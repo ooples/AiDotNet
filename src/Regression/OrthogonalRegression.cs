@@ -116,21 +116,12 @@ public partial class OrthogonalRegression<T> : RegressionBase<T>
         int p = x.Columns;
 
         // Center the data
-        Vector<T> meanX = new(p);
-        for (int j = 0; j < p; j++)
-        {
-            meanX[j] = x.GetColumn(j).Mean();
-        }
+        var xTensor = Tensor<T>.FromMatrix(x);
+        var meanRow = Engine.ReduceMean(xTensor, new[] { 0 }, keepDims: true);
+        Vector<T> meanX = meanRow.Reshape(new[] { p }).ToVector();
         T meanY = y.Mean();
 
-        Matrix<T> centeredX = new(n, p);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                centeredX[i, j] = NumOps.Subtract(x[i, j], meanX[j]);
-            }
-        }
+        Matrix<T> centeredX = Engine.TensorSubtract(xTensor, Engine.TensorBroadcastTo(meanRow, new[] { n, p })).ToMatrix();
         Vector<T> centeredY = y.Subtract(meanY);
 
         // Scale the variables if option is set
@@ -139,42 +130,31 @@ public partial class OrthogonalRegression<T> : RegressionBase<T>
         T scaleY = NumOps.One;
         if (_options.ScaleVariables)
         {
-            for (int j = 0; j < p; j++)
-            {
-                T columnVariance = centeredX.GetColumn(j).Variance();
-                scaleX[j] = NumOps.Sqrt(columnVariance);
-                if (!NumOps.Equals(scaleX[j], NumOps.Zero))
-                {
-                    for (int i = 0; i < n; i++)
-                    {
-                        centeredX[i, j] = NumOps.Divide(centeredX[i, j], scaleX[j]);
-                    }
-                }
-            }
+            // Per-column standard deviation; a zero-deviation column is left unscaled (divided by 1)
+            var columnVariances = new Vector<T>(centeredX.Transpose().GetRows().Select(column => column.Variance()));
+            scaleX = Engine.Sqrt(columnVariances);
+            var scaleTensor = Tensor<T>.FromVector(scaleX);
+            var divisors = Engine.TensorWhere(
+                Engine.TensorEquals(scaleTensor, NumOps.Zero),
+                Tensor<T>.FromVector(Engine.Fill(p, NumOps.One)),
+                scaleTensor);
+            centeredX = Engine.TensorDivide(
+                Tensor<T>.FromMatrix(centeredX),
+                Engine.TensorBroadcastTo(divisors.Reshape(new[] { 1, p }), new[] { n, p })).ToMatrix();
 
             // Scale Y as well to keep the augmented matrix in consistent units
             T yVariance = centeredY.Variance();
             scaleY = NumOps.Sqrt(yVariance);
             if (!NumOps.Equals(scaleY, NumOps.Zero))
             {
-                for (int i = 0; i < n; i++)
-                {
-                    centeredY[i] = NumOps.Divide(centeredY[i], scaleY);
-                }
+                centeredY = Engine.Divide(centeredY, scaleY);
             }
         }
 
         // Total Least Squares via SVD of the augmented matrix [X | y]
         // The TLS solution is extracted from the last right singular vector of [X y].
-        Matrix<T> augmentedMatrix = new(n, p + 1);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                augmentedMatrix[i, j] = centeredX[i, j];
-            }
-            augmentedMatrix[i, p] = centeredY[i];
-        }
+        Matrix<T> augmentedMatrix = Engine.TensorConcatenate(
+            new[] { Tensor<T>.FromMatrix(centeredX), new Tensor<T>(new[] { n, 1 }, centeredY) }, 1).ToMatrix();
 
         // Compute BOTH solutions and pick the better R² on training data.
         // TLS is the textbook solution but its quality depends on the
@@ -207,26 +187,16 @@ public partial class OrthogonalRegression<T> : RegressionBase<T>
             T vLast = vt[lastRow, p];
             if (NumOps.GreaterThan(NumOps.Abs(vLast), NumOps.FromDouble(1e-14)))
             {
-                var tlsCoeffs = new Vector<T>(p);
                 T zeroVarianceTol = NumOps.FromDouble(1e-14);
-                for (int j = 0; j < p; j++)
-                {
-                    // TLS coefficient in scaled space: -v_j / v_last
-                    T scaledCoeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
-                    // Unscale: multiply by scaleY/scaleX[j] to return to original units.
-                    // Zero-variance feature: scaleX[j] ≈ 0 ⇒ the column is constant
-                    // and contributes no information; treat the coefficient as 0
-                    // rather than dividing and producing Inf/NaN that flips
-                    // ssRes-based model selection.
-                    if (NumOps.LessThan(NumOps.Abs(scaleX[j]), zeroVarianceTol))
-                    {
-                        tlsCoeffs[j] = NumOps.Zero;
-                    }
-                    else
-                    {
-                        tlsCoeffs[j] = NumOps.Multiply(scaledCoeff, NumOps.Divide(scaleY, scaleX[j]));
-                    }
-                }
+
+                // TLS coefficient in scaled space: -v_j / v_last, unscaled by scaleY / scaleX[j].
+                // Zero-variance feature: scaleX[j] ~ 0 means the column is constant and contributes no
+                // information; its coefficient is 0 rather than an Inf/NaN that flips ssRes-based
+                // model selection.
+                var scaledCoeffs = Engine.Divide(
+                    Engine.Multiply(vt.GetRow(lastRow).GetSubVector(0, p), NumOps.Negate(NumOps.One)), vLast);
+                var tlsCoeffs = ZeroWhereConstant(
+                    Engine.Multiply(scaledCoeffs, Engine.Divide(Engine.Fill(p, scaleY), scaleX)), scaleX, zeroVarianceTol);
 
                 T tlsIntercept = NumOps.Subtract(meanY, tlsCoeffs.DotProduct(meanX));
                 T tlsSsRes = ComputeSumSquaredResiduals(x, y, tlsCoeffs, tlsIntercept);
@@ -258,35 +228,37 @@ public partial class OrthogonalRegression<T> : RegressionBase<T>
         Vector<T> scaleX, T scaleY, int p)
     {
         var xTx = centeredX.Transpose().Multiply(centeredX);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-8));
+        xTx = Engine.MatrixAdd(xTx, Matrix<T>.CreateDiagonal(Engine.Fill(xTx.Rows, NumOps.FromDouble(1e-8))));
         var xTy = centeredX.Transpose().Multiply(centeredY);
         var ridge = xTx.Inverse().Multiply(xTy);
         T zeroVarianceTol = NumOps.FromDouble(1e-14);
-        for (int j = 0; j < p; j++)
-        {
-            // Zero-variance unscale guard: see the matching note in
-            // ComputeTLS for why constant columns must yield zero coefficient.
-            ridge[j] = NumOps.LessThan(NumOps.Abs(scaleX[j]), zeroVarianceTol)
-                ? NumOps.Zero
-                : NumOps.Multiply(NumOps.Divide(ridge[j], scaleX[j]), scaleY);
-        }
-        return ridge;
+
+        // Zero-variance unscale guard: see the matching note in
+        // ComputeTLS for why constant columns must yield zero coefficient.
+        var unscaled = Engine.Multiply(Engine.Divide(ridge.GetSubVector(0, p), scaleX), scaleY);
+        return ZeroWhereConstant(unscaled, scaleX, zeroVarianceTol);
+    }
+
+    /// <summary>
+    /// Replaces coefficients[j] with 0 wherever |scaleX[j]| is below <paramref name="tolerance"/>.
+    /// </summary>
+    private Vector<T> ZeroWhereConstant(Vector<T> coefficients, Vector<T> scaleX, T tolerance)
+    {
+        return Engine.TensorWhere(
+            Engine.TensorLessThan(Engine.TensorAbs(Tensor<T>.FromVector(scaleX)), tolerance),
+            Tensor<T>.FromVector(Engine.FillZero(coefficients.Length)),
+            Tensor<T>.FromVector(coefficients)).ToVector();
     }
 
     private T ComputeSumSquaredResiduals(Matrix<T> x, Vector<T> y, Vector<T> coeffs, T intercept)
     {
-        T ssRes = NumOps.Zero;
-        int n = x.Rows;
-        int p = x.Columns;
-        for (int i = 0; i < n; i++)
+        if (x.Rows == 0)
         {
-            T predicted = intercept;
-            for (int j = 0; j < p; j++)
-                predicted = NumOps.Add(predicted, NumOps.Multiply(coeffs[j], x[i, j]));
-            T residual = NumOps.Subtract(y[i], predicted);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
+            return NumOps.Zero;
         }
-        return ssRes;
+
+        var predicted = Engine.Add(Engine.Fill(x.Rows, intercept), Engine.MatrixVectorMultiply(x, coeffs));
+        var residual = Engine.Subtract(y, predicted);
+        return Engine.DotProduct(residual, residual);
     }
 }
