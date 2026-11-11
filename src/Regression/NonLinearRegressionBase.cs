@@ -450,6 +450,8 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         return NumOps.Add(B, Engine.DotProduct(alphas, kernelValues));
     }
 
+    private const long KernelBlockElements = 1L << 24;
+
     /// <summary>
     /// Computes the kernel value K(left[i], right[j]) for every pair of rows at once.
     /// </summary>
@@ -461,6 +463,24 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         if (left.Rows == 0 || right.Rows == 0)
         {
             return new Matrix<T>(left.Rows, right.Rows);
+        }
+
+        // Distance kernels materialize a [rows, right.Rows, features] difference tensor; bound it by
+        // evaluating the left rows in blocks and stacking the block results.
+        bool distanceKernel = Options.KernelType is KernelType.RBF or KernelType.Laplacian;
+        long perRow = Math.Max(1L, (long)right.Rows * Math.Max(1, left.Columns));
+        int blockRows = distanceKernel ? (int)Math.Max(1L, Math.Min(left.Rows, KernelBlockElements / perRow)) : left.Rows;
+        if (blockRows < left.Rows)
+        {
+            var blocks = new List<Tensor<T>>();
+            for (int start = 0; start < left.Rows; start += blockRows)
+            {
+                int count = Math.Min(blockRows, left.Rows - start);
+                var block = KernelMatrix(left.GetSubMatrix(start, 0, count, left.Columns), right);
+                blocks.Add(Tensor<T>.FromMatrix(block));
+            }
+
+            return Engine.TensorConcatenate(blocks.ToArray(), 0).ToMatrix();
         }
 
         var engine = Engine;
