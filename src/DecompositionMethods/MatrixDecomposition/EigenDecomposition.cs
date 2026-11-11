@@ -137,7 +137,9 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>A tuple containing the eigenvalues and eigenvectors.</returns>
     private (Vector<T> eigenValues, Matrix<T> eigenVectors) ComputeEigenQR(Matrix<T> matrix)
     {
-        return ComputeEngineEigen(matrix, dominantFirst: false);
+        // The shifted QR iteration deflates the dominant eigenvalues into the leading diagonal
+        // positions, and callers (whitening, SSA, Takagi) take the leading pairs as the largest.
+        return ComputeEngineEigen(matrix, dominantFirst: true);
     }
 
     /// <summary>
