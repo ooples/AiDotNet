@@ -42,10 +42,9 @@ public class LaplacianEigenmaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double? _radius;
     private readonly LaplacianAffinityType _affinity;
     private readonly double _gamma;
-    private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _embedding;
+    private Matrix<T>? _embedding;
     private int _nSamples;
 
     /// <summary>
@@ -61,7 +60,7 @@ public class LaplacianEigenmaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -76,7 +75,7 @@ public class LaplacianEigenmaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="radius">Radius for epsilon-neighborhood (if null, uses k-NN). Defaults to null.</param>
     /// <param name="affinity">Affinity type for edge weights. Defaults to NearestNeighbors.</param>
     /// <param name="gamma">Kernel coefficient for RBF affinity. Defaults to 1.0.</param>
-    /// <param name="randomState">Random seed for reproducibility.</param>
+    /// <param name="randomState">Kept for API compatibility; the eigen solver is deterministic.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public LaplacianEigenmaps(
         int nComponents = 2,
@@ -103,7 +102,6 @@ public class LaplacianEigenmaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _radius = radius;
         _affinity = affinity;
         _gamma = gamma;
-        _randomState = randomState;
     }
 
     /// <summary>
@@ -111,235 +109,68 @@ public class LaplacianEigenmaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nSamples = data.Rows;
         int n = data.Rows;
-        int p = data.Columns;
-
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
 
         // Step 1: Compute affinity matrix (weighted adjacency)
-        var W = ComputeAffinityMatrix(X, n, p);
+        var w = ComputeAffinityMatrix(Tensor<T>.FromMatrix(data), n);
 
-        // Step 2: Compute degree matrix D
-        var D = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                D[i] += W[i, j];
-            }
-        }
+        // Step 2: Degrees D_i = sum_j W_ij
+        var degree = DimensionalityReductionOps.RowSums(w);
 
-        // Step 3: Compute normalized Laplacian: L = D^(-1/2) * (D - W) * D^(-1/2)
-        // Or solve generalized eigenvalue problem: (D - W) * y = λ * D * y
-        var L = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    L[i, j] = 1.0; // D[i] - W[i,i] normalized
-                }
-                else if (W[i, j] > 0 && D[i] > 0 && D[j] > 0)
-                {
-                    L[i, j] = -W[i, j] / Math.Sqrt(D[i] * D[j]);
-                }
-            }
-        }
+        // Step 3: Normalized Laplacian L = I - D^(-1/2) W D^(-1/2), with L_ij = 0 where W_ij = 0
+        var zero = NumOps.Zero;
+        var degreeProduct = engine.TensorMatMul(
+            DimensionalityReductionOps.AsColumn(degree), DimensionalityReductionOps.AsRow(degree));
+        var positiveProduct = engine.TensorGreaterThan(degreeProduct, zero);
+        var safeRoot = engine.TensorSqrt(engine.TensorWhere(
+            positiveProduct, degreeProduct, DimensionalityReductionOps.Full(new[] { n, n }, NumOps.One)));
+        var connected = engine.TensorMultiply(engine.TensorGreaterThan(w, zero), positiveProduct);
+        var laplacian = engine.TensorWhere(
+            connected,
+            engine.TensorNegate(engine.TensorDivide(w, safeRoot)),
+            DimensionalityReductionOps.Full(new[] { n, n }, zero));
+        engine.TensorFillDiagonalInPlace(laplacian, NumOps.One);
 
-        // Step 4: Compute eigenvectors of L (smallest eigenvalues)
-        var (eigenvalues, eigenvectors) = ComputeSmallestEigenvectors(L, n);
+        // Step 4: Eigenvectors of L in ascending eigenvalue order
+        var (_, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(laplacian, descending: false);
 
-        // Step 5: Select eigenvectors (skip first one which is constant)
-        _embedding = new double[n, _nComponents];
+        // Step 5: Select eigenvectors k + 1 (skipping the trivial one), falling back to k past the end
+        var columns = new int[_nComponents];
         for (int k = 0; k < _nComponents; k++)
         {
-            // Use eigenvector k+1 (skip the trivial constant eigenvector)
-            int eigIdx = k + 1;
-            if (eigIdx >= n) eigIdx = k;
-
-            for (int i = 0; i < n; i++)
-            {
-                _embedding[i, k] = eigenvectors[eigIdx, i];
-            }
+            columns[k] = k + 1 < n ? k + 1 : k;
         }
+
+        _embedding = DimensionalityReductionOps.SelectColumns(
+            eigenvectors, DimensionalityReductionOps.IndexTensor(columns)).ToMatrix();
     }
 
-    private double[,] ComputeAffinityMatrix(double[,] X, int n, int p)
+    private Tensor<T> ComputeAffinityMatrix(Tensor<T> x, int n)
     {
-        var W = new double[n, n];
-
-        // Compute pairwise distances
-        var distances = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = X[i, k] - X[j, k];
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
+        var engine = Engine;
+        var squared = DimensionalityReductionOps.SquaredDistances(x, x);
+        var negGamma = NumOps.FromDouble(-_gamma);
 
         if (_affinity == LaplacianAffinityType.RBF)
         {
-            // Full RBF kernel
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (i != j)
-                    {
-                        W[i, j] = Math.Exp(-_gamma * distances[i, j] * distances[i, j]);
-                    }
-                }
-            }
-        }
-        else
-        {
-            // k-NN based connectivity
-            for (int i = 0; i < n; i++)
-            {
-                // Find k nearest neighbors
-                var neighborDists = new (double dist, int idx)[n];
-                for (int j = 0; j < n; j++)
-                {
-                    neighborDists[j] = (j == i ? double.MaxValue : distances[i, j], j);
-                }
-                Array.Sort(neighborDists, (a, b) => a.dist.CompareTo(b.dist));
-
-                // Set connections to k nearest
-                for (int k = 0; k < Math.Min(_nNeighbors, n - 1); k++)
-                {
-                    int j = neighborDists[k].idx;
-                    double weight = _affinity == LaplacianAffinityType.NearestNeighbors
-                        ? 1.0
-                        : Math.Exp(-_gamma * distances[i, j] * distances[i, j]);
-                    W[i, j] = weight;
-                }
-            }
-
-            // Symmetrize
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i + 1; j < n; j++)
-                {
-                    double sym = Math.Max(W[i, j], W[j, i]);
-                    W[i, j] = sym;
-                    W[j, i] = sym;
-                }
-            }
+            // Full RBF kernel with a zero diagonal
+            var kernel = engine.TensorExp(engine.TensorMultiplyScalar(squared, negGamma));
+            engine.TensorFillDiagonalInPlace(kernel, NumOps.Zero);
+            return kernel;
         }
 
-        return W;
-    }
-
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeSmallestEigenvectors(double[,] L, int n)
-    {
-        // Power iteration on (I - L) to get largest eigenvalues of (I - L),
-        // which correspond to smallest eigenvalues of L
-        var eigenvalues = new double[n];
-        var eigenvectors = new double[n, n];
-
-        // Create I - L (shift to get smallest eigenvalues as largest)
-        var shiftedL = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                shiftedL[i, j] = (i == j ? 2.0 : 0.0) - L[i, j];
-            }
-        }
-
-        var A = (double[,])shiftedL.Clone();
-
-        for (int k = 0; k < Math.Min(n, _nComponents + 2); k++)
-        {
-            var v = new double[n];
-            var random = _randomState.HasValue
-                ? RandomHelper.CreateSeededRandom(_randomState.Value + k)
-                : RandomHelper.CreateSeededRandom(42 + k);
-
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = random.NextDouble() - 0.5;
-            }
-
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                double norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            // Compute eigenvalue
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double eigenvalue = 0;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[k] = 2.0 - eigenvalue; // Convert back to L eigenvalue
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[k, i] = v[i];
-            }
-
-            // Deflate
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
+        // k-NN connectivity: W_ij = 1 (or exp(-gamma d^2)) for the k nearest j of i, then max-symmetrized
+        var distances = engine.TensorSqrt(squared);
+        var neighbors = DimensionalityReductionOps.NearestNeighbors(distances, _nNeighbors);
+        int take = neighbors.Shape[1];
+        var weights = _affinity == LaplacianAffinityType.NearestNeighbors
+            ? DimensionalityReductionOps.Full(new[] { n, take }, NumOps.One)
+            : engine.TensorExp(engine.TensorMultiplyScalar(
+                DimensionalityReductionOps.TakeRows(squared, neighbors), negGamma));
+        var w = DimensionalityReductionOps.ScatterRows(neighbors, weights, n, NumOps.Zero);
+        return engine.TensorMax(w, engine.TensorTranspose(w));
     }
 
     /// <summary>
@@ -359,19 +190,7 @@ public class LaplacianEigenmaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int d = _embedding.GetLength(1);
-        var result = new T[n, d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>
