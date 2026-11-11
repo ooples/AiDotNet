@@ -53,19 +53,43 @@ internal static class AnomalyTensorOps
     /// the window starts before the series. <paramref name="mask"/> is 1 at real entries, 0 at padding.
     /// </summary>
     internal static Tensor<T> TrailingWindows<T>(Tensor<T> series, int window, out Tensor<T> mask)
+        => SlidingWindows(series, window - 1, 0, out mask);
+
+    /// <summary>
+    /// The sliding windows of a 1-D series of length n: row i holds series[i - before .. i + after],
+    /// zero-padded where the window runs past either end. <paramref name="mask"/> ([n, before + after + 1])
+    /// is 1 at real entries and 0 at padding, so its row sums are the truncated window lengths.
+    /// </summary>
+    internal static Tensor<T> SlidingWindows<T>(Tensor<T> series, int before, int after, out Tensor<T> mask)
     {
         var engine = Engine;
         int n = series.Length;
+        int width = before + after + 1;
         var ones = Tensor<T>.CreateOnes(new[] { n });
-        if (window <= 1)
+        if (width == 1)
         {
             mask = engine.Reshape(ones, new[] { n, 1 });
             return engine.Reshape(series, new[] { n, 1 });
         }
 
-        var padding = Tensor<T>.CreateZeros(new[] { window - 1 });
-        mask = engine.TensorUnfold(engine.TensorConcatenate(new[] { padding, ones }, 0), 0, window, 1);
-        return engine.TensorUnfold(engine.TensorConcatenate(new[] { padding, series }, 0), 0, window, 1);
+        var parts = new List<Tensor<T>>(3);
+        var maskParts = new List<Tensor<T>>(3);
+        if (before > 0)
+        {
+            parts.Add(Tensor<T>.CreateZeros(new[] { before }));
+            maskParts.Add(Tensor<T>.CreateZeros(new[] { before }));
+        }
+
+        parts.Add(series);
+        maskParts.Add(ones);
+        if (after > 0)
+        {
+            parts.Add(Tensor<T>.CreateZeros(new[] { after }));
+            maskParts.Add(Tensor<T>.CreateZeros(new[] { after }));
+        }
+
+        mask = engine.TensorUnfold(engine.TensorConcatenate(maskParts.ToArray(), 0), 0, width, 1);
+        return engine.TensorUnfold(engine.TensorConcatenate(parts.ToArray(), 0), 0, width, 1);
     }
 
     /// <summary>The rows of m at the given indices, in order.</summary>
