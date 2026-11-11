@@ -67,7 +67,7 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
 
         var standardized = StandardizeData(data);
 
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, double>();
 
         for (int i = 0; i < d; i++)
         {
@@ -94,35 +94,33 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
                 // A symmetric pair is the convention CAMUVAlgorithm already uses for a pair it cannot
                 // orient, and RCDAlgorithm refuses to write an edge at all in the same situation.
                 // This aligns PNL with CAMUV: the adjacency is kept, the direction claim is not made.
-                T weightT = NumOps.FromDouble(weight);
-
                 // Both residual dependencies near zero: a deterministic relationship, where the PNL
                 // model has no residual asymmetry to read a direction from at all.
                 bool nearZeroDeps = depIJ < 1e-6 && depJI < 1e-6;
 
                 if (nearZeroDeps)
                 {
-                    W[i, j] = weightT;
-                    W[j, i] = weightT;
+                    weights[i * d + j] = weight;
+                    weights[j * d + i] = weight;
                 }
                 else if (Math.Abs(asymmetry) > _threshold * 0.1)
                 {
                     if (asymmetry > 0)
-                        W[i, j] = weightT;
+                        weights[i * d + j] = weight;
                     else
-                        W[j, i] = weightT;
+                        weights[j * d + i] = weight;
                 }
                 else
                 {
                     // Strongly related, but the finite-sample PNL independence scores cannot resolve
                     // the direction. Keep the adjacency, decline the orientation.
-                    W[i, j] = weightT;
-                    W[j, i] = weightT;
+                    weights[i * d + j] = weight;
+                    weights[j * d + i] = weight;
                 }
             }
         }
 
-        return W;
+        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
 
     /// <summary>
