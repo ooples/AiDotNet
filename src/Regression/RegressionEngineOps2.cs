@@ -188,6 +188,114 @@ internal static class RegressionEngineOps2
     }
 
     /// <summary>
+    /// Euclidean distances ||left[i] - right[j]|| as a [left.Rows, right.Rows] matrix: the square
+    /// root of the per-feature squared differences summed, the same formula as
+    /// <c>VectorHelper.EuclideanDistance</c> (no ||a||^2 + ||b||^2 - 2ab expansion, which loses
+    /// precision). Left rows are processed in blocks so the difference tensor stays bounded.
+    /// </summary>
+    public static Matrix<T> PairwiseDistances<T>(Matrix<T> left, Matrix<T> right)
+    {
+        if (left.Columns != right.Columns)
+        {
+            throw new ArgumentException(
+                $"Vectors must have the same length. Got {left.Columns} and {right.Columns}.", nameof(right));
+        }
+
+        if (left.Rows == 0 || right.Rows == 0 || left.Columns == 0)
+        {
+            return new Matrix<T>(left.Rows, right.Rows);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        int d = left.Columns;
+        long perRow = Math.Max(1L, (long)right.Rows * Math.Max(1, d));
+        int blockRows = (int)Math.Max(1L, Math.Min(left.Rows, PairwiseBlockElements / perRow));
+        var rightBroadcastSource = engine.Reshape(Tensor<T>.FromMatrix(right), new[] { 1, right.Rows, d });
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < left.Rows; start += blockRows)
+        {
+            int count = Math.Min(blockRows, left.Rows - start);
+            var block = count == left.Rows ? left : left.GetSubMatrix(start, 0, count, d);
+            var shape = new[] { count, right.Rows, d };
+            var l = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(block), new[] { count, 1, d }), shape);
+            var r = engine.TensorBroadcastTo(rightBroadcastSource, shape);
+            var squared = engine.TensorSquare(engine.TensorSubtract(l, r));
+            blocks.Add(engine.ReduceSum(squared, new[] { 2 }, keepDims: false));
+        }
+
+        var sumSq = blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+        return engine.TensorSqrt(sumSq).ToMatrix();
+    }
+
+    private const long PairwiseBlockElements = 1L << 24;
+
+    /// <summary>
+    /// A one-row matrix holding <paramref name="row"/>.
+    /// </summary>
+    public static Matrix<T> AsRowMatrix<T>(Vector<T> row)
+    {
+        return new Tensor<T>(new[] { 1, row.Length }, row.Clone()).ToMatrix();
+    }
+
+    /// <summary>
+    /// The column means of <paramref name="x"/> (population, divided by the row count).
+    /// </summary>
+    public static Vector<T> ColumnMeans<T>(Matrix<T> x)
+    {
+        return AiDotNetEngine.Current.ReduceMean(Tensor<T>.FromMatrix(x), new[] { 0 }, keepDims: false).ToVector();
+    }
+
+    /// <summary>
+    /// Sum over columns of the population variance of each column, computed two-pass
+    /// (mean first, then squared deviations from it).
+    /// </summary>
+    public static T TotalColumnVariance<T>(Matrix<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (x.Columns == 0)
+        {
+            return numOps.Zero;
+        }
+
+        var xt = Tensor<T>.FromMatrix(x);
+        var means = engine.ReduceMean(xt, new[] { 0 }, keepDims: true);
+        var centered = engine.TensorSubtract(xt, engine.TensorBroadcastTo(means, new[] { x.Rows, x.Columns }));
+        var variances = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, keepDims: false),
+            numOps.FromDouble(x.Rows));
+        return engine.TensorSum(variances);
+    }
+
+    /// <summary>
+    /// Largest absolute value, or zero for an empty vector.
+    /// </summary>
+    public static T MaxAbs<T>(Vector<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (values.Length == 0)
+        {
+            return numOps.Zero;
+        }
+
+        return AiDotNetEngine.Current.TensorMaxValue(AiDotNetEngine.Current.TensorAbs(values.AsTensor()));
+    }
+
+    /// <summary>
+    /// Sum of squares of <paramref name="values"/>, or zero for an empty vector.
+    /// </summary>
+    public static T SumOfSquares<T>(Vector<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (values.Length == 0)
+        {
+            return numOps.Zero;
+        }
+
+        return AiDotNetEngine.Current.DotProduct(values, values);
+    }
+
+    /// <summary>
     /// True when any element of <paramref name="mask"/> is non-zero.
     /// </summary>
     public static bool Any<T>(Tensor<T> mask)

@@ -166,22 +166,13 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         // Auto-scale gamma if using the default value of 1.0
         if (Math.Abs(_options.Gamma - 1.0) < 1e-10)
         {
-            double totalVar = 0;
-            for (int j = 0; j < x.Columns; j++)
-            {
-                double mean = 0;
-                for (int i = 0; i < x.Rows; i++)
-                    mean += NumOps.ToDouble(x[i, j]);
-                mean /= x.Rows;
-                double variance = 0;
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    double d = NumOps.ToDouble(x[i, j]) - mean;
-                    variance += d * d;
-                }
-                totalVar += variance / x.Rows;
-            }
-            _options.Gamma = totalVar > 1e-10 ? 1.0 / (x.Columns * (totalVar / x.Columns)) : 1.0;
+            T totalVar = RegressionEngineOps2.TotalColumnVariance(x);
+            T columns = NumOps.FromDouble(x.Columns);
+            T gamma = NumOps.GreaterThan(totalVar, NumOps.FromDouble(1e-10))
+                ? NumOps.Divide(NumOps.One, NumOps.Multiply(columns, NumOps.Divide(totalVar, columns)))
+                : NumOps.One;
+            // The option is a plain configuration number, so the fitted scalar is stored back into it.
+            _options.Gamma = NumOps.ToDouble(gamma);
         }
 
         // Select centers
@@ -288,37 +279,18 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         if (numCenters > 1)
         {
             // minDistSq[i] = squared distance from x[i] to its closest current center.
-            var minDistSq = new double[x.Rows];
-            for (int i = 0; i < x.Rows; i++)
-            {
-                T d = VectorHelper.EuclideanDistance(x.GetRow(i), centers.GetRow(0));
-                double dd = NumOps.ToDouble(d);
-                minDistSq[i] = dd * dd;
-            }
+            var firstDistance = RegressionEngineOps2.PairwiseDistances(x, centers.GetSubMatrix(0, 0, 1, x.Columns)).GetColumn(0);
+            var minDistSq = Engine.Multiply(firstDistance, firstDistance);
 
             for (int c = 1; c < numCenters; c++)
             {
-                int farthest = 0;
-                double farthestDist = minDistSq[0];
-                for (int i = 1; i < x.Rows; i++)
-                {
-                    if (minDistSq[i] > farthestDist)
-                    {
-                        farthestDist = minDistSq[i];
-                        farthest = i;
-                    }
-                }
+                // First point with the largest min-distance (a strict > scan keeps the earliest).
+                int farthest = Engine.TensorArgMax(minDistSq.AsTensor(), 0)[0];
                 centers.SetRow(c, x.GetRow(farthest));
 
                 // Update minDistSq with the new center's contribution.
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    T d = VectorHelper.EuclideanDistance(x.GetRow(i), centers.GetRow(c));
-                    double dd = NumOps.ToDouble(d);
-                    double dSq = dd * dd;
-                    if (dSq < minDistSq[i])
-                        minDistSq[i] = dSq;
-                }
+                var distance = RegressionEngineOps2.PairwiseDistances(x, centers.GetSubMatrix(c, 0, 1, x.Columns)).GetColumn(0);
+                minDistSq = Engine.Min(minDistSq, Engine.Multiply(distance, distance));
             }
         }
 
@@ -328,85 +300,88 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         const int maxIterations = 100;
         var assignments = new int[x.Rows];
         var newCenters = new Matrix<T>(numCenters, x.Columns);
+        var ones = Engine.Fill(x.Rows, NumOps.One).AsTensor();
+        var xTensor = Tensor<T>.FromMatrix(x);
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
-            bool changed = false;
-
-            // Assign points to nearest center
-            for (int i = 0; i < x.Rows; i++)
-            {
-                int nearestCenter = 0;
-                T minDistance = VectorHelper.EuclideanDistance(x.GetRow(i), centers.GetRow(0));
-
-                for (int j = 1; j < numCenters; j++)
-                {
-                    T distance = VectorHelper.EuclideanDistance(x.GetRow(i), centers.GetRow(j));
-                    if (NumOps.LessThan(distance, minDistance))
-                    {
-                        minDistance = distance;
-                        nearestCenter = j;
-                    }
-                }
-
-                if (assignments[i] != nearestCenter)
-                {
-                    assignments[i] = nearestCenter;
-                    changed = true;
-                }
-            }
+            // Assign points to nearest center (first nearest on ties, like a strict < scan)
+            var distances = RegressionEngineOps2.PairwiseDistances(x, centers);
+            var nearest = Engine.TensorArgMin(Tensor<T>.FromMatrix(distances), 1).ToArray();
+            bool changed = !nearest.SequenceEqual(assignments);
+            assignments = nearest;
 
             if (!changed)
             {
                 break; // Convergence reached
             }
 
-            // Compute new centers
-            var counts = new int[numCenters];
-            for (int i = 0; i < numCenters; i++)
+            // Compute new centers: per-cluster sums of the assigned rows and the cluster sizes
+            var assignmentIndex = new Tensor<int>(assignments, new[] { assignments.Length });
+            var sums = Engine.TensorIndexAdd(
+                Engine.TensorZerosLike(Tensor<T>.FromMatrix(newCenters)), 0, assignmentIndex, xTensor).ToMatrix();
+            var countTensor = Engine.TensorIndexAdd(
+                Engine.FillZero<T>(numCenters).AsTensor(), 0, assignmentIndex, ones);
+            var occupied = Engine.TensorNonzero(countTensor).ToArray();
+            var nonEmpty = new bool[numCenters];
+            foreach (int cluster in occupied)
             {
-                newCenters.SetRow(i, new Vector<T>(x.Columns));
+                nonEmpty[cluster] = true;
             }
 
-            for (int i = 0; i < x.Rows; i++)
-            {
-                int assignment = assignments[i];
-                newCenters.SetRow(assignment, newCenters.GetRow(assignment).Add(x.GetRow(i)));
-                counts[assignment]++;
-            }
+            // Means of the non-empty clusters; empty clusters keep their (zero) sums here.
+            var safeCounts = Engine.TensorWhere(nonEmpty, countTensor, Engine.TensorOnesLike(countTensor));
+            var means = Engine.TensorDivide(
+                Tensor<T>.FromMatrix(sums),
+                Engine.TensorBroadcastTo(Engine.Reshape(safeCounts, new[] { numCenters, 1 }), new[] { numCenters, x.Columns })).ToMatrix();
+            newCenters = means;
 
             for (int i = 0; i < numCenters; i++)
             {
-                if (counts[i] > 0)
+                if (nonEmpty[i])
                 {
-                    newCenters.SetRow(i, newCenters.GetRow(i).Divide(NumOps.FromDouble(counts[i])));
+                    continue;
                 }
-                else
+
+                // Deterministic empty-cluster fallback: reseed with the
+                // point farthest from any current non-empty center, which
+                // mirrors the k-means++ seeding above and keeps training
+                // a pure function of X. The scan sees the clusters before i
+                // already averaged and those after i still as running sums.
+                var reference = new List<int>();
+                for (int c = 0; c < numCenters; c++)
                 {
-                    // Deterministic empty-cluster fallback: reseed with the
-                    // point farthest from any current non-empty center, which
-                    // mirrors the k-means++ seeding above and keeps training
-                    // a pure function of X.
-                    int farthest = 0;
-                    double farthestDist = -1;
-                    for (int rowIdx = 0; rowIdx < x.Rows; rowIdx++)
+                    if (c != i && nonEmpty[c])
                     {
-                        double minDistToCenter = double.MaxValue;
-                        for (int c = 0; c < numCenters; c++)
-                        {
-                            if (c == i || counts[c] == 0) continue;
-                            T d = VectorHelper.EuclideanDistance(x.GetRow(rowIdx), newCenters.GetRow(c));
-                            double dd = NumOps.ToDouble(d);
-                            if (dd < minDistToCenter) minDistToCenter = dd;
-                        }
-                        if (minDistToCenter > farthestDist)
-                        {
-                            farthestDist = minDistToCenter;
-                            farthest = rowIdx;
-                        }
+                        reference.Add(c);
                     }
-                    newCenters.SetRow(i, x.GetRow(farthest));
                 }
+
+                int farthest = 0;
+                if (reference.Count > 0)
+                {
+                    var before = reference.Where(c => c < i).ToList();
+                    var after = reference.Where(c => c > i).ToList();
+                    var referenceRows = new List<Tensor<T>>();
+                    if (before.Count > 0)
+                    {
+                        referenceRows.Add(Tensor<T>.FromMatrix(RegressionEngineOps2.GatherRows(means, before)));
+                    }
+
+                    if (after.Count > 0)
+                    {
+                        referenceRows.Add(Tensor<T>.FromMatrix(RegressionEngineOps2.GatherRows(sums, after)));
+                    }
+
+                    var referenceCenters = referenceRows.Count == 1
+                        ? referenceRows[0].ToMatrix()
+                        : Engine.TensorConcatenate(referenceRows.ToArray(), 0).ToMatrix();
+                    var toReference = Tensor<T>.FromMatrix(RegressionEngineOps2.PairwiseDistances(x, referenceCenters));
+                    var minDistToCenter = Engine.TensorAmin(toReference, new[] { 1 }, keepDims: false);
+                    farthest = Engine.TensorArgMax(minDistToCenter, 0)[0];
+                }
+
+                newCenters.SetRow(i, x.GetRow(farthest));
             }
 
             centers = newCenters;
@@ -434,19 +409,19 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
     /// </remarks>
     private Matrix<T> ComputeRBFFeatures(Matrix<T> x)
     {
+        // Features per row: [1 (bias), x1, ..., xp (linear), rbf1, ..., rbfK]
         int p = x.Columns;
-        var rbfFeatures = new Matrix<T>(x.Rows, _centers.Rows + 1 + p);
-
-        for (int i = 0; i < x.Rows; i++)
+        if (x.Rows == 0)
         {
-            var row = ComputeRBFFeaturesSingle(x.GetRow(i));
-            for (int j = 0; j < row.Length; j++)
-            {
-                rbfFeatures[i, j] = row[j];
-            }
+            return new Matrix<T>(0, _centers.Rows + 1 + p);
         }
 
-        return rbfFeatures;
+        var bias = Engine.TensorOnesLike(new Tensor<T>(new[] { x.Rows, 1 }));
+        var distances = Tensor<T>.FromMatrix(RegressionEngineOps2.PairwiseDistances(x, _centers));
+        T gamma = NumOps.FromDouble(_options.Gamma);
+        var kernel = Engine.TensorExp(Engine.TensorNegate(
+            Engine.TensorMultiplyScalar(Engine.TensorSquare(distances), gamma)));
+        return Engine.TensorConcatenate(new[] { bias, Tensor<T>.FromMatrix(x), kernel }, 1).ToMatrix();
     }
 
     /// <summary>
@@ -469,21 +444,7 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
     private Vector<T> ComputeRBFFeaturesSingle(Vector<T> x)
     {
         // Features: [1 (bias), x1, x2, ..., xp (linear), rbf1, rbf2, ..., rbfK]
-        int p = x.Length;
-        var features = new Vector<T>(_centers.Rows + 1 + p);
-        features[0] = NumOps.One; // Bias term
-
-        // Add linear features for extrapolation capability
-        for (int j = 0; j < p; j++)
-            features[1 + j] = x[j];
-
-        for (int i = 0; i < _centers.Rows; i++)
-        {
-            T distance = VectorHelper.EuclideanDistance(x, _centers.GetRow(i));
-            features[1 + p + i] = RbfKernel(distance);
-        }
-
-        return features;
+        return ComputeRBFFeatures(RegressionEngineOps2.AsRowMatrix(x)).GetRow(0);
     }
 
     /// <summary>
@@ -502,29 +463,6 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
     /// Pythagorean theorem. This is used to determine how close an input point is to each center.
     /// </para>
     /// </remarks>
-
-    /// <summary>
-    /// Applies the radial basis function kernel to a distance value.
-    /// </summary>
-    /// <param name="distance">The distance value.</param>
-    /// <returns>The result of applying the RBF kernel to the distance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the Gaussian radial basis function kernel, which is defined as exp(-gamma * distance^2).
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// This function creates the "bell curve" shape of the radial basis function. It takes a distance value
-    /// and returns a value between 0 and 1, where 1 means the input is exactly at the center (distance = 0)
-    /// and values close to 0 mean the input is far from the center. The gamma parameter controls how quickly
-    /// the function drops off with distance.
-    /// </para>
-    /// </remarks>
-    private T RbfKernel(T distance)
-    {
-        T gamma = NumOps.FromDouble(_options.Gamma);
-        return NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, NumOps.Multiply(distance, distance))));
-    }
 
     /// <summary>
     /// Solves a linear regression problem to find the optimal weights using ridge regularization.
@@ -598,37 +536,20 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         // Both checks operate on the supplied (x, y) pair, so they cost a
         // single x · w mat-vec and one pass over y — negligible vs SVD itself.
         var preds = x.Multiply(weights);
-        double maxPred = 0;
-        for (int i = 0; i < preds.Length; i++)
-            maxPred = Math.Max(maxPred, Math.Abs(NumOps.ToDouble(preds[i])));
+        T maxPred = RegressionEngineOps2.MaxAbs(preds);
+        T maxY = RegressionEngineOps2.MaxAbs(y);
+        T meanY = y.Length == 0 ? NumOps.Zero : Engine.Mean(y);
 
-        double maxY = 0;
-        double meanY = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = NumOps.ToDouble(y[i]);
-            maxY = Math.Max(maxY, Math.Abs(yi));
-            meanY += yi;
-        }
-        meanY /= Math.Max(1, y.Length);
-
-        if (maxY > 1e-10 && maxPred < maxY * 0.01)
+        if (NumOps.GreaterThan(maxY, NumOps.FromDouble(1e-10)) &&
+            NumOps.LessThan(maxPred, NumOps.Multiply(maxY, NumOps.FromDouble(0.01))))
             return true;
 
-        double ssRes = 0, ssTot = 0;
-        for (int i = 0; i < y.Length; i++)
+        T ssRes = RegressionEngineOps2.SumOfSquares(Engine.Subtract(y, preds));
+        T ssTot = RegressionEngineOps2.SumOfSquares(RegressionEngineOps2.AddScalar(y, NumOps.Negate(meanY)));
+        if (NumOps.GreaterThan(ssTot, NumOps.FromDouble(1e-12)))
         {
-            double yi = NumOps.ToDouble(y[i]);
-            double pi = NumOps.ToDouble(preds[i]);
-            double r = yi - pi;
-            ssRes += r * r;
-            double t = yi - meanY;
-            ssTot += t * t;
-        }
-        if (ssTot > 1e-12)
-        {
-            double trainR2 = 1.0 - ssRes / ssTot;
-            if (trainR2 < 0)
+            T trainR2 = NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+            if (NumOps.LessThan(trainR2, NumOps.Zero))
                 return true;
         }
 
@@ -641,15 +562,19 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         {
             var svd = new AiDotNet.DecompositionMethods.MatrixDecomposition.SvdDecomposition<T>(x);
 
+            // Largest singular value, ignoring NaN and never below zero.
             T sigmaMax = NumOps.Zero;
-            for (int i = 0; i < svd.S.Length; i++)
+            int k = svd.S.Length;
+            if (k > 0)
             {
-                if (NumOps.GreaterThan(svd.S[i], sigmaMax))
-                    sigmaMax = svd.S[i];
+                var s = svd.S.AsTensor();
+                var sNoNan = Engine.TensorWhere(Engine.TensorIsNan(s), Engine.TensorZerosLike(s), s);
+                T largest = Engine.TensorMaxValue(sNoNan);
+                if (NumOps.GreaterThan(largest, sigmaMax))
+                    sigmaMax = largest;
             }
 
-            double sigmaMaxD = NumOps.ToDouble(sigmaMax);
-            if (!(sigmaMaxD > 0) || double.IsNaN(sigmaMaxD))
+            if (!NumOps.GreaterThan(sigmaMax, NumOps.Zero) || NumOps.IsNaN(sigmaMax))
             {
                 // Caller falls back to normal-equations ridge solve.
                 return null;
@@ -662,19 +587,14 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
             T lambda = NumOps.Multiply(sigmaMax, NumOps.FromDouble(1e-6));
             T lambdaSq = NumOps.Multiply(lambda, lambda);
 
-            var weights = new Vector<T>(svd.Vt.Columns);
-            for (int i = 0; i < svd.S.Length; i++)
-            {
-                T sigma = svd.S[i];
-                T sigmaSq = NumOps.Multiply(sigma, sigma);
-                T damped = NumOps.Divide(sigma, NumOps.Add(sigmaSq, lambdaSq));
-
-                Vector<T> uCol = svd.U.GetColumn(i);
-                T coeff = NumOps.Multiply(uCol.DotProduct(y), damped);
-                Vector<T> vtRow = svd.Vt.GetRow(i);
-                weights = weights.Add(vtRow.Multiply(coeff));
-            }
-            return weights;
+            // weights = Σ_i Vt[i, :] · (U[:, i] · y) · σ_i / (σ_i² + λ²)
+            var sigmas = svd.S;
+            var damped = Engine.Divide(
+                sigmas, RegressionEngineOps2.AddScalar(Engine.Multiply(sigmas, sigmas), lambdaSq));
+            var uUsed = svd.U.Columns == k ? svd.U : svd.U.GetSubMatrix(0, 0, svd.U.Rows, k);
+            var vtUsed = svd.Vt.Rows == k ? svd.Vt : svd.Vt.GetSubMatrix(0, 0, k, svd.Vt.Columns);
+            var coefficients = Engine.Multiply(Engine.MatrixVectorMultiply(Engine.MatrixTranspose(uUsed), y), damped);
+            return Engine.MatrixVectorMultiply(Engine.MatrixTranspose(vtUsed), coefficients);
         }
         catch (Exception ex) when (
             ex is InvalidOperationException ||
@@ -697,9 +617,7 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         // magnitude of the design matrix without manual tuning.
         var xT = x.Transpose();
         var xTx = xT.Multiply(x);
-        T trace = NumOps.Zero;
-        for (int i = 0; i < xTx.Rows; i++)
-            trace = NumOps.Add(trace, xTx[i, i]);
+        T trace = xTx.Rows == 0 ? NumOps.Zero : Engine.Sum(xTx.Diagonal());
         T lambdaRidge = NumOps.Divide(
             NumOps.Multiply(trace, NumOps.FromDouble(1e-6)),
             NumOps.FromDouble(Math.Max(1, xTx.Rows)));
@@ -710,22 +628,14 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         T minLambda = NumOps.FromDouble(1e-12);
         if (NumOps.LessThan(lambdaRidge, minLambda))
             lambdaRidge = minLambda;
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], lambdaRidge);
+        xTx = RegressionEngineOps2.AddDiagonal(xTx, lambdaRidge);
         var xTy = xT.Multiply(y);
         return xTx.Inverse().Multiply(xTy);
     }
 
     private static bool ModelTestHelpers_AllFinite(Vector<T> v)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < v.Length; i++)
-        {
-            double d = ops.ToDouble(v[i]);
-            if (double.IsNaN(d) || double.IsInfinity(d))
-                return false;
-        }
-        return true;
+        return RegressionEngineOps2.AllFinite(v);
     }
 
     /// <summary>
