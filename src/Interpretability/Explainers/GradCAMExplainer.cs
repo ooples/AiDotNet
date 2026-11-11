@@ -322,7 +322,7 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
     /// </summary>
     private int GetPredictedClass(Tensor<T> predictions)
     {
-        return predictions.Length == 0 ? 0 : ExplainerTensorOps<T>.ArgMax(predictions.ToVector());
+        return ExplainerTensorOps<T>.ArgMaxSkippingNaN(predictions.ToVector());
     }
 
     /// <summary>

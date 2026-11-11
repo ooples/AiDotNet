@@ -344,7 +344,7 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
     /// </summary>
     private int GetArgMax(Vector<T> values)
     {
-        return values.Length == 0 ? 0 : ExplainerTensorOps<T>.ArgMax(values);
+        return ExplainerTensorOps<T>.ArgMaxSkippingNaN(values);
     }
 }
 

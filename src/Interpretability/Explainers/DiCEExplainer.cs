@@ -644,18 +644,35 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         // Greedily add the remaining candidate farthest from its nearest selected one
         var engine = AiDotNetEngine.Current;
         var distances = PairwiseDistances(remaining, candidateList);
-        var minDistances = engine.TensorSliceAxis(distances, 1, 0);
+        // Nearest-selected distance per candidate; a NaN distance is skipped (MaxValue until a number arrives)
+        var minDistances = NanSkippingMin(
+            engine.TensorFullLike(engine.TensorSliceAxis(distances, 1, 0), NumOps.MaxValue), engine.TensorSliceAxis(distances, 1, 0));
         var taken = new bool[remaining.Count];
         var unavailable = engine.TensorFullLike(minDistances, NumOps.Negate(NumOps.One));
         while (selected.Count < _numCounterfactuals && selected.Count < candidateList.Count)
         {
-            int bestIdx = ExplainerTensorOps<T>.ArgMax(engine.TensorWhere(taken, unavailable, minDistances).ToVector());
+            // The farthest untaken candidate (scan seeded with -1); with none above -1, the first untaken one
+            int bestIdx = ExplainerTensorOps<T>.FirstArgMaxAbove(
+                engine.TensorWhere(taken, unavailable, minDistances).ToVector(), NumOps.Negate(NumOps.One));
+            if (bestIdx < 0)
+            {
+                bestIdx = Array.IndexOf(taken, false);
+            }
             selected.Add(remaining[bestIdx]);
             taken[bestIdx] = true;
-            minDistances = engine.TensorMin(minDistances, engine.TensorSliceAxis(distances, 1, bestIdx + 1));
+            minDistances = NanSkippingMin(minDistances, engine.TensorSliceAxis(distances, 1, bestIdx + 1));
         }
 
         return selected;
+    }
+
+    /// <summary>
+    /// Element-wise min(running, next) that keeps the running value where next is NaN (running is never NaN).
+    /// </summary>
+    private static Tensor<T> NanSkippingMin(Tensor<T> running, Tensor<T> next)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorWhere(engine.TensorIsNan(next), running, engine.TensorMin(running, next));
     }
 
     /// <summary>

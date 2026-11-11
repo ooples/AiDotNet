@@ -137,7 +137,7 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
         // Determine target output
         if (outputIndex < 0)
         {
-            outputIndex = prediction.Length == 0 ? 0 : ExplainerTensorOps<T>.ArgMax(prediction);
+            outputIndex = ExplainerTensorOps<T>.ArgMaxSkippingNaN(prediction);
         }
 
         T outputValue = outputIndex < prediction.Length

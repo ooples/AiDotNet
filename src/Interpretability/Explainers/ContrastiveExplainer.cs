@@ -128,11 +128,16 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
         }
 
         // Find fact (predicted class) and foil (next most likely class)
-        int factClass = ExplainerTensorOps<T>.ArgMax(predictions);
+        // (a top-two scan seeded with MinValue: NaN scores never win)
+        int factQualifies = ExplainerTensorOps<T>.FirstArgMaxAbove(predictions, NumOps.MinValue);
+        int factClass = Math.Max(0, factQualifies);
         var otherClasses = Enumerable.Range(0, predictions.Length).Where(c => c != factClass).ToArray();
         var otherScores = AiDotNetEngine.Current.TensorIndexSelect(
             predictions.AsTensor(), new Tensor<int>(otherClasses, new[] { otherClasses.Length }), 0).ToVector();
-        int foilClass = otherClasses[ExplainerTensorOps<T>.ArgMax(otherScores)];
+        int bestOther = ExplainerTensorOps<T>.FirstArgMaxAbove(otherScores, NumOps.MinValue);
+
+        // With no qualifying other score the scan leaves the foil at its start: 0 after the fact moved, else 1
+        int foilClass = bestOther >= 0 ? otherClasses[bestOther] : (factQualifies >= 0 ? 0 : 1);
 
         return Explain(instance, factClass, foilClass);
     }
@@ -410,7 +415,7 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     /// </summary>
     private int GetPredictedClass(Vector<T> predictions)
     {
-        return predictions.Length == 0 ? 0 : ExplainerTensorOps<T>.ArgMax(predictions);
+        return ExplainerTensorOps<T>.ArgMaxSkippingNaN(predictions);
     }
 
     private string GetClassName(int classIndex)

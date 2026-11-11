@@ -42,6 +42,34 @@ internal static class ExplainerTensorOps<T>
     }
 
     /// <summary>
+    /// Index of the first largest entry strictly above <paramref name="seed"/> (NaN never is), or -1 when no entry is:
+    /// the scan "best = seed; move only on a strictly larger entry" without its default index.
+    /// </summary>
+    public static int FirstArgMaxAbove(Vector<T> values, T seed)
+    {
+        var engine = AiDotNetEngine.Current;
+        var tensor = values.AsTensor();
+        var above = engine.TensorGreaterThan(tensor, seed);
+        if (values.Length == 0 || engine.TensorCountNonzero(above) == 0)
+        {
+            return -1;
+        }
+
+        var candidates = engine.TensorWhere(above, tensor, engine.TensorFullLike(tensor, seed));
+        var isMax = engine.TensorMultiply(engine.TensorEquals(candidates, engine.TensorMaxValue(candidates)), above);
+        return engine.TensorArgMax(isMax, 0).GetFlat(0);
+    }
+
+    /// <summary>
+    /// Index of the first largest entry, skipping NaN, or 0 when every entry is NaN or the type's minimum: what the
+    /// scan "best = MinValue; move only on a strictly larger entry" returns.
+    /// </summary>
+    public static int ArgMaxSkippingNaN(Vector<T> values)
+    {
+        return Math.Max(0, FirstArgMaxAbove(values, NumOps.MinValue));
+    }
+
+    /// <summary>
     /// Rows baseline + alpha_s * (input - baseline) for each alpha_s, as an [alphas, n] tensor.
     /// </summary>
     public static Tensor<T> InterpolationPath(Vector<T> baseline, Vector<T> input, Tensor<T> alphas)
