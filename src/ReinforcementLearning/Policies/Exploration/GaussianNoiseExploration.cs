@@ -47,16 +47,10 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         /// <inheritdoc />
         public override Vector<T> GetExplorationAction(Vector<T> state, Vector<T> policyAction, int actionSpaceSize, Random random)
         {
-            var noisyAction = new Vector<T>(actionSpaceSize);
-
-            for (int i = 0; i < actionSpaceSize; i++)
-            {
-                // Use BoxMullerSample from base class
-                double noise = NumOps.ToDouble(BoxMullerSample(random)) * _noiseStdDev;
-
-                double actionValue = NumOps.ToDouble(policyAction[i]) + noise;
-                noisyAction[i] = NumOps.FromDouble(actionValue);
-            }
+            // a + sigma * N(0, 1), one standard-normal draw per dimension in index order
+            var engine = AiDotNetEngine.Current;
+            var noise = engine.Multiply(RLTensorOps.StandardNormal<T>(random, actionSpaceSize), NumOps.FromDouble(_noiseStdDev));
+            var noisyAction = engine.Add(RLTensorOps.Head(policyAction, actionSpaceSize), noise);
 
             // Use ClampAction from base class (net462-compatible)
             return ClampAction(noisyAction);

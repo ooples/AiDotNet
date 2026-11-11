@@ -249,6 +249,26 @@ internal static class RLTensorOps
         return ops.Subtract(Engine.Sum(perDimension), ops.FromDouble(0.5 * Math.Log(2.0 * Math.PI) * mean.Length));
     }
 
+    /// <summary>
+    /// <paramref name="count"/> standard-normal draws from <paramref name="random"/>, taken in index order exactly as
+    /// a per-element <c>random.NextGaussian()</c> loop takes them (so a seeded stream is consumed identically).
+    /// </summary>
+    internal static Vector<T> StandardNormal<T>(Random random, int count)
+    {
+        if (random is null)
+        {
+            throw new ArgumentNullException(nameof(random));
+        }
+
+        if (count <= 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var draws = new Vector<double>(Enumerable.Range(0, count).Select(_ => AiDotNet.Extensions.RandomExtensions.NextGaussian(random)));
+        return draws.AsTensor().Cast<T>().ToVector();
+    }
+
     /// <summary>A one-hot vector of the given length with a one at <paramref name="index"/>.</summary>
     internal static Vector<T> OneHot<T>(int length, int index)
     {
