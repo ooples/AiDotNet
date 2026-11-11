@@ -101,7 +101,7 @@ public class BaseNEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Calculate number of digits needed
             int nCategories = sortedValues.Length;
-            int nCategories = sortedValues.Count;
+
             int nDigits = nCategories > 0 ? (int)Math.Ceiling(Math.Log(nCategories + 1) / Math.Log(_base)) : 1;
             nDigits = Math.Max(1, nDigits);
             _nDigitsPerColumn[col] = nDigits;
