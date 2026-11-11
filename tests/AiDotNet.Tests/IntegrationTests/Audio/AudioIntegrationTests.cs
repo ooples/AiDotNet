@@ -216,11 +216,12 @@ public class AudioIntegrationTests
     public async Task WindowType_AllValues()
     {
         var values = (((WindowType[])Enum.GetValues(typeof(WindowType))));
-        Assert.Equal(4, values.Length);
+        Assert.Equal(5, values.Length);
         Assert.Contains(WindowType.Rectangular, values);
         Assert.Contains(WindowType.Hann, values);
         Assert.Contains(WindowType.Hamming, values);
         Assert.Contains(WindowType.Blackman, values);
+        Assert.Contains(WindowType.Povey, values);
     }
 
     #endregion
