@@ -199,34 +199,35 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var outputTensor = _policyNetwork.Predict(stateTensor);
             var output = outputTensor.ToVector();
 
-            T logProb = NumOps.Zero;
+            var engine = AiDotNetEngine.Current;
+            T one = NumOps.One;
 
-            for (int i = 0; i < _actionSize; i++)
-            {
-                double alphaRaw = NumOps.ToDouble(output[i]);
-                double betaRaw = NumOps.ToDouble(output[_actionSize + i]);
+            // alpha, beta = softplus(raw) + 1 (> 1 for a well-behaved Beta)
+            var alpha = engine.TensorAddScalar(engine.Softplus(output.GetSubVector(0, _actionSize).AsTensor()), one);
+            var beta = engine.TensorAddScalar(engine.Softplus(output.GetSubVector(_actionSize, _actionSize).AsTensor()), one);
 
-                double alpha = Softplus(alphaRaw) + 1.0;
-                double beta = Softplus(betaRaw) + 1.0;
+            // Rescale action from [actionMin, actionMax] to [0, 1], clipped to avoid log(0)
+            T range = NumOps.FromDouble(_actionMax - _actionMin);
+            var unit = engine.TensorDivideScalar(
+                engine.TensorSubtractScalar(action.AsTensor(), NumOps.FromDouble(_actionMin)), range);
+            var x = engine.TensorClamp(unit, NumOps.FromDouble(1e-7), NumOps.FromDouble(1.0 - 1e-7));
+            var oneMinusX = engine.TensorSubtract(engine.TensorFullLike(x, one), x);
 
-                // Rescale action from [actionMin, actionMax] to [0, 1]
-                double actionValue = NumOps.ToDouble(action[i]);
-                double x = (actionValue - _actionMin) / (_actionMax - _actionMin);
-                x = Math.Max(1e-7, Math.Min(1.0 - 1e-7, x));  // Clip to avoid log(0)
+            // Beta distribution log probability
+            // log p(x) = (α-1)log(x) + (β-1)log(1-x) - log(B(α,β))
+            // where B(α,β) = Γ(α)Γ(β)/Γ(α+β)
+            var logBeta = engine.TensorSubtract(
+                engine.TensorAdd(engine.TensorLgamma(alpha), engine.TensorLgamma(beta)),
+                engine.TensorLgamma(engine.TensorAdd(alpha, beta)));
+            var betaLogProb = engine.TensorSubtract(
+                engine.TensorAdd(
+                    engine.TensorMultiply(engine.TensorSubtractScalar(alpha, one), engine.TensorLog(x)),
+                    engine.TensorMultiply(engine.TensorSubtractScalar(beta, one), engine.TensorLog(oneMinusX))),
+                logBeta);
 
-                // Beta distribution log probability
-                // log p(x) = (α-1)log(x) + (β-1)log(1-x) - log(B(α,β))
-                // where B(α,β) = Γ(α)Γ(β)/Γ(α+β)
-                double logBeta = LogGamma(alpha) + LogGamma(beta) - LogGamma(alpha + beta);
-                double betaLogProb = (alpha - 1) * Math.Log(x) + (beta - 1) * Math.Log(1 - x) - logBeta;
-
-                // Account for rescaling Jacobian
-                double rescaleLogProb = Math.Log(_actionMax - _actionMin);
-
-                logProb = NumOps.Add(logProb, NumOps.FromDouble(betaLogProb - rescaleLogProb));
-            }
-
-            return logProb;
+            // Account for rescaling Jacobian: log(actionMax - actionMin) per dimension
+            T rescaleLogProb = NumOps.Multiply(NumOps.FromDouble(_actionSize), NumOps.Log(range));
+            return NumOps.Subtract(engine.TensorSum(betaLogProb), rescaleLogProb);
         }
 
         /// <summary>
@@ -301,21 +302,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
                     return d * v;
                 }
             }
-        }
-
-        private double LogGamma(double x)
-        {
-            // Stirling's approximation for log-gamma function
-            // Accurate for x > 1
-            if (x < 1.5)
-            {
-                // Use recursion: Γ(x+1) = x * Γ(x)
-                return Math.Log(x) + LogGamma(x + 1.0);
-            }
-
-            double logSqrt2Pi = 0.5 * Math.Log(2.0 * Math.PI);
-            return logSqrt2Pi + (x - 0.5) * Math.Log(x) - x +
-                   1.0 / (12.0 * x) - 1.0 / (360.0 * x * x * x);
         }
     }
 }
