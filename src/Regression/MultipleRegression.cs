@@ -154,7 +154,11 @@ public class MultipleRegression<T> : RegressionBase<T>
             ridge = floor;
         }
 
-        var conditioned = engine.MatrixAdd(matrix, Matrix<T>.CreateDiagonal(engine.Fill(n, ridge)));
-        conditioned.AsSpan().CopyTo(matrix.AsWritableSpan());
+        // Accumulate the ridge onto the n diagonal positions only (no n x n diagonal operand).
+        var diagonalIndex = RegressionEngineOps2.IndexTensor(Enumerable.Range(0, n).ToArray());
+        var conditioned = Tensor<T>.FromMatrix(matrix);
+        engine.TensorIndexPutInPlace(
+            conditioned, new[] { diagonalIndex, diagonalIndex }, engine.Fill(n, ridge).AsTensor(), true);
+        conditioned.CopyTo(matrix.AsWritableSpan());
     }
 }

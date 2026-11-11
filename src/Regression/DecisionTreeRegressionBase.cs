@@ -1145,20 +1145,8 @@ public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegressi
             return gradients; // Return zeros
         }
 
-        int samplesPerParam = Math.Max(1, (sampleGradients.Length + paramCount - 1) / paramCount);
-
-        // Buckets are contiguous runs of samplesPerParam samples; only the last non-empty bucket can be
-        // partial, and buckets past the end of the samples stay zero. Zero-pad to whole buckets, sum each
-        // row of the [buckets, samplesPerParam] view, and divide by the per-bucket sample counts.
-        int sampleCount = sampleGradients.Length;
-        int bucketCount = (sampleCount + samplesPerParam - 1) / samplesPerParam;
-        var padded = new Vector<T>(bucketCount * samplesPerParam);
-        sampleGradients.AsSpan().CopyTo(padded.AsWritableSpan());
-        var bucketSums = Engine.ReduceSum(
-            new Tensor<T>(new[] { bucketCount, samplesPerParam }, padded), new[] { 1 }, keepDims: false).ToVector();
-        var bucketCounts = Engine.Fill(bucketCount, NumOps.FromDouble(samplesPerParam));
-        bucketCounts[bucketCount - 1] = NumOps.FromDouble(sampleCount - (bucketCount - 1) * samplesPerParam);
-        Engine.Divide(bucketSums, bucketCounts).AsSpan().CopyTo(gradients.AsWritableSpan());
+        RegressionEngineOps.ContiguousBucketMeans(sampleGradients, paramCount)
+            .AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }

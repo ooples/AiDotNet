@@ -358,4 +358,31 @@ internal static class RegressionEngineOps
     {
         return RegressionEngineOps2.Gather(source, indices);
     }
+
+    /// <summary>
+    /// Means of <paramref name="samples"/> over contiguous buckets of ceil(length / maxBuckets)
+    /// samples each. Only the last bucket can be partial; the result has one entry per non-empty
+    /// bucket (at most <paramref name="maxBuckets"/>). <paramref name="samples"/> must not be empty.
+    /// </summary>
+    public static Vector<T> ContiguousBucketMeans<T>(Vector<T> samples, int maxBuckets)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int sampleCount = samples.Length;
+        int samplesPerBucket = Math.Max(1, (sampleCount + maxBuckets - 1) / maxBuckets);
+
+        // Zero-pad to whole buckets, sum each row of the [buckets, samplesPerBucket] view, and divide by
+        // the per-bucket sample counts.
+        int bucketCount = (sampleCount + samplesPerBucket - 1) / samplesPerBucket;
+        var padded = new Vector<T>(bucketCount * samplesPerBucket);
+        samples.AsSpan().CopyTo(padded.AsWritableSpan());
+        var bucketSums = engine.ReduceSum(
+            new Tensor<T>(new[] { bucketCount, samplesPerBucket }, padded), new[] { 1 }, keepDims: false).ToVector();
+        int lastBucketCount = sampleCount - (bucketCount - 1) * samplesPerBucket;
+        var lastCount = engine.Fill(1, numOps.FromDouble(lastBucketCount));
+        var bucketCounts = bucketCount == 1
+            ? lastCount
+            : Vector<T>.Concatenate(engine.Fill(bucketCount - 1, numOps.FromDouble(samplesPerBucket)), lastCount);
+        return engine.Divide(bucketSums, bucketCounts);
+    }
 }
