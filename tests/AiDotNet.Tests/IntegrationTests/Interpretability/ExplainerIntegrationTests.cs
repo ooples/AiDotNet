@@ -2019,5 +2019,26 @@ public class ExplainerIntegrationTests
             "ALE for feature with positive weight should generally increase");
     }
 
+    [Fact]
+    public void DiCEExplainer_WithoutFeatureBounds_PerturbsFeatures()
+    {
+        // Reference behaviour: without feature bounds every normalization/perturbation range falls back
+        // to 1 (DiCE samples x +/- 0.5 * range initially). A zero range would keep every individual equal
+        // to the instance, so no counterfactual could change any feature.
+        Func<Matrix<double>, Vector<double>> predict = m => m.GetColumn(0);
+        var explainer = new DiCEExplainer<double>(
+            predictFunction: predict,
+            numFeatures: 3,
+            numCounterfactuals: 2,
+            populationSize: 10,
+            maxGenerations: 2,
+            randomState: 42);
+
+        var explanation = explainer.Explain(new Vector<double>(new[] { 0.0, 0.0, 0.0 }));
+
+        Assert.NotEmpty(explanation.Counterfactuals);
+        Assert.All(explanation.Counterfactuals, cf => Assert.NotEmpty(cf.Changes));
+    }
+
     #endregion
 }

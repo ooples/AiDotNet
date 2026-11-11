@@ -1175,3 +1175,11 @@ AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.Heatmap.get -> AiDotN
 AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.OriginalHeatmap.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 *REMOVED*AiDotNet.Interpretability.Explainers.LayerAttributionResult<T>.ReshapeSpatial(int height, int width, int channels) -> T[,,]!
 AiDotNet.Interpretability.Explainers.LayerAttributionResult<T>.ReshapeSpatial(int height, int width, int channels) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Interpretability.Explainers.DiCEExplainer<T>.ExplainWithTarget(AiDotNet.Tensors.LinearAlgebra.Vector<T>! instance, double targetValue) -> AiDotNet.Interpretability.Explainers.DiCEExplanation<T>!
+*REMOVED*AiDotNet.Interpretability.Explainers.DiCEExplanation<T>.AverageDistance.get -> double
+*REMOVED*AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.Distance.get -> double
+*REMOVED*AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.SingleCounterfactual(AiDotNet.Tensors.LinearAlgebra.Vector<T>! counterfactualInstance, T prediction, System.Collections.Generic.List<AiDotNet.Interpretability.Explainers.FeatureChange<T>!>! changes, double distance) -> void
+AiDotNet.Interpretability.Explainers.DiCEExplainer<T>.ExplainWithTarget(AiDotNet.Tensors.LinearAlgebra.Vector<T>! instance, T targetValue) -> AiDotNet.Interpretability.Explainers.DiCEExplanation<T>!
+AiDotNet.Interpretability.Explainers.DiCEExplanation<T>.AverageDistance.get -> T
+AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.Distance.get -> T
+AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.SingleCounterfactual(AiDotNet.Tensors.LinearAlgebra.Vector<T>! counterfactualInstance, T prediction, System.Collections.Generic.List<AiDotNet.Interpretability.Explainers.FeatureChange<T>!>! changes, T distance) -> void
