@@ -62,7 +62,7 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     /// </summary>
     /// <param name="x">The x-coordinates of the data points.</param>
     /// <param name="y">The y-coordinates (values) of the data points.</param>
-    /// <param name="customPeriod">Optional custom period for the data. If not provided, it will be calculated as max(x) - min(x).</param>
+    /// <param name="customPeriod">The period of the data. The two-argument constructor uses max(x) - min(x).</param>
     /// <exception cref="ArgumentException">
     /// Thrown when the input vectors have different lengths or when the number of points is even.
     /// </exception>
@@ -83,39 +83,53 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     /// even number of points, you might need to add or remove a point.
     /// </para>
     /// </remarks>
-    public TrigonometricInterpolation(IEnumerable<double> x, IEnumerable<double> y, double? customPeriod = null)
+    public TrigonometricInterpolation(Vector<T> x, Vector<T> y, T customPeriod)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-
-        var xList = x.ToList();
-        var yList = y.ToList();
-
-        if (xList.Count != yList.Count)
+        Guard.NotNull(x);
+        Guard.NotNull(y);
+        if (x.Length != y.Length)
             throw new ArgumentException("Input vectors must have the same length.");
-        if (xList.Count % 2 == 0)
+        if (x.Length % 2 == 0)
             throw new ArgumentException("Number of points must be odd for trigonometric interpolation.");
 
-        _x = new Vector<double>(xList).AsTensor().Cast<T>().ToVector();
-        _y = new Vector<double>(yList).AsTensor().Cast<T>().ToVector();
-
-        // Calculate or set the period
-        if (customPeriod.HasValue)
-        {
-            _period = _numOps.FromDouble(customPeriod.Value);
-        }
-        else
-        {
-            double calculatedPeriod = xList.Max() - xList.Min();
-            _period = _numOps.FromDouble(calculatedPeriod);
-        }
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _x = x;
+        _y = y;
+        _period = customPeriod;
 
         // Angular frequency 2 pi k / period of every Fourier term k = 0..n
-        int n = (xList.Count - 1) / 2;
+        int n = (x.Length - 1) / 2;
         _frequencies = AiDotNetEngine.Current.TensorDivideScalar(
             AiDotNetEngine.Current.TensorMultiplyScalar(Vector<T>.Range(0, n + 1).AsTensor(), _numOps.FromDouble(2 * Math.PI)),
             _period);
 
         (_a, _b) = CalculateCoefficients();
+    }
+
+    /// <summary>
+    /// Creates a trigonometric interpolation whose period is the span of the x-values, max(x) - min(x).
+    /// </summary>
+    /// <param name="x">The x-coordinates of the data points.</param>
+    /// <param name="y">The y-coordinates (values) of the data points.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the input vectors have different lengths, when the number of points is even, or when there are no points.
+    /// </exception>
+    public TrigonometricInterpolation(Vector<T> x, Vector<T> y)
+        : this(x, y, Span(x))
+    {
+    }
+
+    /// <summary>
+    /// The span of <paramref name="x"/>, max(x) - min(x), used as the default period.
+    /// </summary>
+    private static T Span(Vector<T> x)
+    {
+        Guard.NotNull(x);
+        if (x.Length == 0)
+            throw new ArgumentException("At least one point is required for trigonometric interpolation.", nameof(x));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return numOps.Subtract(TensorPrimitivesHelper<T>.Max(x), TensorPrimitivesHelper<T>.Min(x));
     }
 
     /// <summary>

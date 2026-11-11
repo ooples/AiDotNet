@@ -1141,3 +1141,9 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+*REMOVED*AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(System.Collections.Generic.IEnumerable<double>! x, System.Collections.Generic.IEnumerable<double>! y, double cutoffFrequency = 1) -> void
+*REMOVED*AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(System.Collections.Generic.IEnumerable<double>! x, System.Collections.Generic.IEnumerable<double>! y, double? customPeriod = null) -> void
+AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y) -> void
+AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, T cutoffFrequency) -> void
+AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y) -> void
+AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, T customPeriod) -> void
