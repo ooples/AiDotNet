@@ -16322,7 +16322,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     if (model.ClassName is "E2TTS" or "F5TTS" or "ProDiff")
                         sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                     int memorizationSteps = model.ClassName is "E2TTS" or "F5TTS" ? E2TtsMemorizationIterations : naturalSpeechWarmup ? PastWarmupTtsIterations
-                        : model.ClassName is "AdaSpeech" or "AdaSpeech2" ? 4
+                        // VoiceFlow trains at its reference 5e-5 and fell 5.4866 -> 5.4382 (0.88 %) in one step.
+                        : model.ClassName is "AdaSpeech" or "AdaSpeech2" or "VoiceFlow" ? 4
                         // ForwardTacotron's and Non-Attentive Tacotron's objectives fall a fraction of a percent per step at
                         // the fixtures' constant 1e-3 (Non-Attentive Tacotron measured 0.8098 -> 0.8071 in one step); six
                         // steps clear the 1 % threshold, which is unchanged.
@@ -16393,10 +16394,11 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 64 };");
                     // An untrained discrete diffusion over 16-code books can sample the same codes for two constant
-                    // texts; the input-sensitivity probes compare the deterministic objective.
+                    // texts, trained or not; the input-sensitivity probes compare the deterministic objective.
                     AppendObjectiveSensitivityProbes(sb, new[]
                     {
                         ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
