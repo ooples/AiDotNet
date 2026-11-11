@@ -28,13 +28,14 @@ public class FreGradOptions : PriorGradOptions
         get => checked(2 * UpsampleStrides.Aggregate(1, (product, stride) => checked(product * stride)));
         set
         {
+            // Re-assigning the value already held is a no-op, so a copy of any state the strides allow round-trips.
+            if (value == HopSize) return;
             int stages = UpsampleStrides.Length;
             if (stages < 1 || stages > 29 || UpsampleStrides.Any(s => s < 2 || s % 2 != 0))
                 throw new ArgumentException("FreGrad needs positive even transposed-convolution strides.");
             long divisor = 1L << (stages + 1);
             if (value < divisor || value % divisor != 0)
                 throw new ArgumentOutOfRangeException(nameof(value), "The waveform hop must support the DWT and every even upsampling stride.");
-            if (value == HopSize) return;
             int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
             var strides = new int[stages];
             int remaining = value / 2;

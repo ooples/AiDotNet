@@ -129,6 +129,8 @@ public class UniAudioOptions : CodecTtsOptions
                 if (_deserializingGeometry) _deserializedHop = true;
                 return;
             }
+            // Re-assigning the hop already held is a no-op, so a copy of any state the strides allow round-trips.
+            if (value == HopSize) return;
             if (value <= 0 || SampleRate <= 0 || SampleRate % value != 0)
                 throw new ArgumentException("The codec hop must be positive and divide the sample rate exactly.", nameof(value));
             if (CodecRatios is null || CodecRatios.Length == 0 || CodecRatios.Any(ratio => ratio <= 0))
@@ -160,6 +162,7 @@ public class UniAudioOptions : CodecTtsOptions
                 if (_deserializingGeometry) _deserializedFrameRate = true;
                 return;
             }
+            if (value == CodecFrameRate) return;
             if (value <= 0 || SampleRate <= 0 || SampleRate % value != 0)
                 throw new ArgumentException("The codec frame rate must be positive and divide the sample rate exactly.", nameof(value));
             HopSize = SampleRate / value;

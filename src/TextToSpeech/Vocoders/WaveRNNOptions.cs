@@ -22,8 +22,13 @@ public class WaveRNNOptions : VocoderOptions
     public override int HiddenDim
     {
         get => RnnDim;
-        set => RnnDim = value > 0 && value % 2 == 0 ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), "WaveRNN needs two equal nonempty state halves.");
+        set
+        {
+            // Re-assigning the value already held is a no-op, so a copy of any state round-trips.
+            if (value == RnnDim) return;
+            RnnDim = value > 0 && value % 2 == 0 ? value
+                : throw new ArgumentOutOfRangeException(nameof(value), "WaveRNN needs two equal nonempty state halves.");
+        }
     }
 
     /// <summary>The product of the actual conditioning upsampling factors.</summary>
@@ -32,10 +37,11 @@ public class WaveRNNOptions : VocoderOptions
         get => UpsampleScales.Aggregate(1, (product, scale) => checked(product * scale));
         set
         {
+            // Re-assigning the value already held is a no-op, so a copy of any state round-trips.
+            if (value == HopSize) return;
             if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
             if (UpsampleScales.Length == 0 || UpsampleScales.Any(s => s <= 0))
                 throw new ArgumentException("WaveRNN needs positive conditioning factors.");
-            if (value == HopSize) return;
             int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
             var scales = new int[UpsampleScales.Length];
             int remaining = value;

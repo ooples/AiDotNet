@@ -48,13 +48,14 @@ public class DiffWaveOptions : VocoderOptions
         get => UpsampleStrides.Aggregate(1, (product, stride) => checked(product * stride));
         set
         {
+            // Re-assigning the value already held is a no-op, so a copy of any state the strides allow round-trips.
+            if (value == HopSize) return;
             int stages = UpsampleStrides.Length;
             if (stages < 1 || stages > 30 || UpsampleStrides.Any(s => s < 2 || s % 2 != 0))
                 throw new ArgumentException("DiffWave's mel upsampler needs positive even strides.");
             long divisor = 1L << stages;
             if (value < divisor || value % divisor != 0)
                 throw new ArgumentOutOfRangeException(nameof(value), "The hop must preserve every even conditioning upsampling stage.");
-            if (value == HopSize) return;
             int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
             var strides = new int[stages];
             int remaining = value;
