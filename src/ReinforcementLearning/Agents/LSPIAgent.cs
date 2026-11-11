@@ -78,18 +78,11 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
         _samples = new List<(Vector<T>, int, T, Vector<T>, bool)>();
         _iterations = 0;
 
         // Initialize weights to zero
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                _weights[a, f] = NumOps.Zero;
-            }
-        }
+        _weights = Matrix<T>.CreateDefault(_options.ActionSize, _options.FeatureSize, NumOps.Zero);
     }
 
     /// <inheritdoc />
@@ -129,19 +122,13 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 
                 // Add regularization: A += λI
                 T regParam = NumOps.FromDouble(_options.RegularizationParam);
-                for (int i = 0; i < _options.FeatureSize; i++)
-                {
-                    A[i, i] = NumOps.Add(A[i, i], regParam);
-                }
+                A = RLTensorOps.AddToDiagonal(A, regParam);
 
                 // Solve: w = A^-1 * b
                 Vector<T> w = SolveLinearSystem(A, b);
 
                 // Update weights for this action
-                for (int f = 0; f < _options.FeatureSize; f++)
-                {
-                    _weights[targetAction, f] = w[f];
-                }
+                AiDotNetEngine.Current.SetRow(_weights, targetAction, w);
             }
 
             // Check convergence
@@ -159,51 +146,29 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 
     private (Matrix<T> A, Vector<T> b) ComputeLSTDQMatrices(int targetAction)
     {
-        var A = new Matrix<T>(_options.FeatureSize, _options.FeatureSize);
-        var b = new Vector<T>(_options.FeatureSize);
-
-        // Initialize to zero
-        for (int i = 0; i < _options.FeatureSize; i++)
-        {
-            b[i] = NumOps.Zero;
-            for (int j = 0; j < _options.FeatureSize; j++)
-            {
-                A[i, j] = NumOps.Zero;
-            }
-        }
-
         // Accumulate A and b from samples where target action was taken
+        var engine = AiDotNetEngine.Current;
+        var phiRows = new List<Vector<T>>();
+        var diffRows = new List<Vector<T>>();
+        var sampleRewards = new List<T>();
         foreach (var (state, action, reward, nextState, done) in _samples)
         {
             if (action != targetAction) continue;
 
-            // Find best next action using current policy
+            // Find best next action
             int nextAction = done ? 0 : GetGreedyAction(nextState);
 
-            // Compute φ(s,a) and φ(s',a')
-            Vector<T> phi = state;
-            Vector<T> phiNext = done ? new Vector<T>(_options.FeatureSize) : nextState;
-
-            // A += φ(s,a)(φ(s,a) - γφ(s',a'))^T
-            for (int i = 0; i < _options.FeatureSize; i++)
-            {
-                T diff = done ? phi[i] : NumOps.Subtract(phi[i], NumOps.Multiply(DiscountFactor, phiNext[i]));
-                for (int j = 0; j < _options.FeatureSize; j++)
-                {
-                    T increment = NumOps.Multiply(phi[j], diff);
-                    A[j, i] = NumOps.Add(A[j, i], increment);
-                }
-            }
-
-            // b += φ(s,a)r
-            for (int i = 0; i < _options.FeatureSize; i++)
-            {
-                T increment = NumOps.Multiply(phi[i], reward);
-                b[i] = NumOps.Add(b[i], increment);
-            }
+            // phi(s,a) and the TD difference phi(s,a) - gamma * phi(s',a') (just phi at a terminal step)
+            Vector<T> phi = RLTensorOps.Head(state, _options.FeatureSize);
+            phiRows.Add(phi);
+            diffRows.Add(done
+                ? phi
+                : engine.Subtract(phi, engine.Multiply(RLTensorOps.Head(nextState, _options.FeatureSize), DiscountFactor)));
+            sampleRewards.Add(reward);
         }
 
-        return (A, b);
+        // A = sum phi (phi - gamma phi')^T and b = sum phi r over those samples
+        return RLTensorOps.LeastSquaresTdSystem(phiRows, diffRows, sampleRewards, _options.FeatureSize);
     }
 
     private Vector<T> SolveLinearSystem(Matrix<T> A, Vector<T> b)
@@ -275,57 +240,25 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 
     private Matrix<T> CloneWeights(Matrix<T> weights)
     {
-        var clone = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                clone[a, f] = weights[a, f];
-            }
-        }
-        return clone;
+        return weights.Clone();
     }
 
     private T ComputeWeightChange(Matrix<T> w1, Matrix<T> w2)
     {
-        T sumSquaredDiff = NumOps.Zero;
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                T diff = NumOps.Subtract(w1[a, f], w2[a, f]);
-                T squared = NumOps.Multiply(diff, diff);
-                sumSquaredDiff = NumOps.Add(sumSquaredDiff, squared);
-            }
-        }
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquaredDiff)));
+        // ||w1 - w2||_F
+        return RLTensorOps.FrobeniusNorm(AiDotNetEngine.Current.MatrixSubtract(w1, w2));
     }
 
     private T ComputeQValue(Vector<T> features, int actionIndex)
     {
-        T qValue = NumOps.Zero;
-        for (int f = 0; f < _options.FeatureSize; f++)
-        {
-            T weightedFeature = NumOps.Multiply(_weights[actionIndex, f], features[f]);
-            qValue = NumOps.Add(qValue, weightedFeature);
-        }
-        return qValue;
+        // Q(s,a) = w_a . phi(s)
+        return RLTensorOps.LinearQValue(_weights, actionIndex, features);
     }
 
     private int GetGreedyAction(Vector<T> state)
     {
-        int bestAction = 0;
-        T bestValue = ComputeQValue(state, 0);
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            T value = ComputeQValue(state, a);
-            if (NumOps.GreaterThan(value, bestValue))
-            {
-                bestValue = value;
-                bestAction = a;
-            }
-        }
+        // First arg-max of W * phi(s) over the actions.
+        int bestAction = RLTensorOps.ArgMax(RLTensorOps.LinearQValues(_weights, state));
 
         return bestAction;
     }
@@ -345,16 +278,7 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 
     private T ComputeWeightNorm()
     {
-        T sumSquares = NumOps.Zero;
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                T squared = NumOps.Multiply(_weights[a, f], _weights[a, f]);
-                sumSquares = NumOps.Add(sumSquares, squared);
-            }
-        }
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
+        return RLTensorOps.FrobeniusNorm(_weights);
     }
 
     /// <inheritdoc />

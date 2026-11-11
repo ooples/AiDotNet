@@ -423,6 +423,42 @@ internal static class RLTensorOps
         Engine.SetRow(weights, action, Engine.Add(row, step));
     }
 
+    /// <summary>
+    /// The LSTD(Q) normal equations A = sum phi (phi - gamma phi')^T and b = sum phi r, given the
+    /// per-sample feature rows phi, difference rows d = phi - gamma phi', and rewards (A = Phi^T D,
+    /// b = Phi^T r). Zero when there are no samples.
+    /// </summary>
+    internal static (Matrix<T> A, Vector<T> b) LeastSquaresTdSystem<T>(
+        List<Vector<T>> phiRows, List<Vector<T>> diffRows, List<T> rewards, int featureSize)
+    {
+        if (phiRows is null || diffRows is null || rewards is null)
+        {
+            throw new ArgumentNullException(phiRows is null ? nameof(phiRows) : diffRows is null ? nameof(diffRows) : nameof(rewards));
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (phiRows.Count == 0)
+        {
+            return (Matrix<T>.CreateDefault(featureSize, featureSize, ops.Zero), Vector<T>.CreateDefault(featureSize, ops.Zero));
+        }
+
+        var phiT = Engine.MatrixTranspose(Matrix<T>.FromRowVectors(phiRows));
+        var a = Engine.MatrixMultiply(phiT, Matrix<T>.FromRowVectors(diffRows));
+        var b = Engine.MatrixVectorMultiply(phiT, Vector<T>.FromEnumerable(rewards));
+        return (a, b);
+    }
+
+    /// <summary>A + value * I (ridge regularisation of a square matrix).</summary>
+    internal static Matrix<T> AddToDiagonal<T>(Matrix<T> matrix, T value)
+    {
+        if (matrix is null)
+        {
+            throw new ArgumentNullException(nameof(matrix));
+        }
+
+        return Engine.MatrixAdd(matrix, Engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(matrix.Rows), value));
+    }
+
     /// <summary>Frobenius norm sqrt(sum w^2) of a matrix.</summary>
     internal static T FrobeniusNorm<T>(Matrix<T> weights)
     {
