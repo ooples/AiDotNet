@@ -327,7 +327,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
                 : (new Matrix<T>(m, 0), new Vector<T>(0), new Matrix<T>(0, n));
         }
 
-        var (u, s, vh) = Linalg.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices);
+        var (u, s, vh) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices);
 
         int uColumns = u.Shape[1];
         int filled = Engine.TensorCountNonzero(Engine.TensorNorm(u, 0));
@@ -341,7 +341,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
             else
             {
                 var basis = Engine.TensorSlice(u, new[] { 0, 0 }, new[] { m, filled });
-                var (q, _) = Linalg.QR(basis, "complete");
+                var (q, _) = LinalgDispatch<T>.QR(basis, "complete");
                 complement = Engine.TensorSlice(q, new[] { 0, filled }, new[] { m, uColumns - filled });
             }
 
@@ -1056,6 +1056,6 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
             return new Vector<T>(0);
         }
 
-        return Engine.TensorAbs(Linalg.Diagonal(Tensor<T>.FromMatrix(matrix))).ToVector();
+        return Engine.TensorAbs(LinalgDispatch<T>.Diagonal(Tensor<T>.FromMatrix(matrix))).ToVector();
     }
 }

@@ -471,7 +471,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         // Gaussian elimination with partial pivoting on H, as one engine solve.
-        var (solution, info) = Linalg.SolveEx(
+        var (solution, info) = LinalgDispatch<T>.SolveEx(
             Tensor<T>.FromMatrix(H),
             Tensor<T>.FromVector(b, new[] { n, 1 }));
         if (Engine.TensorCountNonzero(info) > 0)

@@ -426,31 +426,6 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     private Vector<T> SolveLinearSystem(Matrix<T> A, Vector<T> b)
     {
         int n = A.Rows;
-        if (n == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        // Gaussian elimination with partial pivoting as one engine solve.
-        var a = Tensor<T>.FromMatrix(A);
-        var rhs = Tensor<T>.FromVector(b, new[] { n, 1 });
-        var (solution, info) = Linalg.SolveEx(a, rhs);
-        if (Engine.TensorCountNonzero(info) > 0)
-        {
-            // Singular: keep the original elimination, which sets the components with a zero pivot to zero.
-            return SolveByEliminationSkippingZeroPivots(A, b);
-        }
-
-        return solution.Reshape(new[] { n }).ToVector();
-    }
-
-    /// <summary>
-    /// Gaussian elimination with partial pivoting that leaves zero-pivot components at zero (the
-    /// original behaviour for singular systems).
-    /// </summary>
-    private Vector<T> SolveByEliminationSkippingZeroPivots(Matrix<T> A, Vector<T> b)
-    {
-        int n = A.Rows;
         Matrix<T> augmented = new Matrix<T>(n, n + 1);
 
         // Create augmented matrix [A|b]

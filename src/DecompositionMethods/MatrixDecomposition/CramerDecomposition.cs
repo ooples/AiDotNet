@@ -98,7 +98,7 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
         var columnMask = Engine.TensorBroadcastTo(Engine.TensorEye<T>(n).Reshape(new[] { n, 1, n }), shape);
         var replaced = Engine.TensorWhere(columnMask, stackedB, stackedA);
 
-        var determinants = Linalg.Det(replaced);
+        var determinants = LinalgDispatch<T>.Det(replaced);
         return Engine.TensorDivideScalar(determinants, detA).Reshape(new[] { n }).ToVector();
     }
 
@@ -127,7 +127,7 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         // adj(A) / det(A) is the inverse; the engine computes it in one whole-matrix call.
-        return Linalg.Inv(Tensor<T>.FromMatrix(A)).ToMatrix();
+        return LinalgDispatch<T>.Inv(Tensor<T>.FromMatrix(A)).ToMatrix();
     }
 
     /// <summary>
@@ -148,6 +148,6 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
             return NumOps.One;
         }
 
-        return Linalg.Det(Tensor<T>.FromMatrix(matrix))[0];
+        return LinalgDispatch<T>.Det(Tensor<T>.FromMatrix(matrix))[0];
     }
 }

@@ -160,11 +160,11 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         Tensor<T> vectors;
         if (NumOps.LessThanOrEquals(MaxAsymmetry(a), SymmetryTolerance(a)))
         {
-            (values, vectors) = Linalg.Eigh(a);
+            (values, vectors) = LinalgDispatch<T>.Eigh(a);
         }
         else
         {
-            var (complexValues, complexVectors) = Linalg.Eig(a);
+            var (complexValues, complexVectors) = LinalgDispatch<T>.Eig(a);
             values = Engine.TensorSelect(complexValues, 1, 0);
             vectors = Engine.TensorSelect(complexVectors, 2, 0);
         }
@@ -247,7 +247,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
 
         // The converged Jacobi iteration is the symmetric eigendecomposition A = V diag(λ) V^T
         // with orthonormal V; the engine symmetric eigensolver computes it in one call.
-        var (values, vectors) = Linalg.Eigh(a);
+        var (values, vectors) = LinalgDispatch<T>.Eigh(a);
         return (values.ToVector(), vectors.ToMatrix());
     }
 

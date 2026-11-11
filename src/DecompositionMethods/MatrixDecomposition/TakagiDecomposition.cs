@@ -132,7 +132,7 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                 nameof(matrix));
         }
 
-        var (values, vectors) = Linalg.Eigh(a);
+        var (values, vectors) = LinalgDispatch<T>.Eigh(a);
 
         // Columns with a negative eigenvalue become purely imaginary.
         var nonNegative = Engine.TensorSubtract(Engine.TensorOnesLike(values), Engine.TensorLessThan(values, NumOps.Zero));

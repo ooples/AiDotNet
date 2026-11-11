@@ -1,0 +1,98 @@
+using System.Reflection;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.Helpers;
+
+/// <summary>
+/// Exposes the tensor library's dense linear-algebra kernels (<see cref="Linalg"/>) to code whose element
+/// type <typeparamref name="T"/> is unconstrained. <see cref="Linalg"/> constrains its element type to
+/// <c>unmanaged</c>, which a generic decomposition cannot state; each kernel is bound once per
+/// <typeparamref name="T"/> by closing the generic method over the runtime type, so the call stays generic
+/// and runs the library's own (device-dispatched) implementation.
+/// </summary>
+internal static class LinalgDispatch<T>
+{
+    private static Func<Tensor<T>, bool, (Tensor<T>, Tensor<int>)>? _choleskyEx;
+    private static Func<Tensor<T>, Tensor<T>>? _det;
+    private static Func<Tensor<T>, Tensor<T>>? _inv;
+    private static Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>)>? _eigh;
+    private static Func<Tensor<T>, (Tensor<T>, Tensor<T>)>? _eig;
+    private static Func<Tensor<T>, Tensor<T>, (Tensor<T>, Tensor<int>)>? _solveEx;
+    private static Func<Tensor<T>, string, (Tensor<T>, Tensor<T>)>? _qr;
+    private static Func<Tensor<T>, (Tensor<T>, Tensor<T>, Tensor<T>)>? _lu;
+    private static Func<Tensor<T>, Tensor<T>, bool, bool, Tensor<T>>? _solveTriangular;
+    private static Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>, Tensor<T>)>? _svd;
+    private static Func<Tensor<T>, int, int, int, Tensor<T>>? _diagonal;
+
+    /// <summary>Cholesky factor with per-matrix failure info (<c>Linalg.CholeskyEx</c>).</summary>
+    internal static (Tensor<T> L, Tensor<int> Info) CholeskyEx(Tensor<T> input, bool upper = false)
+        => (_choleskyEx ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<int>)>>(
+            nameof(Linalg.CholeskyEx), 2))(input, upper);
+
+    /// <summary>Determinant (<c>Linalg.Det</c>).</summary>
+    internal static Tensor<T> Det(Tensor<T> input)
+        => (_det ??= Bind<Func<Tensor<T>, Tensor<T>>>(nameof(Linalg.Det), 1))(input);
+
+    /// <summary>Matrix inverse (<c>Linalg.Inv</c>).</summary>
+    internal static Tensor<T> Inv(Tensor<T> input)
+        => (_inv ??= Bind<Func<Tensor<T>, Tensor<T>>>(nameof(Linalg.Inv), 1))(input);
+
+    /// <summary>Symmetric eigendecomposition (<c>Linalg.Eigh</c>).</summary>
+    internal static (Tensor<T> Values, Tensor<T> Vectors) Eigh(Tensor<T> input, bool upper = false)
+        => (_eigh ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>)>>(
+            nameof(Linalg.Eigh), 2))(input, upper);
+
+    /// <summary>General eigendecomposition (<c>Linalg.Eig</c>).</summary>
+    internal static (Tensor<T> Values, Tensor<T> Vectors) Eig(Tensor<T> input)
+        => (_eig ??= Bind<Func<Tensor<T>, (Tensor<T>, Tensor<T>)>>(nameof(Linalg.Eig), 1))(input);
+
+    /// <summary>Linear solve with per-system failure info (<c>Linalg.SolveEx</c>).</summary>
+    internal static (Tensor<T> Result, Tensor<int> Info) SolveEx(Tensor<T> a, Tensor<T> b)
+        => (_solveEx ??= Bind<Func<Tensor<T>, Tensor<T>, (Tensor<T>, Tensor<int>)>>(
+            nameof(Linalg.SolveEx), 2))(a, b);
+
+    /// <summary>QR decomposition (<c>Linalg.QR</c>); <paramref name="mode"/> is "reduced" or "complete".</summary>
+    internal static (Tensor<T> Q, Tensor<T> R) QR(Tensor<T> input, string mode = "reduced")
+        => (_qr ??= Bind<Func<Tensor<T>, string, (Tensor<T>, Tensor<T>)>>(nameof(Linalg.QR), 2))(input, mode);
+
+    /// <summary>LU decomposition with partial pivoting (<c>Linalg.LU</c>).</summary>
+    internal static (Tensor<T> P, Tensor<T> L, Tensor<T> U) LU(Tensor<T> input)
+        => (_lu ??= Bind<Func<Tensor<T>, (Tensor<T>, Tensor<T>, Tensor<T>)>>(nameof(Linalg.LU), 1))(input);
+
+    /// <summary>Triangular solve (<c>Linalg.SolveTriangular</c>).</summary>
+    internal static Tensor<T> SolveTriangular(Tensor<T> a, Tensor<T> b, bool upper, bool unitDiagonal = false)
+        => (_solveTriangular ??= Bind<Func<Tensor<T>, Tensor<T>, bool, bool, Tensor<T>>>(
+            nameof(Linalg.SolveTriangular), 4))(a, b, upper, unitDiagonal);
+
+    /// <summary>Singular value decomposition (<c>Linalg.Svd</c>).</summary>
+    internal static (Tensor<T> U, Tensor<T> S, Tensor<T> Vh) Svd(Tensor<T> input, bool fullMatrices = true)
+        => (_svd ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>, Tensor<T>)>>(
+            nameof(Linalg.Svd), 2))(input, fullMatrices);
+
+    /// <summary>Diagonal extraction (<c>Linalg.Diagonal</c>).</summary>
+    internal static Tensor<T> Diagonal(Tensor<T> input, int offset = 0, int dim1 = -2, int dim2 = -1)
+        => (_diagonal ??= Bind<Func<Tensor<T>, int, int, int, Tensor<T>>>(
+            nameof(Linalg.Diagonal), 4))(input, offset, dim1, dim2);
+
+    private static TDelegate Bind<TDelegate>(string name, int parameterCount) where TDelegate : Delegate
+    {
+        var method = typeof(Linalg).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .FirstOrDefault(m => m.Name == name && m.IsGenericMethodDefinition
+                && m.GetGenericArguments().Length == 1 && m.GetParameters().Length == parameterCount);
+        if (method is null)
+            throw new MissingMethodException(typeof(Linalg).FullName, name);
+
+        MethodInfo closed;
+        try
+        {
+            closed = method.MakeGenericMethod(typeof(T));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new NotSupportedException(
+                $"Linalg.{name} requires an unmanaged numeric element type; {typeof(T).Name} is not supported.", ex);
+        }
+
+        return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), closed);
+    }
+}

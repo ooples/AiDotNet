@@ -1479,7 +1479,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             var comparer = EqualityComparer<T>.Default;
             foreach (T value in parameters.AsSpan())
             {
-                hash = (hash ^ comparer.GetHashCode(value)) * fnvPrime;
+                hash = (hash ^ (value is null ? 0 : comparer.GetHashCode(value))) * fnvPrime;
             }
             hash = (hash ^ len) * fnvPrime;
 

@@ -297,12 +297,12 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     {
         var engine = AiDotNetEngine.Current;
         var l = Tensor<T>.FromMatrix(unitLower);
-        var y = Linalg.SolveTriangular(l, Tensor<T>.FromMatrix(rhs), upper: false, unitDiagonal: true);
+        var y = LinalgDispatch<T>.SolveTriangular(l, Tensor<T>.FromMatrix(rhs), upper: false, unitDiagonal: true);
         var d = engine.TensorBroadcastTo(
             Tensor<T>.FromVector(diagonal, new[] { diagonal.Length, 1 }),
             new[] { rhs.Rows, rhs.Columns });
         y = engine.TensorMultiply(y, engine.TensorReciprocal(d));
-        return Linalg.SolveTriangular(engine.TensorTranspose(l), y, upper: true, unitDiagonal: true).ToMatrix();
+        return LinalgDispatch<T>.SolveTriangular(engine.TensorTranspose(l), y, upper: true, unitDiagonal: true).ToMatrix();
     }
 
     /// <summary>
@@ -402,7 +402,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x.</returns>
     private protected static Vector<T> SolveTriangularSystem(Matrix<T> triangular, Vector<T> rhs, bool upper, bool unitDiagonal = false)
     {
-        var solution = Linalg.SolveTriangular(
+        var solution = LinalgDispatch<T>.SolveTriangular(
             Tensor<T>.FromMatrix(triangular),
             Tensor<T>.FromVector(rhs, new[] { rhs.Length, 1 }),
             upper,
@@ -415,7 +415,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// </summary>
     private protected static Matrix<T> SolveTriangularSystem(Matrix<T> triangular, Matrix<T> rhs, bool upper, bool unitDiagonal = false)
     {
-        return Linalg.SolveTriangular(
+        return LinalgDispatch<T>.SolveTriangular(
             Tensor<T>.FromMatrix(triangular),
             Tensor<T>.FromMatrix(rhs),
             upper,
@@ -486,7 +486,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
                 : (new Matrix<T>(m, n), new Matrix<T>(n, n));
         }
 
-        var (q, r) = Linalg.QR(Tensor<T>.FromMatrix(matrix), complete ? "complete" : "reduced");
+        var (q, r) = LinalgDispatch<T>.QR(Tensor<T>.FromMatrix(matrix), complete ? "complete" : "reduced");
 
         // sign'(x) = +1 for x >= 0, -1 for x < 0 (sign(0) = 0 would erase the column).
         var signs = Engine.TensorSign(Engine.TensorDiagonal(r));

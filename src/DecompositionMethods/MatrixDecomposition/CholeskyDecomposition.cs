@@ -194,7 +194,7 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
             return new Matrix<T>(0, 0);
         }
 
-        var (factor, info) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(matrix), upper: false);
+        var (factor, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(matrix), upper: false);
         if (Engine.TensorCountNonzero(info) > 0)
         {
             throw new ArgumentException("Matrix is not positive definite.");
