@@ -19869,6 +19869,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // streaming snapshots that must be promoted before its weights participate in backward.
         var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
         var pairedTarget = pair.Target ?? target;
+        if (FusedReadoutForTraining() is { } fusedReadout)
+        {
+            SetTrainingMode(true);
+            var trainingInput = PrepareInputForTraining(pair.Input);
+            var readoutInput = ForwardForTrainingToReadout(trainingInput);
+            var resolved = lossFunction ?? LossFunction;
+            return FusedReadoutObjective(fusedReadout, readoutInput, pairedTarget, resolved, pair.Input);
+        }
         var prediction = ForwardPreparedForTraining(pair.Input, pairTransformed: true);
         return ComputeObjectiveFromPrediction(pair.Input, prediction, pairedTarget, lossFunction);
     }

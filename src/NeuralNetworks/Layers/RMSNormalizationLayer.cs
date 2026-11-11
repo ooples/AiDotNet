@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // Rescales values, never resizes. Rank-agnostic, so its axes carry no intrinsic meaning to name.
 [ElementWiseShape(Note = "Root-mean-square normalisation; every dimension is carried through.")]
 [AutoParameters]
-public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
+public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract, IDetachablePreHeadLayer<T>
 {
     private readonly T _epsilon;
 
@@ -196,6 +196,28 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
         var output = Engine.TensorMultiply(normalised, _gamma);
 
         return output;
+    }
+
+    Tensor<T> IDetachablePreHeadLayer<T>.ForwardWithDetachedParameters(Tensor<T> input, ref object? detachedState)
+    {
+        EnsureInitializedFromInput(input);
+        int rank = input.Shape.Length;
+        int featureSize = input.Shape[rank - 1];
+        var detachedGamma = detachedState as Tensor<T>;
+        if (detachedGamma is null)
+        {
+            detachedGamma = Engine.StopGradient(_gamma);
+            detachedState = detachedGamma;
+        }
+
+        var squared = Engine.TensorSquare(input);
+        var sumSq = Engine.ReduceSum(squared, new[] { rank - 1 }, keepDims: true);
+        var meanSq = Engine.TensorDivideScalar(sumSq, NumOps.FromDouble(featureSize));
+        var stabilised = Engine.TensorAddScalar(meanSq, _epsilon);
+        var rms = Engine.TensorSqrt(stabilised);
+        var invRms = Engine.TensorReciprocal(rms);
+        var normalised = Engine.TensorMultiply(input, invRms);
+        return Engine.TensorMultiply(normalised, detachedGamma);
     }
 
     /// <inheritdoc/>

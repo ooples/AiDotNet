@@ -23,3 +23,32 @@ public interface IFusedReadoutLossLayer<T>
     /// <returns>The fused scalar loss, or null to fall back.</returns>
     Tensor<T>? TryComputeFusedLoss(Tensor<T> input, Tensor<T> target, ILossFunction<T> loss);
 }
+
+/// <summary>
+/// Internal pre-head readout layer contract (e.g. final RMSNorm or LayerNorm) allowing hidden-layer local objectives
+/// to evaluate the shared readout on the same tape while detaching the normalization layer's own parameters.
+/// </summary>
+internal interface IDetachablePreHeadLayer<T>
+{
+    Tensor<T> ForwardWithDetachedParameters(Tensor<T> input, ref object? detachedState);
+}
+
+/// <summary>
+/// Internal extension of <see cref="IFusedReadoutLossLayer{T}"/> that prepares integer class-index targets once per
+/// step, supports parameter-detached evaluation across intermediate hidden layers, and exposes vocabulary rows for
+/// sampled readout local credit without materializing full <c>[rows, vocabulary]</c> logits.
+/// </summary>
+internal interface IDetachableFusedReadoutLossLayer<T> : IFusedReadoutLossLayer<T>
+{
+    Tensor<int>? TryPrepareClassIndexTarget(Tensor<T> target, ILossFunction<T> loss, int inputRank, int[] inputShape, out int vocabularySize);
+
+    Tensor<T>? TryComputeFusedLossPrepared(
+        Tensor<T> input,
+        Tensor<int> ids,
+        bool detachParameters,
+        ref Tensor<T>? tracedWeight,
+        ref Tensor<T>? detachedWeight,
+        ref Tensor<T>? detachedBias);
+
+    bool TryGetVocabularyRowsForSampling(out Tensor<T> vocabRows, out Tensor<T>? bias, out bool vocabRowsAreInputMajor);
+}
