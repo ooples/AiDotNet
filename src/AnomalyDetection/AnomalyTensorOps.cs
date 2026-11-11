@@ -9,6 +9,9 @@ namespace AiDotNet.AnomalyDetection;
 /// </summary>
 internal static class AnomalyTensorOps
 {
+    // Upper bound on the elements of one block of row pairs materialised by the pairwise helpers.
+    private const int PairBlockElements = 1 << 22;
+
     private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>Copies a matrix into a [rows, columns] tensor.</summary>
@@ -90,6 +93,69 @@ internal static class AnomalyTensorOps
 
         mask = engine.TensorUnfold(engine.TensorConcatenate(maskParts.ToArray(), 0), 0, width, 1);
         return engine.TensorUnfold(engine.TensorConcatenate(parts.ToArray(), 0), 0, width, 1);
+    }
+
+    /// <summary>
+    /// Exact squared Euclidean distances between every row of x ([n, d]) and every row of y ([m, d]),
+    /// summed from the explicit differences (no ||x||^2 + ||y||^2 - 2xy cancellation). Row pairs are
+    /// materialised in bounded blocks.
+    /// </summary>
+    internal static Tensor<T> PairwiseSquaredDistances<T>(Tensor<T> x, Tensor<T> y)
+    {
+        var engine = Engine;
+        int n = x.Shape[0];
+        int m = y.Shape[0];
+        int d = x.Shape[1];
+        if (n == 0 || m == 0 || d == 0)
+        {
+            return Tensor<T>.CreateZeros(new[] { n, m });
+        }
+
+        long perRow = (long)m * d;
+        int rowsPerBlock = (int)Math.Max(1, Math.Min(n, PairBlockElements / perRow));
+        if (rowsPerBlock >= n)
+        {
+            return engine.Reshape(RowPairSquaredDistances(x, y, n), new[] { n, m });
+        }
+
+        var result = Tensor<T>.CreateZeros(new[] { n, m });
+        for (int start = 0; start < n; start += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, n - start);
+            var block = engine.TensorSlice(x, new[] { start, 0 }, new[] { count, d });
+            var values = engine.Reshape(RowPairSquaredDistances(block, y, count), new[] { count, m });
+            result = engine.TensorSetSlice(result, values, new[] { start, 0 });
+        }
+
+        return result;
+    }
+
+    /// <summary>Exact Euclidean distances between every row of x and every row of y.</summary>
+    internal static Tensor<T> PairwiseDistances<T>(Tensor<T> x, Tensor<T> y)
+        => Engine.TensorSqrt(PairwiseSquaredDistances(x, y));
+
+    /// <summary>Exact Euclidean distances between every pair of rows of a matrix.</summary>
+    internal static Tensor<T> PairwiseDistances<T>(Matrix<T> x)
+    {
+        var t = ToTensor(x);
+        return PairwiseDistances(t, t);
+    }
+
+    /// <summary>Exact squared Euclidean distances from one point to every row of data.</summary>
+    internal static Tensor<T> SquaredDistancesToPoint<T>(Tensor<T> data, Tensor<T> point)
+    {
+        var engine = Engine;
+        return engine.ReduceSum(engine.TensorSquare(SubtractRow(data, point)), new[] { 1 }, false);
+    }
+
+    // The [rows * m] flattened squared distances of every (block row, y row) pair.
+    private static Tensor<T> RowPairSquaredDistances<T>(Tensor<T> block, Tensor<T> y, int rows)
+    {
+        var engine = Engine;
+        int m = y.Shape[0];
+        var a = engine.TensorRepeatInterleave(block, m, 0);
+        var b = engine.TensorTile(y, new[] { rows, 1 });
+        return engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(a, b)), new[] { 1 }, false);
     }
 
     /// <summary>The rows of m at the given indices, in order.</summary>
