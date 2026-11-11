@@ -1,10 +1,10 @@
 namespace AiDotNet.CausalDiscovery;
 
 /// <summary>
-/// Builds dense [rows x cols] weight matrices from per-edge statistics with one engine scatter,
-/// for algorithms that score edges one at a time.
+/// Engine-op helpers shared by the causal discovery algorithms: dense [rows x cols] weight matrices built
+/// from per-edge statistics with one scatter, and scalar tests on tensors without per-element access.
 /// </summary>
-internal static class CausalWeightScatter
+internal static class CausalTensorHelpers
 {
     /// <summary>
     /// A zero matrix holding <c>weights[p]</c> at the row-major position <c>p</c> of each entry.
@@ -42,6 +42,24 @@ internal static class CausalWeightScatter
         }
 
         return flat.Reshape(new[] { rows, cols }).ToMatrix();
+    }
+
+    /// <summary>
+    /// True when any entry of <paramref name="values"/> is below <paramref name="bound"/> (NaN never is).
+    /// </summary>
+    internal static bool AnyBelow<T>(Tensor<T> values, T bound)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorCountNonzero(engine.TensorLessThan(values, bound)) > 0;
+    }
+
+    /// <summary>
+    /// True when any entry of <paramref name="values"/> is above <paramref name="bound"/> (NaN never is).
+    /// </summary>
+    internal static bool AnyAbove<T>(Tensor<T> values, T bound)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorCountNonzero(engine.TensorGreaterThan(values, bound)) > 0;
     }
 
     /// <summary>
