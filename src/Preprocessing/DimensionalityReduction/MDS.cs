@@ -148,6 +148,7 @@ public class MDS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         // Initialize with classical MDS
         var embedding = ClassicalMDS(distances);
+        int n = distances.Shape[0];
 
         // SMACOF algorithm for non-metric MDS
         T prevStress = NumOps.MaxValue;
@@ -159,7 +160,8 @@ public class MDS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             var embeddingDist = DimensionalityReductionOps.EuclideanDistances(embedding, embedding);
 
             // Monotonic regression (isotonic regression on distances)
-            var disparities = IsotonicRegression(distances, embeddingDist);
+            var disparities = DimensionalityReductionOps.FromArray2D<T>(IsotonicRegression(
+                DimensionalityReductionOps.ToArray2D(distances), DimensionalityReductionOps.ToArray2D(embeddingDist), n));
 
             // Compute Guttman transform
             var newEmbedding = GuttmanTransform(embedding, disparities, embeddingDist);
@@ -183,54 +185,31 @@ public class MDS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Disparities for the upper-triangle pairs: the embedding distances ordered by original distance and made
-    /// monotone by repeated adjacent averaging, mirrored to a symmetric matrix with a zero diagonal.
+    /// Pool Adjacent Violators style monotone fit of the embedding distances in original-distance order. Kept as
+    /// the original scalar member until the engine has TensorIsotonicRegression (see missing-ops).
     /// </summary>
-    /// <remarks>
-    /// The pair ordering and the mapping back are engine ops. The monotone fit itself is a sequential sweep with
-    /// no engine equivalent yet (TensorIsotonicRegression, see missing-ops), so it keeps the original algorithm.
-    /// </remarks>
-    private Tensor<T> IsotonicRegression(Tensor<T> originalDist, Tensor<T> embeddingDist)
+    private double[,] IsotonicRegression(double[,] originalDist, double[,] embeddingDist, int n)
     {
-        var engine = Engine;
-        int n = originalDist.Shape[0];
+        // Pool Adjacent Violators (PAV) algorithm for isotonic regression
+        var disparities = new double[n, n];
 
-        // Flat positions (i * n + j) of the pairs i < j, row by row, and of their mirrors (j * n + i)
-        var upper = new List<int>(n * (n - 1) / 2);
-        var lower = new List<int>(n * (n - 1) / 2);
+        // Create sorted list of original distances
+        var pairs = new List<(int i, int j, double orig, double emb)>();
         for (int i = 0; i < n; i++)
         {
             for (int j = i + 1; j < n; j++)
             {
-                upper.Add(i * n + j);
-                lower.Add(j * n + i);
+                pairs.Add((i, j, originalDist[i, j], embeddingDist[i, j]));
             }
         }
 
-        var upperIndex = DimensionalityReductionOps.IndexTensor(upper.ToArray());
-        var lowerIndex = DimensionalityReductionOps.IndexTensor(lower.ToArray());
-        var originalFlat = engine.TensorIndexSelect(engine.Reshape(originalDist, new[] { n * n }), upperIndex, 0);
-        var embeddingFlat = engine.TensorIndexSelect(engine.Reshape(embeddingDist, new[] { n * n }), upperIndex, 0);
+        // Sort by original distance
+        pairs.Sort((a, b) => a.orig.CompareTo(b.orig));
 
-        // Sort by original distance (stable: equal distances keep pair order)
-        var order = engine.TensorArgsort(originalFlat, 0, false);
-        var fittedSorted = MonotoneByAdjacentAveraging(engine.TensorIndexSelect(embeddingFlat, order, 0));
-
-        // Map back to matrix
-        var disparities = new Tensor<T>(new[] { n * n });
-        disparities = engine.TensorScatter(disparities, engine.TensorIndexSelect(upperIndex, order, 0), fittedSorted, 0);
-        disparities = engine.TensorScatter(disparities, engine.TensorIndexSelect(lowerIndex, order, 0), fittedSorted, 0);
-        return engine.Reshape(disparities, new[] { n, n });
-    }
-
-    /// <summary>
-    /// Repeats left-to-right passes that replace each adjacent decreasing pair by its average until no pair
-    /// decreases (the original monotone fit, kept unchanged until TensorIsotonicRegression exists).
-    /// </summary>
-    private static Tensor<T> MonotoneByAdjacentAveraging(Tensor<T> values)
-    {
-        var fitted = values.Cast<double>().AsSpan().ToArray();
+        // Apply PAV
+        var fitted = pairs.Select(p => p.emb).ToArray();
         int m = fitted.Length;
+
         bool changed = true;
         while (changed)
         {
@@ -247,7 +226,15 @@ public class MDS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             }
         }
 
-        return new Tensor<double>(fitted, new[] { m }).Cast<T>();
+        // Map back to matrix
+        for (int k = 0; k < m; k++)
+        {
+            var (i, j, _, _) = pairs[k];
+            disparities[i, j] = fitted[k];
+            disparities[j, i] = fitted[k];
+        }
+
+        return disparities;
     }
 
     private Tensor<T> GuttmanTransform(Tensor<T> embedding, Tensor<T> disparities, Tensor<T> embeddingDist)

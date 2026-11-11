@@ -149,6 +149,23 @@ internal static class DimensionalityReductionOps
     internal static Tensor<T> Uniform<T>(Random random, int rows, int columns) =>
         Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(random, rows, columns));
 
+    /// <summary>Bulk copy of a [rows, columns] tensor into the 2-D double array an original scalar member takes.</summary>
+    internal static double[,] ToArray2D<T>(Tensor<T> tensor)
+    {
+        var flat = tensor.Cast<double>().AsSpan().ToArray();
+        var result = new double[tensor.Shape[0], tensor.Shape[1]];
+        Buffer.BlockCopy(flat, 0, result, 0, flat.Length * sizeof(double));
+        return result;
+    }
+
+    /// <summary>Bulk copy of a 2-D double array produced by an original scalar member back into a tensor.</summary>
+    internal static Tensor<T> FromArray2D<T>(double[,] values)
+    {
+        var flat = new double[values.Length];
+        Buffer.BlockCopy(values, 0, flat, 0, flat.Length * sizeof(double));
+        return new Tensor<double>(flat, new[] { values.GetLength(0), values.GetLength(1) }).Cast<T>();
+    }
+
     /// <summary>
     /// The start vectors of a deflated power iteration drawn like the original scalar code: <paramref name="count"/>
     /// rows of <paramref name="length"/> values NextDouble() - <paramref name="offset"/>, consuming

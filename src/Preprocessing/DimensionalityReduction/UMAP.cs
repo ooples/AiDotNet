@@ -208,8 +208,10 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Step 3: Initialize embedding
         var embedding = InitializeEmbedding(_nSamples, random);
 
-        // Step 4: Optimize embedding
-        _embedding = OptimizeLayout(graph, embedding, random).ToMatrix();
+        // Step 4: Optimize embedding (master's sequential edge SGD on double[,]; see missing-ops.txt)
+        var layout = DimensionalityReductionOps.ToArray2D(embedding);
+        OptimizeLayout(DimensionalityReductionOps.ToArray2D(graph), layout, random);
+        _embedding = DimensionalityReductionOps.FromArray2D<T>(layout).ToMatrix();
     }
 
     /// <summary>
@@ -355,12 +357,9 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// previous one, so this stays the original scalar loop (in double) until the engine has an edge-sequential
     /// layout kernel; see missing-ops.txt.
     /// </summary>
-    private Tensor<T> OptimizeLayout(Tensor<T> graphTensor, Tensor<T> initial, Random random)
+    private void OptimizeLayout(double[,] graph, double[,] embedding, Random random)
     {
         int n = _nSamples;
-        int dim = _nComponents;
-        var graph = graphTensor.Cast<double>().AsSpan().ToArray();       // row-major [n, n]
-        var embedding = initial.Cast<double>().AsSpan().ToArray();       // row-major [n, dim]
 
         // Build edge list for efficient sampling
         var edges = new List<(int i, int j, double weight)>();
@@ -371,11 +370,10 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             for (int j = i + 1; j < n; j++)
             {
-                double weight = graph[i * n + j];
-                if (weight > 0)
+                if (graph[i, j] > 0)
                 {
-                    edges.Add((i, j, weight));
-                    maxWeight = Math.Max(maxWeight, weight);
+                    edges.Add((i, j, graph[i, j]));
+                    maxWeight = Math.Max(maxWeight, graph[i, j]);
                 }
             }
         }
@@ -408,9 +406,9 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
                 // Compute gradient for attractive force
                 double distSq = 0;
-                for (int d = 0; d < dim; d++)
+                for (int d = 0; d < _nComponents; d++)
                 {
-                    double diff = embedding[i * dim + d] - embedding[j * dim + d];
+                    double diff = (embedding ?? throw new InvalidOperationException("embedding is null where it is required."))[i, d] - embedding[j, d];
                     distSq += diff * diff;
                 }
 
@@ -425,13 +423,13 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     gradCoeff = 0;
                 }
 
-                for (int d = 0; d < dim; d++)
+                for (int d = 0; d < _nComponents; d++)
                 {
-                    double grad = gradCoeff * (embedding[i * dim + d] - embedding[j * dim + d]);
+                    double grad = gradCoeff * ((embedding ?? throw new InvalidOperationException("embedding is null where it is required."))[i, d] - embedding[j, d]);
                     grad = Math.Max(-4, Math.Min(4, grad)); // Clip gradient
 
-                    embedding[i * dim + d] -= alpha * grad;
-                    embedding[j * dim + d] += alpha * grad;
+                    embedding[i, d] -= alpha * grad;
+                    embedding[j, d] += alpha * grad;
                 }
 
                 // Negative sampling for repulsive forces
@@ -442,9 +440,9 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     if (k == i) continue;
 
                     distSq = 0;
-                    for (int d = 0; d < dim; d++)
+                    for (int d = 0; d < _nComponents; d++)
                     {
-                        double diff = embedding[i * dim + d] - embedding[k * dim + d];
+                        double diff = (embedding ?? throw new InvalidOperationException("embedding is null where it is required."))[i, d] - embedding[k, d];
                         distSq += diff * diff;
                     }
 
@@ -458,20 +456,18 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                         gradCoeff = 0;
                     }
 
-                    for (int d = 0; d < dim; d++)
+                    for (int d = 0; d < _nComponents; d++)
                     {
-                        double grad = gradCoeff * (embedding[i * dim + d] - embedding[k * dim + d]);
+                        double grad = gradCoeff * ((embedding ?? throw new InvalidOperationException("embedding is null where it is required."))[i, d] - embedding[k, d]);
                         grad = Math.Max(-4, Math.Min(4, grad)); // Clip gradient
 
-                        embedding[i * dim + d] += alpha * grad;
+                        embedding[i, d] += alpha * grad;
                     }
                 }
 
                 epochOfNextSample[e] += epochsPerSample[e];
             }
         }
-
-        return new Tensor<double>(embedding, new[] { n, dim }).Cast<T>();
     }
 
     /// <summary>
