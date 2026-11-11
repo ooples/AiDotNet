@@ -116,6 +116,7 @@ public class AutoformerOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the number of heads of the Auto-Correlation projections (n_heads, 8).
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Auto-Correlation selects and weights its time delays by the mean of the correlations over every head and channel (Wu et al. 2021, section 3.2), and the delays roll each channel alike, so splitting the width into heads leaves the computation unchanged; the head count only has to divide EmbeddingDim.")]
     public int NumAttentionHeads { get; set; } = 8;
 
     /// <summary>

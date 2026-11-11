@@ -7281,7 +7281,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 8, outputSize: 16), " +
                     "new AiDotNet.TextToSpeech.Classic.AlignTTSOptions { EncoderDim = 32, HiddenDim = 32, MelChannels = 16, " +
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, FftFilterSize = 64, " +
-                    "DurationPredictorDim = 16, DurationPredictorLayers = 1, MixDensityHiddenSize = 32 })";
+                    // The cited Noam schedule warms up over 4000 steps, about 7e-7 per step at width 32; a ten-step
+                    // warmup lets the bounded training probes measure learning on the same schedule.
+                    "DurationPredictorDim = 16, DurationPredictorLayers = 1, MixDensityHiddenSize = 32, WarmupSteps = 10 })";
             }
             else if (model.ClassName == "EagleLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -11037,7 +11039,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     $"VocabSize = {(v15 ? 284 : 265)}, HiddenDim = 16, NumHeads = 2, KeyValueHeads = 1, IntermediateSize = 32, NumDecoderLayers = 1, " +
                     "FastLayers = 1, NumCodebooks = 2, CodebookSize = 16, MaxSequenceLength = 160, " +
                     "SampleRate = 8000, FftSize = 64, HopSize = 16, MelChannels = 12, CodecEncoderDepths = new[] { 1, 1, 1, 1 }, " +
-                    "CodecEncoderDims = new[] { 8, 8, 8, 16 }, CodecQuantizerDim = 16, CodecLevels = new[] { 15 }, " +
+                    "CodecEncoderDims = new[] { 8, 8, 8, 16 }, CodecLevels = new[] { 15 }, " +
                     "CodecDownsampleFactors = new[] { 2, 2 }, CodecUpsampleRates = new[] { 2, 2, 2, 2 }, CodecUpsampleKernels = new[] { 4, 4, 4, 4 }, " +
                     "CodecResBlockKernels = new[] { 3, 7 }, CodecResBlockDilations = new[] { new[] { 1, 3, 5 }, new[] { 1, 3, 5 } }, " +
                     "CodecChannels = 16, MaxNewTokens = 8, ConstrainToSemanticTokens = true, Temperature = 0.1, WarmupSteps = 1, LearningRate = 1e-3 })";
@@ -11131,8 +11133,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 1, outputSize: 1), " +
                     "new AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions { " +
                     "MelChannels = 16, FftSize = 64, HopSize = 16, HiddenDim = 16, NumHeads = 2, Layers = 1, MaxTextLength = 16, MaxMelTokens = 64, " +
-                    "VocabSize = 64, MelCodes = 34, SamplesPerCode = 32, ConditionLatents = 4, ConditionDim = 8, ConditionLinearUnits = 16, " +
-                    "ConditionHeads = 2, ConditionBlocks = 1, DvaeHidden = 8, DvaeLayers = 1, DvaeResBlocks = 1, DvaeCodebookDim = 4, " +
+                    "VocabSize = 64, MelCodes = 34, ConditionLatents = 4, ConditionDim = 8, ConditionLinearUnits = 16, " +
+                    "ConditionHeads = 2, ConditionBlocks = 1, DvaeHidden = 8, DvaeResBlocks = 1, DvaeCodebookDim = 4, " +
                     "VocoderInitialChannels = 16, VocoderUpsampleRates = new[] { 4, 8 }, VocoderUpsampleKernels = new[] { 8, 16 }, " +
                     "VocoderResBlockKernels = new[] { 3 }, VocoderResBlockDilations = new[] { new[] { 1, 3, 5 } }, SpeakerEmbeddingDim = 8, " +
                     "SpeakerEncoderChannels = new[] { 16, 16, 32 }, SpeakerEncoderKernels = new[] { 5, 3, 1 }, SpeakerEncoderDilations = new[] { 1, 2, 1 }, " +
@@ -11849,7 +11851,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.CodecBased.DiaOptions { " +
                     "HiddenDim = 16, EncoderLayers = 2, EncoderHeads = 2, EncoderKeyValueHeads = 2, EncoderHeadDim = 8, EncoderIntermediate = 24, " +
                     "DecoderHidden = 16, DecoderLayers = 2, DecoderHeads = 4, DecoderKeyValueHeads = 2, DecoderHeadDim = 8, CrossHeads = 2, " +
-                    "CrossKeyValueHeads = 2, CrossHeadDim = 8, DecoderIntermediate = 24, AudioVocabSize = 20, Channels = 3, DelayPattern = [0, 2, 3], " +
+                    "CrossKeyValueHeads = 2, CrossHeadDim = 8, DecoderIntermediate = 24, AudioVocabSize = 20, DelayPattern = [0, 2, 3], " +
                     "EndToken = 16, PadToken = 17, BeginToken = 18, MaxAudioTokens = 24, CfgFilterTopK = 5, SampleRate = 16000, HopSize = 8, " +
                     "Codec = new AiDotNet.Audio.Effects.DACOptions { SampleRate = 16000, EncoderDim = 4, EncoderRates = [2, 4], " +
                     "DecoderDim = 16, DecoderRates = [4, 2], NumQuantizers = 3, CodebookSize = 16, CodebookDim = 2, " +
@@ -11871,7 +11873,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 1, outputSize: 1), " +
                     "new AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions { HiddenDim = 16, NumHeads = 2, NumDecoderLayers = 1, " +
                     "IntermediateSize = 32, FsqLevels = [3, 3], DvaeDim = 8, DvaeEncoderHidden = 8, DvaeDecoderHidden = 8, " +
-                    "DvaeLayers = 1, DvaeBottleneck = 8, DecoderDim = 8, DecoderHidden = 8, DecoderLayers = 1, " +
+                    "DvaeLayers = 1, DvaeBottleneck = 8, DecoderHidden = 8, DecoderLayers = 1, " +
                     "DecoderBottleneck = 8, VocosDim = 8, VocosIntermediate = 16, VocosLayers = 1, FftSize = 64, HopSize = 16, " +
                     "MelChannels = 8, MaxNewRefineTokens = 3, MaxNewCodeTokens = 4, MaxTextLength = 32, LearningRate = 3e-3 })";
             }

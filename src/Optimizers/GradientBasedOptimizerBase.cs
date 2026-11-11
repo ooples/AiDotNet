@@ -2528,6 +2528,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
+    /// Ends an epoch on a monitored metric, such as the validation loss: the metric becomes the one a metric-driven
+    /// schedule (reduce-on-plateau) steps on, then <see cref="OnEpochEnd"/> runs.
+    /// </summary>
+    /// <param name="metric">The epoch's monitored value.</param>
+    internal void OnEpochEnd(double metric)
+    {
+        _lastSchedulerMetric = metric;
+        OnEpochEnd();
+    }
+
+    /// <summary>
     /// Called at the end of each training epoch to update scheduler state if applicable.
     /// </summary>
     /// <remarks>

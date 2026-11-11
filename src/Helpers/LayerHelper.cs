@@ -32792,6 +32792,9 @@ public static partial class LayerHelper<T>
             outputSize: modelDim,
             activationFunction: new GELUActivation<T>());
 
+        // RWKV-LM's drop0: dropout on the embedding before the blocks (rate 0 passes through).
+        yield return new DropoutLayer<T>(dropout);
+
         // === RWKV Layers ===
         // RWKV-7 block (Peng et al.): tape-connected time-mixing whose WKV recurrence runs through
         // the fused CpuEngine.Rwkv7SequenceForward kernel, with batched token-shift/projections and

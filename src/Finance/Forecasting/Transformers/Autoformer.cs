@@ -148,7 +148,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _random = RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, learningRateOverride: _options.LearningRate)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
                 new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 { InitialLearningRate = _options.LearningRate });
@@ -177,7 +177,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _random = RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, learningRateOverride: _options.LearningRate)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
                 new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 { InitialLearningRate = _options.LearningRate });

@@ -8314,7 +8314,6 @@ AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.MaxMelTokens.set -> void
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.MelCodes.get -> int
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.MelCodes.set -> void
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.SamplesPerCode.get -> int
-AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.SamplesPerCode.set -> void
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.ConditionLatents.set -> void
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.ConditionLatents.get -> int
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.ConditionDim.get -> int
@@ -8413,7 +8412,6 @@ AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.SamplingSeed.set -> void
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.DvaeHidden.get -> int
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.DvaeHidden.set -> void
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.DvaeLayers.get -> int
-AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.DvaeLayers.set -> void
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.DvaeResBlocks.get -> int
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.DvaeResBlocks.set -> void
 AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions.DvaeCodebookDim.get -> int
@@ -8751,7 +8749,6 @@ AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions.CodecEncoderDepths.get 
 AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions.CodecEncoderDims.set -> void
 AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions.CodecEncoderDims.get -> int[]!
 AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions.CodecQuantizerDim.get -> int
-AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions.CodecQuantizerDim.set -> void
 AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions.CodecLevels.get -> int[]!
 AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions.CodecLevels.set -> void
 AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions.CodecDownsampleFactors.get -> int[]!
@@ -9116,7 +9113,6 @@ AiDotNet.TextToSpeech.CodecBased.DiaOptions.RopeTheta.get -> double
 AiDotNet.TextToSpeech.CodecBased.DiaOptions.AudioVocabSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.DiaOptions.AudioVocabSize.set -> void
 AiDotNet.TextToSpeech.CodecBased.DiaOptions.Channels.get -> int
-AiDotNet.TextToSpeech.CodecBased.DiaOptions.Channels.set -> void
 AiDotNet.TextToSpeech.CodecBased.DiaOptions.DelayPattern.set -> void
 AiDotNet.TextToSpeech.CodecBased.DiaOptions.DelayPattern.get -> int[]!
 AiDotNet.TextToSpeech.CodecBased.DiaOptions.EndToken.get -> int
@@ -9532,7 +9528,6 @@ AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.RmsNormEpsilon.get -> double
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.RmsNormEpsilon.set -> void
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.FsqLevels.get -> int[]!
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.NumVq.get -> int
-AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.NumVq.set -> void
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.FsqLevels.set -> void
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.FsqGroups.set -> void
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.FsqGroups.get -> int
@@ -9550,7 +9545,6 @@ AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.DvaeLayers.get -> int
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.DvaeBottleneck.get -> int
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.DvaeBottleneck.set -> void
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.DecoderDim.get -> int
-AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.DecoderDim.set -> void
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.DecoderHidden.set -> void
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.DecoderHidden.get -> int
 AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions.DecoderLayers.get -> int
@@ -12070,8 +12064,6 @@ AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTCOptions.TimeMasks.get -> 
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTCOptions.TimeMasks.set -> void
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTCOptions.TimeMaskRatio.get -> double
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTCOptions.TimeMaskRatio.set -> void
-AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.FeedForwardMultiplier.get -> int
-AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.FeedForwardMultiplier.set -> void
 AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.ConvKernel.get -> int
 AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.ConvKernel.set -> void
 AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.RopeTheta.get -> double
@@ -12510,10 +12502,6 @@ AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.StartToken.get -> int
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.StartToken.set -> void
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.EndToken.get -> int
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.EndToken.set -> void
-AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.FrequencyMasks.get -> int
-AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.FrequencyMasks.set -> void
-AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.FrequencyMaskWidth.get -> int
-AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.FrequencyMaskWidth.set -> void
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.TimeMasks.get -> int
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.TimeMasks.set -> void
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.TimeMaskRatio.get -> double
@@ -12531,10 +12519,6 @@ AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.StartToken.get -> int
 AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.StartToken.set -> void
 AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.EndToken.get -> int
 AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.EndToken.set -> void
-AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.FrequencyMasks.get -> int
-AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.FrequencyMasks.set -> void
-AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.FrequencyMaskWidth.get -> int
-AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.FrequencyMaskWidth.set -> void
 AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.TimeMasks.get -> int
 AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.TimeMasks.set -> void
 AiDotNet.SpeechRecognition.Streaming.MoonshineOptions.TimeMaskRatio.get -> double
@@ -13133,6 +13117,8 @@ AiDotNet.TextToSpeech.Classic.AlignTTSOptions.MixDensityHiddenSize.get -> int
 AiDotNet.TextToSpeech.Classic.AlignTTSOptions.MixDensityHiddenSize.set -> void
 AiDotNet.TextToSpeech.Classic.AlignTTSOptions.MixDensityHiddenLayers.get -> int
 AiDotNet.TextToSpeech.Classic.AlignTTSOptions.MixDensityHiddenLayers.set -> void
+AiDotNet.TextToSpeech.Classic.AlignTTSOptions.WarmupSteps.get -> int
+AiDotNet.TextToSpeech.Classic.AlignTTSOptions.WarmupSteps.set -> void
 AiDotNet.TextToSpeech.Classic.AdaSpeech2Options.NumMelEncoderLayers.get -> int
 AiDotNet.TextToSpeech.Classic.AdaSpeech2Options.NumMelEncoderLayers.set -> void
 AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.CurrentStep.get -> AiDotNet.TextToSpeech.Classic.AdaSpeech2TrainingStep
@@ -22479,3 +22465,8 @@ override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumDecoderLayers.get -> in
 override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumDecoderLayers.set -> void
 override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumHeads.get -> int
 override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumHeads.set -> void
+*REMOVED*AiDotNet.Video.Options.StreamDiffVSROptions.ScaleFactor.set -> void
+AiDotNet.Video.FrameInterpolation.FLAVR<T>.EndEpoch(double validationLoss) -> void
+AiDotNet.Video.FrameInterpolation.XVFI<T>.EndEpoch() -> void
+*REMOVED*AiDotNet.Document.Options.SVTROptions.OutputCharacterPositions.set -> void
+AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.TrainOnSeries(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! series) -> void

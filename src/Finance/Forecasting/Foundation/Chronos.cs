@@ -100,6 +100,32 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
         Layers.AddRange(layers);
     }
 
+    /// <summary>
+    /// Trains on one long series with the paper's recipe (section 5.2 and the official training script): each of
+    /// <see cref="ChronosFinanceOptions{T}.TrainingSteps"/> steps draws <see cref="ChronosFinanceOptions{T}.BatchSize"/>
+    /// windows split at random points at least <see cref="ChronosFinanceOptions{T}.MinPast"/> values in, drops observed
+    /// values with a probability drawn up to <see cref="ChronosFinanceOptions{T}.MissingValueProbability"/>, and takes
+    /// one AdamW step on the windows' token cross-entropy.
+    /// </summary>
+    /// <param name="series">The series, at least MinPast + PredictionLength values long.</param>
+    public void TrainOnSeries(Tensor<T> series)
+    {
+        if (series is null) throw new ArgumentNullException(nameof(series));
+        var values = new double[series.Length];
+        var span = series.Data.Span;
+        for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(span[i]);
+        var random = _trainingRandom ?? throw new InvalidOperationException("The Chronos network is not built.");
+        SetTrainingMode(true);
+        try
+        {
+            Core.Train(values, Training(), random, System.Threading.CancellationToken.None, stopAtCancellation: false);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
     /// <summary>Loads a released Chronos-T5 checkpoint's <c>model.safetensors</c>; build the model with
     /// <see cref="ChronosOptions{T}.FromPretrainedConfig"/> of the same checkpoint.</summary>
     public void LoadPretrainedWeights(string path) => Core.LoadPretrainedWeights(path);

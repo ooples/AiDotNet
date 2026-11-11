@@ -238,6 +238,7 @@ public class TradingAgentOptions<T> : ModelOptions
     /// More features can help but also make learning harder.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The Q-network's input width is the architecture's CalculatedInputSize; StateSize restates it and a mismatch is rejected, so it cannot vary on its own.", ModelType = typeof(AiDotNet.Finance.Trading.Agents.FinancialDQNAgent<>))]
     public int StateSize { get; set; } = 64;
 
     /// <summary>
@@ -249,6 +250,7 @@ public class TradingAgentOptions<T> : ModelOptions
     /// For continuous actions: number of assets or position dimensions.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The Q-network's output width is the architecture's OutputSize; ActionSize restates it and a mismatch is rejected, so it cannot vary on its own.", ModelType = typeof(AiDotNet.Finance.Trading.Agents.FinancialDQNAgent<>))]
     public int ActionSize { get; set; } = 3;
 
     /// <summary>

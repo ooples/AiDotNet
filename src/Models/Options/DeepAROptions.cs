@@ -138,6 +138,7 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the number of covariates per step (the time-series model reads them from the input matrix; the
     /// paper standardizes every covariate).
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The tensor DeepAR forecaster's input is the target window alone and it rejects covariates; DeepARModel builds the covariate features.", ModelType = typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>))]
     public int CovariateSize { get; set; } = 0;
 
     /// <summary>
@@ -169,6 +170,7 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets whether the time-series model adds the paper's "age" covariate, the distance to the series' first
     /// observation, standardized (§3.4: used in all experiments).
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The tensor DeepAR forecaster's input is the target window alone; DeepARModel builds the age covariate (Salinas et al. 2020, section 3.4).", ModelType = typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>))]
     public bool UseAgeFeature { get; set; } = true;
 
     /// <summary>The likelihood named by <see cref="LikelihoodType"/>.</summary>
