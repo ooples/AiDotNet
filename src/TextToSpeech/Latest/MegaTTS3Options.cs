@@ -14,7 +14,7 @@ public class MegaTTS3Options : TtsModelOptions
 {
     /// <summary>The released networks have no model dropout; only zero is supported.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("The released MegaTTS3 networks have no model dropout; nonzero values are rejected. MegaTts3PipelineReferenceTests.UnsupportedNetworkDropoutIsRejected checks this constraint.")]
-    public new double DropoutRate
+    public override double DropoutRate
     {
         get => base.DropoutRate;
         set
@@ -26,19 +26,19 @@ public class MegaTTS3Options : TtsModelOptions
 
     /// <summary>Samples per mel frame; paired with the WaveVAE encoder and generator rate products.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("HopSize, SampleRate and the WaveVAE encoder/generator ratios must change together. MegaTts3PipelineReferenceTests.PairedWaveVaeGeometryControlsDecodedLength runs both paired geometries and rejects an unpaired hop.")]
-    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+    public override int HopSize { get => base.HopSize; set => base.HopSize = value; }
 
     /// <summary>The phone encoder's layer count; forwards to <see cref="PhoneEncoderLayers"/>.</summary>
-    public new int NumEncoderLayers { get => PhoneEncoderLayers; set => PhoneEncoderLayers = value; }
+    public override int NumEncoderLayers { get => PhoneEncoderLayers; set => PhoneEncoderLayers = value; }
 
     /// <summary>The diffusion transformer's layer count; forwards to <see cref="DitLayers"/>.</summary>
-    public new int NumDecoderLayers { get => DitLayers; set => DitLayers = value; }
+    public override int NumDecoderLayers { get => DitLayers; set => DitLayers = value; }
 
     /// <summary>The diffusion transformer's attention heads; forwards to <see cref="DitHeads"/>.</summary>
-    public new int NumHeads { get => DitHeads; set => DitHeads = value; }
+    public override int NumHeads { get => DitHeads; set => DitHeads = value; }
 
     /// <summary>The diffusion transformer's phone vocabulary; forwards to <see cref="DitPhoneVocabulary"/>.</summary>
-    public new int VocabSize { get => DitPhoneVocabulary; set => DitPhoneVocabulary = value; }
+    public override int VocabSize { get => DitPhoneVocabulary; set => DitPhoneVocabulary = value; }
 
     /// <summary>Initializes a new instance with default values.</summary>
     public MegaTTS3Options()

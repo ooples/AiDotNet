@@ -16,7 +16,7 @@ public class DACOptions : NeuralAudioCodecOptions
 {
     /// <summary>The mono waveform channel used by the paper encoder and decoder.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("DAC's first encoder convolution consumes one channel and its final decoder convolution emits one channel. Constructors reject Channels other than 1; DacOptionConstraintTests verifies that contract.")]
-    public new int Channels { get => base.Channels; set => base.Channels = value; }
+    public override int Channels { get => base.Channels; set => base.Channels = value; }
 
     /// <summary>Creates the paper's 44.1 kHz configuration.</summary>
     public DACOptions()

@@ -54,10 +54,10 @@ public abstract class StyleTtsWaveformOptions : StyleTtsBaseOptions
 
     /// <summary>The generator's upsampling factors; their product (times <see cref="IstftHopSize"/> for iSTFTNet) is the
     /// mel hop (<see cref="StyleTtsBaseOptions.HopSize"/>, 300).</summary>
-    public int[] UpsampleRates { get; set; } = { 10, 5, 3, 2 };
+    public virtual int[] UpsampleRates { get; set; } = { 10, 5, 3, 2 };
 
     /// <summary>Kernel sizes of the upsampling transposed convolutions.</summary>
-    public int[] UpsampleKernels { get; set; } = { 20, 10, 6, 4 };
+    public virtual int[] UpsampleKernels { get; set; } = { 20, 10, 6, 4 };
 
     /// <summary>Channels entering the generator; each upsampling halves them.</summary>
     public int UpsampleInitialChannels { get; set; } = 512;
@@ -67,7 +67,7 @@ public abstract class StyleTtsWaveformOptions : StyleTtsBaseOptions
 
     /// <summary>iSTFTNet's hop (5).</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("StyleTTS-ZS checks that UpsampleRates' product times the iSTFT hop equals the mel HopSize, so the iSTFT hop cannot change alone; IstftFftSize and DecoderType probe the iSTFTNet decoder at a hop of 1.", ModelType = typeof(StyleTTSZS<>))]
-    public int IstftHopSize { get; set; } = 5;
+    public virtual int IstftHopSize { get; set; } = 5;
 
     /// <summary>The PL-BERT encoder (ALBERT: 178 phoneme tokens, width 768, 12 heads, feed-forward 2048, 12 shared-layer
     /// passes; <c>Utils/PLBERT/config.yml</c>).</summary>

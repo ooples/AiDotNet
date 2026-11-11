@@ -42,7 +42,7 @@ public class SpeechT5Options : TtsModelOptions
 {
     /// <summary>Waveform samples per mel frame, paired with the HiFi-GAN upsampling product.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("HopSize and the vocoder rates/kernels must change together. SpeechT5OptionContextTests executes native 256/512-hop waveforms and rejects an unpaired hop.")]
-    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+    public override int HopSize { get => base.HopSize; set => base.HopSize = value; }
 
     /// <summary>Creates the paper's base configuration.</summary>
     public SpeechT5Options()

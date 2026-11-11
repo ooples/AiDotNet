@@ -63,9 +63,9 @@ public abstract class VallEModelOptions : ModelOptions
     internal int VocabSize { get; set; }
 
     /// <summary>Prepend the beginning-of-audio token used by the community VALL-E-X checkpoint.</summary>
-    public bool PrependBos { get; set; }
+    public virtual bool PrependBos { get; set; }
     /// <summary>Stop when EOS is most likely, even if sampling selected another token.</summary>
-    public bool StopOnMostLikelyEndToken { get; set; } = true;
+    public virtual bool StopOnMostLikelyEndToken { get; set; } = true;
     /// <summary>The feed-forward width of both Transformers.</summary>
     public int FeedForwardDim { get; set; } = 4096;
     /// <summary>The phoneme embedding rows, sufficient for the selected inventory.</summary>
@@ -83,9 +83,9 @@ public abstract class VallEModelOptions : ModelOptions
     /// <summary>The updates over which the learning rate decays linearly to zero.</summary>
     public int TrainingSteps { get; set; } = 800000;
     /// <summary>The AR sampling temperature.</summary>
-    public double Temperature { get; set; } = 1.0;
+    public virtual double Temperature { get; set; } = 1.0;
     /// <summary>The AR top-k cut, or zero to retain every code.</summary>
-    public int TopK { get; set; }
+    public virtual int TopK { get; set; }
     /// <summary>The AR generation limit in codes per phoneme.</summary>
     public int MaxCodesPerTextToken { get; set; } = 16;
     /// <summary>The pretrained codec (EnCodec 24 kHz at 6 kbps by default).</summary>

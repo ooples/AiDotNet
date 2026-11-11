@@ -37,23 +37,23 @@ public class PhemeOptions : TtsModelOptions
 {
     /// <summary>The waveform rate, paired with SpeechTokenizer.SampleRate.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate must match SpeechTokenizer.SampleRate; native contracts reject unpaired rates and round-trip paired codec configurations.")]
-    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+    public override int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
 
     /// <summary>The waveform hop, paired with the SpeechTokenizer stride product.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must match the SpeechTokenizer stride product; native tests reject unpaired hops and round-trip paired 320/640-sample hops.")]
-    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+    public override int HopSize { get => base.HopSize; set => base.HopSize = value; }
 
     /// <summary>The derived phoneme/special/semantic vocabulary size.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("The native vocabulary is derived from the USLM phoneme table, five specials and SemanticCodes; paired codec tests verify the resolved vocabulary for multiple semantic vocabularies.")]
-    public new int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
+    public override int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
 
     /// <summary>Inherited mel-output metadata; native Pheme emits codec-decoded waveforms.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Pheme emits SpeechTokenizer waveforms, not mel outputs; native codec round trips verify waveform geometry with different inherited MelChannels metadata.")]
-    public new int MelChannels { get => base.MelChannels; set => base.MelChannels = value; }
+    public override int MelChannels { get => base.MelChannels; set => base.MelChannels = value; }
 
     /// <summary>Inherited spectrogram metadata; the native codec owns its analysis configuration.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Native Pheme encodes and decodes with SpeechTokenizer, not the inherited spectrogram frontend; codec round trips exercise different inherited FftSize metadata.")]
-    public new int FftSize { get => base.FftSize; set => base.FftSize = value; }
+    public override int FftSize { get => base.FftSize; set => base.FftSize = value; }
 
     /// <summary>Creates the paper's small model's options (Budzianowski et al. 2024, Table 5 and §4.1).</summary>
     public PhemeOptions()

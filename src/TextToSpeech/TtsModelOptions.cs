@@ -73,7 +73,7 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no configurable analysis FFT; its released ISTFTNet synthesis transform has fixed decoder geometry.", ModelType = typeof(EndToEnd.Kokoro<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi has no analysis FFT; its optional Mimi STFT critics use MimiDiscriminatorWindows (Defossez et al. 2024 section 3.3); native construction requires FftSize=0.", ModelType = typeof(MultiModal.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR has no analysis FFT; its native constructor requires FftSize=0 (Defossez et al. 2024 section 3.3).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
-    public int FftSize { get; set; } = 1024;
+    public virtual int FftSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the model hidden dimension.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro's released style and decoder interfaces require hidden width 512; the native constructor rejects other widths.", ModelType = typeof(EndToEnd.Kokoro<>))]
@@ -127,7 +127,7 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Parler-TTS derives this metadata from PromptVocabulary, the option that configures its transcript embedding table.", ModelType = typeof(DescriptionBased.ParlerTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("The native embedding is sized from the NATSpeech phone symbols and reserves. Native construction accepts their count and the inherited legacy value of 256.", ModelType = typeof(Latest.MegaTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("The native embedding is sized from the NATSpeech phone symbols and reserves. Native construction accepts their count and the inherited legacy value of 256.", ModelType = typeof(Latest.MegaTTS2<>))]
-    public int VocabSize { get; set; } = 256;
+    public virtual int VocabSize { get; set; } = 256;
 
     /// <summary>Gets or sets the maximum input text length.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's ESPnet ScaledPositionalEncoding extends to any length, so its text has no length bound.", ModelType = typeof(StyleEmotion.EmotiVoice<>))]

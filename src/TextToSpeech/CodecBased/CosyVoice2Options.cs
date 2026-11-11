@@ -14,15 +14,15 @@ public class CosyVoice2Options : CosyVoiceAutoregressiveOptions
 {
     /// <summary>The released S3Tokenizer v2 cardinality: eight ternary FSQ dimensions give 3^8 = 6,561 codes.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 has exactly 3^8 = 6,561 codes; other cardinalities are rejected by its constructor, rather than changing a valid model. S3TokenizerV2ReferenceTests verifies the released states/tokens and rejects alternative cardinalities.")]
-    public new int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
+    public override int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
 
     /// <summary>S3 v2's state width; it must be 64 times its head count.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 fixes rotary head width at 64, so state and head count must change together. S3TokenizerV2ReferenceTests verifies valid 64/1 and 128/2 configurations and rejects either isolated change.")]
-    public new int SpeechTokenizerState { get => base.SpeechTokenizerState; set => base.SpeechTokenizerState = value; }
+    public override int SpeechTokenizerState { get => base.SpeechTokenizerState; set => base.SpeechTokenizerState = value; }
 
     /// <summary>S3 v2's head count; each head has the released 64-wide rotary table.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 fixes rotary head width at 64, so state and head count must change together. S3TokenizerV2ReferenceTests verifies valid 64/1 and 128/2 configurations and rejects either isolated change.")]
-    public new int SpeechTokenizerHeads { get => base.SpeechTokenizerHeads; set => base.SpeechTokenizerHeads = value; }
+    public override int SpeechTokenizerHeads { get => base.SpeechTokenizerHeads; set => base.SpeechTokenizerHeads = value; }
 
     /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoice2Options()

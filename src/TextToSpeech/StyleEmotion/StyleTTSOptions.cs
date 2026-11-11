@@ -48,7 +48,7 @@ public abstract class StyleTtsBaseOptions : ModelOptions
     /// <summary>Mel frequency channels.</summary>
     public int MelChannels { get; set; } = 80;
     /// <summary>Samples per mel frame.</summary>
-    public int HopSize { get; set; } = 256;
+    public virtual int HopSize { get; set; } = 256;
     /// <summary>Analysis FFT size.</summary>
     public int FftSize { get; set; } = 1024;
     /// <summary>Phoneme vocabulary size.</summary>
@@ -119,7 +119,7 @@ public abstract class StyleTtsBaseOptions : ModelOptions
     public double MelStd { get; set; } = 4.0;
 
     /// <summary>Width of the style vector (128).</summary>
-    public int StyleDim { get; set; } = 128;
+    public virtual int StyleDim { get; set; } = 128;
 
     /// <summary>The decoder's residual phoneme, pitch and energy feature width (64).</summary>
     public int ResidualDim { get; set; } = 64;

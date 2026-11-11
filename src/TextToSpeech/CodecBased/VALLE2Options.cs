@@ -77,17 +77,17 @@ public class VALLE2Options : VallEModelOptions
 
     /// <summary>VALL-E 2 samples at unit temperature; other temperatures are rejected by the native constructor.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("VALL-E 2 fixes temperature to one; native constructor tests reject other values, including through the base options type.")]
-    public new double Temperature { get => base.Temperature; set => base.Temperature = value; }
+    public override double Temperature { get => base.Temperature; set => base.Temperature = value; }
 
     /// <summary>VALL-E 2 uses nucleus sampling; nonzero top-k cuts are rejected.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("VALL-E 2 uses top-p rather than top-k; native constructor tests reject a nonzero TopK.")]
-    public new int TopK { get => base.TopK; set => base.TopK = value; }
+    public override int TopK { get => base.TopK; set => base.TopK = value; }
 
     /// <summary>The community VALL-E-X beginning-token switch is unsupported by VALL-E 2.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("VALL-E 2 always uses its grouped-code beginning token; native constructor tests reject PrependBos=true.")]
-    public new bool PrependBos { get => base.PrependBos; set => base.PrependBos = value; }
+    public override bool PrependBos { get => base.PrependBos; set => base.PrependBos = value; }
 
     /// <summary>VALL-E 2 stops only on a sampled end token, as Algorithm 1 specifies.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("VALL-E 2 stops on sampled EOS; native constructor tests reject StopOnMostLikelyEndToken=true.")]
-    public new bool StopOnMostLikelyEndToken { get => base.StopOnMostLikelyEndToken; set => base.StopOnMostLikelyEndToken = value; }
+    public override bool StopOnMostLikelyEndToken { get => base.StopOnMostLikelyEndToken; set => base.StopOnMostLikelyEndToken = value; }
 }

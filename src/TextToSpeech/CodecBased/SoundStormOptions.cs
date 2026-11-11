@@ -32,15 +32,15 @@ public class SoundStormOptions : TtsModelOptions
 {
     /// <summary>The codec sample rate; must match SoundStream.SampleRate.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate must match SoundStream.SampleRate; native tests reject unpaired rates and round-trip paired codec rates.")]
-    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+    public override int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
 
     /// <summary>The codec hop; must match the product of SoundStream.Ratios.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must match the SoundStream stride product; native tests reject unpaired hops and round-trip paired stride products.")]
-    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+    public override int HopSize { get => base.HopSize; set => base.HopSize = value; }
 
     /// <summary>The derived ByT5 byte and semantic token vocabulary.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Native SoundStorm derives VocabSize as 384 plus SemanticCodes; native tests verify tokenizer and network invariance to inherited vocabulary metadata.")]
-    public new int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
+    public override int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
 
     /// <summary>Creates the paper's options (§4.1, §5).</summary>
     public SoundStormOptions()

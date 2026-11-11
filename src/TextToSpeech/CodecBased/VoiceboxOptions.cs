@@ -187,7 +187,7 @@ public class VoiceboxOptions : TtsModelOptions
     /// <summary>Alias of <see cref="AudioLayers"/>.</summary>
     public int NumLLMLayers { get => AudioLayers; set => AudioLayers = value; }
     /// <summary>Alias of <see cref="AudioHeads"/>.</summary>
-    public new int NumHeads { get => AudioHeads; set => AudioHeads = value; }
+    public override int NumHeads { get => AudioHeads; set => AudioHeads = value; }
     /// <summary>Alias of <see cref="PhoneEmbeddingDim"/>.</summary>
     public int TextEncoderDim { get => PhoneEmbeddingDim; set => PhoneEmbeddingDim = value; }
 

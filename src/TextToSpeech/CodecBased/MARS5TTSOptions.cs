@@ -27,23 +27,23 @@ public enum Mars5Stage
 public class MARS5TTSOptions : TtsModelOptions
 {
     /// <summary>The NAR text encoder's depth.</summary>
-    public new int NumEncoderLayers { get => NarEncoderLayers; set => NarEncoderLayers = value; }
+    public override int NumEncoderLayers { get => NarEncoderLayers; set => NarEncoderLayers = value; }
 
     /// <summary>The released MARS5 blocks use zero activation dropout.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Released MARS5 blocks have no activation dropout; native contracts reject nonzero rates. ConditionDropProbability controls NAR conditioning dropout.")]
-    public new double DropoutRate { get => base.DropoutRate; set => base.DropoutRate = value; }
+    public override double DropoutRate { get => base.DropoutRate; set => base.DropoutRate = value; }
 
     /// <summary>Inherited vocabulary metadata; TextTokenizerModel defines the native vocabulary.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("TextTokenizerModel defines the native vocabulary (258 tokens for the byte fallback); native tests verify tokenizer IDs independently of inherited VocabSize metadata.")]
-    public new int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
+    public override int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
 
     /// <summary>The waveform rate, paired with Codec.SampleRate.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate must match Codec.SampleRate; native tests reject unpaired values and encode/vocode paired 16/24 kHz configurations.")]
-    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+    public override int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
 
     /// <summary>The waveform hop, paired with the codec's stride product.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must equal the codec stride product; native tests reject unpaired values and encode/vocode paired 320/640-sample hops.")]
-    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+    public override int HopSize { get => base.HopSize; set => base.HopSize = value; }
 
     /// <summary>Creates the release's configuration.</summary>
     public MARS5TTSOptions()

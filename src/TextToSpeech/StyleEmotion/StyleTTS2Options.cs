@@ -27,19 +27,19 @@ public class StyleTTS2Options : StyleTtsWaveformOptions
 
     /// <summary>Samples per mel frame, paired with the waveform generator's upsampling and iSTFT hop.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must equal the product of UpsampleRates and, for iSTFTNet, IstftHopSize. StyleTts2OptionContextTests runs valid native decoder geometries and rejects unpaired changes.")]
-    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+    public override int HopSize { get => base.HopSize; set => base.HopSize = value; }
 
     /// <summary>Native waveform upsampling factors, paired with their doubled kernels and mel hop.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Upsampling rates, doubled kernels and HopSize must change together. StyleTts2OptionContextTests runs valid native HiFi-GAN/iSTFTNet pairs and rejects unpaired changes.")]
-    public new int[] UpsampleRates { get => base.UpsampleRates; set => base.UpsampleRates = value; }
+    public override int[] UpsampleRates { get => base.UpsampleRates; set => base.UpsampleRates = value; }
 
     /// <summary>The released transposed-convolution kernels, twice each upsampling rate.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("The native source and residual branches require doubled upsampling kernels. StyleTts2OptionContextTests verifies valid paired rates/kernels and rejects isolated kernel changes before allocation.")]
-    public new int[] UpsampleKernels { get => base.UpsampleKernels; set => base.UpsampleKernels = value; }
+    public override int[] UpsampleKernels { get => base.UpsampleKernels; set => base.UpsampleKernels = value; }
 
     /// <summary>iSTFT waveform hop, paired with the generator's rates and mel hop.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("In iSTFTNet, HopSize must equal the product of UpsampleRates times IstftHopSize. StyleTts2OptionContextTests verifies multiple native paired hops and decoded lengths.")]
-    public new int IstftHopSize { get => base.IstftHopSize; set => base.IstftHopSize = value; }
+    public override int IstftHopSize { get => base.IstftHopSize; set => base.IstftHopSize = value; }
 
     /// <summary>Creates the released LibriTTS configuration.</summary>
     public StyleTTS2Options()

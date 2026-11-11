@@ -34,10 +34,10 @@ public class CodecTtsOptions : TtsModelOptions
     }
 
     /// <summary>Gets or sets the number of RVQ codebooks.</summary>
-    public int NumCodebooks { get; set; } = 8;
+    public virtual int NumCodebooks { get; set; } = 8;
 
     /// <summary>Gets or sets the codebook vocabulary size.</summary>
-    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public virtual int CodebookSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the codec frame rate in Hz.</summary>
     public virtual int CodecFrameRate { get; set; } = 50;

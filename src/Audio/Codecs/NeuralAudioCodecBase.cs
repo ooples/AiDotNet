@@ -29,7 +29,7 @@ public class NeuralAudioCodecOptions : ModelOptions
     public int SampleRate { get; set; } = 24000;
 
     /// <summary>Gets or sets the number of audio channels.</summary>
-    public int Channels { get; set; } = 1;
+    public virtual int Channels { get; set; } = 1;
 
     /// <summary>Gets or sets the most residual codebooks the quantizer holds.</summary>
     public int NumQuantizers { get; set; } = 32;
