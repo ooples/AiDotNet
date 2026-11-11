@@ -99,23 +99,9 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
             // catches this. When all Q-values are equal, hash the state
             // key to a deterministic-but-state-dependent action so
             // distinct unvisited states get distinct initial choices.
-            selectedAction = 0;
-            T bestValue = _qTable[stateKey][0];
-            bool allEqual = true;
-
-            for (int a = 1; a < _options.ActionSize; a++)
-            {
-                if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-                {
-                    bestValue = _qTable[stateKey][a];
-                    selectedAction = a;
-                    allEqual = false;
-                }
-                else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-                {
-                    allEqual = false;
-                }
-            }
+            var qRow = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+            selectedAction = RLTensorOps.ArgMax(qRow);
+            bool allEqual = RLTensorOps.AllEqual(qRow, NumOps);
 
             if (allEqual)
             {
@@ -161,7 +147,18 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
     private void UpdateFromEpisode()
     {
         T G = NumOps.Zero;
-        var visited = new HashSet<string>();
+        // First-visit MC (Sutton & Barto 2018, Figures 5.1 / 5.4 / 5.6): a pair's return is the
+        // one that follows its EARLIEST occurrence in the episode. A backward scan with a "seen"
+        // set would keep the LATEST occurrence instead, so record each pair's first index up front.
+        var firstVisit = new Dictionary<string, int>();
+        for (int step = 0; step < _episode.Count; step++)
+        {
+            string pairKey = $"{GetStateKey(_episode[step].state)}_{_episode[step].action}";
+            if (!firstVisit.ContainsKey(pairKey))
+            {
+                firstVisit[pairKey] = step;
+            }
+        }
 
         // Process episode backward (first-visit MC)
         for (int t = _episode.Count - 1; t >= 0; t--)
@@ -173,9 +170,8 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
             string stateActionKey = $"{stateKey}_{action}";
 
             // First-visit: only update first occurrence
-            if (!visited.Contains(stateActionKey))
+            if (firstVisit[stateActionKey] == t)
             {
-                visited.Add(stateActionKey);
 
                 EnsureStateExists(state);
                 if (!_returns.ContainsKey(stateKey))
@@ -224,13 +220,7 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
             return NumOps.Zero;
         }
 
-        T sum = NumOps.Zero;
-        foreach (var value in values)
-        {
-            sum = NumOps.Add(sum, value);
-        }
-
-        return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
+        return RLTensorOps.Average(values);
     }
 
     private int ArgMax(Vector<T> values)
