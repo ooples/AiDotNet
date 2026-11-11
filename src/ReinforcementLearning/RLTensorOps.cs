@@ -41,16 +41,16 @@ internal static class RLTensorOps
     /// First index whose element is strictly greater than zero, or 0 when there is none
     /// (the "decode a one-hot action" scan the tabular agents use).
     /// </summary>
-    internal static int FirstPositiveIndex<T>(Vector<T> values, T zero)
+    internal static int FirstPositiveIndex<T>(Vector<T> values, T threshold)
     {
-        return FirstPositiveIndex(values, zero, out _);
+        return FirstPositiveIndex(values, threshold, out _);
     }
 
     /// <summary>
     /// First index whose element is strictly greater than zero; <paramref name="found"/> is false
     /// (and the result 0) when no element is positive.
     /// </summary>
-    internal static int FirstPositiveIndex<T>(Vector<T> values, T zero, out bool found)
+    internal static int FirstPositiveIndex<T>(Vector<T> values, T threshold, out bool found)
     {
         if (values is null)
         {
@@ -65,9 +65,10 @@ internal static class RLTensorOps
 
         // The comparison is 1 where values > 0 and 0 elsewhere (NaN compares false), so the first
         // arg-max of the indicator is the first positive slot, and 0 when no slot is positive.
-        var positive = Engine.TensorGreaterThan(values.AsTensor(), zero);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var positive = Engine.TensorGreaterThan(values.AsTensor(), threshold);
         int index = Engine.TensorArgMax(positive, 0)[0];
-        found = !MathHelper.GetNumericOperations<T>().Equals(positive[index], zero);
+        found = !ops.Equals(positive[index], ops.Zero);
         return index;
     }
 
@@ -188,6 +189,15 @@ internal static class RLTensorOps
     /// </summary>
     internal static int SampleFromCdf<T>(Vector<T> probabilities, double uniform, int fallback)
     {
+        return SampleFromCdf(probabilities, uniform, fallback, strict: false);
+    }
+
+    /// <summary>
+    /// Inverse-CDF categorical draw; with <paramref name="strict"/> the first index whose running sum
+    /// strictly exceeds the uniform ("r &lt; cumulative"), otherwise the first that reaches it.
+    /// </summary>
+    internal static int SampleFromCdf<T>(Vector<T> probabilities, double uniform, int fallback, bool strict)
+    {
         if (probabilities is null)
         {
             throw new ArgumentNullException(nameof(probabilities));
@@ -201,8 +211,33 @@ internal static class RLTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         var cdf = Engine.TensorCumSum(probabilities.AsTensor(), 0);
         var target = new Tensor<T>(new[] { ops.FromDouble(uniform) }, new[] { 1 });
-        int index = Engine.TensorSearchSorted(cdf, target, false)[0];
+        int index = Engine.TensorSearchSorted(cdf, target, strict)[0];
         return index < probabilities.Length ? index : fallback;
+    }
+
+    /// <summary>
+    /// Exact log-softmax of one entry, z_index - max(z) - log(sum exp(z - max(z))) (torch's
+    /// Categorical.log_prob).
+    /// </summary>
+    internal static T LogSoftmaxAt<T>(Vector<T> logits, int index)
+    {
+        if (logits is null)
+        {
+            throw new ArgumentNullException(nameof(logits));
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        T max = Max(logits);
+        T sum = Engine.TensorSum(Engine.TensorExp(Engine.TensorSubtractScalar(logits.AsTensor(), max)));
+        return ops.Subtract(ops.Subtract(logits[index], max), ops.Log(sum));
+    }
+
+    /// <summary>A one-hot vector of the given length with a one at <paramref name="index"/>.</summary>
+    internal static Vector<T> OneHot<T>(int length, int index)
+    {
+        var oneHot = new Vector<T>(length);
+        oneHot[index] = MathHelper.GetNumericOperations<T>().One;
+        return oneHot;
     }
 
     /// <summary>Numerically stable softmax: exp(x - max) / sum(exp(x - max)).</summary>
