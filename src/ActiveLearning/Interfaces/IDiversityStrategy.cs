@@ -157,7 +157,7 @@ public abstract class DiversityStrategyBase<T, TInput, TOutput> : IDiversityStra
         for (int start = 0; start < n; start += blockRows)
         {
             int count = Math.Min(blockRows, n - start);
-            blocks.Add(ActiveLearning.ActiveLearningEngineOps.DistanceBlock(stacked, start, count));
+            blocks.Add(AiDotNet.ActiveLearning.ActiveLearningEngineOps.DistanceBlock(stacked, start, count));
         }
 
         var all = Engine.TensorConcatenate(blocks.ToArray(), 0);
