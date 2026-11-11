@@ -73,7 +73,7 @@ public class CAMUVAlgorithm<T> : FunctionalBase<T>
         int d = data.Columns;
         var standardized = StandardizeData(data);
 
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, double>();
 
         for (int i = 0; i < d; i++)
         {
@@ -95,11 +95,10 @@ public class CAMUVAlgorithm<T> : FunctionalBase<T>
 
                 bool suspectConfounder = depIJ > _confoundingThreshold && depJI > _confoundingThreshold;
 
-                T weightT = NumOps.FromDouble(weight);
                 if (suspectConfounder)
                 {
-                    W[i, j] = weightT;
-                    W[j, i] = weightT;
+                    weights[i * d + j] = weight;
+                    weights[j * d + i] = weight;
                 }
                 else
                 {
@@ -107,14 +106,14 @@ public class CAMUVAlgorithm<T> : FunctionalBase<T>
                     if (Math.Abs(asymmetry) > _threshold * 0.1)
                     {
                         if (asymmetry > 0)
-                            W[i, j] = weightT;
+                            weights[i * d + j] = weight;
                         else
-                            W[j, i] = weightT;
+                            weights[j * d + i] = weight;
                     }
                 }
             }
         }
 
-        return W;
+        return CausalWeightScatter.FromStatistics<T>(d, d, weights);
     }
 }

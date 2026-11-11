@@ -198,28 +198,36 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
     /// </summary>
     private bool HasCycle(Matrix<T> W, int d)
     {
+        // Edge lists of the entries whose |W| is not below 1e-15 (NaN counts as an edge), row-major,
+        // so the DFS visits children in index order.
+        var magnitude = Engine.TensorAbs(Tensor<T>.FromMatrix(W));
+        var edgeMask = Engine.TensorSubtract(Engine.TensorOnesLike(magnitude),
+            Engine.TensorLessThan(magnitude, NumOps.FromDouble(1e-15)));
+        var children = new List<int>[d];
+        for (int i = 0; i < d; i++) children[i] = new List<int>();
+        foreach (int position in Engine.TensorNonzero(edgeMask.Reshape(new[] { d * d })).ToArray())
+            children[position / d].Add(position % d);
+
         // 0 = unvisited, 1 = in-progress, 2 = done
         var state = new int[d];
 
         for (int i = 0; i < d; i++)
         {
-            if (state[i] == 0 && DFSHasCycle(W, d, i, state))
+            if (state[i] == 0 && DFSHasCycle(children, i, state))
                 return true;
         }
 
         return false;
     }
 
-    private bool DFSHasCycle(Matrix<T> W, int d, int node, int[] state)
+    private static bool DFSHasCycle(List<int>[] children, int node, int[] state)
     {
         state[node] = 1;
 
-        for (int j = 0; j < d; j++)
+        foreach (int j in children[node])
         {
-            if (Math.Abs(NumOps.ToDouble(W[node, j])) < 1e-15) continue;
-
             if (state[j] == 1) return true; // Back edge = cycle
-            if (state[j] == 0 && DFSHasCycle(W, d, j, state)) return true;
+            if (state[j] == 0 && DFSHasCycle(children, j, state)) return true;
         }
 
         state[node] = 2;
