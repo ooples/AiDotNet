@@ -91,12 +91,12 @@ public class FeatureDropout<T> : TabularAugmenterBase<T>
         }
 
         var engine = Engine;
-        // Draws are compared with the rate in double (as the generator produces them), then each
-        // listed feature's hits are accumulated into its column; a column drops if any listing hit.
-        var dropped = AugmentationRandom<T>.UnitBelow(context, [rows, features.Length], DropoutRate);
+        // Each listed feature's hits are accumulated into its column; a column drops if any listing hit.
+        var dropped = engine.TensorLessThan(
+            AugmentationRandom<T>.Unit(context, [rows, features.Length]), NumOps.FromDouble(DropoutRate));
         var hits = engine.TensorIndexAdd(
-            new Tensor<double>([rows, cols]), 1, new Tensor<int>(features, [features.Length]), dropped);
-        var mask = engine.TensorGreaterThan(hits, 0.0).Cast<T>();
+            new Tensor<T>([rows, cols]), 1, new Tensor<int>(features, [features.Length]), dropped);
+        var mask = engine.TensorGreaterThan(hits, NumOps.Zero);
         var fill = new Tensor<T>([rows, cols]);
         engine.TensorFill(fill, NumOps.FromDouble(DropValue));
         return engine.TensorWhere(mask, fill, values).ToMatrix();
