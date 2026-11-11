@@ -104,9 +104,13 @@ public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
 
+    /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
     public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
     public override int LatentChannels => _latentChannels;
     /// <remarks>
     /// Includes the adapters, so this stays equal to <c>GetParameters().Length</c>. They are real
@@ -274,6 +278,7 @@ public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "T-LoRA", Version = "1.0",

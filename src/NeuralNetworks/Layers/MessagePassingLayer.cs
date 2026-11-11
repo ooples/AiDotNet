@@ -271,6 +271,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private IGpuBuffer? _gpuResetMsgWeightsGradient;
     private IGpuBuffer? _gpuResetBiasGradient;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

@@ -61,6 +61,7 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
         }
     }
 
+    /// <inheritdoc />
     public Vector<T> PropagateContext(Vector<T> input, int currentLevel)
     {
         if (input is null)
@@ -112,6 +113,7 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
         return newContext;
     }
 
+    /// <inheritdoc />
     public Vector<T> ComputeContextGradients(Vector<T> upstreamGradient, int level)
     {
         if (level < 0 || level >= _numLevels)
@@ -122,6 +124,7 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
         return transposed.Multiply(upstreamGradient);
     }
 
+    /// <inheritdoc />
     public void UpdateFlow(Vector<T>[] gradients, T[] learningRates)
     {
         if (gradients.Length != _numLevels)
@@ -153,6 +156,7 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
         }
     }
 
+    /// <inheritdoc />
     public Vector<T> GetContextState(int level)
     {
         if (level < 0 || level >= _numLevels)
@@ -161,6 +165,7 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
         return _contextStates[level];
     }
 
+    /// <inheritdoc />
     public Vector<T> CompressContext(Vector<T> context, int targetLevel)
     {
         if (targetLevel < 0 || targetLevel >= _numLevels)
@@ -171,6 +176,7 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
         return _compressionMatrices[targetLevel].Multiply(context);
     }
 
+    /// <inheritdoc />
     public void Reset()
     {
         for (int i = 0; i < _numLevels; i++)
@@ -179,6 +185,7 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
         }
     }
 
+    /// <inheritdoc />
     public int NumberOfLevels => _numLevels;
 
     /// <summary>

@@ -62,8 +62,11 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     private bool _useNativeMode;
     private bool _disposed;
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => true;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public KyutaiMoshi(
@@ -151,6 +154,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         };
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
@@ -158,6 +162,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
+    /// <inheritdoc />
     public string DetectLanguage(Tensor<T> audio)
     {
         var features = PreprocessAudio(audio);
@@ -178,6 +183,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         return ClassifyLanguageFromTokens(tokens);
     }
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
         var detected = DetectLanguage(audio);
@@ -196,6 +202,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         return result;
     }
 
+    /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new KyutaiMoshiStreamingSession(this, language ?? _options.Language);
 
     protected override void InitializeLayers()
@@ -220,6 +227,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -237,7 +245,9 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         Name = _useNativeMode ? "KyutaiMoshi-Native" : "KyutaiMoshi-ONNX",
@@ -356,6 +366,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
             throw new ObjectDisposedException(GetType().FullName ?? nameof(KyutaiMoshi<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

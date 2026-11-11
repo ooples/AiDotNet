@@ -28,9 +28,13 @@ public class DeLongTest<T> : IStatisticalTest<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "DeLong Test";
+    /// <inheritdoc />
     public string Description => "Compares two ROC curves to test if AUC difference is significant.";
+    /// <inheritdoc />
     public bool IsPaired => true;
+    /// <inheritdoc />
     public bool IsNonParametric => true;
 
     /// <summary>

@@ -104,6 +104,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
     /// published initialization starts from.
     /// </remarks>
     internal double LocalizationMargin => _localizationMargin;
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
     public SVTRThinPlateSplineLayer(
         int inputChannels = 3,
@@ -211,6 +212,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 4 || input.Shape[1] != _inputChannels)
@@ -275,6 +277,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
     // so they are covered by that walk with no bespoke code and, more importantly, no second
     // ordering that can drift again.
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         foreach (var layer in ParameterLayers) layer.ResetState();

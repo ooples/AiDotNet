@@ -36,10 +36,15 @@ public class GtzanDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "GTZAN";
+    /// <inheritdoc />
     public override string Description => "GTZAN music genre classification (10 genres × 100 clips)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.Samples;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public GtzanDataLoader(GtzanDataLoaderOptions? options = null)

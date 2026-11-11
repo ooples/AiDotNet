@@ -137,18 +137,15 @@ public class RidgeRegression<T> : RegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
-        Matrix<T> xProcessed = x;
+        if (x.Rows != y.Length)
+            throw new ArgumentException("The number of rows in X must match the length of y.");
 
-        // Add intercept column if needed
-        if (Options.UseIntercept)
-        {
-            xProcessed = xProcessed.AddConstantColumn(NumOps.One);
-        }
+        int numFeatures = x.Columns + (Options.UseIntercept ? 1 : 0);
 
-        int numFeatures = xProcessed.Columns;
-
-        // Compute X^T X
-        var xTx = xProcessed.Transpose().Multiply(xProcessed);
+        // X^T X and X^T y over [1, X] when fitting an intercept (the intercept is column 0).
+        var (xTx, xTy) = typeof(T) == typeof(double) || typeof(T) == typeof(float)
+            ? NormalEquationsInDouble(x, y, Options.UseIntercept)
+            : NormalEquations(x, y, Options.UseIntercept);
 
         // Add alpha * I to the diagonal (regularization term)
         // Note: If using intercept, we typically don't regularize the intercept term
@@ -161,9 +158,6 @@ public class RidgeRegression<T> : RegressionBase<T>
 
         // Apply additional regularization if provided
         var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
-
-        // Compute X^T y
-        var xTy = xProcessed.Transpose().Multiply(y);
 
         // Solve (X^T X + alpha * I) * w = X^T y
         var solution = SolveSystemWithDecomposition(regularizedXTx, xTy);
@@ -183,6 +177,82 @@ public class RidgeRegression<T> : RegressionBase<T>
             Intercept = NumOps.Zero;
             Coefficients = solution;
         }
+    }
+
+    /// <summary>Rows per block of <see cref="NormalEquationsInDouble"/>'s parallel pass.</summary>
+    private const int GramBlockRows = 1024;
+
+    /// <summary>
+    /// <c>X^T X</c> and <c>X^T y</c>, over <c>[1, X]</c> when <paramref name="withIntercept"/> is set, for any numeric type.
+    /// </summary>
+    private (Matrix<T> XtX, Vector<T> XtY) NormalEquations(Matrix<T> x, Vector<T> y, bool withIntercept)
+    {
+        var design = withIntercept ? x.AddConstantColumn(NumOps.One) : x;
+        var transposed = design.Transpose();
+        return (transposed.Multiply(design), transposed.Multiply(y));
+    }
+
+    /// <summary>
+    /// <see cref="NormalEquations"/> for <c>double</c> and <c>float</c>, whose values convert to double exactly: one pass
+    /// over the rows accumulating the upper triangle of <c>X^T X</c> and <c>X^T y</c>, without copying the design matrix.
+    /// </summary>
+    /// <remarks>
+    /// The intercept column was appended by copying the whole matrix, then transposed twice for two general multiplies;
+    /// on 20,000 x 20 that took about twice scikit-learn's whole fit. Fixed blocks of rows run in parallel and their sums are
+    /// added in block order, so the result does not depend on the thread count.
+    /// </remarks>
+    private (Matrix<T> XtX, Vector<T> XtY) NormalEquationsInDouble(Matrix<T> x, Vector<T> y, bool withIntercept)
+    {
+        int rows = x.Rows;
+        int columns = x.Columns;
+        int shift = withIntercept ? 1 : 0;
+        int width = columns + shift;
+        int blocks = (rows + GramBlockRows - 1) / GramBlockRows;
+
+        // Each block keeps the upper triangle of the Gram matrix, row-major [width, width], then X^T y.
+        var partials = new double[blocks][];
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            var sums = new double[width * width + width];
+            var values = new double[width];
+            if (withIntercept) values[0] = 1.0;
+            int end = Math.Min(rows, (block + 1) * GramBlockRows);
+            for (int i = block * GramBlockRows; i < end; i++)
+            {
+                var row = x.GetRowReadOnlySpan(i);
+                for (int j = 0; j < columns; j++) values[shift + j] = NumOps.ToDouble(row[j]);
+                double target = NumOps.ToDouble(y[i]);
+                for (int a = 0; a < width; a++)
+                {
+                    double va = values[a];
+                    int at = a * width;
+                    for (int b = a; b < width; b++) sums[at + b] += va * values[b];
+                    sums[width * width + a] += va * target;
+                }
+            }
+
+            partials[block] = sums;
+        });
+
+        var total = new double[width * width + width];
+        foreach (var sums in partials)
+            for (int m = 0; m < total.Length; m++) total[m] += sums[m];
+
+        var xTx = new Matrix<T>(width, width);
+        var xTy = new Vector<T>(width);
+        for (int a = 0; a < width; a++)
+        {
+            for (int b = a; b < width; b++)
+            {
+                T value = NumOps.FromDouble(total[a * width + b]);
+                xTx[a, b] = value;
+                xTx[b, a] = value;
+            }
+
+            xTy[a] = NumOps.FromDouble(total[width * width + a]);
+        }
+
+        return (xTx, xTy);
     }
 
     /// <summary>

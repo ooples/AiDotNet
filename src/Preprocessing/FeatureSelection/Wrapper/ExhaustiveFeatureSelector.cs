@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _minFeatures;
     private readonly int _maxFeatures;
@@ -37,7 +37,9 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     public int MinFeatures => _minFeatures;
     public int MaxFeatures => _maxFeatures;
     public double BestScore => _bestScore;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ExhaustiveFeatureSelector(
@@ -59,12 +61,14 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _nFolds = nFolds;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "ExhaustiveFeatureSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -235,12 +239,14 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -257,11 +263,13 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ExhaustiveFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -274,6 +282,7 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

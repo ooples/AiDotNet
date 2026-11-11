@@ -263,6 +263,7 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -277,9 +278,12 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -465,6 +469,7 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CMGAN<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

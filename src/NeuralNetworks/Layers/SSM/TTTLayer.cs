@@ -703,6 +703,7 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         _lnGamma, _lnBeta
     ];
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

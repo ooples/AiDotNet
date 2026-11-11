@@ -47,7 +47,8 @@ public class MedicalASRMechanismTests
     private static MedicalASR<double> Model(Action<MedicalASROptions>? tweak = null)
         => new(Arch(), Small(tweak));
 
-    private static Tensor<double> Features(int frames = 8, int width = 8, int seed = 4)
+    // 32 frames by default: the listener's convolution subsampling reduces them to 7 before the pyramid.
+    private static Tensor<double> Features(int frames = 32, int width = 8, int seed = 4)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>([frames, width]);
@@ -192,7 +193,8 @@ public class MedicalASRMechanismTests
     public void TranscriptionReportsFiniteConfidence()
     {
         var model = Model();
-        var audio = new Tensor<double>([64]);
+        // One second: the listener's convolution subsampling needs at least seven feature frames.
+        var audio = new Tensor<double>([16000]);
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         for (int i = 0; i < audio.Length; i++) audio[i] = rng.NextDouble() - 0.5;
 

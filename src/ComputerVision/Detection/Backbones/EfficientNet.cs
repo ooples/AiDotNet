@@ -53,7 +53,9 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
 
     public bool IsFrozen { get; private set; }
     public string Name => $"EfficientNet-{_variant}";
+    /// <inheritdoc />
     public IReadOnlyList<int> OutputChannels { get; }
+    /// <inheritdoc />
     public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
@@ -145,6 +147,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
 
     private static int ScaleDepth(int depth, double multiplier) => (int)Math.Ceiling(depth * multiplier);
 
+    /// <inheritdoc />
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         var features = new List<Tensor<T>>();
@@ -158,6 +161,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
         return features;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     // ParameterCount is NOT overridden. It folds the same enumeration GetParameters
@@ -166,6 +170,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     // a SEPARATE source, and once the vector started folding the base enumeration the
     // two drifted apart immediately.
 
+    /// <inheritdoc />
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);
@@ -176,6 +181,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
         foreach (var block in _blocks) block.WriteParameters(writer);
     }
 
+    /// <inheritdoc />
     public void ReadParameters(BinaryReader reader)
     {
         var variant = (EfficientNetVariant)reader.ReadInt32();
@@ -202,6 +208,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var features = ExtractFeatures(input);
@@ -213,6 +220,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
 
     protected override void InitializeLayers() { }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -227,6 +235,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
 
 
 
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");

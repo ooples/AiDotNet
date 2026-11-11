@@ -31,7 +31,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.NLP;
 [ResearchPaper("Foundations of Statistical Natural Language Processing", "https://nlp.stanford.edu/fsnlp/", Year = 1999, Authors = "Christopher D. Manning, Hinrich Schütze")]
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _minDf;
@@ -41,11 +41,14 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MinDf => _minDf;
     public int MaxDf => _maxDf;
     public int[]? DocumentFrequencies => _documentFrequencies;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public DocumentFrequencyFS(
@@ -67,6 +70,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _maxDf = maxDf;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -121,6 +125,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -137,11 +142,13 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("DocumentFrequencyFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -154,6 +161,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

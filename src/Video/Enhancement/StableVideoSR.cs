@@ -245,6 +245,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -263,6 +264,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
                 "Call UpscaleWithFlows or clear PropagationSteps.");
     }
 
+    /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
@@ -292,10 +294,13 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
             return _diffusionCore.GetLastTrainingParameterGradients();
         return base.GetParameterGradients();
     }
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -334,6 +339,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(StableVideoSR<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

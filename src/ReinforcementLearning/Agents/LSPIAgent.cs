@@ -92,6 +92,7 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         // Greedy action selection based on current Q-values
@@ -102,12 +103,14 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         int actionIndex = ArgMax(action);
         _samples.Add((state, actionIndex, reward, nextState, done));
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         if (_samples.Count == 0) return NumOps.Zero;
@@ -342,6 +345,7 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
         return maxIndex;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T>
     {
         ["samples_collected"] = NumOps.FromDouble(_samples.Count),
@@ -363,12 +367,18 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
         return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode() { }
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    /// <inheritdoc />
     public override int FeatureCount => _options.FeatureSize;
+    /// <inheritdoc />
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
+    /// <inheritdoc />
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

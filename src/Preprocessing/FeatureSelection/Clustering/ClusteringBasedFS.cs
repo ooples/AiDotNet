@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Clustering;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatureSelector<T>
 {
     private readonly int _nClusters;
     private readonly int _maxIterations;
@@ -36,7 +36,9 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NClusters => _nClusters;
     public int[]? ClusterAssignments => _clusterAssignments;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ClusteringBasedFS(
@@ -54,6 +56,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _maxIterations = maxIterations;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         if (data.Rows == 0)
@@ -232,6 +235,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return assignments;
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -251,11 +255,13 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ClusteringBasedFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -268,6 +274,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null)

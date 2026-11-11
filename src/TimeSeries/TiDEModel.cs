@@ -204,6 +204,7 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
         _targetStd = targetStd > 1e-8 && IsFiniteValue(targetStd) ? targetStd : 1.0;
     }
 
+    /// <inheritdoc />
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
@@ -275,6 +276,7 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
 
     }
 
+    /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
         var xv = NormalizeWindow(Window(_l, j => Convert.ToDouble(input[j]), input.Length));
@@ -292,6 +294,7 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
 
 
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -309,6 +312,7 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
         => new TiDEModel<T>(new TiDEOptions<T>(_options));
 }

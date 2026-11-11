@@ -15,6 +15,7 @@ public class ZoomBlur<T> : ImageAugmenterBase<T>
         MinZoomFactor = minZoomFactor; MaxZoomFactor = maxZoomFactor;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         double factor = context.GetRandomDouble(MinZoomFactor, MaxZoomFactor);
@@ -42,6 +43,7 @@ public class ZoomBlur<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

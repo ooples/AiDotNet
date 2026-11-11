@@ -97,6 +97,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly DropoutLayer<T>? _attnDropout;
     private readonly DropoutLayer<T>? _ffnDropout;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>

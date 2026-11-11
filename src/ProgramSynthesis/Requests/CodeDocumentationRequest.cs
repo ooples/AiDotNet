@@ -7,6 +7,7 @@ namespace AiDotNet.ProgramSynthesis.Requests;
 /// </summary>
 public sealed class CodeDocumentationRequest : CodeTaskRequestBase
 {
+    /// <inheritdoc />
     public override CodeTask Task => CodeTask.Documentation;
 
     public string Code { get; set; } = string.Empty;

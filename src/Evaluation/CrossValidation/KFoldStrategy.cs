@@ -46,10 +46,14 @@ public class KFoldStrategy<T> : ICrossValidationStrategy<T>
         _randomSeed = randomSeed;
     }
 
+    /// <inheritdoc />
     public string Name => $"{_k}-Fold";
+    /// <inheritdoc />
     public int NumSplits => _k;
+    /// <inheritdoc />
     public string Description => $"Standard {_k}-fold cross-validation{(_shuffle ? " with shuffling" : "")}.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize < _k)

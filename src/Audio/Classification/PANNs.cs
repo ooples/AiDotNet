@@ -133,12 +133,16 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     #region IAudioEventDetector
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedEvents => ClassLabels;
     public IReadOnlyList<string> EventLabels => ClassLabels;
+    /// <inheritdoc />
     public double TimeResolution => _options.WindowSize * (1 - _options.WindowOverlap);
 
+    /// <inheritdoc />
     public AudioEventResult<T> Detect(Tensor<T> audio) { ThrowIfDisposed(); return Detect(audio, NumOps.FromDouble(_options.Threshold)); }
 
+    /// <inheritdoc />
     public AudioEventResult<T> Detect(Tensor<T> audio, T threshold)
     {
         ThrowIfDisposed(); double tv = NumOps.ToDouble(threshold), dur = audio.Length / (double)_options.SampleRate;
@@ -148,10 +152,14 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         return new AudioEventResult<T> { Events = merged, TotalDuration = dur, DetectedEventTypes = merged.Select(e => e.EventType).Distinct().ToList(), EventStats = ComputeEventStatistics(merged) };
     }
 
+    /// <inheritdoc />
     public Task<AudioEventResult<T>> DetectAsync(Tensor<T> audio, CancellationToken ct = default) => Task.Run(() => Detect(audio), ct);
+    /// <inheritdoc />
     public AudioEventResult<T> DetectSpecific(Tensor<T> audio, IReadOnlyList<string> types) => DetectSpecific(audio, types, NumOps.FromDouble(_options.Threshold));
+    /// <inheritdoc />
     public AudioEventResult<T> DetectSpecific(Tensor<T> audio, IReadOnlyList<string> types, T threshold) { var r = Detect(audio, threshold); var s = new HashSet<string>(types, StringComparer.OrdinalIgnoreCase); var f = r.Events.Where(e => s.Contains(e.EventType)).ToList(); return new AudioEventResult<T> { Events = f, TotalDuration = r.TotalDuration, DetectedEventTypes = f.Select(e => e.EventType).Distinct().ToList(), EventStats = ComputeEventStatistics(f) }; }
 
+    /// <inheritdoc />
     public Tensor<T> GetEventProbabilities(Tensor<T> audio)
     {
         ThrowIfDisposed(); var wins = SplitIntoWindows(audio); var p = new Tensor<T>([wins.Count, ClassLabels.Count]);
@@ -159,7 +167,9 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         return p;
     }
 
+    /// <inheritdoc />
     public IStreamingEventDetectionSession<T> StartStreamingSession() => StartStreamingSession(_options.SampleRate, NumOps.FromDouble(_options.Threshold));
+    /// <inheritdoc />
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sr, T thr)
     {
         if (sr <= 0)
@@ -178,6 +188,7 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         else Layers.AddRange(LayerHelper<T>.CreateDefaultPANNsLayers(numMels: _options.NumMels, baseChannels: _options.BaseChannels, numBlocks: _options.NumBlocks, embeddingDim: _options.EmbeddingDim, numClasses: ClassLabels.Count, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -215,9 +226,12 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => _melSpectrogram?.Forward(rawAudio) ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) { var r = new Tensor<T>(o._shape); for (int i = 0; i < o.Length; i++) r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(o[i])))); return r; }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = _useNativeMode ? "PANNs-Native" : "PANNs-ONNX", Description = "PANNs CNN14 (Kong et al., 2020)", FeatureCount = ClassLabels.Count, Complexity = _options.NumBlocks };
@@ -293,6 +307,7 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Disposal
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PANNs<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

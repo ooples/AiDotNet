@@ -35,7 +35,7 @@ public enum SelectionDirection
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly SelectionDirection _direction;
@@ -47,10 +47,13 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public SelectionDirection Direction => _direction;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public SequentialFeatureSelector(
@@ -72,12 +75,14 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _randomState = randomState;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "SequentialFeatureSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -307,12 +312,14 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -329,11 +336,13 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("SequentialFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -346,6 +355,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

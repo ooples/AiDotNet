@@ -868,6 +868,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         return diagnostics;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -880,6 +881,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </summary>
     internal override bool KeepsResultsBetweenCalls => GetType() != typeof(EmbeddingLayer<T>);
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear gradients from the backward pass

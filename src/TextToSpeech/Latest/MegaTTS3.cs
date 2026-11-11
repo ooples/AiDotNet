@@ -100,9 +100,13 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public int NumCodebooks => _options.NumCodebooks;
+    /// <inheritdoc />
     public int CodebookSize => _options.CodebookSize;
+    /// <inheritdoc />
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. MegaTTS 3: text -> latent LM -> sparse DiT diffusion -> codec latent -> WavVAE decoder -> waveform.</summary>
@@ -116,6 +120,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
         return PostprocessAudio(output);
     }
 
+    /// <inheritdoc />
     public Tensor<T> EncodeToTokens(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -124,6 +129,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
         return Predict(audio);
     }
 
+    /// <inheritdoc />
     public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
     {
         ThrowIfDisposed();
@@ -132,6 +138,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
         return Predict(tokens);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         int len = Math.Min(text.Length, _options.MaxTextLength);
@@ -141,6 +148,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -164,6 +172,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -181,6 +190,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -209,6 +219,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(MegaTTS3<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

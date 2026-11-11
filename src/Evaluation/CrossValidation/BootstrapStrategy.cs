@@ -49,10 +49,14 @@ public class BootstrapStrategy<T> : ICrossValidationStrategy<T>
         _randomSeed = randomSeed;
     }
 
+    /// <inheritdoc />
     public string Name => "Bootstrap";
+    /// <inheritdoc />
     public int NumSplits => _numBootstraps;
+    /// <inheritdoc />
     public string Description => $"Bootstrap validation with {_numBootstraps} samples using out-of-bag evaluation.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize < 2)

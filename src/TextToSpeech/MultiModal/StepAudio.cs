@@ -107,18 +107,24 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public int NumCodebooks => _options.NumCodebooks;
+    /// <inheritdoc />
     public int CodebookSize => _options.CodebookSize;
 
     /// <inheritdoc />
     /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
     protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
+    /// <inheritdoc />
     public int CodecFrameRate => _options.CodecFrameRate;
     private int _streamPosition;
     private string _streamText = string.Empty;
     private int _chunkSamples;
+    /// <inheritdoc />
     public int FirstPacketLatencyMs => _options.FirstPacketLatencyMs;
+    /// <inheritdoc />
     public bool HasMoreChunks => _streamPosition < _streamText.Length;
 
     /// Synthesizes speech using StepAudio's neural codec language model pipeline.
@@ -134,6 +140,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
         return PostprocessAudio(output);
     }
 
+    /// <inheritdoc />
     public Tensor<T> EncodeToTokens(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -142,6 +149,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
         return Predict(audio);
     }
 
+    /// <inheritdoc />
     public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
     {
         ThrowIfDisposed();
@@ -150,6 +158,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
         return Predict(tokens);
     }
 
+    /// <inheritdoc />
     public Tensor<T> SynthesizeFirstChunk(string text, int chunkSize)
     {
         if (string.IsNullOrEmpty(text))
@@ -165,6 +174,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
         return SynthesizeNextChunk();
     }
 
+    /// <inheritdoc />
     public Tensor<T> SynthesizeNextChunk()
     {
         if (_streamPosition >= _streamText.Length)
@@ -199,6 +209,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -222,6 +233,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -250,6 +262,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
     }
 
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -277,6 +290,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
             throw new ObjectDisposedException(GetType().FullName ?? nameof(StepAudio<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

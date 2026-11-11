@@ -131,6 +131,7 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
             span[i] = numOps.FromDouble(random.NextGaussian(0, stddev));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Tape-tracked per-point linear map: [N, In] @ [In, Out] + bias -> activation.
@@ -147,14 +148,17 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
     }
 
     // UpdateParameters delegated straight to SetParameters. The base does that now.
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         // No-op: gradients live on the tape, not in a per-layer buffer.
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 }

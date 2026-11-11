@@ -59,8 +59,11 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
 
     private readonly ConvTransformerOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public ConvTransformer(NeuralNetworkArchitecture<T> architecture, string modelPath, ConvTransformerOptions? options = null) : base(architecture) { _options = options ?? new ConvTransformerOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
@@ -95,13 +98,16 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration, Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>() };
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Transcribe(audio, language, includeTimestamps); }, cancellationToken);
+    /// <inheritdoc />
     public string DetectLanguage(Tensor<T> audio)
     {
         ThrowIfDisposed();
         // ConvTransformer is monolingual; return the configured language.
         return _options.Language;
     }
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -111,9 +117,11 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
             result[lang] = NumOps.FromDouble(lang == _options.Language ? 1.0 : 0.0);
         return result;
     }
+    /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("ConvTransformer does not support streaming.");
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultCTCDecoderLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardDim: _options.FeedForwardDim, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -137,7 +145,9 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     }
 
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ConvTransformer-Native" : "ConvTransformer-ONNX", Description = "Convolution-Augmented Transformer for ASR (2019)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
@@ -165,5 +175,6 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ConvTransformer<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

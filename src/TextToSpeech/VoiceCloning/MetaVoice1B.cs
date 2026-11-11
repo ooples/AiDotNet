@@ -88,8 +88,11 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int HiddenDim => _options.HiddenDim;
+    /// <inheritdoc />
     public int NumFlowSteps => 0;
 
     /// <summary>
@@ -107,7 +110,9 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         return FlattenWaveform(audio);
     }
 
+    /// <inheritdoc />
     public double MinReferenceDuration => 3.0;
+    /// <inheritdoc />
     public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
 
     /// <summary>
@@ -126,6 +131,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         return FlattenWaveform(audio);
     }
 
+    /// <inheritdoc />
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
     {
         int embDim = _options.SpeakerEmbeddingDim;
@@ -179,6 +185,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         return waveform;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         int len = Math.Min(text.Length, _options.MaxTextLength);
@@ -188,6 +195,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -217,6 +225,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -234,6 +243,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -261,6 +271,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
             throw new ObjectDisposedException(GetType().FullName ?? nameof(MetaVoice1B<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

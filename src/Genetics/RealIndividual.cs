@@ -59,26 +59,31 @@ public class RealValuedIndividual : IEvolvable<RealGene, double>
         }
     }
 
+    /// <inheritdoc />
     public ICollection<RealGene> GetGenes()
     {
         return _genes;
     }
 
+    /// <inheritdoc />
     public void SetGenes(ICollection<RealGene> genes)
     {
         _genes = [.. genes];
     }
 
+    /// <inheritdoc />
     public double GetFitness()
     {
         return _fitness;
     }
 
+    /// <inheritdoc />
     public void SetFitness(double fitness)
     {
         _fitness = fitness;
     }
 
+    /// <inheritdoc />
     public IEvolvable<RealGene, double> Clone()
     {
         var clone = new RealValuedIndividual([]);

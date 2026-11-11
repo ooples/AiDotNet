@@ -53,10 +53,14 @@ public class TimeSeriesSplitStrategy<T> : ICrossValidationStrategy<T>
         _gap = gap;
     }
 
+    /// <inheritdoc />
     public string Name => "TimeSeriesSplit";
+    /// <inheritdoc />
     public int NumSplits => _numSplits;
+    /// <inheritdoc />
     public string Description => $"Time series split with {_numSplits} expanding windows{(_gap > 0 ? $" and gap of {_gap}" : "")}.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize < _numSplits + 1)

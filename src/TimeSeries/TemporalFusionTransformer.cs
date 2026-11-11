@@ -181,6 +181,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     }
 
     // ── Training (tape + Adam) ──────────────────────────────────────────────────────
+    /// <inheritdoc />
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         _trainingSeries = new Vector<T>(y.Length);
@@ -434,6 +435,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     }
 
     // ── Prediction ──────────────────────────────────────────────────────────────────
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibrated))
@@ -504,6 +506,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     // Rows per batched predict forward; bounds activation memory (rows x length x HiddenSize per GRN).
     private const int PredictChunkRows = 256;
 
+    /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
         var output = ForwardEngine(input);
@@ -582,6 +585,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     }
 
     // ── Serialization ───────────────────────────────────────────────────────────────
+    /// <inheritdoc />
     protected override void SerializeCore(BinaryWriter writer)
     {
         writer.Write(_options.LookbackWindow);
@@ -601,6 +605,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
             SerializeTensor(writer, p);
     }
 
+    /// <inheritdoc />
     protected override void DeserializeCore(BinaryReader reader)
     {
         _options.LookbackWindow = reader.ReadInt32();
@@ -646,6 +651,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     }
 
     // ── Metadata ──────────────────────────────────────────────────────────────────
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -665,6 +671,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new TemporalFusionTransformer<T>(new TemporalFusionTransformerOptions<T>(_options));
