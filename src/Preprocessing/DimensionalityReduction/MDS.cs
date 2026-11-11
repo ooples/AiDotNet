@@ -171,7 +171,7 @@ public class MDS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             _stress = stress;
 
             // Check convergence
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(prevStress, stress)), eps))
+            if (DimensionalityReductionOps.ChangeBelow(prevStress, stress, eps))
             {
                 break;
             }

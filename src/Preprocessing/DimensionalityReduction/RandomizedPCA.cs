@@ -47,11 +47,11 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _components; // Principal components (d x p)
-    private double[]? _mean;
-    private double[]? _explainedVariance;
-    private double[]? _singularValues;
-    private double _totalVariance;
+    private Matrix<T>? _components; // Principal components (d x p)
+    private Vector<T>? _mean;
+    private Vector<T>? _explainedVariance;
+    private Vector<T>? _singularValues;
+    private T _totalVariance = MathHelper.GetNumericOperations<T>().Zero;
     private int _nFeatures;
 
     /// <summary>
@@ -62,17 +62,17 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the principal components (each row is a component).
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets the explained variance for each component.
     /// </summary>
-    public double[]? ExplainedVariance => _explainedVariance;
+    public Vector<T>? ExplainedVariance => _explainedVariance;
 
     /// <summary>
     /// Gets the singular values.
     /// </summary>
-    public double[]? SingularValues => _singularValues;
+    public Vector<T>? SingularValues => _singularValues;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -111,6 +111,7 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         int n = data.Rows;
         int p = data.Columns;
         _nFeatures = p;
@@ -134,286 +135,43 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        // Center the data
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = DimensionalityReductionOps.ColumnMeans(x);
+        var xc = DimensionalityReductionOps.SubtractRow(x, mean);
 
-        // Step 1: Center the data
-        _mean = new double[p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                _mean[j] += X[i, j];
-            }
-        }
-        for (int j = 0; j < p; j++) _mean[j] /= n;
+        // Total variance: sum of the column sample variances
+        _totalVariance = NumOps.Divide(engine.TensorSum(engine.TensorSquare(xc)), NumOps.FromDouble(n - 1));
 
-        var Xc = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                Xc[i, j] = X[i, j] - _mean[j];
-            }
-        }
-
-        // Compute total variance (sum of variances of all features)
-        _totalVariance = 0;
-        for (int j = 0; j < p; j++)
-        {
-            double colVariance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                colVariance += Xc[i, j] * Xc[i, j];
-            }
-            _totalVariance += colVariance / (n - 1);
-        }
-
-        // Step 2: Randomized range finder
+        // Number of random projections (components + oversamples)
         int k = _nComponents + _nOversamples;
         k = Math.Min(k, Math.Min(n, p));
 
-        // Generate random Gaussian matrix Ω (p x k)
-        var Omega = new double[p, k];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                Omega[i, j] = random.NextGaussian();
-            }
-        }
+        // Random Gaussian test matrix Omega [p, k] and its range sample Y = Xc * Omega
+        var omega = DimensionalityReductionOps.StandardNormal<T>(random, p, k);
+        var y = engine.TensorMatMul(xc, omega);
 
-        // Y = X * Ω (n x k)
-        var Y = new double[n, k];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                for (int l = 0; l < p; l++)
-                {
-                    Y[i, j] += Xc[i, l] * Omega[l, j];
-                }
-            }
-        }
-
-        // Step 3: Power iteration for improved accuracy
+        // Power iterations sharpen the spectrum: Y = Xc * orth(Xc^T * Y)
         for (int iter = 0; iter < _nPowerIter; iter++)
         {
-            // Y = X * X^T * Y
-            // First compute Z = X^T * Y (p x k)
-            var Z = new double[p, k];
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    for (int l = 0; l < n; l++)
-                    {
-                        Z[i, j] += Xc[l, i] * Y[l, j];
-                    }
-                }
-            }
-
-            // Orthonormalize Z
-            Z = QROrthonormalize(Z, p, k);
-
-            // Y = X * Z
-            Y = new double[n, k];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    for (int l = 0; l < p; l++)
-                    {
-                        Y[i, j] += Xc[i, l] * Z[l, j];
-                    }
-                }
-            }
+            var z = DimensionalityReductionOps.OrthonormalizeColumns(DimensionalityReductionOps.TransposeMatMul(xc, y));
+            y = engine.TensorMatMul(xc, z);
         }
 
-        // Step 4: Orthonormalize Y to get Q (n x k)
-        var Q = QROrthonormalize(Y, n, k);
+        // Orthonormal basis of the range and the projected matrix B = Q^T * Xc [k, p]
+        var q = DimensionalityReductionOps.OrthonormalizeColumns(y);
+        var b = DimensionalityReductionOps.TransposeMatMul(q, xc);
 
-        // Step 5: Form B = Q^T * X (k x p)
-        var B = new double[k, p];
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int l = 0; l < n; l++)
-                {
-                    B[i, j] += Q[l, i] * Xc[l, j];
-                }
-            }
-        }
+        // SVD of the small matrix: right singular vectors are the eigenvectors of B^T B
+        var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(
+            DimensionalityReductionOps.TransposeMatMul(b, b), descending: true);
+        var singularValues = engine.TensorSqrt(
+            engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, _nComponents), NumOps.Zero));
 
-        // Step 6: SVD of B to get right singular vectors
-        var (singularValues, rightVectors) = ComputeSVD(B, k, p, random);
-
-        // Step 7: Extract top components
-        _components = new double[_nComponents, p];
-        _singularValues = new double[_nComponents];
-        _explainedVariance = new double[_nComponents];
-
-        for (int d = 0; d < _nComponents; d++)
-        {
-            _singularValues[d] = singularValues[d];
-            _explainedVariance[d] = (singularValues[d] * singularValues[d]) / (n - 1);
-
-            for (int j = 0; j < p; j++)
-            {
-                _components[d, j] = rightVectors[d, j];
-            }
-        }
-    }
-
-    private double[,] QROrthonormalize(double[,] A, int m, int n)
-    {
-        var Q = new double[m, n];
-
-        // Copy A to Q
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                Q[i, j] = A[i, j];
-            }
-        }
-
-        // Modified Gram-Schmidt
-        for (int j = 0; j < n; j++)
-        {
-            // Normalize column j
-            double norm = 0;
-            for (int i = 0; i < m; i++)
-            {
-                norm += Q[i, j] * Q[i, j];
-            }
-            norm = Math.Sqrt(norm);
-
-            if (norm > 1e-10)
-            {
-                for (int i = 0; i < m; i++)
-                {
-                    Q[i, j] /= norm;
-                }
-            }
-
-            // Orthogonalize remaining columns
-            for (int k = j + 1; k < n; k++)
-            {
-                double dot = 0;
-                for (int i = 0; i < m; i++)
-                {
-                    dot += Q[i, j] * Q[i, k];
-                }
-
-                for (int i = 0; i < m; i++)
-                {
-                    Q[i, k] -= dot * Q[i, j];
-                }
-            }
-        }
-
-        return Q;
-    }
-
-    private (double[] singularValues, double[,] rightVectors) ComputeSVD(
-        double[,] B, int m, int n, Random random)
-    {
-        // Compute B^T * B for right singular vectors
-        var BtB = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                for (int k = 0; k < m; k++)
-                {
-                    BtB[i, j] += B[k, i] * B[k, j];
-                }
-            }
-        }
-
-        // Power iteration to get top eigenvectors of B^T * B
-        var singularValues = new double[_nComponents];
-        var rightVectors = new double[_nComponents, n];
-        var A = (double[,])BtB.Clone();
-
-        for (int d = 0; d < _nComponents; d++)
-        {
-            var v = new double[n];
-            for (int i = 0; i < n; i++) v[i] = random.NextDouble() - 0.5;
-
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                double norm = 0;
-                for (int i = 0; i < n; i++) norm += Av[i] * Av[i];
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                double change = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double newV = Av[i] / norm;
-                    change += Math.Abs(newV - v[i]);
-                    v[i] = newV;
-                }
-
-                if (change < 1e-10) break;
-            }
-
-            // Store right singular vector
-            for (int i = 0; i < n; i++)
-            {
-                rightVectors[d, i] = v[i];
-            }
-
-            // Compute eigenvalue (squared singular value)
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double lambda = 0;
-            for (int i = 0; i < n; i++)
-            {
-                lambda += v[i] * Av2[i];
-            }
-
-            singularValues[d] = Math.Sqrt(Math.Max(lambda, 0));
-
-            // Deflate
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= lambda * v[i] * v[j];
-                }
-            }
-        }
-
-        return (singularValues, rightVectors);
+        _mean = mean.ToVector();
+        _components = engine.TensorTranspose(DimensionalityReductionOps.FirstColumns(eigenvectors, _nComponents)).ToMatrix();
+        _singularValues = singularValues.ToVector();
+        _explainedVariance = engine.TensorDivideScalar(engine.TensorSquare(singularValues), NumOps.FromDouble(n - 1)).ToVector();
     }
 
     /// <summary>
@@ -426,7 +184,6 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("RandomizedPCA has not been fitted.");
         }
 
-        int n = data.Rows;
         int p = data.Columns;
 
         if (p != _nFeatures)
@@ -436,23 +193,8 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        var result = new T[n, _nComponents];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int d = 0; d < _nComponents; d++)
-            {
-                double val = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    double xij = NumOps.ToDouble(data[i, j]) - _mean[j];
-                    val += xij * _components[d, j];
-                }
-                result[i, d] = NumOps.FromDouble(val);
-            }
-        }
-
-        return new Matrix<T>(result);
+        var centered = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
+        return DimensionalityReductionOps.MatMulTranspose(centered, Tensor<T>.FromMatrix(_components)).ToMatrix();
     }
 
     /// <summary>
@@ -465,7 +207,6 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("RandomizedPCA has not been fitted.");
         }
 
-        int n = data.Rows;
         int d = data.Columns;
 
         if (d != _nComponents)
@@ -475,42 +216,23 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        var result = new T[n, _nFeatures];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                double val = _mean[j];
-                for (int k = 0; k < _nComponents; k++)
-                {
-                    val += NumOps.ToDouble(data[i, k]) * _components[k, j];
-                }
-                result[i, j] = NumOps.FromDouble(val);
-            }
-        }
-
-        return new Matrix<T>(result);
+        var reconstructed = Engine.TensorMatMul(Tensor<T>.FromMatrix(data), Tensor<T>.FromMatrix(_components));
+        return DimensionalityReductionOps.AddRow(reconstructed, Tensor<T>.FromVector(_mean)).ToMatrix();
     }
 
     /// <summary>
     /// Gets the total explained variance ratio (proportion of total variance explained by selected components).
     /// </summary>
     /// <returns>A value between 0 and 1 representing the fraction of total variance captured.</returns>
-    public double GetExplainedVarianceRatio()
+    public T GetExplainedVarianceRatio()
     {
         if (_explainedVariance is null)
         {
             throw new InvalidOperationException("RandomizedPCA has not been fitted.");
         }
 
-        double explainedSum = 0;
-        foreach (var v in _explainedVariance)
-        {
-            explainedSum += v;
-        }
-
-        return _totalVariance > 0 ? explainedSum / _totalVariance : 0;
+        T explainedSum = Engine.TensorSum(Tensor<T>.FromVector(_explainedVariance));
+        return NumOps.GreaterThan(_totalVariance, NumOps.Zero) ? NumOps.Divide(explainedSum, _totalVariance) : NumOps.Zero;
     }
 
     /// <summary>

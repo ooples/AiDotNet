@@ -187,6 +187,19 @@ internal static class DimensionalityReductionOps
     /// <summary>The inverse of a square matrix by LU with partial pivoting.</summary>
     internal static Tensor<T> Inverse<T>(Tensor<T> a) => Solve(a, Identity<T>(a.Shape[0]));
 
+    /// <summary>|a - b| &lt; tolerance: the scalar convergence test of an iterative fit (one call per iteration).</summary>
+    internal static bool ChangeBelow<T>(T a, T b, T tolerance)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return numOps.LessThan(numOps.Abs(numOps.Subtract(a, b)), tolerance);
+    }
+
+    /// <summary>value &lt; threshold for a scalar reduction result.</summary>
+    internal static bool Below<T>(T value, T threshold) => MathHelper.GetNumericOperations<T>().LessThan(value, threshold);
+
+    /// <summary>value &gt; threshold for a scalar reduction result.</summary>
+    internal static bool Above<T>(T value, T threshold) => MathHelper.GetNumericOperations<T>().GreaterThan(value, threshold);
+
     /// <summary>
     /// Double centering of a squared-distance matrix: B = -1/2 (D2 - row means - column means + grand mean).
     /// </summary>
@@ -215,5 +228,35 @@ internal static class DimensionalityReductionOps
         var (values, vectors) = SymmetricEigen(b, descending: true);
         var scale = engine.TensorSqrt(engine.TensorClampMin(engine.TensorNarrow(values, 0, 0, k), numOps.Zero));
         return ScaleColumns(FirstColumns(vectors, k), scale);
+    }
+
+    /// <summary>
+    /// Modified Gram-Schmidt on the columns of a [m, n] matrix: each column in turn is normalised (left as is when
+    /// its norm is at most <paramref name="tolerance"/>) and its projection removed from every later column.
+    /// </summary>
+    internal static Tensor<T> OrthonormalizeColumns<T>(Tensor<T> a, double tolerance = 1e-10)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T tol = numOps.FromDouble(tolerance);
+        int n = a.Shape[1];
+        var columns = new Tensor<T>[n];
+        var remaining = a;
+        for (int j = 0; j < n; j++)
+        {
+            var column = engine.TensorNarrow(remaining, 1, 0, 1);
+            var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(column), new[] { 0 }, true));
+            var divisor = engine.TensorWhere(engine.TensorGreaterThan(norm, tol), norm, engine.TensorOnesLike(norm));
+            column = engine.TensorDivide(column, divisor);
+            columns[j] = column;
+
+            if (j + 1 < n)
+            {
+                var rest = engine.TensorNarrow(remaining, 1, 1, n - j - 1);
+                remaining = engine.TensorSubtract(rest, engine.TensorMatMul(column, TransposeMatMul(column, rest)));
+            }
+        }
+
+        return engine.TensorConcatenate(columns, 1);
     }
 }
