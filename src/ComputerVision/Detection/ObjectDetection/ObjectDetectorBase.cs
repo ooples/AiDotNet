@@ -417,8 +417,47 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
             return image;
         }
 
-        // Bilinear with the asymmetric mapping src = dst * in / out, clamping the upper neighbour.
-        return CvTensorOps<T>.ResizeBilinearAsymmetric(image, targetHeight, targetWidth);
+        int batch = image.Shape[0];
+        int channels = image.Shape[1];
+        double scaleY = (double)srcHeight / targetHeight;
+        double scaleX = (double)srcWidth / targetWidth;
+
+        // Bilinear in double, exactly as before, on one bulk conversion of the input; NCHW flat indexing.
+        var source = CvTensorOps<T>.ToDoubleArray(image);
+        var resized = new double[batch * channels * targetHeight * targetWidth];
+        for (int plane = 0; plane < batch * channels; plane++)
+        {
+            int sourcePlane = plane * srcHeight * srcWidth;
+            int targetPlane = plane * targetHeight * targetWidth;
+            for (int h = 0; h < targetHeight; h++)
+            {
+                for (int w = 0; w < targetWidth; w++)
+                {
+                    double srcY = h * scaleY;
+                    double srcX = w * scaleX;
+
+                    int y0 = (int)Math.Floor(srcY);
+                    int x0 = (int)Math.Floor(srcX);
+                    int y1 = Math.Min(y0 + 1, srcHeight - 1);
+                    int x1 = Math.Min(x0 + 1, srcWidth - 1);
+
+                    double dy = srcY - y0;
+                    double dx = srcX - x0;
+
+                    double v00 = source[sourcePlane + (y0 * srcWidth) + x0];
+                    double v01 = source[sourcePlane + (y0 * srcWidth) + x1];
+                    double v10 = source[sourcePlane + (y1 * srcWidth) + x0];
+                    double v11 = source[sourcePlane + (y1 * srcWidth) + x1];
+
+                    resized[targetPlane + (h * targetWidth) + w] = v00 * (1 - dx) * (1 - dy)
+                                 + v01 * dx * (1 - dy)
+                                 + v10 * (1 - dx) * dy
+                                 + v11 * dx * dy;
+                }
+            }
+        }
+
+        return CvTensorOps<T>.FromDoubleArray(resized, new[] { batch, channels, targetHeight, targetWidth });
     }
 
     /// <summary>

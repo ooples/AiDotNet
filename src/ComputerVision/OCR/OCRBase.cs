@@ -330,14 +330,15 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
         // Resize
         var resized = ResizeBilinear(crop, targetH, targetW);
 
-        // Normalize to [-1, 1]
-        for (int i = 0; i < resized.Length; i++)
+        // Normalize to [-1, 1], in double as before, on one bulk conversion.
+        var normalized = CvTensorOps<T>.ToDoubleArray(resized);
+        for (int i = 0; i < normalized.Length; i++)
         {
-            double val = NumOps.ToDouble(resized[i]) / 255.0;
-            resized[i] = NumOps.FromDouble(val * 2.0 - 1.0);
+            double val = normalized[i] / 255.0;
+            normalized[i] = val * 2.0 - 1.0;
         }
 
-        return resized;
+        return CvTensorOps<T>.FromDoubleArray(normalized, resized.Shape.ToArray());
     }
 
     /// <summary>
@@ -350,6 +351,7 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
 
         var result = new List<char>();
         int prevIndex = 0;
+        var values = FirstSequenceLogits(logits);
 
         // The budget is emitted characters, not timesteps: CTC blanks and repeats consume
         // sequence positions without consuming the caller's character budget.
@@ -361,7 +363,7 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
 
             for (int c = 0; c < numClasses; c++)
             {
-                double val = NumOps.ToDouble(logits[0, t, c]);
+                double val = values[(t * numClasses) + c];
                 if (val > maxVal)
                 {
                     maxVal = val;
@@ -393,6 +395,7 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
         int numClasses = logits.Shape[2];
 
         var result = new List<char>();
+        var values = FirstSequenceLogits(logits);
 
         for (int t = 0; t < seqLen && result.Count < Options.MaxSequenceLength; t++)
         {
@@ -401,7 +404,7 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
 
             for (int c = 0; c < numClasses; c++)
             {
-                double val = NumOps.ToDouble(logits[0, t, c]);
+                double val = values[(t * numClasses) + c];
                 if (val > maxVal)
                 {
                     maxVal = val;
@@ -434,6 +437,7 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
 
         double totalConf = 0;
         int count = 0;
+        var values = FirstSequenceLogits(logits);
 
         for (int t = 0; t < seqLen && count < decodedText.Length; t++)
         {
@@ -441,13 +445,13 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
             double maxLogit = double.NegativeInfinity;
             for (int c = 0; c < numClasses; c++)
             {
-                maxLogit = Math.Max(maxLogit, NumOps.ToDouble(logits[0, t, c]));
+                maxLogit = Math.Max(maxLogit, values[(t * numClasses) + c]);
             }
 
             double sumExp = 0;
             for (int c = 0; c < numClasses; c++)
             {
-                sumExp += Math.Exp(NumOps.ToDouble(logits[0, t, c]) - maxLogit);
+                sumExp += Math.Exp(values[(t * numClasses) + c] - maxLogit);
             }
 
             // Get probability of predicted character
@@ -455,7 +459,7 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
             double maxVal = double.NegativeInfinity;
             for (int c = 0; c < numClasses; c++)
             {
-                double val = NumOps.ToDouble(logits[0, t, c]);
+                double val = values[(t * numClasses) + c];
                 if (val > maxVal)
                 {
                     maxVal = val;
@@ -474,6 +478,10 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
         return NumOps.FromDouble(count > 0 ? totalConf / count : 0);
     }
 
+    /// <summary>The first sequence of <c>[batch, seqLen, classes]</c> logits in double, as one bulk conversion.</summary>
+    private double[] FirstSequenceLogits(Tensor<T> logits)
+        => CvTensorOps<T>.ToDoubleArray(Engine.TensorSlice(logits, new[] { 0, 0, 0 }, new[] { 1, logits.Shape[1], logits.Shape[2] }));
+
     /// <summary>
     /// Resizes tensor using bilinear interpolation.
     /// </summary>
@@ -484,12 +492,16 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
         int srcH = input.Shape[2];
         int srcW = input.Shape[3];
 
-        var output = new Tensor<T>(new[] { batch, channels, targetH, targetW });
+        // In double, exactly as before, on one bulk conversion of the input; NCHW flat indexing.
+        var source = CvTensorOps<T>.ToDoubleArray(input);
+        var output = new double[batch * channels * targetH * targetW];
 
         for (int b = 0; b < batch; b++)
         {
             for (int c = 0; c < channels; c++)
             {
+                int sourcePlane = ((b * channels) + c) * srcH * srcW;
+                int targetPlane = ((b * channels) + c) * targetH * targetW;
                 for (int h = 0; h < targetH; h++)
                 {
                     for (int w = 0; w < targetW; w++)
@@ -507,19 +519,19 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
                         double wx1 = srcX - x0;
                         double wx0 = 1.0 - wx1;
 
-                        double v00 = NumOps.ToDouble(input[b, c, y0, x0]);
-                        double v01 = NumOps.ToDouble(input[b, c, y0, x1]);
-                        double v10 = NumOps.ToDouble(input[b, c, y1, x0]);
-                        double v11 = NumOps.ToDouble(input[b, c, y1, x1]);
+                        double v00 = source[sourcePlane + (y0 * srcW) + x0];
+                        double v01 = source[sourcePlane + (y0 * srcW) + x1];
+                        double v10 = source[sourcePlane + (y1 * srcW) + x0];
+                        double v11 = source[sourcePlane + (y1 * srcW) + x1];
 
                         double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-                        output[b, c, h, w] = NumOps.FromDouble(val);
+                        output[targetPlane + (h * targetW) + w] = val;
                     }
                 }
             }
         }
 
-        return output;
+        return CvTensorOps<T>.FromDoubleArray(output, new[] { batch, channels, targetH, targetW });
     }
 
     /// <summary>
@@ -589,16 +601,16 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
     {
         if (transcriptions is null) throw new ArgumentNullException(nameof(transcriptions));
         int width = Math.Max(1, transcriptions.Max(text => (text ?? throw new ArgumentException("Transcriptions cannot be null.", nameof(transcriptions))).Length));
-        var labels = new Tensor<T>(new[] { transcriptions.Count, width });
+        var labels = new double[transcriptions.Count * width];
         for (int b = 0; b < transcriptions.Count; b++)
             for (int i = 0; i < transcriptions[b].Length; i++)
             {
                 char ch = transcriptions[b][i];
                 if (!CharToIndex.TryGetValue(ch, out int id))
                     throw new ArgumentException($"Character '{ch}' of transcription {b} is not in the character set.", nameof(transcriptions));
-                labels[b, i] = NumOps.FromDouble(id);
+                labels[(b * width) + i] = id;
             }
-        return labels;
+        return CvTensorOps<T>.FromDoubleArray(labels, new[] { transcriptions.Count, width });
     }
     /// <inheritdoc />
     /// <remarks>Recognisers regress their raw logits, not the decoded prediction.</remarks>
