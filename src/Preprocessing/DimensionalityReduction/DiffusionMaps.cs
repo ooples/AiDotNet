@@ -41,11 +41,10 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _alpha;
     private readonly int _diffusionTime;
     private readonly double _epsilon;
-    private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _embedding;
-    private double[]? _eigenvalues;
+    private Matrix<T>? _embedding;
+    private Vector<T>? _eigenvalues;
     private int _nSamples;
 
     /// <summary>
@@ -61,12 +60,12 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets the eigenvalues.
     /// </summary>
-    public double[]? Eigenvalues => _eigenvalues;
+    public Vector<T>? Eigenvalues => _eigenvalues;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -80,7 +79,7 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="alpha">Normalization factor (0 to 1). Defaults to 0.5.</param>
     /// <param name="diffusionTime">Number of diffusion steps. Defaults to 1.</param>
     /// <param name="epsilon">Kernel bandwidth. If 0, computed automatically. Defaults to 0.</param>
-    /// <param name="randomState">Random seed for reproducibility.</param>
+    /// <param name="randomState">Kept for API compatibility; the eigen solver is deterministic.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public DiffusionMaps(
         int nComponents = 2,
@@ -110,7 +109,6 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _alpha = alpha;
         _diffusionTime = diffusionTime;
         _epsilon = epsilon;
-        _randomState = randomState;
     }
 
     /// <summary>
@@ -118,9 +116,9 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nSamples = data.Rows;
         int n = data.Rows;
-        int p = data.Columns;
 
         // Validate that we have enough samples for requested components
         // We need at least nComponents + 1 samples because we skip the first eigenvector
@@ -131,217 +129,50 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 $"The first eigenvector is skipped, so at least {_nComponents + 1} samples are required.");
         }
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
-
-        // Step 1: Compute pairwise squared distances
-        var distSq = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = X[i, k] - X[j, k];
-                    dist += diff * diff;
-                }
-                distSq[i, j] = dist;
-                distSq[j, i] = dist;
-            }
-        }
+        // Step 1: Compute pairwise distances and squared distances
+        var x = Tensor<T>.FromMatrix(data);
+        var distances = DimensionalityReductionOps.EuclideanDistances(x, x);
+        var distSq = engine.TensorSquare(distances);
 
         // Step 2: Compute epsilon (kernel bandwidth) if not provided
-        double eps = _epsilon;
-        if (eps <= 0)
+        T eps = NumOps.FromDouble(_epsilon);
+        if (_epsilon <= 0)
         {
-            // Use median of pairwise distances
-            var allDists = new List<double>();
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i + 1; j < n; j++)
-                {
-                    allDists.Add(Math.Sqrt(distSq[i, j]));
-                }
-            }
-            allDists.Sort();
-            eps = allDists[allDists.Count / 2];
-            eps = eps * eps; // Square it for the kernel
+            // Median of the n(n-1)/2 pairwise distances, squared. With the diagonal at +inf every pair appears
+            // twice in the sorted flattened matrix, so the upper-triangle element m / 2 sits at position 2 (m / 2).
+            var masked = distances.Clone();
+            engine.TensorFillDiagonalInPlace(masked, NumOps.FromDouble(double.PositiveInfinity));
+            var (sorted, _) = engine.TensorSort(engine.TensorFlatten(masked), 0, false);
+            int pairs = n * (n - 1) / 2;
+            T median = sorted[2 * (pairs / 2)];
+            eps = NumOps.Multiply(median, median);
         }
 
-        // Step 3: Compute kernel matrix K
-        var K = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                K[i, j] = Math.Exp(-distSq[i, j] / eps);
-            }
-        }
+        // Step 3: Kernel K = exp(-d^2 / eps)
+        var kernel = engine.TensorExp(engine.TensorNegate(engine.TensorDivideScalar(distSq, eps)));
 
-        // Step 4: Compute row sums (degree)
-        var q = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                q[i] += K[i, j];
-            }
-        }
+        // Step 4-5: alpha-normalization K_alpha = K / (q_i q_j)^alpha with q = row sums (q_i >= K_ii = 1)
+        var q = DimensionalityReductionOps.RowSums(kernel);
+        var qAlpha = engine.TensorPow(q, NumOps.FromDouble(_alpha));
+        var kAlpha = engine.TensorDivide(
+            engine.TensorDivide(kernel, DimensionalityReductionOps.AsColumn(qAlpha)),
+            DimensionalityReductionOps.AsRow(qAlpha));
 
-        // Step 5: Normalize kernel (alpha-normalization)
-        var Kalpha = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (q[i] > 0 && q[j] > 0)
-                {
-                    Kalpha[i, j] = K[i, j] / Math.Pow(q[i] * q[j], _alpha);
-                }
-            }
-        }
+        // Step 6-7: symmetric diffusion operator M_s = D^(-1/2) K_alpha D^(-1/2) (d_i >= K_alpha_ii > 0)
+        var rootD = engine.TensorSqrt(DimensionalityReductionOps.RowSums(kAlpha));
+        var ms = engine.TensorDivide(
+            engine.TensorDivide(kAlpha, DimensionalityReductionOps.AsColumn(rootD)),
+            DimensionalityReductionOps.AsRow(rootD));
 
-        // Step 6: Compute new row sums
-        var d = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                d[i] += Kalpha[i, j];
-            }
-        }
+        // Step 8: Eigen-decomposition (M_s is positive semi-definite, so descending order = magnitude order)
+        var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(ms, descending: true);
 
-        // Step 7: Construct symmetric diffusion operator
-        var Ms = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (d[i] > 0 && d[j] > 0)
-                {
-                    Ms[i, j] = Kalpha[i, j] / Math.Sqrt(d[i] * d[j]);
-                }
-            }
-        }
-
-        // Step 8: Compute eigenvectors
-        var (eigenvalues, eigenvectors) = ComputeLargestEigenvectors(Ms, n);
-
-        // Step 9: Create embedding (skip first eigenvector which is constant)
-        _eigenvalues = new double[_nComponents];
-        _embedding = new double[n, _nComponents];
-
-        for (int k = 0; k < _nComponents; k++)
-        {
-            int eigIdx = k + 1; // Skip first (constant) eigenvector
-
-            _eigenvalues[k] = eigenvalues[eigIdx];
-
-            // Scale by eigenvalue^t for diffusion time t
-            // Eigenvalues of the symmetric normalized Laplacian should be non-negative
-            double scale = Math.Pow(eigenvalues[eigIdx], _diffusionTime);
-
-            for (int i = 0; i < n; i++)
-            {
-                // Standard diffusion map embedding uses eigenvectors scaled by eigenvalue powers
-                // Degree normalization was already applied when constructing the symmetric operator Ms
-                _embedding[i, k] = eigenvectors[eigIdx, i] * scale;
-            }
-        }
-    }
-
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeLargestEigenvectors(double[,] M, int n)
-    {
-        var eigenvalues = new double[n];
-        var eigenvectors = new double[n, n];
-        var A = (double[,])M.Clone();
-
-        for (int k = 0; k < Math.Min(n, _nComponents + 2); k++)
-        {
-            var v = new double[n];
-            var random = _randomState.HasValue
-                ? RandomHelper.CreateSeededRandom(_randomState.Value + k)
-                : RandomHelper.CreateSeededRandom(42 + k);
-
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = random.NextDouble();
-            }
-
-            // Normalize initial vector
-            double initNorm = 0;
-            for (int i = 0; i < n; i++) initNorm += v[i] * v[i];
-            initNorm = Math.Sqrt(initNorm);
-            for (int i = 0; i < n; i++) v[i] /= initNorm;
-
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                double norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            // Compute eigenvalue
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double eigenvalue = 0;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[k] = eigenvalue;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[k, i] = v[i];
-            }
-
-            // Deflate
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
+        // Step 9: Embedding from eigenvectors 1..nComponents (skipping the trivial first one) scaled by lambda^t
+        var selected = engine.TensorNarrow(eigenvalues, 0, 1, _nComponents);
+        var scale = engine.TensorPow(selected, NumOps.FromDouble(_diffusionTime));
+        _eigenvalues = selected.ToVector();
+        _embedding = DimensionalityReductionOps.ScaleColumns(
+            engine.TensorNarrow(eigenvectors, 1, 1, _nComponents), scale).ToMatrix();
     }
 
     /// <summary>
@@ -361,19 +192,7 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int d = _embedding.GetLength(1);
-        var result = new T[n, d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>
