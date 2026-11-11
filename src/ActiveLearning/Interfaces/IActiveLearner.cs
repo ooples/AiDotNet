@@ -142,7 +142,7 @@ public interface IActiveLearner<T, TInput, TOutput>
     /// <summary>
     /// Event raised when samples are selected for labeling.
     /// </summary>
-    event EventHandler<SamplesSelectedEventArgs<TInput>>? SamplesSelected;
+    event EventHandler<SamplesSelectedEventArgs<T, TInput>>? SamplesSelected;
 
     /// <summary>
     /// Event raised when the learning process is complete.
@@ -189,8 +189,9 @@ public interface IOracle<TInput, TOutput>
 /// <summary>
 /// Event arguments for when samples are selected for labeling.
 /// </summary>
+/// <typeparam name="T">The numeric type of the informativeness scores.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
-public class SamplesSelectedEventArgs<TInput> : EventArgs
+public class SamplesSelectedEventArgs<T, TInput> : EventArgs
 {
     /// <summary>
     /// Gets the indices of selected samples in the unlabeled pool.
@@ -205,7 +206,7 @@ public class SamplesSelectedEventArgs<TInput> : EventArgs
     /// <summary>
     /// Gets the informativeness scores of selected samples.
     /// </summary>
-    public double[] InformativenessScores { get; }
+    public T[] InformativenessScores { get; }
 
     /// <summary>
     /// Initializes a new instance of the SamplesSelectedEventArgs class.
@@ -213,7 +214,7 @@ public class SamplesSelectedEventArgs<TInput> : EventArgs
     /// <param name="selectedIndices">Indices of selected samples.</param>
     /// <param name="selectedSamples">The selected samples.</param>
     /// <param name="scores">Informativeness scores.</param>
-    public SamplesSelectedEventArgs(int[] selectedIndices, TInput[] selectedSamples, double[] scores)
+    public SamplesSelectedEventArgs(int[] selectedIndices, TInput[] selectedSamples, T[] scores)
     {
         SelectedIndices = selectedIndices;
         SelectedSamples = selectedSamples;

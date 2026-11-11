@@ -1193,3 +1193,19 @@ AiDotNet.ActiveLearning.ActiveLearningSelection<T>.StrategyName.get -> string!
 AiDotNet.ActiveLearning.ActiveLearningSelection<T>.StrategyName.init -> void
 AiDotNet.ActiveLearning.BatchActiveLearner<T>.Select(AiDotNet.Tensors.LinearAlgebra.Vector<T>! informativeness, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! representation, int batchSize, string! strategyName, string! representationSpace) -> AiDotNet.ActiveLearning.ActiveLearningSelection<T>!
 AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.ActiveLearningSelection.get -> AiDotNet.ActiveLearning.ActiveLearningSelection<T>?
+*REMOVED*AiDotNet.ActiveLearning.Core.ActiveLearner<T, TInput, TOutput>.SamplesSelected -> System.EventHandler<AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<TInput>!>?
+*REMOVED*AiDotNet.ActiveLearning.Interfaces.IActiveLearner<T, TInput, TOutput>.SamplesSelected -> System.EventHandler<AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<TInput>!>?
+*REMOVED*AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<TInput>
+*REMOVED*AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<TInput>.InformativenessScores.get -> double[]!
+*REMOVED*AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<TInput>.SamplesSelectedEventArgs(int[]! selectedIndices, TInput[]! selectedSamples, double[]! scores) -> void
+*REMOVED*AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<TInput>.SelectedIndices.get -> int[]!
+*REMOVED*AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<TInput>.SelectedSamples.get -> TInput[]!
+*REMOVED*virtual AiDotNet.ActiveLearning.Core.ActiveLearner<T, TInput, TOutput>.OnSamplesSelected(AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<TInput>! args) -> void
+AiDotNet.ActiveLearning.Core.ActiveLearner<T, TInput, TOutput>.SamplesSelected -> System.EventHandler<AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>!>?
+AiDotNet.ActiveLearning.Interfaces.IActiveLearner<T, TInput, TOutput>.SamplesSelected -> System.EventHandler<AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>!>?
+AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>
+AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>.InformativenessScores.get -> T[]!
+AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>.SamplesSelectedEventArgs(int[]! selectedIndices, TInput[]! selectedSamples, T[]! scores) -> void
+AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>.SelectedIndices.get -> int[]!
+AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>.SelectedSamples.get -> TInput[]!
+virtual AiDotNet.ActiveLearning.Core.ActiveLearner<T, TInput, TOutput>.OnSamplesSelected(AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>! args) -> void
