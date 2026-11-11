@@ -239,9 +239,10 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             classSamples[c] = [];
         }
 
-        for (int i = 0; i < y.Length; i++)
+        var sampleClasses = GetClassIndicesFromLabels(y);
+        for (int i = 0; i < sampleClasses.Length; i++)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
+            int classIdx = sampleClasses[i];
             if (classIdx >= 0 && classIdx < NumClasses)
             {
                 classSamples[classIdx].Add(i);
@@ -267,16 +268,10 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             var subsetIndices = CreateBalancedSubset(classSamples, minoritySize, minorityClass);
 
             // Extract subset data
-            var subX = new Matrix<T>(subsetIndices.Length, NumFeatures);
-            var subY = new Vector<T>(subsetIndices.Length);
-            for (int i = 0; i < subsetIndices.Length; i++)
+            var (subX, subY) = SelectSamples(x, y, subsetIndices);
+            if (subX.Columns != NumFeatures)
             {
-                int srcIdx = subsetIndices[i];
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    subX[i, j] = x[srcIdx, j];
-                }
-                subY[i] = y[srcIdx];
+                subX = subX.GetSubMatrix(0, 0, subX.Rows, NumFeatures);
             }
 
             // Train AdaBoost on this subset
@@ -363,9 +358,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             weights[i] = initWeight;
 
         // Precompute class indices + feature columns to avoid repeated NumOps.ToDouble / GetClassIndexFromLabel
-        var classIndices = new int[n];
-        for (int i = 0; i < n; i++)
-            classIndices[i] = GetClassIndexFromLabel(y[i]);
+        var classIndices = GetClassIndicesFromLabels(y);
 
         var featureColumns = new double[NumFeatures][];
         for (int j = 0; j < NumFeatures; j++)
@@ -482,6 +475,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
     private WeakLearner TrainWeakLearner(Matrix<T> x, Vector<T> y, double[] weights)
     {
         int n = x.Rows;
+        var actualClasses = GetClassIndicesFromLabels(y);
         var bestLearner = new WeakLearner();
         double bestWeightedError = double.MaxValue;
 
@@ -514,7 +508,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
                     {
                         double val = NumOps.ToDouble(x[i, j]);
                         int pred = (polarity * (val - threshold) > 0) ? 1 : 0;
-                        int actual = GetClassIndexFromLabel(y[i]);
+                        int actual = actualClasses[i];
                         if (pred != actual)
                         {
                             weightedError += weights[i];
@@ -579,7 +573,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
+        var bestClasses = new int[input.Rows];
 
         for (int i = 0; i < input.Rows; i++)
         {
@@ -598,8 +592,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
                 }
 
                 // Pick class with highest average score
-                int bestClass = avgScores[1] > avgScores[0] ? 1 : 0;
-                predictions[i] = ClassLabels[bestClass];
+                bestClasses[i] = avgScores[1] > avgScores[0] ? 1 : 0;
             }
             else
             {
@@ -611,12 +604,11 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
                     votes[pred]++;
                 }
 
-                int bestClass = votes[1] > votes[0] ? 1 : 0;
-                predictions[i] = ClassLabels[bestClass];
+                bestClasses[i] = votes[1] > votes[0] ? 1 : 0;
             }
         }
 
-        return predictions;
+        return ClassIndicesToLabels(new Tensor<int>(bestClasses, new[] { bestClasses.Length }));
     }
 
     /// <summary>

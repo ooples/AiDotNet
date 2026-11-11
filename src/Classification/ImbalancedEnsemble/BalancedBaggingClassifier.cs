@@ -203,6 +203,11 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
     /// </remarks>
 
     /// <summary>
+    /// Class index of every training sample (computed once per Train call).
+    /// </summary>
+    private int[] _sampleClasses = Array.Empty<int>();
+
+    /// <summary>
     /// Trains the balanced bagging classifier.
     /// </summary>
     /// <param name="x">Feature matrix [n_samples, n_features].</param>
@@ -220,6 +225,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
 
         NumFeatures = x.Columns;
         ClassLabels = ExtractClassLabels(y);
+        _sampleClasses = GetClassIndicesFromLabels(y);
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
@@ -234,7 +240,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
 
         for (int i = 0; i < y.Length; i++)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
+            int classIdx = _sampleClasses[i];
             if (classIdx >= 0 && classIdx < NumClasses)
             {
                 classSamples[classIdx].Add(i);
@@ -317,7 +323,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
         var classCounts = new int[NumClasses];
         foreach (int i in sampleIndices)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
+            int classIdx = _sampleClasses[i];
             if (classIdx >= 0 && classIdx < NumClasses)
             {
                 classCounts[classIdx]++;
@@ -464,7 +470,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
         var classCounts = new int[NumClasses];
         foreach (int i in indices)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
+            int classIdx = _sampleClasses[i];
             if (classIdx >= 0 && classIdx < NumClasses)
             {
                 classCounts[classIdx]++;
@@ -498,7 +504,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
+        var bestClasses = new int[input.Rows];
 
         for (int i = 0; i < input.Rows; i++)
         {
@@ -522,10 +528,10 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels[bestClass];
+            bestClasses[i] = bestClass;
         }
 
-        return predictions;
+        return ClassIndicesToLabels(new Tensor<int>(bestClasses, new[] { bestClasses.Length }));
     }
 
     /// <summary>
@@ -577,23 +583,32 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
     /// </remarks>
     public override Dictionary<string, T> GetFeatureImportance()
     {
-        var importance = new double[NumFeatures];
-
+        // Collect the feature of every split across all trees
+        var splitFeatures = new List<int>();
         foreach (var tree in _baseClassifiers)
         {
-            CountFeatureUsage(tree, importance);
+            CountFeatureUsage(tree, splitFeatures);
         }
 
-        double total = importance.Sum();
-        if (total == 0) total = 1;
+        // Usage count per feature, normalized to sum to 1
+        var engine = Engine;
+        var importance = new Tensor<T>(new[] { NumFeatures });
+        if (splitFeatures.Count > 0 && NumFeatures > 0)
+        {
+            var counts = engine.TensorScatterAdd(importance,
+                new Tensor<int>(splitFeatures.ToArray(), new[] { splitFeatures.Count }),
+                FilledVector(splitFeatures.Count, NumOps.One).AsTensor(), 0);
+            importance = engine.TensorDivideScalar(counts, engine.TensorSum(counts));
+        }
 
+        var values = importance.ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < NumFeatures; i++)
         {
             string name = FeatureNames is not null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[name] = NumOps.FromDouble(importance[i] / total);
+            result[name] = values[i];
         }
 
         return result;
@@ -603,17 +618,17 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
     /// Counts feature usage in a tree.
     /// </summary>
     /// <param name="node">Tree node.</param>
-    /// <param name="importance">Array to accumulate counts.</param>
+    /// <param name="splitFeatures">Receives the feature index of every split.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Recursively traverses the tree counting feature splits.</para>
     /// </remarks>
-    private void CountFeatureUsage(DecisionTreeNode node, double[] importance)
+    private void CountFeatureUsage(DecisionTreeNode node, List<int> splitFeatures)
     {
         if (node.LeftChild is null || node.RightChild is null) return;
 
-        importance[node.FeatureIndex] += 1;
-        CountFeatureUsage(node.LeftChild, importance);
-        CountFeatureUsage(node.RightChild, importance);
+        splitFeatures.Add(node.FeatureIndex);
+        CountFeatureUsage(node.LeftChild, splitFeatures);
+        CountFeatureUsage(node.RightChild, splitFeatures);
     }
 
     private static Dictionary<string, object?> SerializeTreeNode(DecisionTreeNode node)
