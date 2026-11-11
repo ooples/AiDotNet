@@ -230,20 +230,7 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
     /// </summary>
     private (Matrix<T> x, Vector<T> y) CreateBootstrapData(Matrix<T> x, Vector<T> y, List<int> indices)
     {
-        var xBootstrap = new Matrix<T>(indices.Count, x.Columns);
-        var yBootstrap = new Vector<T>(indices.Count);
-
-        for (int i = 0; i < indices.Count; i++)
-        {
-            int srcIdx = indices[i];
-            for (int j = 0; j < x.Columns; j++)
-            {
-                xBootstrap[i, j] = x[srcIdx, j];
-            }
-            yBootstrap[i] = y[srcIdx];
-        }
-
-        return (xBootstrap, yBootstrap);
+        return SelectSamples(x, y, indices.ToArray());
     }
 
     /// <summary>
@@ -284,54 +271,53 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
     {
         // For each sample, aggregate predictions only from trees where it was OOB
         int nSamples = x.Rows;
-        int correct = 0;
-        int oobSampleCount = 0;
-
-        for (int sampleIdx = 0; sampleIdx < nSamples; sampleIdx++)
+        int numTrees = Estimators.Count;
+        if (nSamples == 0 || NumClasses == 0)
         {
-            // Collect predictions from trees where this sample was OOB
-            var voteCounts = new Dictionary<double, int>();
-            int treesVoted = 0;
-
-            for (int treeIdx = 0; treeIdx < Estimators.Count; treeIdx++)
-            {
-                // Check if this sample was OOB for this tree
-                if (_oobIndicesPerTree[treeIdx].Contains(sampleIdx))
-                {
-                    // Get prediction for this single sample
-                    var sample = new Matrix<T>(1, x.Columns);
-                    for (int j = 0; j < x.Columns; j++)
-                    {
-                        sample[0, j] = x[sampleIdx, j];
-                    }
-
-                    var pred = Estimators[treeIdx].Predict(sample);
-                    double predValue = NumOps.ToDouble(pred[0]);
-
-                    if (!voteCounts.TryGetValue(predValue, out int count))
-                    {
-                        count = 0;
-                    }
-                    voteCounts[predValue] = count + 1;
-                    treesVoted++;
-                }
-            }
-
-            // Only count samples that were OOB for at least one tree
-            if (treesVoted > 0)
-            {
-                oobSampleCount++;
-
-                // Find majority vote
-                double majorityClass = voteCounts.OrderByDescending(kv => kv.Value).First().Key;
-                double actualClass = NumOps.ToDouble(y[sampleIdx]);
-
-                if (Math.Abs(majorityClass - actualClass) < 1e-10)
-                {
-                    correct++;
-                }
-            }
+            OobScore_ = 0.0;
+            return;
         }
+
+        var engine = Engine;
+        var votes = new Tensor<T>(new[] { nSamples, NumClasses });
+        var anyVote = new Tensor<int>(new[] { nSamples });
+        var firstVoter = new Tensor<T>(new[] { nSamples, NumClasses });
+        engine.TensorFill(firstVoter, NumOps.FromDouble(numTrees));
+        var treeIndexValues = engine.TensorArange<T>(0, Math.Max(1, numTrees)).ToArray();
+
+        for (int treeIdx = 0; treeIdx < numTrees; treeIdx++)
+        {
+            var oob = _oobIndicesPerTree[treeIdx].ToArray();
+            if (oob.Length == 0)
+            {
+                continue;
+            }
+
+            // Predict every sample that was OOB for this tree in one call
+            var oobTensor = new Tensor<int>(oob, new[] { oob.Length });
+            var predicted = ClassMembership(Estimators[treeIdx].Predict(x.GetRows(oob)));
+            var treeVotes = engine.TensorScatterAdd(new Tensor<T>(new[] { nSamples, NumClasses }), oobTensor, predicted, 0);
+            votes = engine.TensorAdd(votes, treeVotes);
+            var ones = new Tensor<int>(new[] { oob.Length });
+            engine.TensorFill(ones, 1);
+            anyVote = engine.TensorScatterAdd(anyVote, oobTensor, ones, 0);
+
+            // Remember the first tree that voted for each class (ties go to the class voted first)
+            var voterIndex = new Tensor<T>(new[] { nSamples, NumClasses });
+            engine.TensorFill(voterIndex, treeIndexValues[treeIdx]);
+            firstVoter = engine.TensorMin(firstVoter,
+                engine.TensorWhere(treeVotes, voterIndex, firstVoter));
+        }
+
+        // Majority vote, ties broken by the earliest vote: maximise count * (numTrees + 1) - firstVoter
+        var key = engine.TensorSubtract(engine.TensorMultiplyScalar(votes, NumOps.FromDouble(numTrees + 1)), firstVoter);
+        var majority = engine.TensorArgMax(key, 1).Reshape(nSamples);
+        var actual = GetClassIndexTensor(y);
+
+        // Only count samples that were OOB for at least one tree
+        var voted = engine.TensorClampMax(anyVote, 1);
+        int oobSampleCount = engine.TensorSum(voted);
+        int correct = engine.TensorSum(engine.TensorMultiply(voted, engine.TensorEquals(majority, actual)));
 
         OobScore_ = oobSampleCount > 0 ? (double)correct / oobSampleCount : 0.0;
     }
