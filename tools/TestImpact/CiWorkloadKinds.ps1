@@ -202,3 +202,49 @@ function Set-CiShardRunners {
     }
     return $routed
 }
+
+# Plans self-hosted routing from the SELF_HOSTED_RUNNERS secret, e.g. {"label":"aidotnet-cpu","shardsPerRunner":6},
+# and the repository's runners. Each online runner carrying the label takes shardsPerRunner shards, so a runner
+# that is asleep, stopped or removed gets nothing and its shards stay on the hosted pool. Anything missing or
+# malformed routes nothing, because the hosted pool is always a correct place to run a shard; Warning marks a
+# configuration that is present but unusable, so the run says why routing is off.
+function Get-SelfHostedShardPlan {
+    param([string] $Config, [AllowNull()] [object[]] $Runners)
+    $off = { param([string] $Reason, [bool] $Warn) [pscustomobject]@{ Count = 0; Label = ''; Reason = $Reason; Warning = $Warn } }
+    if ([string]::IsNullOrWhiteSpace($Config)) { return & $off 'SELF_HOSTED_RUNNERS is not set.' $false }
+    try { $parsed = $Config | ConvertFrom-Json -ErrorAction Stop }
+    catch { return & $off 'SELF_HOSTED_RUNNERS is not valid JSON.' $true }
+    $label = if ($parsed.PSObject.Properties['label']) { [string] $parsed.label } else { '' }
+    if ($label -cnotmatch '^[A-Za-z0-9._-]+$') {
+        return & $off 'SELF_HOSTED_RUNNERS needs a "label" of letters, digits, ".", "_" or "-".' $true
+    }
+    $perRunner = 0
+    if (-not ($parsed.PSObject.Properties['shardsPerRunner'] -and
+            [int]::TryParse([string] $parsed.shardsPerRunner, [ref] $perRunner)) -or $perRunner -lt 1) {
+        return & $off 'SELF_HOSTED_RUNNERS needs a "shardsPerRunner" of 1 or more.' $true
+    }
+    if ($null -eq $Runners) {
+        return & $off 'the runner list could not be read (is SELF_HOSTED_RUNNER_TOKEN set, with Administration: read?).' $true
+    }
+    $online = @($Runners | Where-Object { $_.status -eq 'online' -and @($_.labels.name) -ccontains $label }).Count
+    return [pscustomobject]@{
+        Count = $online * $perRunner; Label = $label; Warning = $false
+        Reason = "$online online runner(s) labelled '$label' x $perRunner shard(s) each."
+    }
+}
+
+# Lists the repository's self-hosted runners, or $null when there is no token or the request fails.
+function Get-SelfHostedRunners {
+    param([string] $Repository, [string] $Token)
+    if ([string]::IsNullOrWhiteSpace($Token)) { return $null }
+    try {
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/actions/runners?per_page=100" `
+            -Headers @{ Authorization = "Bearer $Token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } `
+            -TimeoutSec 30 -ErrorAction Stop
+        return , @($response.runners)
+    }
+    catch {
+        Write-Host "Runner list request failed: $($_.Exception.Message)"
+        return $null
+    }
+}

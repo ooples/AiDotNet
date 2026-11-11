@@ -221,5 +221,28 @@ Assert-True (@((Set-CiShardRunners -Shards $shards -Count 99) | Where-Object { $
 Assert-True (@((Set-CiShardRunners -Shards $shards -Count 0) | Where-Object { $_.PSObject.Properties['runner'] }).Count -eq 0) `
     'Routing with a zero count still routed shards.'
 Assert-True (@(Set-CiShardRunners -Shards @() -Count 3).Count -eq 0) 'Routing an empty selection produced shards.'
-Write-Host 'Workload partitions passed, including five executions of the shipping workflow emitter, six malformed kinds and six nightly-deferral cases and shard runner routing.'
+# Get-SelfHostedShardPlan: only online runners carrying the label take shards; anything unusable routes none.
+function New-Runner([string] $Status, [string[]] $Labels) {
+    [pscustomobject]@{ status = $Status; labels = @($Labels | ForEach-Object { [pscustomobject]@{ name = $_ } }) }
+}
+$fleet = @((New-Runner 'online' @('self-hosted', 'cpu-a')), (New-Runner 'online' @('self-hosted', 'cpu-a')),
+    (New-Runner 'offline' @('self-hosted', 'cpu-a')), (New-Runner 'online' @('self-hosted', 'gpu')))
+$plan = Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet
+Assert-True ($plan.Count -eq 10 -and $plan.Label -ceq 'cpu-a' -and -not $plan.Warning) `
+    'Two online runners at five shards each should take ten.'
+Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"CPU-A","shardsPerRunner":5}' -Runners $fleet).Count -eq 0) `
+    'A label matched a runner label of another case.'
+Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners @()).Count -eq 0) `
+    'Shards went to a label with no runners.'
+$unset = Get-SelfHostedShardPlan -Config '' -Runners $fleet
+Assert-True ($unset.Count -eq 0 -and -not $unset.Warning) 'An unset configuration should route nothing, quietly.'
+foreach ($bad in @('not json', '{"shardsPerRunner":5}', '{"label":"a,b","shardsPerRunner":5}', '{"label":"cpu-a"}',
+        '{"label":"cpu-a","shardsPerRunner":0}', '{"label":"cpu-a","shardsPerRunner":"many"}')) {
+    $plan = Get-SelfHostedShardPlan -Config $bad -Runners $fleet
+    Assert-True ($plan.Count -eq 0 -and $plan.Warning) "Malformed configuration $bad routed shards or said nothing."
+}
+$noList = Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $null
+Assert-True ($noList.Count -eq 0 -and $noList.Warning) 'An unreadable runner list routed shards or said nothing.'
+Assert-True ($null -eq (Get-SelfHostedRunners -Repository 'o/r' -Token '')) 'A missing token produced a runner list.'
+Write-Host 'Workload partitions passed, including five executions of the shipping workflow emitter, six malformed kinds and six nightly-deferral cases, shard runner routing and self-hosted planning.'
 exit 0

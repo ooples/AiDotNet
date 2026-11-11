@@ -223,7 +223,8 @@ $workloads = Split-CiWorkloads -Shards @($runnable.Shards)
 
 function ConvertTo-MatrixJson($Shards) { ConvertTo-Json -InputObject @($Shards) -Depth 6 -Compress }
 function Measure-Outputs { (ConvertTo-MatrixJson $tests).Length + (ConvertTo-MatrixJson $runnable.LedgerShards).Length }
-$tests = @(Set-CiShardRunners -Shards @($workloads.Tests) -Count ([int] $env:SELF_HOSTED_SHARDS))
+$selfHostedCount = if ([string]::IsNullOrWhiteSpace($env:SELF_HOSTED_LABEL)) { 0 } else { [int] $env:SELF_HOSTED_SHARDS }
+$tests = @(Set-CiShardRunners -Shards @($workloads.Tests) -Count $selfHostedCount -Label $env:SELF_HOSTED_LABEL)
 while ((Measure-Outputs) -gt $MaxMatrixCharacters) {
     $widest = $tests | Where-Object { $_.PSObject.Properties['narrowed'] -and $_.narrowed } |
         Sort-Object { $_.narrowedClasses } -Descending | Select-Object -First 1
