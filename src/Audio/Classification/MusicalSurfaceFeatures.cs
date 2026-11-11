@@ -40,9 +40,14 @@ internal sealed class MusicalSurfaceFeatures
         _sampleRate = sampleRate;
         _window = analysisWindow;
         _hop = hop;
-        _textureWindow = Math.Max(1, textureWindow);
+        if (textureWindow < 1) throw new ArgumentOutOfRangeException(nameof(textureWindow), "The texture window spans at least one analysis frame.");
+        // Four DAUB4 levels and the 16x envelope downsampling leave one envelope sample per 256 input samples.
+        if (beatWindow < (1 << DwtLevels) * EnvelopeDownsampling)
+            throw new ArgumentOutOfRangeException(nameof(beatWindow), $"The beat window needs at least {(1 << DwtLevels) * EnvelopeDownsampling} samples (one envelope sample).");
+        if (beatHop < 1) throw new ArgumentOutOfRangeException(nameof(beatHop), "The beat hop advances at least one sample.");
+        _textureWindow = textureWindow;
         _beatWindow = beatWindow;
-        _beatHop = Math.Max(1, beatHop);
+        _beatHop = beatHop;
         _stft = new ShortTimeFourierTransform<double>(nFft: analysisWindow, hopLength: hop, center: false);
         _mel = new MelSpectrogram<double>(sampleRate: sampleRate, nMels: MelBands, nFft: analysisWindow, hopLength: hop,
             logMel: true, logOffset: 1e-10);
