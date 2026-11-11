@@ -80,16 +80,13 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
         var engine = Engine;
         var signal = engine.TensorSlice(engine.Reshape(waveform, [waveform.Length]), [0], [samples]);
 
-        // The power is accumulated in double (a Half sum of squares overflows at 65504) and only the
-        // final noise scale is converted to T
-        var signalWide = signal.Contiguous().Cast<double>();
-        double signalPower = engine.TensorSum(engine.TensorSquare(signalWide)) / samples;
+        T signalPower = NumOps.Divide(engine.TensorSum(engine.TensorSquare(signal)), NumOps.FromDouble(samples));
 
         // Convert SNR from dB to linear ratio
         // SNR_db = 10 * log10(signal_power / noise_power)
         // noise_power = signal_power / 10^(SNR_db/10)
         double snrLinear = Math.Pow(10, snrDb / 10.0);
-        T noiseStd = NumOps.FromDouble(Math.Sqrt(signalPower / snrLinear));
+        T noiseStd = NumOps.Sqrt(NumOps.Divide(signalPower, NumOps.FromDouble(snrLinear)));
 
         // Noise state starts fresh for each clip, so every generator is a function of this clip's draws
         var noise = NoiseType switch
