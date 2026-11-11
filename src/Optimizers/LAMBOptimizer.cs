@@ -534,14 +534,6 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         return NumOps.Multiply(baseLr, trustRatio);
     }
 
-    /// <summary>The L2 norm of a whole tensor as a scalar (zero for an empty tensor).</summary>
-    private T TensorL2Norm(Tensor<T> tensor)
-    {
-        if (tensor.Length == 0) return NumOps.Zero;
-        var norm = Engine.TensorNorm(tensor);
-        return norm.Length > 0 ? norm.AsSpan()[0] : NumOps.Zero;
-    }
-
     // Per-parameter LAMB state for tape-based training
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);

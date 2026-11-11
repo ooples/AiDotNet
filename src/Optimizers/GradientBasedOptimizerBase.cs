@@ -455,6 +455,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             NumOps.FromDouble(tolerance));
     }
 
+    /// <summary>The L2 norm of a whole tensor as a scalar, one engine reduction (zero for an empty tensor).</summary>
+    protected T TensorL2Norm(Tensor<T> tensor)
+    {
+        if (tensor.Length == 0) return NumOps.Zero;
+        var norm = Engine.TensorNorm(tensor);
+        return norm.Length > 0 ? norm.AsSpan()[0] : NumOps.Zero;
+    }
+
     /// <summary>
     /// The current step (batch) number for scheduler tracking.
     /// </summary>
