@@ -427,4 +427,54 @@ internal static class DimensionalityReductionOps
         var identity = Engine.Reshape(Identity<T>(k), new[] { 1, k, k });
         return Engine.ReduceSum(Engine.TensorMultiply(a, identity), new[] { 1, 2 }, false);
     }
+
+    /// <summary>
+    /// Accumulates per-sample [k, k] blocks into a dense [n, n] matrix: result[nb[i, a], nb[i, b]] += blocks[i, a, b]
+    /// (repeated targets add up).
+    /// </summary>
+    internal static Tensor<T> ScatterAddBlocks<T>(Tensor<int> neighbors, Tensor<T> blocks, int n)
+    {
+        var engine = Engine;
+        int m = neighbors.Shape[0];
+        int k = neighbors.Shape[1];
+        var rows = engine.TensorMultiplyScalar(engine.Reshape(neighbors, new[] { m, k, 1 }), n);
+        var flat = engine.TensorAdd(rows, engine.Reshape(neighbors, new[] { m, 1, k }));
+        var accumulated = engine.TensorIndexAdd(
+            new Tensor<T>(new[] { n * n }), 0, engine.Reshape(flat, new[] { m * k * k }), engine.Reshape(blocks, new[] { m * k * k }));
+        return engine.Reshape(accumulated, new[] { n, n });
+    }
+
+    /// <summary>
+    /// Modified Gram-Schmidt on the columns of every [k, c] matrix of an [n, k, c] batch, returning the first
+    /// min(k, c) orthonormal columns as [n, k, min(k, c)]. A column whose residual norm is at most
+    /// <paramref name="tolerance"/> is replaced by the unit vector e_j.
+    /// </summary>
+    internal static Tensor<T> OrthonormalizeColumnsEach<T>(Tensor<T> a, double tolerance = 1e-10)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int k = a.Shape[1];
+        int count = Math.Min(k, a.Shape[2]);
+        var tol = numOps.FromDouble(tolerance);
+        var basis = engine.Reshape(Identity<T>(k), new[] { 1, k, k });
+        var columns = new Tensor<T>[count];
+        for (int j = 0; j < count; j++)
+        {
+            var v = engine.TensorNarrow(a, 2, j, 1);
+            for (int c = 0; c < j; c++)
+            {
+                var projection = engine.ReduceSum(engine.TensorMultiply(columns[c], v), new[] { 1 }, true);
+                v = engine.TensorSubtract(v, engine.TensorMultiply(columns[c], projection));
+            }
+
+            var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(v), new[] { 1 }, true));
+            var keep = engine.TensorGreaterThan(norm, tol);
+            var drop = engine.TensorSubtract(engine.TensorOnesLike(keep), keep);
+            var unit = engine.TensorDivide(v, engine.TensorAdd(norm, drop));
+            columns[j] = engine.TensorAdd(
+                engine.TensorMultiply(unit, keep), engine.TensorMultiply(engine.TensorNarrow(basis, 2, j, 1), drop));
+        }
+
+        return count == 0 ? new Tensor<T>(new[] { a.Shape[0], k, 0 }) : engine.TensorConcatenate(columns, 2);
+    }
 }

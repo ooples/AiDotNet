@@ -39,10 +39,9 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;
     private readonly int _nNeighbors;
-    private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _embedding;
+    private Matrix<T>? _embedding;
     private int _nSamples;
 
     /// <summary>
@@ -58,7 +57,7 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -70,7 +69,7 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     /// <param name="nComponents">Target dimensionality. Defaults to 2.</param>
     /// <param name="nNeighbors">Number of neighbors. Should be > (n_components * (n_components + 3) / 2). Defaults to 10.</param>
-    /// <param name="randomState">Random seed for reproducibility.</param>
+    /// <param name="randomState">Kept for API compatibility; the eigen solver is deterministic.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public HessianLLE(
         int nComponents = 2,
@@ -95,7 +94,6 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         _nComponents = nComponents;
         _nNeighbors = nNeighbors;
-        _randomState = randomState;
     }
 
     /// <summary>
@@ -103,361 +101,76 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nSamples = data.Rows;
         int n = data.Rows;
-        int p = data.Columns;
         int k = Math.Min(_nNeighbors, n - 1);
         int d = _nComponents;
 
         // Number of Hessian estimator columns: d(d+1)/2
         int dp = d * (d + 1) / 2;
+        int nCols = 1 + d + dp;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
+        // Step 1: Find k-nearest neighbors (ties in index order)
+        var neighbors = DimensionalityReductionOps.NearestNeighbors(DimensionalityReductionOps.EuclideanDistances(x, x), k);
+
+        // Step 2: Centered neighbourhoods [n, k, p]
+        var rows = DimensionalityReductionOps.NeighborhoodRows(x, neighbors);
+        var centered = engine.TensorSubtract(rows, engine.ReduceMean(rows, new[] { 1 }, true));
+
+        // Local PCA: top d eigenvectors of X_i^T X_i, then tangent coordinates Y_i = X_i V_i [n, k, d]
+        var scatter = DimensionalityReductionOps.BatchTransposeMatMul(centered, centered);
+        var (_, principal) = DimensionalityReductionOps.SymmetricEigenEach(scatter, descending: true);
+        var tangent = engine.TensorBatchMatMul(centered, engine.TensorNarrow(principal, 2, 0, d));
+
+        // Hessian estimator G = [1, y_1..y_d, y_a y_b for a <= b] [n, k, nCols]
+        var first = new int[dp];
+        var second = new int[dp];
+        int col = 0;
+        for (int d1 = 0; d1 < d; d1++)
         {
-            for (int j = 0; j < p; j++)
+            for (int d2 = d1; d2 < d; d2++)
             {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+                first[col] = d1;
+                second[col] = d2;
+                col++;
             }
         }
 
-        // Step 1: Find k-nearest neighbors
-        var neighbors = FindKNearestNeighbors(X, n, p, k);
+        var quadratic = engine.TensorMultiply(
+            engine.TensorIndexSelect(tangent, DimensionalityReductionOps.IndexTensor(first), 2),
+            engine.TensorIndexSelect(tangent, DimensionalityReductionOps.IndexTensor(second), 2));
+        var estimator = engine.TensorConcatenate(
+            new[] { DimensionalityReductionOps.Full(new[] { n, k, 1 }, NumOps.One), tangent, quadratic }, 2);
 
-        // Step 2: Build Hessian estimator matrix H
-        var H = new double[n, n];
-
-        for (int i = 0; i < n; i++)
+        // Orthonormal factor Q of G (Gram-Schmidt); the columns after [1, y] span the Hessian part
+        var q = DimensionalityReductionOps.OrthonormalizeColumnsEach(estimator);
+        int available = Math.Min(k, nCols);
+        Tensor<T> h;
+        if (available > 1 + d)
         {
-            // Get neighborhood data
-            var Xi = new double[k, p];
-            var mean = new double[p];
-
-            for (int j = 0; j < k; j++)
-            {
-                int idx = neighbors[i, j];
-                for (int dd = 0; dd < p; dd++)
-                {
-                    Xi[j, dd] = X[idx, dd];
-                    mean[dd] += Xi[j, dd];
-                }
-            }
-
-            for (int dd = 0; dd < p; dd++) mean[dd] /= k;
-
-            // Center the neighborhood
-            for (int j = 0; j < k; j++)
-            {
-                for (int dd = 0; dd < p; dd++)
-                {
-                    Xi[j, dd] -= mean[dd];
-                }
-            }
-
-            // PCA to get local coordinates
-            var V = ComputeTopPrincipalComponents(Xi, k, p, d);
-
-            // Project onto tangent space
-            var Yi = new double[k, d];
-            for (int j = 0; j < k; j++)
-            {
-                for (int dd = 0; dd < d; dd++)
-                {
-                    for (int pp = 0; pp < p; pp++)
-                    {
-                        Yi[j, dd] += Xi[j, pp] * V[pp, dd];
-                    }
-                }
-            }
-
-            // Build Hessian estimator matrix
-            // Columns: 1, y1, y2, y1^2, y1*y2, y2^2 (for d=2)
-            int nCols = 1 + d + dp;
-            var G = new double[k, nCols];
-
-            for (int j = 0; j < k; j++)
-            {
-                int col = 0;
-                G[j, col++] = 1; // Constant
-
-                for (int d1 = 0; d1 < d; d1++)
-                {
-                    G[j, col++] = Yi[j, d1]; // Linear terms
-                }
-
-                for (int d1 = 0; d1 < d; d1++)
-                {
-                    for (int d2 = d1; d2 < d; d2++)
-                    {
-                        G[j, col++] = Yi[j, d1] * Yi[j, d2]; // Quadratic terms
-                    }
-                }
-            }
-
-            // QR decomposition of G
-            var (Q, _) = QRDecomposition(G, k, nCols);
-
-            // Extract null space (last columns correspond to Hessian)
-            var nullSpace = new double[k, dp];
-            for (int j = 0; j < k; j++)
-            {
-                for (int dd = 0; dd < dp; dd++)
-                {
-                    int colIdx = nCols - dp + dd;
-                    if (colIdx >= 0 && colIdx < k)
-                    {
-                        nullSpace[j, dd] = Q[j, colIdx];
-                    }
-                }
-            }
-
-            // Compute local Hessian piece: Yi = nullSpace * nullSpace^T
-            var Wi = new double[k, k];
-            for (int j1 = 0; j1 < k; j1++)
-            {
-                for (int j2 = 0; j2 < k; j2++)
-                {
-                    for (int dd = 0; dd < dp; dd++)
-                    {
-                        Wi[j1, j2] += nullSpace[j1, dd] * nullSpace[j2, dd];
-                    }
-                }
-            }
-
-            // Add to global matrix H
-            for (int j1 = 0; j1 < k; j1++)
-            {
-                for (int j2 = 0; j2 < k; j2++)
-                {
-                    H[neighbors[i, j1], neighbors[i, j2]] += Wi[j1, j2];
-                }
-            }
+            var nullSpace = engine.TensorNarrow(q, 2, 1 + d, available - 1 - d);
+            var local = DimensionalityReductionOps.BatchMatMulTranspose(nullSpace, nullSpace);
+            h = DimensionalityReductionOps.ScatterAddBlocks(neighbors, local, n);
+        }
+        else
+        {
+            h = new Tensor<T>(new[] { n, n });
         }
 
-        // Step 3: Compute eigenvectors of H
-        var (eigenvalues, eigenvectors) = ComputeSmallestEigenvectors(H, n);
+        // Step 3: Eigenvectors of H in ascending eigenvalue order
+        var (_, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(h, descending: false);
 
-        // Step 4: Create embedding
-        _embedding = new double[n, _nComponents];
+        // Step 4: Create embedding, skipping the null eigenvector
+        var columns = new int[_nComponents];
         for (int dd = 0; dd < _nComponents; dd++)
         {
-            int eigIdx = dd + 1; // Skip null eigenvector
-            if (eigIdx >= n) eigIdx = dd;
-
-            for (int i = 0; i < n; i++)
-            {
-                _embedding[i, dd] = eigenvectors[eigIdx, i];
-            }
-        }
-    }
-
-    private int[,] FindKNearestNeighbors(double[,] X, int n, int p, int k)
-    {
-        var neighbors = new int[n, k];
-
-        for (int i = 0; i < n; i++)
-        {
-            var distances = new (double dist, int idx)[n];
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    distances[j] = (double.MaxValue, j);
-                    continue;
-                }
-
-                double dist = 0;
-                for (int d = 0; d < p; d++)
-                {
-                    double diff = X[i, d] - X[j, d];
-                    dist += diff * diff;
-                }
-                distances[j] = (dist, j);
-            }
-
-            Array.Sort(distances, (a, b) => a.dist.CompareTo(b.dist));
-
-            for (int j = 0; j < k; j++)
-            {
-                neighbors[i, j] = distances[j].idx;
-            }
+            columns[dd] = dd + 1 < n ? dd + 1 : dd;
         }
 
-        return neighbors;
-    }
-
-    private double[,] ComputeTopPrincipalComponents(double[,] Xi, int m, int p, int nDims)
-    {
-        var XtX = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < m; k++)
-                {
-                    XtX[i, j] += Xi[k, i] * Xi[k, j];
-                }
-            }
-        }
-
-        var V = new double[p, nDims];
-        var A = (double[,])XtX.Clone();
-
-        for (int d = 0; d < nDims; d++)
-        {
-            var v = new double[p];
-            for (int i = 0; i < p; i++) v[i] = 1.0 / Math.Sqrt(p);
-
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Av = new double[p];
-                for (int i = 0; i < p; i++)
-                {
-                    for (int j = 0; j < p; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                double norm = 0;
-                for (int i = 0; i < p; i++) norm += Av[i] * Av[i];
-                norm = Math.Sqrt(norm);
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < p; i++) v[i] = Av[i] / norm;
-            }
-
-            for (int i = 0; i < p; i++) V[i, d] = v[i];
-
-            var Av2 = new double[p];
-            double lambda = 0;
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++) Av2[i] += A[i, j] * v[j];
-                lambda += v[i] * Av2[i];
-            }
-
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    A[i, j] -= lambda * v[i] * v[j];
-                }
-            }
-        }
-
-        return V;
-    }
-
-    private (double[,] Q, double[,] R) QRDecomposition(double[,] A, int m, int n)
-    {
-        var Q = new double[m, m];
-        var R = new double[m, n];
-
-        // Initialize Q as identity
-        for (int i = 0; i < m; i++) Q[i, i] = 1;
-
-        for (int j = 0; j < Math.Min(m, n); j++)
-        {
-            // Compute column j of Q
-            var v = new double[m];
-            for (int i = j; i < m; i++) v[i] = A[i, j];
-
-            // Subtract projections
-            for (int k = 0; k < j; k++)
-            {
-                double dot = 0;
-                for (int i = 0; i < m; i++) dot += Q[i, k] * A[i, j];
-                R[k, j] = dot;
-            }
-
-            for (int k = 0; k < j; k++)
-            {
-                for (int i = 0; i < m; i++)
-                {
-                    v[i] -= R[k, j] * Q[i, k];
-                }
-            }
-
-            double norm = 0;
-            for (int i = 0; i < m; i++) norm += v[i] * v[i];
-            norm = Math.Sqrt(norm);
-
-            R[j, j] = norm;
-            if (norm > 1e-10)
-            {
-                for (int i = 0; i < m; i++) Q[i, j] = v[i] / norm;
-            }
-        }
-
-        return (Q, R);
-    }
-
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeSmallestEigenvectors(double[,] H, int n)
-    {
-        var eigenvalues = new double[n];
-        var eigenvectors = new double[n, n];
-
-        double shift = 0;
-        for (int i = 0; i < n; i++) shift = Math.Max(shift, Math.Abs(H[i, i]));
-        shift *= 2;
-
-        var A = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                A[i, j] = (i == j ? shift : 0) - H[i, j];
-            }
-        }
-
-        for (int k = 0; k < Math.Min(n, _nComponents + 2); k++)
-        {
-            var v = new double[n];
-            var random = _randomState.HasValue
-                ? RandomHelper.CreateSeededRandom(_randomState.Value + k)
-                : RandomHelper.CreateSeededRandom(42 + k);
-
-            for (int i = 0; i < n; i++) v[i] = random.NextDouble() - 0.5;
-
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++) Av[i] += A[i, j] * v[j];
-                }
-
-                double norm = 0;
-                for (int i = 0; i < n; i++) norm += Av[i] * Av[i];
-                norm = Math.Sqrt(norm);
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++) v[i] = Av[i] / norm;
-            }
-
-            var Av2 = new double[n];
-            double lambda = 0;
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++) Av2[i] += A[i, j] * v[j];
-                lambda += v[i] * Av2[i];
-            }
-
-            eigenvalues[k] = shift - lambda;
-            for (int i = 0; i < n; i++) eigenvectors[k, i] = v[i];
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= lambda * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
+        _embedding = DimensionalityReductionOps.SelectColumns(
+            eigenvectors, DimensionalityReductionOps.IndexTensor(columns)).ToMatrix();
     }
 
     /// <summary>
@@ -477,19 +190,7 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int d = _embedding.GetLength(1);
-        var result = new T[n, d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>
