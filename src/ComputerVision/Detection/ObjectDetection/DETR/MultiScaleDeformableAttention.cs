@@ -79,6 +79,7 @@ internal sealed class MultiScaleDeformableAttention<T> : CvParameterModule<T>
         _outputWeight = new Tensor<T>(new[] { dModel, dModel });
         _outputBias = new Tensor<T>(new[] { dModel });
 
+        var offsetBias = new double[_offsetBias.Length];
         for (int m = 0; m < numHeads; m++)
         {
             double theta = m * (2.0 * Math.PI / numHeads);
@@ -89,11 +90,12 @@ internal sealed class MultiScaleDeformableAttention<T> : CvParameterModule<T>
                 for (int p = 0; p < numPoints; p++)
                 {
                     int index = (((m * numLevels) + l) * numPoints + p) * 2;
-                    _offsetBias[index] = _numOps.FromDouble(cx / scale * (p + 1));
-                    _offsetBias[index + 1] = _numOps.FromDouble(cy / scale * (p + 1));
+                    offsetBias[index] = cx / scale * (p + 1);
+                    offsetBias[index + 1] = cy / scale * (p + 1);
                 }
             }
         }
+        CvTensorOps<T>.AssignFromDoubles(_offsetBias, offsetBias);
 
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         XavierUniform(_valueWeight, random);
@@ -170,12 +172,13 @@ internal sealed class MultiScaleDeformableAttention<T> : CvParameterModule<T>
         if (refDim == 2)
         {
             // offset / (W, H) of its level
-            var normalizer = new Tensor<T>(new[] { 1, 1, 1, levels, 1, 2 });
+            var normalizerValues = new double[levels * 2];
             for (int l = 0; l < levels; l++)
             {
-                normalizer[(l * 2) + 0] = _numOps.FromDouble(1.0 / spatialShapes[l][1]);
-                normalizer[(l * 2) + 1] = _numOps.FromDouble(1.0 / spatialShapes[l][0]);
+                normalizerValues[(l * 2) + 0] = 1.0 / spatialShapes[l][1];
+                normalizerValues[(l * 2) + 1] = 1.0 / spatialShapes[l][0];
             }
+            var normalizer = CvTensorOps<T>.FromDoubleArray(normalizerValues, new[] { 1, 1, 1, levels, 1, 2 });
 
             var reference = engine.TensorBroadcastTo(
                 engine.Reshape(referencePoints, new[] { batch, numQueries, 1, levels, 1, 2 }), locationShape);
@@ -280,7 +283,6 @@ internal sealed class MultiScaleDeformableAttention<T> : CvParameterModule<T>
     private void XavierUniform(Tensor<T> weight, Random random)
     {
         double bound = Math.Sqrt(6.0 / (weight.Shape[0] + weight.Shape[1]));
-        for (int i = 0; i < weight.Length; i++)
-            weight[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
+        CvTensorOps<T>.AssignFromDoubles(weight, Enumerable.Range(0, weight.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
     }
 }
