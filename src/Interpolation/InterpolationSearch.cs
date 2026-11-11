@@ -72,7 +72,7 @@ internal static class InterpolationSearch
         // Nonzero lists matching positions in ascending order on every engine, so the first match wins
         Tensor<int> matches = AiDotNetEngine.Current.TensorNonzero(
             AiDotNetEngine.Current.TensorEquals(values.AsTensor(), value));
-        return matches.Length == 0 ? -1 : matches[0];
+        return matches.Length == 0 ? -1 : matches.GetFlat(0);
     }
 
     /// <summary>
