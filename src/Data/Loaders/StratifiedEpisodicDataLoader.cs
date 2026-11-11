@@ -159,7 +159,7 @@ public class StratifiedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
         var supportLabels = new List<T>();
         var queryExamples = new List<Vector<T>>();
         var queryLabels = new List<T>();
-
+
         var taskLabels = DoubleStorage.Ramp<T>(selectedClasses.Length);
         for (int classIdx = 0; classIdx < selectedClasses.Length; classIdx++)
         {

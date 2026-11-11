@@ -188,7 +188,7 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
                 signature = HashCombine(signature, selectedClasses[i]);
             }
 
-            // Step 2: For each selected class, sample and split examples
+            // Step 2: For each selected class, sample and split examples
             var taskLabels = DoubleStorage.Ramp<T>(selectedClasses.Length);
             for (int classIdx = 0; classIdx < selectedClasses.Length; classIdx++)
             {
