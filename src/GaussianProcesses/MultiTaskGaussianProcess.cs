@@ -321,166 +321,128 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     /// </remarks>
     private void OptimizeHyperparameters()
     {
+        var engine = Engine;
         int n = _X.Rows;
         int tasks = _numTasks;
         int size = n * tasks;
-        const double Jitter = 1e-6;
-
-        var inputKernel = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                inputKernel[i, j] = _numOps.ToDouble(_kernel.Calculate(_X.GetRow(i), _X.GetRow(j)));
-            }
-        }
-
-        var targets = new double[size];
-        for (int t = 0; t < tasks; t++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                targets[t * n + i] = _numOps.ToDouble(_Y[i, t]) - _numOps.ToDouble(_taskMeans[t]);
-            }
-        }
-
-        // Starting point: the current B (empirical, or the identity) and, when the noise is learned, a
-        // tenth of the average task variance.
-        var taskFactor = new double[tasks, tasks];
-        var startingCovariance = new double[tasks, tasks];
-        double averageTaskVariance = 0;
-        for (int a = 0; a < tasks; a++)
-        {
-            for (int b = 0; b < tasks; b++)
-            {
-                startingCovariance[a, b] = _numOps.ToDouble(_taskCovariance[a, b]);
-            }
-
-            averageTaskVariance += startingCovariance[a, a] / tasks;
-        }
-
-        var startingFactor = GaussianProcessEvidence.Cholesky(startingCovariance);
-        for (int a = 0; a < tasks; a++)
-        {
-            for (int b = 0; b <= a; b++)
-            {
-                taskFactor[a, b] = startingFactor is not null ? startingFactor[a, b] : (a == b ? 1.0 : 0.0);
-            }
-        }
+        T jitter = _numOps.FromDouble(1e-6);
 
         bool learnNoise = !_noiseVariance.HasValue;
         bool learnTasks = _learnTaskCorrelations;
-        double fixedNoise = _noiseVariance ?? 0.0;
-        double logNoise = learnNoise ? Math.Log(Math.Max(0.1 * averageTaskVariance, 1e-8)) : 0.0;
-
-        // Parameter vector: the lower triangle of L (diagonal as a log) when B is learned, then log noise.
-        var slots = new List<(int Row, int Column)>();
-        if (learnTasks)
+        T fixedNoise = _numOps.FromDouble(_noiseVariance ?? 0.0);
+        int slots = learnTasks ? tasks * (tasks + 1) / 2 : 0;
+        int count = slots + (learnNoise ? 1 : 0);
+        if (count == 0)
         {
-            for (int a = 0; a < tasks; a++)
+            // Nothing to learn: keep the starting B and the fixed noise.
+            _fittedNoiseVariance[0] = fixedNoise;
+            return;
+        }
+
+        var inputKernel = Tensor<T>.FromMatrix(InputKernelMatrix());
+
+        // Targets stacked task by task: y[t*n + i] = Y[i, t] - mean_t
+        var targets = engine.TensorTranspose(CenteredTargets()).Reshape(new[] { size, 1 });
+
+        // Starting point: the current B (empirical, or the identity) and, when the noise is learned, a
+        // tenth of the average task variance.
+        var startingCovariance = Tensor<T>.FromMatrix(_taskCovariance);
+        T averageTaskVariance = _numOps.Divide(engine.TensorTrace(startingCovariance), _numOps.FromDouble(tasks));
+        var startingFactor = GaussianProcessEvidence.Cholesky(startingCovariance);
+        var taskFactor = startingFactor is not null ? engine.TensorTril(startingFactor) : engine.TensorEye<T>(tasks);
+
+        T floor = _numOps.FromDouble(1e-8);
+        T logNoise = learnNoise
+            ? _numOps.Log(MathHelper.Max(_numOps.Multiply(_numOps.FromDouble(0.1), averageTaskVariance), floor))
+            : _numOps.Zero;
+
+        // Parameter vector: the lower triangle of L row by row (diagonal as a log) when B is learned, then log noise.
+        var positions = new int[slots];
+        int slot = 0;
+        for (int a = 0; a < tasks && learnTasks; a++)
+        {
+            for (int b = 0; b <= a; b++)
             {
-                for (int b = 0; b <= a; b++)
-                {
-                    slots.Add((a, b));
-                }
+                positions[slot++] = a * tasks + b;
             }
         }
 
-        int count = slots.Count + (learnNoise ? 1 : 0);
-        var theta = new double[count];
-        for (int s = 0; s < slots.Count; s++)
+        var slotIndex = new Tensor<int>(positions, new[] { slots });
+        var diagonalMask = slots > 0
+            ? engine.TensorIndexSelect(engine.TensorEye<T>(tasks).Reshape(new[] { tasks * tasks }), slotIndex, 0)
+            : new Tensor<T>(new[] { 0 });
+
+        var initialParts = new List<Tensor<T>>();
+        if (slots > 0)
         {
-            var (row, column) = slots[s];
-            theta[s] = row == column ? Math.Log(Math.Max(taskFactor[row, row], 1e-8)) : taskFactor[row, column];
+            var factorValues = engine.TensorIndexSelect(taskFactor.Reshape(new[] { tasks * tasks }), slotIndex, 0);
+            initialParts.Add(engine.TensorWhere(
+                diagonalMask, engine.TensorLog(engine.TensorMax(factorValues, floor)), factorValues));
         }
 
         if (learnNoise)
         {
-            theta[count - 1] = logNoise;
+            initialParts.Add(Tensor<T>.CreateDefault(new[] { 1 }, logNoise));
         }
 
-        double[,] FactorOf(double[] parameters)
+        var theta = engine.TensorConcatenate(initialParts.ToArray(), 0);
+
+        Tensor<T> FactorOf(Tensor<T> parameters)
         {
             if (!learnTasks)
                 return taskFactor;
 
-            var factor = new double[tasks, tasks];
-            for (int s = 0; s < slots.Count; s++)
-            {
-                var (row, column) = slots[s];
-                factor[row, column] = row == column ? Math.Exp(parameters[s]) : parameters[s];
-            }
-
-            return factor;
+            var slotParameters = engine.TensorSlice(parameters, new[] { 0 }, new[] { slots });
+            var values = engine.TensorWhere(diagonalMask, engine.TensorExp(slotParameters), slotParameters);
+            return engine.TensorIndexAdd(new Tensor<T>(new[] { tasks * tasks }), 0, slotIndex, values)
+                .Reshape(new[] { tasks, tasks });
         }
 
-        double NoiseOf(double[] parameters) => learnNoise ? Math.Exp(parameters[count - 1]) : fixedNoise;
+        T NoiseOf(Tensor<T> parameters) => learnNoise
+            ? _numOps.Exp(engine.TensorSum(engine.TensorSlice(parameters, new[] { count - 1 }, new[] { 1 })))
+            : fixedNoise;
 
-        double[,]? CombinedFactor(double[,] factor, double noise, out double[,] covariance)
+        // K = B (x) K_x + (sigma_n^2 + jitter) I, with K[(a,i),(b,j)] = B[a,b] K_x[i,j]
+        var identity = engine.TensorEye<T>(size);
+        var blockShape = new[] { tasks, n, tasks, n };
+        var inputBlocks = engine.TensorBroadcastTo(inputKernel.Reshape(new[] { 1, n, 1, n }), blockShape);
+        Tensor<T>? CombinedFactor(Tensor<T> factor, T noise, out Tensor<T> covariance)
         {
-            covariance = new double[tasks, tasks];
-            for (int a = 0; a < tasks; a++)
-            {
-                for (int b = 0; b < tasks; b++)
-                {
-                    double sum = 0;
-                    for (int k = 0; k < tasks; k++)
-                    {
-                        sum += factor[a, k] * factor[b, k];
-                    }
-
-                    covariance[a, b] = sum;
-                }
-            }
-
-            var combined = new double[size, size];
-            for (int a = 0; a < tasks; a++)
-            {
-                for (int b = 0; b < tasks; b++)
-                {
-                    for (int i = 0; i < n; i++)
-                    {
-                        for (int j = 0; j < n; j++)
-                        {
-                            combined[a * n + i, b * n + j] = covariance[a, b] * inputKernel[i, j];
-                        }
-                    }
-                }
-            }
-
-            for (int i = 0; i < size; i++)
-            {
-                combined[i, i] += noise + Jitter;
-            }
-
+            covariance = engine.TensorMatMul(factor, engine.TensorTranspose(factor));
+            var taskBlocks = engine.TensorBroadcastTo(covariance.Reshape(new[] { tasks, 1, tasks, 1 }), blockShape);
+            var combined = engine.TensorMultiply(taskBlocks, inputBlocks).Reshape(new[] { size, size });
+            combined = engine.TensorAdd(combined, engine.TensorMultiplyScalar(identity, _numOps.Add(noise, jitter)));
             return GaussianProcessEvidence.Cholesky(combined);
         }
 
-        var best = (double[])theta.Clone();
-        double bestEvidence = double.NegativeInfinity;
-        var firstMoment = new double[count];
-        var secondMoment = new double[count];
+        // Block (a, b) of the tiled matrix is K_x^T, so summing W * tile over a block gives
+        // sum_ij W[(a,i),(b,j)] K_x[j,i].
+        var kernelTiles = engine.TensorTile(engine.TensorTranspose(inputKernel), new[] { tasks, tasks });
+        var best = theta;
+        T bestEvidence = _numOps.FromDouble(double.NegativeInfinity);
+        var firstMoment = engine.TensorZerosLike(theta);
+        var secondMoment = engine.TensorZerosLike(theta);
         const double LearningRate = 0.05;
         const double Beta1 = 0.9;
         const double Beta2 = 0.999;
         const double Epsilon = 1e-8;
-        var columns = new[] { targets };
+        T half = _numOps.FromDouble(0.5);
 
-        for (int step = 0; step <= _hyperparameterOptimizationSteps && count > 0; step++)
+        for (int step = 0; step <= _hyperparameterOptimizationSteps; step++)
         {
             var factor = FactorOf(theta);
-            double noise = NoiseOf(theta);
+            T noise = NoiseOf(theta);
             var lower = CombinedFactor(factor, noise, out _);
             if (lower is null)
             {
                 break;
             }
 
-            double evidence = GaussianProcessEvidence.LogMarginalLikelihood(lower, columns);
-            if (evidence > bestEvidence)
+            T evidence = GaussianProcessEvidence.LogMarginalLikelihood(lower, targets);
+            if (_numOps.GreaterThan(evidence, bestEvidence))
             {
                 bestEvidence = evidence;
-                best = (double[])theta.Clone();
+                best = theta;
             }
 
             if (step == _hyperparameterOptimizationSteps)
@@ -491,90 +453,60 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
             // W = a a^T - K^-1.
             var alpha = GaussianProcessEvidence.Solve(lower, targets);
             var inverse = GaussianProcessEvidence.Inverse(lower);
-            var gradient = new double[count];
+            var w = engine.TensorSubtract(engine.TensorMatMul(alpha, engine.TensorTranspose(alpha)), inverse);
+            var gradientParts = new List<Tensor<T>>();
 
             if (learnTasks)
             {
                 // G[a, b] = sum_ij W[(a,i),(b,j)] K_x[j,i]; the gradient for L is (G L).
-                var g = new double[tasks, tasks];
-                for (int a = 0; a < tasks; a++)
-                {
-                    for (int b = 0; b < tasks; b++)
-                    {
-                        double sum = 0;
-                        for (int i = 0; i < n; i++)
-                        {
-                            for (int j = 0; j < n; j++)
-                            {
-                                int p = a * n + i;
-                                int q = b * n + j;
-                                sum += (alpha[p] * alpha[q] - inverse[p, q]) * inputKernel[j, i];
-                            }
-                        }
+                var g = engine.ReduceSum(
+                    engine.TensorMultiply(w, kernelTiles).Reshape(blockShape), new[] { 1, 3 }, keepDims: false);
+                var gl = engine.TensorIndexSelect(
+                    engine.TensorMatMul(g, factor).Reshape(new[] { tasks * tasks }), slotIndex, 0);
 
-                        g[a, b] = sum;
-                    }
-                }
-
-                for (int s = 0; s < slots.Count; s++)
-                {
-                    var (row, column) = slots[s];
-                    double sum = 0;
-                    for (int k = 0; k < tasks; k++)
-                    {
-                        sum += g[row, k] * factor[k, column];
-                    }
-
-                    // The diagonal is parameterized by its log, so the chain rule multiplies by it.
-                    gradient[s] = row == column ? sum * factor[row, row] : sum;
-                }
+                // The diagonal is parameterized by its log, so the chain rule multiplies by it.
+                var factorSlots = engine.TensorIndexSelect(factor.Reshape(new[] { tasks * tasks }), slotIndex, 0);
+                gradientParts.Add(engine.TensorWhere(diagonalMask, engine.TensorMultiply(gl, factorSlots), gl));
             }
 
             if (learnNoise)
             {
-                double trace = 0;
-                for (int i = 0; i < size; i++)
-                {
-                    trace += alpha[i] * alpha[i] - inverse[i, i];
-                }
-
-                gradient[count - 1] = 0.5 * noise * trace;
+                T trace = _numOps.Subtract(engine.TensorSumOfSquares(alpha), engine.TensorTrace(inverse));
+                gradientParts.Add(Tensor<T>.CreateDefault(
+                    new[] { 1 }, _numOps.Multiply(half, _numOps.Multiply(noise, trace))));
             }
+
+            var gradient = engine.TensorConcatenate(gradientParts.ToArray(), 0);
 
             // Adam, ascending the evidence.
-            for (int k = 0; k < count; k++)
-            {
-                firstMoment[k] = Beta1 * firstMoment[k] + (1 - Beta1) * gradient[k];
-                secondMoment[k] = Beta2 * secondMoment[k] + (1 - Beta2) * gradient[k] * gradient[k];
-                double firstHat = firstMoment[k] / (1 - Math.Pow(Beta1, step + 1));
-                double secondHat = secondMoment[k] / (1 - Math.Pow(Beta2, step + 1));
-                theta[k] += LearningRate * firstHat / (Math.Sqrt(secondHat) + Epsilon);
-            }
+            firstMoment = engine.TensorAdd(
+                engine.TensorMultiplyScalar(firstMoment, _numOps.FromDouble(Beta1)),
+                engine.TensorMultiplyScalar(gradient, _numOps.FromDouble(1 - Beta1)));
+            secondMoment = engine.TensorAdd(
+                engine.TensorMultiplyScalar(secondMoment, _numOps.FromDouble(Beta2)),
+                engine.TensorMultiplyScalar(engine.TensorSquare(gradient), _numOps.FromDouble(1 - Beta2)));
+            var firstHat = engine.TensorDivideScalar(firstMoment, _numOps.FromDouble(1 - Math.Pow(Beta1, step + 1)));
+            var secondHat = engine.TensorDivideScalar(secondMoment, _numOps.FromDouble(1 - Math.Pow(Beta2, step + 1)));
+            var stepSize = engine.TensorDivide(
+                engine.TensorMultiplyScalar(firstHat, _numOps.FromDouble(LearningRate)),
+                engine.TensorAddScalar(engine.TensorSqrt(secondHat), _numOps.FromDouble(Epsilon)));
+            theta = engine.TensorAdd(theta, stepSize);
         }
 
         var bestFactor = FactorOf(best);
-        double bestNoise = NoiseOf(best);
-        if (count == 0 || CombinedFactor(bestFactor, bestNoise, out var bestCovariance) is null)
+        T bestNoise = NoiseOf(best);
+        if (CombinedFactor(bestFactor, bestNoise, out var bestCovariance) is null)
         {
-            // Nothing to learn, or no point of the search was positive definite: keep the starting B
-            // and the fixed (or starting) noise.
-            _fittedNoiseVariance[0] = _numOps.FromDouble(learnNoise ? Math.Exp(logNoise) : fixedNoise);
+            // No point of the search was positive definite: keep the starting B and the starting noise.
+            _fittedNoiseVariance[0] = learnNoise ? _numOps.Exp(logNoise) : fixedNoise;
             return;
         }
 
-        _fittedNoiseVariance[0] = _numOps.FromDouble(bestNoise);
+        _fittedNoiseVariance[0] = bestNoise;
         if (learnTasks)
         {
-            _taskCovariance = new Matrix<T>(tasks, tasks);
-            _taskCovCholesky = new Matrix<T>(tasks, tasks);
-            for (int a = 0; a < tasks; a++)
-            {
-                for (int b = 0; b < tasks; b++)
-                {
-                    _taskCovariance[a, b] = _numOps.FromDouble(bestCovariance[a, b]);
-                    _taskCovCholesky[a, b] = _numOps.FromDouble(bestFactor[a, b]);
-                }
-            }
+            _taskCovariance = bestCovariance.ToMatrix();
+            _taskCovCholesky = bestFactor.ToMatrix();
         }
     }
 

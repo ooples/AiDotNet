@@ -215,28 +215,10 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
         _outputMeans = meanRow.Reshape(new[] { Y.Columns }).ToVector();
         var centered = engine.TensorSubtract(targets, engine.TensorBroadcastTo(meanRow, new[] { n, Y.Columns }));
 
-        // GaussianProcessEvidence runs the hyperparameter search in double by design; the element-type
-        // conversion at that boundary waits on a bulk cast op (TensorCast).
-        var columns = new List<double[]>(Y.Columns);
-        for (int c = 0; c < Y.Columns; c++)
-        {
-            var column = new double[n];
-            for (int i = 0; i < n; i++)
-                column[i] = _numOps.ToDouble(centered[i, c]);
-            columns.Add(column);
-        }
-
-        var kernel = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                kernel[i, j] = _numOps.ToDouble(inputKernel[i, j]);
-
         var (signal, noise) = GaussianProcessEvidence.FitSignalAndNoise(
-            kernel, columns, _noiseVariance, _hyperparameterOptimizationSteps, jitter: 1e-6);
-        _fittedSignalVariance = new Vector<T>(1);
-        _fittedSignalVariance[0] = _numOps.FromDouble(signal);
-        _fittedNoiseVariance = new Vector<T>(1);
-        _fittedNoiseVariance[0] = _numOps.FromDouble(noise);
+            Tensor<T>.FromMatrix(inputKernel), centered, _noiseVariance, _hyperparameterOptimizationSteps, jitter: 1e-6);
+        _fittedSignalVariance = Tensor<T>.CreateDefault(new[] { 1 }, signal).ToVector();
+        _fittedNoiseVariance = Tensor<T>.CreateDefault(new[] { 1 }, noise).ToVector();
 
         _K = GaussianProcessEngineOps.AddToDiagonal(
             engine.MatrixMultiplyScalar(inputKernel, _fittedSignalVariance[0]),
