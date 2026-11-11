@@ -550,16 +550,8 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
 
-        var oneMinusTau = NumOps.Subtract(NumOps.One, _options.TargetUpdateTau);
-
-        for (int i = 0; i < sourceParams.Length; i++)
-        {
-            var sourceContrib = NumOps.Multiply(_options.TargetUpdateTau, sourceParams[i]);
-            var targetContrib = NumOps.Multiply(oneMinusTau, targetParams[i]);
-            targetParams[i] = NumOps.Add(sourceContrib, targetContrib);
-        }
-
-        target.UpdateParameters(targetParams);
+        // theta_target <- tau * theta + (1 - tau) * theta_target
+        target.UpdateParameters(RLTensorOps.SoftUpdate(sourceParams, targetParams, _options.TargetUpdateTau));
     }
 
     private Vector<T> ConcatenateVectors(List<Vector<T>> vectors)
@@ -587,16 +579,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
-        var result = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++)
-        {
-            result[i] = state[i];
-        }
-        for (int i = 0; i < action.Length; i++)
-        {
-            result[state.Length + i] = action[i];
-        }
-        return result;
+        return RLTensorOps.Concat(state, action);
     }
 
     private Vector<T> ComputeJointTargetActions(Vector<T> jointNextState)

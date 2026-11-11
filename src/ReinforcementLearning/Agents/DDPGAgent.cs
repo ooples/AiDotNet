@@ -443,28 +443,13 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
 
-        var tau = _options.TargetUpdateTau;
-        var oneMinusTau = NumOps.Subtract(NumOps.One, tau);
-
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            targetParams[i] = NumOps.Add(
-                NumOps.Multiply(tau, sourceParams[i]),
-                NumOps.Multiply(oneMinusTau, targetParams[i])
-            );
-        }
-
-        target.UpdateParameters(targetParams);
+        // theta_target <- tau * theta + (1 - tau) * theta_target
+        target.UpdateParameters(RLTensorOps.SoftUpdate(sourceParams, targetParams, _options.TargetUpdateTau));
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
-        var combined = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++)
-            combined[i] = state[i];
-        for (int i = 0; i < action.Length; i++)
-            combined[state.Length + i] = action[i];
-        return combined;
+        return RLTensorOps.Concat(state, action);
     }
 
     /// <inheritdoc/>

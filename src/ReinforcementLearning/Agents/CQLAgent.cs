@@ -586,31 +586,14 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     {
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
-        var oneMinusTau = _numOps.Subtract(_numOps.One, _options.TargetUpdateTau);
 
-        var updatedParams = new Vector<T>(targetParams.Length);
-        for (int softUpdateIdx = 0; softUpdateIdx < targetParams.Length; softUpdateIdx++)
-        {
-            var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceParams[softUpdateIdx]);
-            var targetContrib = _numOps.Multiply(oneMinusTau, targetParams[softUpdateIdx]);
-            updatedParams[softUpdateIdx] = _numOps.Add(sourceContrib, targetContrib);
-        }
-
-        target.UpdateParameters(updatedParams);
+        // theta_target <- tau * theta + (1 - tau) * theta_target
+        target.UpdateParameters(RLTensorOps.SoftUpdate(sourceParams, targetParams, _options.TargetUpdateTau));
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
-        var result = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++)
-        {
-            result[i] = state[i];
-        }
-        for (int i = 0; i < action.Length; i++)
-        {
-            result[state.Length + i] = action[i];
-        }
-        return result;
+        return RLTensorOps.Concat(state, action);
     }
 
     private T GetSeededNormalRandom(T mean, T stdDev, Random random)

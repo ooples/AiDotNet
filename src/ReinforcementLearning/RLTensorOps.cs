@@ -424,6 +424,21 @@ internal static class RLTensorOps
         return Engine.TensorWhere(taken, targets, current);
     }
 
+    /// <summary>
+    /// Polyak target update tau * source + (1 - tau) * target over the target's parameters (Lillicrap et al. 2016).
+    /// </summary>
+    internal static Vector<T> SoftUpdate<T>(Vector<T> source, Vector<T> target, T tau)
+    {
+        if (target is null)
+        {
+            throw new ArgumentNullException(nameof(target));
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        T oneMinusTau = ops.Subtract(ops.One, tau);
+        return Engine.Add(Engine.Multiply(Head(source, target.Length), tau), Engine.Multiply(target, oneMinusTau));
+    }
+
     /// <summary>A one-hot vector of the given length with a one at <paramref name="index"/>.</summary>
     internal static Vector<T> OneHot<T>(int length, int index)
     {

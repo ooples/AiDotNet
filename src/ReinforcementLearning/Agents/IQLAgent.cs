@@ -402,31 +402,13 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var sourceParams = _valueNetwork.GetParameters();
         var targetParams = _targetValueNetwork.GetParameters();
 
-        var oneMinusTau = _numOps.Subtract(_numOps.One, _options.TargetUpdateTau);
-        var updatedParams = new Vector<T>(targetParams.Length);
-
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceParams[i]);
-            var targetContrib = _numOps.Multiply(oneMinusTau, targetParams[i]);
-            updatedParams[i] = _numOps.Add(sourceContrib, targetContrib);
-        }
-
-        _targetValueNetwork.SetParameters(updatedParams);
+        // theta_target <- tau * theta + (1 - tau) * theta_target
+        _targetValueNetwork.SetParameters(RLTensorOps.SoftUpdate(sourceParams, targetParams, _options.TargetUpdateTau));
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
-        var result = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++)
-        {
-            result[i] = state[i];
-        }
-        for (int i = 0; i < action.Length; i++)
-        {
-            result[state.Length + i] = action[i];
-        }
-        return result;
+        return RLTensorOps.Concat(state, action);
     }
 
     /// <inheritdoc />
