@@ -151,4 +151,54 @@ internal static class GaussianProcessEngineOps
         var index = new Tensor<int>(indices, new[] { indices.Length });
         return AiDotNetEngine.Current.TensorIndexSelect(Tensor<T>.FromVector(vector), index, 0).ToVector();
     }
+
+    /// <summary>
+    /// Lower Cholesky factor with every pivot floored: L_jj = sqrt(max(A_jj - Σ_k L_jk², <paramref name="pivotFloor"/>)).
+    /// </summary>
+    /// <remarks>
+    /// Matches the clamped factorization the Gaussian process models have always used, so a matrix that is not
+    /// positive definite gets a usable factor instead of an exception. When the standard factorization succeeds
+    /// and no pivot falls below the floor the two are identical, so the engine factor is returned; only a
+    /// clamped pivot takes the sequential fallback, because clamping one pivot changes every later column.
+    /// </remarks>
+    internal static Tensor<T> ClampedCholesky<T>(Matrix<T> A, double pivotFloor = 1e-10)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        int n = A.Rows;
+        T floor = numOps.FromDouble(pivotFloor);
+        if (n == 0)
+            return new Tensor<T>(new[] { 0, 0 });
+
+        var (factor, info) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(A), upper: false);
+        if (engine.TensorCountNonzero(info) == 0 && AllFinite(factor)
+            && !numOps.LessThan(engine.TensorMinValue(engine.TensorSquare(engine.TensorDiagonal(factor))), floor))
+        {
+            return factor;
+        }
+
+        // Fallback: column-by-column factorization with the pivot floor applied as each pivot is formed.
+        var L = new Matrix<T>(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            var rowI = L.GetRow(i);
+            for (int j = 0; j <= i; j++)
+            {
+                // Entries of row i at and past column j are still zero, so the full dot products are Σ_{k<j}.
+                T sum = engine.DotProduct(rowI, j == i ? rowI : L.GetRow(j));
+                if (i == j)
+                {
+                    rowI[j] = numOps.Sqrt(MathHelper.Max(numOps.Subtract(A[i, i], sum), floor));
+                }
+                else
+                {
+                    rowI[j] = numOps.Divide(numOps.Subtract(A[i, j], sum), L[j, j]);
+                }
+            }
+
+            L.SetRow(i, rowI);
+        }
+
+        return Tensor<T>.FromMatrix(L);
+    }
 }

@@ -333,11 +333,11 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         // ill-conditioned, causing Cholesky to produce NaN or large alpha values.
         GaussianProcessEngineOps.AddAdaptiveJitter(K);
 
-        // Cholesky decomposition, then K alpha = y through the factor
-        var L = Factor(K);
-        _L = L.ToMatrix();
-        _alpha = Linalg.CholeskySolve(Tensor<T>.FromVector(_y).Reshape(new[] { _y.Length, 1 }), L, upper: false)
-            .Reshape(new[] { _y.Length }).ToVector();
+        // Cholesky decomposition (pivots floored at 1e-10)
+        _L = Factor(K).ToMatrix();
+
+        // Solve K * alpha = y using the properly-conditioned matrix
+        _alpha = MatrixSolutionHelper.SolveLinearSystem(K, _y, Enums.MatrixDecompositionType.Cholesky);
     }
 
     /// <summary>
@@ -563,19 +563,12 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
     }
 
     /// <summary>
-    /// Lower Cholesky factor of a symmetric positive definite matrix.
+    /// Lower Cholesky factor with every pivot floored at 1e-10, so a kernel matrix that is not
+    /// positive definite still yields a usable factor.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The matrix is not positive definite.</exception>
     private static Tensor<T> Factor(Matrix<T> K)
     {
-        var (L, info) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(K), upper: false);
-        if (AiDotNetEngine.Current.TensorCountNonzero(info) > 0)
-        {
-            throw new InvalidOperationException(
-                "Kernel matrix is not positive definite; increase the jitter or check the kernel.");
-        }
-
-        return L;
+        return GaussianProcessEngineOps.ClampedCholesky(K, 1e-10);
     }
 
     #endregion

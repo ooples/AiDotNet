@@ -274,12 +274,11 @@ public partial class BayesianGPLVM<T>
         for (int k = 0; k < effectiveLatentDims; k++)
         {
             // Initialize random vector (uniform draws in [-0.5, 0.5) from the seeded generator)
-            var start = new double[d];
+            var v = new Vector<T>(d);
             for (int i = 0; i < d; i++)
             {
-                start[i] = rand.NextDouble() - 0.5;
+                v[i] = _numOps.FromDouble(rand.NextDouble() - 0.5);
             }
-            var v = GaussianProcessEngineOps.FromDoubles<T>(start);
 
             // Power iteration
             for (int iter = 0; iter < 100; iter++)
@@ -316,13 +315,16 @@ public partial class BayesianGPLVM<T>
         int extraDims = _latentDimensions - effectiveLatentDims;
         if (extraDims > 0)
         {
-            var noise = new double[n * extraDims];
-            for (int i = 0; i < noise.Length; i++)
+            var extraValues = new Matrix<T>(n, extraDims);
+            for (int i = 0; i < n; i++)
             {
-                noise[i] = 0.01 * (rand.NextDouble() - 0.5);
+                for (int q = 0; q < extraDims; q++)
+                {
+                    extraValues[i, q] = _numOps.FromDouble(0.01 * (rand.NextDouble() - 0.5));
+                }
             }
 
-            var extra = Tensor<T>.FromVector(GaussianProcessEngineOps.FromDoubles<T>(noise)).Reshape(new[] { n, extraDims });
+            var extra = Tensor<T>.FromMatrix(extraValues);
             latent = engine.TensorConcatenate(new[] { latent, extra }, 1);
         }
 

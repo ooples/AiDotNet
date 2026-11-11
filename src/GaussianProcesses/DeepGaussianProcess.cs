@@ -779,9 +779,13 @@ internal class DGPLayer<T>
         // Initialize inducing inputs randomly
         _inducingInputs = new Matrix<T>(m, inputDim);
         var random = RandomHelper.CreateSecureRandom();
-        AiDotNetEngine.Current.TensorRandomUniformRange(
-                new[] { m, inputDim }, _numOps.FromDouble(-1.0), _numOps.One, random.Next())
-            .AsSpan().CopyTo(_inducingInputs.AsWritableSpan());
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < inputDim; j++)
+            {
+                _inducingInputs[i, j] = _numOps.FromDouble(random.NextDouble() * 2 - 1);
+            }
+        }
             }
         }
 
@@ -1004,18 +1008,11 @@ internal class DGPLayer<T>
     }
 
     /// <summary>
-    /// Lower Cholesky factor of a symmetric positive definite matrix.
+    /// Lower Cholesky factor from the library Cholesky decomposition, the same factorization (and the same
+    /// <see cref="ArgumentException"/> on a matrix that is not positive definite) as the solves it replaces.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The matrix is not positive definite.</exception>
     private static Tensor<T> Factor(Matrix<T> K)
     {
-        var (L, info) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(K), upper: false);
-        if (AiDotNetEngine.Current.TensorCountNonzero(info) > 0)
-        {
-            throw new InvalidOperationException(
-                "Inducing-point kernel matrix is not positive definite; check the kernel or the inducing inputs.");
-        }
-
-        return L;
+        return Tensor<T>.FromMatrix(new CholeskyDecomposition<T>(K).L);
     }
 }
