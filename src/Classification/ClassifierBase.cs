@@ -637,6 +637,19 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Converts a tensor of exact 0/1 values to the matching integer indicators (same shape).
+    /// </summary>
+    /// <param name="zeroOne">Values that are exactly 0 or 1.</param>
+    /// <returns>The 0/1 integers.</returns>
+    protected Tensor<int> ZeroOneToInt(Tensor<T> zeroOne)
+    {
+        // argmax over [1 - b, b] picks index b
+        int axis = zeroOne.Shape.Length;
+        var absent = Engine.ScalarMinusTensor(NumOps.One, zeroOne);
+        return Engine.TensorArgMax(Engine.TensorStack(new[] { absent, zeroOne }, axis), axis);
+    }
+
+    /// <summary>
     /// Majority vote: the label with the most votes per row (ties go to the lowest class index).
     /// </summary>
     /// <param name="votes">The [n, NumClasses] vote counts.</param>

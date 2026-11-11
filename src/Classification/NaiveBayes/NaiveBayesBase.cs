@@ -206,6 +206,78 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <summary>
+    /// For every sample and class, sums table[class, feature, choices[sample, feature]] over the features.
+    /// </summary>
+    /// <param name="choices">The [samples, features] chosen entries, each in [0, choicesPerFeature).</param>
+    /// <param name="table">The [classes, features, choicesPerFeature] log-probability table.</param>
+    /// <param name="choicesPerFeature">The number of entries per feature in <paramref name="table"/>.</param>
+    /// <returns>The [samples, classes] sums.</returns>
+    protected Tensor<T> SumSelectedLogProbabilities(Tensor<int> choices, Tensor<T> table, int choicesPerFeature)
+    {
+        var engine = Engine;
+        int n = choices.Shape[0];
+        int features = choices.Shape[1];
+        if (n == 0 || NumClasses == 0 || features == 0)
+        {
+            return new Tensor<T>(new[] { n, NumClasses });
+        }
+
+        // Flat table index: (class * features + feature) * choicesPerFeature + choice
+        var flatTable = table.Reshape(NumClasses * features * choicesPerFeature);
+        var featureOffsets = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, features), choicesPerFeature)
+            .Reshape(1, 1, features);
+        var classOffsets = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, NumClasses), features * choicesPerFeature)
+            .Reshape(1, NumClasses, 1);
+        var offsets = engine.TensorAdd(classOffsets, featureOffsets);
+
+        int batch = Math.Max(1, (1 << 22) / Math.Max(1, NumClasses * features));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += batch)
+        {
+            int rows = Math.Min(batch, n - start);
+            var index = engine.TensorAdd(choices.Slice(0, start, start + rows).Reshape(rows, 1, features), offsets);
+            var selected = engine.TensorGather(flatTable, index.Reshape(rows * NumClasses * features), 0)
+                .Reshape(rows, NumClasses, features);
+            blocks.Add(engine.ReduceSum(selected, new[] { 2 }, false));
+        }
+
+        return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// Serializes a matrix as its row-major T values plus its shape.
+    /// </summary>
+    protected static void SerializeMatrixValues(Dictionary<string, object> data, string name, Matrix<T>? matrix)
+    {
+        if (matrix is null) return;
+        data[name] = matrix.Rows == 0 || matrix.Columns == 0 ? Array.Empty<T>() : Tensor<T>.FromMatrix(matrix).ToArray();
+        data[$"{name}Rows"] = matrix.Rows;
+        data[$"{name}Cols"] = matrix.Columns;
+    }
+
+    /// <summary>
+    /// Restores a matrix written by <see cref="SerializeMatrixValues"/> (null when absent or empty).
+    /// </summary>
+    protected static Matrix<T>? DeserializeMatrixValues(Newtonsoft.Json.Linq.JObject obj, string name)
+    {
+        var token = obj[name];
+        if (token is null) return null;
+        var arr = token.ToObject<T[]>() ?? Array.Empty<T>();
+        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
+        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
+        if (rows <= 0 || cols <= 0) return null;
+        if (arr.Length < rows * cols)
+        {
+            throw new InvalidOperationException(
+                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
+        }
+
+        var values = new T[rows * cols];
+        Array.Copy(arr, values, values.Length);
+        return new Tensor<T>(values, new[] { rows, cols }).ToMatrix();
+    }
+
+    /// <summary>
     /// log P(sample | class) through the batched <see cref="ComputeLogLikelihoods"/> on a single row.
     /// </summary>
     /// <param name="sample">The sample's features.</param>
