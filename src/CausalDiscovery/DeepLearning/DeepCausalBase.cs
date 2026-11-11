@@ -242,4 +242,14 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
         return Engine.TensorWhere(keep, weight, Engine.TensorZerosLike(weight)).ToMatrix();
     }
 
+    /// <summary>
+    /// Copies a [d x d] tensor into the double grid that the DAG projection and adjacency helpers take.
+    /// </summary>
+    private protected static double[,] ToDoubleGrid(Tensor<T> values, int d)
+    {
+        var flat = values.Cast<double>().ToArray();
+        var grid = new double[d, d];
+        Buffer.BlockCopy(flat, 0, grid, 0, d * d * sizeof(double));
+        return grid;
+    }
 }
