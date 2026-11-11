@@ -167,6 +167,7 @@ public partial class GraphCodeBERT<T> : CodeModelBase<T>
         CodeTransformerLayerFactory.AddOutputProjection(Layers, CodeArchitecture);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return CreateTransformerModelMetadata(

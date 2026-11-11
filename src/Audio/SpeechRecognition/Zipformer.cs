@@ -188,6 +188,7 @@ public partial class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
             vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -201,8 +202,10 @@ public partial class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         int totalLayers = 0; foreach (int n in _options.NumLayersPerStack) totalLayers += n;
@@ -315,6 +318,7 @@ public partial class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Zipformer<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

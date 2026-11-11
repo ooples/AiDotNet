@@ -80,13 +80,21 @@ public partial class OpenSora2Model<T> : VideoDiffusionModelBase<T>
     // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
     private readonly int? _seed;
 
+    /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _predictor; } }
+    /// <inheritdoc />
     public override IVAEModel<T> VAE { get { EnsureInitialized(); return _temporalVAE; } }
+    /// <inheritdoc />
     public override IVAEModel<T>? TemporalVAE { get { EnsureInitialized(); return _temporalVAE; } }
+    /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
     public override bool SupportsImageToVideo => true;
+    /// <inheritdoc />
     public override bool SupportsTextToVideo => true;
+    /// <inheritdoc />
     public override bool SupportsVideoToVideo => false;
 
 
@@ -156,6 +164,7 @@ public partial class OpenSora2Model<T> : VideoDiffusionModelBase<T>
             seed: seed);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictVideoNoise(
         Tensor<T> latents,
         int timestep,
@@ -166,6 +175,7 @@ public partial class OpenSora2Model<T> : VideoDiffusionModelBase<T>
         return _predictor.PredictNoise(latents, timestep, imageEmbedding);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

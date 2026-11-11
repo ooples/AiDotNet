@@ -26,6 +26,7 @@ public sealed class PerformanceAwareClientSelectionStrategy : ClientSelectionStr
         _explorationRate = explorationRate;
     }
 
+    /// <inheritdoc />
     public override List<int> SelectClients(ClientSelectionRequest request)
     {
         if (request == null)
@@ -62,6 +63,7 @@ public sealed class PerformanceAwareClientSelectionStrategy : ClientSelectionStr
         return ordered;
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "PerformanceAware";
 }
 

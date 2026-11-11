@@ -924,6 +924,7 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
 
     #endregion
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

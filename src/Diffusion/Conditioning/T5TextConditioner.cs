@@ -36,6 +36,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     private readonly int? _numLayersOverride;
     private readonly int? _numHeadsOverride;
 
+    /// <inheritdoc />
     public override bool ProducesPooledOutput => false;
 
     /// <param name="options">The variant and optional transformer dimensions; each unset dimension
@@ -103,6 +104,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         return new T5TextConditioner<T>(tokenizer, options: new T5TextConditionerOptions { Variant = variant });
     }
 
+    /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
         LayerHelper<T>.CreateDefaultT5TextLayers(
             vocabSize: VocabSize,

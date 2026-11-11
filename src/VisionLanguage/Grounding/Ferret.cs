@@ -117,11 +117,14 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         InitializeLayers();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxDetections => _options.MaxDetections;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -324,6 +327,7 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         return result;
     }
 
+    /// <inheritdoc />
     public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories)
     {
         ThrowIfDisposed();
@@ -399,6 +403,7 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -415,11 +420,14 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -445,6 +453,7 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
             throw new ObjectDisposedException(GetType().FullName ?? nameof(Ferret<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

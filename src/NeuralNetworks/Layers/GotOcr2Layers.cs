@@ -69,6 +69,7 @@ public partial class SamViTDetEncoderLayer<T> : LayerBase<T>, IShapeContract
     private readonly ConvolutionalLayer<T> _neckConv2;
     private readonly LayerNormalizationLayer<T> _neckNorm2;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public SamViTDetEncoderLayer([LayerState] int imageSize, [LayerState] int patchSize, [LayerState] int dim,
@@ -158,6 +159,7 @@ public partial class SamViTDetEncoderLayer<T> : LayerBase<T>, IShapeContract
         yield return _neckNorm2;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank is 3 or 4
         ? new[]
         {
@@ -167,6 +169,7 @@ public partial class SamViTDetEncoderLayer<T> : LayerBase<T>, IShapeContract
         }
         : null;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var image = input.Rank == 3 ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] }) : input;
@@ -281,6 +284,7 @@ public partial class SamViTDetEncoderLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ResetState() { foreach (var layer in SubLayers()) layer.ResetState(); }
 }
 
@@ -305,6 +309,7 @@ public partial class GotOcr2ProjectorLayer<T> : LayerBase<T>, IShapeContract
     private readonly ConvolutionalLayer<T> _down2;
     [SubLayerInput("_textDim")] private readonly DenseLayer<T> _projection;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public GotOcr2ProjectorLayer([LayerState] int visionChannels, [LayerState] int textDim, [LayerState] int grid)
@@ -329,6 +334,7 @@ public partial class GotOcr2ProjectorLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Number of image tokens produced.</summary>
     public int TokenCount => (_grid / 4) * (_grid / 4);
 
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank is 3 or 4
         ? new[]
         {
@@ -337,6 +343,7 @@ public partial class GotOcr2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         }
         : null;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var map = input.Rank == 3 ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] }) : input;
@@ -359,6 +366,7 @@ public partial class GotOcr2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _down1.ResetState();
@@ -403,6 +411,7 @@ public partial class QwenDecoderLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<PreLNTransformerBlock<T>> _blocks = new();
     [SubLayerInput("_dim")] private readonly RMSNormalizationLayer<T> _finalNorm;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public QwenDecoderLayer([LayerState] int vocabSize, [LayerState] int dim, [LayerState] int numHeads,
@@ -457,6 +466,7 @@ public partial class QwenDecoderLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Longest sequence the rotary tables and attention cover.</summary>
     public int MaxPositions => _maxPositions;
 
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 1
         ? new[]
         {
@@ -465,6 +475,7 @@ public partial class QwenDecoderLayer<T> : LayerBase<T>, IShapeContract
         }
         : null;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 1)
@@ -518,6 +529,7 @@ public partial class QwenDecoderLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         foreach (var block in _blocks) block.ResetState();

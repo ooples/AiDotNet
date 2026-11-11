@@ -286,8 +286,10 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _biasGradients;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients() { base.ClearGradients(); _kernelGradients = null; _biasGradients = null; }
 
     /// <summary>

@@ -10,6 +10,7 @@ namespace AiDotNet.ProgramSynthesis.Requests;
 /// </remarks>
 public sealed class CodeCompletionRequest : CodeTaskRequestBase
 {
+    /// <inheritdoc />
     public override CodeTask Task => CodeTask.Completion;
 
     public string Code { get; set; } = string.Empty;

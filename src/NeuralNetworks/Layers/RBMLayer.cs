@@ -1002,12 +1002,14 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorMatMul(aReshaped, bReshaped);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
         _weightsGradient = null; _visibleBiasesGradient = null; _hiddenBiasesGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values used during contrastive divergence training

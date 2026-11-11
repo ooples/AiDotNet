@@ -23,15 +23,24 @@ public class MarkednessMetric<T> : IClassificationMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "Markedness";
+    /// <inheritdoc />
     public string Category => "Classification";
+    /// <inheritdoc />
     public string Description => "Markedness (PPV + NPV - 1).";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.HigherIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.FromDouble(-1.0);
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -56,6 +65,7 @@ public class MarkednessMetric<T> : IClassificationMetric<T>
         return NumOps.FromDouble(ppv + npv - 1);
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

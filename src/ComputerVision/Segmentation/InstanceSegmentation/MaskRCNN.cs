@@ -214,7 +214,7 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
         List<Tensor<T>> fpnFeatures = new();
         List<BoundingBox<T>> anchors = new();
         TrainWithTargets(input, targets,
-            image => ForwardDetection(image, gold, out fpnFeatures, out anchors),
+            image => ForwardDetection(image, gold, out fpnFeatures, out anchors, random),
             (heads, objects) =>
             {
                 var proposalLoss = _detectionLoss.ComputeProposalLoss(
@@ -305,14 +305,26 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
     }
 
     /// <summary>The detection forward, optionally adding boxes to the proposals the RoI heads classify.</summary>
+    /// <remarks>
+    /// With <paramref name="sampleRandom"/> (training) the box head runs only on the RoIs the stage loss trains on, as
+    /// torchvision's RoIHeads does, instead of on every proposal before sampling (see FasterRCNN).
+    /// </remarks>
     private List<Tensor<T>> ForwardDetection(Tensor<T> input, IReadOnlyList<double[]>? extraProposals,
-        out List<Tensor<T>> fpnFeatures, out List<BoundingBox<T>> anchors)
+        out List<Tensor<T>> fpnFeatures, out List<BoundingBox<T>> anchors, Random? sampleRandom = null)
     {
         var (features, proposalBoxes, objectness, rpnDeltas, levelAnchors, _) = ProposeRegionsCore(input, ProposalsPerImage);
         fpnFeatures = features;
         anchors = levelAnchors;
         if (extraProposals is { Count: > 0 })
             proposalBoxes = TwoStageTargets.AppendBoxes(proposalBoxes, extraProposals);
+
+        if (sampleRandom is not null && extraProposals is not null && proposalBoxes.Shape[0] > 0)
+        {
+            var rows = _detectionLoss.SampleStageRois(proposalBoxes, extraProposals, 0, sampleRandom);
+            proposalBoxes = rows.Length == 0
+                ? new Tensor<T>(new[] { 0, 4 })
+                : CvTensorOps<T>.Select(proposalBoxes, rows, 0);
+        }
 
         int width = Options.NumClasses + 1;
         int count = proposalBoxes.Shape[0];

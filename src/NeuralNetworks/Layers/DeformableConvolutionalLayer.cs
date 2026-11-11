@@ -714,6 +714,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
 
     #region Layer Properties
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     #endregion

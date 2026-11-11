@@ -792,6 +792,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < maLen; i++) ModelParameters[arLen + i] = _maParameters[i];
     }
 
+    /// <inheritdoc />
     protected override void ApplyParameters(Vector<T> parameters)
     {
         if (parameters == null)

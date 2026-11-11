@@ -592,6 +592,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     #endregion
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();

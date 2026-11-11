@@ -25,6 +25,7 @@ public class ChannelDropout<T> : ImageAugmenterBase<T>
         FillValue = fillValue;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         int clampedMin = Math.Min(MinChannelsToDrop, data.Channels - 1);
@@ -56,6 +57,7 @@ public class ChannelDropout<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

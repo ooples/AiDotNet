@@ -41,7 +41,7 @@ public class CustomObjectiveFusedTrainingTests
         "DeepONet" => BuildDeepOnet(),
         "FNO" => Warm(BuildFno(), new Tensor<double>([1, 2, 4])),
         "MQCNN" => Warm(BuildMqcnn(), new Tensor<double>([1, 8, 1])),
-        "CodeSwitchingASR" => Warm(BuildAsr(), new Tensor<double>([4, 8])),
+        "CodeSwitchingASR" => Warm(BuildAsr(), new Tensor<double>([32, 8])),
         "CCDM" => Warm(BuildCcdm(), new Tensor<double>([1, 8, 1])),
         "TSDiff" => Warm(BuildTsDiff(), new Tensor<double>([1, 16, 1])),
         "TimeDiff" => Warm(BuildTimeDiff(), new Tensor<double>([1, 16, 1])),
@@ -75,7 +75,7 @@ public class CustomObjectiveFusedTrainingTests
             case "DeepONet": TrainDeepOnet((DeepOperatorNetwork<double>)model); break;
             case "FNO": TrainFno((FourierNeuralOperator<double>)model); break;
             case "MQCNN": TrainOnChangingBatches(model, [1, 8, 1], [1, 2 * MqcnnQuantiles]); break;
-            case "CodeSwitchingASR": TrainOnChangingBatches(model, [4, 8], [4, AsrOptions().VocabSize]); break;
+            case "CodeSwitchingASR": TrainOnChangingBatches(model, [32, 8], [7, AsrOptions().VocabSize]); break; // subsampling: 32 frames -> 7
             // Every step draws its own diffusion steps, noise and contrastive negatives.
             case "CCDM": TrainOnChangingBatches(model, [1, 8, 1], [1, 4]); break;
             case "TSDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;

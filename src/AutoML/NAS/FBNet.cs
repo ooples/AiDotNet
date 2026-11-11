@@ -65,8 +65,11 @@ namespace AiDotNet.AutoML.NAS
         private readonly int _inputChannels;
         private readonly int _spatialSize;
 
+        /// <inheritdoc />
         protected override INumericOperations<T> NumOps => _ops;
+        /// <inheritdoc />
         protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        /// <inheritdoc />
         protected override int NasNumNodes => _numLayers;
 
         public FBNet(SearchSpaceBase<T> searchSpace, int numLayers = 20,
@@ -255,6 +258,7 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         public T GetTemperature() => _temperature;
 
+        /// <inheritdoc />
         protected override Architecture<T> SearchArchitecture(
             Tensor<T> inputs,
             Tensor<T> targets,

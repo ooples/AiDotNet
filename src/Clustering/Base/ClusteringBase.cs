@@ -611,6 +611,7 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
         }
     }
 
+    /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
@@ -889,18 +890,30 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
     {
         if (Labels is null || ClusterCenters is null || NumClusters <= 1) return;
 
-        // Compute data range per feature for relative threshold
+        // Compute data range per feature for relative threshold (one pass over the rows)
+        var colMin = new double[x.Columns];
+        var colMax = new double[x.Columns];
+        for (int j = 0; j < x.Columns; j++)
+        {
+            colMin[j] = double.MaxValue;
+            colMax[j] = double.MinValue;
+        }
+
+        for (int i = 0; i < x.Rows; i++)
+        {
+            var row = x.GetRowReadOnlySpan(i);
+            for (int j = 0; j < row.Length; j++)
+            {
+                double v = NumOps.ToDouble(row[j]);
+                if (v < colMin[j]) colMin[j] = v;
+                if (v > colMax[j]) colMax[j] = v;
+            }
+        }
+
         double maxRange = 0;
         for (int j = 0; j < x.Columns; j++)
         {
-            double colMin = double.MaxValue, colMax = double.MinValue;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                double v = NumOps.ToDouble(x[i, j]);
-                if (v < colMin) colMin = v;
-                if (v > colMax) colMax = v;
-            }
-            double range = colMax - colMin;
+            double range = colMax[j] - colMin[j];
             if (range > maxRange) maxRange = range;
         }
         // Merge degenerate clusters: when cluster centers are closer than 10% of the maximum
