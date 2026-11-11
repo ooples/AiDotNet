@@ -25,10 +25,8 @@ public sealed class InstanceSegmentationTrainingTarget<T>
         if (mask is null) throw new ArgumentNullException(nameof(mask));
         if (mask.Rank != 2 || mask.Shape[0] <= 0 || mask.Shape[1] <= 0)
             throw new ArgumentException("A mask must be [height, width].", nameof(mask));
-        var ops = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        foreach (var value in mask.ToArray())
+        foreach (double v in CvTensorOps<T>.ToDoubleArray(mask))
         {
-            double v = ops.ToDouble(value);
             if (double.IsNaN(v) || v < 0 || v > 1)
                 throw new ArgumentException("Mask values must be in [0, 1].", nameof(mask));
         }

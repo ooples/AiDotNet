@@ -226,25 +226,24 @@ public class PrototypeMaskHead<T> : IParameterSource<T>, IParameterChunkSource<T
         int height = prototypes.Shape[2];
         int width = prototypes.Shape[3];
 
-        var mask = new Tensor<T>(new[] { height, width });
+        int plane = height * width;
+        // Both inputs convert to double in one bulk pass; the per-pixel sum keeps its prototype order.
+        var protoValues = CvTensorOps<T>.ToDoubleArray(prototypes);
+        var coefValues = CvTensorOps<T>.ToDoubleArray(coefficients);
+        var maskValues = new double[plane];
 
-        for (int h = 0; h < height; h++)
+        for (int pixel = 0; pixel < plane; pixel++)
         {
-            for (int w = 0; w < width; w++)
+            double val = 0;
+            for (int p = 0; p < _numPrototypes; p++)
             {
-                double val = 0;
-                for (int p = 0; p < _numPrototypes; p++)
-                {
-                    double proto = _numOps.ToDouble(prototypes[0, p, h, w]);
-                    double coef = _numOps.ToDouble(coefficients[p]);
-                    val += proto * coef;
-                }
-                // Apply sigmoid
-                mask[h, w] = _numOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
+                val += protoValues[(p * plane) + pixel] * coefValues[p];
             }
+            // Apply sigmoid
+            maskValues[pixel] = 1.0 / (1.0 + Math.Exp(-val));
         }
 
-        return mask;
+        return CvTensorOps<T>.FromDoubleArray(maskValues, new[] { height, width });
     }
 
     private static Tensor<T> ApplyConvReLU(Conv2D<T> conv, Tensor<T> input)

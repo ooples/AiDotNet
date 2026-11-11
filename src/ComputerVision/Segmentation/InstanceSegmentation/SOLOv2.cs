@@ -103,8 +103,11 @@ public partial class SOLOv2<T> : InstanceSegmenterBase<T>
         var maskFeatures = _maskBranch.Forward(fpnFeatures[0]);
         int maskH = maskFeatures.Shape[2];
         int maskW = maskFeatures.Shape[3];
+        var maskFeatureValues = CvTensorOps<T>.ToDoubleArray(maskFeatures);
 
-        var instances = new List<InstanceMask<T>>();
+        var accepted = new List<(BoundingBox<T> Box, Tensor<T> Mask, int ClassId)>();
+        var acceptedScores = new List<double>();
+        double confidenceThreshold = NumOps.ToDouble(Options.ConfidenceThreshold);
 
         // Process each FPN level
         for (int levelIdx = 0; levelIdx < fpnFeatures.Count; levelIdx++)
@@ -118,6 +121,12 @@ public partial class SOLOv2<T> : InstanceSegmenterBase<T>
 
             int featH = categoryPreds.Shape[2];
             int featW = categoryPreds.Shape[3];
+            int cellCount = featH * featW;
+            // Each head's output converts to double in one bulk pass ([1, C, H, W] row-major).
+            var categoryValues = CvTensorOps<T>.ToDoubleArray(categoryPreds);
+            var kernelValues = CvTensorOps<T>.ToDoubleArray(kernelPreds);
+            int kernelPlane = kernelPreds.Shape[2] * kernelPreds.Shape[3];
+            int kernelWidth = kernelPreds.Shape[3];
 
             // Process each grid cell
             for (int y = 0; y < featH; y++)
@@ -130,7 +139,7 @@ public partial class SOLOv2<T> : InstanceSegmenterBase<T>
 
                     for (int c = 0; c < Options.NumClasses; c++)
                     {
-                        double score = Sigmoid(NumOps.ToDouble(categoryPreds[0, c, y, x]));
+                        double score = Sigmoid(categoryValues[(c * cellCount) + (y * featW) + x]);
                         if (score > bestScore)
                         {
                             bestScore = score;
@@ -138,18 +147,18 @@ public partial class SOLOv2<T> : InstanceSegmenterBase<T>
                         }
                     }
 
-                    if (bestScore < NumOps.ToDouble(Options.ConfidenceThreshold))
+                    if (bestScore < confidenceThreshold)
                         continue;
 
                     // Extract kernel weights for this instance
-                    var kernel = new Tensor<T>(new[] { 1, _kernelDim, 1, 1 });
+                    var kernel = new double[_kernelDim];
                     for (int k = 0; k < _kernelDim; k++)
                     {
-                        kernel[0, k, 0, 0] = kernelPreds[0, k, y, x];
+                        kernel[k] = kernelValues[(k * kernelPlane) + (y * kernelWidth) + x];
                     }
 
                     // Generate mask using dynamic convolution
-                    var mask = GenerateMask(maskFeatures, kernel, maskH, maskW);
+                    var mask = GenerateMask(maskFeatureValues, maskFeatures.Shape[1], kernel, maskH, maskW);
 
                     // Resize mask to image size
                     var fullMask = ResizeMask(mask, imageHeight, imageWidth);
@@ -162,11 +171,18 @@ public partial class SOLOv2<T> : InstanceSegmenterBase<T>
 
                     if (box != null)
                     {
-                        instances.Add(new InstanceMask<T>(box, binaryMask, bestClass, NumOps.FromDouble(bestScore)));
+                        accepted.Add((box, binaryMask, bestClass));
+                        acceptedScores.Add(bestScore);
                     }
                 }
             }
         }
+
+        // Scores become T in one bulk pass; instances keep their discovery order.
+        var scores = CvTensorOps<T>.FromDoubleArray(acceptedScores.ToArray(), new[] { acceptedScores.Count }).ToArray();
+        var instances = accepted
+            .Select((item, i) => new InstanceMask<T>(item.Box, item.Mask, item.ClassId, scores[i]))
+            .ToList();
 
         // Apply mask NMS
         instances = ApplyMaskNMS(instances, NumOps.ToDouble(Options.NmsThreshold));
@@ -183,30 +199,27 @@ public partial class SOLOv2<T> : InstanceSegmenterBase<T>
         };
     }
 
-    private Tensor<T> GenerateMask(Tensor<T> maskFeatures, Tensor<T> kernel, int height, int width)
+    /// <param name="maskFeatures">Mask features <c>[1, channels, height, width]</c> as row-major doubles.</param>
+    /// <param name="kernel">The instance kernel, one weight per channel.</param>
+    private static Tensor<T> GenerateMask(double[] maskFeatures, int channels, double[] kernel, int height, int width)
     {
         // Dynamic convolution: convolve mask features with instance-specific kernel
-        int channels = maskFeatures.Shape[1];
-        var mask = new Tensor<T>(new[] { height, width });
+        int plane = height * width;
+        var mask = new double[plane];
 
-        for (int h = 0; h < height; h++)
+        for (int pixel = 0; pixel < plane; pixel++)
         {
-            for (int w = 0; w < width; w++)
+            double sum = 0;
+            for (int c = 0; c < channels; c++)
             {
-                double sum = 0;
-                for (int c = 0; c < channels; c++)
-                {
-                    double feat = NumOps.ToDouble(maskFeatures[0, c, h, w]);
-                    double weight = NumOps.ToDouble(kernel[0, c, 0, 0]);
-                    sum += feat * weight;
-                }
-
-                // Apply sigmoid
-                mask[h, w] = NumOps.FromDouble(Sigmoid(sum));
+                sum += maskFeatures[(c * plane) + pixel] * kernel[c];
             }
+
+            // Apply sigmoid
+            mask[pixel] = Sigmoid(sum);
         }
 
-        return mask;
+        return CvTensorOps<T>.FromDoubleArray(mask, new[] { height, width });
     }
 
     private BoundingBox<T>? ComputeBoundingBox(Tensor<T> mask)
@@ -216,12 +229,15 @@ public partial class SOLOv2<T> : InstanceSegmenterBase<T>
 
         int minX = width, minY = height, maxX = 0, maxY = 0;
         bool found = false;
+        // T's order is double's order, so comparing bulk-converted values against T's 0.5 matches GreaterThan.
+        var values = CvTensorOps<T>.ToDoubleArray(mask);
+        double half = NumOps.ToDouble(NumOps.FromDouble(0.5));
 
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                if (NumOps.GreaterThan(mask[y, x], NumOps.FromDouble(0.5)))
+                if (values[(y * width) + x] > half)
                 {
                     minX = Math.Min(minX, x);
                     minY = Math.Min(minY, y);
