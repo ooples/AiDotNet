@@ -391,7 +391,7 @@ internal static class DimensionalityReductionOps
         Engine.TensorBatchMatMul(Engine.TensorSwapAxes(a, 1, 2), b);
 
     /// <summary>
-    /// Solves a[i] x[i] = b[i] for every i of a batch of square systems ([n, k, k] with [n, k]) by LU with
+    /// Solves a[i] x[i] = b[i] for every i of a batch of square systems ([n, k, k] with [n, k] or [n, k, m]) by LU with
     /// partial pivoting. The engine has no batched solver, so the systems are solved one by one.
     /// </summary>
     internal static Tensor<T> SolveEach<T>(Tensor<T> a, Tensor<T> b)
