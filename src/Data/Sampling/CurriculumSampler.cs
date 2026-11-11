@@ -140,12 +140,7 @@ public class CurriculumSampler<T> : EpochAdaptiveSamplerBase<T>
     /// </summary>
     private static int[] MaskedIndices(Tensor<Bit> mask)
     {
-        var ramp = new int[mask.Length];
-        for (int i = 0; i < ramp.Length; i++)
-        {
-            ramp[i] = i;
-        }
-
+        var ramp = Enumerable.Range(0, mask.Length).ToArray();
         return AiDotNetEngine.Current.TensorMaskedSelect(new Tensor<int>(ramp, new[] { ramp.Length }), mask)
             .AsSpan().ToArray();
     }
@@ -155,15 +150,15 @@ public class CurriculumSampler<T> : EpochAdaptiveSamplerBase<T>
     {
         double threshold = CurrentDifficultyThreshold;
 
-        // Filter samples that are below the current difficulty threshold (compared in double precision,
-        // as before; NaN difficulties never qualify).
+        // Filter samples that are below the current difficulty threshold (NaN difficulties never qualify).
         var engine = AiDotNetEngine.Current;
-        var difficulties = new Tensor<double>(DoubleStorage.ToDoubles(_difficulties), new[] { _difficulties.Length });
+        var difficulties = new Tensor<T>((T[])_difficulties.Clone(), new[] { _difficulties.Length });
+        T thresholdT = NumOps.FromDouble(threshold);
         var eligibleIndices = new List<int>();
         if (_difficulties.Length > 0)
         {
-            var below = engine.TensorEqScalar(engine.TensorLessThan(difficulties, threshold), 1.0);
-            var atThreshold = engine.TensorEqScalar(difficulties, threshold);
+            var below = engine.TensorEqScalar(engine.TensorLessThan(difficulties, thresholdT), NumOps.One);
+            var atThreshold = engine.TensorEqScalar(difficulties, thresholdT);
             eligibleIndices.AddRange(MaskedIndices(engine.TensorLogicalOr(below, atThreshold)));
         }
 
@@ -171,9 +166,9 @@ public class CurriculumSampler<T> : EpochAdaptiveSamplerBase<T>
         if (eligibleIndices.Count == 0 && _difficulties.Length > 0)
         {
             // Find minimum difficulty and include all samples within 1e-9 of it
-            double minDifficulty = engine.TensorMinValue(difficulties);
+            T minDifficulty = engine.TensorMinValue(difficulties);
             var distance = engine.TensorAbs(engine.TensorSubtractScalar(difficulties, minDifficulty));
-            var atMinimum = engine.TensorEqScalar(engine.TensorLessThan(distance, 1e-9), 1.0);
+            var atMinimum = engine.TensorEqScalar(engine.TensorLessThan(distance, NumOps.FromDouble(1e-9)), NumOps.One);
             eligibleIndices.AddRange(MaskedIndices(atMinimum));
         }
 

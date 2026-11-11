@@ -42,7 +42,7 @@ public class ImportanceSampler<T> : DataSamplerBase
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T[] _importanceScores;
-    private readonly double[] _cumulativeProbabilities;
+    private Tensor<T> _cumulativeProbabilities;
     private readonly double _smoothingFactor;
     private readonly bool _stabilize;
     private bool _needsUpdate = true;
@@ -67,7 +67,7 @@ public class ImportanceSampler<T> : DataSamplerBase
         }
 
         _importanceScores = new T[datasetSize];
-        _cumulativeProbabilities = new double[datasetSize];
+        _cumulativeProbabilities = new Tensor<T>(new[] { datasetSize });
 
         // Initialize with uniform importance
         T initialImportance = NumOps.FromDouble(1.0 / datasetSize);
@@ -147,17 +147,16 @@ public class ImportanceSampler<T> : DataSamplerBase
         int n = _importanceScores.Length;
         var engine = AiDotNetEngine.Current;
 
-        // Convert to doubles (one cast) and clamp negatives to zero
-        var rawScores = engine.TensorClampMin(
-            new Tensor<double>(DoubleStorage.ToDoubles(_importanceScores), new[] { n }), 0.0);
+        // Clamp negative scores to zero
+        var rawScores = engine.TensorClampMin(new Tensor<T>((T[])_importanceScores.Clone(), new[] { n }), NumOps.Zero);
 
         // Stabilization: clip extreme values
         if (_stabilize)
         {
-            double mean = engine.TensorMean(rawScores);
+            T mean = engine.TensorMean(rawScores);
             var centered = engine.TensorSubtractScalar(rawScores, mean);
-            double stdDev = Math.Sqrt(engine.TensorMean(engine.TensorMultiply(centered, centered)));
-            double maxAllowed = mean + 3 * stdDev;
+            T stdDev = NumOps.Sqrt(engine.TensorMean(engine.TensorMultiply(centered, centered)));
+            T maxAllowed = NumOps.Add(mean, NumOps.Multiply(NumOps.FromDouble(3.0), stdDev));
 
             rawScores = engine.TensorClampMax(rawScores, maxAllowed);
         }
@@ -165,21 +164,22 @@ public class ImportanceSampler<T> : DataSamplerBase
         // Add smoothing: blend with uniform distribution
         double uniformProb = 1.0 / n;
         rawScores = engine.TensorAddScalar(
-            engine.TensorMultiplyScalar(rawScores, 1.0 - _smoothingFactor), _smoothingFactor * uniformProb);
+            engine.TensorMultiplyScalar(rawScores, NumOps.FromDouble(1.0 - _smoothingFactor)),
+            NumOps.FromDouble(_smoothingFactor * uniformProb));
 
         // Normalize: the left-to-right running sum's last entry is the total
-        double sum = engine.TensorCumSum(rawScores, 0).AsSpan()[n - 1];
-        if (sum <= 0)
+        T sum = engine.TensorCumSum(rawScores, 0).AsSpan()[n - 1];
+        if (NumOps.LessThanOrEquals(sum, NumOps.Zero))
         {
             // Fallback to uniform
-            rawScores = new Tensor<double>(new[] { n });
-            rawScores.Fill(uniformProb);
-            sum = 1.0;
+            rawScores = new Tensor<T>(new[] { n });
+            rawScores.Fill(NumOps.FromDouble(uniformProb));
+            sum = NumOps.One;
         }
 
         // Compute cumulative probabilities
-        engine.TensorCumSum(engine.TensorDivideScalar(rawScores, sum), 0).AsSpan().CopyTo(_cumulativeProbabilities);
-        _cumulativeProbabilities[n - 1] = 1.0; // Ensure exactly 1.0
+        _cumulativeProbabilities = engine.TensorCumSum(engine.TensorDivideScalar(rawScores, sum), 0);
+        _cumulativeProbabilities[n - 1] = NumOps.One; // Ensure exactly 1.0
 
         _needsUpdate = false;
     }
@@ -234,26 +234,11 @@ public class ImportanceSampler<T> : DataSamplerBase
 
     private int SampleOne()
     {
-        double u = Random.NextDouble();
-
-        // Binary search
-        int left = 0;
-        int right = _cumulativeProbabilities.Length - 1;
-
-        while (left < right)
-        {
-            int mid = (left + right) / 2;
-            if (_cumulativeProbabilities[mid] < u)
-            {
-                left = mid + 1;
-            }
-            else
-            {
-                right = mid;
-            }
-        }
-
-        return left;
+        // First entry with u <= cumulative (left search-sorted), capped at the last index like the former
+        // binary search.
+        var u = new Tensor<T>(new[] { NumOps.FromDouble(Random.NextDouble()) }, new[] { 1 });
+        int firstAtOrAbove = AiDotNetEngine.Current.TensorSearchSorted(_cumulativeProbabilities, u, right: false).AsSpan()[0];
+        return Math.Min(firstAtOrAbove, _cumulativeProbabilities.Length - 1);
     }
 
     /// <summary>
@@ -270,13 +255,14 @@ public class ImportanceSampler<T> : DataSamplerBase
     {
         RecomputeProbabilities();
 
-        double prob = index == 0
+        T prob = index == 0
             ? _cumulativeProbabilities[0]
-            : _cumulativeProbabilities[index] - _cumulativeProbabilities[index - 1];
+            : NumOps.Subtract(_cumulativeProbabilities[index], _cumulativeProbabilities[index - 1]);
 
         // Correction = 1 / (n * p_i) where n is dataset size
-        double correction = 1.0 / (_importanceScores.Length * Math.Max(prob, 1e-10));
-        return NumOps.FromDouble(correction);
+        T floor = NumOps.FromDouble(1e-10);
+        T clamped = NumOps.GreaterThan(prob, floor) ? prob : floor;
+        return NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(_importanceScores.Length), clamped));
     }
 }
 
