@@ -243,7 +243,7 @@ public abstract partial class SemiSupervisedClassifierBase<T> : ClassifierBase<T
     /// is mirrored to [j, i].
     /// </param>
     /// <returns>The similarity matrix.</returns>
-    protected Tensor<T> KernelSimilarities(IKernelFunction<T> kernel, Matrix<T> a, Matrix<T> b, bool graphWithoutSelfLoops)
+    private protected Tensor<T> KernelSimilarities(IKernelFunction<T> kernel, Matrix<T> a, Matrix<T> b, bool graphWithoutSelfLoops)
     {
         int n = a.Rows;
         int m = b.Rows;
@@ -289,7 +289,7 @@ public abstract partial class SemiSupervisedClassifierBase<T> : ClassifierBase<T
     /// Divides every row with a positive sum by that sum. Other rows become uniform (1 / columns)
     /// when <paramref name="uniformWhenNotPositive"/> is true and are left unchanged otherwise.
     /// </summary>
-    protected Tensor<T> NormalizeRowSums(Tensor<T> weights, bool uniformWhenNotPositive)
+    private protected Tensor<T> NormalizeRowSums(Tensor<T> weights, bool uniformWhenNotPositive)
     {
         var engine = Engine;
         int rows = weights.Shape[0];
@@ -318,7 +318,7 @@ public abstract partial class SemiSupervisedClassifierBase<T> : ClassifierBase<T
     /// One-hot rows for the labeled samples followed by uniform (1 / NumClasses) rows up to
     /// <paramref name="totalSamples"/>.
     /// </summary>
-    protected Matrix<T> InitialLabelDistributions(Vector<T> labeledY, int totalSamples)
+    private protected Matrix<T> InitialLabelDistributions(Vector<T> labeledY, int totalSamples)
     {
         var engine = Engine;
         var classIndices = GetClassIndexTensor(labeledY);
@@ -353,7 +353,7 @@ public abstract partial class SemiSupervisedClassifierBase<T> : ClassifierBase<T
     /// <summary>
     /// The largest |a - b| over all entries (0 when empty).
     /// </summary>
-    protected T MaxAbsoluteChange(Tensor<T> a, Tensor<T> b)
+    private protected T MaxAbsoluteChange(Tensor<T> a, Tensor<T> b)
     {
         return a.Length == 0 ? NumOps.Zero : Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorSubtract(a, b)));
     }
@@ -362,7 +362,7 @@ public abstract partial class SemiSupervisedClassifierBase<T> : ClassifierBase<T
     /// Sets the pseudo-labels (argmax class, first wins ties) and their confidences (the max
     /// probability) for the rows after the first <paramref name="numLabeled"/>.
     /// </summary>
-    protected void SetPseudoLabelsFromDistributions(Matrix<T> distributions, int numLabeled, string missingLabelsMessage)
+    private protected void SetPseudoLabelsFromDistributions(Matrix<T> distributions, int numLabeled, string missingLabelsMessage)
     {
         int numUnlabeled = distributions.Rows - numLabeled;
         if (numUnlabeled <= 0) return;
@@ -381,7 +381,7 @@ public abstract partial class SemiSupervisedClassifierBase<T> : ClassifierBase<T
     /// Class distributions for new samples: kernel similarities to the training samples, row-normalized
     /// (uniform when a row has no positive similarity), times the training label distributions.
     /// </summary>
-    protected Matrix<T> PropagatedDistributions(IKernelFunction<T> kernel, Matrix<T> input, Matrix<T> trainFeatures, Matrix<T> labelDistributions)
+    private protected Matrix<T> PropagatedDistributions(IKernelFunction<T> kernel, Matrix<T> input, Matrix<T> trainFeatures, Matrix<T> labelDistributions)
     {
         if (input.Rows == 0)
         {

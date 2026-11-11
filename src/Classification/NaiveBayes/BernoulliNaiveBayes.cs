@@ -175,7 +175,7 @@ public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    private protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
     {
         if (_logFeatureProbsPresent == null || _logFeatureProbsAbsent == null)
         {

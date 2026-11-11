@@ -165,7 +165,7 @@ public partial class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    private protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
     {
         if (_logFeatureProbs == null)
         {

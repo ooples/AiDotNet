@@ -90,7 +90,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     /// </summary>
     /// <param name="columns">The columns, in order (at least one).</param>
     /// <returns>The matrix whose j-th column is <paramref name="columns"/>[j].</returns>
-    protected Matrix<T> StackColumns(IReadOnlyList<Vector<T>> columns)
+    private protected Matrix<T> StackColumns(IReadOnlyList<Vector<T>> columns)
     {
         var stacked = new Tensor<T>[columns.Count];
         for (int k = 0; k < stacked.Length; k++)
@@ -107,7 +107,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     /// <param name="values">The values to threshold.</param>
     /// <param name="threshold">The threshold.</param>
     /// <returns>The 0/1 indicator vector.</returns>
-    protected Vector<T> AtLeast(Vector<T> values, T threshold)
+    private protected Vector<T> AtLeast(Vector<T> values, T threshold)
     {
         if (values.Length == 0)
         {
@@ -124,7 +124,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     /// </summary>
     /// <param name="zeroOne">Values that are exactly 0 or 1.</param>
     /// <returns>The 0/1 integers.</returns>
-    protected Tensor<int> ZeroOneToInt(Tensor<T> zeroOne)
+    private protected Tensor<int> ZeroOneToInt(Tensor<T> zeroOne)
     {
         // argmax over [1 - b, b] picks index b
         int axis = zeroOne.Shape.Length;
@@ -135,7 +135,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     /// <summary>
     /// <paramref name="values"/> truncated or zero-padded to <paramref name="length"/> elements.
     /// </summary>
-    protected static Vector<T> FitToLength(Vector<T> values, int length)
+    private protected static Vector<T> FitToLength(Vector<T> values, int length)
     {
         if (values.Length == length)
         {

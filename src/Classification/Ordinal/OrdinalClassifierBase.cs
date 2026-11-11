@@ -171,7 +171,7 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
     /// </summary>
     /// <param name="labels">The labels to map.</param>
     /// <returns>One class index per label.</returns>
-    protected Tensor<int> GetOrdinalClassIndices(Vector<T> labels)
+    private protected Tensor<int> GetOrdinalClassIndices(Vector<T> labels)
     {
         if (ClassLabels is null)
         {
@@ -213,7 +213,7 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
     /// </summary>
     /// <param name="x">The inputs.</param>
     /// <returns>The sigmoid values.</returns>
-    protected Tensor<T> SigmoidSaturated(Tensor<T> x)
+    private protected Tensor<T> SigmoidSaturated(Tensor<T> x)
     {
         var engine = Engine;
         var ones = new Tensor<T>(x.Shape.ToArray());
@@ -239,7 +239,7 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
     /// </summary>
     /// <param name="coefficients">The coefficients.</param>
     /// <returns>Importance per feature name.</returns>
-    protected Dictionary<string, T> NormalizedCoefficientImportance(Vector<T> coefficients)
+    private protected Dictionary<string, T> NormalizedCoefficientImportance(Vector<T> coefficients)
     {
         var importance = new Dictionary<string, T>();
         if (coefficients.Length == 0)
@@ -272,7 +272,7 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
     /// <param name="coefficients">The coefficients.</param>
     /// <param name="bias">The intercept.</param>
     /// <returns>The [rows] linear predictions.</returns>
-    protected Tensor<T> LinearPredictions(Matrix<T> features, Vector<T> coefficients, T bias)
+    private protected Tensor<T> LinearPredictions(Matrix<T> features, Vector<T> coefficients, T bias)
     {
         var engine = Engine;
         int n = features.Rows;

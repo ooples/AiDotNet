@@ -155,7 +155,7 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// <param name="a">The first set of samples (rows).</param>
     /// <param name="b">The second set of samples (rows).</param>
     /// <returns>The kernel matrix.</returns>
-    protected Tensor<T> ComputeKernelMatrix(Matrix<T> a, Matrix<T> b)
+    private protected Tensor<T> ComputeKernelMatrix(Matrix<T> a, Matrix<T> b)
     {
         var engine = Engine;
         int n = a.Rows;
@@ -256,7 +256,7 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// <summary>
     /// +1 for the positive class (the last class label) and -1 for every other label.
     /// </summary>
-    protected Vector<T> SignedTargets(Vector<T> y)
+    private protected Vector<T> SignedTargets(Vector<T> y)
     {
         if (ClassLabels is null || y.Length == 0)
         {
@@ -270,7 +270,7 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// <summary>
     /// Indices i with values[i] &gt; threshold, in increasing order.
     /// </summary>
-    protected int[] IndicesAbove(Vector<T> values, T threshold)
+    private protected int[] IndicesAbove(Vector<T> values, T threshold)
     {
         if (values.Length == 0)
         {
@@ -284,7 +284,7 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// <summary>
     /// bias + sum_i coefficients[i] * kernel(input_row, train_i) for every input row, as an [input.Rows, 1] matrix.
     /// </summary>
-    protected Matrix<T> KernelDecisions(Matrix<T> input, Matrix<T> train, Vector<T> coefficients, T bias)
+    private protected Matrix<T> KernelDecisions(Matrix<T> input, Matrix<T> train, Vector<T> coefficients, T bias)
     {
         var engine = Engine;
         if (input.Rows == 0)

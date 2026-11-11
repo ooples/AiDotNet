@@ -200,7 +200,7 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     /// The default evaluates <see cref="ComputeLogLikelihood"/> sample by sample; derived classes override
     /// this with a whole-batch computation.
     /// </remarks>
-    protected virtual Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    private protected virtual Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
     {
         return PerSampleLogLikelihoods(input);
     }
@@ -212,7 +212,7 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     /// <param name="table">The [classes, features, choicesPerFeature] log-probability table.</param>
     /// <param name="choicesPerFeature">The number of entries per feature in <paramref name="table"/>.</param>
     /// <returns>The [samples, classes] sums.</returns>
-    protected Tensor<T> SumSelectedLogProbabilities(Tensor<int> choices, Tensor<T> table, int choicesPerFeature)
+    private protected Tensor<T> SumSelectedLogProbabilities(Tensor<int> choices, Tensor<T> table, int choicesPerFeature)
     {
         var engine = Engine;
         int n = choices.Shape[0];
@@ -250,7 +250,7 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     /// <param name="sample">The sample's features.</param>
     /// <param name="classIndex">The class index.</param>
     /// <returns>The log-likelihood.</returns>
-    protected T SingleSampleLogLikelihood(Vector<T> sample, int classIndex)
+    private protected T SingleSampleLogLikelihood(Vector<T> sample, int classIndex)
     {
         var row = sample.AsTensor().Reshape(1, sample.Length).ToMatrix();
         return ComputeLogLikelihoods(row)[0, classIndex];

@@ -377,7 +377,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// query is located with a single sorted search, so the lookup is a handful of engine calls instead
     /// of a scan per sample. <see cref="ClassLabels"/> does not have to be sorted.
     /// </remarks>
-    protected int[] GetClassIndicesFromLabels(Vector<T> labels)
+    private protected int[] GetClassIndicesFromLabels(Vector<T> labels)
     {
         return GetClassIndexTensor(labels).ToArray();
     }
@@ -388,7 +388,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="labels">The label values to look up.</param>
     /// <returns>The class index of each label, or -1 where a label is not a known class.</returns>
-    protected Tensor<int> GetClassIndexTensor(Vector<T> labels)
+    private protected Tensor<int> GetClassIndexTensor(Vector<T> labels)
     {
         int n = labels.Length;
         var result = new Tensor<int>(new[] { n });
@@ -413,7 +413,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="scores">A [samples, classes] score or probability matrix.</param>
     /// <returns>The arg-max column of each row.</returns>
-    protected Tensor<int> ArgMaxRows(Matrix<T> scores)
+    private protected Tensor<int> ArgMaxRows(Matrix<T> scores)
     {
         return Engine.TensorArgMax(Tensor<T>.FromMatrix(scores), 1);
     }
@@ -425,7 +425,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="indices">Class indices in [0, <paramref name="numClasses"/>).</param>
     /// <param name="numClasses">The number of classes.</param>
     /// <returns>The index values as T.</returns>
-    protected Vector<T> ClassIndicesToValues(Tensor<int> indices, int numClasses)
+    private protected Vector<T> ClassIndicesToValues(Tensor<int> indices, int numClasses)
     {
         if (indices.Length == 0)
         {
@@ -443,7 +443,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="weights">One weight per vector.</param>
     /// <param name="length">The vector length, used when <paramref name="vectors"/> is empty.</param>
     /// <returns>The weighted sum, or a zero vector when there is nothing to add.</returns>
-    protected Vector<T> WeightedSumOfVectors(IReadOnlyList<Vector<T>> vectors, Vector<T> weights, int length)
+    private protected Vector<T> WeightedSumOfVectors(IReadOnlyList<Vector<T>> vectors, Vector<T> weights, int length)
     {
         if (vectors.Count == 0 || length == 0)
         {
@@ -465,7 +465,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <summary>
     /// Truncates or zero-pads <paramref name="values"/> to exactly <paramref name="length"/> elements.
     /// </summary>
-    protected static Vector<T> FitToLength(Vector<T> values, int length)
+    private protected static Vector<T> FitToLength(Vector<T> values, int length)
     {
         if (values.Length == length)
         {
@@ -486,7 +486,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="y">The label vector.</param>
     /// <returns>The one-hot class membership matrix.</returns>
-    protected Tensor<T> ClassMembership(Vector<T> y)
+    private protected Tensor<T> ClassMembership(Vector<T> y)
     {
         var engine = Engine;
         if (y.Length == 0 || NumClasses == 0)
@@ -506,7 +506,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="matrix">The square matrix.</param>
     /// <returns>The (pseudo-)inverse.</returns>
-    protected static Matrix<T> InvertMatrix(Matrix<T> matrix)
+    private protected static Matrix<T> InvertMatrix(Matrix<T> matrix)
     {
         if (matrix.Rows == 0)
         {
@@ -527,7 +527,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="y">The label vector.</param>
     /// <param name="indices">The sample indices to take.</param>
     /// <returns>The selected rows and labels.</returns>
-    protected (Matrix<T> X, Vector<T> Y) SelectSamples(Matrix<T> x, Vector<T> y, int[] indices)
+    private protected (Matrix<T> X, Vector<T> Y) SelectSamples(Matrix<T> x, Vector<T> y, int[] indices)
     {
         if (indices.Length == 0)
         {
@@ -543,7 +543,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="values">The source vector.</param>
     /// <param name="indices">The indices to take (repeats allowed).</param>
     /// <returns>The gathered elements.</returns>
-    protected Vector<T> SelectElements(Vector<T> values, int[] indices)
+    private protected Vector<T> SelectElements(Vector<T> values, int[] indices)
     {
         if (indices.Length == 0)
         {
@@ -559,7 +559,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="x">The source matrix.</param>
     /// <param name="columns">The column indices to take.</param>
     /// <returns>The [x.Rows, columns.Length] matrix of selected columns.</returns>
-    protected Matrix<T> SelectColumns(Matrix<T> x, int[] columns)
+    private protected Matrix<T> SelectColumns(Matrix<T> x, int[] columns)
     {
         if (x.Rows == 0 || columns.Length == 0)
         {
@@ -578,7 +578,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="probabilities">The estimator's [n, k] probabilities.</param>
     /// <param name="sourceLabels">The estimator's class labels (column order of <paramref name="probabilities"/>).</param>
     /// <returns>The [n, NumClasses] aligned probabilities.</returns>
-    protected Matrix<T> AlignProbabilities(Matrix<T> probabilities, Vector<T>? sourceLabels)
+    private protected Matrix<T> AlignProbabilities(Matrix<T> probabilities, Vector<T>? sourceLabels)
     {
         var aligned = new Tensor<T>(new[] { probabilities.Rows, NumClasses });
         int usable = sourceLabels is null ? 0 : Math.Min(sourceLabels.Length, probabilities.Columns);
@@ -615,7 +615,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="values">The values to threshold.</param>
     /// <param name="threshold">The threshold.</param>
     /// <returns>The 0/1 indicator vector.</returns>
-    protected Vector<T> AtLeast(Vector<T> values, T threshold)
+    private protected Vector<T> AtLeast(Vector<T> values, T threshold)
     {
         if (values.Length == 0)
         {
@@ -631,7 +631,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="x">The source matrix.</param>
     /// <param name="count">The number of leading columns to keep.</param>
     /// <returns>The leading columns.</returns>
-    protected Matrix<T> LeadingColumns(Matrix<T> x, int count)
+    private protected Matrix<T> LeadingColumns(Matrix<T> x, int count)
     {
         return x.Columns == count ? x : SelectColumns(x, Enumerable.Range(0, count).ToArray());
     }
@@ -641,7 +641,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="zeroOne">Values that are exactly 0 or 1.</param>
     /// <returns>The 0/1 integers.</returns>
-    protected Tensor<int> ZeroOneToInt(Tensor<T> zeroOne)
+    private protected Tensor<int> ZeroOneToInt(Tensor<T> zeroOne)
     {
         // argmax over [1 - b, b] picks index b
         int axis = zeroOne.Shape.Length;
@@ -652,7 +652,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <summary>
     /// Serializes a matrix as its row-major T values plus its shape.
     /// </summary>
-    protected static void SerializeMatrixValues(Dictionary<string, object> data, string name, Matrix<T>? matrix)
+    private protected static void SerializeMatrixValues(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {
         if (matrix is null) return;
         data[name] = matrix.Rows == 0 || matrix.Columns == 0 ? Array.Empty<T>() : Tensor<T>.FromMatrix(matrix).ToArray();
@@ -663,7 +663,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <summary>
     /// Restores a matrix written by <see cref="SerializeMatrixValues"/> (null when absent or empty).
     /// </summary>
-    protected static Matrix<T>? DeserializeMatrixValues(Newtonsoft.Json.Linq.JObject obj, string name)
+    private protected static Matrix<T>? DeserializeMatrixValues(Newtonsoft.Json.Linq.JObject obj, string name)
     {
         var token = obj[name];
         if (token is null) return null;
@@ -685,7 +685,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <summary>
     /// Serializes a vector as its T values.
     /// </summary>
-    protected static void SerializeVectorValues(Dictionary<string, object> data, string name, Vector<T>? vector)
+    private protected static void SerializeVectorValues(Dictionary<string, object> data, string name, Vector<T>? vector)
     {
         if (vector is null) return;
         data[name] = vector.ToArray();
@@ -694,7 +694,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <summary>
     /// Restores a vector written by <see cref="SerializeVectorValues"/> (null when absent or empty).
     /// </summary>
-    protected static Vector<T>? DeserializeVectorValues(Newtonsoft.Json.Linq.JObject obj, string name)
+    private protected static Vector<T>? DeserializeVectorValues(Newtonsoft.Json.Linq.JObject obj, string name)
     {
         var token = obj[name];
         if (token is null) return null;
@@ -707,7 +707,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="votes">The [n, NumClasses] vote counts.</param>
     /// <returns>The winning class label per row.</returns>
-    protected Vector<T> MajorityVoteLabels(Tensor<T> votes)
+    private protected Vector<T> MajorityVoteLabels(Tensor<T> votes)
     {
         if (votes.Shape[0] == 0)
         {
@@ -720,7 +720,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <summary>
     /// Creates a vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
     /// </summary>
-    protected static Vector<T> FilledVector(int length, T value)
+    private protected static Vector<T> FilledVector(int length, T value)
     {
         var result = new Vector<T>(length);
         if (length > 0)
@@ -737,7 +737,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="probabilities">The probability matrix; column 1 holds P(positive).</param>
     /// <returns>The predicted class labels.</returns>
-    protected Vector<T> PredictBinaryLabels(Matrix<T> probabilities)
+    private protected Vector<T> PredictBinaryLabels(Matrix<T> probabilities)
     {
         var classLabels = ClassLabels ?? throw new InvalidOperationException("Model must be trained before making predictions.");
         int n = probabilities.Rows;
@@ -758,7 +758,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="logOdds">The log-odds of the positive class per sample.</param>
     /// <returns>The probability matrix.</returns>
-    protected Matrix<T> BinaryProbabilitiesFromLogOdds(Vector<T> logOdds)
+    private protected Matrix<T> BinaryProbabilitiesFromLogOdds(Vector<T> logOdds)
     {
         if (logOdds.Length == 0)
         {
@@ -778,7 +778,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="logOdds">The log-odds of the positive class per sample.</param>
     /// <param name="yBinary">The 0/1 targets.</param>
     /// <returns>The mean log loss (zero for no samples).</returns>
-    protected T ComputeBinaryLogLoss(Vector<T> logOdds, Vector<T> yBinary)
+    private protected T ComputeBinaryLogLoss(Vector<T> logOdds, Vector<T> yBinary)
     {
         if (logOdds.Length == 0)
         {
@@ -801,7 +801,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="columns">The columns, in order.</param>
     /// <returns>The matrix whose j-th column is <paramref name="columns"/>[j].</returns>
-    protected Matrix<T> StackColumns(IReadOnlyList<Vector<T>> columns)
+    private protected Matrix<T> StackColumns(IReadOnlyList<Vector<T>> columns)
     {
         var stacked = new Tensor<T>[columns.Count];
         for (int k = 0; k < stacked.Length; k++)
@@ -817,7 +817,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </summary>
     /// <param name="indices">Class indices in [0, ClassLabels.Length).</param>
     /// <returns>The class labels as T.</returns>
-    protected Vector<T> ClassIndicesToLabels(Tensor<int> indices)
+    private protected Vector<T> ClassIndicesToLabels(Tensor<int> indices)
     {
         if (ClassLabels is null || ClassLabels.Length == 0)
         {

@@ -345,7 +345,7 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
     /// </summary>
     /// <param name="y">The label vector.</param>
     /// <returns>The +1/-1 targets.</returns>
-    protected Vector<T> SignedBinaryTargets(Vector<T> y)
+    private protected Vector<T> SignedBinaryTargets(Vector<T> y)
     {
         if (ClassLabels is null || y.Length == 0)
         {
@@ -360,7 +360,7 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
     /// <summary>
     /// The first <see cref="ClassifierBase{T}.NumFeatures"/> values of row <paramref name="row"/>.
     /// </summary>
-    protected Vector<T> GetSample(Matrix<T> x, int row)
+    private protected Vector<T> GetSample(Matrix<T> x, int row)
     {
         return x.Columns == NumFeatures ? x.GetRow(row) : x.GetRowSegment(row, 0, NumFeatures);
     }
@@ -368,7 +368,7 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
     /// <summary>
     /// w = w + scale * sample.
     /// </summary>
-    protected void AddScaledSample(Vector<T> sample, T scale)
+    private protected void AddScaledSample(Vector<T> sample, T scale)
     {
         if (Weights is null) return;
         Weights = Engine.Add(Weights, Engine.Multiply(sample, scale));
