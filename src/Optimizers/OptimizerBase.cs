@@ -1812,6 +1812,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// True when |previous - current| is below <paramref name="tolerance"/>: the scalar per-iteration convergence
+    /// test shared by the iterative optimizers (one comparison per iteration, not per element).
+    /// </summary>
+    protected bool FitnessChangeBelow(T previous, T current, double tolerance)
+    {
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previous, current)), NumOps.FromDouble(tolerance));
+    }
+
+    /// <summary>
     /// Updates the iteration history with the current step data and checks if early stopping should be applied.
     /// </summary>
     /// <param name="iteration">The current iteration number.</param>
