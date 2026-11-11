@@ -182,6 +182,8 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         // Scale learning rate by sample count for stable convergence
         T scaledLearningRate = NumOps.Divide(NumOps.FromDouble(_options.LearningRate), NumOps.FromDouble(n));
         T interceptLearningRate = NumOps.FromDouble(_options.LearningRate);
+        T sampleCount = NumOps.FromDouble(n);
+        var interceptState = Engine.FillZero(1);
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             Vector<T> predictions = Predict(xStandardized);
@@ -198,8 +200,9 @@ public partial class LogisticRegression<T> : RegressionBase<T>
             Vector<T> gradientUpdate = gradient.Multiply(scaledLearningRate);
             Coefficients = Coefficients.Add(gradientUpdate);
             // Update intercept with original learning rate (averaged error)
-            T avgError = NumOps.Divide(errors.Sum(), NumOps.FromDouble(n));
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(interceptLearningRate, avgError));
+            var avgError = Engine.Divide(Engine.Fill(1, Engine.Sum(errors)), sampleCount);
+            interceptState = Engine.Add(interceptState, Engine.Multiply(avgError, interceptLearningRate));
+            Intercept = Engine.Sum(interceptState);
             if (HasConvergedScaled(gradient, n))
                 break;
         }
@@ -211,13 +214,8 @@ public partial class LogisticRegression<T> : RegressionBase<T>
 
         // Back to the caller's scale: a standardized fit b*(x - mu)/sigma + a is the same linear
         // predictor as (b/sigma) * x + (a - sum(b * mu / sigma)).
-        var rescaled = new Vector<T>(p);
-        T interceptShift = NumOps.Zero;
-        for (int j = 0; j < p; j++)
-        {
-            rescaled[j] = NumOps.Divide(Coefficients[j], featureStd[j]);
-            interceptShift = NumOps.Add(interceptShift, NumOps.Multiply(rescaled[j], featureMean[j]));
-        }
+        var rescaled = Engine.Divide(Coefficients, featureStd);
+        T interceptShift = Engine.DotProduct(rescaled, featureMean);
 
         Coefficients = rescaled;
         Intercept = NumOps.Subtract(Intercept, interceptShift);
@@ -232,33 +230,28 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     /// <returns>The per-feature mean and standard deviation; a constant column gets a deviation of 1.</returns>
     private (Vector<T> Mean, Vector<T> Std) ComputeStandardization(Matrix<T> x, int featureCount)
     {
-        var mean = new Vector<T>(featureCount);
-        var std = new Vector<T>(featureCount);
         int n = x.Rows;
-
-        for (int j = 0; j < featureCount; j++)
+        if (featureCount == 0 || n == 0)
         {
-            double sum = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(x[i, j]);
-            }
-            double m = sum / n;
-
-            double sq = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                double d = NumOps.ToDouble(x[i, j]) - m;
-                sq += d * d;
-            }
-            double s = Math.Sqrt(sq / n);
-            if (s < 1e-10) s = 1.0;
-
-            mean[j] = NumOps.FromDouble(m);
-            std[j] = NumOps.FromDouble(s);
+            // No data: zero means and unit deviations (matches the per-column fallback)
+            return (new Vector<T>(featureCount), Engine.Fill(featureCount, NumOps.One));
         }
 
-        return (mean, std);
+        // Population mean and deviation per column (two-pass), restricted to the first featureCount columns
+        var xTensor = Tensor<T>.FromMatrix(featureCount == x.Columns ? x : x.GetSubMatrix(0, 0, n, featureCount));
+        var meanRow = Engine.ReduceMean(xTensor, new[] { 0 }, keepDims: true);
+        var deviations = Engine.TensorSubtract(xTensor, Engine.TensorBroadcastTo(meanRow, new[] { n, featureCount }));
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorSquare(deviations), new[] { 0 }, keepDims: false), NumOps.FromDouble(n));
+        var rawStd = Engine.TensorSqrt(variance);
+
+        // A (near-)constant column gets a deviation of 1
+        var std = Engine.TensorWhere(
+            Engine.TensorLessThan(rawStd, NumOps.FromDouble(1e-10)),
+            Tensor<T>.FromVector(Engine.Fill(featureCount, NumOps.One)),
+            rawStd).ToVector();
+
+        return (meanRow.Reshape(new[] { featureCount }).ToVector(), std);
     }
 
     /// <summary>
@@ -266,16 +259,15 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     /// </summary>
     private Matrix<T> Standardize(Matrix<T> x, Vector<T> mean, Vector<T> std)
     {
-        var result = new Matrix<T>(x.Rows, x.Columns);
-        for (int i = 0; i < x.Rows; i++)
+        if (x.Rows == 0 || x.Columns == 0)
         {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                result[i, j] = NumOps.Divide(NumOps.Subtract(x[i, j], mean[j]), std[j]);
-            }
+            return new Matrix<T>(x.Rows, x.Columns);
         }
 
-        return result;
+        var shape = new[] { x.Rows, x.Columns };
+        var meanRow = Engine.TensorBroadcastTo(new Tensor<T>(new[] { 1, mean.Length }, mean), shape);
+        var stdRow = Engine.TensorBroadcastTo(new Tensor<T>(new[] { 1, std.Length }, std), shape);
+        return Engine.TensorDivide(Engine.TensorSubtract(Tensor<T>.FromMatrix(x), meanRow), stdRow).ToMatrix();
     }
 
     /// <summary>
