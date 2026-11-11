@@ -242,7 +242,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         var weightedSums = Engine.TensorMatMul(weights, grid);
         var totals = Engine.TensorMatMul(weights, Engine.TensorOnesLike(grid));
-        return Engine.TensorMultiply(weightedSums, Engine.TensorReciprocal(totals));
+        return DivideElementwise(weightedSums, totals);
     }
 
     /// <summary>

@@ -201,7 +201,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         var lagSums = Engine.TensorFlip(
             Engine.TensorSlice(correlation, new[] { N - _windowSize }, new[] { _windowSize }), new[] { 0 });
         var pairCounts = Engine.ScalarMinusTensor(NumOps.FromDouble(N), Engine.TensorArange<T>(0, _windowSize, 1));
-        var autocovariance = Engine.TensorMultiply(lagSums, Engine.TensorReciprocal(pairCounts));
+        var autocovariance = DivideElementwise(lagSums, pairCounts);
 
         var index = Engine.TensorArange<int>(0, _windowSize, 1);
         var lags = Engine.TensorAbs(Engine.TensorSubtract(
@@ -219,10 +219,10 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         Matrix<T> X = CreateTrajectoryMatrix();
         var leading = Engine.TensorSlice(Tensor<T>.FromMatrix(U), new[] { 0, 0 }, new[] { U.Rows, _numberOfComponents });
         var projected = Engine.TensorMatMul(Engine.TensorTranspose(Tensor<T>.FromMatrix(X)), leading);
-        var inverseS = Engine.TensorReciprocal(Engine.TensorSlice(Tensor<T>.FromVector(S), new[] { 0 }, new[] { _numberOfComponents }));
-        Matrix<T> V = Engine.TensorMultiply(
+        var leadingS = Engine.TensorSlice(Tensor<T>.FromVector(S), new[] { 0 }, new[] { _numberOfComponents });
+        Matrix<T> V = DivideElementwise(
             projected,
-            Engine.TensorBroadcastTo(inverseS.Reshape(new[] { 1, _numberOfComponents }), new[] { K, _numberOfComponents })).ToMatrix();
+            Engine.TensorBroadcastTo(leadingS.Reshape(new[] { 1, _numberOfComponents }), new[] { K, _numberOfComponents })).ToMatrix();
 
         // Truncate to the specified number of components
         U = U.Submatrix(0, _windowSize - 1, 0, _numberOfComponents - 1);
@@ -348,7 +348,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
             var X = Tensor<T>.FromMatrix(groupedComponents[k]);
             var sums = AntiDiagonalSums(X);
             var counts = AntiDiagonalSums(Engine.TensorOnesLike(X));
-            reconstructedComponents[k] = Engine.TensorMultiply(sums, Engine.TensorReciprocal(counts)).ToVector();
+            reconstructedComponents[k] = DivideElementwise(sums, counts).ToVector();
         }
 
         return reconstructedComponents;
