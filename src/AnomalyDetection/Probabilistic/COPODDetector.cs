@@ -70,15 +70,10 @@ public partial class COPODDetector<T> : AnomalyDetectorBase<T>
 
         // Pre-sort feature values for O(log n) ECDF lookups
         _sortedFeatureValues = new Vector<T>[_nFeatures];
+        var (sortedColumns, _) = Engine.TensorSort(AnomalyTensorOps.ToTensor(X), 0, false);
         for (int j = 0; j < _nFeatures; j++)
         {
-            var values = new T[_nSamples];
-            for (int i = 0; i < _nSamples; i++)
-            {
-                values[i] = X[i, j];
-            }
-            Array.Sort(values, (a, b) => NumOps.Compare(a, b));
-            _sortedFeatureValues[j] = new Vector<T>(values);
+            _sortedFeatureValues[j] = Engine.TensorSliceAxis(sortedColumns, 1, j).ToVector();
         }
 
         // Calculate scores for training data to set threshold
@@ -99,62 +94,32 @@ public partial class COPODDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
-
         T eps = NumOps.FromDouble(1e-10);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T score = NumOps.Zero;
-
-            // For each feature, compute the empirical tail probability
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                T value = X[i, j];
-
-                // Compute empirical CDF (left tail) and survival function (right tail)
-                T leftTailProb = ComputeECDF(j, value);
-                T rightTailProb = NumOps.Subtract(NumOps.One, leftTailProb);
-
-                // Add negative log of minimum tail probability (skewness-corrected)
-                T minTailProb = NumOps.LessThan(leftTailProb, rightTailProb) ? leftTailProb : rightTailProb;
-
-                // Avoid log(0)
-                if (NumOps.LessThan(minTailProb, eps)) minTailProb = eps;
-
-                score = NumOps.Subtract(score, NumOps.Log(minTailProb));
-            }
-
-            scores[i] = score;
-        }
-
-        return scores;
-    }
-
-    private T ComputeECDF(int featureIndex, T value)
-    {
         var sortedValues = _sortedFeatureValues;
         if (sortedValues == null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        // Linear search for count of values <= value (binary search needs IComparable<T>)
-        var featureValues = sortedValues[featureIndex];
-        int count = 0;
-        for (int i = 0; i < featureValues.Length; i++)
+        var engine = Engine;
+        var data = AnomalyTensorOps.ToTensor(X);
+        var scores = Tensor<T>.CreateZeros(new[] { X.Rows });
+        T half = NumOps.FromDouble(0.5);
+        T denominator = NumOps.FromDouble(_nSamples + 1);
+
+        // For each feature, compute the empirical tail probability
+        for (int j = 0; j < _nFeatures; j++)
         {
-            if (!NumOps.GreaterThan(featureValues[i], value))
-            {
-                count++;
-            }
-            else
-            {
-                break; // Values are sorted, so we can stop early
-            }
+            // Empirical CDF (left tail), adjusted to avoid 0 and 1: (count(values <= x) + 0.5) / (n + 1)
+            var atOrBelow = engine.TensorSearchSorted(sortedValues[j].AsTensor(), engine.TensorSliceAxis(data, 1, j), true);
+            var leftTailProb = engine.TensorDivideScalar(engine.TensorAddScalar(atOrBelow.Cast<T>(), half), denominator);
+            var rightTailProb = engine.ScalarMinusTensor(NumOps.One, leftTailProb);
+
+            // Add negative log of minimum tail probability, clamped away from 0 to avoid log(0)
+            var minTailProb = engine.TensorMax(engine.TensorMin(leftTailProb, rightTailProb), eps);
+            scores = engine.TensorSubtract(scores, engine.TensorLog(minTailProb));
         }
 
-        // Return proportion, adjusted to avoid 0 and 1
-        return NumOps.FromDouble((count + 0.5) / (_nSamples + 1));
+        return scores.ToVector();
     }
 }

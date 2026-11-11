@@ -73,15 +73,10 @@ public partial class ECODDetector<T> : AnomalyDetectorBase<T>
         // Store sorted values for each feature to compute empirical CDF
         _sortedFeatureValues = new Vector<T>[_nFeatures];
 
+        var (sortedColumns, _) = Engine.TensorSort(AnomalyTensorOps.ToTensor(X), 0, false);
         for (int j = 0; j < _nFeatures; j++)
         {
-            var featureValues = new T[X.Rows];
-            for (int i = 0; i < X.Rows; i++)
-            {
-                featureValues[i] = X[i, j];
-            }
-            Array.Sort(featureValues, (a, b) => NumOps.Compare(a, b));
-            _sortedFeatureValues[j] = new Vector<T>(featureValues);
+            _sortedFeatureValues[j] = Engine.TensorSliceAxis(sortedColumns, 1, j).ToVector();
         }
 
         // Calculate scores for training data to set threshold
@@ -102,55 +97,29 @@ public partial class ECODDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
-
         T eps = NumOps.FromDouble(1e-10);
         var sortedVals = _sortedFeatureValues ?? throw new InvalidOperationException("_sortedFeatureValues has not been initialized.");
 
-        for (int i = 0; i < X.Rows; i++)
+        var engine = Engine;
+        var data = AnomalyTensorOps.ToTensor(X);
+        var scores = Tensor<T>.CreateZeros(new[] { X.Rows });
+
+        for (int j = 0; j < _nFeatures; j++)
         {
-            T combinedScore = NumOps.Zero;
+            var sortedValues = sortedVals[j];
 
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                T value = X[i, j];
+            // Empirical CDF: F(x) = (number of training values <= x) / n
+            var atOrBelow = engine.TensorSearchSorted(sortedValues.AsTensor(), engine.TensorSliceAxis(data, 1, j), true);
+            var leftCdf = engine.TensorDivideScalar(atOrBelow.Cast<T>(), NumOps.FromDouble(sortedValues.Length));
+            var rightCdf = engine.ScalarMinusTensor(NumOps.One, leftCdf);
 
-                // Compute empirical CDF: F(x) = proportion of values <= x
-                T leftCdf = ComputeECDF(value, sortedVals[j]);
-                T rightCdf = NumOps.Subtract(NumOps.One, leftCdf);
+            // Minimum of the left and right tail probabilities, clamped away from 0 to avoid log(0)
+            var tailProb = engine.TensorMax(engine.TensorMin(leftCdf, rightCdf), eps);
 
-                // Use the minimum of left and right tail probabilities
-                T tailProb = NumOps.LessThan(leftCdf, rightCdf) ? leftCdf : rightCdf;
-
-                // Avoid log(0) by clamping
-                if (NumOps.LessThan(tailProb, eps)) tailProb = eps;
-
-                // Negative log probability (higher = more anomalous)
-                combinedScore = NumOps.Subtract(combinedScore, NumOps.Log(tailProb));
-            }
-
-            scores[i] = combinedScore;
+            // Negative log probability (higher = more anomalous)
+            scores = engine.TensorSubtract(scores, engine.TensorLog(tailProb));
         }
 
-        return scores;
-    }
-
-    private T ComputeECDF(T value, Vector<T> sortedValues)
-    {
-        // Linear search for count of values <= value (sorted array)
-        int left = 0;
-        int right = sortedValues.Length - 1;
-
-        while (left <= right)
-        {
-            int mid = (left + right) / 2;
-            if (!NumOps.GreaterThan(sortedValues[mid], value))
-                left = mid + 1;
-            else
-                right = mid - 1;
-        }
-
-        // CDF = (number of values <= x) / n
-        return NumOps.FromDouble((double)left / sortedValues.Length);
+        return scores.ToVector();
     }
 }
