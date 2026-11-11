@@ -147,6 +147,47 @@ internal static class RegressionEngineOps2
     }
 
     /// <summary>
+    /// True when every element of <paramref name="values"/> is finite (no NaN, no infinity).
+    /// </summary>
+    public static bool AllFinite<T>(Vector<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return true;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var tensor = values.AsTensor();
+        var notFinite = engine.TensorWhere(
+            engine.TensorIsFinite(tensor), engine.TensorZerosLike(tensor), engine.TensorOnesLike(tensor));
+        return engine.TensorCountNonzero(notFinite) == 0;
+    }
+
+    /// <summary>
+    /// Element-wise max(<paramref name="values"/>, <paramref name="floor"/>).
+    /// </summary>
+    public static Vector<T> ClampMin<T>(Vector<T> values, T floor)
+    {
+        return AiDotNetEngine.Current.TensorMax(values.AsTensor(), floor).ToVector();
+    }
+
+    /// <summary>
+    /// <paramref name="values"/> + <paramref name="scalar"/> element-wise.
+    /// </summary>
+    public static Vector<T> AddScalar<T>(Vector<T> values, T scalar)
+    {
+        return AiDotNetEngine.Current.TensorAddScalar(values.AsTensor(), scalar).ToVector();
+    }
+
+    /// <summary>
+    /// <paramref name="values"/> with <paramref name="last"/> appended.
+    /// </summary>
+    public static Vector<T> Append<T>(Vector<T> values, T last)
+    {
+        return Vector<T>.Concatenate(values, new Vector<T>(new[] { last }));
+    }
+
+    /// <summary>
     /// True when any element of <paramref name="mask"/> is non-zero.
     /// </summary>
     public static bool Any<T>(Tensor<T> mask)
