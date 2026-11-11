@@ -233,6 +233,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         T betaMinus1 = NumOps.FromDouble(_beta - 1);
         T l1Reg = NumOps.FromDouble(_alpha * _l1Ratio);
         T l2Reg = NumOps.FromDouble(_alpha * (1 - _l1Ratio));
+        T l1Eps = NumOps.Add(l1Reg, eps);
         T prevError = NumOps.MaxValue;
 
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -245,7 +246,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 engine.TensorAdd(
                     DimensionalityReductionOps.TransposeMatMul(w, engine.TensorPower(wh, betaMinus1)),
                     engine.TensorMultiplyScalar(h, l2Reg)),
-                NumOps.Add(l1Reg, eps));
+                l1Eps);
             h = engine.TensorClampMin(engine.TensorMultiply(h, engine.TensorDivide(numeratorH, denominatorH)), eps);
 
             // Update W: W *= (WH^(beta-2) * V) H^T / (WH^(beta-1) H^T + l1 + l2 W + eps)
@@ -256,7 +257,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 engine.TensorAdd(
                     DimensionalityReductionOps.MatMulTranspose(engine.TensorPower(wh, betaMinus1), h),
                     engine.TensorMultiplyScalar(w, l2Reg)),
-                NumOps.Add(l1Reg, eps));
+                l1Eps);
             w = engine.TensorClampMin(engine.TensorMultiply(w, engine.TensorDivide(numeratorW, denominatorW)), eps);
 
             // Check convergence
@@ -280,6 +281,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         T eps = NumOps.FromDouble(1e-10);
         T l2Reg = NumOps.FromDouble(_alpha * (1 - _l1Ratio));
         T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio);
+        T l2Eps = NumOps.Add(eps, l2Reg);
         T prevError = NumOps.MaxValue;
 
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -291,7 +293,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 var residual = ResidualWithout(v, w, h, c);                                 // [n, p]
                 var numerator = DimensionalityReductionOps.TransposeMatMul(wColumn, residual); // [1, p]
                 var denominator = engine.TensorAddScalar(
-                    engine.ReduceSum(engine.TensorSquare(wColumn), new[] { 0 }, true), NumOps.Add(eps, l2Reg));
+                    engine.ReduceSum(engine.TensorSquare(wColumn), new[] { 0 }, true), l2Eps);
                 var updated = engine.TensorClampMin(
                     engine.TensorDivide(DimensionalityReductionOps.SoftThreshold(numerator, l1Penalty), denominator), NumOps.Zero);
                 h = DimensionalityReductionOps.WithRow(h, c, updated);
@@ -304,7 +306,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 var residual = ResidualWithout(v, w, h, c);
                 var numerator = DimensionalityReductionOps.MatMulTranspose(residual, hRow); // [n, 1]
                 var denominator = engine.TensorAddScalar(
-                    engine.ReduceSum(engine.TensorSquare(hRow), new[] { 1 }, true), NumOps.Add(eps, l2Reg));
+                    engine.ReduceSum(engine.TensorSquare(hRow), new[] { 1 }, true), l2Eps);
                 var updated = engine.TensorClampMin(
                     engine.TensorDivide(DimensionalityReductionOps.SoftThreshold(numerator, l1Penalty), denominator), NumOps.Zero);
                 w = DimensionalityReductionOps.WithColumn(w, c, updated);

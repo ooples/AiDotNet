@@ -153,6 +153,8 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         T tol = NumOps.FromDouble(_tol);
         T sumFloor = NumOps.FromDouble(1e-10);
+        T infinity = NumOps.FromDouble(double.PositiveInfinity);
+        T two = NumOps.FromDouble(2.0);
         T prevObjective = NumOps.Zero;
         bool hasPrevious = false;
         double lr = _learningRate;
@@ -162,7 +164,7 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // Transformed data Y = X A^T and squared distances with the diagonal excluded (+inf)
             var y = DimensionalityReductionOps.MatMulTranspose(x, a);
             var distances = DimensionalityReductionOps.SquaredDistances(y, y);
-            engine.TensorFillDiagonalInPlace(distances, NumOps.FromDouble(double.PositiveInfinity));
+            engine.TensorFillDiagonalInPlace(distances, infinity);
 
             // Softmax p_ij = exp(-(d_ij - min_i)) / sum, rows with sum <= 1e-10 left unnormalized
             var minDist = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(distances), new[] { 1 }, true));
@@ -193,7 +195,7 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             var laplacian = engine.TensorSubtract(
                 engine.TensorDiag(degree), engine.TensorAdd(c, engine.TensorTranspose(c)));
             var gradient = engine.TensorMultiplyScalar(
-                DimensionalityReductionOps.TransposeMatMul(y, engine.TensorMatMul(laplacian, x)), NumOps.FromDouble(2.0));
+                DimensionalityReductionOps.TransposeMatMul(y, engine.TensorMatMul(laplacian, x)), two);
 
             // Gradient ascent (maximizing the objective)
             a = engine.TensorAdd(a, engine.TensorMultiplyScalar(gradient, DimensionalityReductionOps.Constant<T>(lr)));
