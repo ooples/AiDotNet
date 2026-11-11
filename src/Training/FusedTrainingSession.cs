@@ -307,12 +307,8 @@ internal sealed class FusedTrainingSession<T>
             return DeclineAndDropCommitted("optimizer clips gradients by value; the fused plan clips only by global norm");
         if (optimizerClip > 0.0)
             clip = clip > 0.0 ? Math.Min(clip, optimizerClip) : optimizerClip;
-        // The linked plan adds its L2 term only ahead of its clip (CompiledTrainingPlan.SetL2Regularization), so L2
-        // after the clip - PyTorch's order, the default - trains on the eager tape whenever both are on.
-        if (l2 > 0.0 && clip > 0.0
-            && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true })
-            return DeclineAndDropCommitted(
-                "L2 after the gradient clip has no fused form in the linked plan; the eager tape applies it");
+        // The plan adds its L2 term on the optimizer's side of the clip; after it is PyTorch's order, the default.
+        bool l2AfterClip = optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true };
 
         bool verifyPersistence = (!_persistenceVerified && !IsCommitted)
             || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval;
@@ -387,6 +383,7 @@ internal sealed class FusedTrainingSession<T>
                 owner: _owner,
                 l2Regularization: l2,
                 deferredLoss: deferredLoss,
+                l2AfterClip: l2AfterClip,
                 stateKey: _stateKey);
         }
         finally
