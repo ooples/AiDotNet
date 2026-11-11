@@ -249,16 +249,9 @@ public partial class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </summary>
     private Matrix<T> PrependInterceptColumn(Matrix<T> matrix)
     {
-        var result = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            result[i, 0] = NumOps.One;
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j + 1] = matrix[i, j];
-            }
-        }
-        return result;
+        var engine = AiDotNetEngine.Current;
+        var ones = new Tensor<T>(new[] { matrix.Rows, 1 }, engine.Fill(matrix.Rows, NumOps.One));
+        return engine.TensorConcatenate(new[] { ones, Tensor<T>.FromMatrix(matrix) }, 1).ToMatrix();
     }
 
     /// <summary>

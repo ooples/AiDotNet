@@ -142,11 +142,8 @@ public class MultipleRegression<T> : RegressionBase<T>
             return;
         }
 
-        var trace = NumOps.Zero;
-        for (var i = 0; i < n; i++)
-        {
-            trace = NumOps.Add(trace, matrix[i, i]);
-        }
+        var engine = AiDotNetEngine.Current;
+        var trace = engine.Sum(matrix.Diagonal());
 
         // ridge = 1e-9 * mean(diagonal), with a tiny absolute floor for a degenerate (zero-diagonal) matrix.
         var meanDiag = NumOps.Divide(trace, NumOps.FromDouble(n));
@@ -157,9 +154,7 @@ public class MultipleRegression<T> : RegressionBase<T>
             ridge = floor;
         }
 
-        for (var i = 0; i < n; i++)
-        {
-            matrix[i, i] = NumOps.Add(matrix[i, i], ridge);
-        }
+        var conditioned = engine.MatrixAdd(matrix, Matrix<T>.CreateDiagonal(engine.Fill(n, ridge)));
+        conditioned.AsSpan().CopyTo(matrix.AsWritableSpan());
     }
 }
