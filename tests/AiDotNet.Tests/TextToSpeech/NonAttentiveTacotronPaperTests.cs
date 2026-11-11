@@ -74,7 +74,7 @@ public class NonAttentiveTacotronPaperTests
         Assert.True(uncappedFrames > 2, $"The trained duration predictor yielded {uncappedFrames} frames.");
         ((NonAttentiveTacotronOptions)model.GetOptions()).MaxMelLength = 2;
         var output = model.Predict(tokens);
-        Assert.Equal(new[] { 2, MelBins }, output.Shape);
+        Assert.Equal(new[] { 2, MelBins }, output.Shape.ToArray());
         Assert.Equal(model.Predict(prefix).ToArray(), output.ToArray());
     }
 
