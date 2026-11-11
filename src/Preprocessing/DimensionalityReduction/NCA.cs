@@ -46,7 +46,7 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _transformationMatrix; // A: d x p (projects from p to d dimensions)
+    private Matrix<T>? _transformationMatrix; // A: d x p (projects from p to d dimensions)
     private int _nFeatures;
 
     /// <summary>
@@ -57,7 +57,7 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the learned transformation matrix.
     /// </summary>
-    public double[,]? TransformationMatrix => _transformationMatrix;
+    public Matrix<T>? TransformationMatrix => _transformationMatrix;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -120,6 +120,7 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="labels">The class labels for each sample.</param>
     internal void Fit(Matrix<T> data, int[] labels)
     {
+        var engine = Engine;
         int n = data.Rows;
 
         if (labels.Length != n)
@@ -136,189 +137,66 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Convert to double array with column selection
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, columnsToProcess[j]]);
-            }
-        }
+        var x = DimensionalityReductionOps.SelectColumns(
+            Tensor<T>.FromMatrix(data), DimensionalityReductionOps.IndexTensor(columnsToProcess));
 
-        // Initialize transformation matrix A (d x p) with small random values
-        var A = new double[_nComponents, p];
-        for (int i = 0; i < _nComponents; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                A[i, j] = (random.NextDouble() - 0.5) * 0.01;
-            }
-        }
+        // Initialize transformation matrix A (d x p) with small random values in [-0.005, 0.005)
+        var a = engine.TensorMultiplyScalar(
+            engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, _nComponents, p), NumOps.FromDouble(0.5)),
+            NumOps.FromDouble(0.01));
 
-        // Gradient descent optimization
-        double prevObjective = double.NegativeInfinity;
+        // same[i, j] = 1 when labels[i] == labels[j]
+        var labelValues = new Tensor<int>(labels, new[] { n }).Cast<T>();
+        var same = engine.TensorEquals(
+            engine.TensorSubtract(DimensionalityReductionOps.AsColumn(labelValues), DimensionalityReductionOps.AsRow(labelValues)),
+            NumOps.Zero);
+
+        T tol = NumOps.FromDouble(_tol);
+        T sumFloor = NumOps.FromDouble(1e-10);
+        T prevObjective = NumOps.Zero;
+        bool hasPrevious = false;
         double lr = _learningRate;
 
         for (int iter = 0; iter < _maxIter; iter++)
         {
-            // Compute transformed data: Y = X * A^T (n x d)
-            var Y = new double[n, _nComponents];
-            for (int i = 0; i < n; i++)
-            {
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    for (int j = 0; j < p; j++)
-                    {
-                        Y[i, d] += X[i, j] * A[d, j];
-                    }
-                }
-            }
+            // Transformed data Y = X A^T and squared distances with the diagonal excluded (+inf)
+            var y = DimensionalityReductionOps.MatMulTranspose(x, a);
+            var distances = DimensionalityReductionOps.SquaredDistances(y, y);
+            engine.TensorFillDiagonalInPlace(distances, NumOps.FromDouble(double.PositiveInfinity));
 
-            // Compute pairwise distances in transformed space
-            var distances = new double[n, n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (i == j) continue;
-                    for (int d = 0; d < _nComponents; d++)
-                    {
-                        double diff = Y[i, d] - Y[j, d];
-                        distances[i, j] += diff * diff;
-                    }
-                }
-            }
+            // Softmax p_ij = exp(-(d_ij - min_i)) / sum, rows with sum <= 1e-10 left unnormalized
+            var minDist = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(distances), new[] { 1 }, true));
+            var exponentials = engine.TensorExp(engine.TensorNegate(engine.TensorSubtract(distances, minDist)));
+            var sumExp = engine.ReduceSum(exponentials, new[] { 1 }, true);
+            var divisor = engine.TensorWhere(
+                engine.TensorGreaterThan(sumExp, sumFloor), sumExp, engine.TensorOnesLike(sumExp));
+            var probabilities = engine.TensorDivide(exponentials, divisor);
 
-            // Compute softmax probabilities p_ij with numerical stability
-            var probabilities = new double[n, n];
-            var sumExp = new double[n];
-            var minDist = new double[n];
-
-            // Find min distance per row (excluding diagonal) for numerical stability
-            for (int i = 0; i < n; i++)
-            {
-                minDist[i] = double.MaxValue;
-                for (int j = 0; j < n; j++)
-                {
-                    if (i != j && distances[i, j] < minDist[i])
-                    {
-                        minDist[i] = distances[i, j];
-                    }
-                }
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (i == j) continue;
-                    // Subtract min distance to prevent underflow (equivalent to multiplying by constant)
-                    probabilities[i, j] = Math.Exp(-(distances[i, j] - minDist[i]));
-                    sumExp[i] += probabilities[i, j];
-                }
-            }
-
-            // Normalize probabilities
-            for (int i = 0; i < n; i++)
-            {
-                if (sumExp[i] > 1e-10)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        probabilities[i, j] /= sumExp[i];
-                    }
-                }
-            }
-
-            // Compute p_i (probability of correct classification for point i)
-            var pi = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (labels[i] == labels[j])
-                    {
-                        pi[i] += probabilities[i, j];
-                    }
-                }
-            }
-
-            // Compute objective (sum of p_i)
-            double objective = 0;
-            for (int i = 0; i < n; i++)
-            {
-                objective += pi[i];
-            }
+            // p_i = sum over same-class j of p_ij; objective = sum_i p_i
+            var pi = engine.ReduceSum(engine.TensorMultiply(probabilities, same), new[] { 1 }, true);   // [n, 1]
+            T objective = engine.TensorSum(pi);
 
             // Check convergence
-            if (Math.Abs(objective - prevObjective) < _tol)
+            if (hasPrevious && DimensionalityReductionOps.ChangeBelow(objective, prevObjective, tol))
             {
                 break;
             }
+
             prevObjective = objective;
+            hasPrevious = true;
 
-            // Compute gradient
-            var gradient = new double[_nComponents, p];
+            // Gradient of the objective (Goldberger et al. 2005):
+            // df/dA = 2 A sum_ik c_ik x_ik x_ik^T with c_ik = p_ik (p_i - [y_i == y_k]),
+            // and sum_ik c_ik x_ik x_ik^T = X^T (diag(rowsum C + colsum C) - C - C^T) X.
+            var c = engine.TensorMultiply(probabilities, engine.TensorSubtract(pi, same));
+            var degree = engine.TensorAdd(DimensionalityReductionOps.RowSums(c), DimensionalityReductionOps.ColumnSums(c));
+            var laplacian = engine.TensorSubtract(
+                engine.TensorDiag(degree), engine.TensorAdd(c, engine.TensorTranspose(c)));
+            var gradient = engine.TensorMultiplyScalar(
+                DimensionalityReductionOps.TransposeMatMul(y, engine.TensorMatMul(laplacian, x)), NumOps.FromDouble(2.0));
 
-            for (int i = 0; i < n; i++)
-            {
-                // Compute weighted outer products
-                // First term: sum over k where y_k = y_i of p_ik * (x_i - x_k)
-                // Second term: p_i * sum over all k of p_ik * (x_i - x_k)
-
-                for (int k = 0; k < n; k++)
-                {
-                    if (i == k) continue;
-
-                    // Compute (x_i - x_k)
-                    var xDiff = new double[p];
-                    for (int j = 0; j < p; j++)
-                    {
-                        xDiff[j] = X[i, j] - X[k, j];
-                    }
-
-                    // Compute A * (x_i - x_k)
-                    var aDiff = new double[_nComponents];
-                    for (int d = 0; d < _nComponents; d++)
-                    {
-                        for (int j = 0; j < p; j++)
-                        {
-                            aDiff[d] += A[d, j] * xDiff[j];
-                        }
-                    }
-
-                    double coeff = 0;
-                    if (labels[i] == labels[k])
-                    {
-                        // Same class: attractive
-                        coeff = probabilities[i, k] * (1 - pi[i]);
-                    }
-                    else
-                    {
-                        // Different class: repulsive (weighted by p_i)
-                        coeff = -probabilities[i, k] * pi[i];
-                    }
-
-                    // Update gradient: 2 * coeff * A * (x_i - x_k) * (x_i - x_k)^T
-                    for (int d = 0; d < _nComponents; d++)
-                    {
-                        for (int j = 0; j < p; j++)
-                        {
-                            gradient[d, j] += 2 * coeff * aDiff[d] * xDiff[j];
-                        }
-                    }
-                }
-            }
-
-            // Update A using gradient ascent (maximizing objective)
-            for (int d = 0; d < _nComponents; d++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    A[d, j] += lr * gradient[d, j];
-                }
-            }
+            // Gradient ascent (maximizing the objective)
+            a = engine.TensorAdd(a, engine.TensorMultiplyScalar(gradient, DimensionalityReductionOps.Constant<T>(lr)));
 
             // Decay learning rate
             if (iter > 0 && iter % 20 == 0)
@@ -327,7 +205,7 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             }
         }
 
-        _transformationMatrix = A;
+        _transformationMatrix = a.ToMatrix();
     }
 
     /// <summary>
@@ -340,103 +218,26 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         // Without labels, initialize with PCA-like transformation
+        var engine = Engine;
         _nFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
 
-        var random = _randomState.HasValue
-            ? RandomHelper.CreateSeededRandom(_randomState.Value)
-            : RandomHelper.CreateSeededRandom(42);
+        // Center data and compute the covariance matrix (divided by n)
+        var x = Tensor<T>.FromMatrix(data);
+        var centered = DimensionalityReductionOps.SubtractRow(x, DimensionalityReductionOps.ColumnMeans(x));
+        var covariance = engine.TensorDivideScalar(
+            DimensionalityReductionOps.TransposeMatMul(centered, centered), NumOps.FromDouble(n));
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        // Top eigenvectors as the rows of A (zero rows past the feature count)
+        var (_, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(covariance, descending: true);
+        int available = Math.Min(_nComponents, p);
+        var rows = engine.TensorTranspose(DimensionalityReductionOps.FirstColumns(eigenvectors, available));
+        var a = available == _nComponents
+            ? rows
+            : engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { _nComponents - available, p }) }, 0);
 
-        // Center data
-        var mean = new double[p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                mean[j] += X[i, j];
-            }
-        }
-        for (int j = 0; j < p; j++) mean[j] /= n;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] -= mean[j];
-            }
-        }
-
-        // Compute covariance matrix
-        var C = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < n; k++)
-                {
-                    C[i, j] += X[k, i] * X[k, j];
-                }
-                C[i, j] /= n;
-            }
-        }
-
-        // Power iteration for top eigenvectors
-        var A = new double[_nComponents, p];
-        var Atemp = (double[,])C.Clone();
-
-        for (int d = 0; d < _nComponents; d++)
-        {
-            var v = new double[p];
-            for (int i = 0; i < p; i++) v[i] = random.NextDouble() - 0.5;
-
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Av = new double[p];
-                for (int i = 0; i < p; i++)
-                {
-                    for (int j = 0; j < p; j++) Av[i] += Atemp[i, j] * v[j];
-                }
-
-                double norm = 0;
-                for (int i = 0; i < p; i++) norm += Av[i] * Av[i];
-                norm = Math.Sqrt(norm);
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < p; i++) v[i] = Av[i] / norm;
-            }
-
-            for (int j = 0; j < p; j++) A[d, j] = v[j];
-
-            // Deflate
-            var Av2 = new double[p];
-            double lambda = 0;
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++) Av2[i] += Atemp[i, j] * v[j];
-                lambda += v[i] * Av2[i];
-            }
-
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    Atemp[i, j] -= lambda * v[i] * v[j];
-                }
-            }
-        }
-
-        _transformationMatrix = A;
+        _transformationMatrix = a.ToMatrix();
     }
 
     /// <summary>
@@ -461,7 +262,6 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("NCA has not been fitted.");
         }
 
-        int n = data.Rows;
         int p = data.Columns;
 
         if (p != _nFeatures)
@@ -471,22 +271,8 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        var result = new T[n, _nComponents];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int d = 0; d < _nComponents; d++)
-            {
-                double val = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    val += NumOps.ToDouble(data[i, j]) * _transformationMatrix[d, j];
-                }
-                result[i, d] = NumOps.FromDouble(val);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return DimensionalityReductionOps.MatMulTranspose(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromMatrix(_transformationMatrix)).ToMatrix();
     }
 
     /// <summary>
