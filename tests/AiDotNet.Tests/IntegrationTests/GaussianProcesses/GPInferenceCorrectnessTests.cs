@@ -156,6 +156,186 @@ public class GPInferenceCorrectnessTests
 
     #endregion
 
+    #region SparseGaussianProcess Reference Tests
+
+    /// <summary>
+    /// With every training point used as an inducing point, the FITC diagonal correction is
+    /// Lambda_i = k(x_i, x_i) - k_i^T Kuu^{-1} k_i. This test rebuilds the FITC posterior mean densely
+    /// (same jitters as the model: 1e-4 on Kuu, 1e-4 on Lambda, 1e-6 * mean diagonal on Ky) and checks
+    /// the model against it. A non-unit output scale makes the check sensitive to the Qff diagonal:
+    /// using ||Kuu^{-1} k_i||^2 instead of k_i^T Kuu^{-1} k_i gives Lambda close to 3 instead of 0 here.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SparseGaussianProcess_AllPointsInducing_MatchesDenseFitcReference()
+    {
+        var kernel = new ScaleKernel<double>(new GaussianKernel<double>(1.0), outputScale: 4.0);
+        int n = 8;
+        var X = new Matrix<double>(n, 1);
+        var y = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            X[i, 0] = 0.5 * i;
+            y[i] = Math.Sin(0.5 * i);
+        }
+
+        var gp = new SparseGaussianProcess<double>(kernel);
+        gp.Fit(X, y);
+
+        var K = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                K[i, j] = kernel.Calculate(X.GetRow(i), X.GetRow(j));
+
+        var kuu = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                kuu[i, j] = K[i, j] + (i == j ? 1e-4 : 0.0);
+
+        var d = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            var column = new double[n];
+            for (int r = 0; r < n; r++) column[r] = K[r, i];
+            var solved = DenseSolve(kuu, column);
+            double qff = 0;
+            for (int r = 0; r < n; r++) qff += column[r] * solved[r];
+            double lambda = Math.Max(K[i, i] - qff, 0.0);
+            d[i] = 1.0 / (lambda + 1e-4);
+        }
+
+        var ky = new double[n, n];
+        double trace = 0;
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                double sum = kuu[i, j];
+                for (int r = 0; r < n; r++) sum += K[i, r] * d[r] * K[j, r];
+                ky[i, j] = sum;
+            }
+            trace += ky[i, i];
+        }
+        double jitter = 1e-6 * trace / n;
+        for (int i = 0; i < n; i++) ky[i, i] += jitter;
+
+        var rhs = new double[n];
+        for (int i = 0; i < n; i++)
+            for (int r = 0; r < n; r++)
+                rhs[i] += K[i, r] * d[r] * y[r];
+        var alpha = DenseSolve(ky, rhs);
+
+        foreach (double xs in new[] { 0.25, 1.3, 2.0, 3.1 })
+        {
+            var point = new Vector<double>(new[] { xs });
+            double expected = 0;
+            for (int j = 0; j < n; j++) expected += kernel.Calculate(X.GetRow(j), point) * alpha[j];
+
+            var (mean, _) = gp.Predict(point);
+            Assert.True(Math.Abs(mean - expected) < 1e-5,
+                $"FITC mean at {xs}: expected {expected}, got {mean}");
+        }
+    }
+
+    private static double[] DenseSolve(double[,] a, double[] b)
+    {
+        int n = b.Length;
+        var m = (double[,])a.Clone();
+        var x = (double[])b.Clone();
+        for (int col = 0; col < n; col++)
+        {
+            int pivot = col;
+            for (int r = col + 1; r < n; r++)
+                if (Math.Abs(m[r, col]) > Math.Abs(m[pivot, col])) pivot = r;
+            for (int c = 0; c < n; c++) (m[col, c], m[pivot, c]) = (m[pivot, c], m[col, c]);
+            (x[col], x[pivot]) = (x[pivot], x[col]);
+            for (int r = col + 1; r < n; r++)
+            {
+                double factor = m[r, col] / m[col, col];
+                for (int c = col; c < n; c++) m[r, c] -= factor * m[col, c];
+                x[r] -= factor * x[col];
+            }
+        }
+        for (int r = n - 1; r >= 0; r--)
+        {
+            double sum = x[r];
+            for (int c = r + 1; c < n; c++) sum -= m[r, c] * x[c];
+            x[r] = sum / m[r, r];
+        }
+        return x;
+    }
+
+    #endregion
+
+    #region VariationalStrategies Reference Tests
+
+    /// <summary>
+    /// Checks the sparse variational ELBO against the closed form of Hensman et al. (2013) for a Gaussian
+    /// likelihood, computed densely with 2 inducing points:
+    /// Σ_i log N(y_i | k_iᵀKuu⁻¹m, σ²) - (1/2σ²) Σ_i (k_ii - k_iᵀKuu⁻¹k_i) - (1/2σ²) Σ_i k_iᵀKuu⁻¹ S Kuu⁻¹k_i
+    /// - ½ (tr(Kuu⁻¹S) + mᵀKuu⁻¹m - M + log|Kuu| - log|S|), with S = L_S L_Sᵀ and Kuu jittered by 1e-6.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task VariationalStrategies_ComputeELBO_MatchesSvgpClosedForm()
+    {
+        var kernel = new GaussianKernel<double>(1.0);
+        var strategies = new VariationalStrategies<double>();
+
+        var X = new Matrix<double>(3, 1);
+        X[0, 0] = 0.0; X[1, 0] = 0.7; X[2, 0] = 1.5;
+        var y = new Vector<double>(new[] { 0.3, -0.2, 0.8 });
+        var Z = new Matrix<double>(2, 1);
+        Z[0, 0] = 0.2; Z[1, 0] = 1.2;
+        var m = new Vector<double>(new[] { 0.1, -0.4 });
+        var LS = new Matrix<double>(2, 2);
+        LS[0, 0] = 0.5; LS[1, 0] = 0.2; LS[1, 1] = 0.4;
+        double noise = 0.25;
+
+        double actual = strategies.ComputeELBO(X, y, Z, kernel, noise, m, LS);
+
+        // Dense reference
+        double k00 = kernel.Calculate(Z.GetRow(0), Z.GetRow(0)) + 1e-6;
+        double k01 = kernel.Calculate(Z.GetRow(0), Z.GetRow(1));
+        double k11 = kernel.Calculate(Z.GetRow(1), Z.GetRow(1)) + 1e-6;
+        double det = k00 * k11 - k01 * k01;
+        double i00 = k11 / det, i01 = -k01 / det, i11 = k00 / det;
+
+        double s00 = LS[0, 0] * LS[0, 0];
+        double s01 = LS[0, 0] * LS[1, 0];
+        double s11 = LS[1, 0] * LS[1, 0] + LS[1, 1] * LS[1, 1];
+
+        double kinvM0 = i00 * m[0] + i01 * m[1];
+        double kinvM1 = i01 * m[0] + i11 * m[1];
+
+        double expected = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            var xi = X.GetRow(i);
+            double u0 = kernel.Calculate(Z.GetRow(0), xi);
+            double u1 = kernel.Calculate(Z.GetRow(1), xi);
+            double mu = u0 * kinvM0 + u1 * kinvM1;
+            double a0 = i00 * u0 + i01 * u1;
+            double a1 = i01 * u0 + i11 * u1;
+            double qii = u0 * a0 + u1 * a1;
+            double sVar = a0 * (s00 * a0 + s01 * a1) + a1 * (s01 * a0 + s11 * a1);
+            double kii = kernel.Calculate(xi, xi);
+            double diff = y[i] - mu;
+
+            expected += -0.5 * Math.Log(2 * Math.PI * noise) - 0.5 * diff * diff / noise;
+            expected -= 0.5 / noise * (kii - qii);
+            expected -= 0.5 / noise * sVar;
+        }
+
+        double traceKinvS = i00 * s00 + 2 * i01 * s01 + i11 * s11;
+        double quad = m[0] * kinvM0 + m[1] * kinvM1;
+        double logDetS = 2 * (Math.Log(LS[0, 0]) + Math.Log(LS[1, 1]));
+        expected -= 0.5 * (traceKinvS + quad - 2 + Math.Log(det) - logDetS);
+
+        Assert.True(Math.Abs(actual - expected) < 1e-8 * Math.Max(1.0, Math.Abs(expected)),
+            $"ELBO: expected {expected}, got {actual}");
+    }
+
+    #endregion
+
     #region BetaLikelihood Tests
 
     [Fact(Timeout = 120000)]
@@ -542,6 +722,82 @@ public class GPInferenceCorrectnessTests
 
         // The outlier at index 5 should be detected
         Assert.Contains(5, outlierIndices);
+    }
+
+    /// <summary>
+    /// As nu grows the Student-t likelihood tends to N(y | f, scale^2), for which EP is exact: every site becomes
+    /// tau = 1/scale^2, nu_site = y/scale^2, and the EP predictive distribution (Rasmussen &amp; Williams, GPML,
+    /// Alg. 3.5/3.6) equals GP regression with noise scale^2 (GPML eqs. 2.25-2.26):
+    /// mean k*^T (K + s^2 I)^-1 y and latent variance k** - k*^T (K + s^2 I)^-1 k*; the model adds scale^2.
+    /// The reference is computed by hand with a dense 3x3 Cholesky. At nu = 1e6 the likelihood differs from the
+    /// Gaussian by O(1/nu), hence the 1e-4 tolerance.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task StudentTGP_LargeNu_MatchesGaussianLikelihoodEpReference()
+    {
+        var kernel = new GaussianKernel<double>(1.0);
+        double scale = 1.0;
+        var gp = new StudentTGaussianProcess<double>(
+            kernel, nu: 1e6, scale: scale, maxIterations: 100, tolerance: 1e-12, damping: 1.0, jitter: 1e-12);
+
+        var X = new Matrix<double>(3, 1);
+        X[0, 0] = 0.0; X[1, 0] = 0.8; X[2, 0] = 1.7;
+        var y = new Vector<double>(new[] { 0.4, -0.3, 0.9 });
+        gp.Fit(X, y);
+
+        var xStar = new Vector<double>(new[] { 1.1 });
+        var (mean, variance) = gp.Predict(xStar);
+
+        // A = K + scale^2 I, factor A = L L^T by hand
+        var A = new double[3, 3];
+        var kStar = new double[3];
+        for (int i = 0; i < 3; i++)
+        {
+            kStar[i] = kernel.Calculate(X.GetRow(i), xStar);
+            for (int j = 0; j < 3; j++)
+            {
+                A[i, j] = kernel.Calculate(X.GetRow(i), X.GetRow(j)) + (i == j ? scale * scale : 0.0);
+            }
+        }
+
+        var L = new double[3, 3];
+        for (int j = 0; j < 3; j++)
+        {
+            double pivot = A[j, j];
+            for (int k = 0; k < j; k++) pivot -= L[j, k] * L[j, k];
+            L[j, j] = Math.Sqrt(pivot);
+            for (int i = j + 1; i < 3; i++)
+            {
+                double sum = A[i, j];
+                for (int k = 0; k < j; k++) sum -= L[i, k] * L[j, k];
+                L[i, j] = sum / L[j, j];
+            }
+        }
+
+        double[] ForwardSolve(double[] b)
+        {
+            var z = new double[3];
+            for (int i = 0; i < 3; i++)
+            {
+                double sum = b[i];
+                for (int k = 0; k < i; k++) sum -= L[i, k] * z[k];
+                z[i] = sum / L[i, i];
+            }
+            return z;
+        }
+
+        var zy = ForwardSolve(new[] { y[0], y[1], y[2] });
+        var zk = ForwardSolve(kStar);
+        double expectedMean = 0, reduction = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            expectedMean += zk[i] * zy[i];
+            reduction += zk[i] * zk[i];
+        }
+        double expectedVariance = kernel.Calculate(xStar, xStar) - reduction + scale * scale;
+
+        Assert.True(Math.Abs(mean - expectedMean) < 1e-4, $"mean: expected {expectedMean}, got {mean}");
+        Assert.True(Math.Abs(variance - expectedVariance) < 1e-4, $"variance: expected {expectedVariance}, got {variance}");
     }
 
     #endregion

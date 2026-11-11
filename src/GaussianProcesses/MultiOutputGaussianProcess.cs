@@ -171,9 +171,7 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
         // Throwing here made the model unusable through the IFullModel contract it implements.
         if (y is null)
             throw new ArgumentNullException(nameof(y));
-        var yMatrix = new Matrix<T>(y.Length, 1);
-        for (int i = 0; i < y.Length; i++)
-            yMatrix[i, 0] = y[i];
+        var yMatrix = Tensor<T>.FromVector(y).Reshape(new[] { y.Length, 1 }).ToMatrix();
         FitMultiOutput(X, yMatrix);
     }
 
@@ -211,40 +209,20 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
         // prior of fixed unit amplitude and no noise at all: targets far from zero or far larger than 1
         // could not be explained except as noise, and its uncertainty collapsed on noisy data.
         int n = X.Rows;
-        _outputMeans = new Vector<T>(Y.Columns);
-        var columns = new List<double[]>(Y.Columns);
-        for (int c = 0; c < Y.Columns; c++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += _numOps.ToDouble(Y[i, c]) / n;
-            _outputMeans[c] = _numOps.FromDouble(mean);
-
-            var column = new double[n];
-            for (int i = 0; i < n; i++)
-                column[i] = _numOps.ToDouble(Y[i, c]) - mean;
-            columns.Add(column);
-        }
-
-        var kernel = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                kernel[i, j] = _numOps.ToDouble(inputKernel[i, j]);
+        var engine = Engine;
+        var targets = Tensor<T>.FromMatrix(Y);
+        var meanRow = engine.ReduceMean(targets, new[] { 0 }, keepDims: true);
+        _outputMeans = meanRow.Reshape(new[] { Y.Columns }).ToVector();
+        var centered = engine.TensorSubtract(targets, engine.TensorBroadcastTo(meanRow, new[] { n, Y.Columns }));
 
         var (signal, noise) = GaussianProcessEvidence.FitSignalAndNoise(
-            kernel, columns, _noiseVariance, _hyperparameterOptimizationSteps, jitter: 1e-6);
-        _fittedSignalVariance = new Vector<T>(1);
-        _fittedSignalVariance[0] = _numOps.FromDouble(signal);
-        _fittedNoiseVariance = new Vector<T>(1);
-        _fittedNoiseVariance[0] = _numOps.FromDouble(noise);
+            Tensor<T>.FromMatrix(inputKernel), centered, _noiseVariance, _hyperparameterOptimizationSteps, jitter: 1e-6);
+        _fittedSignalVariance = Tensor<T>.CreateDefault(new[] { 1 }, signal).ToVector();
+        _fittedNoiseVariance = Tensor<T>.CreateDefault(new[] { 1 }, noise).ToVector();
 
-        _K = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                _K[i, j] = _numOps.Multiply(_fittedSignalVariance[0], inputKernel[i, j]);
-            _K[i, i] = _numOps.Add(_K[i, i], _fittedNoiseVariance[0]);
-        }
+        _K = GaussianProcessEngineOps.AddToDiagonal(
+            engine.MatrixMultiplyScalar(inputKernel, _fittedSignalVariance[0]),
+            _fittedNoiseVariance[0]);
 
         // Add adaptive jitter to diagonal for numerical stability.
         // Kernels like Exponential and Laplacian produce ill-conditioned matrices
@@ -252,23 +230,12 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
         // We check the condition number via the L diagonal ratio.
         AddJitter(_K);
 
-        // Solve for alpha using Cholesky decomposition
-        _alpha = new Matrix<T>(Y.Rows, Y.Columns);
-        for (int i = 0; i < Y.Columns; i++)
-        {
-            // The deviations from the output's mean - what the zero-mean prior describes.
-            var y_col = new Vector<T>(Y.Rows);
-            for (int r = 0; r < Y.Rows; r++)
-                y_col[r] = _numOps.Subtract(Y[r, i], _outputMeans[i]);
-            var alpha_col = MatrixSolutionHelper.SolveLinearSystem(_K, y_col, MatrixDecompositionType.Cholesky);
-            for (int j = 0; j < Y.Rows; j++)
-            {
-                _alpha[j, i] = alpha_col[j];
-            }
-        }
-
         // Store the Cholesky decomposition for later use in predictions
         _L = new CholeskyDecomposition<T>(_K).L;
+
+        // Solve K alpha = (Y - mean) for every output at once with the Cholesky factor.
+        // The deviations from each output's mean are what the zero-mean prior describes.
+        _alpha = Linalg.CholeskySolve(centered, Tensor<T>.FromMatrix(_L), upper: false).ToMatrix();
     }
 
     /// <summary>
@@ -334,29 +301,15 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     public (Vector<T> means, Matrix<T> covariance) PredictMultiOutput(Vector<T> x)
     {
         // The cross-covariance and the prior variance are the kernel scaled by the fitted signal variance.
-        var k_star = CalculateKernelVector(_X, x);
-        for (int j = 0; j < k_star.Length; j++)
-            k_star[j] = _numOps.Multiply(_fittedSignalVariance[0], k_star[j]);
-        var means = new Vector<T>(_Y.Columns);
+        var engine = Engine;
+        var k_star = engine.Multiply(CalculateKernelVector(_X, x), _fittedSignalVariance[0]);
 
-        for (int i = 0; i < _Y.Columns; i++)
-        {
-            means[i] = _outputMeans[i];
-            for (int j = 0; j < k_star.Length; j++)
-            {
-                means[i] = _numOps.Add(means[i], _numOps.Multiply(k_star[j], _alpha[j, i]));
-            }
-        }
+        var means = engine.Add(_outputMeans, engine.MatrixVectorMultiply(engine.MatrixTranspose(_alpha), k_star));
 
         var v = MatrixSolutionHelper.SolveLinearSystem(_K, k_star, MatrixDecompositionType.Cholesky);
         var variance = _numOps.Subtract(
             _numOps.Multiply(_fittedSignalVariance[0], _kernel.Calculate(x, x)), k_star.DotProduct(v));
-        var covariance = new Matrix<T>(_Y.Columns, _Y.Columns);
-
-        for (int i = 0; i < _Y.Columns; i++)
-        {
-            covariance[i, i] = variance;
-        }
+        var covariance = engine.TensorMultiplyScalar(engine.TensorEye<T>(_Y.Columns), variance).ToMatrix();
 
         return (means, covariance);
     }
@@ -413,55 +366,7 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Adds adaptive jitter to the diagonal of a kernel matrix for numerical stability.
     /// </summary>
-    private void AddJitter(Matrix<T> K)
-    {
-        double jitterValue = 1e-6;
-        const double maxJitter = 1e-1;
-
-        while (jitterValue <= maxJitter)
-        {
-            var jitter = _numOps.FromDouble(jitterValue);
-            for (int i = 0; i < K.Rows; i++)
-                K[i, i] = _numOps.Add(K[i, i], jitter);
-
-            try
-            {
-                var chol = new CholeskyDecomposition<T>(K);
-
-                double minDiag = double.MaxValue;
-                double maxDiag = 0;
-                bool hasNaN = false;
-                for (int i = 0; i < chol.L.Rows; i++)
-                {
-                    double d = _numOps.ToDouble(chol.L[i, i]);
-                    if (double.IsNaN(d) || double.IsInfinity(d) || d <= 0)
-                    {
-                        hasNaN = true;
-                        break;
-                    }
-                    minDiag = Math.Min(minDiag, d);
-                    maxDiag = Math.Max(maxDiag, d);
-                }
-
-                if (!hasNaN && minDiag > 0 && maxDiag / minDiag < 1e8)
-                    return;
-
-                for (int i = 0; i < K.Rows; i++)
-                    K[i, i] = _numOps.Subtract(K[i, i], jitter);
-                jitterValue *= 10;
-            }
-            catch (ArgumentException)
-            {
-                for (int i = 0; i < K.Rows; i++)
-                    K[i, i] = _numOps.Subtract(K[i, i], jitter);
-                jitterValue *= 10;
-            }
-        }
-
-        var maxJitterT = _numOps.FromDouble(maxJitter);
-        for (int i = 0; i < K.Rows; i++)
-            K[i, i] = _numOps.Add(K[i, i], maxJitterT);
-    }
+    private void AddJitter(Matrix<T> K) => GaussianProcessEngineOps.AddAdaptiveJitter(K);
 
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {

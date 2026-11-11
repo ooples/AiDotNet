@@ -1166,3 +1166,9 @@ override AiDotNet.Clustering.DistanceMetrics.EuclideanDistance<T>.ComputeRowPair
 override AiDotNet.Clustering.DistanceMetrics.MahalanobisDistance<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Clustering.DistanceMetrics.ManhattanDistance<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Clustering.DistanceMetrics.MinkowskiDistance<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.GaussianProcesses.BetaLikelihood<T>.LogLikelihood(AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, AiDotNet.Tensors.LinearAlgebra.Vector<T>! f) -> double
+AiDotNet.GaussianProcesses.BetaLikelihood<T>.LogLikelihood(AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, AiDotNet.Tensors.LinearAlgebra.Vector<T>! f) -> T
+*REMOVED*AiDotNet.GaussianProcesses.StudentTGaussianProcess<T>.GetOutlierWeights() -> double[]?
+AiDotNet.GaussianProcesses.StudentTGaussianProcess<T>.GetOutlierWeights() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.GaussianProcesses.HeteroscedasticGaussianProcess<T>.GetNoiseVariances() -> double[]?
+AiDotNet.GaussianProcesses.HeteroscedasticGaussianProcess<T>.GetNoiseVariances() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
