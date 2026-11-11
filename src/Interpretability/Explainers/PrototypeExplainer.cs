@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Interpretability.Helpers;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -120,115 +121,72 @@ public partial class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplana
 
         int numPrototypes = _prototypes.Rows;
         int numFeatures = instance.Length;
+        var engine = AiDotNetEngine.Current;
 
         // Get prediction for the instance
-        var instanceMatrix = CreateSingleRowMatrix(instance);
-        var prediction = _predictFunction(instanceMatrix)[0];
-        int predictedClass = (int)Math.Round(NumOps.ToDouble(prediction));
+        var prediction = _predictFunction(ExplainerTensorOps<T>.RowMatrix(instance))[0];
+        int predictedClass = NumOps.ToInt32(NumOps.Round(prediction));
 
-        // Compute distances to all prototypes
-        var distances = new (int index, double distance, T label, int labelClass)[numPrototypes];
-
-        for (int i = 0; i < numPrototypes; i++)
-        {
-            var prototype = _prototypes.GetRow(i);
-            double dist = ComputeDistance(instance, prototype);
-            T label = _prototypeLabels != null && i < _prototypeLabels.Length
-                ? _prototypeLabels[i]
-                : NumOps.Zero;
-            int labelClass = (int)Math.Round(NumOps.ToDouble(label));
-            distances[i] = (i, dist, label, labelClass);
-        }
+        // Compute distances to all prototypes, and their similarities 1 / (1 + distance)
+        var distances = ComputeDistances(instance);
+        var similarities = engine.TensorDivide(
+            engine.TensorFullLike(distances, NumOps.One), engine.TensorAddScalar(distances, NumOps.One));
+        var labels = _prototypeLabels != null
+            ? ExplainerTensorOps<T>.PadOrTruncate(_prototypeLabels, numPrototypes)
+            : new Vector<T>(numPrototypes);
+        var labelClasses = engine.TensorRound(labels.AsTensor()).Cast<int>().ToArray();
 
         // Sort by distance
-        Array.Sort(distances, (a, b) => a.distance.CompareTo(b.distance));
+        var order = numPrototypes > 0 ? engine.TensorSort(distances).Item2.ToArray() : Array.Empty<int>();
+        var distanceValues = distances.ToArray();
+        var similarityValues = similarities.ToArray();
+        var labelValues = labels.ToArray();
+        var sorted = order
+            .Select(i => (index: i, distance: distanceValues[i], similarity: similarityValues[i], label: labelValues[i], labelClass: labelClasses[i]))
+            .ToList();
+
+        PrototypeMatch<T> ToMatch((int index, T distance, T similarity, T label, int labelClass) d, bool isSameClass) => new PrototypeMatch<T>
+        {
+            PrototypeIndex = d.index,
+            PrototypeName = _prototypeNames != null && d.index < _prototypeNames.Length
+                ? _prototypeNames[d.index]
+                : $"Prototype {d.index}",
+            Distance = d.distance,
+            Similarity = d.similarity,
+            Label = d.label,
+            PrototypeFeatures = _prototypes.GetRow(d.index),
+            IsSameClass = isSameClass
+        };
 
         // Get K nearest neighbors
-        var nearestPrototypes = distances
+        var nearestPrototypes = sorted
             .Take(_numNeighbors)
-            .Select(d => new PrototypeMatch<T>
-            {
-                PrototypeIndex = d.index,
-                PrototypeName = _prototypeNames != null && d.index < _prototypeNames.Length
-                    ? _prototypeNames[d.index]
-                    : $"Prototype {d.index}",
-                Distance = NumOps.FromDouble(d.distance),
-                Similarity = NumOps.FromDouble(1.0 / (1.0 + d.distance)),
-                Label = d.label,
-                PrototypeFeatures = _prototypes.GetRow(d.index),
-                IsSameClass = d.labelClass == predictedClass
-            })
+            .Select(d => ToMatch(d, d.labelClass == predictedClass))
             .ToList();
 
         // Get same-class prototypes (supporting the prediction)
-        var sameClassPrototypes = distances
+        var sameClassPrototypes = sorted
             .Where(d => d.labelClass == predictedClass)
             .Take(_numNeighbors)
-            .Select(d => new PrototypeMatch<T>
-            {
-                PrototypeIndex = d.index,
-                PrototypeName = _prototypeNames != null && d.index < _prototypeNames.Length
-                    ? _prototypeNames[d.index]
-                    : $"Prototype {d.index}",
-                Distance = NumOps.FromDouble(d.distance),
-                Similarity = NumOps.FromDouble(1.0 / (1.0 + d.distance)),
-                Label = d.label,
-                PrototypeFeatures = _prototypes.GetRow(d.index),
-                IsSameClass = true
-            })
+            .Select(d => ToMatch(d, true))
             .ToList();
 
         // Get different-class prototypes (contrasting)
-        var contrastPrototypes = distances
+        var contrastPrototypes = sorted
             .Where(d => d.labelClass != predictedClass)
             .Take(_numNeighbors)
-            .Select(d => new PrototypeMatch<T>
-            {
-                PrototypeIndex = d.index,
-                PrototypeName = _prototypeNames != null && d.index < _prototypeNames.Length
-                    ? _prototypeNames[d.index]
-                    : $"Prototype {d.index}",
-                Distance = NumOps.FromDouble(d.distance),
-                Similarity = NumOps.FromDouble(1.0 / (1.0 + d.distance)),
-                Label = d.label,
-                PrototypeFeatures = _prototypes.GetRow(d.index),
-                IsSameClass = false
-            })
+            .Select(d => ToMatch(d, false))
             .ToList();
 
         // Compute feature differences with nearest same-class prototype
-        Dictionary<int, T>? featureDifferences = null;
-        if (sameClassPrototypes.Count > 0)
-        {
-            featureDifferences = new Dictionary<int, T>();
-            var nearestSame = sameClassPrototypes[0];
-            for (int j = 0; j < numFeatures; j++)
-            {
-                double diff = NumOps.ToDouble(instance[j]) - NumOps.ToDouble(nearestSame.PrototypeFeatures[j]);
-                if (Math.Abs(diff) > 1e-6)
-                {
-                    featureDifferences[j] = NumOps.FromDouble(diff);
-                }
-            }
-        }
+        Dictionary<int, T>? featureDifferences = sameClassPrototypes.Count > 0
+            ? SignificantDifferences(instance, sameClassPrototypes[0].PrototypeFeatures)
+            : null;
 
         // Compute distinguishing features (what makes this different from contrast prototypes)
-        Dictionary<int, T>? distinguishingFeatures = null;
-        if (contrastPrototypes.Count > 0)
-        {
-            distinguishingFeatures = new Dictionary<int, T>();
-            var nearestContrast = contrastPrototypes[0];
-            for (int j = 0; j < numFeatures; j++)
-            {
-                double instanceVal = NumOps.ToDouble(instance[j]);
-                double contrastVal = NumOps.ToDouble(nearestContrast.PrototypeFeatures[j]);
-                double diff = instanceVal - contrastVal;
-                if (Math.Abs(diff) > 1e-6)
-                {
-                    distinguishingFeatures[j] = NumOps.FromDouble(diff);
-                }
-            }
-        }
+        Dictionary<int, T>? distinguishingFeatures = contrastPrototypes.Count > 0
+            ? SignificantDifferences(instance, contrastPrototypes[0].PrototypeFeatures)
+            : null;
 
         return new PrototypeExplanation<T>
         {
@@ -245,6 +203,19 @@ public partial class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplana
         };
     }
 
+    /// <summary>
+    /// instance - prototype at the features where it exceeds 1e-6 in magnitude, keyed by feature index.
+    /// </summary>
+    private static Dictionary<int, T> SignificantDifferences(Vector<T> instance, Vector<T> prototype)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(instance, prototype.GetSubVector(0, instance.Length));
+        var significant = engine.TensorGreaterThan(engine.Abs(diff).AsTensor(), NumOps.FromDouble(1e-6)).ToVector();
+        var indices = significant.NonZeroIndices().ToList();
+        return indices.Zip(diff.GetElements(indices), (index, value) => (index, value))
+            .ToDictionary(entry => entry.index, entry => entry.value);
+    }
+
     /// <inheritdoc/>
     public PrototypeExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
@@ -259,27 +230,39 @@ public partial class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplana
     /// <summary>
     /// Computes distance between two vectors.
     /// </summary>
-    private double ComputeDistance(Vector<T> a, Vector<T> b)
+    private Tensor<T> ComputeDistances(Vector<T> instance)
     {
-        if (a.Length != b.Length)
-            throw new ArgumentException($"Vector dimensions must match for distance computation. Got {a.Length} and {b.Length}.");
-
-        return _distanceMetric switch
+        if (_prototypes.Rows == 0)
         {
-            DistanceMetric.Euclidean => NumOps.ToDouble(VectorHelper.EuclideanDistance(a, b)),
-            DistanceMetric.Manhattan => NumOps.ToDouble(VectorHelper.ManhattanDistance(a, b)),
-            DistanceMetric.Cosine => 1.0 - VectorHelper.CosineSimilarity(a, b),
-            _ => NumOps.ToDouble(VectorHelper.EuclideanDistance(a, b))
-        };
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var prototypes = Tensor<T>.FromMatrix(_prototypes);
+        var instanceRows = engine.TensorBroadcastTo(ExplainerTensorOps<T>.RowTensor(instance), prototypes.Shape);
+        var diff = engine.TensorSubtract(prototypes, instanceRows);
+
+        switch (_distanceMetric)
+        {
+            case DistanceMetric.Manhattan:
+                return engine.ReduceSum(engine.TensorAbs(diff), new[] { 1 }, false);
+            case DistanceMetric.Cosine:
+            {
+                // 1 - clamp(p . x / sqrt(|p|^2 |x|^2), -1, 1), with similarity 0 when the denominator is <= 1e-10
+                var dot = engine.MatrixVectorMultiply(_prototypes, instance).AsTensor();
+                var prototypeNorms = engine.ReduceSum(engine.TensorSquare(prototypes), new[] { 1 }, false);
+                var denominator = engine.TensorSqrt(engine.TensorMultiplyScalar(prototypeNorms, engine.DotProduct(instance, instance)));
+                var usable = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
+                var safeDenominator = engine.TensorWhere(usable, denominator, engine.TensorFullLike(denominator, NumOps.One));
+                var cosine = engine.TensorMax(engine.TensorMin(engine.TensorDivide(dot, safeDenominator), NumOps.One), NumOps.Negate(NumOps.One));
+                var similarity = engine.TensorWhere(usable, cosine, engine.TensorFullLike(cosine, NumOps.Zero));
+                return engine.TensorSubtract(engine.TensorFullLike(similarity, NumOps.One), similarity);
+            }
+            default:
+                return engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(diff), new[] { 1 }, false));
+        }
     }
 
-    private Matrix<T> CreateSingleRowMatrix(Vector<T> row)
-    {
-        var matrix = new Matrix<T>(1, row.Length);
-        for (int j = 0; j < row.Length; j++)
-            matrix[0, j] = row[j];
-        return matrix;
-    }
 }
 
 /// <summary>
@@ -419,19 +402,21 @@ public class PrototypeExplanation<T>
         lines.Add("Nearest Similar Examples (same class):");
         foreach (var proto in SameClassPrototypes.Take(3))
         {
-            lines.Add($"  {proto.PrototypeName}: distance={NumOps.ToDouble(proto.Distance):F4}, " +
-                      $"similarity={NumOps.ToDouble(proto.Similarity):F4}");
+            lines.Add($"  {proto.PrototypeName}: distance={proto.Distance:F4}, " +
+                      $"similarity={proto.Similarity:F4}");
         }
 
         if (ContrastPrototypes.Count > 0)
         {
             lines.Add("");
             lines.Add("Nearest Contrasting Examples (different class):");
-            foreach (var proto in ContrastPrototypes.Take(3))
+            var contrasts = ContrastPrototypes.Take(3).ToList();
+            var engine = AiDotNetEngine.Current;
+            var labelClasses = engine.TensorRound(new Vector<T>(contrasts.Select(proto => proto.Label)).AsTensor()).Cast<int>().ToArray();
+            foreach (var (proto, labelClass) in contrasts.Zip(labelClasses, (match, label) => (match, label)))
             {
-                int labelClass = (int)Math.Round(NumOps.ToDouble(proto.Label));
                 lines.Add($"  {proto.PrototypeName}: class={labelClass}, " +
-                          $"distance={NumOps.ToDouble(proto.Distance):F4}");
+                          $"distance={proto.Distance:F4}");
             }
         }
 
@@ -442,12 +427,17 @@ public class PrototypeExplanation<T>
             var sorted = DistinguishingFeatures
                 .OrderByDescending(kvp => Math.Abs(NumOps.ToDouble(kvp.Value)))
                 .Take(5);
-            foreach (var kvp in sorted)
+            var top = sorted.ToList();
+            var engine = AiDotNetEngine.Current;
+            var diffs = new Vector<T>(top.Select(kvp => kvp.Value)).AsTensor();
+            var magnitudes = engine.TensorAbs(diffs).ToArray();
+            var higher = engine.TensorGreaterThan(diffs, NumOps.Zero).Cast<int>().ToArray();
+            for (int k = 0; k < top.Count; k++)
             {
-                string featureName = kvp.Key < FeatureNames.Length ? FeatureNames[kvp.Key] : $"Feature {kvp.Key}";
-                double diff = NumOps.ToDouble(kvp.Value);
-                string direction = diff > 0 ? "higher" : "lower";
-                lines.Add($"  {featureName}: {Math.Abs(diff):F4} {direction}");
+                int featureIndex = top[k].Key;
+                string featureName = featureIndex < FeatureNames.Length ? FeatureNames[featureIndex] : $"Feature {featureIndex}";
+                string direction = higher[k] != 0 ? "higher" : "lower";
+                lines.Add($"  {featureName}: {magnitudes[k]:F4} {direction}");
             }
         }
 
