@@ -158,6 +158,17 @@ internal static class AnomalyTensorOps
         return engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(a, b)), new[] { 1 }, false);
     }
 
+    /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
+    internal static int[] NonzeroIndices<T>(Tensor<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        return Engine.TensorNonzero(values).ToArray();
+    }
+
     /// <summary>The rows of m at the given indices, in order.</summary>
     internal static Tensor<T> SelectRows<T>(Tensor<T> m, int[] rows)
     {

@@ -125,35 +125,21 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
+        var trainingData = _trainingData ?? throw new InvalidOperationException("Model not properly fitted.");
+        var engine = Engine;
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            int neighborCount = CountNeighborsInRadius(X, i);
+        // Neighbour counts within epsilon (a NaN distance is never "greater", so it counts, as before).
+        var distances = AnomalyTensorOps.PairwiseDistances(
+            AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData));
+        var outside = engine.ReduceSum(engine.TensorGreaterThan(distances, _fittedEpsilon), new[] { 1 }, false);
+        var neighborCount = engine.ScalarMinusTensor(NumOps.FromDouble(trainingData.Rows), outside);
 
-            // Score based on density — all in T
-            T score;
-            if (neighborCount >= _fittedMinPts)
-            {
-                // Core point — low anomaly score
-                score = NumOps.Divide(NumOps.One, NumOps.FromDouble(neighborCount + 1));
-            }
-            else if (neighborCount > 0)
-            {
-                // Border point — medium anomaly score
-                score = NumOps.Subtract(NumOps.One,
-                    NumOps.Divide(NumOps.FromDouble(neighborCount), NumOps.FromDouble(_fittedMinPts)));
-            }
-            else
-            {
-                // Noise point — high anomaly score
-                score = NumOps.One;
-            }
-
-            scores[i] = score;
-        }
-
-        return scores;
+        // Core point (count >= minPts): 1 / (count + 1). Border point: 1 - count / minPts, which is 1 for
+        // a noise point (count = 0).
+        T minPts = NumOps.FromDouble(_fittedMinPts);
+        var core = engine.TensorReciprocal(engine.TensorAddScalar(neighborCount, NumOps.One));
+        var border = engine.ScalarMinusTensor(NumOps.One, engine.TensorDivideScalar(neighborCount, minPts));
+        return engine.TensorWhere(engine.TensorLessThan(neighborCount, minPts), border, core).ToVector();
     }
 
     private int[] RunDBSCAN(Matrix<T> X)
@@ -225,70 +211,41 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
     {
         // K-distance method: find the elbow in sorted k-distances
         int k = _fittedMinPts;
-        var kDistances = new List<T>();
-
-        for (int i = 0; i < X.Rows; i++)
+        int n = X.Rows;
+        if (n - 1 < k)
         {
-            var distances = new List<T>();
-            // Extract row as Vector for vectorized distance computation
-            var pointI = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            for (int j = 0; j < X.Rows; j++)
-            {
-                if (i == j) continue;
-
-                var pointJ = new Vector<T>(X.GetRowReadOnlySpan(j).ToArray());
-
-                // Vectorized Euclidean distance via Engine
-                var diff = Engine.Subtract(pointI, pointJ);
-                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-                distances.Add(dist);
-            }
-
-            distances.Sort((a, b) => NumOps.Compare(a, b));
-            if (distances.Count >= k)
-            {
-                kDistances.Add(distances[k - 1]);
-            }
+            // No point has k other points, so there is no k-distance to take a percentile of.
+            throw new ArgumentOutOfRangeException(nameof(X),
+                $"Estimating epsilon needs more than minPts ({k}) samples; got {n}.");
         }
 
-        kDistances.Sort((a, b) => NumOps.Compare(a, b));
+        var engine = Engine;
+
+        // Distance of every point to its k-th nearest other point (self pushed to the end of each row).
+        var distances = AnomalyTensorOps.PairwiseDistances(X);
+        var self = engine.TensorEqScalar(engine.TensorEye<T>(n), NumOps.One);
+        var (sortedRows, _) = engine.TensorSort(engine.TensorMaskedFill(distances, self, NumOps.MaxValue), 1, false);
+        var kDistances = engine.TensorSliceAxis(sortedRows, 1, k - 1);
 
         // Use the 90th percentile k-distance as epsilon estimate
-        int elbowIdx = (int)(kDistances.Count * 0.9);
-        return kDistances[Math.Min(elbowIdx, kDistances.Count - 1)];
+        var (sortedKDistances, _) = engine.TensorSort(kDistances, 0, false);
+        int elbowIdx = (int)(n * 0.9);
+        return sortedKDistances[Math.Min(elbowIdx, n - 1)];
     }
 
     private List<int> GetNeighborsInRadius(Matrix<T> X, int pointIdx)
     {
-        var neighbors = new List<int>();
-        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
-
         var trainingData = _trainingData;
         if (trainingData == null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        for (int i = 0; i < trainingData.Rows; i++)
-        {
-            var refPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
-
-            // Vectorized distance via Engine
-            var diff = Engine.Subtract(point, refPoint);
-            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-
-            if (!NumOps.GreaterThan(dist, _fittedEpsilon))
-            {
-                neighbors.Add(i);
-            }
-        }
-
-        return neighbors;
-    }
-
-    private int CountNeighborsInRadius(Matrix<T> X, int pointIdx)
-    {
-        return GetNeighborsInRadius(X, pointIdx).Count;
+        // Training points whose distance is not greater than epsilon, in index order.
+        var engine = Engine;
+        var point = X.GetRow(pointIdx).AsTensor();
+        var dist = engine.TensorSqrt(AnomalyTensorOps.SquaredDistancesToPoint(AnomalyTensorOps.ToTensor(trainingData), point));
+        var within = engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(dist, _fittedEpsilon));
+        return new List<int>(AnomalyTensorOps.NonzeroIndices(within));
     }
 }
