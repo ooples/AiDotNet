@@ -1141,3 +1141,15 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+*REMOVED*AiDotNet.Interpretability.FaithfulnessAuditor<T>.Audit(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, double>! score, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! attributions) -> AiDotNet.Interpretability.FaithfulnessReport<T>!
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.Comprehensiveness.get -> double
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.DeletionAuc.get -> double
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.FaithfulnessScore.get -> double
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.InsertionAuc.get -> double
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.Sufficiency.get -> double
+AiDotNet.Interpretability.FaithfulnessAuditor<T>.Audit(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>! score, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! attributions) -> AiDotNet.Interpretability.FaithfulnessReport<T>!
+AiDotNet.Interpretability.FaithfulnessReport<T>.Comprehensiveness.get -> T
+AiDotNet.Interpretability.FaithfulnessReport<T>.DeletionAuc.get -> T
+AiDotNet.Interpretability.FaithfulnessReport<T>.FaithfulnessScore.get -> T
+AiDotNet.Interpretability.FaithfulnessReport<T>.InsertionAuc.get -> T
+AiDotNet.Interpretability.FaithfulnessReport<T>.Sufficiency.get -> T
