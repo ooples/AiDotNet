@@ -38,6 +38,7 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;
+    private readonly int? _randomState;
     private readonly double _alpha;
     private readonly int _diffusionTime;
     private readonly double _epsilon;
@@ -79,7 +80,7 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="alpha">Normalization factor (0 to 1). Defaults to 0.5.</param>
     /// <param name="diffusionTime">Number of diffusion steps. Defaults to 1.</param>
     /// <param name="epsilon">Kernel bandwidth. If 0, computed automatically. Defaults to 0.</param>
-    /// <param name="randomState">Kept for API compatibility; the eigen solver is deterministic.</param>
+    /// <param name="randomState">Random seed for reproducibility.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public DiffusionMaps(
         int nComponents = 2,
@@ -106,6 +107,7 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nComponents = nComponents;
+        _randomState = randomState;
         _alpha = alpha;
         _diffusionTime = diffusionTime;
         _epsilon = epsilon;
@@ -166,6 +168,9 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Step 8: Eigen-decomposition (M_s is positive semi-definite, so descending order = magnitude order)
         var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(ms, descending: true);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        eigenvectors = DimensionalityReductionOps.MatchStartSigns(eigenvectors,
+            DimensionalityReductionOps.SeededPowerIterationStarts<T>(_randomState ?? 42, Math.Min(n, _nComponents + 2), n, 0.0));
 
         // Step 9: Embedding from eigenvectors 1..nComponents (skipping the trivial first one) scaled by lambda^t
         var selected = engine.TensorNarrow(eigenvalues, 0, 1, _nComponents);

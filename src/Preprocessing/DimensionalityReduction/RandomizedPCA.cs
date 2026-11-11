@@ -165,6 +165,9 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // SVD of the small matrix: right singular vectors are the eigenvectors of B^T B
         var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(
             DimensionalityReductionOps.TransposeMatMul(b, b), descending: true);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        eigenvectors = DimensionalityReductionOps.MatchStartSigns(eigenvectors,
+            DimensionalityReductionOps.PowerIterationStarts<T>(random, _nComponents, p, 0.5));
         var singularValues = engine.TensorSqrt(
             engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, _nComponents), NumOps.Zero));
 

@@ -144,10 +144,13 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             weights[i] = new List<double>(flatWeights.Skip(i * k).Take(k));
         }
 
-        var y = initial.Cast<double>().ToMatrix();
+        var flat = initial.Cast<double>().AsSpan().ToArray();
+        var y = new double[n, _nComponents];
+        Buffer.BlockCopy(flat, 0, y, 0, flat.Length * sizeof(double));
         OptimizeWithNegativeSampling(y, neighbors, weights, n, random);
 
-        _embedding = Tensor<double>.FromMatrix(y).Cast<T>().ToMatrix();
+        Buffer.BlockCopy(y, 0, flat, 0, flat.Length * sizeof(double));
+        _embedding = new Tensor<double>(flat, new[] { n, _nComponents }).Cast<T>().ToMatrix();
     }
 
     /// <summary>
@@ -189,6 +192,10 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Top eigenvectors (zero columns past the feature count)
         var (_, vectors) = DimensionalityReductionOps.SymmetricEigen(covariance, descending: true);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        // (their draws come before the noise below, so the stream position matches)
+        vectors = DimensionalityReductionOps.MatchStartSigns(vectors,
+            DimensionalityReductionOps.PowerIterationStarts<T>(random, _nComponents, p, 0.5));
         int available = Math.Min(_nComponents, p);
         var projected = engine.TensorMatMul(centered, DimensionalityReductionOps.FirstColumns(vectors, available));
         if (available < _nComponents)
@@ -208,7 +215,7 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// layout kernel; see missing-ops.txt.
     /// </summary>
     private void OptimizeWithNegativeSampling(
-        Matrix<double> Y,
+        double[,] Y,
         List<int>[] neighbors,
         List<double>[] weights,
         int n,

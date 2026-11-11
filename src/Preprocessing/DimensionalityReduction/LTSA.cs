@@ -38,6 +38,7 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 public class LTSA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;
+    private readonly int? _randomState;
     private readonly int _nNeighbors;
 
     // Fitted parameters
@@ -69,7 +70,7 @@ public class LTSA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     /// <param name="nComponents">Target dimensionality. Defaults to 2.</param>
     /// <param name="nNeighbors">Number of neighbors. Defaults to 5.</param>
-    /// <param name="randomState">Kept for API compatibility; the eigen solver is deterministic.</param>
+    /// <param name="randomState">Random seed for reproducibility.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public LTSA(
         int nComponents = 2,
@@ -89,6 +90,7 @@ public class LTSA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nComponents = nComponents;
+        _randomState = randomState;
         _nNeighbors = nNeighbors;
     }
 
@@ -130,6 +132,10 @@ public class LTSA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Step 3: Eigenvectors of B in ascending eigenvalue order
         var (_, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(b, descending: false);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        // (on shift I - M, so ascending order here is their order)
+        eigenvectors = DimensionalityReductionOps.MatchStartSigns(eigenvectors,
+            DimensionalityReductionOps.SeededPowerIterationStarts<T>(_randomState ?? 42, Math.Min(n, _nComponents + 2), n, 0.5));
 
         // Step 4: Create embedding (skip first eigenvector)
         var columns = new int[_nComponents];

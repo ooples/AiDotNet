@@ -159,7 +159,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var weights = ComputeTripletWeights(anchors, positives, negatives, isRandom, distances, n);
 
         // Step 4: Initialize embedding with PCA
-        var y = InitializeWithPCA(x, n);
+        var y = InitializeWithPCA(x, n, random);
 
         // Step 5: Optimize using triplet loss
         _embedding = OptimizeEmbedding(y, anchors, positives, negatives, weights).ToMatrix();
@@ -282,7 +282,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>Centered data projected on the top principal axes, each component scaled to unit variance.</summary>
-    private Tensor<T> InitializeWithPCA(Tensor<T> x, int n)
+    private Tensor<T> InitializeWithPCA(Tensor<T> x, int n, Random random)
     {
         var engine = Engine;
         int p = x.Shape[1];
@@ -292,6 +292,9 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Top eigenvectors (zero columns past the feature count)
         var (_, vectors) = DimensionalityReductionOps.SymmetricEigen(covariance, descending: true);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        vectors = DimensionalityReductionOps.MatchStartSigns(vectors,
+            DimensionalityReductionOps.PowerIterationStarts<T>(random, _nComponents, x.Shape[1], 0.5));
         int available = Math.Min(_nComponents, p);
         var y = engine.TensorMatMul(centered, DimensionalityReductionOps.FirstColumns(vectors, available));
         if (available < _nComponents)

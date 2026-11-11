@@ -150,6 +150,47 @@ internal static class DimensionalityReductionOps
         Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(random, rows, columns));
 
     /// <summary>
+    /// The start vectors of a deflated power iteration drawn like the original scalar code: <paramref name="count"/>
+    /// rows of <paramref name="length"/> values NextDouble() - <paramref name="offset"/>, consuming
+    /// <paramref name="random"/> in that order.
+    /// </summary>
+    internal static Tensor<T> PowerIterationStarts<T>(Random random, int count, int length, double offset) =>
+        Engine.TensorSubtractScalar(Uniform<T>(random, count, length), MathHelper.GetNumericOperations<T>().FromDouble(offset));
+
+    /// <summary>
+    /// Power iteration start vectors where component k drew from its own generator seeded with
+    /// <paramref name="seed"/> + k.
+    /// </summary>
+    internal static Tensor<T> SeededPowerIterationStarts<T>(int seed, int count, int length, double offset)
+    {
+        var rows = new Tensor<T>[count];
+        for (int k = 0; k < count; k++)
+            rows[k] = PowerIterationStarts<T>(RandomHelper.CreateSeededRandom(seed + k), 1, length, offset);
+        return Engine.TensorConcatenate(rows, 0);
+    }
+
+    /// <summary>
+    /// Gives the first starts.Shape[0] eigenvector columns of <paramref name="vectors"/> the sign power iteration
+    /// converges to from the matching start row (non-negative dot product), so a converged deflated power iteration
+    /// and this exact eigensolver return the same vectors; later columns are unchanged.
+    /// </summary>
+    internal static Tensor<T> MatchStartSigns<T>(Tensor<T> vectors, Tensor<T> starts)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int count = Math.Min(starts.Shape[0], vectors.Shape[1]);
+        var lead = FirstColumns(vectors, count);
+        var dots = engine.ReduceSum(
+            engine.TensorMultiply(lead, engine.TensorTranspose(FirstRows(starts, count))), new[] { 0 }, true);
+        var negative = engine.TensorLessThan(dots, numOps.Zero);
+        var sign = engine.TensorAddScalar(engine.TensorMultiplyScalar(negative, numOps.FromDouble(-2.0)), numOps.One);
+        lead = engine.TensorMultiply(lead, sign);
+        return count == vectors.Shape[1]
+            ? lead
+            : engine.TensorConcatenate(new[] { lead, engine.TensorNarrow(vectors, 1, count, vectors.Shape[1] - count) }, 1);
+    }
+
+    /// <summary>
     /// Row-major [rows, columns] standard normal draws consuming <paramref name="random"/> exactly like a nested
     /// loop of <c>RandomExtensions.NextGaussian</c>: two NextDouble values per entry (u1 then u2),
     /// z = sqrt(-2 ln max(u1, double.Epsilon)) sin(2 pi u2).
@@ -229,13 +270,15 @@ internal static class DimensionalityReductionOps
     /// Classical (Torgerson) MDS of a distance matrix: the leading <paramref name="components"/> eigenvectors of the
     /// double-centred squared distances, each scaled by sqrt(max(eigenvalue, 0)).
     /// </summary>
-    internal static Tensor<T> ClassicalMds<T>(Tensor<T> distances, int components)
+    internal static Tensor<T> ClassicalMds<T>(Tensor<T> distances, int components, Tensor<T>? powerIterationStarts = null)
     {
         var engine = Engine;
         var numOps = MathHelper.GetNumericOperations<T>();
         int k = Math.Min(components, distances.Shape[0]);
         var b = DoubleCenter(engine.TensorSquare(distances));
         var (values, vectors) = SymmetricEigen(b, descending: true);
+        if (powerIterationStarts is not null)
+            vectors = MatchStartSigns(vectors, powerIterationStarts);
         var scale = engine.TensorSqrt(engine.TensorClampMin(engine.TensorNarrow(values, 0, 0, k), numOps.Zero));
         return ScaleColumns(FirstColumns(vectors, k), scale);
     }

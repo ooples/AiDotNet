@@ -31,6 +31,7 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;
+    private readonly int? _randomState;
     private readonly SpectralAffinity _affinity;
     private readonly double _gamma;
     private readonly int _nNeighbors;
@@ -83,7 +84,7 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="affinity">How to construct the affinity matrix. Defaults to NearestNeighbors.</param>
     /// <param name="gamma">Kernel coefficient for RBF. If null, uses 1/n_features.</param>
     /// <param name="nNeighbors">Number of neighbors for NN affinity. Defaults to 10.</param>
-    /// <param name="randomState">Kept for API compatibility; the eigen solver is deterministic.</param>
+    /// <param name="randomState">Random seed for reproducibility.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public SpectralEmbedding(
         int nComponents = 2,
@@ -105,6 +106,7 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nComponents = nComponents;
+        _randomState = randomState;
         _affinity = affinity;
         _gamma = gamma ?? 0; // Will be computed during fit
         _nNeighbors = nNeighbors;
@@ -192,6 +194,10 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         // Eigenvectors of L in ascending eigenvalue order (ties in index order)
         var (_, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(laplacian, descending: false);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        // (on L itself, largest first, so their start vectors are reversed for this ascending order)
+        var starts = DimensionalityReductionOps.SeededPowerIterationStarts<T>(_randomState ?? 42, n, n, 0.5);
+        eigenvectors = DimensionalityReductionOps.MatchStartSigns(eigenvectors, Engine.TensorFlip(starts, new[] { 0 }));
 
         // Take eigenvectors 1 to nComponents (skip the first which is constant)
         int nComp = Math.Min(_nComponents, n - 1);

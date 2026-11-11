@@ -166,7 +166,7 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var (nearbyPairs, midNearPairs, furtherPairs) = GeneratePairs(distances, n, random);
 
         // Step 3: Initialize embedding with PCA
-        var y = InitializeWithPCA(x, n);
+        var y = InitializeWithPCA(x, n, random);
 
         // Step 4: Optimize using PaCMAP loss
         _embedding = OptimizeEmbedding(y, nearbyPairs, midNearPairs, furtherPairs).ToMatrix();
@@ -242,13 +242,16 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>Centered data projected on the top principal axes, scaled by 1e-4.</summary>
-    private Tensor<T> InitializeWithPCA(Tensor<T> x, int n)
+    private Tensor<T> InitializeWithPCA(Tensor<T> x, int n, Random random)
     {
         var engine = Engine;
         var centered = DimensionalityReductionOps.SubtractRow(x, DimensionalityReductionOps.ColumnMeans(x));
         var covariance = engine.TensorDivideScalar(
             DimensionalityReductionOps.TransposeMatMul(centered, centered), NumOps.FromDouble(n));
         var (_, vectors) = DimensionalityReductionOps.SymmetricEigen(covariance, descending: true);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        vectors = DimensionalityReductionOps.MatchStartSigns(vectors,
+            DimensionalityReductionOps.PowerIterationStarts<T>(random, _nComponents, x.Shape[1], 0.5));
         var projected = engine.TensorMatMul(centered, DimensionalityReductionOps.FirstColumns(vectors, _nComponents));
         return engine.TensorMultiplyScalar(projected, NumOps.FromDouble(0.0001));
     }

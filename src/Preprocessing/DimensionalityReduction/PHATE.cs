@@ -41,6 +41,7 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 public class PHATE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;
+    private readonly int? _randomState;
     private readonly int _nNeighbors;
     private readonly int _diffusionTime;
     private readonly double _decay;
@@ -83,7 +84,7 @@ public class PHATE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="diffusionTime">Number of diffusion steps. Defaults to auto (-1) or use specific value.</param>
     /// <param name="decay">Alpha decay for kernel. Defaults to 40.</param>
     /// <param name="gamma">Informational distance parameter. Defaults to 1 (log potential).</param>
-    /// <param name="randomState">Kept for API compatibility; the eigen solver is deterministic.</param>
+    /// <param name="randomState">Random seed for reproducibility.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public PHATE(
         int nComponents = 2,
@@ -106,6 +107,7 @@ public class PHATE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nComponents = nComponents;
+        _randomState = randomState;
         _nNeighbors = nNeighbors;
         _diffusionTime = diffusionTime;
         _decay = decay;
@@ -138,7 +140,10 @@ public class PHATE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var potentialDistance = ComputePotentialDistance(pt);
 
         // Step 6: Embed using classical MDS (zero columns past the sample count)
-        var embedding = DimensionalityReductionOps.ClassicalMds(potentialDistance, _nComponents);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        var random = RandomHelper.CreateSeededRandom(_randomState ?? 42);
+        var starts = DimensionalityReductionOps.PowerIterationStarts<T>(random, Math.Min(n, _nComponents + 2), n, 0.5);
+        var embedding = DimensionalityReductionOps.ClassicalMds(potentialDistance, _nComponents, starts);
         if (embedding.Shape[1] < _nComponents)
         {
             embedding = Engine.TensorConcatenate(

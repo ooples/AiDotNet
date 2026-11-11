@@ -33,6 +33,7 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;
+    private readonly int _randomState;
     private readonly int _nIterations;
 
     // Fitted parameters
@@ -82,7 +83,7 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     /// <param name="nComponents">Number of components to keep. Defaults to 2.</param>
     /// <param name="nIterations">Iteration budget kept for API compatibility (the decomposition is exact). Defaults to 5.</param>
-    /// <param name="randomState">Accepted for API compatibility; the exact eigen solve draws no random numbers. Defaults to 0.</param>
+    /// <param name="randomState">Random seed for reproducibility. Defaults to 0.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public TruncatedSVD(
         int nComponents = 2,
@@ -102,6 +103,7 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nComponents = nComponents;
+        _randomState = randomState;
         _nIterations = nIterations;
     }
 
@@ -122,6 +124,9 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Right singular vectors are the eigenvectors of X^T X; the singular values are sqrt(eigenvalues)
         var gram = DimensionalityReductionOps.TransposeMatMul(x, x);
         var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(gram, descending: true);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        eigenvectors = DimensionalityReductionOps.MatchStartSigns(eigenvectors,
+            DimensionalityReductionOps.PowerIterationStarts<T>(RandomHelper.CreateSeededRandom(_randomState), k, p, 0.5));
         var explainedVariance = engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, k), NumOps.Zero);
 
         T totalVariance = engine.TensorSum(engine.TensorSquare(x));
