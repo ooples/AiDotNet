@@ -167,7 +167,7 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
             return result;
         }
 
-        // a[0] + sum_{k=1..n} a[k] cos(f_k x) + sum_{k=1..n-1} b[k - 1] sin(f_k x)
+        // a[0] (already halved to the mean) + sum_{k=1..n} a[k] cos(f_k x) + sum_{k=1..n-1} b[k - 1] sin(f_k x)
         var engine = AiDotNetEngine.Current;
         Tensor<T> angles = engine.TensorMultiplyScalar(engine.TensorSlice(_frequencies, new[] { 1 }, new[] { n }), x);
         Tensor<T> cosineCoefficients = engine.TensorSlice(_a.AsTensor(), new[] { 1 }, new[] { n });
@@ -212,9 +212,17 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
         T twoOverN = _numOps.Divide(_numOps.FromDouble(2), _numOps.FromDouble(count));
         Tensor<T> ys = _y.AsTensor().Reshape(count, 1);
 
-        // a[k] = 2/N * sum_j y[j] cos(f_k x[j]) for k = 0..n, one row of angles per frequency
-        Vector<T> a = engine.TensorMultiplyScalar(ProjectOnto(engine, _frequencies, ys, cosine: true), twoOverN)
-            .Reshape(n + 1).ToVector();
+        // a[k] = 2/N * sum_j y[j] cos(f_k x[j]) for k = 0..n, one row of angles per frequency. The interpolant is
+        // a[0] / 2 + sum_k (a[k] cos + b[k] sin), so the stored constant term is halved to the data mean:
+        // scale = [1/2, 1, ..., 1] applied in one engine multiply.
+        Tensor<T> cosineProjections = engine.TensorMultiplyScalar(
+            ProjectOnto(engine, _frequencies, ys, cosine: true), twoOverN).Reshape(n + 1);
+        Tensor<T> scale = engine.TensorConcatenate(new[]
+        {
+            Tensor<T>.CreateDefault(new[] { 1 }, _numOps.FromDouble(0.5)),
+            Tensor<T>.CreateDefault(new[] { n }, _numOps.One)
+        }, 0);
+        Vector<T> a = engine.TensorMultiply(cosineProjections, scale).ToVector();
 
         // b[k - 1] = 2/N * sum_j y[j] sin(f_k x[j]) for k = 1..n-1; the last sine coefficient stays zero
         if (n <= 1)
