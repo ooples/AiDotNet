@@ -278,7 +278,7 @@ internal static class RegressionEngineOps
     /// </summary>
     public static Matrix<T> GaussJordanStep<T>(Matrix<T> augmented, int col, int n, T pivotThreshold)
     {
-        var engine = AiDotNetengine.Current;
+        var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Find pivot
