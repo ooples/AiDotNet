@@ -94,7 +94,9 @@ public partial class GaussianMixtureClassifierLayer<T> : LayerBase<T>, IShapeCon
     {
         bool single = input.Rank == 1;
         if (input.Rank > 2 || input.Shape[input.Rank - 1] != _features)
-            throw new ArgumentException($"Expected {_features} features, got [{string.Join(", ", input.Shape)}].", nameof(input));
+            throw new AiDotNet.Exceptions.TensorShapeMismatchException(
+                $"{nameof(GaussianMixtureClassifierLayer<T>)} takes [features] or [batch, features] with {_features} features "
+                + $"on the last axis, got shape [{string.Join(", ", input.Shape)}].");
         int batch = input.Length / _features;
         var x = Engine.TensorTile(Engine.Reshape(input, new[] { batch, 1, 1, _features }), new[] { 1, _classes, _components, 1 });
         var means = Engine.TensorTile(Engine.Reshape(_means, new[] { 1, _classes, _components, _features }), new[] { batch, 1, 1, 1 });
