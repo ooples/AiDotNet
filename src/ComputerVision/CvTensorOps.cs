@@ -592,6 +592,29 @@ internal static class CvTensorOps<T>
     }
 
     /// <summary>
+    /// The items ordered by descending <paramref name="key"/> (compared as <see cref="double"/>), ties in input
+    /// order - what <c>OrderByDescending(i =&gt; ToDouble(key(i)))</c> gives, with the keys converted in bulk.
+    /// </summary>
+    public static List<TItem> OrderByDescending<TItem>(IReadOnlyList<TItem> items, Func<TItem, T> key)
+        => OrderBy(items, key, descending: true);
+
+    /// <summary>
+    /// The items ordered by <paramref name="key"/> (compared as <see cref="double"/>), ties in input order.
+    /// </summary>
+    public static List<TItem> OrderBy<TItem>(IReadOnlyList<TItem> items, Func<TItem, T> key, bool descending = false)
+    {
+        if (items.Count == 0) return new List<TItem>();
+        var keys = ToDoubleArray(new Tensor<T>(new[] { items.Count }, new Vector<T>(items.Select(key).ToArray())));
+        var order = Enumerable.Range(0, items.Count);
+        var sorted = descending ? order.OrderByDescending(i => keys[i]) : order.OrderBy(i => keys[i]);
+        return sorted.Select(i => items[i]).ToList();
+    }
+
+    /// <summary>A rank-2 <c>[rows.Count, columns]</c> tensor from per-row value arrays (no arithmetic).</summary>
+    public static Tensor<T> FromRows(IReadOnlyList<T[]> rows, int columns)
+        => new Tensor<T>(new[] { rows.Count, columns }, new Vector<T>(rows.SelectMany(r => r).ToArray()));
+
+    /// <summary>
     /// The elements of <paramref name="values"/> as <see cref="double"/>, for result types whose public
     /// contract is a <c>double[]</c> (detection and segmentation scores). A bulk conversion of the whole buffer.
     /// </summary>

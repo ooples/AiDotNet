@@ -349,89 +349,27 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
             if (outputs[index].Rank == 2 && outputs[index].Shape[0] == numProposals && outputs[index].Shape[1] == numClasses)
                 stageLogits.Add(outputs[index]);
 
-        var candidateDetections = new List<Detection<T>>();
         // The last stage regressed targets scaled by its box-regression weights; its deltas are divided by them below.
         var lastWeights = _detectionLoss.StageBoxRegressionWeights(_numStages - 1);
 
-        for (int i = 0; i < numProposals; i++)
+        // Each stage's softmax, averaged; then the best foreground class per RoI.
+        Tensor<T>? probabilities = null;
+        var stageWeight = NumOps.FromDouble(1.0 / stageLogits.Count);
+        foreach (var logits in stageLogits)
         {
-            var probs = new double[numClasses];
-            foreach (var logits in stageLogits)
-            {
-                double maxLogit = double.NegativeInfinity;
-                for (int c = 0; c < numClasses; c++)
-                    maxLogit = Math.Max(maxLogit, NumOps.ToDouble(logits[i, c]));
-                double sumExp = 0;
-                var stageProbs = new double[numClasses];
-                for (int c = 0; c < numClasses; c++)
-                {
-                    stageProbs[c] = Math.Exp(NumOps.ToDouble(logits[i, c]) - maxLogit);
-                    sumExp += stageProbs[c];
-                }
-                for (int c = 0; c < numClasses; c++)
-                    probs[c] += stageProbs[c] / sumExp / stageLogits.Count;
-            }
-
-            // Find best non-background class
-            int bestClass = 0;
-            double bestScore = 0;
-            for (int c = 1; c < numClasses; c++)
-            {
-                if (probs[c] > bestScore)
-                {
-                    bestScore = probs[c];
-                    bestClass = c;
-                }
-            }
-
-            if (bestScore < confidenceThreshold) continue;
-
-            // The boxes have already been refined through the earlier stages; apply the last stage's
-            // class-agnostic delta.
-            double px1 = NumOps.ToDouble(proposalBoxes[i, 0]);
-            double py1 = NumOps.ToDouble(proposalBoxes[i, 1]);
-            double px2 = NumOps.ToDouble(proposalBoxes[i, 2]);
-            double py2 = NumOps.ToDouble(proposalBoxes[i, 3]);
-
-            double pw = px2 - px1;
-            double ph = py2 - py1;
-            double pcx = px1 + pw / 2;
-            double pcy = py1 + ph / 2;
-
-            double dx = NumOps.ToDouble(boxDeltas[i, 0]) / lastWeights[0];
-            double dy = NumOps.ToDouble(boxDeltas[i, 1]) / lastWeights[1];
-            double dw = NumOps.ToDouble(boxDeltas[i, 2]) / lastWeights[2];
-            double dh = NumOps.ToDouble(boxDeltas[i, 3]) / lastWeights[3];
-
-            double predCx = pcx + dx * pw;
-            double predCy = pcy + dy * ph;
-            double predW = pw * Math.Exp(Math.Min(dw, 4.0));
-            double predH = ph * Math.Exp(Math.Min(dh, 4.0));
-
-            // Decoded in network-input coordinates; map to the source image before clipping.
-            // (RefineBoxes does NOT do this: it works on proposals in the input frame on purpose.)
-            var (scaleX, scaleY) = InputToImageScale(imageWidth, imageHeight);
-            double x1 = Math.Max(0, (predCx - predW / 2) * scaleX);
-            double y1 = Math.Max(0, (predCy - predH / 2) * scaleY);
-            double x2 = Math.Min(imageWidth, (predCx + predW / 2) * scaleX);
-            double y2 = Math.Min(imageHeight, (predCy + predH / 2) * scaleY);
-
-            if (x2 <= x1 || y2 <= y1) continue;
-
-            int classId = bestClass - 1;
-
-            var box = new BoundingBox<T>(
-                NumOps.FromDouble(x1),
-                NumOps.FromDouble(y1),
-                NumOps.FromDouble(x2),
-                NumOps.FromDouble(y2));
-
-            candidateDetections.Add(new Detection<T>(
-                box,
-                classId,
-                NumOps.FromDouble(bestScore),
-                classId < ClassNames.Length ? ClassNames[classId] : null));
+            var stageProbabilities = Engine.TensorMultiplyScalar(TwoStageBoxDecoding<T>.ClassProbabilities(logits), stageWeight);
+            probabilities = probabilities is null ? stageProbabilities : Engine.TensorAdd(probabilities, stageProbabilities);
         }
+
+        var (bestClasses, bestScores) = TwoStageBoxDecoding<T>.BestForegroundClass(probabilities ?? new Tensor<T>(new[] { numProposals, numClasses }));
+
+        // The boxes have already been refined through the earlier stages; apply the last stage's
+        // class-agnostic delta. Decoded in network-input coordinates; map to the source image before clipping.
+        // (RefineBoxes does NOT do this: it works on proposals in the input frame on purpose.)
+        var deltas = Engine.TensorSlice(boxDeltas, new[] { 0, 0 }, new[] { numProposals, 4 });
+        var (scaleX, scaleY) = InputToImageScale(imageWidth, imageHeight);
+        var candidateDetections = TwoStageBoxDecoding<T>.BestClassCandidates(bestClasses, bestScores, proposalBoxes, deltas,
+            lastWeights, 4.0, scaleX, scaleY, imageWidth, imageHeight, confidenceThreshold, ClassNames);
 
         // Apply NMS
         var nmsResults = _nms.Apply(candidateDetections, nmsThreshold);

@@ -306,99 +306,21 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         var boxDeltas = outputs[1];
         var proposalBoxes = outputs[2];
 
-        int numProposals = classLogits.Shape[0];
         int numClasses = Options.NumClasses + 1; // Including background
 
-        var candidateDetections = new List<Detection<T>>();
         // The detection loss multiplies the stage's regression targets by these weights, so the predicted deltas are
         // divided by them here; unit weights (the default) leave them raw.
         var regressionWeights = _detectionLoss.StageBoxRegressionWeights(0);
 
-        for (int i = 0; i < numProposals; i++)
-        {
-            // Apply softmax to get class probabilities
-            double maxLogit = double.NegativeInfinity;
-            for (int c = 0; c < numClasses; c++)
-            {
-                maxLogit = Math.Max(maxLogit, NumOps.ToDouble(classLogits[i, c]));
-            }
+        // Softmax class scores, the best foreground class per RoI and that class's own deltas, all RoIs at once.
+        var probabilities = TwoStageBoxDecoding<T>.ClassProbabilities(classLogits);
+        var (bestClasses, bestScores) = TwoStageBoxDecoding<T>.BestForegroundClass(probabilities);
+        var deltas = TwoStageBoxDecoding<T>.ClassDeltas(boxDeltas, bestClasses, numClasses);
 
-            double sumExp = 0;
-            var probs = new double[numClasses];
-            for (int c = 0; c < numClasses; c++)
-            {
-                probs[c] = Math.Exp(NumOps.ToDouble(classLogits[i, c]) - maxLogit);
-                sumExp += probs[c];
-            }
-
-            for (int c = 0; c < numClasses; c++)
-            {
-                probs[c] /= sumExp;
-            }
-
-            // Find best non-background class
-            int bestClass = 0;
-            double bestScore = 0;
-            for (int c = 1; c < numClasses; c++) // Skip class 0 (background)
-            {
-                if (probs[c] > bestScore)
-                {
-                    bestScore = probs[c];
-                    bestClass = c;
-                }
-            }
-
-            if (bestScore < confidenceThreshold) continue;
-
-            // Decode box
-            double px1 = NumOps.ToDouble(proposalBoxes[i, 0]);
-            double py1 = NumOps.ToDouble(proposalBoxes[i, 1]);
-            double px2 = NumOps.ToDouble(proposalBoxes[i, 2]);
-            double py2 = NumOps.ToDouble(proposalBoxes[i, 3]);
-
-            double pw = px2 - px1;
-            double ph = py2 - py1;
-            double pcx = px1 + pw / 2;
-            double pcy = py1 + ph / 2;
-
-            // Get box deltas for this class
-            int deltaOffset = bestClass * 4;
-            double dx = NumOps.ToDouble(boxDeltas[i, deltaOffset]) / regressionWeights[0];
-            double dy = NumOps.ToDouble(boxDeltas[i, deltaOffset + 1]) / regressionWeights[1];
-            double dw = NumOps.ToDouble(boxDeltas[i, deltaOffset + 2]) / regressionWeights[2];
-            double dh = NumOps.ToDouble(boxDeltas[i, deltaOffset + 3]) / regressionWeights[3];
-
-            // Apply deltas
-            double predCx = pcx + dx * pw;
-            double predCy = pcy + dy * ph;
-            double predW = pw * Math.Exp(Math.Min(dw, 4.0));
-            double predH = ph * Math.Exp(Math.Min(dh, 4.0));
-
-            // Convert to (x1, y1, x2, y2) and clip
-            // Decoded in network-input coordinates; map to the source image before clipping.
-            var (scaleX, scaleY) = InputToImageScale(imageWidth, imageHeight);
-            double x1 = Math.Max(0, (predCx - predW / 2) * scaleX);
-            double y1 = Math.Max(0, (predCy - predH / 2) * scaleY);
-            double x2 = Math.Min(imageWidth, (predCx + predW / 2) * scaleX);
-            double y2 = Math.Min(imageHeight, (predCy + predH / 2) * scaleY);
-
-            if (x2 <= x1 || y2 <= y1) continue;
-
-            // Adjust class ID (subtract 1 to remove background class offset)
-            int classId = bestClass - 1;
-
-            var box = new BoundingBox<T>(
-                NumOps.FromDouble(x1),
-                NumOps.FromDouble(y1),
-                NumOps.FromDouble(x2),
-                NumOps.FromDouble(y2));
-
-            candidateDetections.Add(new Detection<T>(
-                box,
-                classId,
-                NumOps.FromDouble(bestScore),
-                classId < ClassNames.Length ? ClassNames[classId] : null));
-        }
+        // Decoded in network-input coordinates; map to the source image before clipping.
+        var (scaleX, scaleY) = InputToImageScale(imageWidth, imageHeight);
+        var candidateDetections = TwoStageBoxDecoding<T>.BestClassCandidates(bestClasses, bestScores, proposalBoxes, deltas,
+            regressionWeights, 4.0, scaleX, scaleY, imageWidth, imageHeight, confidenceThreshold, ClassNames);
 
         // Apply NMS
         var nmsResults = _nms.Apply(candidateDetections, nmsThreshold);
