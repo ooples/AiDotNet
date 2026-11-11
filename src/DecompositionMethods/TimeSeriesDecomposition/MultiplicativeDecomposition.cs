@@ -73,60 +73,65 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeGeometricMovingAverage()
     {
         int n = TimeSeries.Length;
-        Vector<T> trend = new Vector<T>(n);
-        Vector<T> seasonal = new Vector<T>(n);
-        Vector<T> residual = new Vector<T>(n);
-
-        // Calculate trend using geometric moving average
-        int halfWindow = _seasonalPeriod / 2;
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            int start = Math.Max(0, i - halfWindow);
-            int end = Math.Min(n - 1, i + halfWindow);
-            T product = NumOps.One;
-            int count = 0;
-
-            for (int j = start; j <= end; j++)
-            {
-                product = NumOps.Multiply(product, TimeSeries[j]);
-                count++;
-            }
-
-            trend[i] = NumOps.Power(product, NumOps.Divide(NumOps.One, NumOps.FromDouble(count)));
+            AddComponent(DecompositionComponentType.Trend, new Vector<T>(0));
+            AddComponent(DecompositionComponentType.Seasonal, new Vector<T>(0));
+            AddComponent(DecompositionComponentType.Residual, new Vector<T>(0));
+            return;
         }
+
+        // Calculate trend using geometric moving average: (prod of the window)^(1 / count), with
+        // the window product expressed as sign * exp(sum log|x|) so it reduces to window sums.
+        int halfWindow = _seasonalPeriod / 2;
+        var x = Tensor<T>.FromVector(TimeSeries);
+        var logMagnitude = Engine.TensorLog(Engine.TensorAbs(x));
+        var isNegative = Engine.TensorLessThan(x, NumOps.Zero);
+        var isZero = Engine.TensorEquals(x, NumOps.Zero);
+        var window = BoxKernel(halfWindow);
+
+        var logSum = WindowSums(logMagnitude, window);
+        var negativeCount = WindowSums(isNegative, window);
+        var zeroCount = WindowSums(isZero, window);
+        var count = WindowSums(Engine.TensorOnesLike(x), window);
+
+        // A zero factor gives 0; a negative product has no real root (NaN, as Power gives);
+        // otherwise exp(mean log|x|).
+        var geometricMean = Engine.TensorExp(Engine.TensorMultiply(logSum, Engine.TensorReciprocal(count)));
+        var oddNegatives = Engine.TensorRemainder(negativeCount, Engine.TensorFullLike(negativeCount, NumOps.FromDouble(2)));
+        var trendTensor = Engine.TensorWhere(
+            Engine.TensorGreaterThan(oddNegatives, NumOps.FromDouble(0.5)),
+            Engine.TensorFullLike(x, NumOps.FromDouble(double.NaN)),
+            geometricMean);
+        trendTensor = Engine.TensorWhere(
+            Engine.TensorGreaterThan(zeroCount, NumOps.FromDouble(0.5)), Engine.TensorZerosLike(x), trendTensor);
+        Vector<T> trend = trendTensor.ToVector();
 
         // Calculate seasonal component
-        for (int i = 0; i < n; i++)
-        {
-            seasonal[i] = NumOps.Divide(TimeSeries[i], trend[i]);
-        }
+        var seasonalTensor = Engine.TensorMultiply(x, Engine.TensorReciprocal(trendTensor));
 
-        // Normalize seasonal component
-        for (int i = 0; i < _seasonalPeriod; i++)
-        {
-            T seasonalSum = NumOps.Zero;
-            int count = 0;
-            for (int j = i; j < n; j += _seasonalPeriod)
-            {
-                seasonalSum = NumOps.Add(seasonalSum, seasonal[j]);
-                count++;
-            }
-            T averageSeasonal = NumOps.Divide(seasonalSum, NumOps.FromDouble(count));
-            for (int j = i; j < n; j += _seasonalPeriod)
-            {
-                seasonal[j] = NumOps.Divide(seasonal[j], averageSeasonal);
-            }
-        }
+        // Normalize seasonal component by the mean of its phase
+        Vector<T> averageSeasonal = PhaseMeans(seasonalTensor.ToVector(), _seasonalPeriod);
+        var phaseAverage = Tensor<T>.FromVector(RepeatPeriodic(averageSeasonal, n));
+        seasonalTensor = Engine.TensorMultiply(seasonalTensor, Engine.TensorReciprocal(phaseAverage));
+        Vector<T> seasonal = seasonalTensor.ToVector();
 
         // Calculate residual
-        for (int i = 0; i < n; i++)
-        {
-            residual[i] = NumOps.Divide(TimeSeries[i], NumOps.Multiply(trend[i], seasonal[i]));
-        }
+        Vector<T> residual = Engine.TensorMultiply(
+            x, Engine.TensorReciprocal(Engine.TensorMultiply(trendTensor, seasonalTensor))).ToVector();
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Seasonal, seasonal);
         AddComponent(DecompositionComponentType.Residual, residual);
+    }
+
+    /// <summary>Sums of <paramref name="values"/> over the centred, series-truncated window of <paramref name="kernel"/>.</summary>
+    private Tensor<T> WindowSums(Tensor<T> values, Tensor<T> kernel)
+    {
+        int n = values.Length;
+        int width = kernel.Length;
+        var sums = Engine.Conv1D(values.Reshape(new[] { 1, 1, n }), kernel.Reshape(new[] { 1, 1, width }), 1, width / 2);
+        return sums.Reshape(new[] { n });
     }
 
     /// <summary>
@@ -209,13 +214,9 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeLogTransformedSTL()
     {
         int n = TimeSeries.Length;
-        Vector<T> logTimeSeries = new Vector<T>(n);
 
         // Log transform the time series
-        for (int i = 0; i < n; i++)
-        {
-            logTimeSeries[i] = NumOps.Log(TimeSeries[i]);
-        }
+        Vector<T> logTimeSeries = Engine.TensorLog(Tensor<T>.FromVector(TimeSeries)).ToVector();
 
         // Perform STL decomposition on log-transformed data
         var stlOptions = new STLDecompositionOptions<T>
@@ -233,23 +234,16 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
         };
 
         var stlDecomposition = new STLDecomposition<T>(stlOptions);
-        stlDecomposition.Train(new Matrix<T>(logTimeSeries.Length, 1), logTimeSeries);
+        stlDecomposition.Train(new Matrix<T>(n, 1), logTimeSeries);
 
         Vector<T> logTrend = stlDecomposition.GetTrend();
         Vector<T> logSeasonal = stlDecomposition.GetSeasonal();
         Vector<T> logResidual = stlDecomposition.GetResidual();
 
         // Transform components back to original scale
-        Vector<T> trend = new Vector<T>(n);
-        Vector<T> seasonal = new Vector<T>(n);
-        Vector<T> residual = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            trend[i] = NumOps.Exp(logTrend[i]);
-            seasonal[i] = NumOps.Exp(logSeasonal[i]);
-            residual[i] = NumOps.Exp(logResidual[i]);
-        }
+        Vector<T> trend = Engine.TensorExp(Tensor<T>.FromVector(logTrend)).ToVector();
+        Vector<T> seasonal = Engine.TensorExp(Tensor<T>.FromVector(logSeasonal)).ToVector();
+        Vector<T> residual = Engine.TensorExp(Tensor<T>.FromVector(logResidual)).ToVector();
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Seasonal, seasonal);
