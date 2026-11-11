@@ -171,43 +171,30 @@ public class KBinsDiscretizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private T[] ComputeUniformBinEdges(Vector<T> column)
     {
         // Find min and max
-        T min = column[0];
-        T max = column[0];
-        for (int i = 1; i < column.Length; i++)
-        {
-            if (NumOps.Compare(column[i], min) < 0) min = column[i];
-            if (NumOps.Compare(column[i], max) > 0) max = column[i];
-        }
+        var values = Tensor<T>.FromVector(column);
+        T min = Engine.TensorMinValue(values);
+        T max = Engine.TensorMaxValue(values);
 
-        // Create uniform edges
-        var edges = new T[_nBins + 1];
+        // Create uniform edges: min + (i / nBins) * (max - min)
         T range = NumOps.Subtract(max, min);
-
-        for (int i = 0; i <= _nBins; i++)
-        {
-            T fraction = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(_nBins));
-            edges[i] = NumOps.Add(min, NumOps.Multiply(fraction, range));
-        }
-
-        return edges;
+        var fraction = Engine.TensorDivideScalar(PreprocessingTensorOps.Range<T>(_nBins + 1), NumOps.FromDouble(_nBins));
+        return Engine.TensorAddScalar(Engine.TensorMultiplyScalar(fraction, range), min).AsSpan().ToArray();
     }
 
     private T[] ComputeQuantileBinEdges(Vector<T> column)
     {
         // Sort the column
-        var sortedValues = column.ToArray();
-        Array.Sort(sortedValues, (a, b) => NumOps.Compare(a, b));
+        var sortedValues = Engine.TensorSort(Tensor<T>.FromVector(column)).Item1;
 
         // Compute quantile edges
-        var edges = new T[_nBins + 1];
+        var index = new int[_nBins + 1];
         for (int i = 0; i <= _nBins; i++)
         {
             double quantile = (double)i / _nBins;
-            int index = (int)(quantile * (sortedValues.Length - 1));
-            edges[i] = sortedValues[index];
+            index[i] = (int)(quantile * (sortedValues.Length - 1));
         }
 
-        return edges;
+        return Engine.TensorIndexSelect(sortedValues, new Tensor<int>(index, new[] { _nBins + 1 }), 0).AsSpan().ToArray();
     }
 
     private T[] ComputeKMeansBinEdges(Vector<T> column)
@@ -230,51 +217,44 @@ public class KBinsDiscretizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Discretizer has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var columns = new List<Tensor<T>>(numColumns);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (processSet.Contains(j) && _binEdges[j].Length > 0)
             {
-                T value = data[i, j];
-
-                if (processSet.Contains(j) && _binEdges[j].Length > 0)
-                {
-                    int binIndex = FindBin(value, _binEdges[j]);
-
-                    if (_encode == EncodeMode.Ordinal)
-                    {
-                        value = NumOps.FromDouble(binIndex);
-                    }
-                    else // Normalized
-                    {
-                        value = NumOps.Divide(NumOps.FromDouble(binIndex), NumOps.FromDouble(_nBins - 1));
-                    }
-                }
-
-                result[i, j] = value;
+                var binIndex = FindBins(column, _binEdges[j]).Cast<T>();
+                column = _encode == EncodeMode.Ordinal
+                    ? binIndex
+                    : engine.TensorDivideScalar(binIndex, NumOps.FromDouble(_nBins - 1)); // Normalized
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
-    private int FindBin(T value, T[] edges)
+    /// <summary>
+    /// The bin of each value: the first bin whose upper edge is at least the value, or the last bin for values
+    /// above every edge.
+    /// </summary>
+    private Tensor<int> FindBins(Tensor<T> values, T[] edges)
     {
-        // Find which bin the value belongs to
-        for (int i = 0; i < edges.Length - 1; i++)
-        {
-            if (NumOps.Compare(value, edges[i + 1]) <= 0)
-            {
-                return i;
-            }
-        }
-        // Value is greater than all edges, return last bin
-        return _nBins - 1;
+        if (values.Length == 0)
+            return new Tensor<int>(new[] { 0 });
+
+        int upperEdges = edges.Length - 1;
+        var upper = new Tensor<T>(edges.Skip(1).ToArray(), new[] { upperEdges });
+        var bins = Engine.TensorSearchSorted(upper, values, false).AsSpan().ToArray();
+        for (int i = 0; i < bins.Length; i++)
+            bins[i] = Math.Min(bins[i], _nBins - 1);
+        return new Tensor<int>(bins, new[] { bins.Length });
     }
 
     /// <summary>
@@ -289,45 +269,41 @@ public class KBinsDiscretizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Discretizer has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var columns = new List<Tensor<T>>(numColumns);
+        T bins = NumOps.FromDouble(_nBins - 1);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            var edgeValues = _binEdges[j];
+            if (processSet.Contains(j) && edgeValues.Length > 0 && numRows > 0)
             {
-                T value = data[i, j];
+                // Get bin index from value (truncated for ordinal codes, rounded for normalized ones)
+                var binIndex = _encode == EncodeMode.Ordinal
+                    ? engine.TensorTrunc(column)
+                    : engine.TensorRound(engine.TensorMultiplyScalar(column, bins));
 
-                if (processSet.Contains(j) && _binEdges[j].Length > 0)
-                {
-                    // Get bin index from value
-                    int binIndex;
-                    if (_encode == EncodeMode.Ordinal)
-                    {
-                        binIndex = (int)NumOps.ToDouble(value);
-                    }
-                    else // Normalized
-                    {
-                        binIndex = (int)Math.Round(NumOps.ToDouble(value) * (_nBins - 1));
-                    }
+                // Clamp to valid range
+                var lower = engine.TensorClamp(binIndex, NumOps.Zero, bins);
+                var lowerIndex = lower.Cast<int>();
+                var upperIndex = engine.TensorClamp(engine.TensorAddScalar(lower, NumOps.One), NumOps.Zero,
+                    NumOps.FromDouble(edgeValues.Length - 1)).Cast<int>();
 
-                    // Clamp to valid range
-                    binIndex = Math.Max(0, Math.Min(_nBins - 1, binIndex));
-
-                    // Return bin midpoint
-                    T lowerEdge = _binEdges[j][binIndex];
-                    T upperEdge = _binEdges[j][Math.Min(binIndex + 1, _binEdges[j].Length - 1)];
-                    value = NumOps.Divide(NumOps.Add(lowerEdge, upperEdge), NumOps.FromDouble(2.0));
-                }
-
-                result[i, j] = value;
+                // Return bin midpoint
+                var edges = new Tensor<T>(edgeValues, new[] { edgeValues.Length });
+                column = engine.TensorDivideScalar(
+                    engine.TensorAdd(engine.TensorIndexSelect(edges, lowerIndex, 0), engine.TensorIndexSelect(edges, upperIndex, 0)),
+                    NumOps.FromDouble(2.0));
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>
