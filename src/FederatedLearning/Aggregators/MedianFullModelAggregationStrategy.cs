@@ -17,6 +17,7 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 public sealed class MedianFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -49,6 +50,7 @@ public sealed class MedianFullModelAggregationStrategy<T, TInput, TOutput> :
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "Median";
 }
 

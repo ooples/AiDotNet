@@ -232,6 +232,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidationHelper<T>.ValidateInputData(x, y);

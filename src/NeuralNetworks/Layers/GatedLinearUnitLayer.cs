@@ -557,6 +557,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_gateBias);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -564,6 +565,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         _linearBiasGradient = null; _gateBiasGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

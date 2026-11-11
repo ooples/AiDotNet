@@ -32,6 +32,7 @@ public class HistogramEqualization<T> : ImageAugmenterBase<T>
         PerChannel = perChannel;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -87,6 +88,7 @@ public class HistogramEqualization<T> : ImageAugmenterBase<T>
         dst.SetChannelPlane(channel, engine.TensorTake(levels, bins).Cast<T>());
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

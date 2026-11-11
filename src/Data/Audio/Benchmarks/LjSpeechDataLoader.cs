@@ -33,10 +33,15 @@ public class LjSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "LJSpeech 1.1";
+    /// <inheritdoc />
     public override string Description => "LJSpeech single-speaker English TTS corpus (~24 hr, 22 kHz)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.MaxTextLength;
+    /// <inheritdoc />
     public override int OutputDimension => _options.MaxAudioSamples;
 
     public LjSpeechDataLoader(LjSpeechDataLoaderOptions? options = null)

@@ -48,7 +48,9 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
 
     public bool IsFrozen { get; private set; }
     public string Name => $"Swin-{_variant}";
+    /// <inheritdoc />
     public IReadOnlyList<int> OutputChannels { get; }
+    /// <inheritdoc />
     public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
@@ -91,6 +93,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
         _ => (96, new[] { 2, 2, 6, 2 }, new[] { 3, 6, 12, 24 })
     };
 
+    /// <inheritdoc />
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         // Accept both batched [N, C, H, W] and unbatched [C, H, W] image input. The patch
@@ -137,6 +140,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     /// </summary>
     private const int PatchEmbeddingStride = 4;
 
+    /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
@@ -191,6 +195,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     // a SEPARATE source, and once the vector started folding the base enumeration the
     // two drifted apart immediately.
 
+    /// <inheritdoc />
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);
@@ -201,6 +206,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
         foreach (var stage in _stages) stage.WriteParameters(writer);
     }
 
+    /// <inheritdoc />
     public void ReadParameters(BinaryReader reader)
     {
         var variant = (SwinVariant)reader.ReadInt32();
@@ -225,6 +231,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var features = ExtractFeatures(input);
@@ -259,6 +266,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
 
     protected override void InitializeLayers() { }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -273,6 +281,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
 
 
 
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");

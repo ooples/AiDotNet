@@ -354,8 +354,10 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     private Tensor<T>? _gpuBiasesV;
     #endregion
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

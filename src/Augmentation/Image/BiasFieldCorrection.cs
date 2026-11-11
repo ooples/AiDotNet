@@ -16,6 +16,7 @@ public class BiasFieldCorrection<T> : ImageAugmenterBase<T>
         MinCoeff = minCoeff; MaxCoeff = maxCoeff; Order = order;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -62,6 +63,7 @@ public class BiasFieldCorrection<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

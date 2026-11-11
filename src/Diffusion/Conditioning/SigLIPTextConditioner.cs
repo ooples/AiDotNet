@@ -36,6 +36,7 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
     private readonly int? _numLayersOverride;
     private readonly int? _numHeadsOverride;
 
+    /// <inheritdoc />
     public override bool ProducesPooledOutput => true;
 
     /// <param name="options">The variant and optional transformer dimensions; each unset dimension
@@ -93,6 +94,7 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
         return new SigLIPTextConditioner<T>(tokenizer, options: new SigLIPTextConditionerOptions { Variant = variant });
     }
 
+    /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
         LayerHelper<T>.CreateDefaultSigLIPTextLayers(
             vocabSize: VocabSize,

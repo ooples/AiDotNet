@@ -14,6 +14,7 @@ public class FancyPCA<T> : ImageAugmenterBase<T>
         AlphaStd = alphaStd;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         if (data.Channels < 3) return data.Clone();
@@ -78,6 +79,7 @@ public class FancyPCA<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

@@ -238,6 +238,7 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         var stateTensor = Tensor<T>.FromVector(state);
@@ -278,12 +279,14 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         return action;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // IQL is offline - data is loaded beforehand
         _offlineBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         if (_offlineBuffer.Count < _options.BatchSize)
@@ -426,6 +429,7 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         return result;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -435,11 +439,13 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         // IQL is offline - no episode reset needed
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         return SelectAction(input, training: false);

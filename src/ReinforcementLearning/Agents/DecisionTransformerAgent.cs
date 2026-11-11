@@ -410,6 +410,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         RecomputeStateStatistics();
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         return SelectActionWithReturn(state, CurrentReturnToGo(), training);
@@ -465,6 +466,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return chosen;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         ValidateState(state);
@@ -898,6 +900,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return true;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -928,6 +931,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         _episodeStep = 0;
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         // Pure, stateless single-step inference (the IFullModel.Predict contract): two Predict(state)
@@ -955,6 +959,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -964,6 +969,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         };
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
 
     /// <summary>
@@ -1003,12 +1009,14 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return computable.ComputeGradients(tokens, targets, objective);
     }
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         var data = System.IO.File.ReadAllBytes(filepath);

@@ -114,6 +114,7 @@ public partial class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Keep inference on the base funnel so unbatched token sequences are
@@ -125,6 +126,7 @@ public partial class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     }
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

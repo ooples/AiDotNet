@@ -549,6 +549,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return predictions;
     }
 
+    /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
         return PredictWithScale(input, ComputeScaleFactor(input));
@@ -810,6 +811,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return tensor;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -830,6 +832,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new ChronosFoundationModel<T>(new ChronosOptions<T>(_options));

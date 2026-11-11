@@ -98,11 +98,13 @@ public class SaliencyMix<T> : ImageMixingAugmenterBase<T>
         return engine.TensorMultiply(inWindow, onStride).Cast<T>();
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         return data.Clone();
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         return base.GetParameters();

@@ -16,6 +16,7 @@ public class SaltAndPepperNoise<T> : ImageAugmenterBase<T>
         Amount = amount; SaltVsPepper = saltVsPepper;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -46,6 +47,7 @@ public class SaltAndPepperNoise<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters(); p["amount"] = Amount; p["salt_vs_pepper"] = SaltVsPepper; return p;

@@ -17,6 +17,7 @@ public class BoxBlur<T> : ImageAugmenterBase<T>
         MinKernelSize = minKernelSize; MaxKernelSize = maxKernelSize;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         int kSize = context.GetRandomInt(MinKernelSize, MaxKernelSize + 1);
@@ -35,6 +36,7 @@ public class BoxBlur<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters(); p["min_kernel_size"] = MinKernelSize; p["max_kernel_size"] = MaxKernelSize; return p;

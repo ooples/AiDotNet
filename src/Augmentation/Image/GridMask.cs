@@ -22,6 +22,7 @@ public class GridMask<T> : ImageAugmenterBase<T>
         Rotate = rotate; FillValue = fillValue;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -71,6 +72,7 @@ public class GridMask<T> : ImageAugmenterBase<T>
         return engine.TensorFmod(inner, divisor);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

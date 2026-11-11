@@ -66,6 +66,7 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
 
     #region IEmotionRecognizer Properties
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedEmotions => _options.EmotionLabels;
 
     #endregion
@@ -127,6 +128,7 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
 
     #region IEmotionRecognizer
 
+    /// <inheritdoc />
     public EmotionResult<T> RecognizeEmotion(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -144,6 +146,7 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
         };
     }
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, T> GetEmotionProbabilities(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -166,6 +169,7 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
         return probs;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<TimedEmotionResult<T>> RecognizeEmotionTimeSeries(Tensor<T> audio, int windowSizeMs = 1000, int hopSizeMs = 500)
     {
         ThrowIfDisposed();
@@ -190,12 +194,14 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
         return results;
     }
 
+    /// <inheritdoc />
     public T GetArousal(Tensor<T> audio)
     {
         ThrowIfDisposed();
         return ComputeArousalFromProbs(GetEmotionProbabilities(audio));
     }
 
+    /// <inheritdoc />
     public T GetValence(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -226,6 +232,7 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
         return NumOps.FromDouble(Math.Max(-1, Math.Min(1, valence)));
     }
 
+    /// <inheritdoc />
     public Vector<T> ExtractEmotionFeatures(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -249,6 +256,7 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
             dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -287,8 +295,10 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -312,6 +322,7 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Emotion2Vec<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

@@ -250,23 +250,6 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // build it (#2138). DiffusionAutoMLTrainingTests covers the search itself.
         "DiffusionAutoML",
 
-        // Proprietary-API TTS wrappers (ElevenLabs, AmazonPolly, AzureNeuralTTS,
-        // GoogleCloudTTS, Murf, NVIDIARivaTTS): real inference is a remote API
-        // call, not a local Predict pipeline — these classes have no published
-        // architecture paper to be faithful to. Their native-mode placeholder
-        // layer chain (CreateDefaultProprietaryTTSLayers) starts with a 192-dim
-        // MHA expecting tokenized text input, but the auto-generated test
-        // harness feeds 80-dim mel-spectrogram input. Rather than add a non-
-        // paper-faithful adapter to the layer chain, skip auto-test generation
-        // for the wrapper class. Manual API-mocking integration tests cover
-        // the wrappers' actual contracts.
-        "ElevenLabsTTS",
-        "AmazonPolly",
-        "AzureNeuralTTS",
-        "GoogleCloudTTS",
-        "Murf",
-        "NVIDIARivaTTS",
-
         // Janus / Janus-Pro (DeepSeek): paper-faithful unified understanding +
         // generation VLMs at ~1.5B (Janus, decoderDim=2048) / ~7B (Janus-Pro,
         // decoderDim=4096, 24 vision + 32 decoder layers). At paper scale a
@@ -1296,6 +1279,19 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         /// </summary>
         internal bool DeterministicMemorizationLoss { get; }
     }
+
+    /// <summary>
+    /// Models built on <c>LayerHelper.CreateDefaultConformerLayers</c>, whose convolution subsampling fixes the
+    /// mel width at construction: their fixtures feed [B, frames, NumMels] and vary the frame axis.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> ConvSubsamplingAsrClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "Conformer", "FunASRNano", "ConformerCTC", "Branchformer", "CIFDecoder", "CTCSegmentation",
+            "EBranchformer", "InterCTC", "SelfConditionedCTC", "FireRedASR", "Chirp3", "OWSM", "ParakeetCTC",
+            "ESPnetASR", "NoiseRobustASR", "RobustConformer", "SpeechBrain", "CodeSwitchingASR", "MedicalASR",
+            "SpeakerDiarizedASR", "KyutaiMoshi",
+        };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
@@ -5858,7 +5854,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "BucketSize = 1024, EmbeddingDimension = 16, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
-                    or "SpeakerDiarizedASR" or "SPIRAL"
+                    or "SpeakerDiarizedASR" or "SpeechBrain" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                     or "Wav2Vec2ASR" or "WavLMASR" or "WavLMRobust" or "XLSR"
                 && model.TypeParameterCount == 1)
@@ -5876,6 +5872,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     "SpeakerDiarizedASR" => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
+                    "SpeechBrain" => "AiDotNet.SpeechRecognition.Robust.SpeechBrainOptions",
                     "SPIRAL" => "AiDotNet.SpeechRecognition.Foundation.SPIRALOptions",
                     "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
                     "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
@@ -7609,7 +7606,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
                     "new AiDotNet.SpeechRecognition.Streaming.KyutaiMoshiOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, VocabSize = 64 })";
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 64 })";
             }
             else if (model.ClassName == "MedSAM" && model.TypeParameterCount == 1)
             {
@@ -10104,7 +10101,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // 2-vs-5 MoreData), so — as with Chronos — the residual cost is per-step
                 // scale rather than repeat count, and only a fixture bound can address it.
                 // Exercise the same mel projection -> Conformer encoder -> vocabulary head at
-                // CI-smoke scale; NumMels=64 matches the generated [1,64,32] audio fixture.
+                // CI-smoke scale. The fixture is time-major [1, 64 frames, 32 mels], so NumMels=32: the
+                // encoder's convolution subsampling fixes the mel width in its projection.
                 // Production defaults and every customization point are unchanged.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
@@ -10112,7 +10110,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.Multilingual.Chirp3Options { SampleRate = 16000, " +
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, FeedForwardExpansionFactor = 2, NumMels = 64, " +
+                    "NumAttentionHeads = 2, FeedForwardExpansionFactor = 2, NumMels = 32, " +
                     "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "APNet" && model.TypeParameterCount == 1)
@@ -10192,7 +10190,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions { SampleRate = 16000, " +
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
+                    "NumAttentionHeads = 2, NumMels = 32, VocabSize = 64, MaxTextLength = 16, " +
                     // The hybrid CTC/attention rebuild (#51) adds an attention decoder and an LID
                     // head alongside the CTC head. DecoderDim must be bounded here too — it
                     // defaults to the paper's 320, which would dwarf the 32-wide smoke encoder.
@@ -16095,16 +16093,33 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // DemucsNoise likewise, once its waveform output stopped passing through ReLU: at its paper Adam
                     // 3e-4 the first update is a sign step of every one of its 3.4M weights (|dtheta| = 3e-4 sqrt(n)), so
                     // the loss goes 1.68 -> 3.10 -> 0.69 -> 0.24 -> 0.16 -> 0.12 -> 0.04 and a 2-step probe sees only the hump.
-                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2" or "MatchaTTS" or "DemucsNoise"
+                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2" or "MatchaTTS" or "DemucsNoise" or "KyutaiMoshi"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+                    // KyutaiMoshi trains with DropoutRate 0.1, so GetLastLoss() is one draw over dropout masks: on
+                    // a fixed pair it wandered 4.47, 4.52, 4.54, 4.58, 4.54, 4.69, 4.49 over 30 steps with no trend.
+                    // The evaluation loss at the same parameters falls every step (4.542354 -> 4.542295 -> ...
+                    // -> 4.536263 at step 30) as the paper's one-cycle warm-up from a 2e-6 peak LR ramps up. One
+                    // update clears the threshold by 3e-6, so it is judged on that path over 15 steps (ratio 0.99959).
+                    if (model.ClassName == "KyutaiMoshi")
+                        sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
                 }
             }
 
             // ECAPATDNNSpeaker takes time-major [B, frames, mels] features: the mel axis is its first
             // convolution's channel count, fixed by the weights, so the variable length is axis 1.
             if (model.ClassName == "ECAPATDNNSpeaker")
+            {
+                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            }
+
+            // The Conformer factory's convolution subsampling projects channels x mel bins with fixed weights, so
+            // the mel axis cannot vary either: these models take time-major [B, frames, mels] and vary the frames.
+            // FullyQualifiedName is rendered in FullyQualifiedFormat, so it carries the global:: prefix.
+            if (ConvSubsamplingAsrClassNames.Contains(model.ClassName)
+                && (model.ClassName != "Conformer"
+                    || model.FullyQualifiedName.StartsWith("global::AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }

@@ -37,6 +37,7 @@ public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<
             : RandomHelper.CreateSecureRandom();
     }
 
+    /// <inheritdoc />
     public override Vector<T> ApplyPrivacy(Vector<T> model, double epsilon, double delta)
     {
         if (model == null)
@@ -84,6 +85,7 @@ public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<
         return noisy;
     }
 
+    /// <inheritdoc />
     public override double GetPrivacyBudgetConsumed()
     {
         lock (_sync)
@@ -92,6 +94,7 @@ public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<
         }
     }
 
+    /// <inheritdoc />
     public override string GetMechanismName() => "Gaussian Mechanism (Vector)";
 
     /// <summary>

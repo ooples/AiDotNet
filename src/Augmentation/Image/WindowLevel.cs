@@ -19,6 +19,7 @@ public class WindowLevel<T> : ImageAugmenterBase<T>
         WindowWidthVar = windowWidthVar; WindowCenterVar = windowCenterVar;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -52,6 +53,7 @@ public class WindowLevel<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

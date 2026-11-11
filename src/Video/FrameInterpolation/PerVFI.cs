@@ -138,6 +138,7 @@ public partial class PerVFI<T> : FrameInterpolationBase<T>
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -152,9 +153,12 @@ public partial class PerVFI<T> : FrameInterpolationBase<T>
     protected override bool SupportsParameterMutation => _useNativeMode;
     // Identity: tape training runs the raw layer stack (no NormalizeFrames) and the sigmoid head
     // emits [0,1] frames, so /255+*255 only on inference was a train/eval mismatch (MoreData).
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -185,6 +189,7 @@ public partial class PerVFI<T> : FrameInterpolationBase<T>
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PerVFI<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

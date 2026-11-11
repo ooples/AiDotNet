@@ -70,7 +70,7 @@ public static class CloneRegistry
     {
         if (type is null) throw new ArgumentNullException(nameof(type));
 
-        EnsureGeneratedPlansLoaded();
+        EnsureGeneratedPlanLoaded(type);
 
         if (Generated.ContainsKey(type)) return true;
 
@@ -87,7 +87,12 @@ public static class CloneRegistry
     /// Gets every type with a compile-time plan. Used by the generated round-trip tests.
     /// </summary>
     /// <returns>The verified types.</returns>
-    public static IEnumerable<Type> VerifiedTypes() => Generated.Keys;
+    public static IEnumerable<Type> VerifiedTypes()
+    {
+        // Plans otherwise register per type on first use, so enumerating them needs all of them.
+        EnsureGeneratedPlansLoaded();
+        return Generated.Keys;
+    }
 
     /// <summary>
     /// Gets the plan for a type, building one by reflection if the generator never saw it.
@@ -99,7 +104,7 @@ public static class CloneRegistry
     {
         if (type is null) throw new ArgumentNullException(nameof(type));
 
-        EnsureGeneratedPlansLoaded();
+        EnsureGeneratedPlanLoaded(type);
 
         if (Generated.TryGetValue(type, out var generated)) return generated;
 
@@ -189,6 +194,39 @@ public static class CloneRegistry
     /// <see cref="IsVerified"/> reports honestly that no compile-time plan was available.
     /// </para>
     /// </remarks>
+    private static Func<Type, bool>? _registerGenerated;
+
+    /// <summary>
+    /// Registers the generated plan for one type, and for a closed generic the plan of its open definition.
+    /// </summary>
+    /// <remarks>
+    /// Registering every generated plan binds every configuration property of every type by reflection, about
+    /// 7 s on the first clone in a process; registering only the type asked for costs that type alone. A plan
+    /// already present (generated earlier, or registered by the caller) is left as it is.
+    /// </remarks>
+    private static void EnsureGeneratedPlanLoaded(Type type)
+    {
+        if (_generatedLoaded) return;
+
+        var register = _registerGenerated ??= BindGeneratedRegistration();
+        if (!Generated.ContainsKey(type)) register(type);
+        if (type.IsGenericType && !type.IsGenericTypeDefinition)
+        {
+            var definition = type.GetGenericTypeDefinition();
+            if (!Generated.ContainsKey(definition)) register(definition);
+        }
+    }
+
+    private static Func<Type, bool> BindGeneratedRegistration()
+    {
+        var method = typeof(CloneRegistry).Assembly
+            .GetType("AiDotNet.Generated.CloneRegistrations", throwOnError: false)
+            ?.GetMethod("TryRegister", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+        return method is null
+            ? static _ => false
+            : (Func<Type, bool>)method.CreateDelegate(typeof(Func<Type, bool>));
+    }
+
     private static void EnsureGeneratedPlansLoaded()
     {
         if (_generatedLoaded) return;

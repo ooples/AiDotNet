@@ -42,6 +42,7 @@ public class HistogramMatching<T> : ImageAugmenterBase<T>
         BlendFactor = blendFactor;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -122,6 +123,7 @@ public class HistogramMatching<T> : ImageAugmenterBase<T>
         dst.SetChannelPlane(channel, blended);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

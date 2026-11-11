@@ -16,6 +16,7 @@ public class RandomToneCurve<T> : ImageAugmenterBase<T>
         Scale = scale; NumControlPoints = numControlPoints;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -62,6 +63,7 @@ public class RandomToneCurve<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

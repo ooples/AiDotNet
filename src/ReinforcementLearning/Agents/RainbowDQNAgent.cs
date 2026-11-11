@@ -252,6 +252,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     /// </summary>
     public override Vector<T> Predict(Vector<T> input) => ComputeQValues(input);
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         // Fortunato et al. 2017 ("Noisy Networks for Exploration") replaces
@@ -363,6 +364,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         return probs;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // N-step learning: accumulate transitions
@@ -471,6 +473,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         TrainingSteps++;
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         // Rainbow paper (Hessel et al. 2018) does mini-batch SGD on
@@ -797,6 +800,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         return maxIndex;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         var baseMetrics = base.GetMetrics();
@@ -807,11 +811,13 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         return baseMetrics;
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         _nStepBuffer.Clear();
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -820,6 +826,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         };
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
 
     /// <summary>
@@ -847,6 +854,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             lossFunction);
     }
 
+    /// <inheritdoc />
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var currentParams = GetParameters();
@@ -872,12 +880,14 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         SetParameters(newParams);
     }
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         var data = System.IO.File.ReadAllBytes(filepath);

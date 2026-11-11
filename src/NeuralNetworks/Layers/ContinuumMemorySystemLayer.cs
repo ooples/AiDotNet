@@ -45,6 +45,7 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
     private Tensor<T>? LastOutput;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -219,6 +220,7 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
             };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input == null)

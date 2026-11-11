@@ -67,6 +67,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         _mmdBandwidth = mmdBandwidth;
     }
 
+    /// <inheritdoc />
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
@@ -119,6 +120,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             distributionLoss);
     }
 
+    /// <inheritdoc />
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
@@ -434,10 +436,10 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             {
                 double p_i = Convert.ToDouble(studentSoft[sampleIdx][classIdx]);
 
-                double meanGrad = (studentMeans[classIdx] - teacherMeans[classIdx]) / (batchSize * numClasses);
+                double meanGrad = (studentMeans[classIdx] - teacherMeans[classIdx]) / ((double)batchSize * numClasses);
 
                 double centered = p_i - studentMeans[classIdx];
-                double varGrad = 2.0 * centered * (studentVars[classIdx] - teacherVars[classIdx]) / (batchSize * numClasses);
+                double varGrad = 2.0 * centered * (studentVars[classIdx] - teacherVars[classIdx]) / ((double)batchSize * numClasses);
 
                 double totalGrad = 0.5 * meanGrad + 0.5 * varGrad;
 
@@ -475,7 +477,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
                     gradSum -= 2.0 * k_it * diff_it / (_mmdBandwidth * _mmdBandwidth);
                 }
 
-                gradSum /= (batchSize * batchSize);
+                gradSum /= (double)batchSize * batchSize;
                 gradient[i, classIdx] = NumOps.FromDouble(gradSum);
             }
         }

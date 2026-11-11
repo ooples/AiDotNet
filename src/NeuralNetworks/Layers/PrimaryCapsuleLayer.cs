@@ -154,6 +154,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private readonly int _stride;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc />
@@ -785,6 +786,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

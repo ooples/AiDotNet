@@ -16,6 +16,7 @@ public class MultiplicativeNoise<T> : ImageAugmenterBase<T>
         MinMultiplier = minMultiplier; MaxMultiplier = maxMultiplier; PerChannel = perChannel;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
@@ -41,6 +42,7 @@ public class MultiplicativeNoise<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

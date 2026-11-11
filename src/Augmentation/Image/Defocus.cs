@@ -16,6 +16,7 @@ public class Defocus<T> : ImageAugmenterBase<T>
         MinRadius = minRadius; MaxRadius = maxRadius;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         int radius = context.GetRandomInt(MinRadius, MaxRadius + 1);
@@ -33,6 +34,7 @@ public class Defocus<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters(); p["min_radius"] = MinRadius; p["max_radius"] = MaxRadius; return p;

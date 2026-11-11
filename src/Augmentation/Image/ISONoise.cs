@@ -19,6 +19,7 @@ public class ISONoise<T> : ImageAugmenterBase<T>
         MinIntensity = minIntensity; MaxIntensity = maxIntensity;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         double colorShift = context.GetRandomDouble(MinColorShift, MaxColorShift);
@@ -45,6 +46,7 @@ public class ISONoise<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

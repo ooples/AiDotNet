@@ -23,6 +23,7 @@ public class HueSaturationValue<T> : ImageAugmenterBase<T>
         ValShiftLimit = valShiftLimit;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         if (data.Channels < 3) return data.Clone();
@@ -62,6 +63,7 @@ public class HueSaturationValue<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

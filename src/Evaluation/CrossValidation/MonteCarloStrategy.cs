@@ -31,8 +31,11 @@ public class MonteCarloStrategy<T> : ICrossValidationStrategy<T>
     private readonly double _testSize;
     private readonly int? _randomSeed;
 
+    /// <inheritdoc />
     public string Name => $"Monte Carlo ({_nIterations} iterations)";
+    /// <inheritdoc />
     public string Description => "Repeated random sub-sampling validation.";
+    /// <inheritdoc />
     public int NumSplits => _nIterations;
 
     /// <summary>
@@ -53,6 +56,7 @@ public class MonteCarloStrategy<T> : ICrossValidationStrategy<T>
         _randomSeed = randomSeed;
     }
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize < 2)

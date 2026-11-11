@@ -216,6 +216,7 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         return Enumerable.Range(0, _xTrain.Columns > 0 ? _xTrain.Columns : 0);
     }
 
+    /// <inheritdoc />
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // In LWR, we don't pre-compute a global model. Instead, we store the training data.

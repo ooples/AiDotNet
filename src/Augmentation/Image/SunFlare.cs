@@ -17,6 +17,7 @@ public class SunFlare<T> : ImageAugmenterBase<T>
         NumFlareCircles = numFlareCircles;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -69,6 +70,7 @@ public class SunFlare<T> : ImageAugmenterBase<T>
         image.SetFromPlanarTensor(engine.TensorWhere(mask, glowed, planar));
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

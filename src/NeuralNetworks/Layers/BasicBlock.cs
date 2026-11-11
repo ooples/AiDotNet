@@ -133,6 +133,7 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     private int _inputWidth;
     private readonly bool _zeroInitResidual;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -365,6 +366,7 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         _downsampleBn?.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

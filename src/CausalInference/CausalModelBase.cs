@@ -188,6 +188,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         }
     }
 
+    /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
@@ -624,6 +625,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
     /// </summary>
     internal bool HasSuppliedTreatment => _suppliedTreatment is not null;
 
+    /// <inheritdoc />
     public virtual void Train(Matrix<T> x, Vector<T> y)
     {
         ThrowIfDisposed();
@@ -881,6 +883,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         ThrowIfDisposed();

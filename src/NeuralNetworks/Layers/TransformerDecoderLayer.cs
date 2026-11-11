@@ -370,6 +370,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

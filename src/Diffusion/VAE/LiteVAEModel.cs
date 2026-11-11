@@ -237,6 +237,7 @@ public partial class LiteVAEModel<T> : VAEModelBase<T>
     }
 
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

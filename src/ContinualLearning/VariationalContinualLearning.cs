@@ -93,6 +93,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     /// <remarks>VCL shifts prior to last posterior without precision accumulation per the reference implementation.</remarks>
     public bool AccumulatesAcrossTasks => false;
 
+    /// <inheritdoc />
     public double Lambda
     {
         get => _lambda;

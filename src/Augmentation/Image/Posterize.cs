@@ -26,6 +26,7 @@ public class Posterize<T> : ImageAugmenterBase<T>
         MaxBitsPerChannel = maxBitsPerChannel;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         int bits = context.GetRandomInt(MinBitsPerChannel, MaxBitsPerChannel + 1);
@@ -43,6 +44,7 @@ public class Posterize<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

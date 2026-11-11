@@ -41,6 +41,7 @@ public class CLAHE<T> : ImageAugmenterBase<T>
         TileGridSize = tileGridSize;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -133,6 +134,7 @@ public class CLAHE<T> : ImageAugmenterBase<T>
         return (lower.Cast<int>(), upper.Cast<int>(), weight);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

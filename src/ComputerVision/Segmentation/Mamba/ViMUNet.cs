@@ -171,6 +171,7 @@ public partial class ViMUNet<T> : Common.SemanticSegmentationBase<T>
     #endregion
 
     #region Private Methods
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
@@ -184,6 +185,7 @@ public partial class ViMUNet<T> : Common.SemanticSegmentationBase<T>
         return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

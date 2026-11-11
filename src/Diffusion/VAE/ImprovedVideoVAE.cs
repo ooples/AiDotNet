@@ -300,6 +300,7 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
     }
 
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

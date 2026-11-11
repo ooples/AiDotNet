@@ -16,6 +16,7 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
         CropHeight = cropHeight; CropWidth = cropWidth; MaxAttempts = maxAttempts;
     }
 
+    /// <inheritdoc />
     protected override (ImageTensor<T> data, IDictionary<string, object> parameters) ApplyWithTransformParams(
         ImageTensor<T> data, AugmentationContext<T> context)
     {
@@ -56,6 +57,7 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
         return (data.Crop(bestY, bestX, cropH, cropW), parms);
     }
 
+    /// <inheritdoc />
     protected override BoundingBox<T> TransformBoundingBox(BoundingBox<T> box,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
@@ -86,6 +88,7 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override Keypoint<T> TransformKeypoint(Keypoint<T> keypoint,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
@@ -107,6 +110,7 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override SegmentationMask<T> TransformMask(SegmentationMask<T> mask,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
@@ -172,6 +176,7 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
         return NumOps.GreaterThan(score, other);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

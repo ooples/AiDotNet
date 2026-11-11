@@ -42,6 +42,23 @@ public class KMeansOptions<T> : ClusteringOptions<T>
     public KMeansInitMethod InitMethod { get; set; } = KMeansInitMethod.KMeansPlusPlus;
 
     /// <summary>
+    /// Gets or sets how many candidates k-means++ draws for each new center, keeping the one that lowers the total
+    /// squared distance most.
+    /// </summary>
+    /// <value>The candidates per center, or null for <c>2 + floor(ln NumClusters)</c>. Default is null.</value>
+    /// <remarks>
+    /// <para>
+    /// Null is the greedy k-means++ of Arthur and Vassilvitskii (2007), the default of scikit-learn's KMeans. 1 is the
+    /// classic k-means++, which takes each drawn point as the next center. Only <see cref="KMeansInitMethod.KMeansPlusPlus"/>
+    /// reads it.
+    /// </para>
+    /// <para><b>For Beginners:</b> Trying a few candidate centers and keeping the best usually gives a better starting
+    /// point, so the algorithm needs fewer iterations and more often finds every group.
+    /// </para>
+    /// </remarks>
+    public int? KMeansPlusPlusLocalTrials { get; set; }
+
+    /// <summary>
     /// Gets or sets custom initial cluster centers.
     /// </summary>
     /// <value>Matrix where each row is a cluster center, or null to use InitMethod.</value>
