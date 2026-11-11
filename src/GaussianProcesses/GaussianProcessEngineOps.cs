@@ -77,4 +77,22 @@ internal static class GaussianProcessEngineOps
     /// True when every element is finite (no NaN and no infinity). An empty matrix is finite.
     /// </summary>
     internal static bool AllFinite<T>(Matrix<T> values) => AllFinite(Tensor<T>.FromMatrix(values));
+
+    /// <summary>
+    /// Rows of <paramref name="matrix"/> at <paramref name="rows"/>, in the given order.
+    /// </summary>
+    internal static Matrix<T> SelectRows<T>(Matrix<T> matrix, int[] rows)
+    {
+        var index = new Tensor<int>(rows, new[] { rows.Length });
+        return AiDotNetEngine.Current.TensorIndexSelect(Tensor<T>.FromMatrix(matrix), index, 0).ToMatrix();
+    }
+
+    /// <summary>
+    /// Elements of <paramref name="vector"/> at <paramref name="indices"/>, in the given order.
+    /// </summary>
+    internal static Vector<T> Select<T>(Vector<T> vector, int[] indices)
+    {
+        var index = new Tensor<int>(indices, new[] { indices.Length });
+        return AiDotNetEngine.Current.TensorIndexSelect(Tensor<T>.FromVector(vector), index, 0).ToVector();
+    }
 }

@@ -366,8 +366,8 @@ public class HyperparameterOptimizer<T>
 
         // Fixed ordering so the dictionary can be mapped to and from a parameter vector.
         var names = new List<string>(initialParameters.Keys);
-        var start = new Vector<double>(names.Count);
-        for (int i = 0; i < names.Count; i++) start[i] = initialParameters[names[i]];
+        var engine = AiDotNetEngine.Current;
+        var start = new Vector<double>(names.Select(name => initialParameters[name]));
 
         double bestLml = double.NegativeInfinity;
         var bestParameters = new Dictionary<string, double>(initialParameters);
@@ -376,7 +376,8 @@ public class HyperparameterOptimizer<T>
         Dictionary<string, double> ToParameterDictionary(Vector<double> point)
         {
             var result = new Dictionary<string, double>(names.Count);
-            for (int i = 0; i < names.Count; i++) result[names[i]] = point[i];
+            foreach (var (name, value) in names.Zip(point, (name, value) => (name, value)))
+                result[name] = value;
             return result;
         }
 
@@ -386,7 +387,6 @@ public class HyperparameterOptimizer<T>
         {
             evaluations++;
             var current = ToParameterDictionary(point);
-            var gradientVector = new Vector<double>(names.Count);
 
             try
             {
@@ -397,12 +397,10 @@ public class HyperparameterOptimizer<T>
                     bestParameters = current;
                 }
 
-                for (int i = 0; i < names.Count; i++)
-                {
-                    gradientVector[i] = gradient.TryGetValue(names[i], out double g) ? -g : 0.0;
-                }
+                var reported = new Vector<double>(
+                    names.Select(name => gradient.TryGetValue(name, out double g) ? g : 0.0));
 
-                return (-lml, gradientVector);
+                return (-lml, engine.Negate(reported));
             }
             catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
             {
@@ -415,28 +413,19 @@ public class HyperparameterOptimizer<T>
                 // implementation instead halved the learning rate on every failure, which
                 // permanently degraded the step size for the rest of the run even after the search
                 // had returned to a well-conditioned region.
-                for (int i = 0; i < names.Count; i++)
-                {
-                    double best = bestParameters.TryGetValue(names[i], out double b) ? b : point[i];
-                    gradientVector[i] = point[i] - best;
-                }
+                var best = new Vector<double>(names.Zip(
+                    point,
+                    (name, value) => bestParameters.TryGetValue(name, out double b) ? b : value));
 
-                return (InfeasiblePointPenalty, gradientVector);
+                return (InfeasiblePointPenalty, engine.Subtract(point, best));
             }
         }
 
         Vector<double> Project(Vector<double> point)
         {
-            var projected = new Vector<double>(names.Count);
-            for (int i = 0; i < names.Count; i++)
+            foreach (string name in names)
             {
-                string name = names[i];
-                double value = point[i];
-                bool requiresPositive =
-                    name.Contains("variance", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("length", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("scale", StringComparison.OrdinalIgnoreCase);
-
+                bool requiresPositive = RequiresPositive(name);
                 if (parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds))
                 {
                     if (double.IsNaN(bounds.min) || double.IsInfinity(bounds.min) ||
@@ -456,22 +445,31 @@ public class HyperparameterOptimizer<T>
                             $"{MinimumPositiveHyperparameter}, but was {bounds.max}.",
                             nameof(parameterBounds));
                     }
-
-                    value = Math.Max(bounds.min, Math.Min(bounds.max, value));
                 }
-
-                // Kernel length scales, signal variances and noise variances are strictly positive
-                // quantities; a non-positive value makes the covariance matrix indefinite.
-                if (requiresPositive)
-                {
-                    value = Math.Max(MinimumPositiveHyperparameter, value);
-                }
-
-                projected[i] = value;
             }
 
-            return projected;
+            var lower = new Vector<double>(names.Select(name =>
+                parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds)
+                    ? bounds.min
+                    : double.NegativeInfinity));
+            var upper = new Vector<double>(names.Select(name =>
+                parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds)
+                    ? bounds.max
+                    : double.PositiveInfinity));
+
+            // Kernel length scales, signal variances and noise variances are strictly positive
+            // quantities; a non-positive value makes the covariance matrix indefinite.
+            var positiveFloor = new Vector<double>(names.Select(name =>
+                RequiresPositive(name) ? MinimumPositiveHyperparameter : double.NegativeInfinity));
+
+            var clamped = engine.Max(lower, engine.Min(upper, point));
+            return engine.Max(positiveFloor, clamped);
         }
+
+        static bool RequiresPositive(string name) =>
+            name.Contains("variance", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("length", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("scale", StringComparison.OrdinalIgnoreCase);
 
         // Uses the library's Adam optimizer rather than a private reimplementation of the update
         // rule. Bounds and positivity are enforced by projecting each iterate onto the feasible
@@ -542,7 +540,6 @@ public class HyperparameterOptimizer<T>
             throw new ArgumentException("Number of folds cannot exceed number of samples.");
 
         int n = X.Rows;
-        int d = X.Columns;
         var rand = RandomHelper.CreateSeededRandom(_randomSeed);
 
         // Shuffle indices
@@ -572,35 +569,13 @@ public class HyperparameterOptimizer<T>
                 testIndices.Add(indices[i]);
             }
 
-            // Split data
-            int trainSize = n - foldSize;
-            var XTrain = new Matrix<T>(trainSize, d);
-            var yTrain = new Vector<T>(trainSize);
-            var XTest = new Matrix<T>(foldSize, d);
-            var yTest = new Vector<T>(foldSize);
-
-            int trainIdx = 0, testIdx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (testIndices.Contains(i))
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        XTest[testIdx, j] = X[i, j];
-                    }
-                    yTest[testIdx] = y[i];
-                    testIdx++;
-                }
-                else
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        XTrain[trainIdx, j] = X[i, j];
-                    }
-                    yTrain[trainIdx] = y[i];
-                    trainIdx++;
-                }
-            }
+            // Split data (rows keep their original order within each split)
+            var testRows = Enumerable.Range(0, n).Where(testIndices.Contains).ToArray();
+            var trainRows = Enumerable.Range(0, n).Where(i => !testIndices.Contains(i)).ToArray();
+            var XTrain = GaussianProcessEngineOps.SelectRows(X, trainRows);
+            var yTrain = GaussianProcessEngineOps.Select(y, trainRows);
+            var XTest = GaussianProcessEngineOps.SelectRows(X, testRows);
+            var yTest = GaussianProcessEngineOps.Select(y, testRows);
 
             try
             {
@@ -611,20 +586,20 @@ public class HyperparameterOptimizer<T>
                 // Predict on test set
                 var (predictions, variances) = predictFunc(XTest, yTest);
 
-                // Compute test log-likelihood
-                double testLl = 0;
-                for (int i = 0; i < foldSize; i++)
-                {
-                    double pred = _numOps.ToDouble(predictions[i]);
-                    double var = Math.Max(_numOps.ToDouble(variances[i]), 1e-10);
-                    double actual = _numOps.ToDouble(yTest[i]);
+                // Compute test Gaussian log-likelihood:
+                // sum_i -0.5 * (log(2 pi var_i) + (y_i - mu_i)^2 / var_i)
+                var engine = AiDotNetEngine.Current;
+                var predictionTensor = engine.TensorSlice(Tensor<T>.FromVector(predictions), new[] { 0 }, new[] { foldSize });
+                var varianceTensor = engine.TensorMax(
+                    engine.TensorSlice(Tensor<T>.FromVector(variances), new[] { 0 }, new[] { foldSize }),
+                    _numOps.FromDouble(1e-10));
+                var diff = engine.TensorSubtract(Tensor<T>.FromVector(yTest), predictionTensor);
+                var terms = engine.TensorAdd(
+                    engine.TensorLog(engine.TensorMultiplyScalar(varianceTensor, _numOps.FromDouble(2 * Math.PI))),
+                    engine.TensorDivide(engine.TensorSquare(diff), varianceTensor));
+                T testLl = _numOps.Multiply(_numOps.FromDouble(-0.5), engine.TensorSum(terms));
 
-                    // Gaussian log-likelihood
-                    double diff = actual - pred;
-                    testLl += -0.5 * (Math.Log(2 * Math.PI * var) + diff * diff / var);
-                }
-
-                foldScores.Add(testLl / foldSize);
+                foldScores.Add(_numOps.ToDouble(testLl) / foldSize);
             }
             catch
             {
