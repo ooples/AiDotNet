@@ -182,16 +182,6 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// <returns>The residual component as a vector.</returns>
     protected Vector<T> CalculateResidual(Vector<T> trend, Vector<T> seasonal)
     {
-        Vector<T> residual = new Vector<T>(TimeSeries.Length);
-
-        for (int i = 0; i < TimeSeries.Length; i++)
-        {
-            residual[i] = NumOps.Subtract(
-                TimeSeries[i],
-                NumOps.Add(trend[i], seasonal[i])
-            );
-        }
-
-        return residual;
+        return Engine.Subtract(TimeSeries, Engine.Add(trend, seasonal));
     }
 }
