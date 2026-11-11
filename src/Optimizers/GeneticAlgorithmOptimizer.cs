@@ -314,7 +314,7 @@ public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBa
             population = next;
             values = nextValues;
 
-            if (Spread(population, dimension) < stop) break;
+            if (PopulationMeanAbsoluteDeviation(population, dimension) < stop) break;
         }
 
         return search.BestPoint;
@@ -330,23 +330,5 @@ public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBa
     }
 
     /// <summary>The mean absolute deviation of the population, coordinate by coordinate.</summary>
-    private double Spread(Vector<T>[] population, int dimension)
-    {
-        double total = 0.0;
-
-        for (int i = 0; i < dimension; i++)
-        {
-            double mean = 0.0;
-            foreach (var member in population) mean += Convert.ToDouble(member[i]);
-            mean /= population.Length;
-
-            foreach (var member in population)
-            {
-                total += Math.Abs(Convert.ToDouble(member[i]) - mean);
-            }
-        }
-
-        return total / (population.Length * dimension);
-    }
 
 }
