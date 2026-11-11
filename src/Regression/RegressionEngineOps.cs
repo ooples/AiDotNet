@@ -88,6 +88,20 @@ internal static class RegressionEngineOps
     }
 
     /// <summary>
+    /// Squared Euclidean distance from <paramref name="query"/> to every row of <paramref name="x"/>,
+    /// summed in feature order per row. <paramref name="x"/> must have at least one row.
+    /// </summary>
+    public static Vector<T> RowSquaredDistances<T>(Matrix<T> x, Vector<T> query)
+    {
+        var engine = AiDotNetEngine.Current;
+        var broadcastQuery = engine.TensorBroadcastTo(
+            new Tensor<T>(new[] { 1, query.Length }, query),
+            new[] { x.Rows, x.Columns });
+        var diff = engine.TensorSubtract(Tensor<T>.FromMatrix(x), broadcastQuery);
+        return engine.ReduceSum(engine.TensorSquare(diff), new[] { 1 }, keepDims: false).ToVector();
+    }
+
+    /// <summary>
     /// Gathers <paramref name="source"/> at <paramref name="indices"/> (in the given order).
     /// </summary>
     public static Vector<T> Gather<T>(Vector<T> source, int[] indices)
