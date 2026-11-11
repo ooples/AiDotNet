@@ -362,36 +362,25 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
         _numClasses = classLabels.Count;
 
         // Build node features tensor
-        var nodeFeatures = new Tensor<T>([numNodes, numFeatures]);
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                nodeFeatures[i, j] = NumOps.FromDouble(features[i][j]);
-            }
-        }
+        var nodeFeatures = GraphTensorHelper.Rows<T>(features, numFeatures);
 
         // Build edge index tensor (COO format)
-        var edgeIndex = new Tensor<T>([edges.Count, 2]);
+        var edgeIndex = GraphTensorHelper.EdgeIndex<T>(edges);
+
+        // Build adjacency matrix: scatter ones at (0, source, target) with one engine index-put
+        var batchIdx = new int[edges.Count];
+        var sourceIdx = new int[edges.Count];
+        var targetIdx = new int[edges.Count];
         for (int i = 0; i < edges.Count; i++)
         {
-            edgeIndex[i, 0] = NumOps.FromDouble(edges[i].source);
-            edgeIndex[i, 1] = NumOps.FromDouble(edges[i].target);
+            sourceIdx[i] = edges[i].source;
+            targetIdx[i] = edges[i].target;
         }
-
-        // Build adjacency matrix
-        var adjacencyMatrix = new Tensor<T>([1, numNodes, numNodes]);
-        foreach (var edge in edges)
-        {
-            adjacencyMatrix[0, edge.source, edge.target] = NumOps.One;
-        }
+        var adjacencyMatrix = GraphTensorHelper.IndexPut(
+            new Tensor<T>([1, numNodes, numNodes]), new[] { batchIdx, sourceIdx, targetIdx }, NumOps.One);
 
         // Build one-hot encoded labels
-        var nodeLabels = new Tensor<T>([numNodes, _numClasses]);
-        for (int i = 0; i < numNodes; i++)
-        {
-            nodeLabels[i, labels[i]] = NumOps.One;
-        }
+        var nodeLabels = GraphTensorHelper.OneHot<T>(labels.Take(numNodes).ToArray(), _numClasses);
 
         return new GraphData<T>
         {
@@ -626,10 +615,12 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
         var allEdges = new List<(int src, int dst)>();
         var existingEdgeSet = new HashSet<(int, int)>();
 
+        int[] edgeInts = GraphTensorHelper.EdgeIndexToInt32(graph.EdgeIndex);
+        int edgeCols = graph.EdgeIndex.Shape.Length > 1 ? graph.EdgeIndex.Shape[1] : 2;
         for (int i = 0; i < graph.EdgeIndex.Shape[0]; i++)
         {
-            int src = NumOps.ToInt32(graph.EdgeIndex[i, 0]);
-            int dst = NumOps.ToInt32(graph.EdgeIndex[i, 1]);
+            int src = edgeInts[i * edgeCols];
+            int dst = edgeInts[i * edgeCols + 1];
 
             // Store unique edges (avoid counting both directions)
             if (src < dst)
@@ -693,12 +684,6 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
     /// </summary>
     private Tensor<T> ConvertEdgesToTensor((int src, int dst)[] edges)
     {
-        var tensor = new Tensor<T>([edges.Length, 2]);
-        for (int i = 0; i < edges.Length; i++)
-        {
-            tensor[i, 0] = NumOps.FromDouble(edges[i].src);
-            tensor[i, 1] = NumOps.FromDouble(edges[i].dst);
-        }
-        return tensor;
+        return GraphTensorHelper.EdgeIndex<T>(edges);
     }
 }

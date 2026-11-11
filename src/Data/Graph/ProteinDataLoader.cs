@@ -78,7 +78,7 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         _sampleCount = totalSamples;
         int featDim = _options.FeatureDimension;
         var featuresData = new double[totalSamples * featDim];
-        var labelsData = new T[totalSamples];
+        var labelsData = new double[totalSamples];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -106,18 +106,20 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             int featOff = i * featDim;
             if (residueCount > 0)
             {
-                for (int f = 0; f < featDim; f++)
-                    featuresData[featOff + f] = aggFeatures[f] / residueCount;
+                // Mean over residues with one engine divide.
+                var mean = AiDotNetEngine.Current.TensorDivideScalar(
+                    new Tensor<double>(aggFeatures, new[] { featDim }), (double)residueCount);
+                mean.AsSpan().CopyTo(featuresData.AsSpan(featOff, featDim));
             }
 
             string proteinId = Path.GetFileNameWithoutExtension(csvFiles[i]);
             labelsData[i] = labelMap.TryGetValue(proteinId, out int label)
-                ? NumOps.FromDouble(label % _options.NumClasses)
-                : NumOps.FromDouble(-1); // -1 sentinel: no label found
+                ? label % _options.NumClasses
+                : -1.0; // -1 sentinel: no label found
         }
 
         LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, featDim }).Cast<T>();
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

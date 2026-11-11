@@ -116,6 +116,15 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
         var featuresData = new double[totalSamples * totalFeatDim];
         var labelsData = new double[totalSamples];
 
+        // Hash embedding for unknown nodes: sin((node + 1) * (f + 1)), f = 0 .. halfNode - 1,
+        // computed with engine ops from a shared (f + 1) ramp.
+        var engine = AiDotNetEngine.Current;
+        int halfNodeDim = nodeFeatDim / 2;
+        var ramp = new double[halfNodeDim];
+        for (int f = 0; f < halfNodeDim; f++)
+            ramp[f] = f + 1.0;
+        var rampTensor = new Tensor<double>(ramp, new[] { halfNodeDim });
+
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -132,8 +141,9 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
             else
             {
                 // Simple hash embedding for unknown nodes
-                for (int f = 0; f < halfNode; f++)
-                    featuresData[featOff + f] = Math.Sin((src + 1.0) * (f + 1.0));
+                if (halfNode > 0)
+                    engine.TensorSin(engine.TensorMultiplyScalar(rampTensor, src + 1.0))
+                        .AsSpan().CopyTo(featuresData.AsSpan(featOff, halfNode));
             }
 
             if (nodeFeatureMap.TryGetValue(dst, out var dstFeats))
@@ -142,8 +152,9 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
             }
             else
             {
-                for (int f = 0; f < halfNode; f++)
-                    featuresData[featOff + halfNode + f] = Math.Sin((dst + 1.0) * (f + 1.0));
+                if (halfNode > 0)
+                    engine.TensorSin(engine.TensorMultiplyScalar(rampTensor, dst + 1.0))
+                        .AsSpan().CopyTo(featuresData.AsSpan(featOff + halfNode, halfNode));
             }
 
             // Edge features
