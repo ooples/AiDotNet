@@ -326,6 +326,17 @@ internal static class RLTensorOps
         return Engine.Add(mean, Engine.Multiply(std, NormalRandom<T>(random, actionSize)));
     }
 
+    /// <summary>The first element of a network output (a value head's V(s), a critic's Q(s, a)).</summary>
+    internal static T FirstValue<T>(Tensor<T> output)
+    {
+        if (output is null)
+        {
+            throw new ArgumentNullException(nameof(output));
+        }
+
+        return output.ToVector()[0];
+    }
+
     /// <summary>A one-hot vector of the given length with a one at <paramref name="index"/>.</summary>
     internal static Vector<T> OneHot<T>(int length, int index)
     {
