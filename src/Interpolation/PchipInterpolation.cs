@@ -148,14 +148,30 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
         Tensor<T> w1 = engine.TensorAdd(engine.TensorMultiplyScalar(hRight, _numOps.FromDouble(2)), hLeft);
         Tensor<T> w2 = engine.TensorAdd(hRight, engine.TensorMultiplyScalar(hLeft, _numOps.FromDouble(2)));
         // Same-sign, nonzero neighbours keep the mean; a sign change or a flat neighbour is an extremum with slope 0.
-        // Masked-out secants are replaced by 1 before dividing (a decimal division by a zero secant throws).
-        Tensor<T> sameSign = engine.TensorGreaterThan(engine.TensorMultiply(left, right), _numOps.Zero);
+        // The signs are compared separately ((l > 0 and r > 0) or (l < 0 and r < 0)), so a secant product cannot
+        // overflow or underflow. The 0/1 indicator products below never leave {0, 1}.
+        Tensor<T> bothPositive = engine.TensorMultiply(
+            engine.TensorGreaterThan(left, _numOps.Zero), engine.TensorGreaterThan(right, _numOps.Zero));
+        Tensor<T> bothNegative = engine.TensorMultiply(
+            engine.TensorLessThan(left, _numOps.Zero), engine.TensorLessThan(right, _numOps.Zero));
+        Tensor<T> sameSign = engine.TensorAdd(bothPositive, bothNegative);
+
+        // Weighted harmonic mean (w1 + w2) / (w1 / l + w2 / r), evaluated with normalized weights
+        // a = w1 / (w1 + w2), b = w2 / (w1 + w2) and secants scaled by s = max(|l|, |r|):
+        // s / (a / (l / s) + b / (r / s)). The scaled secants lie in [-1, 1], so the divisions cannot overflow for
+        // representable slopes. Masked-out secants are replaced by 1 first (a decimal division by zero throws).
         Tensor<T> ones = engine.TensorOnesLike(left);
         Tensor<T> safeLeft = engine.TensorWhere(sameSign, left, ones);
         Tensor<T> safeRight = engine.TensorWhere(sameSign, right, ones);
+        Tensor<T> scale = engine.TensorMax(engine.TensorAbs(safeLeft), engine.TensorAbs(safeRight));
+        Tensor<T> totalWeight = engine.TensorAdd(w1, w2);
+        Tensor<T> weightLeft = engine.TensorDivide(w1, totalWeight);
+        Tensor<T> weightRight = engine.TensorDivide(w2, totalWeight);
         Tensor<T> interior = engine.TensorDivide(
-            engine.TensorAdd(w1, w2),
-            engine.TensorAdd(engine.TensorDivide(w1, safeLeft), engine.TensorDivide(w2, safeRight)));
+            scale,
+            engine.TensorAdd(
+                engine.TensorDivide(weightLeft, engine.TensorDivide(safeLeft, scale)),
+                engine.TensorDivide(weightRight, engine.TensorDivide(safeRight, scale))));
         interior = engine.TensorWhere(sameSign, interior, engine.TensorZerosLike(interior));
 
         var slopes = new[]
