@@ -121,6 +121,7 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
         // Step 2: Recognize text in each region
         var recognizedTexts = new List<RecognizedText<T>>();
+        var readings = new List<(TextRegion<T> Region, string Text, T Confidence)>();
 
         foreach (var region in detectionResult.TextRegions)
         {
@@ -129,9 +130,16 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
             // Recognize text
             var (text, confidence) = _recognizer.RecognizeText(crop);
+            readings.Add((region, text, confidence));
+        }
 
+        double confidenceThreshold = NumOps.ToDouble(_options.ConfidenceThreshold);
+        var confidences = CvTensorOps<T>.ToDoubleArray(readings.Select(r => r.Confidence).ToArray());
+        for (int index = 0; index < readings.Count; index++)
+        {
+            var (region, text, confidence) = readings[index];
             if (!string.IsNullOrWhiteSpace(text) &&
-                NumOps.ToDouble(confidence) >= NumOps.ToDouble(_options.ConfidenceThreshold))
+                confidences[index] >= confidenceThreshold)
             {
                 var recognized = new RecognizedText<T>(text, confidence)
                 {
@@ -178,10 +186,11 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int width = image.Shape[3];
 
         // Get bounding box
-        double x1 = NumOps.ToDouble(region.Box.X1);
-        double y1 = NumOps.ToDouble(region.Box.Y1);
-        double x2 = NumOps.ToDouble(region.Box.X2);
-        double y2 = NumOps.ToDouble(region.Box.Y2);
+        var corners = CvTensorOps<T>.ToDoubleArray(new[] { region.Box.X1, region.Box.Y1, region.Box.X2, region.Box.Y2 });
+        double x1 = corners[0];
+        double y1 = corners[1];
+        double x2 = corners[2];
+        double y2 = corners[3];
 
         // Clamp to image bounds
         int cropX1 = Math.Max(0, (int)x1);
@@ -194,24 +203,13 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
         var crop = new Tensor<T>(new[] { batch, channels, cropH, cropW });
 
-        for (int b = 0; b < batch; b++)
+        // The part of the crop inside the image is copied; the rest (a degenerate box) stays zero.
+        int insideH = Math.Min(cropH, height - cropY1);
+        int insideW = Math.Min(cropW, width - cropX1);
+        if (insideH > 0 && insideW > 0)
         {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < cropH; h++)
-                {
-                    for (int w = 0; w < cropW; w++)
-                    {
-                        int srcH = cropY1 + h;
-                        int srcW = cropX1 + w;
-
-                        if (srcH < height && srcW < width)
-                        {
-                            crop[b, c, h, w] = image[b, c, srcH, srcW];
-                        }
-                    }
-                }
-            }
+            var inside = Engine.TensorSlice(image, new[] { 0, 0, cropY1, cropX1 }, new[] { batch, channels, insideH, insideW });
+            crop = insideH == cropH && insideW == cropW ? inside : Engine.TensorSetSlice(crop, inside, new[] { 0, 0, 0, 0 });
         }
 
         // If polygon available and text is rotated, apply perspective correction.
@@ -289,12 +287,15 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             return region.RotationAngle >= 0 ? Rotate90(crop) : Rotate270(crop);
         }
 
-        // Warp.
-        var output = new Tensor<T>(new[] { batch, channels, dstH, dstW });
+        // Warp, in double as before, on one bulk conversion of the crop.
+        var source = CvTensorOps<T>.ToDoubleArray(crop);
+        var output = new double[batch * channels * dstH * dstW];
         for (int b = 0; b < batch; b++)
         {
             for (int c = 0; c < channels; c++)
             {
+                int sourcePlane = ((b * channels) + c) * srcH * srcW;
+                int targetPlane = ((b * channels) + c) * dstH * dstW;
                 for (int y = 0; y < dstH; y++)
                 {
                     for (int x = 0; x < dstW; x++)
@@ -304,12 +305,12 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                         if (Math.Abs(w) < 1e-12) continue;
                         double xs = (h[0] * x + h[1] * y + h[2]) / w;
                         double ys = (h[3] * x + h[4] * y + h[5]) / w;
-                        output[b, c, y, x] = BilinearSample(crop, b, c, xs, ys, srcW, srcH);
+                        output[targetPlane + (y * dstW) + x] = BilinearSample(source, sourcePlane, xs, ys, srcW, srcH);
                     }
                 }
             }
         }
-        return output;
+        return CvTensorOps<T>.FromDoubleArray(output, new[] { batch, channels, dstH, dstW });
     }
 
     /// <summary>
@@ -332,10 +333,11 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int tlIdx = 0, brIdx = 0, trIdx = 0, blIdx = 0;
         double minSum = double.PositiveInfinity, maxSum = double.NegativeInfinity;
         double maxDiff = double.NegativeInfinity, minDiff = double.PositiveInfinity;
+        var points = CvTensorOps<T>.PointsToDoubles(poly);
         for (int i = 0; i < n; i++)
         {
-            double x = NumOps.ToDouble(poly[i].X);
-            double y = NumOps.ToDouble(poly[i].Y);
+            double x = points[i].X;
+            double y = points[i].Y;
             double s = x + y;
             double d = x - y;
             if (s < minSum) { minSum = s; tlIdx = i; }
@@ -394,11 +396,7 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         // Use the base class's protected static NumOps instead of
         // Convert.ToDouble — Convert.ToDouble throws on non-IConvertible
         // generic T types and bypasses the library's numeric abstraction.
-        var pts = new (double X, double Y)[4];
-        for (int i = 0; i < 4; i++)
-        {
-            pts[i] = (NumOps.ToDouble(poly[i].X), NumOps.ToDouble(poly[i].Y));
-        }
+        var pts = CvTensorOps<T>.PointsToDoubles(poly.GetRange(0, 4)).ToArray();
         // Centroid.
         double cx = (pts[0].X + pts[1].X + pts[2].X + pts[3].X) / 4.0;
         double cy = (pts[0].Y + pts[1].Y + pts[2].Y + pts[3].Y) / 4.0;
@@ -496,103 +494,63 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// Bilinear-interpolated sample from a [batch, channel, H, W] tensor at
     /// a fractional position. Returns 0 for out-of-bounds reads.
     /// </summary>
-    private T BilinearSample(Tensor<T> src, int b, int c, double xs, double ys, int srcW, int srcH)
+    private static double BilinearSample(double[] src, int plane, double xs, double ys, int srcW, int srcH)
     {
-        if (xs < 0 || xs > srcW - 1 || ys < 0 || ys > srcH - 1) return NumOps.Zero;
+        if (xs < 0 || xs > srcW - 1 || ys < 0 || ys > srcH - 1) return 0.0;
         int x0 = (int)Math.Floor(xs);
         int y0 = (int)Math.Floor(ys);
         int x1 = Math.Min(x0 + 1, srcW - 1);
         int y1 = Math.Min(y0 + 1, srcH - 1);
         double dxw = xs - x0, dyw = ys - y0;
-        // Route every T → double via the library's NumericOperations rather
-        // than Convert.ToDouble, which throws on non-IConvertible T types
-        // (e.g. when a custom NumericOperations<T> is installed).
-        double v00 = NumOps.ToDouble(src[b, c, y0, x0]);
-        double v01 = NumOps.ToDouble(src[b, c, y0, x1]);
-        double v10 = NumOps.ToDouble(src[b, c, y1, x0]);
-        double v11 = NumOps.ToDouble(src[b, c, y1, x1]);
+        // The plane was converted to double in bulk through the library's NumericOperations.
+        double v00 = src[plane + (y0 * srcW) + x0];
+        double v01 = src[plane + (y0 * srcW) + x1];
+        double v10 = src[plane + (y1 * srcW) + x0];
+        double v11 = src[plane + (y1 * srcW) + x1];
         double v = v00 * (1 - dxw) * (1 - dyw)
                  + v01 * dxw * (1 - dyw)
                  + v10 * (1 - dxw) * dyw
                  + v11 * dxw * dyw;
-        return NumOps.FromDouble(v);
+        return v;
     }
 
     private Tensor<T> Rotate90(Tensor<T> input)
-    {
-        // 90° clockwise.
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var output = new Tensor<T>(new[] { batch, channels, width, height });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[b, c, w, height - 1 - h] = input[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
+        // 90 degrees clockwise: output[b, c, w, height - 1 - h] = input[b, c, h, w], i.e. swap H and W, then
+        // reverse the new width axis.
+        => Engine.TensorFlip(Engine.TensorPermute(input, new[] { 0, 1, 3, 2 }), new[] { 3 });
 
     private Tensor<T> Rotate270(Tensor<T> input)
-    {
-        // 90° counter-clockwise (== 270° clockwise). Mirrors Rotate90 with
-        // the destination indices flipped along the width axis so a
-        // negative-rotation detector reading still ends up upright.
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var output = new Tensor<T>(new[] { batch, channels, width, height });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[b, c, width - 1 - w, h] = input[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
+        // 90 degrees counter-clockwise (== 270 clockwise): output[b, c, width - 1 - w, h] = input[b, c, h, w],
+        // i.e. swap H and W, then reverse the new height axis.
+        => Engine.TensorFlip(Engine.TensorPermute(input, new[] { 0, 1, 3, 2 }), new[] { 2 });
 
     private List<RecognizedText<T>> SortByReadingOrder(List<RecognizedText<T>> texts)
     {
         if (texts.Count <= 1)
             return texts;
 
-        // Group into lines based on Y-coordinate overlap
-        var lines = new List<List<RecognizedText<T>>>();
+        // (Y1, Y2, X1) of every box in double, one bulk conversion; a text without a box reads as 0.
+        var coordinates = CvTensorOps<T>.ToDoubleArray(texts
+            .SelectMany(t => t.Box != null ? new[] { t.Box.Y1, t.Box.Y2, t.Box.X1 } : new[] { NumOps.Zero, NumOps.Zero, NumOps.Zero })
+            .ToArray());
+        double Top(int i) => coordinates[3 * i];
+        double Bottom(int i) => coordinates[(3 * i) + 1];
+        double Left(int i) => coordinates[(3 * i) + 2];
 
-        foreach (var text in texts.OrderBy(t => t.Box != null ? NumOps.ToDouble(t.Box.Y1) : 0))
+        // Group into lines based on Y-coordinate overlap
+        var lines = new List<List<int>>();
+
+        foreach (int text in Enumerable.Range(0, texts.Count).OrderBy(Top))
         {
             bool addedToLine = false;
 
             foreach (var line in lines)
             {
                 // Check if this text overlaps vertically with the line
-                var lineTop = line.Min(t => t.Box != null ? NumOps.ToDouble(t.Box.Y1) : 0);
-                var lineBottom = line.Max(t => t.Box != null ? NumOps.ToDouble(t.Box.Y2) : 0);
-                var textTop = text.Box != null ? NumOps.ToDouble(text.Box.Y1) : 0;
-                var textBottom = text.Box != null ? NumOps.ToDouble(text.Box.Y2) : 0;
+                var lineTop = line.Min(Top);
+                var lineBottom = line.Max(Bottom);
+                var textTop = Top(text);
+                var textBottom = Bottom(text);
 
                 double overlapThreshold = (lineBottom - lineTop) * 0.5;
 
@@ -607,17 +565,16 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
             if (!addedToLine)
             {
-                lines.Add(new List<RecognizedText<T>> { text });
+                lines.Add(new List<int> { text });
             }
         }
 
         // Sort each line left-to-right, then concatenate lines
         var result = new List<RecognizedText<T>>();
 
-        foreach (var line in lines.OrderBy(l => l.Min(t => t.Box != null ? NumOps.ToDouble(t.Box.Y1) : 0)))
+        foreach (var line in lines.OrderBy(l => l.Min(Top)))
         {
-            var sortedLine = line.OrderBy(t => t.Box != null ? NumOps.ToDouble(t.Box.X1) : 0);
-            result.AddRange(sortedLine);
+            result.AddRange(line.OrderBy(Left).Select(i => texts[i]));
         }
 
         return result;
@@ -653,21 +610,23 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (regions == 0)
             return new Tensor<T>([0, 6]);
 
-        var output = new Tensor<T>([regions, 6]);
+        var lengths = CvTensorOps<T>.FromDoubleArray(
+            result.TextRegions.Select(region => (double)region.Text.Length).ToArray(), new[] { regions }).ToArray();
+        var output = new T[regions * 6];
         for (int i = 0; i < regions; i++)
         {
             var region = result.TextRegions[i];
-            output[i, 0] = region.Confidence;
-            output[i, 1] = NumOps.FromDouble(region.Text.Length);
+            output[i * 6] = region.Confidence;
+            output[(i * 6) + 1] = lengths[i];
             if (region.Box is not null)
             {
-                output[i, 2] = region.Box.X1;
-                output[i, 3] = region.Box.Y1;
-                output[i, 4] = region.Box.X2;
-                output[i, 5] = region.Box.Y2;
+                output[(i * 6) + 2] = region.Box.X1;
+                output[(i * 6) + 3] = region.Box.Y1;
+                output[(i * 6) + 4] = region.Box.X2;
+                output[(i * 6) + 5] = region.Box.Y2;
             }
         }
-        return output;
+        return new Tensor<T>(output, new[] { regions, 6 });
     }
 
     /// <inheritdoc />
