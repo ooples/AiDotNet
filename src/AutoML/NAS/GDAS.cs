@@ -58,8 +58,11 @@ namespace AiDotNet.AutoML.NAS
         private readonly T _initialTemperature;
         private readonly T _finalTemperature;
 
+        /// <inheritdoc />
         protected override INumericOperations<T> NumOps => _ops;
+        /// <inheritdoc />
         protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        /// <inheritdoc />
         protected override int NasNumNodes => _numNodes;
 
         public GDAS(SearchSpaceBase<T> searchSpace, int numNodes = 4,
@@ -167,6 +170,7 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         public T GetTemperature() => _temperature;
 
+        /// <inheritdoc />
         protected override Architecture<T> SearchArchitecture(
             Tensor<T> inputs,
             Tensor<T> targets,

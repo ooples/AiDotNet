@@ -264,6 +264,7 @@ public partial class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDete
             sampleRate: _options.SampleRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -277,8 +278,10 @@ public partial class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDete
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -301,6 +304,7 @@ public partial class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDete
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(QuailVad<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

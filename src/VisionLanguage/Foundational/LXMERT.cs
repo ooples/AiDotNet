@@ -124,12 +124,16 @@ public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
             _options.ImageSize = h;
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.FusionDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int FusionEmbeddingDim => _options.FusionDim;
+    /// <inheritdoc />
     public int MaxSequenceLength => _options.MaxSequenceLength;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -142,6 +146,7 @@ public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
         return L2Normalize(c);
     }
 
+    /// <inheritdoc />
     public Tensor<T> FuseImageText(Tensor<T> image, string text)
     {
         ThrowIfDisposed();
@@ -227,6 +232,7 @@ public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
         return visionOut.ConcatenateTensors(textState);
     }
 
+    /// <inheritdoc />
     public T ComputeMatchingScore(Tensor<T> image, string text)
     {
         // Run the full LXMERT three-encoder fusion so the matching score
@@ -310,6 +316,7 @@ public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -325,11 +332,14 @@ public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
     // This forwarded to a helper the base now calls from its own
     // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -358,6 +368,7 @@ public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
             throw new ObjectDisposedException(GetType().FullName ?? nameof(LXMERT<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -167,6 +167,7 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private T _yStd;
 
 
+    /// <inheritdoc />
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         _numFeatures = x.Columns;

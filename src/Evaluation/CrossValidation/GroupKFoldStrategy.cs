@@ -43,10 +43,14 @@ public class GroupKFoldStrategy<T> : ICrossValidationStrategy<T>
         if (_k < 2) throw new ArgumentException("Must have at least 2 groups for Group K-Fold.");
     }
 
+    /// <inheritdoc />
     public string Name => $"Group {_k}-Fold";
+    /// <inheritdoc />
     public int NumSplits => _k;
+    /// <inheritdoc />
     public string Description => $"Group {_k}-fold cross-validation keeping related samples together.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize != _groups.Length)

@@ -24,15 +24,24 @@ public class GiniCoefficientMetric<T> : IProbabilisticClassificationMetric<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly AUCROCMetric<T> _aucMetric = new();
 
+    /// <inheritdoc />
     public string Name => "GiniCoefficient";
+    /// <inheritdoc />
     public string Category => "Classification";
+    /// <inheritdoc />
     public string Description => "Gini coefficient (2*AUC - 1) measuring discriminative power.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.HigherIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.FromDouble(-1.0);
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => true;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals, int numClasses = 2)
     {
         var auc = _aucMetric.Compute(probabilities, actuals, numClasses);
@@ -40,6 +49,7 @@ public class GiniCoefficientMetric<T> : IProbabilisticClassificationMetric<T>
         return NumOps.FromDouble(2 * aucVal - 1);
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals, int numClasses,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

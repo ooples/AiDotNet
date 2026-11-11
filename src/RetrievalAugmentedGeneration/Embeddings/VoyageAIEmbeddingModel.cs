@@ -194,6 +194,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
         public int Index { get; set; }
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)

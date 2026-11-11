@@ -103,6 +103,10 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
 
         if (!source.IsShapeResolved)
             source.ResolveFromShape(new[] { 1, _embeddingDimension });
+        // The quantized projections have no bias; quantizing a Whisper-style attention would drop its q and v biases.
+        if (source.HasProjectionBiases)
+            throw new NotSupportedException(
+                "Weight-only quantization does not carry query or value projection biases yet.");
 
         _qProj = WeightOnlyProjection.Quantize(source.GetQueryWeights(), _embeddingDimension, _embeddingDimension, _format);
         _kProj = WeightOnlyProjection.Quantize(source.GetKeyWeights(), _embeddingDimension, _embeddingDimension, _format);

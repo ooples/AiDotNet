@@ -68,7 +68,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly VisionMambaOptions _options;
+    /// <inheritdoc />
     protected override double DefaultLearningRate => _options.LearningRate;
+    /// <inheritdoc />
     protected override double DefaultWeightDecay => _options.WeightDecay;
 
     #region Fields
@@ -181,6 +183,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         _ => ([192, 192, 192, 192], [2, 2, 2, 18], 256)
     };
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -190,6 +193,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

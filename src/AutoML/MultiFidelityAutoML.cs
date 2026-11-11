@@ -70,6 +70,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         _options = options ?? new AutoMLMultiFidelityOptions();
     }
 
+    /// <inheritdoc />
     public override async Task<IFullModel<T, TInput, TOutput>> SearchAsync(
         TInput inputs,
         TOutput targets,
@@ -380,6 +381,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         return (localBestModel, localBestScore);
     }
 
+    /// <inheritdoc />
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();

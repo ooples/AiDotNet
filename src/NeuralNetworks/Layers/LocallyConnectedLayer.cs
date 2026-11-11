@@ -362,6 +362,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private readonly int _stride;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -754,6 +755,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_biases);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _weightGradients = null;

@@ -120,6 +120,7 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         return new int[] { Stride, Stride };
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
 

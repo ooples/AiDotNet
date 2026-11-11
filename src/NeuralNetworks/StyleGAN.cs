@@ -711,12 +711,14 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
         return Generate(input);
     }
 
+    /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(
@@ -726,6 +728,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         return true;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

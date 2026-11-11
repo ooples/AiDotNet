@@ -379,12 +379,14 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
 
 
 
+    /// <inheritdoc />
     protected override void ExtractModelParameters()
     {
         if (_useOLS) return;
         base.ExtractModelParameters();
     }
 
+    /// <inheritdoc />
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (_useOLS && _olsCoefficients is not null)
@@ -392,6 +394,7 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
         return base.GetActiveFeatureIndices();
     }
 
+    /// <inheritdoc />
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Use OLS for reliable predictions

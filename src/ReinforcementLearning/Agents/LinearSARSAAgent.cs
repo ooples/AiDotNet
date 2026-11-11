@@ -87,6 +87,7 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = options.EpsilonStart;
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         int selectedAction;
@@ -107,6 +108,7 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         if (_lastState == null || _lastAction < 0) return;
@@ -151,6 +153,7 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override T Train() => NumOps.Zero;
 
     private T ComputeQValue(Vector<T> features, int actionIndex)
@@ -203,6 +206,7 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return bestAction;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T>
     {
         ["epsilon"] = NumOps.FromDouble(_epsilon),
@@ -223,17 +227,23 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         _lastAction = -1;
         _lastState = null;
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    /// <inheritdoc />
     public override int FeatureCount => _options.FeatureSize;
+    /// <inheritdoc />
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
+    /// <inheritdoc />
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

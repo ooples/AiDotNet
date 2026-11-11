@@ -679,6 +679,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
     private IGpuBuffer? _gpuM;
     private IGpuBuffer? _gpuU;
 
+    /// <inheritdoc />
     public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
     {
         _gpuM?.Dispose();
@@ -691,6 +692,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         base.InitializeGpuState(parameterCount, backend);
     }
 
+    /// <inheritdoc />
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
         if (!_gpuStateInitialized || _gpuM == null || _gpuU == null)
@@ -715,6 +717,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         );
     }
 
+    /// <inheritdoc />
     public override void DisposeGpuState()
     {
         _gpuM?.Dispose();

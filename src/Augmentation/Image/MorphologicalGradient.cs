@@ -16,6 +16,7 @@ public class MorphologicalGradient<T> : ImageAugmenterBase<T>
         KernelSize = kernelSize; BlendAlpha = blendAlpha;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
@@ -40,6 +41,7 @@ public class MorphologicalGradient<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

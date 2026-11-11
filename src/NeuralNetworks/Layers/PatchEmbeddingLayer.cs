@@ -683,12 +683,14 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_projectionBias);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
         _projectionWeightsGradient = null; _projectionBiasGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _projectionWeightsGradient = null;

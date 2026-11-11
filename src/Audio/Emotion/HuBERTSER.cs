@@ -58,6 +58,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
 
     #region IEmotionRecognizer Properties
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedEmotions => _options.EmotionLabels;
 
     #endregion
@@ -125,6 +126,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
 
     #region IEmotionRecognizer
 
+    /// <inheritdoc />
     public EmotionResult<T> RecognizeEmotion(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -142,6 +144,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
         };
     }
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, T> GetEmotionProbabilities(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -175,6 +178,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
         return probs;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<TimedEmotionResult<T>> RecognizeEmotionTimeSeries(Tensor<T> audio, int windowSizeMs = 1000, int hopSizeMs = 500)
     {
         ThrowIfDisposed();
@@ -199,12 +203,14 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
         return results;
     }
 
+    /// <inheritdoc />
     public T GetArousal(Tensor<T> audio)
     {
         ThrowIfDisposed();
         return ComputeArousalFromProbs(GetEmotionProbabilities(audio));
     }
 
+    /// <inheritdoc />
     public T GetValence(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -235,6 +241,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
         return NumOps.FromDouble(Math.Max(-1, Math.Min(1, valence)));
     }
 
+    /// <inheritdoc />
     public Vector<T> ExtractEmotionFeatures(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -258,6 +265,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
             numClasses: _options.NumClasses, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -297,8 +305,10 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -323,6 +333,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(HuBERTSER<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

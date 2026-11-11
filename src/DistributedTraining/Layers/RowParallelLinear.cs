@@ -64,6 +64,7 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _weightShard;   // [outputSize, localInputSize]
     private Tensor<T> _bias;          // [outputSize] (replicated)
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
     public int LocalInputSize => _localInputSize;
 
@@ -112,6 +113,7 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var weightT = Engine.TensorTranspose(_weightShard);                  // [localIn, outputSize]
@@ -136,10 +138,12 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
         => throw new System.InvalidOperationException(
             "RowParallelLinear is tape-native: parameters are updated by the optimizer's tape Step " +
             "on the registered trainable shards, not by the legacy per-layer UpdateParameters.");
 
+    /// <inheritdoc />
     public override void ResetState() { }
 }

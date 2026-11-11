@@ -208,9 +208,13 @@ public sealed class TensorCollectionParameterSource<T> : IParameterSource<T>, IP
         }
     }
 
+    /// <inheritdoc />
     public long ParameterCount => _inner.ParameterCount;
+    /// <inheritdoc />
     public Vector<T> GetParameters() => _inner.GetParameters();
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters) => _inner.SetParameters(parameters);
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _inner.GetParameterLayout();
 }
 
@@ -250,9 +254,13 @@ public sealed class MatrixCollectionParameterSource<T> : IParameterSource<T>, IP
         }
     }
 
+    /// <inheritdoc />
     public long ParameterCount => _inner.ParameterCount;
+    /// <inheritdoc />
     public Vector<T> GetParameters() => _inner.GetParameters();
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters) => _inner.SetParameters(parameters);
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _inner.GetParameterLayout();
 }
 
@@ -288,9 +296,13 @@ public sealed class VectorCollectionParameterSource<T> : IParameterSource<T>, IP
         }
     }
 
+    /// <inheritdoc />
     public long ParameterCount => _inner.ParameterCount;
+    /// <inheritdoc />
     public Vector<T> GetParameters() => _inner.GetParameters();
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters) => _inner.SetParameters(parameters);
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _inner.GetParameterLayout();
 }
 
@@ -326,9 +338,13 @@ public sealed class KeyedTensorCollectionParameterSource<T, TKey> : IParameterSo
         }
     }
 
+    /// <inheritdoc />
     public long ParameterCount => _inner.ParameterCount;
+    /// <inheritdoc />
     public Vector<T> GetParameters() => _inner.GetParameters();
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters) => _inner.SetParameters(parameters);
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _inner.GetParameterLayout();
 }
 
@@ -368,9 +384,13 @@ public sealed class KeyedMatrixCollectionParameterSource<T, TKey> : IParameterSo
         }
     }
 
+    /// <inheritdoc />
     public long ParameterCount => _inner.ParameterCount;
+    /// <inheritdoc />
     public Vector<T> GetParameters() => _inner.GetParameters();
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters) => _inner.SetParameters(parameters);
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _inner.GetParameterLayout();
 }
 
@@ -406,9 +426,13 @@ public sealed class KeyedVectorCollectionParameterSource<T, TKey> : IParameterSo
         }
     }
 
+    /// <inheritdoc />
     public long ParameterCount => _inner.ParameterCount;
+    /// <inheritdoc />
     public Vector<T> GetParameters() => _inner.GetParameters();
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters) => _inner.SetParameters(parameters);
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _inner.GetParameterLayout();
 }
 
