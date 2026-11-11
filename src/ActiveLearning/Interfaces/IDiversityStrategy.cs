@@ -100,10 +100,10 @@ public abstract class DiversityStrategyBase<T, TInput, TOutput> : IDiversityStra
 
     /// <inheritdoc />
     /// <remarks>
-    /// Features are extracted once per sample. When every sample has the same feature length the
-    /// Euclidean distances are computed blockwise with engine ops (exact differences, no Gram-matrix
-    /// shortcut); otherwise each pair falls back to <see cref="ComputeDistance"/>, which compares the
-    /// shared prefix.
+    /// Features are extracted once per sample. When <see cref="ComputeDistance"/> is not overridden
+    /// and every sample has the same feature length, the Euclidean distances are computed blockwise
+    /// with engine ops (exact differences, no Gram-matrix shortcut). Otherwise each pair goes through
+    /// <see cref="ComputeDistance"/>, so subclasses that override it keep their metric.
     /// </remarks>
     public virtual Matrix<T> ComputeDistanceMatrix(IDataset<T, TInput, TOutput> dataset)
     {
@@ -120,7 +120,7 @@ public abstract class DiversityStrategyBase<T, TInput, TOutput> : IDiversityStra
         }
 
         int d = features[0].Length;
-        if (features.TrueForAll(f => f.Length == d))
+        if (!OverridesComputeDistance() && features.TrueForAll(f => f.Length == d))
         {
             return ComputeUniformDistanceMatrix(features, d);
         }
@@ -137,6 +137,21 @@ public abstract class DiversityStrategyBase<T, TInput, TOutput> : IDiversityStra
         }
 
         return distances;
+    }
+
+    /// <summary>
+    /// True when the runtime type overrides <see cref="ComputeDistance"/>, in which case the batched
+    /// Euclidean matrix would not match the subclass's metric.
+    /// </summary>
+    private bool OverridesComputeDistance()
+    {
+        var method = GetType().GetMethod(
+            nameof(ComputeDistance),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            null,
+            new[] { typeof(Vector<T>), typeof(Vector<T>) },
+            null);
+        return method is not null && method.DeclaringType != typeof(DiversityStrategyBase<T, TInput, TOutput>);
     }
 
     /// <summary>
