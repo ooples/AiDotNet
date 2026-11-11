@@ -262,6 +262,15 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
     private Tensor<T> ResampleTorchaudio(double[] samples, int from, int to) =>
         from == to ? Wave(samples) : AudioHelper<T>.ResampleBandLimited(Engine, Wave(samples), from, to);
 
+    /// <summary>A prompt recording cut to <see cref="IndexTTS2Options.MaxPromptSeconds"/>, as every prompt reader cuts it.</summary>
+    internal double[] CutPrompt(double[] samples, int sampleRate) => Cut(samples, sampleRate);
+
+    /// <summary>Segment waveforms joined as long-form synthesis joins them.</summary>
+    internal double[] JoinSegments(List<double[]> waves) => Join(waves);
+
+    /// <summary>The text-to-emotion model's raw answer for <paramref name="text"/>, before parsing.</summary>
+    internal string EmotionAnswer(string text) => TextToEmotion().Answer(text, _options.EmotionMaxTokens);
+
     private double[] Cut(double[] samples, int sampleRate)
     {
         int max = (int)(_options.MaxPromptSeconds * sampleRate);

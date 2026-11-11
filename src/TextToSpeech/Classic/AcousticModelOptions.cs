@@ -31,6 +31,7 @@ public class AcousticModelOptions : TtsModelOptions
 
     /// <summary>Gets or sets the encoder embedding dimension.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (EmbeddingDim, CbhgChannels); the inherited encoder width has no part to size.", ModelType = typeof(Tacotron<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech's encoder and decoder share one channel width, HiddenDim (Vainer and Dusek 2020, section 3.2).", ModelType = typeof(SpeedySpeech<>))]
     public virtual int EncoderDim { get; set; } = 256;
 
     /// <summary>Ordered symbol inventory used to train the text embedding. Null selects this model's English inventory.</summary>
@@ -38,6 +39,8 @@ public class AcousticModelOptions : TtsModelOptions
 
     /// <summary>Gets or sets the decoder output dimension (mel channels).</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (DecoderRnnDim, AttentionDim); the inherited decoder width has no part to size.", ModelType = typeof(Tacotron<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech's encoder and decoder share one channel width, HiddenDim, and project to MelChannels (Vainer and Dusek 2020, section 3.2).", ModelType = typeof(SpeedySpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("ProDiff's decoder is its diffusion denoiser, whose width is DenoiserChannels (Huang et al. 2022, section 3.3).", ModelType = typeof(ProDiff<>))]
     public virtual int DecoderDim { get; set; } = 80;
 
     /// <summary>Gets or sets the number of mel frames generated per decoder step (reduction factor).</summary>

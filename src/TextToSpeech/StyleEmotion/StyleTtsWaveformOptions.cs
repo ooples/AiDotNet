@@ -66,6 +66,7 @@ public abstract class StyleTtsWaveformOptions : StyleTtsBaseOptions
     public int IstftFftSize { get; set; } = 20;
 
     /// <summary>iSTFTNet's hop (5).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("StyleTTS-ZS checks that UpsampleRates' product times the iSTFT hop equals the mel HopSize, so the iSTFT hop cannot change alone; IstftFftSize and DecoderType probe the iSTFTNet decoder at a hop of 1.", ModelType = typeof(StyleTTSZS<>))]
     public int IstftHopSize { get; set; } = 5;
 
     /// <summary>The PL-BERT encoder (ALBERT: 178 phoneme tokens, width 768, 12 heads, feed-forward 2048, 12 shared-layer

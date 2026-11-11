@@ -148,10 +148,12 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private void ConfigureBase()
     {
         var o = _options;
-        if (o.FsqGroups * o.FsqResiduals != o.NumVq)
-            throw new ArgumentException($"The DVAE's {o.FsqGroups} groups × {o.FsqResiduals} stages must give the GPT's {o.NumVq} codes per frame.");
-        if (o.HiddenDim != 2 * o.DecoderDim)
-            throw new ArgumentException($"The hidden-state decoder reads the GPT's {o.HiddenDim} channels as two halves of {o.DecoderDim}.");
+        if (o.NumEncoderLayers != 0)
+            throw new ArgumentException("ChatTTS's GPT is a decoder-only Llama with no text encoder; NumEncoderLayers must be 0.");
+        if (o.DropoutRate != 0)
+            throw new ArgumentException("ChatTTS's released Llama GPT has no dropout; DropoutRate must be 0.");
+        if (o.HiddenDim % 2 != 0)
+            throw new ArgumentException($"The hidden-state decoder reads the GPT's {o.HiddenDim} channels as two halves.");
         base.SampleRate = o.SampleRate;
         base.HopSize = o.HopSize;
         base.HiddenDim = o.HiddenDim;

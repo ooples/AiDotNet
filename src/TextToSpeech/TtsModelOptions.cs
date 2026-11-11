@@ -47,6 +47,7 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Bark's released EnCodec renderer operates at 24000 Hz; BarkOptions.Validate rejects every other sample rate.", ModelType = typeof(CodecBased.BarkModel<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("The released OpenVoice converter config fixes audio at 22050 Hz; the native constructor rejects other rates (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("The released OpenVoiceV2 converter config fixes audio at 22050 Hz; the native constructor rejects other rates (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Dia's audio is its Descript Audio Codec's; the native constructor rejects any other rate (nari-labs/dia config.json).", ModelType = typeof(CodecBased.Dia<>))]
     public virtual int SampleRate { get; set; } = 22050;
 
     /// <summary>Gets or sets the number of mel-spectrogram frequency channels.</summary>
@@ -63,6 +64,8 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi has no mel-analysis hop; Mimi's actual codec strides are MimiRatios (Defossez et al. 2024 section 3.3); native construction requires HopSize=0.", ModelType = typeof(MultiModal.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR has no mel-analysis hop; Mimi's codec strides are MimiRatios; native construction requires HopSize=0 (Defossez et al. 2024 section 3.3).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("IndexTTS2's hop is the product of its BigVGAN upsampling rates (VocoderUpsampleRates); the native constructor rejects a hop that differs from it.", ModelType = typeof(Latest.IndexTTS2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's hop is the product of its HiFi-GAN upsampling rates (UpsampleRates); the native constructor rejects a hop that differs from it.", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
     public virtual int HopSize { get => _hopSize; set => _hopSize = value; }
     private int _hopSize = 256;
 
@@ -84,6 +87,16 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures SenseVoice depth through LargeEncoderLayers, SmallEncoderBlocks and SmallEncoderTpBlocks.", ModelType = typeof(MultiModal.MinMo<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (PrenetSizes, EncoderBankSize, CbhgChannels); the inherited layer count has no part to size.", ModelType = typeof(Classic.Tacotron<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Parler-TTS's description encoder depth is TextEncoderLayers (Flan-T5's); its decoder depth is NumDecoderLayers. The inherited encoder count has no part to size.", ModelType = typeof(DescriptionBased.ParlerTTS<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech's encoder is a stack of dilated residual convolutions whose depth is EncoderDilations (Vainer and Dusek 2020, section 3.2); it has no Transformer layers.", ModelType = typeof(Classic.SpeedySpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Dia sizes its text encoder with DiaOptions.EncoderLayers and its decoder with DecoderLayers (nari-labs/dia config.json).", ModelType = typeof(CodecBased.Dia<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice sizes its encoder with EmotiVoiceOptions.EncoderLayers (netease-youdao/EmotiVoice config).", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("ChatTTS's GPT is a decoder-only Llama with no text encoder (2noise/ChatTTS ChatTTS/config/config.py); its native constructor requires NumEncoderLayers=0.", ModelType = typeof(CodecBased.ChatTTS<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeechGPT is a decoder-only LLaMA over text and HuBERT units (Zhang et al. 2023, section 3.2) with no text encoder; its depth is SpeechGPTOptions.Layers and the frozen HuBERT's is HubertLayer.", ModelType = typeof(MultiModal.SpeechGPT<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("LLaMA-Omni's speech encoder depth is LlamaOmniOptions.EncoderLayers, its LLM's Layers and its speech decoder's SpeechDecoderLayers (Fang et al. 2024, section 2); it has no separate text encoder.", ModelType = typeof(MultiModal.LlamaOmni<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Fish Speech is a decoder-only dual autoregressive transformer (Liao et al. 2024, section 3.1) with no text encoder; its slow transformer's depth is NumDecoderLayers and the fast one's FastLayers.", ModelType = typeof(CodecBased.FishSpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Fish Speech 1.5 is a decoder-only dual autoregressive transformer (Liao et al. 2024, section 3.1) with no text encoder; its slow transformer's depth is NumDecoderLayers and the fast one's FastLayers.", ModelType = typeof(CodecBased.FishSpeechV15<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("IndexTTS's text-to-code model is a decoder-only GPT (Deng et al. 2025, section 2.2) with no text encoder; its depth is IndexTTSOptions.Layers and the conditioner's ConditionBlocks.", ModelType = typeof(CodecBased.IndexTTS<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("IndexTTS2's text-to-semantic model is a decoder-only GPT (Zhou et al. 2025, section 3.1) with no text encoder; its depth is IndexTTS2Options.Layers.", ModelType = typeof(Latest.IndexTTS2<>))]
     public virtual int NumEncoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of decoder layers.</summary>
@@ -91,6 +104,10 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN decoder has four upsampling stages [8,8,2,2]; other depths are rejected by the native constructor (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron's decoder is the paper's fixed attention GRU plus two residual GRUs (§3.3); the inherited layer count has no part to size.", ModelType = typeof(Classic.Tacotron<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Non-Attentive Tacotron uses two autoregressive decoder LSTMs (Shen et al. 2020, §3). Native construction accepts two and the inherited legacy value of six.", ModelType = typeof(Classic.NonAttentiveTacotron<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech's decoder is a stack of dilated residual convolutions whose depth is DecoderDilations (Vainer and Dusek 2020, section 3.2); it has no Transformer layers.", ModelType = typeof(Classic.SpeedySpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice sizes its decoder with EmotiVoiceOptions.DecoderLayers (netease-youdao/EmotiVoice config).", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("ProDiff's decoder is its diffusion denoiser, a WaveNet sized by DenoiserLayers and DenoiserChannels (Huang et al. 2022, section 3.3); the FastSpeech 2 mel decoder depth does not exist in it.", ModelType = typeof(Classic.ProDiff<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("MeloTTS's waveform decoder is VITS's HiFi-GAN generator, staged by MeloTTSOptions.UpsampleRates (myshell-ai/MeloTTS configs); it has no Transformer decoder layers.", ModelType = typeof(EndToEnd.MeloTTS<>))]
     public virtual int NumDecoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of attention heads.</summary>
@@ -98,6 +115,9 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Deep Voice 3 section 3.6 uses a single dot-product alignment per convolutional attention hop, not configurable multi-head attention; the native constructor requires NumHeads=1 (arXiv:1710.07654).", ModelType = typeof(Classic.DeepVoice3<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron's attention is single-head additive (Bahdanau) attention, §3.3; there are no heads.", ModelType = typeof(Classic.Tacotron<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Non-Attentive Tacotron uses Gaussian duration upsampling (Shen et al. 2020, §3.1). Native construction accepts zero and the inherited legacy value of eight.", ModelType = typeof(Classic.NonAttentiveTacotron<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech is fully convolutional and has no attention (Vainer and Dusek 2020, section 3.2).", ModelType = typeof(Classic.SpeedySpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Dia sets its encoder, decoder and cross-attention heads separately (DiaOptions.EncoderHeads, DecoderHeads, CrossHeads; nari-labs/dia config.json).", ModelType = typeof(CodecBased.Dia<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's attention heads are EmotiVoiceOptions.Heads (netease-youdao/EmotiVoice config).", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
     public virtual int NumHeads { get; set; } = 8;
 
     /// <summary>Gets or sets the phoneme/text vocabulary size.</summary>
@@ -110,6 +130,7 @@ public class TtsModelOptions : ModelOptions
     public int VocabSize { get; set; } = 256;
 
     /// <summary>Gets or sets the maximum input text length.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's ESPnet ScaledPositionalEncoding extends to any length, so its text has no length bound.", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
     public int MaxTextLength { get; set; } = 512;
 
     /// <summary>Gets or sets the maximum output audio length in mel frames.</summary>
@@ -117,9 +138,13 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro emits waveforms rather than mel frames; duration logits and Speed determine its output length.", ModelType = typeof(EndToEnd.Kokoro<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi generates codec audio rather than mel frames (Defossez et al. 2024 sections 3.3-3.4); native construction requires MaxMelLength=0.", ModelType = typeof(MultiModal.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR produces text from waveform codes, not mel frames; native construction requires MaxMelLength=0 (Defossez et al. 2024 section 3.3 and Appendix C).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's mel length is the duration predictor's, with positions for any length (ESPnet ScaledPositionalEncoding).", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeechGPT's LLaMA-7B fine-tunes without dropout (0nutation/SpeechGPT's training scripts leave LlamaConfig's attention dropout at 0); the native constructor requires DropoutRate=0; LoRA dropout is SpeechGPTOptions.LoraDropout.", ModelType = typeof(MultiModal.SpeechGPT<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("LLaMA-Omni's Llama-3.1 LLM and speech decoder train without dropout (ictnlp/LLaMA-Omni leaves the configs' attention dropout at 0); the native constructor requires DropoutRate=0.", ModelType = typeof(MultiModal.LlamaOmni<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("ChatTTS's released GPT is a Hugging Face LlamaModel whose config leaves attention_dropout at 0 (2noise/ChatTTS ChatTTS/config/config.py); its native constructor requires DropoutRate=0.", ModelType = typeof(CodecBased.ChatTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Llasa's released Llama config fixes attention_dropout=0 (HKUSTAudio/Llasa-1B cef8ce6); native construction requires DropoutRate=0, and X-codec2's encoders are frozen.", ModelType = typeof(CodecBased.Llasa<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Vevo's released AR and flow Llama configurations use zero dropout, and frozen HuBERT runs in inference mode (Amphion 26f6883); native construction requires DropoutRate=0.", ModelType = typeof(CodecBased.Vevo<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi's released streaming transformer fixes attention dropout to zero (kyutai-labs/moshi e6a55d2 modules/transformer.py); construction requires DropoutRate=0. MimiQuantizerDropout controls codec quantizer dropout separately.", ModelType = typeof(MultiModal.Moshi<>))]
@@ -141,6 +166,8 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures dropout on its native Qwen adapters through LoraDropout; its other native blocks do not use this generic setting.", ModelType = typeof(MultiModal.MinMo<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron applies dropout only in its pre-nets (PrenetDropout, 0.5, Table 1); the inherited rate has no part to act on.", ModelType = typeof(Classic.Tacotron<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("The released Step-1 decoder does not apply attention dropout (stepfun-ai/Step-Audio-TTS-3B modeling_step1.py). Native construction requires zero.", ModelType = typeof(MultiModal.StepAudio<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech's residual blocks are convolution, ReLU and batch normalization without dropout (Vainer and Dusek 2020, section 3.2).", ModelType = typeof(Classic.SpeedySpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Dia's released encoder and decoder apply no dropout (nari-labs/dia layers.py).", ModelType = typeof(CodecBased.Dia<>))]
     public virtual double DropoutRate { get; set; } = 0.1;
 
     /// <summary>Gets or sets the ONNX model path.</summary>
@@ -154,5 +181,8 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the weight decay.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron trains with plain Adam and no weight decay (§4); the inherited decay has no part to act on.", ModelType = typeof(Classic.Tacotron<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech trains with Adam at its default parameters and no weight decay (Vainer and Dusek 2020, section 4.3).", ModelType = typeof(Classic.SpeedySpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's released recipe trains with Adam (0.5, 0.9, 1e-9) and no weight decay.", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("ProDiff trains with Adam (0.9, 0.98, 1e-9) on the rsqrt schedule and no weight decay (Huang et al. 2022, section 4.1).", ModelType = typeof(Classic.ProDiff<>))]
     public double WeightDecay { get; set; } = 0.01;
 }

@@ -27,6 +27,7 @@ public class AlignTTSOptions : AcousticModelOptions
         DurationPredictorLayers = other.DurationPredictorLayers;
         MixDensityHiddenSize = other.MixDensityHiddenSize;
         MixDensityHiddenLayers = other.MixDensityHiddenLayers;
+        WarmupSteps = other.WarmupSteps;
     }
 
     /// <summary>Initializes a new instance with default values.</summary>
@@ -61,4 +62,10 @@ public class AlignTTSOptions : AcousticModelOptions
     /// without a count; the default is two.
     /// </summary>
     public int MixDensityHiddenLayers { get; set; } = 2;
+
+    /// <summary>
+    /// Gets or sets the warmup steps of the first two stages' inverse-square-root (Noam) schedule. The paper adopts
+    /// the schedule of Vaswani et al. 2017, whose warmup is 4000 steps (Sec. 5.3).
+    /// </summary>
+    public int WarmupSteps { get; set; } = 4000;
 }

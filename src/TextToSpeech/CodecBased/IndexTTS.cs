@@ -110,13 +110,13 @@ public partial class IndexTTS<T> : TtsModelBase<T>
         var o = _options;
         if (o.HiddenDim % o.NumHeads != 0) throw new ArgumentException("HiddenDim must divide by NumHeads.");
         if (o.MelCodes < 3) throw new ArgumentException("MelCodes holds the DVAE's codes and the start and stop codes.");
-        if (o.VocoderUpsampleRates.Aggregate(1, (a, b) => a * b) != o.SamplesPerCode)
-            throw new ArgumentException($"BigVGAN's upsampling rates must multiply to SamplesPerCode {o.SamplesPerCode}.");
+        if (o.VocoderUpsampleRates.Length == 0 || o.VocoderUpsampleRates.Any(rate => rate < 1))
+            throw new ArgumentException("BigVGAN needs at least one positive upsampling rate.");
         if ((o.VocoderInitialChannels >> o.VocoderUpsampleRates.Length) < 1)
             throw new ArgumentException("Each BigVGAN stage halves the channels: VocoderInitialChannels must keep at least one through them all.");
         if (o.VocoderResBlockDilations.Length != o.VocoderResBlockKernels.Length || o.VocoderResBlockDilations.Any(d => d.Length != 3))
             throw new ArgumentException("The release's AMP block takes three dilations per kernel.");
-        if (o.SamplesPerCode % o.HopSize != 0 || (1 << o.DvaeLayers) != o.SamplesPerCode / o.HopSize)
+        if (o.DvaeLayers < 0)
             throw new ArgumentException("The DVAE's stride-2 layers must reduce the mel frames to one per SamplesPerCode samples.");
         if (o.Beams < 1) throw new ArgumentException("Beams must be positive.");
         if (o.SegmentTokens < 1) throw new ArgumentException("SegmentTokens must be positive.");

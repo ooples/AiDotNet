@@ -53,7 +53,6 @@ public class DiaOptions : TtsModelOptions
         NormEpsilon = other.NormEpsilon;
         RopeTheta = other.RopeTheta;
         AudioVocabSize = other.AudioVocabSize;
-        Channels = other.Channels;
         DelayPattern = (int[])other.DelayPattern.Clone();
         EndToken = other.EndToken;
         PadToken = other.PadToken;
@@ -125,8 +124,8 @@ public class DiaOptions : TtsModelOptions
     /// unused).</summary>
     public int AudioVocabSize { get; set; } = 1028;
 
-    /// <summary>DAC codebooks the decoder predicts (9).</summary>
-    public int Channels { get; set; } = 9;
+    /// <summary>DAC codebooks the decoder predicts: one per <see cref="DelayPattern"/> entry (9).</summary>
+    public int Channels => DelayPattern?.Length ?? 0;
 
     /// <summary>Each codebook's delay in frames ([0, 8, 9, 10, 11, 12, 13, 14, 15]).</summary>
     public int[] DelayPattern { get; set; } = { 0, 8, 9, 10, 11, 12, 13, 14, 15 };

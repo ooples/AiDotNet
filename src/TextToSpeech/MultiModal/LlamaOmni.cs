@@ -142,6 +142,7 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
             throw new ArgumentException("The language model's width must divide into its heads, and the heads into the key-value heads.");
         if (o.UpsampleFactor <= 0 || o.AdaptorDownsample <= 0) throw new ArgumentException("The upsample factor and the adaptor's downsampling must be positive.");
         if (o.MaxNewTokens <= 0) throw new ArgumentException("MaxNewTokens must be positive.");
+        if (o.DropoutRate != 0) throw new ArgumentException("LLaMA-Omni's LLM and speech decoder train without dropout; DropoutRate must be 0.");
         if (o.Temperature < 0 || o.TopP <= 0 || o.TopP > 1) throw new ArgumentException("The temperature must be at least 0 and top-p in (0, 1].");
         if (o.UnitChunkSize < 0) throw new ArgumentException("UnitChunkSize must be 0 (offline) or positive.");
         if (o.VocoderUpsampleRates.Length != o.VocoderUpsampleKernels.Length) throw new ArgumentException("The vocoder needs one kernel per upsampling rate.");

@@ -64,8 +64,9 @@ public class IndexTTSOptions : TtsModelOptions
     /// <summary>The mel-code vocabulary: the DVAE's codes plus the start and stop codes (8194).</summary>
     public int MelCodes { get; set; } = 8194;
 
-    /// <summary>Samples per mel code (<c>mel_length_compression</c>, 1024): BigVGAN's upsampling.</summary>
-    public int SamplesPerCode { get; set; } = 1024;
+    /// <summary>Samples per mel code (<c>mel_length_compression</c>, 1024): BigVGAN's upsampling, the product of
+    /// <see cref="VocoderUpsampleRates"/>.</summary>
+    public int SamplesPerCode => VocoderUpsampleRates is { Length: > 0 } rates ? rates.Aggregate(1, (a, b) => a * b) : 0;
 
     /// <summary>Perceiver latents the prompt is pooled into (32).</summary>
     public int ConditionLatents { get; set; } = 32;
@@ -125,8 +126,20 @@ public class IndexTTSOptions : TtsModelOptions
     /// <summary>The DVAE's first downsampling width (512; doubled per layer).</summary>
     public int DvaeHidden { get; set; } = 512;
 
-    /// <summary>The DVAE's stride-2 layers (2).</summary>
-    public int DvaeLayers { get; set; } = 2;
+    /// <summary>The DVAE's stride-2 layers (2): as many halvings as take the mel frames (one per
+    /// <see cref="TtsModelOptions.HopSize"/> samples) to one per <see cref="SamplesPerCode"/> samples; -1 when no whole
+    /// number of halvings does.</summary>
+    public int DvaeLayers
+    {
+        get
+        {
+            int hop = HopSize, perCode = SamplesPerCode;
+            if (hop <= 0 || perCode <= 0 || perCode % hop != 0) return -1;
+            int ratio = perCode / hop, layers = 0;
+            while (ratio > 1 && ratio % 2 == 0) { ratio /= 2; layers++; }
+            return ratio == 1 ? layers : -1;
+        }
+    }
 
     /// <summary>The DVAE's residual blocks (3).</summary>
     public int DvaeResBlocks { get; set; } = 3;

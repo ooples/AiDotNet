@@ -64,8 +64,9 @@ public abstract class FishSpeechFamilyOptions : TtsModelOptions
     /// <summary>The ConvNeXt encoder's widths per stage.</summary>
     public int[] CodecEncoderDims { get; set; } = { 128, 256, 384, 512 };
 
-    /// <summary>The quantizer's input width (<c>input_dim</c>).</summary>
-    public int CodecQuantizerDim { get; set; } = 512;
+    /// <summary>The quantizer's input width (<c>input_dim</c>, 512): the encoder's last stage width
+    /// (<see cref="CodecEncoderDims"/>), which the quantizer reads.</summary>
+    public int CodecQuantizerDim => CodecEncoderDims is { Length: > 0 } dims ? dims[dims.Length - 1] : 0;
 
     /// <summary>The finite scalar quantizer's levels per dimension (8·5·5·5 = 1,000 codes).</summary>
     public int[] CodecLevels { get; set; } = { 8, 5, 5, 5 };

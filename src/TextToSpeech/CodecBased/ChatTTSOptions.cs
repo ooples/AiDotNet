@@ -50,7 +50,6 @@ public class ChatTTSOptions : TtsModelOptions
     {
         IntermediateSize = other.IntermediateSize;
         RmsNormEpsilon = other.RmsNormEpsilon;
-        NumVq = other.NumVq;
         FsqLevels = (int[])other.FsqLevels.Clone();
         FsqGroups = other.FsqGroups;
         FsqResiduals = other.FsqResiduals;
@@ -59,7 +58,6 @@ public class ChatTTSOptions : TtsModelOptions
         DvaeDecoderHidden = other.DvaeDecoderHidden;
         DvaeLayers = other.DvaeLayers;
         DvaeBottleneck = other.DvaeBottleneck;
-        DecoderDim = other.DecoderDim;
         DecoderHidden = other.DecoderHidden;
         DecoderLayers = other.DecoderLayers;
         DecoderBottleneck = other.DecoderBottleneck;
@@ -90,8 +88,9 @@ public class ChatTTSOptions : TtsModelOptions
     /// <summary>RMSNorm ε (Hugging Face <c>LlamaConfig</c>'s default, 1e-6, which ChatTTS keeps).</summary>
     public double RmsNormEpsilon { get; set; } = 1e-6;
 
-    /// <summary>Codes per audio frame, one code table and head each (4).</summary>
-    public int NumVq { get; set; } = 4;
+    /// <summary>Codes per audio frame, one code table and head each (4): the DVAE's <see cref="FsqGroups"/> groups ×
+    /// <see cref="FsqResiduals"/> stages, since the GPT reads every code its quantizer emits.</summary>
+    public int NumVq => FsqGroups * FsqResiduals;
 
     // ---------------------------------------------------------------- DVAE (config.DVAE)
 
@@ -121,8 +120,9 @@ public class ChatTTSOptions : TtsModelOptions
 
     // ---------------------------------------------------------------- hidden-state decoder (config.Decoder)
 
-    /// <summary>The hidden-state decoder's width (384, half the GPT's).</summary>
-    public int DecoderDim { get; set; } = 384;
+    /// <summary>The hidden-state decoder's width (384): half the GPT's <see cref="TtsModelOptions.HiddenDim"/>, since
+    /// the decoder reads the GPT's hidden states as two halves.</summary>
+    public int DecoderDim => HiddenDim / 2;
 
     /// <summary>Its ConvNeXt width (512).</summary>
     public int DecoderHidden { get; set; } = 512;

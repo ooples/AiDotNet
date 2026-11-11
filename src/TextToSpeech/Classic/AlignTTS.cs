@@ -112,6 +112,8 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         _useNativeMode = true;
         if (_options.LearningRate <= 0 || double.IsNaN(_options.LearningRate) || double.IsInfinity(_options.LearningRate))
             throw new ArgumentOutOfRangeException(nameof(options), "Learning rate must be finite and positive.");
+        if (_options.WarmupSteps < 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "The Noam schedule needs at least one warmup step.");
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -119,7 +121,8 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         InitializeLayers();
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
-                modelDimensionOverride: _options.HiddenDim, trainingStepsOverride: 40_000)
+                modelDimensionOverride: _options.HiddenDim, trainingStepsOverride: 40_000,
+                warmupStepsOverride: _options.WarmupSteps)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _fineTuningOptimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,

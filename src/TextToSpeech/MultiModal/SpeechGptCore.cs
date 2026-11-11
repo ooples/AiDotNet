@@ -59,6 +59,7 @@ internal sealed class SpeechGptCore<T>
         if (o.HiddenDim <= 0 || o.Layers <= 0 || o.NumHeads <= 0 || o.HiddenDim % o.NumHeads != 0)
             throw new ArgumentException("The language model's width must divide into its heads.");
         if (o.Temperature < 0 || o.TopP <= 0 || o.TopP > 1 || o.TopK < 0) throw new ArgumentException("Sampling needs a temperature ≥ 0, top-k ≥ 0 and top-p in (0, 1].");
+        if (o.DropoutRate != 0) throw new ArgumentException("SpeechGPT's LLaMA trains without dropout; DropoutRate must be 0 (LoRA dropout is LoraDropout).");
         if (o.MaxNewTokens <= 0 || o.MinNewTokens < 0) throw new ArgumentException("MaxNewTokens must be positive and MinNewTokens non-negative.");
         if (o.VocoderUpsampleRates.Length != o.VocoderUpsampleKernels.Length) throw new ArgumentException("The vocoder needs one kernel per upsampling rate.");
         if (o.Vocoder == SpeechGptVocoder.MultiSpeaker && (o.Speaker < 0 || o.Speaker >= o.VocoderSpeakers))
