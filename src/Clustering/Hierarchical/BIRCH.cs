@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
@@ -107,13 +108,7 @@ public partial class BIRCH<T> : ClusteringBase<T>
         // Insert each point into the CF-tree
         for (int i = 0; i < n; i++)
         {
-            var point = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                point[j] = x[i, j];
-            }
-
-            var entry = CFEntry.FromPoint(point);
+            var entry = CFEntry.FromPoint(x.GetRow(i).ToArray());
             InsertEntry(_root, entry);
         }
 
@@ -131,16 +126,7 @@ public partial class BIRCH<T> : ClusteringBase<T>
         {
             // Each leaf entry is a cluster
             NumClusters = _leafEntries.Count;
-
-            ClusterCenters = new Matrix<T>(NumClusters, d);
-            for (int k = 0; k < NumClusters; k++)
-            {
-                var centroid = _leafEntries[k].Centroid;
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[k, j] = centroid[j];
-                }
-            }
+            ClusterCenters = StackCentroids(_leafEntries, d);
         }
 
         IsTrained = true;
@@ -156,6 +142,43 @@ public partial class BIRCH<T> : ClusteringBase<T>
         }
     }
 
+    /// <summary>Centroids of the entries as rows of a [count, d] matrix (shorter centroids are zero-padded).</summary>
+    private static Matrix<T> StackCentroids(List<CFEntry> entries, int d)
+    {
+        var result = new Matrix<T>(entries.Count, d);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            var centroid = entries[i].Centroid;
+            if (centroid.Length > 0)
+            {
+                result.SetSubMatrix(i, 0, Tensor<T>.FromVector(Vector<T>.FromArray(centroid), new[] { 1, centroid.Length }).ToMatrix());
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Index of the entry whose centroid is closest to the point (first on ties), or -1 when none is below MaxValue.</summary>
+    private int ClosestEntry(List<CFEntry> entries, CFEntry entry)
+    {
+        if (entries.Count == 0)
+        {
+            return -1;
+        }
+
+        var centroid = entry.Centroid;
+        int d = Math.Max(centroid.Length, entries.Max(e => e.Centroid.Length));
+        var distances = ClusteringTensorOps.DistancesToPoint(Pad(centroid, d), StackCentroids(entries, d));
+        int best = ClusteringTensorOps.ArgMin(distances);
+        return NumOps.LessThan(distances[best], NumOps.MaxValue) ? best : -1;
+    }
+
+    /// <summary>The values as a length-d vector (zero-padded).</summary>
+    private static Vector<T> Pad(T[] values, int d)
+        => values.Length == d
+            ? Vector<T>.FromArray(values)
+            : Vector<T>.Concatenate(new[] { Vector<T>.FromArray(values), new Vector<T>(d - values.Length) });
+
     private void InsertEntry(CFNode node, CFEntry entry)
     {
         T threshold = NumOps.FromDouble(_options.Threshold);
@@ -163,18 +186,7 @@ public partial class BIRCH<T> : ClusteringBase<T>
         if (node.IsLeaf)
         {
             // Try to find closest entry to merge with
-            int closestIdx = -1;
-            T closestDist = NumOps.MaxValue;
-
-            for (int i = 0; i < node.Entries.Count; i++)
-            {
-                T dist = CFEntry.Distance(node.Entries[i], entry);
-                if (NumOps.LessThan(dist, closestDist))
-                {
-                    closestDist = dist;
-                    closestIdx = i;
-                }
-            }
+            int closestIdx = ClosestEntry(node.Entries, entry);
 
             if (closestIdx >= 0)
             {
@@ -199,19 +211,7 @@ public partial class BIRCH<T> : ClusteringBase<T>
         else
         {
             // Find closest child
-            int closestIdx = 0;
-            T closestDist = NumOps.MaxValue;
-
-            for (int i = 0; i < node.Children.Count; i++)
-            {
-                var childCF = ComputeNodeCF(node.Children[i]);
-                T dist = CFEntry.Distance(childCF, entry);
-                if (NumOps.LessThan(dist, closestDist))
-                {
-                    closestDist = dist;
-                    closestIdx = i;
-                }
-            }
+            int closestIdx = Math.Max(0, ClosestEntry(node.Children.Select(ComputeNodeCF).ToList(), entry));
 
             // Recursively insert
             InsertEntry(node.Children[closestIdx], entry);
@@ -228,49 +228,37 @@ public partial class BIRCH<T> : ClusteringBase<T>
     {
         T threshold = NumOps.FromDouble(_options.Threshold);
 
-        // Find two farthest entries as seeds
-        int seed1 = 0, seed2 = 1;
-        T maxDist = NumOps.Zero;
+        // Centroid distances between all entries
+        int count = node.Entries.Count;
+        int d = node.Entries.Max(e => e.Centroid.Length);
+        var centroids = StackCentroids(node.Entries, d);
+        var distances = Tensor<T>.FromMatrix(ClusteringTensorOps.Distances(centroids, centroids));
 
-        for (int i = 0; i < node.Entries.Count; i++)
-        {
-            for (int j = i + 1; j < node.Entries.Count; j++)
-            {
-                T dist = CFEntry.Distance(node.Entries[i], node.Entries[j]);
-                if (NumOps.GreaterThan(dist, maxDist))
-                {
-                    maxDist = dist;
-                    seed1 = i;
-                    seed2 = j;
-                }
-            }
-        }
+        // Find two farthest entries as seeds (first strictly largest pair i < j; defaults to 0 and 1)
+        var upper = Engine.TensorTriu(Engine.TensorOnesLike(distances), 1);
+        var pairDistances = Engine.Reshape(Engine.TensorMultiply(distances, upper), new[] { count * count }).ToVector();
+        int farthest = ClusteringTensorOps.ArgMax(pairDistances);
+        bool separated = NumOps.GreaterThan(pairDistances[farthest], NumOps.Zero);
+        int seed1 = separated ? farthest / count : 0;
+        int seed2 = separated ? farthest % count : 1;
+
+        // Each entry goes to the nearer seed (the first seed on ties)
+        var distanceMatrix = distances.ToMatrix();
+        var toFirst = ClusteringTensorOps.LessOrEqualFlags(
+            Engine.Subtract(distanceMatrix.GetRow(seed1), distanceMatrix.GetRow(seed2)), NumOps.Zero);
 
         // Create two new nodes
         var newNode1 = new CFNode(_options.BranchingFactor, threshold, node.IsLeaf);
         var newNode2 = new CFNode(_options.BranchingFactor, threshold, node.IsLeaf);
 
         // Distribute entries
-        for (int i = 0; i < node.Entries.Count; i++)
+        for (int i = 0; i < count; i++)
         {
-            T dist1 = CFEntry.Distance(node.Entries[i], node.Entries[seed1]);
-            T dist2 = CFEntry.Distance(node.Entries[i], node.Entries[seed2]);
-
-            if (!NumOps.GreaterThan(dist1, dist2))
+            var target = toFirst[i] ? newNode1 : newNode2;
+            target.Entries.Add(node.Entries[i]);
+            if (!node.IsLeaf && i < node.Children.Count)
             {
-                newNode1.Entries.Add(node.Entries[i]);
-                if (!node.IsLeaf && i < node.Children.Count)
-                {
-                    newNode1.Children.Add(node.Children[i]);
-                }
-            }
-            else
-            {
-                newNode2.Entries.Add(node.Entries[i]);
-                if (!node.IsLeaf && i < node.Children.Count)
-                {
-                    newNode2.Children.Add(node.Children[i]);
-                }
+                target.Children.Add(node.Children[i]);
             }
         }
 
@@ -306,13 +294,21 @@ public partial class BIRCH<T> : ClusteringBase<T>
             return new CFEntry(0, Array.Empty<T>(), NumOps.Zero);
         }
 
-        var merged = node.Entries[0];
-        for (int i = 1; i < node.Entries.Count; i++)
+        // CF additivity: counts, linear sums and squared sums add up
+        int d = node.Entries.Max(e => e.LS.Length);
+        var sums = new Matrix<T>(node.Entries.Count, d);
+        for (int i = 0; i < node.Entries.Count; i++)
         {
-            merged = CFEntry.Merge(merged, node.Entries[i]);
+            var ls = node.Entries[i].LS;
+            if (ls.Length > 0)
+            {
+                sums.SetSubMatrix(i, 0, Tensor<T>.FromVector(Vector<T>.FromArray(ls), new[] { 1, ls.Length }).ToMatrix());
+            }
         }
 
-        return merged;
+        var linearSum = Engine.ReduceSum(Tensor<T>.FromMatrix(sums), new[] { 0 }, false).ToArray();
+        var squaredSum = Engine.TensorSum(Vector<T>.FromArray(node.Entries.Select(e => e.SS).ToArray()).AsTensor());
+        return new CFEntry(node.Entries.Sum(e => e.N), linearSum, squaredSum);
     }
 
     private void CollectLeafEntries(CFNode node, List<CFEntry> entries)
@@ -343,46 +339,22 @@ public partial class BIRCH<T> : ClusteringBase<T>
             clusterAssignments[i] = i;
         }
 
-        // Compute distance matrix
-        var distances = new T[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                distances[i, j] = CFEntry.Distance(entries[i], entries[j]);
-                distances[j, i] = distances[i, j];
-            }
-        }
+        // Compute distance matrix (zero diagonal)
+        var centroids = StackCentroids(entries, d);
+        var distances = ClusteringTensorOps.Distances(centroids, centroids);
+        distances = Engine.TensorWhere(
+            Engine.TensorEye<T>(n), Tensor<T>.CreateZeros(new[] { n, n }), Tensor<T>.FromMatrix(distances)).ToMatrix();
 
         // Agglomerative merging until numClusters remain
         var activeClusters = new HashSet<int>(Enumerable.Range(0, n));
 
         // Track merge history: when cluster B merges into A, record mergedInto[B] = A
         var mergedInto = new Dictionary<int, int>();
-        T two = NumOps.FromDouble(2.0);
 
         while (activeClusters.Count > numClusters)
         {
             // Find closest pair
-            T minDist = NumOps.MaxValue;
-            int merge1 = -1, merge2 = -1;
-
-            var activeList = activeClusters.ToList();
-            for (int i = 0; i < activeList.Count; i++)
-            {
-                for (int j = i + 1; j < activeList.Count; j++)
-                {
-                    int c1 = activeList[i];
-                    int c2 = activeList[j];
-
-                    if (NumOps.LessThan(distances[c1, c2], minDist))
-                    {
-                        minDist = distances[c1, c2];
-                        merge1 = c1;
-                        merge2 = c2;
-                    }
-                }
-            }
+            var (merge1, merge2) = ClosestActivePair(distances, activeClusters);
 
             if (merge1 < 0) break;
 
@@ -398,15 +370,8 @@ public partial class BIRCH<T> : ClusteringBase<T>
                 }
             }
 
-            // Update distances (average linkage)
-            foreach (int c in activeClusters)
-            {
-                if (c != merge1 && c != merge2)
-                {
-                    distances[merge1, c] = NumOps.Divide(NumOps.Add(distances[merge1, c], distances[merge2, c]), two);
-                    distances[c, merge1] = distances[merge1, c];
-                }
-            }
+            // Update distances (average linkage) to the other active clusters
+            AverageLinkage(distances, activeClusters, merge1, merge2);
 
             activeClusters.Remove(merge2);
         }
@@ -439,45 +404,52 @@ public partial class BIRCH<T> : ClusteringBase<T>
             clusterAssignments[i] = clusterMap.ContainsKey(cluster) ? clusterMap[cluster] : 0;
         }
 
-        // Compute cluster centers from entries
-        var clusterCentroids = new T[numClusters][];
-        var clusterCounts = new int[numClusters];
+        // Compute cluster centers from entries: sum_i N_i c_i / sum_i N_i over each cluster's entries
+        var sizes = ClusteringTensorOps.FromIntArray<T>(entries.Select(e => e.N).ToArray());
+        var weighted = Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(centroids), Engine.TensorBroadcastTo(Tensor<T>.FromVector(sizes, new[] { n, 1 }), new[] { n, d }));
+        var members = Engine.TensorTranspose(ClusteringTensorOps.OneHotMask(ClusteringTensorOps.FromIntArray<T>(clusterAssignments), numClusters));
+        var sums = Engine.TensorMatMul(members, weighted).ToMatrix();
+        var counts = Engine.TensorMatMul(members, Tensor<T>.FromVector(sizes, new[] { n, 1 })).ToVector();
+        var means = ClusteringTensorOps.DivideRows(sums, counts);
+        ClusterCenters = ClusteringTensorOps.RowsWherePositive(counts, means, new Matrix<T>(numClusters, d));
+    }
 
-        for (int k = 0; k < numClusters; k++)
+    /// <summary>The closest pair of active clusters in active-set scan order (first strictly smallest), or (-1, -1).</summary>
+    private (int, int) ClosestActivePair(Matrix<T> distances, HashSet<int> activeClusters)
+    {
+        var activeList = activeClusters.ToArray();
+        int a = activeList.Length;
+        if (a < 2)
         {
-            clusterCentroids[k] = new T[d];
-            for (int j = 0; j < d; j++) clusterCentroids[k][j] = NumOps.Zero;
+            return (-1, -1);
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            int cluster = clusterAssignments[i];
-            if (cluster >= 0 && cluster < numClusters)
-            {
-                var centroid = entries[i].Centroid;
-                T weight = NumOps.FromDouble(entries[i].N);
+        var sub = ClusteringTensorOps.SelectColumns(Tensor<T>.FromMatrix(ClusteringTensorOps.SelectRows(distances, activeList)), activeList);
+        var upper = Engine.TensorTriu(Engine.TensorOnesLike(sub), 1);
+        var candidates = Engine.Reshape(Engine.TensorWhere(upper, sub, Engine.TensorFullLike(sub, NumOps.MaxValue)), new[] { a * a }).ToVector();
+        int best = ClusteringTensorOps.ArgMin(candidates);
+        return NumOps.LessThan(candidates[best], NumOps.MaxValue) ? (activeList[best / a], activeList[best % a]) : (-1, -1);
+    }
 
-                for (int j = 0; j < d; j++)
-                {
-                    clusterCentroids[cluster][j] = NumOps.Add(clusterCentroids[cluster][j],
-                        NumOps.Multiply(centroid[j], weight));
-                }
-                clusterCounts[cluster] += entries[i].N;
+    /// <summary>d(merge1, c) = (d(merge1, c) + d(merge2, c)) / 2 for every other active cluster c (kept symmetric).</summary>
+    private void AverageLinkage(Matrix<T> distances, HashSet<int> activeClusters, int merge1, int merge2)
+    {
+        var others = new int[distances.Rows];
+        foreach (int c in activeClusters)
+        {
+            if (c != merge1 && c != merge2)
+            {
+                others[c] = 1;
             }
         }
 
-        ClusterCenters = new Matrix<T>(numClusters, d);
-        for (int k = 0; k < numClusters; k++)
-        {
-            if (clusterCounts[k] > 0)
-            {
-                T countT = NumOps.FromDouble(clusterCounts[k]);
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(clusterCentroids[k][j], countT);
-                }
-            }
-        }
+        var averaged = Engine.Multiply(Engine.Add(distances.GetRow(merge1), distances.GetRow(merge2)), NumOps.FromDouble(0.5));
+        var mask = ClusteringTensorOps.FromIntArray<T>(others).AsTensor();
+        var row = Engine.TensorWhere(mask, averaged.AsTensor(), distances.GetRow(merge1).AsTensor()).ToVector();
+        Engine.SetRow(distances, merge1, row);
+        var column = Engine.TensorWhere(mask, averaged.AsTensor(), distances.GetColumn(merge1).AsTensor()).ToVector();
+        Engine.SetColumn(distances, merge1, column);
     }
 
     /// <inheritdoc />
@@ -485,37 +457,16 @@ public partial class BIRCH<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-        int d = x.Columns;
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var pointArr = new T[d];
-            var centerArr = new T[d];
-            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[k, j];
-                    T dist = metric.ComputeInline(pointArr, centerArr, d);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />
@@ -562,12 +513,8 @@ public partial class BIRCH<T> : ClusteringBase<T>
         /// </summary>
         public static CFEntry FromPoint(T[] point)
         {
-            T ss = NumOps.Zero;
-            for (int i = 0; i < point.Length; i++)
-            {
-                ss = NumOps.Add(ss, NumOps.Multiply(point[i], point[i]));
-            }
-
+            var values = Vector<T>.FromArray(point);
+            T ss = point.Length == 0 ? NumOps.Zero : CfEngine.DotProduct(values, values);
             return new CFEntry(1, (T[])point.Clone(), ss);
         }
 
@@ -577,42 +524,35 @@ public partial class BIRCH<T> : ClusteringBase<T>
         public static CFEntry Merge(CFEntry a, CFEntry b)
         {
             int d = Math.Max(a.LS.Length, b.LS.Length);
-            var ls = new T[d];
-            for (int i = 0; i < d; i++) ls[i] = NumOps.Zero;
-
-            for (int i = 0; i < a.LS.Length; i++)
-            {
-                ls[i] = NumOps.Add(ls[i], a.LS[i]);
-            }
-            for (int i = 0; i < b.LS.Length; i++)
-            {
-                ls[i] = NumOps.Add(ls[i], b.LS[i]);
-            }
-
+            var ls = d == 0 ? Array.Empty<T>() : CfEngine.Add(PadTo(a.LS, d), PadTo(b.LS, d)).ToArray();
             return new CFEntry(a.N + b.N, ls, NumOps.Add(a.SS, b.SS));
         }
+
+        private static IEngine CfEngine => AiDotNetEngine.Current;
+
+        /// <summary>The values as a length-d vector (zero-padded).</summary>
+        private static Vector<T> PadTo(T[] values, int d)
+            => values.Length == d
+                ? Vector<T>.FromArray(values)
+                : Vector<T>.Concatenate(new[] { Vector<T>.FromArray(values), new Vector<T>(d - values.Length) });
 
         /// <summary>
         /// Computes distance between two CFEntries.
         /// </summary>
         public static T Distance(CFEntry a, CFEntry b)
         {
-            // Use centroid distance
+            // Use centroid distance (shorter centroids are zero-padded)
             var ca = a.Centroid;
             var cb = b.Centroid;
 
             int d = Math.Max(ca.Length, cb.Length);
-            T sum = NumOps.Zero;
-
-            for (int i = 0; i < d; i++)
+            if (d == 0)
             {
-                T va = i < ca.Length ? ca[i] : NumOps.Zero;
-                T vb = i < cb.Length ? cb[i] : NumOps.Zero;
-                T diff = NumOps.Subtract(va, vb);
-                sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
+                return NumOps.Zero;
             }
 
-            return NumOps.Sqrt(sum);
+            var diff = CfEngine.Subtract(PadTo(ca, d), PadTo(cb, d));
+            return NumOps.Sqrt(CfEngine.DotProduct(diff, diff));
         }
 
         /// <summary>
@@ -622,14 +562,8 @@ public partial class BIRCH<T> : ClusteringBase<T>
         {
             get
             {
-                if (N == 0) return LS;
-                T nT = NumOps.FromDouble(N);
-                var result = new T[LS.Length];
-                for (int i = 0; i < LS.Length; i++)
-                {
-                    result[i] = NumOps.Divide(LS[i], nT);
-                }
-                return result;
+                if (N == 0 || LS.Length == 0) return LS;
+                return CfEngine.Divide(Vector<T>.FromArray(LS), NumOps.FromDouble(N)).ToArray();
             }
         }
 
@@ -643,12 +577,8 @@ public partial class BIRCH<T> : ClusteringBase<T>
                 if (N <= 1) return NumOps.Zero;
 
                 // Radius = sqrt((SS/N) - ||LS/N||²)
-                T centroidNormSq = NumOps.Zero;
-                var c = Centroid;
-                for (int i = 0; i < c.Length; i++)
-                {
-                    centroidNormSq = NumOps.Add(centroidNormSq, NumOps.Multiply(c[i], c[i]));
-                }
+                var c = Vector<T>.FromArray(Centroid);
+                T centroidNormSq = c.Length == 0 ? NumOps.Zero : CfEngine.DotProduct(c, c);
 
                 T nT = NumOps.FromDouble(N);
                 T variance = NumOps.Subtract(NumOps.Divide(SS, nT), centroidNormSq);
