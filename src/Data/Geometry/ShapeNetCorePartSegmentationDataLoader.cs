@@ -76,8 +76,8 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
         }
 
         int featureDim = _options.IncludeNormals ? 6 : 3;
-        var featuresData = new T[samples.Count * _options.PointsPerSample * featureDim];
-        var labelsData = new T[samples.Count * _options.PointsPerSample];
+        var featuresData = new double[samples.Count * _options.PointsPerSample * featureDim];
+        var labelsData = new double[samples.Count * _options.PointsPerSample];
 
         var random = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
@@ -97,8 +97,8 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
             FillSampleLabels(labelValues, indices, sampleIndex, labelsData);
         }
 
-        var features = new Tensor<T>(featuresData, new[] { samples.Count, _options.PointsPerSample, featureDim });
-        var labels = new Tensor<T>(labelsData, new[] { samples.Count, _options.PointsPerSample });
+        var features = new Tensor<double>(featuresData, new[] { samples.Count, _options.PointsPerSample, featureDim }).Cast<T>();
+        var labels = new Tensor<double>(labelsData, new[] { samples.Count, _options.PointsPerSample }).Cast<T>();
         SetLoadedData(features, labels);
     }
 
@@ -111,7 +111,7 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
         _categoryNames = new List<string>();
     }
 
-    private void FillSampleFeatures(List<double[]> rows, int[] indices, int featureDim, int sampleIndex, T[] featuresData)
+    private void FillSampleFeatures(List<double[]> rows, int[] indices, int featureDim, int sampleIndex, double[] featuresData)
     {
         int sampleOffset = sampleIndex * _options.PointsPerSample * featureDim;
         for (int i = 0; i < indices.Length; i++)
@@ -129,9 +129,9 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
             double y = row.Length > 1 ? row[1] : 0.0;
             double z = row.Length > 2 ? row[2] : 0.0;
 
-            featuresData[destOffset] = NumOps.FromDouble(x);
-            featuresData[destOffset + 1] = NumOps.FromDouble(y);
-            featuresData[destOffset + 2] = NumOps.FromDouble(z);
+            featuresData[destOffset] = x;
+            featuresData[destOffset + 1] = y;
+            featuresData[destOffset + 2] = z;
 
             if (_options.IncludeNormals)
             {
@@ -139,14 +139,14 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
                 double ny = row.Length > 4 ? row[4] : 0.0;
                 double nz = row.Length > 5 ? row[5] : 0.0;
 
-                featuresData[destOffset + 3] = NumOps.FromDouble(nx);
-                featuresData[destOffset + 4] = NumOps.FromDouble(ny);
-                featuresData[destOffset + 5] = NumOps.FromDouble(nz);
+                featuresData[destOffset + 3] = nx;
+                featuresData[destOffset + 4] = ny;
+                featuresData[destOffset + 5] = nz;
             }
         }
     }
 
-    private void FillSampleLabels(List<int> labels, int[] indices, int sampleIndex, T[] labelsData)
+    private void FillSampleLabels(List<int> labels, int[] indices, int sampleIndex, double[] labelsData)
     {
         int sampleOffset = sampleIndex * _options.PointsPerSample;
         for (int i = 0; i < indices.Length; i++)
@@ -167,7 +167,7 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
                 labelValue = _options.NumClasses - 1;
             }
 
-            labelsData[sampleOffset + i] = NumOps.FromDouble(labelValue);
+            labelsData[sampleOffset + i] = labelValue;
         }
     }
 
