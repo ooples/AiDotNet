@@ -22,6 +22,9 @@ public sealed class CompositeLossWithLogits<T> : LossFunctionBase<T>
 {
     private readonly CompositeLoss<T> _probabilityLoss;
 
+    /// <summary>It keeps a result between calls when its composite's terms do.</summary>
+    internal override bool KeepsResultsBetweenCalls => _probabilityLoss.KeepsResultsBetweenCalls;
+
     /// <summary>
     /// Creates a logits-aware composite from probability-domain loss terms and their absolute
     /// coefficients. An empty term list selects <see cref="CompositeLoss{T}"/>'s standard 20:1

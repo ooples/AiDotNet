@@ -1151,6 +1151,10 @@ AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensor
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.GetLastLoss() -> T
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, bool useCausalMask = false, bool residualGroupNorm = false) -> void
 *REMOVED*AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, int flashAttentionThreshold = 256, bool useCausalMask = false) -> void
+override AiDotNet.NeuralNetworks.NeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.Transformer<T>.ReleasesInferenceIntermediates.get -> bool
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.LayersKeepNoResultsBetweenCalls() -> bool
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.get -> int
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.set -> void
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool

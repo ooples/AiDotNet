@@ -38,6 +38,9 @@ namespace AiDotNet.LossFunctions;
 [LossProperty(IsNonNegative = true, ZeroForIdentical = true, ApiShape = LossApiShape.ImageMatrix, ExpectedOutput = OutputType.Continuous)]
 public partial class PerceptualLoss<T> : LossFunctionBase<T>
 {
+    /// <summary>It runs a caller's feature extractor (a callback or a network), which may keep a GPU result between calls; nothing here can check that.</summary>
+    internal override bool KeepsResultsBetweenCalls => true;
+
     /// <summary>
     /// The feature extractor function that converts images to feature representations.
     /// </summary>

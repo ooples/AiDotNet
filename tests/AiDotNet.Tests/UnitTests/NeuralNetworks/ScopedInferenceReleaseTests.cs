@@ -138,6 +138,34 @@ public class ScopedInferenceReleaseTests
         finally { AiDotNetEngine.Current = prior; }
     }
 
+    private sealed class DerivedResNet : ResNetNetwork<float>
+    {
+        public DerivedResNet(NeuralNetworkArchitecture<float> architecture)
+            : base(architecture, new ResNetConfiguration(ResNetVariant.ResNet18, Classes, Size, Size)) { }
+    }
+
+    // The generated stack releases its predict results; a saved and loaded copy rebuilds the same stack and still
+    // does. A layer added afterwards has not been checked, nor has a derived model, so neither releases.
+    [Theory]
+    [InlineData(CnnFamily.DenseNet)]
+    [InlineData(CnnFamily.ResNet)]
+    [InlineData(CnnFamily.Vgg)]
+    public void Only_the_generated_stack_releases_its_predict_results(CnnFamily family)
+    {
+        var network = Build(family, custom: false);
+        Assert.True(network.ReleasesPredictResults);
+        network.Predict(Input());   // resolve the lazy weights so the model serializes
+
+        var loaded = Build(family, custom: false);
+        loaded.Deserialize(network.Serialize());
+        Assert.True(loaded.ReleasesPredictResults, $"{family}: a deserialized copy stopped releasing its predict results.");
+
+        network.Layers.Add(new FlattenLayer<float>());
+        Assert.False(network.ReleasesPredictResults, $"{family}: a layer added to the generated stack was trusted.");
+
+        if (family == CnnFamily.ResNet) Assert.False(new DerivedResNet(Arch(null)).ReleasesPredictResults);
+    }
+
     // Caller-supplied layers may carry a tensor between calls, so Predict must not free what they produced.
     [SkippableTheory]
     [InlineData(CnnFamily.DenseNet)]

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -174,7 +175,7 @@ internal class TreeSpeculativeDecoder<T>
                     if (bonusPos < targetProbs.Rows)
                     {
                         var targetDist = targetProbs.GetRow(bonusPos);
-                        int bonusToken = SampleFromDistribution(ApplyTemperature(targetDist, temperature));
+                        int bonusToken = TemperatureSampling<T>.Sample(TemperatureSampling<T>.Apply(targetDist, temperature), _random);
                         tokens.Add(bonusToken);
                         generated++;
 
@@ -185,15 +186,18 @@ internal class TreeSpeculativeDecoder<T>
             }
             else
             {
-                // No path accepted - sample from target distribution
+                // No path accepted - sample from the residual max(0, p_target - p_draft), both tempered.
                 if (allTargetProbs.Count > 0)
                 {
                     var targetProbs = allTargetProbs[0];
                     int pos = tokens.Count - 1;
                     if (pos >= 0 && pos < targetProbs.Rows)
                     {
-                        var targetDist = targetProbs.GetRow(pos);
-                        int fallbackToken = SampleFromDistribution(ApplyTemperature(targetDist, temperature));
+                        var targetDist = TemperatureSampling<T>.Apply(targetProbs.GetRow(pos), temperature);
+                        var sampleDist = tree.Root.DraftDistribution is { } draftDist && draftDist.Length == targetDist.Length
+                            ? ComputeAdjustedDistribution(targetDist, draftDist)
+                            : targetDist;
+                        int fallbackToken = TemperatureSampling<T>.Sample(sampleDist, _random);
                         tokens.Add(fallbackToken);
                         generated++;
 
@@ -281,6 +285,11 @@ internal class TreeSpeculativeDecoder<T>
                 var draft = _draftModel.GenerateDraft(nodeContext, 1, temperature);
                 if (draft.NumTokens == 0) continue;
 
+                if (node.DraftDistribution is null && draft.Probabilities.Rows > 0)
+                {
+                    node.DraftDistribution = draft.Probabilities.GetRow(0);
+                }
+
                 var child = new TreeNode<T>
                 {
                     Token = draft.Tokens[0],
@@ -342,7 +351,8 @@ internal class TreeSpeculativeDecoder<T>
             if (targetPos < 0 || targetPos >= targetProbs.Rows)
                 break;
 
-            T pTarget = targetProbs[targetPos, token];
+            // Compare against the target under the same temperature as the draft (one-hot when greedy).
+            T pTarget = TemperatureSampling<T>.Apply(targetProbs.GetRow(targetPos), temperature)[token];
             T pDraft = i < draftProbs.Length ? draftProbs[i] : NumOps.FromDouble(0.01);
 
             if (NumOps.LessThanOrEquals(pDraft, NumOps.Zero))
@@ -366,45 +376,16 @@ internal class TreeSpeculativeDecoder<T>
         return accepted;
     }
 
-    private Vector<T> ApplyTemperature(Vector<T> dist, T temperature)
+    /// <summary>
+    /// Computes the adjusted distribution for rejection sampling: normalized <c>max(0, p_target - p_draft)</c>.
+    /// </summary>
+    private static Vector<T> ComputeAdjustedDistribution(Vector<T> targetDist, Vector<T> draftDist)
     {
-        T one = NumOps.One;
-        if (NumOps.Equals(temperature, one))
-            return dist;
-
-        var result = new Vector<T>(dist.Length);
-        T sum = NumOps.Zero;
-        T invTemp = NumOps.Divide(one, temperature);
-
-        for (int i = 0; i < dist.Length; i++)
-        {
-            result[i] = NumOps.Power(dist[i], invTemp);
-            sum = NumOps.Add(sum, result[i]);
-        }
-
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Divide(result[i], sum);
-            }
-        }
-
-        return result;
-    }
-
-    private int SampleFromDistribution(Vector<T> distribution)
-    {
-        T r = NumOps.FromDouble(_random.NextDouble());
-        T cumulative = NumOps.Zero;
-
-        for (int i = 0; i < distribution.Length; i++)
-        {
-            cumulative = NumOps.Add(cumulative, distribution[i]);
-            if (NumOps.LessThanOrEquals(r, cumulative))
-                return i;
-        }
-
-        return distribution.Length - 1;
+        var engine = AiDotNetEngine.Current;
+        var adjusted = (Vector<T>)engine.ReLU(engine.Subtract(targetDist, draftDist));
+        T sum = engine.Sum(adjusted);
+        return NumOps.GreaterThan(sum, NumOps.Zero)
+            ? (Vector<T>)engine.Divide(adjusted, sum)
+            : (Vector<T>)targetDist.Clone();
     }
 }

@@ -49,6 +49,16 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     public abstract Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target);
 
     /// <summary>
+    /// Whether this loss keeps a GPU result from one <see cref="ComputeTapeLoss"/> call and reads it in a later one (a
+    /// basis or scale built on the device by its first call). A <see cref="AiDotNet.Tensors.Engines.TensorScope"/>
+    /// around the call frees every GPU result it creates, so a caller scopes it only when this is false. The library's
+    /// own losses keep none (a table they reuse is built on the host); a loss defined elsewhere, a derived one included,
+    /// has not been checked, and a library loss that runs a caller's network, layer, callback or nested loss overrides
+    /// this to answer for them.
+    /// </summary>
+    internal virtual bool KeepsResultsBetweenCalls => GetType().Assembly != typeof(LossFunctionBase<T>).Assembly;
+
+    /// <summary>
     /// Calculates both loss and gradient on GPU in a single pass.
     /// Default implementation differentiates <see cref="ComputeTapeLoss"/> on the CPU and uploads
     /// the result; override to compute both in a single GPU kernel invocation.
