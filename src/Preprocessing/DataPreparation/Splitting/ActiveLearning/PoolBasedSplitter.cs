@@ -160,6 +160,8 @@ public class PoolBasedSplitter<T> : DataSplitterBase<T>
     private (int[] labeled, int[] unlabeled) SelectDiverse(Matrix<T> X, int nSamples, int labeledSize)
     {
         // Simple diverse selection using max-min distance
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var points = Tensor<T>.FromMatrix(X);
         var labeled = new List<int>();
         var unlabeled = new HashSet<int>(Enumerable.Range(0, nSamples));
 
@@ -168,46 +170,35 @@ public class PoolBasedSplitter<T> : DataSplitterBase<T>
         labeled.Add(first);
         unlabeled.Remove(first);
 
-        // Greedily select farthest points
+        // Distance from every sample to its nearest selected sample; selected samples are marked -1
+        var minDistance = DistancesTo(engine, points, first);
+        var isLabeled = new int[nSamples];
+        isLabeled[first] = 1;
+        var minusOne = PreprocessingTensorOps.Filled(new[] { nSamples }, NumOps.Negate(NumOps.One));
+
+        // Greedily select farthest points (ties go to the lowest index)
         while (labeled.Count < labeledSize && unlabeled.Count > 0)
         {
-            int bestCandidate = -1;
-            double bestDistance = -1;
+            var labeledMask = new Tensor<int>(isLabeled, new[] { nSamples }).Cast<T>();
+            var candidates = engine.TensorWhere(labeledMask, minusOne, minDistance);
+            int bestCandidate = engine.TensorArgMax(engine.Reshape(candidates, new[] { 1, nSamples }), 1).AsSpan()[0];
 
-            foreach (int candidate in unlabeled)
-            {
-                double minDist = double.MaxValue;
-                foreach (int selected in labeled)
-                {
-                    double dist = ComputeDistance(X, candidate, selected);
-                    minDist = Math.Min(minDist, dist);
-                }
-
-                if (minDist > bestDistance)
-                {
-                    bestDistance = minDist;
-                    bestCandidate = candidate;
-                }
-            }
-
-            if (bestCandidate >= 0)
-            {
-                labeled.Add(bestCandidate);
-                unlabeled.Remove(bestCandidate);
-            }
+            labeled.Add(bestCandidate);
+            unlabeled.Remove(bestCandidate);
+            isLabeled[bestCandidate] = 1;
+            minDistance = engine.TensorMin(minDistance, DistancesTo(engine, points, bestCandidate));
         }
 
         return (labeled.ToArray(), unlabeled.ToArray());
     }
 
-    private double ComputeDistance(Matrix<T> X, int i, int j)
+    /// <summary>The Euclidean distance from every row of <paramref name="points"/> to row <paramref name="row"/>.</summary>
+    private static Tensor<T> DistancesTo(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> points, int row)
     {
-        double sum = 0;
-        for (int k = 0; k < X.Columns; k++)
-        {
-            double diff = Convert.ToDouble(X[i, k]) - Convert.ToDouble(X[j, k]);
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
+        int n = points.Shape[0];
+        int p = points.Shape[1];
+        var reference = engine.TensorBroadcastTo(PreprocessingTensorOps.RowVector(points, row), new[] { n, p });
+        var diff = engine.TensorSubtract(points, reference);
+        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, false));
     }
 }
