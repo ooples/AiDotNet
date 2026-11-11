@@ -228,27 +228,38 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
         var scaledDiff = (Vector<T>)Engine.Multiply(bMinusC, _currentMutationRate);
         var mutant = (Vector<T>)Engine.Add(aParams, scaledDiff);
 
-        var trialParams = new Vector<T>(dimensions);
         int R = Random.Next(dimensions);
         var currentCrossOverRate = Convert.ToDouble(_currentCrossoverRate);
 
-        // Crossover (element-wise due to random per-element decisions)
-        for (int i = 0; i < dimensions; i++)
-        {
-            if (Random.NextDouble() < currentCrossOverRate || i == R)
-            {
-                trialParams[i] = mutant[i];
-            }
-            else
-            {
-                trialParams[i] = currentParams[i];
-            }
-        }
+        // Binomial crossover: the random per-coordinate decisions form a mask, then one engine select.
+        var takeMutant = CrossoverMask(Random, dimensions, currentCrossOverRate, R, drawAtForced: true);
+        var trialParams = Engine.TensorWhere(takeMutant, mutant.AsTensor(), currentParams.AsTensor()).AsVector();
 
         // Create a new model with the modified parameters
         return InterfaceGuard.Parameterizable(currentModel).WithParameters(trialParams);
     }
 
+
+    /// <summary>
+    /// The binomial-crossover mask: true where the trial takes the mutant's coordinate. Each coordinate draws one
+    /// uniform and takes the mutant when it falls below <paramref name="rate"/>; the <paramref name="forced"/>
+    /// coordinate always takes it, and draws only when <paramref name="drawAtForced"/> (so the random stream is
+    /// consumed exactly as the per-coordinate loop it replaces consumed it).
+    /// </summary>
+    private static bool[] CrossoverMask(Random random, int dimension, double rate, int forced, bool drawAtForced)
+    {
+        var mask = new bool[dimension];
+        for (int i = 0; i < dimension; i++)
+        {
+            bool drawn = (i != forced || drawAtForced) && random.NextDouble() < rate;
+            mask[i] = drawn || i == forced;
+        }
+
+        return mask;
+    }
+
+    /// <summary>True when the trial's objective value is strictly better (lower) than the member's.</summary>
+    private bool IsImprovement(T trialValue, T currentValue) => NumOps.LessThan(trialValue, currentValue);
 
     /// <summary>
     /// Retrieves the current options of the Differential Evolution optimizer.
@@ -316,6 +327,7 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
         double differentialWeight = _deOptions.MutationRate;
         double crossoverRate = _deOptions.CrossoverRate;
         double stop = Convert.ToDouble(tolerance);
+        T weight = NumOps.FromDouble(differentialWeight);
 
         var population = new Vector<T>[populationSize];
         var values = new T[populationSize];
@@ -344,28 +356,17 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
                 // At least one coordinate always comes from the mutant, so the trial can never be
                 // an exact copy of the member it is meant to replace.
                 int forced = random.Next(dimension);
-                var trial = new Vector<T>(dimension);
+                var takeMutant = CrossoverMask(random, dimension, crossoverRate, forced, drawAtForced: false);
 
-                for (int i = 0; i < dimension; i++)
-                {
-                    if (i == forced || random.NextDouble() < crossoverRate)
-                    {
-                        double difference = Convert.ToDouble(
-                            NumOps.Subtract(population[second][i], population[third][i]));
-
-                        trial[i] = NumOps.Add(
-                            population[first][i],
-                            NumOps.FromDouble(differentialWeight * difference));
-                    }
-                    else
-                    {
-                        trial[i] = population[p][i];
-                    }
-                }
+                // mutant = first + F * (second - third)
+                var mutant = Engine.Add(
+                    population[first],
+                    Engine.Multiply(Engine.Subtract(population[second], population[third]), weight));
+                var trial = Engine.TensorWhere(takeMutant, mutant.AsTensor(), population[p].AsTensor()).AsVector();
 
                 T trialValue = search.Evaluate(trial);
 
-                if (NumOps.LessThan(trialValue, values[p]))
+                if (IsImprovement(trialValue, values[p]))
                 {
                     population[p] = trial;
                     values[p] = trialValue;
