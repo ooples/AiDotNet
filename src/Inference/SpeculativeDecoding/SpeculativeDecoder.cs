@@ -190,7 +190,11 @@ internal class SpeculativeDecoder<T>
                 if (targetPos < 0 || targetPos >= targetProbs.Rows)
                     break;
 
-                T pTarget = targetProbs[targetPos, draftToken];
+                // Speculative sampling compares the target and draft under the SAME temperature: the draft
+                // probabilities are already tempered, so the target row must be too (one-hot when greedy,
+                // which makes acceptance exact: accept iff the draft token is the target's argmax).
+                var targetDist = TemperatureSampling<T>.Apply(targetProbs.GetRow(targetPos), temperature);
+                T pTarget = targetDist[draftToken];
                 T pDraft = draft.TokenProbabilities[i];
 
                 // Speculative acceptance: accept with probability min(1, p_target / p_draft)
@@ -225,12 +229,11 @@ internal class SpeculativeDecoder<T>
                 }
                 else
                 {
-                    // Rejection: sample from adjusted distribution
-                    var targetDist = targetProbs.GetRow(targetPos);
+                    // Rejection: sample from the residual max(0, p_target - p_draft), both tempered.
                     var draftDist = draft.Probabilities.GetRow(i);
-                    var adjustedDist = ComputeAdjustedDistribution(targetDist, draftDist, temperature);
+                    var adjustedDist = ComputeAdjustedDistribution(targetDist, draftDist);
 
-                    int resampledToken = SampleFromDistribution(adjustedDist);
+                    int resampledToken = TemperatureSampling<T>.Sample(adjustedDist, _random);
                     tokens.Add(resampledToken);
                     generated++;
 
@@ -256,9 +259,8 @@ internal class SpeculativeDecoder<T>
                 int lastPos = tokens.Count - 1;
                 if (lastPos < targetProbs.Rows)
                 {
-                    var targetDist = targetProbs.GetRow(lastPos);
-                    var temperedDist = ApplyTemperature(targetDist, temperature);
-                    int bonusToken = SampleFromDistribution(temperedDist);
+                    var temperedDist = TemperatureSampling<T>.Apply(targetProbs.GetRow(lastPos), temperature);
+                    int bonusToken = TemperatureSampling<T>.Sample(temperedDist, _random);
                     tokens.Add(bonusToken);
                     generated++;
 
@@ -447,7 +449,7 @@ internal class SpeculativeDecoder<T>
     /// <summary>
     /// Computes the adjusted distribution for rejection sampling.
     /// </summary>
-    private Vector<T> ComputeAdjustedDistribution(Vector<T> targetDist, Vector<T> draftDist, T temperature)
+    private static Vector<T> ComputeAdjustedDistribution(Vector<T> targetDist, Vector<T> draftDist)
     {
         // Compute max(0, p_target - p_draft), then normalize
         var adjusted = new Vector<T>(targetDist.Length);
@@ -478,53 +480,5 @@ internal class SpeculativeDecoder<T>
         }
 
         return adjusted;
-    }
-
-    /// <summary>
-    /// Applies temperature scaling to a probability distribution.
-    /// </summary>
-    private Vector<T> ApplyTemperature(Vector<T> distribution, T temperature)
-    {
-        T one = NumOps.One;
-        if (NumOps.Equals(temperature, one))
-            return distribution;
-
-        var result = new Vector<T>(distribution.Length);
-        T sum = NumOps.Zero;
-        T invTemp = NumOps.Divide(one, temperature);
-
-        for (int i = 0; i < distribution.Length; i++)
-        {
-            result[i] = NumOps.Power(distribution[i], invTemp);
-            sum = NumOps.Add(sum, result[i]);
-        }
-
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Divide(result[i], sum);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Samples a token index from a probability distribution.
-    /// </summary>
-    private int SampleFromDistribution(Vector<T> distribution)
-    {
-        T r = NumOps.FromDouble(_random.NextDouble());
-        T cumulative = NumOps.Zero;
-
-        for (int i = 0; i < distribution.Length; i++)
-        {
-            cumulative = NumOps.Add(cumulative, distribution[i]);
-            if (NumOps.LessThanOrEquals(r, cumulative))
-                return i;
-        }
-
-        return distribution.Length - 1;
     }
 }

@@ -1388,7 +1388,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                     _fusedLinearScratch = new Tensor<T>([batchDim, outputSize]);
                 }
                 Engine.FusedLinearInto(_fusedLinearScratch, flattenedInput, _weights, BiasOrNull(), fusedActivation);
-                result = _fusedLinearScratch;
+                // The layer reuses this buffer next call; a scope open around this call must not free it.
+                result = AiDotNet.Tensors.Engines.TensorScope.Detach(_fusedLinearScratch);
             }
             else
             {
@@ -1652,6 +1653,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
 
         base.ClearGradients();
     }
+
+    /// <summary>
+    /// Its forward caches serve only the next backward; the fused-linear scratch it reuses across calls is detached from
+    /// any open <see cref="AiDotNet.Tensors.Engines.TensorScope"/> each time it is written. Only this exact type has been
+    /// checked: a derived layer may keep more, so it counts as keeping a result.
+    /// </summary>
+    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(DenseLayer<T>);
 
     /// <summary>
     /// Resets the internal state of the layer.

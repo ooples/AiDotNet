@@ -228,15 +228,48 @@ internal static class OpenAiJson
     /// <summary>Flattens a string or a content-part array (<c>[{type:"text",text:"..."}]</c>) to text.</summary>
     public static string ContentText(JToken? t)
     {
-        if (t == null) return string.Empty;
+        if (t == null || t.Type == JTokenType.Null) return string.Empty;
         if (t.Type == JTokenType.String) return t.Value<string>() ?? string.Empty;
         if (t.Type == JTokenType.Array)
         {
             var sb = new StringBuilder();
             foreach (var part in t)
             {
-                var txt = part.Type == JTokenType.String ? part.Value<string>() : part["text"]?.Value<string>();
-                if (!string.IsNullOrEmpty(txt)) sb.Append(txt);
+                if (part.Type == JTokenType.String)
+                {
+                    var txt = part.Value<string>();
+                    if (!string.IsNullOrEmpty(txt)) sb.Append(txt);
+                }
+                else if (part.Type == JTokenType.Object)
+                {
+                    var txt = part["text"]?.Value<string>();
+                    if (!string.IsNullOrEmpty(txt))
+                    {
+                        sb.Append(txt);
+                    }
+                    else if (part["type"]?.Value<string>() == "tool_result")
+                    {
+                        // Label each result with its tool_use_id so parallel results stay separable and
+                        // the model can pair each one with the [tool_use: ...] call that produced it. content is
+                        // optional in the Anthropic API (an empty or error result may omit it); it renders as empty.
+                        // A failed execution (is_error: true) is labelled "tool_result error" so the model can tell
+                        // it apart from a successful result with the same content.
+                        var toolUseId = part["tool_use_id"]?.Value<string>() ?? "unknown";
+                        var isError = part["is_error"] is JValue { Type: JTokenType.Boolean } flag && flag.Value<bool>();
+                        var label = isError ? "tool_result error" : "tool_result";
+                        sb.Append($"[{label} {toolUseId}: {ContentText(part["content"])}]");
+                    }
+                    else if (part["content"] != null)
+                    {
+                        sb.Append(ContentText(part["content"]));
+                    }
+                    else if (part["type"]?.Value<string>() == "tool_use")
+                    {
+                        var toolName = part["name"]?.Value<string>() ?? "tool";
+                        var toolInput = part["input"]?.ToString(Formatting.None) ?? "{}";
+                        sb.Append($"[tool_use: {toolName}({toolInput})]");
+                    }
+                }
             }
             return sb.ToString();
         }

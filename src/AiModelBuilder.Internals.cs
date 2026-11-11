@@ -698,6 +698,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 return;
             }
 
+            // An engine the caller assigned (AiDotNetEngine.Current = new CpuEngine()) is an explicit choice; the
+            // auto-detect below would reinstall the parked GPU engine over it, so a "CPU" run held the whole GPU.
+            if (AiDotNetEngine.IsCallerAssigned)
+            {
+                return;
+            }
+
             // Industry standard default: Try to auto-detect GPU, use CPU fallback if not available
             // This is silent and non-intrusive - if GPU exists, use it; if not, use CPU
             try

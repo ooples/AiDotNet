@@ -7093,7 +7093,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // when a garbage collection finalizes them (ooples/AiDotNet.Tensors#1432); only the output survives.
         // Disposed in the finally below, before the collection there, which must see the intermediates already returned.
         // Not while a layer observer is recording: it keeps intermediate outputs to read after Predict returns.
+        // Not while a graph is being traced either: the trace's results are lazy nodes, and keeping the output reads its
+        // storage, which realizes it on the host and marks the trace as escaping the graph, so the plan is refused.
         var resultScope = ReleasesInferenceIntermediates && Graph.LayerForwardObserver<T>.Current is null
+                          && !Tensors.Engines.Compilation.GraphMode.IsActive
             ? TensorScope.Begin()
             : null;
         using var noGrad = new NoGradScope<T>();
@@ -7159,6 +7162,57 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <see cref="TensorScope"/>. A model that does keep one must leave this false: its kept tensors would be freed.
     /// </summary>
     protected virtual bool ReleasesInferenceIntermediates => false;
+
+    /// <summary>
+    /// Whether a caller may free every GPU result a <see cref="Predict(Tensor{T})"/> call creates once it has read the
+    /// output (<see cref="ReleasesInferenceIntermediates"/>): the model keeps none of them for a later call.
+    /// </summary>
+    internal bool ReleasesPredictResults => ReleasesInferenceIntermediates;
+
+    /// <summary>
+    /// True when the network has layers and every one has been checked to keep no GPU result between calls
+    /// (<see cref="LayerBase{T}.KeepsResultsBetweenCalls"/>); a layer of any other kind counts as keeping one.
+    /// </summary>
+    protected bool LayersKeepNoResultsBetweenCalls()
+    {
+        if (Layers.Count == 0) return false;
+        foreach (var layer in Layers)
+        {
+            if (layer is not LayerBase<T> checkedLayer || checkedLayer.KeepsResultsBetweenCalls) return false;
+        }
+
+        return true;
+    }
+
+    // The layer types, in order, of the stack a model generated itself (RecordGeneratedLayerTypes).
+    private Type[]? _generatedLayerTypes;
+
+    /// <summary>
+    /// Records the current layers' types as the stack the model generated itself and has checked keeps no GPU result
+    /// between calls (<see cref="ReleasesInferenceIntermediates"/>). Call it when the layers are built.
+    /// </summary>
+    private protected void RecordGeneratedLayerTypes()
+    {
+        var types = new Type[Layers.Count];
+        for (int i = 0; i < types.Length; i++) types[i] = Layers[i].GetType();
+        _generatedLayerTypes = types;
+    }
+
+    /// <summary>
+    /// True while the network holds layers of exactly the types <see cref="RecordGeneratedLayerTypes"/> recorded, in
+    /// order. A layer added, removed or swapped for another kind since then has not been checked; a deserialized or
+    /// cloned stack rebuilds the same types and still matches.
+    /// </summary>
+    private protected bool LayersMatchTheGeneratedStack()
+    {
+        if (_generatedLayerTypes is not { } generated || Layers.Count != generated.Length) return false;
+        for (int i = 0; i < generated.Length; i++)
+        {
+            if (Layers[i].GetType() != generated[i]) return false;
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Whether this model sizes its layers from its options rather than from its architecture, so an architecture
@@ -7255,9 +7309,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // per-call arena for both capture and its matching reference forward so validation compares
         // the same execution path. Normal eager inference and compiled-plan execution still use the
         // default-on arena and retain its allocation savings.
+        // Taken once, by this model only: a sub-model's Predict inside PredictCore takes the normal path, so its
+        // between-layer Reset never rewinds the caller's arena under this model's live intermediates.
+        var callerArena = t_callerArena;
+        if (callerArena.Owner is not null) ExchangeCallerArena(default);
+
         if (!InferenceArenaSettings.Enabled
             || GraphCaptureCompatibility.IsActive)
             return PredictCore(input);
+
+        if (ReferenceEquals(callerArena.Owner, this) && callerArena.Arena is { } arenaOfCaller
+            && ReferenceEquals(TensorArena.Current, arenaOfCaller))
+        {
+            // PredictIntoCallerArena: the caller consumes the output inside its own top-level arena, so the output
+            // stays that arena's memory. No per-call arena and no DetachFromArena copy ([rows, vocabulary] for an LM
+            // head); the caller's Dispose returns every buffer of the forward to the cross-arena pool.
+            var prevCallerRecycle = ExchangeRecycleArena(InferenceArenaSettings.RecycleLayerScratch ? arenaOfCaller : null);
+            try
+            {
+                return PredictCore(input);
+            }
+            finally
+            {
+                ExchangeRecycleArena(prevCallerRecycle);
+            }
+        }
 
         // Run the forward inside a per-call arena. The arena recycles intermediate Rent-backed
         // buffers; it Resets/returns them to the cross-arena pool on Dispose. The output is
@@ -7279,9 +7355,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // forward — never an outer training/composite arena (whose live tape/step tensors a
         // mid-forward Reset would corrupt). Save/restore makes it nesting-safe.
         using var arena = TensorArena.Create();
-        var prevRecycle = _inferenceRecycleArena;
-        _inferenceRecycleArena =
-            InferenceArenaSettings.RecycleLayerScratch ? arena : null;
+        var prevRecycle = ExchangeRecycleArena(InferenceArenaSettings.RecycleLayerScratch ? arena : null);
         Tensor<T> output;
         try
         {
@@ -7289,7 +7363,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         finally
         {
-            _inferenceRecycleArena = prevRecycle;
+            ExchangeRecycleArena(prevRecycle);
         }
         // #2385: with no host scratch rented, nothing in this arena can back the output (a GPU forward keeps its
         // result on the device). Detaching anyway downloaded every result to a fresh host array on each call,
@@ -7315,6 +7389,45 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     [ThreadStatic]
     private static TensorArena? _inferenceRecycleArena;
+
+    // Set by PredictIntoCallerArena for one Predict of one model.
+    [ThreadStatic]
+    private static (NeuralNetworkBase<T>? Owner, TensorArena? Arena) t_callerArena;
+
+    // The two thread-static slots above are only ever swapped, the previous value restored in a finally.
+    private static TensorArena? ExchangeRecycleArena(TensorArena? arena)
+    {
+        var previous = _inferenceRecycleArena;
+        _inferenceRecycleArena = arena;
+        return previous;
+    }
+
+    private static (NeuralNetworkBase<T>? Owner, TensorArena? Arena) ExchangeCallerArena(
+        (NeuralNetworkBase<T>? Owner, TensorArena? Arena) value)
+    {
+        var previous = t_callerArena;
+        t_callerArena = value;
+        return previous;
+    }
+
+    /// <summary>
+    /// Predict whose output is memory of <paramref name="arena"/>, the caller's active top-level arena, instead of a
+    /// fresh garbage-collected copy. For a caller that consumes the output before disposing the arena (streaming
+    /// validation reads one loss scalar). Disposing the arena returns the output and every intermediate to the
+    /// cross-arena pool, so the next call reuses them. The output must not be read after the arena is disposed.
+    /// </summary>
+    internal Tensor<T> PredictIntoCallerArena(Tensor<T> input, TensorArena arena)
+    {
+        var previous = ExchangeCallerArena((this, arena));
+        try
+        {
+            return Predict(input);
+        }
+        finally
+        {
+            ExchangeCallerArena(previous);
+        }
+    }
 
     /// <summary>
     /// True when the current forward is running under an authorized inference recycle arena

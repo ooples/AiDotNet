@@ -22399,6 +22399,10 @@ override AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.SelectTrainableParame
 override AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 override AiDotNet.SpeechRecognition.Multilingual.XLSR<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 override AiDotNet.SpeechRecognition.Robust.WavLMRobust<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.NeuralNetworks.NeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.Transformer<T>.ReleasesInferenceIntermediates.get -> bool
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.LayersKeepNoResultsBetweenCalls() -> bool
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.get -> int
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.set -> void
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
