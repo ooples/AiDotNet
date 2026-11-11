@@ -48,7 +48,7 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _embedding;
+    private Matrix<T>? _embedding;
     private int _nSamples;
 
     /// <summary>
@@ -64,7 +64,7 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -119,208 +119,96 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         _nSamples = data.Rows;
         int n = data.Rows;
-        int p = data.Columns;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
 
         // Step 1: Build k-NN graph
-        var (neighbors, weights) = BuildKNNGraph(X, n, p, random);
+        var (neighborTensor, weightTensor) = BuildKNNGraph(x, n);
 
         // Step 2: Initialize embedding
-        var Y = InitializeEmbedding(X, n, p, random);
+        var initial = InitializeEmbedding(x, n, random);
 
-        // Step 3: Optimize using negative sampling
-        OptimizeWithNegativeSampling(Y, neighbors, weights, n, random);
+        // Step 3: Optimize using negative sampling (edge-sequential SGD, see OptimizeWithNegativeSampling)
+        int k = neighborTensor.Shape[1];
+        var flatNeighbors = neighborTensor.AsSpan().ToArray();
+        var flatWeights = weightTensor.Cast<double>().AsSpan().ToArray();
+        var neighbors = new List<int>[n];
+        var weights = new List<double>[n];
+        for (int i = 0; i < n; i++)
+        {
+            neighbors[i] = new List<int>(flatNeighbors.Skip(i * k).Take(k));
+            weights[i] = new List<double>(flatWeights.Skip(i * k).Take(k));
+        }
 
-        _embedding = Y;
+        var y = initial.Cast<double>().ToMatrix();
+        OptimizeWithNegativeSampling(y, neighbors, weights, n, random);
+
+        _embedding = Tensor<double>.FromMatrix(y).Cast<T>().ToMatrix();
     }
 
-    private (List<int>[] neighbors, List<double>[] weights) BuildKNNGraph(
-        double[,] X, int n, int p, Random random)
+    /// <summary>
+    /// k nearest neighbours (ties in index order) and shared-neighbour weights
+    /// (s_ij + 1) / (|N(i)| + |N(j)| - s_ij + 1), s_ij = |N(i) and N(j)|, for every j in N(i).
+    /// </summary>
+    private (Tensor<int> Neighbors, Tensor<T> Weights) BuildKNNGraph(Tensor<T> x, int n)
     {
+        var engine = Engine;
         int k = Math.Min(_nNeighbors, n - 1);
 
         // Compute all pairwise distances for exact k-NN
-        // (In production, would use approximate methods like random projection trees)
-        var neighbors = new List<int>[n];
-        var weights = new List<double>[n];
+        var neighbors = DimensionalityReductionOps.NearestNeighbors(DimensionalityReductionOps.EuclideanDistances(x, x), k);
 
-        for (int i = 0; i < n; i++)
-        {
-            neighbors[i] = new List<int>();
-            weights[i] = new List<double>();
-        }
+        // Shared neighbour counts S = A A^T for the 0/1 adjacency A[i, j] = [j in N(i)]
+        var adjacency = DimensionalityReductionOps.ScatterRows(
+            neighbors, DimensionalityReductionOps.Full(new[] { n, k }, NumOps.One), n, NumOps.Zero);
+        var shared = DimensionalityReductionOps.TakeRows(
+            DimensionalityReductionOps.MatMulTranspose(adjacency, adjacency), neighbors);
 
-        // Find k-nearest neighbors for each point
-        for (int i = 0; i < n; i++)
-        {
-            var distances = new (double dist, int idx)[n];
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    distances[j] = (double.MaxValue, j);
-                    continue;
-                }
-
-                double dist = 0;
-                for (int d = 0; d < p; d++)
-                {
-                    double diff = X[i, d] - X[j, d];
-                    dist += diff * diff;
-                }
-                distances[j] = (Math.Sqrt(dist), j);
-            }
-
-            Array.Sort(distances, (a, b) => a.dist.CompareTo(b.dist));
-
-            // Store k nearest neighbors
-            for (int j = 0; j < k; j++)
-            {
-                neighbors[i].Add(distances[j].idx);
-            }
-        }
-
-        // Compute edge weights based on shared neighbors
-        for (int i = 0; i < n; i++)
-        {
-            var neighborSet = new HashSet<int>(neighbors[i]);
-
-            foreach (int j in neighbors[i])
-            {
-                // Count shared neighbors
-                int shared = 0;
-                foreach (int jNeighbor in neighbors[j])
-                {
-                    if (neighborSet.Contains(jNeighbor))
-                    {
-                        shared++;
-                    }
-                }
-
-                // Weight based on shared neighbor similarity (Jaccard-like)
-                double weight = (double)(shared + 1) / (neighbors[i].Count + neighbors[j].Count - shared + 1);
-                weights[i].Add(weight);
-            }
-        }
-
+        // Every neighbourhood has k members
+        var weights = engine.TensorDivide(
+            engine.TensorAddScalar(shared, NumOps.One),
+            engine.TensorSubtract(DimensionalityReductionOps.Full(new[] { n, k }, NumOps.FromDouble(2 * k + 1)), shared));
         return (neighbors, weights);
     }
 
-    private double[,] InitializeEmbedding(double[,] X, int n, int p, Random random)
+    /// <summary>
+    /// PCA initialization: centered data projected on the top principal axes, scaled by 1e-4, plus
+    /// 1e-4 (u - 0.5) noise drawn row-major.
+    /// </summary>
+    private Tensor<T> InitializeEmbedding(Tensor<T> x, int n, Random random)
     {
-        var Y = new double[n, _nComponents];
+        var engine = Engine;
+        int p = x.Shape[1];
+        var centered = DimensionalityReductionOps.SubtractRow(x, DimensionalityReductionOps.ColumnMeans(x));
+        var covariance = engine.TensorDivideScalar(
+            DimensionalityReductionOps.TransposeMatMul(centered, centered), NumOps.FromDouble(n));
 
-        // Initialize with PCA for better starting point
-        // Center data
-        var mean = new double[p];
-        for (int i = 0; i < n; i++)
+        // Top eigenvectors (zero columns past the feature count)
+        var (_, vectors) = DimensionalityReductionOps.SymmetricEigen(covariance, descending: true);
+        int available = Math.Min(_nComponents, p);
+        var projected = engine.TensorMatMul(centered, DimensionalityReductionOps.FirstColumns(vectors, available));
+        if (available < _nComponents)
         {
-            for (int j = 0; j < p; j++)
-            {
-                mean[j] += X[i, j];
-            }
-        }
-        for (int j = 0; j < p; j++) mean[j] /= n;
-
-        var Xc = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                Xc[i, j] = X[i, j] - mean[j];
-            }
+            projected = engine.TensorConcatenate(new[] { projected, new Tensor<T>(new[] { n, _nComponents - available }) }, 1);
         }
 
-        // Compute covariance
-        var C = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < n; k++)
-                {
-                    C[i, j] += Xc[k, i] * Xc[k, j];
-                }
-                C[i, j] /= n;
-            }
-        }
-
-        // Power iteration for top eigenvectors
-        var V = new double[p, _nComponents];
-        var A = (double[,])C.Clone();
-
-        for (int d = 0; d < _nComponents; d++)
-        {
-            var v = new double[p];
-            for (int i = 0; i < p; i++) v[i] = random.NextDouble() - 0.5;
-
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Av = new double[p];
-                for (int i = 0; i < p; i++)
-                {
-                    for (int j = 0; j < p; j++) Av[i] += A[i, j] * v[j];
-                }
-
-                double norm = 0;
-                for (int i = 0; i < p; i++) norm += Av[i] * Av[i];
-                norm = Math.Sqrt(norm);
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < p; i++) v[i] = Av[i] / norm;
-            }
-
-            for (int i = 0; i < p; i++) V[i, d] = v[i];
-
-            var Av2 = new double[p];
-            double lambda = 0;
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++) Av2[i] += A[i, j] * v[j];
-                lambda += v[i] * Av2[i];
-            }
-
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    A[i, j] -= lambda * v[i] * v[j];
-                }
-            }
-        }
-
-        // Project and scale
-        for (int i = 0; i < n; i++)
-        {
-            for (int d = 0; d < _nComponents; d++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    Y[i, d] += Xc[i, j] * V[j, d];
-                }
-                // Add small noise
-                Y[i, d] = Y[i, d] * 0.0001 + (random.NextDouble() - 0.5) * 0.0001;
-            }
-        }
-
-        return Y;
+        var scale = NumOps.FromDouble(0.0001);
+        var noise = engine.TensorMultiplyScalar(
+            engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, n, _nComponents), NumOps.FromDouble(0.5)), scale);
+        return engine.TensorAdd(engine.TensorMultiplyScalar(projected, scale), noise);
     }
 
+    /// <summary>
+    /// Edge-sequential SGD with alias-table negative sampling. Each update reads the positions written by the
+    /// previous one, so this stays the original scalar loop (in double) until the engine has an edge-sequential
+    /// layout kernel; see missing-ops.txt.
+    /// </summary>
     private void OptimizeWithNegativeSampling(
-        double[,] Y,
+        Matrix<double> Y,
         List<int>[] neighbors,
         List<double>[] weights,
         int n,
@@ -496,19 +384,7 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int d = _embedding.GetLength(1);
-        var result = new T[n, d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>

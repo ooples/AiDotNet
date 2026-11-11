@@ -382,11 +382,11 @@ internal static class DimensionalityReductionOps
         return engine.Reshape(engine.TensorIndexSelect(x, engine.Reshape(neighbors, new[] { n * k }), 0), new[] { n, k, x.Shape[1] });
     }
 
-    /// <summary>Batched a bᵀ over the leading axis: [n, r, c] x [n, s, c] -> [n, r, s].</summary>
+    /// <summary>Batched a b^T over the leading axis: [n, r, c] x [n, s, c] -> [n, r, s].</summary>
     internal static Tensor<T> BatchMatMulTranspose<T>(Tensor<T> a, Tensor<T> b) =>
         Engine.TensorBatchMatMul(a, Engine.TensorSwapAxes(b, 1, 2));
 
-    /// <summary>Batched aᵀ b over the leading axis: [n, r, c] x [n, r, s] -> [n, c, s].</summary>
+    /// <summary>Batched a^T b over the leading axis: [n, r, c] x [n, r, s] -> [n, c, s].</summary>
     internal static Tensor<T> BatchTransposeMatMul<T>(Tensor<T> a, Tensor<T> b) =>
         Engine.TensorBatchMatMul(Engine.TensorSwapAxes(a, 1, 2), b);
 
