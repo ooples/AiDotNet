@@ -1157,3 +1157,5 @@ AiDotNet.Interpretability.FaithfulnessReport<T>.Sufficiency.get -> T
 AiDotNet.Interpretability.Explainers.TreeSHAPExplanation<T>.GetSumError() -> T
 *REMOVED*AiDotNet.Interpretability.Explainers.DeepSHAPExplanation<T>.GetSumError() -> double
 AiDotNet.Interpretability.Explainers.DeepSHAPExplanation<T>.GetSumError() -> T
+*REMOVED*AiDotNet.Interpretability.Explainers.ALE2DResult<T>.ALEValues2D.get -> T[,]!
+AiDotNet.Interpretability.Explainers.ALE2DResult<T>.ALEValues2D.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!

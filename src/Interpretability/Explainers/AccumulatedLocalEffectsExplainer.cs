@@ -154,138 +154,77 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
     /// </summary>
     private void ComputeSingleFeatureALE(int featureIndex, ALEResult<T> result)
     {
-        int n = _data.Rows;
-
-        // Get feature values and sort them
-        var featureValues = new double[n];
-        var sortedIndices = new int[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            featureValues[i] = NumOps.ToDouble(_data[i, featureIndex]);
-            sortedIndices[i] = i;
-        }
-
-        // Sort indices by feature value
-        Array.Sort(sortedIndices, (a, b) => featureValues[a].CompareTo(featureValues[b]));
+        var engine = AiDotNetEngine.Current;
+        var featureValues = _data.GetColumn(featureIndex);
 
         // Compute quantile-based interval bounds
-        var intervalBounds = new T[_numIntervals + 1];
-        for (int i = 0; i <= _numIntervals; i++)
-        {
-            int idx = (int)Math.Round((double)i / _numIntervals * (n - 1));
-            intervalBounds[i] = NumOps.FromDouble(featureValues[sortedIndices[idx]]);
-        }
+        var intervalBounds = QuantileBounds(featureValues, _numIntervals);
+        result.IntervalBounds[featureIndex] = intervalBounds.ToArray();
 
-        // Ensure unique bounds (remove duplicates by adjusting slightly)
-        for (int i = 1; i <= _numIntervals; i++)
-        {
-            double current = NumOps.ToDouble(intervalBounds[i]);
-            double prev = NumOps.ToDouble(intervalBounds[i - 1]);
-            if (current <= prev)
-            {
-                intervalBounds[i] = NumOps.FromDouble(prev + 1e-10);
-            }
-        }
-
-        result.IntervalBounds[featureIndex] = intervalBounds;
-
-        // Compute local effects for each interval
-        var localEffects = new double[_numIntervals];
+        // Find which interval each point belongs to
+        var intervals = FindIntervals(featureValues, intervalBounds);
+        var intervalIndex = new Tensor<int>(intervals, new[] { intervals.Length });
         var intervalCounts = new int[_numIntervals];
-
-        for (int i = 0; i < n; i++)
+        foreach (int interval in intervals)
         {
-            double val = featureValues[i];
-
-            // Find which interval this point belongs to
-            int interval = FindInterval(val, intervalBounds);
-            if (interval < 0 || interval >= _numIntervals)
-                continue;
-
             intervalCounts[interval]++;
-
-            // Compute local effect: f(x_right) - f(x_left)
-            double leftBound = NumOps.ToDouble(intervalBounds[interval]);
-            double rightBound = NumOps.ToDouble(intervalBounds[interval + 1]);
-
-            // Create copies of the data point with feature at interval bounds
-            var leftData = CreateSingleRowMatrix(i, featureIndex, leftBound);
-            var rightData = CreateSingleRowMatrix(i, featureIndex, rightBound);
-
-            var leftPred = _predictFunction(leftData)[0];
-            var rightPred = _predictFunction(rightData)[0];
-
-            double effect = NumOps.ToDouble(rightPred) - NumOps.ToDouble(leftPred);
-            localEffects[interval] += effect;
         }
+
+        // Compute local effect: f(x_right) - f(x_left), with the feature moved to the interval bounds
+        var boundsTensor = intervalBounds.AsTensor();
+        var leftBounds = engine.TensorIndexSelect(boundsTensor, intervalIndex, 0).ToVector();
+        var rightBounds = engine.TensorIndexSelect(boundsTensor,
+            engine.TensorAddScalar(intervalIndex, 1), 0).ToVector();
+        var leftPred = _predictFunction(WithColumn(_data, featureIndex, leftBounds));
+        var rightPred = _predictFunction(WithColumn(_data, featureIndex, rightBounds));
+        var effects = engine.Subtract(rightPred.GetSubVector(0, intervals.Length), leftPred.GetSubVector(0, intervals.Length));
 
         // Average local effects within each interval
-        for (int i = 0; i < _numIntervals; i++)
-        {
-            if (intervalCounts[i] > 0)
-            {
-                localEffects[i] /= intervalCounts[i];
-            }
-        }
+        var localEffects = AverageByGroup(effects, intervalIndex, intervalCounts);
 
-        // Accumulate effects
-        var aleValues = new T[_numIntervals + 1];
-        aleValues[0] = NumOps.Zero;
-        double cumSum = 0;
-
-        for (int i = 0; i < _numIntervals; i++)
-        {
-            cumSum += localEffects[i];
-            aleValues[i + 1] = NumOps.FromDouble(cumSum);
-        }
+        // Accumulate effects: [0, cumsum(localEffects)]
+        var cumulative = engine.TensorCumSum(localEffects, 0);
+        var aleValues = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), cumulative }, 0);
 
         // Center the ALE values (mean should be zero)
-        double mean = 0;
-        for (int i = 0; i <= _numIntervals; i++)
-        {
-            mean += NumOps.ToDouble(aleValues[i]);
-        }
-        mean /= (_numIntervals + 1);
+        aleValues = engine.TensorSubtractScalar(aleValues, engine.TensorMean(aleValues));
 
-        for (int i = 0; i <= _numIntervals; i++)
-        {
-            aleValues[i] = NumOps.FromDouble(NumOps.ToDouble(aleValues[i]) - mean);
-        }
-
-        result.ALEValues[featureIndex] = aleValues;
+        result.ALEValues[featureIndex] = aleValues.ToArray();
         result.IntervalCounts[featureIndex] = intervalCounts;
+    }
+
+    /// <summary>
+    /// The mean of <paramref name="values"/> within each group (0 for an empty group).
+    /// </summary>
+    private static Tensor<T> AverageByGroup(Vector<T> values, Tensor<int> groupIndex, int[] groupCounts)
+    {
+        var engine = AiDotNetEngine.Current;
+        int groups = groupCounts.Length;
+        var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { groups }), 0, groupIndex, values.AsTensor());
+        var counts = new Tensor<int>(groupCounts, new[] { groups }).Cast<T>();
+        return engine.TensorDivide(sums, engine.TensorMax(counts, NumOps.One));
+    }
+
+    /// <summary>
+    /// A copy of <paramref name="data"/> with column <paramref name="column"/> replaced by <paramref name="values"/>.
+    /// </summary>
+    private static Matrix<T> WithColumn(Matrix<T> data, int column, Vector<T> values)
+    {
+        var modified = data.Clone();
+        AiDotNetEngine.Current.SetColumn(modified, column, values);
+        return modified;
     }
 
     /// <summary>
     /// Finds the interval index for a given value.
     /// </summary>
-    private int FindInterval(double value, T[] bounds)
+    private static int[] FindIntervals(Vector<T> values, Vector<T> bounds)
     {
-        for (int i = 0; i < bounds.Length - 1; i++)
-        {
-            double left = NumOps.ToDouble(bounds[i]);
-            double right = NumOps.ToDouble(bounds[i + 1]);
-            if (value >= left && value < right)
-                return i;
-        }
-        // Last interval includes the right bound
-        return bounds.Length - 2;
-    }
-
-    /// <summary>
-    /// Creates a single-row matrix with a modified feature value.
-    /// </summary>
-    private Matrix<T> CreateSingleRowMatrix(int rowIndex, int featureIndex, double newValue)
-    {
-        var matrix = new Matrix<T>(1, _data.Columns);
-        for (int j = 0; j < _data.Columns; j++)
-        {
-            matrix[0, j] = j == featureIndex
-                ? NumOps.FromDouble(newValue)
-                : _data[rowIndex, j];
-        }
-        return matrix;
+        // The interval i with bounds[i] <= value < bounds[i + 1]; values at or past the last bound (or
+        // matching no interval) fall in the last interval, which includes the right bound.
+        int last = bounds.Length - 2;
+        var boundsAtOrBelow = AiDotNetEngine.Current.TensorSearchSorted(bounds.AsTensor(), values.AsTensor(), true).ToArray();
+        return boundsAtOrBelow.Select(count => count == 0 || count - 1 > last ? last : count - 1).ToArray();
     }
 
     /// <summary>
@@ -317,78 +256,47 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
 
         // Use fewer intervals for 2D (computational cost is O(intervals^2))
         int intervals2D = Math.Min(_numIntervals, 10);
+        var engine = AiDotNetEngine.Current;
 
         // Get quantile-based bounds for both features
-        var bounds1 = ComputeQuantileBounds(feature1Index, intervals2D);
-        var bounds2 = ComputeQuantileBounds(feature2Index, intervals2D);
+        var values1 = _data.GetColumn(feature1Index);
+        var values2 = _data.GetColumn(feature2Index);
+        var bounds1 = QuantileBounds(values1, intervals2D);
+        var bounds2 = QuantileBounds(values2, intervals2D);
 
-        // Compute 2D local effects
-        var aleValues = new T[intervals2D, intervals2D];
-        var counts = new int[intervals2D, intervals2D];
-
-        for (int i = 0; i < n; i++)
+        // Interval cell of every point
+        var int1 = FindIntervals(values1, bounds1);
+        var int2 = FindIntervals(values2, bounds2);
+        var index1 = new Tensor<int>(int1, new[] { n });
+        var index2 = new Tensor<int>(int2, new[] { n });
+        var cells = int1.Zip(int2, (a, b) => a * intervals2D + b).ToArray();
+        var counts = new int[intervals2D * intervals2D];
+        foreach (int cell in cells)
         {
-            double val1 = NumOps.ToDouble(_data[i, feature1Index]);
-            double val2 = NumOps.ToDouble(_data[i, feature2Index]);
-
-            int int1 = FindInterval(val1, bounds1);
-            int int2 = FindInterval(val2, bounds2);
-
-            if (int1 < 0 || int1 >= intervals2D || int2 < 0 || int2 >= intervals2D)
-                continue;
-
-            counts[int1, int2]++;
-
-            // Compute 2D local effect using second-order differences
-            double left1 = NumOps.ToDouble(bounds1[int1]);
-            double right1 = NumOps.ToDouble(bounds1[int1 + 1]);
-            double left2 = NumOps.ToDouble(bounds2[int2]);
-            double right2 = NumOps.ToDouble(bounds2[int2 + 1]);
-
-            // f(right1, right2) - f(left1, right2) - f(right1, left2) + f(left1, left2)
-            var pred_rr = PredictWithModifiedFeatures(i, feature1Index, right1, feature2Index, right2);
-            var pred_lr = PredictWithModifiedFeatures(i, feature1Index, left1, feature2Index, right2);
-            var pred_rl = PredictWithModifiedFeatures(i, feature1Index, right1, feature2Index, left2);
-            var pred_ll = PredictWithModifiedFeatures(i, feature1Index, left1, feature2Index, left2);
-
-            double effect = pred_rr - pred_lr - pred_rl + pred_ll;
-            aleValues[int1, int2] = NumOps.FromDouble(NumOps.ToDouble(aleValues[int1, int2]) + effect);
+            counts[cell]++;
         }
+
+        // Compute 2D local effect using second-order differences:
+        // f(right1, right2) - f(left1, right2) - f(right1, left2) + f(left1, left2)
+        var left1 = engine.TensorIndexSelect(bounds1.AsTensor(), index1, 0).ToVector();
+        var right1 = engine.TensorIndexSelect(bounds1.AsTensor(), engine.TensorAddScalar(index1, 1), 0).ToVector();
+        var left2 = engine.TensorIndexSelect(bounds2.AsTensor(), index2, 0).ToVector();
+        var right2 = engine.TensorIndexSelect(bounds2.AsTensor(), engine.TensorAddScalar(index2, 1), 0).ToVector();
+        var predRR = PredictWithModifiedFeatures(feature1Index, right1, feature2Index, right2);
+        var predLR = PredictWithModifiedFeatures(feature1Index, left1, feature2Index, right2);
+        var predRL = PredictWithModifiedFeatures(feature1Index, right1, feature2Index, left2);
+        var predLL = PredictWithModifiedFeatures(feature1Index, left1, feature2Index, left2);
+        var effects = engine.Add(engine.Subtract(engine.Subtract(predRR, predLR), predRL), predLL);
 
         // Average and accumulate
-        for (int i1 = 0; i1 < intervals2D; i1++)
-        {
-            for (int i2 = 0; i2 < intervals2D; i2++)
-            {
-                if (counts[i1, i2] > 0)
-                {
-                    aleValues[i1, i2] = NumOps.FromDouble(NumOps.ToDouble(aleValues[i1, i2]) / counts[i1, i2]);
-                }
-            }
-        }
+        var cellIndex = new Tensor<int>(cells, new[] { n });
+        var cellEffects = AverageByGroup(effects, cellIndex, counts).Reshape(new[] { intervals2D, intervals2D });
 
         // Accumulate in both dimensions
-        var accumulated = Accumulate2D(aleValues, intervals2D);
+        var accumulated = engine.TensorCumSum(engine.TensorCumSum(cellEffects, 0), 1);
 
         // Center
-        double mean2D = 0;
-        int totalCells = intervals2D * intervals2D;
-        for (int i1 = 0; i1 < intervals2D; i1++)
-        {
-            for (int i2 = 0; i2 < intervals2D; i2++)
-            {
-                mean2D += NumOps.ToDouble(accumulated[i1, i2]);
-            }
-        }
-        mean2D /= totalCells;
-
-        for (int i1 = 0; i1 < intervals2D; i1++)
-        {
-            for (int i2 = 0; i2 < intervals2D; i2++)
-            {
-                accumulated[i1, i2] = NumOps.FromDouble(NumOps.ToDouble(accumulated[i1, i2]) - mean2D);
-            }
-        }
+        accumulated = engine.TensorSubtractScalar(accumulated, engine.TensorMean(accumulated));
 
         return new ALE2DResult<T>
         {
@@ -396,94 +304,43 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
             Feature2Index = feature2Index,
             Feature1Name = _featureNames?[feature1Index] ?? $"Feature {feature1Index}",
             Feature2Name = _featureNames?[feature2Index] ?? $"Feature {feature2Index}",
-            Bounds1 = bounds1,
-            Bounds2 = bounds2,
-            ALEValues2D = accumulated
+            Bounds1 = bounds1.ToArray(),
+            Bounds2 = bounds2.ToArray(),
+            ALEValues2D = accumulated.ToMatrix()
         };
     }
 
     /// <summary>
     /// Computes quantile-based bounds for a feature.
     /// </summary>
-    private T[] ComputeQuantileBounds(int featureIndex, int numIntervals)
+    private static Vector<T> QuantileBounds(Vector<T> featureValues, int numIntervals)
     {
-        int n = _data.Rows;
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            values[i] = NumOps.ToDouble(_data[i, featureIndex]);
-        }
-        Array.Sort(values);
+        var engine = AiDotNetEngine.Current;
+        int n = featureValues.Length;
 
-        var bounds = new T[numIntervals + 1];
-        for (int i = 0; i <= numIntervals; i++)
-        {
-            int idx = (int)Math.Round((double)i / numIntervals * (n - 1));
-            bounds[i] = NumOps.FromDouble(values[idx]);
-        }
+        // Sorted values at the quantile positions round(i / numIntervals * (n - 1))
+        var (sorted, _) = engine.TensorSort(featureValues.AsTensor());
+        var positions = Enumerable.Range(0, numIntervals + 1)
+            .Select(i => (int)Math.Round((double)i / numIntervals * (n - 1)))
+            .ToArray();
+        var bounds = engine.TensorIndexSelect(sorted, new Tensor<int>(positions, new[] { positions.Length }), 0);
 
-        // Ensure unique bounds
-        for (int i = 1; i <= numIntervals; i++)
-        {
-            double current = NumOps.ToDouble(bounds[i]);
-            double prev = NumOps.ToDouble(bounds[i - 1]);
-            if (current <= prev)
-            {
-                bounds[i] = NumOps.FromDouble(prev + 1e-10);
-            }
-        }
-
-        return bounds;
+        // Ensure unique bounds: a bound not above its predecessor moves 1e-10 past it, i.e.
+        // bounds_i = offset_i + cummax(bounds - offset)_i with offset_i = i * 1e-10. (The scan differs from
+        // a one-at-a-time nudge only for raw gaps already below 1e-10, by less than 1e-10.)
+        var offsets = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numIntervals + 1, 1), NumOps.FromDouble(1e-10));
+        var lifted = engine.TensorCumMax(engine.TensorSubtract(bounds, offsets), 0);
+        return engine.TensorAdd(lifted, offsets).ToVector();
     }
 
     /// <summary>
     /// Makes a prediction with two modified feature values.
     /// </summary>
-    private double PredictWithModifiedFeatures(int rowIndex, int feat1, double val1, int feat2, double val2)
+    private Vector<T> PredictWithModifiedFeatures(int feat1, Vector<T> values1, int feat2, Vector<T> values2)
     {
-        var matrix = new Matrix<T>(1, _data.Columns);
-        for (int j = 0; j < _data.Columns; j++)
-        {
-            if (j == feat1)
-                matrix[0, j] = NumOps.FromDouble(val1);
-            else if (j == feat2)
-                matrix[0, j] = NumOps.FromDouble(val2);
-            else
-                matrix[0, j] = _data[rowIndex, j];
-        }
-        return NumOps.ToDouble(_predictFunction(matrix)[0]);
-    }
-
-    /// <summary>
-    /// Accumulates 2D local effects.
-    /// </summary>
-    private T[,] Accumulate2D(T[,] localEffects, int size)
-    {
-        var result = new T[size, size];
-
-        // First accumulate along first dimension
-        for (int i2 = 0; i2 < size; i2++)
-        {
-            double cumSum = 0;
-            for (int i1 = 0; i1 < size; i1++)
-            {
-                cumSum += NumOps.ToDouble(localEffects[i1, i2]);
-                result[i1, i2] = NumOps.FromDouble(cumSum);
-            }
-        }
-
-        // Then accumulate along second dimension
-        for (int i1 = 0; i1 < size; i1++)
-        {
-            double cumSum = 0;
-            for (int i2 = 0; i2 < size; i2++)
-            {
-                cumSum += NumOps.ToDouble(result[i1, i2]);
-                result[i1, i2] = NumOps.FromDouble(cumSum);
-            }
-        }
-
-        return result;
+        var modified = WithColumn(_data, feat1, values1);
+        AiDotNetEngine.Current.SetColumn(modified, feat2, values2);
+        return _predictFunction(modified).GetSubVector(0, _data.Rows);
     }
 }
 
@@ -529,10 +386,11 @@ public class ALEResult<T>
 
         foreach (var featureIndex in FeatureIndices)
         {
-            var aleValues = ALEValues[featureIndex];
-            double minAle = aleValues.Min(v => NumOps.ToDouble(v));
-            double maxAle = aleValues.Max(v => NumOps.ToDouble(v));
-            double range = maxAle - minAle;
+            var aleValues = new Vector<T>(ALEValues[featureIndex]).AsTensor();
+            var engine = AiDotNetEngine.Current;
+            T minAle = engine.TensorMinValue(aleValues);
+            T maxAle = engine.TensorMaxValue(aleValues);
+            T range = NumOps.Subtract(maxAle, minAle);
 
             string featureName = FeatureNames[Array.IndexOf(FeatureIndices, featureIndex)];
             lines.Add($"  {featureName}: ALE range = {range:F4} (min={minAle:F4}, max={maxAle:F4})");
@@ -581,5 +439,5 @@ public class ALE2DResult<T>
     /// <summary>
     /// Gets or sets the 2D ALE values [feature1 interval, feature2 interval].
     /// </summary>
-    public T[,] ALEValues2D { get; set; } = new T[0, 0];
+    public Matrix<T> ALEValues2D { get; set; } = new Matrix<T>(0, 0);
 }
