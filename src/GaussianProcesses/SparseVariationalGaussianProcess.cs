@@ -429,20 +429,19 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     /// <summary>A step size derived from the spread of the training inputs, so it is scale-free.</summary>
     private double ComputeInducingStepScale()
     {
-        double total = 0;
         int dims = _X.Columns;
-        for (int d = 0; d < dims; d++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < _X.Rows; i++)
-            {
-                double v = Convert.ToDouble(_numOps.ToDouble(_X[i, d]));
-                if (v < min) min = v;
-                if (v > max) max = v;
-            }
-            if (max > min) total += max - min;
-        }
-        return dims == 0 ? 0 : (total / dims) * 0.05;
+        if (dims == 0 || _X.Rows == 0) return 0;
+
+        // Sum of the per-column ranges max - min (columns with no spread contribute 0)
+        var engine = Engine;
+        var inputs = Tensor<T>.FromMatrix(_X);
+        var columnMax = engine.ReduceMax(inputs, new[] { 0 }, keepDims: false);
+        var columnMin = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(inputs), new[] { 0 }, keepDims: false));
+        var ranges = engine.TensorMax(engine.TensorSubtract(columnMax, columnMin), _numOps.Zero);
+        T total = engine.TensorSum(ranges);
+
+        // The search step is a scalar hyperparameter of the coordinate search.
+        return (_numOps.ToDouble(total) / dims) * 0.05;
     }
 
     /// <summary>
@@ -561,16 +560,8 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         //   (Kuu + σ² * (Kuf*Kuf^T)^{-1}) * alpha = y  (when inducing=training, Kuf=Kuu)
         //
         // Simplified approach: solve (Kuu + σ²I) * alpha = y, then m = Kuu * alpha
-        var KuuPlusNoise = new Matrix<T>(_Kuu.Rows, _Kuu.Columns);
         T noiseVar = _numOps.FromDouble(_noiseVariance);
-        for (int i = 0; i < _Kuu.Rows; i++)
-        {
-            for (int j = 0; j < _Kuu.Columns; j++)
-            {
-                KuuPlusNoise[i, j] = _Kuu[i, j];
-            }
-            KuuPlusNoise[i, i] = _numOps.Add(KuuPlusNoise[i, i], noiseVar);
-        }
+        var KuuPlusNoise = GaussianProcessEngineOps.AddToDiagonal(_Kuu, noiseVar);
 
         // The prediction formula is: mean = kstar^T * Kuu^{-1} * m
         // For standard GP equivalence (when inducing=training): mean = kstar^T * (K+σ²I)^{-1} * y
@@ -620,30 +611,16 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         int m = _Kuu.Rows;
         int n = Kuf.Columns;
 
-        // Compute A = Luu^{-1} Kuf / σ  (forward-solve each column)
-        double sqrtPrecision = Math.Sqrt(Math.Max(_numOps.ToDouble(noisePrecision), 0.0));
-        var A = new Matrix<T>(m, n);
-        for (int j = 0; j < n; j++)
-        {
-            var col = Kuf.GetColumn(j);
-            // Forward-solve: Luu * x = col using forward substitution (numerically stable)
-            var whitened = ForwardSolve(_LKuu, col);
-            for (int i = 0; i < m; i++)
-            {
-                A[i, j] = _numOps.Multiply(_numOps.FromDouble(sqrtPrecision), whitened[i]);
-            }
-        }
+        var engine = Engine;
+        T sqrtPrecision = _numOps.Sqrt(MathHelper.Max(noisePrecision, _numOps.Zero));
+
+        // A = sqrt(precision) * L_uu^{-1} Kuf, one triangular solve for all columns
+        var whitened = Linalg.SolveTriangular(Tensor<T>.FromMatrix(_LKuu), Tensor<T>.FromMatrix(Kuf), upper: false);
+        var A = engine.TensorMultiplyScalar(whitened, sqrtPrecision).ToMatrix();
 
         // Compute B = I + A A^T (m×m, well-conditioned)
         var AAT = A.Multiply(A.Transpose());
-        var B = CreateIdentityMatrix(m);
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < m; j++)
-            {
-                B[i, j] = _numOps.Add(B[i, j], AAT[i, j]);
-            }
-        }
+        var B = GaussianProcessEngineOps.AddToDiagonal(AAT, _numOps.One);
 
         // Compute S = Luu * B^{-1} * Luu^T, then take its Cholesky.
         // B^{-1} is computed by solving B * X = I column by column.
@@ -673,61 +650,8 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         catch (ArgumentException)
         {
             // Fallback: use a scaled identity covariance
-            _variationalCovCholesky = CreateIdentityMatrix(m);
-            for (int i = 0; i < m; i++)
-            {
-                _variationalCovCholesky[i, i] = _numOps.FromDouble(0.01);
-            }
+            _variationalCovCholesky = engine.TensorMultiplyScalar(engine.TensorEye<T>(m), _numOps.FromDouble(0.01)).ToMatrix();
         }
-    }
-
-    /// <summary>
-    /// Forward-solves L * x = b for lower-triangular L.
-    /// </summary>
-    private Vector<T> ForwardSolve(Matrix<T> L, Vector<T> b)
-    {
-        int n = b.Length;
-        var x = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            T sum = b[i];
-            for (int j = 0; j < i; j++)
-            {
-                sum = _numOps.Subtract(sum, _numOps.Multiply(L[i, j], x[j]));
-            }
-            T diag = L[i, i];
-            // Guard against zero diagonal
-            if (_numOps.ToDouble(diag) == 0.0)
-            {
-                diag = _numOps.FromDouble(1e-10);
-            }
-            x[i] = _numOps.Divide(sum, diag);
-        }
-        return x;
-    }
-
-    /// <summary>
-    /// Back-solves U * x = b for upper-triangular U.
-    /// </summary>
-    private Vector<T> BackSolve(Matrix<T> U, Vector<T> b)
-    {
-        int n = b.Length;
-        var x = new Vector<T>(n);
-        for (int i = n - 1; i >= 0; i--)
-        {
-            T sum = b[i];
-            for (int j = i + 1; j < n; j++)
-            {
-                sum = _numOps.Subtract(sum, _numOps.Multiply(U[i, j], x[j]));
-            }
-            T diag = U[i, i];
-            if (_numOps.ToDouble(diag) == 0.0)
-            {
-                diag = _numOps.FromDouble(1e-10);
-            }
-            x[i] = _numOps.Divide(sum, diag);
-        }
-        return x;
     }
 
     /// <summary>
@@ -749,19 +673,8 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     private Vector<T> ComputePredictiveMean(Matrix<T> KuuInvKuf)
     {
         // predictive_mean = Kfu * Kuu^(-1) * m = (Kuu^(-1) * Kuf)^T * m
-        var predictiveMean = new Vector<T>(KuuInvKuf.Columns);
-
-        for (int i = 0; i < KuuInvKuf.Columns; i++)
-        {
-            T sum = _numOps.Zero;
-            for (int j = 0; j < _variationalMean.Length; j++)
-            {
-                sum = _numOps.Add(sum, _numOps.Multiply(KuuInvKuf[j, i], _variationalMean[j]));
-            }
-            predictiveMean[i] = sum;
-        }
-
-        return predictiveMean;
+        var engine = Engine;
+        return engine.MatrixVectorMultiply(engine.MatrixTranspose(KuuInvKuf), _variationalMean);
     }
 
     /// <inheritdoc/>
@@ -779,30 +692,19 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         var KuuInvKStar = MatrixSolutionHelper.SolveLinearSystem(_Kuu, kStar, _decompositionType);
 
         // Predictive mean: k*^T * Kuu^(-1) * m
-        T mean = _numOps.Zero;
-        for (int i = 0; i < _variationalMean.Length; i++)
-        {
-            mean = _numOps.Add(mean, _numOps.Multiply(KuuInvKStar[i], _variationalMean[i]));
-        }
+        var engine = Engine;
+        T mean = engine.DotProduct(KuuInvKStar, _variationalMean);
 
         // Predictive variance: k** - k*^T * Kuu^(-1) * k* + k*^T * Kuu^(-1) * S * Kuu^(-1) * k*
         T kStarStar = _kernel.Calculate(x, x);
 
         // First term: k** - k*^T * Kuu^(-1) * k*
-        T variance = kStarStar;
-        for (int i = 0; i < kStar.Length; i++)
-        {
-            variance = _numOps.Subtract(variance, _numOps.Multiply(kStar[i], KuuInvKStar[i]));
-        }
+        T variance = _numOps.Subtract(kStarStar, engine.DotProduct(kStar, KuuInvKStar));
 
         // Second term: k*^T * Kuu^(-1) * S * Kuu^(-1) * k*
         // S = L * L^T, so this is ||L^T * Kuu^(-1) * k*||²
         var LTKuuInvKStar = _variationalCovCholesky.Transpose().Multiply(KuuInvKStar);
-        T additionalVar = _numOps.Zero;
-        for (int i = 0; i < LTKuuInvKStar.Length; i++)
-        {
-            additionalVar = _numOps.Add(additionalVar, _numOps.Multiply(LTKuuInvKStar[i], LTKuuInvKStar[i]));
-        }
+        T additionalVar = engine.DotProduct(LTKuuInvKStar, LTKuuInvKStar);
         variance = _numOps.Add(variance, additionalVar);
 
         // Add observation noise
@@ -863,63 +765,55 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         var predictiveMean = ComputePredictiveMean(KuuInvKuf);
 
         // Expected log-likelihood (Gaussian)
-        double logLik = 0.0;
+        var engine = Engine;
         double noiseVar = Math.Max(_noiseVariance, 1e-10);
-        for (int i = 0; i < _y.Length; i++)
-        {
-            double diff = _numOps.ToDouble(_y[i]) - _numOps.ToDouble(predictiveMean[i]);
-            logLik -= 0.5 * diff * diff / noiseVar;
-            logLik -= 0.5 * Math.Log(2 * Math.PI * noiseVar);
-        }
+        var residuals = engine.Subtract(_y, predictiveMean);
+        T logLik = _numOps.Negate(_numOps.Add(
+            _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(0.5), engine.DotProduct(residuals, residuals)), _numOps.FromDouble(noiseVar)),
+            _numOps.FromDouble(_y.Length * 0.5 * Math.Log(2 * Math.PI * noiseVar))));
 
         // KL divergence: KL(q(u)||p(u))
         // KL = 0.5 * (tr(Kuu^(-1) * S) + m^T * Kuu^(-1) * m - m + log|Kuu| - log|S|)
         var S = _variationalCovCholesky.Multiply(_variationalCovCholesky.Transpose());
 
         // tr(Kuu^(-1) * S)
-        double trace = 0.0;
+        // tr(Kuu^{-1} S) = Σ_ij (Kuu^{-1})_ji S_ji, with Kuu^{-1} built column by column
+        var identity = CreateIdentityMatrix(_Kuu.Rows);
+        var KuuInv = new Matrix<T>(_Kuu.Rows, _Kuu.Rows);
         for (int i = 0; i < _Kuu.Rows; i++)
         {
-            var ei = new Vector<T>(_Kuu.Rows);
-            ei[i] = _numOps.One;
-            var KuuInvEi = MatrixSolutionHelper.SolveLinearSystem(_Kuu, ei, _decompositionType);
-            for (int j = 0; j < S.Columns; j++)
-            {
-                trace += _numOps.ToDouble(KuuInvEi[j]) * _numOps.ToDouble(S[j, i]);
-            }
+            KuuInv.SetColumn(i, MatrixSolutionHelper.SolveLinearSystem(_Kuu, identity.GetColumn(i), _decompositionType));
         }
+        T trace = engine.TensorSum(engine.TensorMultiply(Tensor<T>.FromMatrix(KuuInv), Tensor<T>.FromMatrix(S)));
 
         // m^T * Kuu^(-1) * m
         var KuuInvM = MatrixSolutionHelper.SolveLinearSystem(_Kuu, _variationalMean, _decompositionType);
-        double quadForm = 0.0;
-        for (int i = 0; i < _variationalMean.Length; i++)
-        {
-            quadForm += _numOps.ToDouble(_variationalMean[i]) * _numOps.ToDouble(KuuInvM[i]);
-        }
+        T quadForm = engine.DotProduct(_variationalMean, KuuInvM);
+        T logDetKuu = LogDeterminantFromCholesky(_LKuu);
+        T logDetS = LogDeterminantFromCholesky(_variationalCovCholesky);
 
-        // log|Kuu| = 2 * sum(log(diag(LKuu)))
-        double logDetKuu = 0.0;
-        for (int i = 0; i < _LKuu.Rows; i++)
-        {
-            logDetKuu += 2.0 * Math.Log(Math.Abs(_numOps.ToDouble(_LKuu[i, i])));
-        }
+        T kl = _numOps.Multiply(
+            _numOps.FromDouble(0.5),
+            _numOps.Add(
+                _numOps.Subtract(_numOps.Add(trace, quadForm), _numOps.FromDouble(_variationalMean.Length)),
+                _numOps.Subtract(logDetKuu, logDetS)));
 
-        // log|S| = 2 * sum(log(diag(L_S)))
-        double logDetS = 0.0;
-        for (int i = 0; i < _variationalCovCholesky.Rows; i++)
-        {
-            logDetS += 2.0 * Math.Log(Math.Abs(_numOps.ToDouble(_variationalCovCholesky[i, i])));
-        }
-
-        double kl = 0.5 * (trace + quadForm - _variationalMean.Length + logDetKuu - logDetS);
-
-        double elbo = logLik - kl;
-        return _numOps.FromDouble(elbo);
+        return _numOps.Subtract(logLik, kl);
     }
 
     /// <summary>
     /// Calculates the kernel matrix between two sets of data points.
     /// </summary>
+    /// <summary>
+    /// log|A| = 2 Σ log|L_ii| for A = L Lᵀ.
+    /// </summary>
+    private T LogDeterminantFromCholesky(Matrix<T> L)
+    {
+        var engine = Engine;
+        var diagonal = engine.TensorAbs(Tensor<T>.FromVector(GaussianProcessEngineOps.Diagonal(L)));
+        return _numOps.Multiply(_numOps.FromDouble(2.0), engine.TensorSum(engine.TensorLog(diagonal)));
+    }
+
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {
         var K = new Matrix<T>(X1.Rows, X2.Rows);
@@ -951,12 +845,7 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     /// </summary>
     private Matrix<T> CreateIdentityMatrix(int size)
     {
-        var identity = new Matrix<T>(size, size);
-        for (int i = 0; i < size; i++)
-        {
-            identity[i, i] = _numOps.One;
-        }
-        return identity;
+        return Engine.TensorEye<T>(size).ToMatrix();
     }
 
     /// <summary>
@@ -964,11 +853,7 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     /// </summary>
     private void AddJitter(Matrix<T> K)
     {
-        var jitter = _numOps.FromDouble(1e-6);
-        for (int i = 0; i < K.Rows; i++)
-        {
-            K[i, i] = _numOps.Add(K[i, i], jitter);
-        }
+        GaussianProcessEngineOps.AddToDiagonalInPlace(K, _numOps.FromDouble(1e-6));
     }
 
     /// <summary>
@@ -979,15 +864,9 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     /// </summary>
     private void ForceSymmetric(Matrix<T> K)
     {
-        var half = _numOps.FromDouble(0.5);
-        for (int i = 0; i < K.Rows; i++)
-        {
-            for (int j = i + 1; j < K.Columns; j++)
-            {
-                var avg = _numOps.Multiply(half, _numOps.Add(K[i, j], K[j, i]));
-                K[i, j] = avg;
-                K[j, i] = avg;
-            }
-        }
+        var engine = Engine;
+        var matrix = Tensor<T>.FromMatrix(K);
+        engine.TensorMultiplyScalar(engine.TensorAdd(matrix, engine.TensorTranspose(matrix)), _numOps.FromDouble(0.5))
+            .AsSpan().CopyTo(K.AsWritableSpan());
     }
 }
