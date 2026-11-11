@@ -358,10 +358,10 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         }
 
         // 4) Pre-compute the labels tensor (cheap, small — N * NumClasses).
-        var labelsData = new double[_sampleCount * _numClasses];
+        var labelsData = new int[_sampleCount * _numClasses];
         for (int i = 0; i < _sampleCount; i++)
-            labelsData[i * _numClasses + _samples[i].ClassIndex] = 1.0;
-        LoadedLabels = new Tensor<double>(labelsData, [_sampleCount, _numClasses]).Cast<T>();
+            labelsData[i * _numClasses + _samples[i].ClassIndex] = 1;
+        LoadedLabels = new Tensor<int>(labelsData, [_sampleCount, _numClasses]).Cast<T>();
 
         // 5) Features tensor stays null — see the class remarks. Audio is decoded
         // lazily per-batch in ExtractBatch.
@@ -605,23 +605,21 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         if (targetLen <= 0) return;
 
         // Linear interpolation: gather the floor/ceil neighbours with the engine and blend them
-        // with per-output weights (1 - frac, frac). The index bookkeeping is integer-only.
-        double rateRatio = (double)nativeRate / targetRate;
+        // with per-output weights (1 - frac, frac). The source position is
+        // nativeOffset + t * nativeRate / targetRate, so its floor is nativeOffset plus the integer
+        // quotient and frac is the integer remainder / targetRate: the index bookkeeping is integer-only
+        // and the weights are built in T.
         var floorIdx = new int[targetLen];
         var ceilIdx = new int[targetLen];
-        var w0 = new double[targetLen];
-        var w1 = new double[targetLen];
+        var remainders = new int[targetLen];
         for (int t = 0; t < targetLen; t++)
         {
-            double srcPos = nativeOffset + t * rateRatio;
-            int f = (int)Math.Floor(srcPos);
-            // frac = srcPos - floor(srcPos); reuse f to avoid a second Math.Floor call.
-            double frac = srcPos - f;
+            long scaled = (long)t * nativeRate;
+            int f = nativeOffset + (int)(scaled / targetRate);
             int c = f + 1;
             floorIdx[t] = f > lastIdx ? lastIdx : f;
             ceilIdx[t] = c > lastIdx ? lastIdx : c;
-            w0[t] = 1.0 - frac;
-            w1[t] = frac;
+            remainders[t] = (int)(scaled % targetRate);
         }
 
         var engine = AiDotNetEngine.Current;
@@ -629,9 +627,11 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         var shape = new[] { targetLen };
         var v0 = engine.TensorIndexSelect(source, new Tensor<int>(floorIdx, shape), 0);
         var v1 = engine.TensorIndexSelect(source, new Tensor<int>(ceilIdx, shape), 0);
-        var blended = engine.TensorAdd(
-            engine.TensorMultiply(v0, new Tensor<double>(w0, shape).Cast<T>()),
-            engine.TensorMultiply(v1, new Tensor<double>(w1, shape).Cast<T>()));
+        var remainder = new Tensor<int>(remainders, shape).Cast<T>();
+        T rate = NumOps.FromDouble(targetRate);
+        var w1 = engine.TensorDivideScalar(remainder, rate);
+        var w0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remainder, rate), remainder), rate);
+        var blended = engine.TensorAdd(engine.TensorMultiply(v0, w0), engine.TensorMultiply(v1, w1));
         blended.AsSpan().CopyTo(dst.AsSpan(dstOffset, targetLen));
     }
 

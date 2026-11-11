@@ -149,8 +149,8 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         }
 
         // Build tensors: features [N, SamplesPerFile], labels [N, NumClasses]
-        var featuresData = new double[_sampleCount * _samplesPerFile];
-        var labelsData = new double[_sampleCount * _numClasses];
+        var featuresData = new T[_sampleCount * _samplesPerFile];
+        var labelsData = new int[_sampleCount * _numClasses];
 
         for (int i = 0; i < _sampleCount; i++)
         {
@@ -164,11 +164,11 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             Array.Copy(audioSamples, 0, featuresData, featureOffset, copyLen);
 
             int labelOffset = i * _numClasses;
-            labelsData[labelOffset + classIndex] = 1.0;
+            labelsData[labelOffset + classIndex] = 1;
         }
 
-        var features = new Tensor<double>(featuresData, new[] { _sampleCount, _samplesPerFile }).Cast<T>();
-        var labels = new Tensor<double>(labelsData, new[] { _sampleCount, _numClasses }).Cast<T>();
+        var features = new Tensor<T>(featuresData, new[] { _sampleCount, _samplesPerFile });
+        var labels = new Tensor<int>(labelsData, new[] { _sampleCount, _numClasses }).Cast<T>();
 
         LoadedFeatures = features;
         LoadedLabels = labels;
@@ -230,10 +230,10 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             ExtractTensorBatch((LoadedLabels ?? throw new InvalidOperationException("LoadedLabels is null where it is required.")), indices));
     }
 
-    private double[] LoadAudioSamples(string filePath)
+    private T[] LoadAudioSamples(string filePath)
     {
         byte[] rawBytes = File.ReadAllBytes(filePath);
-        var samples = new double[_samplesPerFile];
+        var samples = new T[_samplesPerFile];
 
         string ext = Path.GetExtension(filePath);
         if (ext.Equals(".wav", StringComparison.OrdinalIgnoreCase))
@@ -249,7 +249,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         return samples;
     }
 
-    private void LoadWavSamples(byte[] rawBytes, double[] samples)
+    private void LoadWavSamples(byte[] rawBytes, T[] samples)
     {
         // Parse RIFF/WAVE header properly
         if (rawBytes.Length < 12)
@@ -310,7 +310,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     }
 
     private void LoadPcmSamples(byte[] rawBytes, int dataOffset, int dataSize, int bitsPerSample,
-        int numChannels, double[] samples)
+        int numChannels, T[] samples)
     {
         int bytesPerSample = bitsPerSample / 8;
         int bytesPerFrame = bytesPerSample * numChannels;
@@ -327,86 +327,30 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
 
         int totalFrames = dataSize / bytesPerFrame;
         int framesToRead = Math.Min(totalFrames, _samplesPerFile);
+        // Frames that would run past the end of the buffer are not decoded.
+        int framesInBuffer = Math.Max(0, rawBytes.Length - dataOffset) / bytesPerFrame;
+        int frames = Math.Min(framesToRead, framesInBuffer);
+        if (frames <= 0) return;
 
-        for (int i = 0; i < framesToRead; i++)
+        if (bitsPerSample != 8 && bitsPerSample != 16 && bitsPerSample != 24 && bitsPerSample != 32)
         {
-            int frameOffset = dataOffset + i * bytesPerFrame;
-            if (frameOffset + bytesPerFrame > rawBytes.Length) break;
-
-            double value;
-            if (bitsPerSample == 8)
-            {
-                // 8-bit PCM is unsigned (0-255, centered at 128)
-                value = rawBytes[frameOffset] - 128.0;
-                if (_options.Normalize) value /= 128.0;
-            }
-            else if (bitsPerSample == 16)
-            {
-                short pcm16 = (short)(rawBytes[frameOffset] | (rawBytes[frameOffset + 1] << 8));
-                value = pcm16;
-                if (_options.Normalize) value /= 32768.0;
-            }
-            else if (bitsPerSample == 24)
-            {
-                int pcm24 = rawBytes[frameOffset] | (rawBytes[frameOffset + 1] << 8) | (rawBytes[frameOffset + 2] << 16);
-                if ((pcm24 & 0x800000) != 0) pcm24 |= unchecked((int)0xFF000000); // Sign extend
-                value = pcm24;
-                if (_options.Normalize) value /= 8388608.0;
-            }
-            else if (bitsPerSample == 32)
-            {
-                int pcm32 = BitConverter.ToInt32(rawBytes, frameOffset);
-                value = pcm32;
-                if (_options.Normalize) value /= 2147483648.0;
-            }
-            else
-            {
-                throw new InvalidDataException($"Unsupported bits per sample: {bitsPerSample}. Supported: 8, 16, 24, 32.");
-            }
-
-            // If multi-channel and Mono requested, average all channels
-            if (numChannels > 1 && _options.Mono)
-            {
-                double sum = value;
-                for (int ch = 1; ch < numChannels; ch++)
-                {
-                    int chOffset = frameOffset + ch * bytesPerSample;
-                    if (chOffset + bytesPerSample > rawBytes.Length) break;
-
-                    if (bitsPerSample == 16)
-                    {
-                        short s = (short)(rawBytes[chOffset] | (rawBytes[chOffset + 1] << 8));
-                        double chVal = s;
-                        if (_options.Normalize) chVal /= 32768.0;
-                        sum += chVal;
-                    }
-                    else if (bitsPerSample == 8)
-                    {
-                        double chVal = rawBytes[chOffset] - 128.0;
-                        if (_options.Normalize) chVal /= 128.0;
-                        sum += chVal;
-                    }
-                    else if (bitsPerSample == 24)
-                    {
-                        int pcm24 = rawBytes[chOffset] | (rawBytes[chOffset + 1] << 8) | (rawBytes[chOffset + 2] << 16);
-                        if ((pcm24 & 0x800000) != 0) pcm24 |= unchecked((int)0xFF000000);
-                        double chVal = pcm24;
-                        if (_options.Normalize) chVal /= 8388608.0;
-                        sum += chVal;
-                    }
-                    else if (bitsPerSample == 32)
-                    {
-                        int pcm32 = BitConverter.ToInt32(rawBytes, chOffset);
-                        double chVal = pcm32;
-                        if (_options.Normalize) chVal /= 2147483648.0;
-                        sum += chVal;
-                    }
-                }
-                value = sum / numChannels;
-            }
-
-            samples[i] = value;
+            throw new InvalidDataException($"Unsupported bits per sample: {bitsPerSample}. Supported: 8, 16, 24, 32.");
         }
+
+        // Decode every channel sample with engine ops (normalized to [-1, 1] when requested)
+        var values = Benchmarks.AudioLoaderHelper.DecodePcmSamples<T>(
+            rawBytes, dataOffset, frames * numChannels, bitsPerSample, bytesPerSample, _options.Normalize);
+
+        // If multi-channel and Mono requested, average all channels
+        if (numChannels > 1 && _options.Mono)
+        {
+            var engine = AiDotNetEngine.Current;
+            values = engine.TensorDivideScalar(
+                engine.ReduceSum(values.Reshape(new[] { frames, numChannels }), new[] { 1 }, false),
+                NumOps.FromDouble(numChannels));
+        }
+
+        values.AsSpan().CopyTo(samples.AsSpan(0, frames));
     }
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
