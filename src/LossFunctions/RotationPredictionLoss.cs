@@ -76,29 +76,27 @@ public class RotationPredictionLoss<T> : LossFunctionBase<T>, ISelfSupervisedLos
         int width = tensorInput.Shape[2];
         int channels = tensorInput.Shape.Length > 3 ? tensorInput.Shape[3] : 1;
 
-        // Create rotated versions (4 rotations per image)
-        int totalRotatedImages = numImages * 4;
-        var augmentedX = new Tensor<T>(new[] { totalRotatedImages, height, width, channels });
-        var augmentedY = new Tensor<T>(new[] { totalRotatedImages, 4 });  // 4-class one-hot
-
-        int outputIdx = 0;
-        for (int imgIdx = 0; imgIdx < numImages; imgIdx++)
+        bool copiesAnyElement = numImages > 0 && height > 0 && width > 0 && channels > 0;
+        if (tensorInput.Shape.Length > 4 && copiesAnyElement)
         {
-            // Create 4 rotations (0°, 90°, 180°, 270°)
-            for (int rotationClass = 0; rotationClass < 4; rotationClass++)
-            {
-                // Copy rotated image to output
-                RotateAndCopy(tensorInput, augmentedX, imgIdx, outputIdx, rotationClass, height, width, channels);
-
-                // Store rotation label (one-hot encoding)
-                for (int classIdx = 0; classIdx < 4; classIdx++)
-                {
-                    augmentedY[outputIdx, classIdx] = (classIdx == rotationClass) ? NumOps.One : NumOps.Zero;
-                }
-
-                outputIdx++;
-            }
+            throw new ArgumentException("Number of indices must match the tensor's rank.");
         }
+
+        if (height != width && copiesAnyElement)
+        {
+            // The 90°/270° rotations keep the [height, width] layout, so they only fit square images.
+            throw new ArgumentOutOfRangeException(nameof(input),
+                $"Rotation prediction needs square images, but got {height}x{width}.");
+        }
+
+        // Create rotated versions (4 rotations per image), always as [N*4, H, W, C]:
+        // image-major, rotation-minor, so image n's rotation r lands at row 4n + r.
+        int totalRotatedImages = numImages * 4;
+        var images = Engine.Reshape(tensorInput, new[] { numImages, height, width, channels });
+        var augmentedX = Engine.Reshape(RotateAll(images), new[] { totalRotatedImages, height, width, channels });
+
+        // Store rotation labels (4-class one-hot): the identity, once per image.
+        var augmentedY = Engine.TensorTile(Engine.TensorEye<T>(4), new[] { numImages, 1 });
 
         // Cast through object is required for generic type conversion at runtime.
         // The compiler cannot verify Tensor<T> -> TInput at compile time, so the
@@ -107,105 +105,27 @@ public class RotationPredictionLoss<T> : LossFunctionBase<T>, ISelfSupervisedLos
     }
 
     /// <summary>
-    /// Rotates an image and copies it to the destination tensor.
+    /// Builds all four rotations (0°, 90°, 180°, 270° clockwise) of every image.
     /// </summary>
-    /// <param name="source">Source tensor containing images.</param>
-    /// <param name="dest">Destination tensor for rotated images.</param>
-    /// <param name="srcIdx">Index of source image.</param>
-    /// <param name="destIdx">Index in destination tensor.</param>
-    /// <param name="rotationClass">Rotation class (0=0°, 1=90°, 2=180°, 3=270°).</param>
-    /// <param name="height">Image height.</param>
-    /// <param name="width">Image width.</param>
-    /// <param name="channels">Number of color channels.</param>
+    /// <param name="images">Square images shaped [N, S, S, C].</param>
+    /// <returns>Rotations shaped [N, 4, S, S, C]; index 1 holds rotation class r.</returns>
     /// <remarks>
-    /// <b>Note:</b> This implementation assumes square images for correct rotation behavior.
-    /// For non-square images, 90° and 270° rotations will result in distorted images,
-    /// since the output dimensions remain [height, width] instead of swapping to [width, height].
+    /// Rotation class 1 (90° clockwise) maps (i, j) → (j, S-1-i): a transpose followed by a flip of
+    /// the width axis. Class 2 (180°) flips both axes. Class 3 (270° clockwise) maps (i, j) →
+    /// (S-1-j, i): a transpose followed by a flip of the height axis.
     /// </remarks>
-    private void RotateAndCopy(
-        Tensor<T> source,
-        Tensor<T> dest,
-        int srcIdx,
-        int destIdx,
-        int rotationClass,
-        int height,
-        int width,
-        int channels)
+    private Tensor<T> RotateAll(Tensor<T> images)
     {
-        switch (rotationClass)
+        var transposed = Engine.TensorPermute(images, new[] { 0, 2, 1, 3 });
+        var rotations = new[]
         {
-            case 0:
-                // No rotation (0°)
-                CopyImage(source, dest, srcIdx, destIdx, height, width, channels,
-                    (i, j) => (i, j));
-                break;
+            images,
+            Engine.TensorFlip(transposed, new[] { 2 }),
+            Engine.TensorFlip(images, new[] { 1, 2 }),
+            Engine.TensorFlip(transposed, new[] { 1 }),
+        };
 
-            case 1:
-                // Rotate 90° clockwise: (i, j) → (j, height-1-i)
-                CopyImage(source, dest, srcIdx, destIdx, height, width, channels,
-                    (i, j) => (j, height - 1 - i));
-                break;
-
-            case 2:
-                // Rotate 180°: (i, j) → (height-1-i, width-1-j)
-                CopyImage(source, dest, srcIdx, destIdx, height, width, channels,
-                    (i, j) => (height - 1 - i, width - 1 - j));
-                break;
-
-            case 3:
-                // Rotate 270° clockwise (90° counter-clockwise): (i, j) → (width-1-j, i)
-                CopyImage(source, dest, srcIdx, destIdx, height, width, channels,
-                    (i, j) => (width - 1 - j, i));
-                break;
-
-            default:
-                throw new ArgumentException($"Invalid rotation class: {rotationClass}. Must be 0-3.");
-        }
-    }
-
-    /// <summary>
-    /// Copies an image with a coordinate transformation.
-    /// </summary>
-    /// <param name="source">Source tensor.</param>
-    /// <param name="dest">Destination tensor.</param>
-    /// <param name="srcIdx">Source image index.</param>
-    /// <param name="destIdx">Destination image index.</param>
-    /// <param name="height">Image height.</param>
-    /// <param name="width">Image width.</param>
-    /// <param name="channels">Number of channels.</param>
-    /// <param name="transform">Coordinate transformation function (srcCoord → destCoord).</param>
-    private void CopyImage(
-        Tensor<T> source,
-        Tensor<T> dest,
-        int srcIdx,
-        int destIdx,
-        int height,
-        int width,
-        int channels,
-        Func<int, int, (int, int)> transform)
-    {
-        for (int i = 0; i < height; i++)
-        {
-            for (int j = 0; j < width; j++)
-            {
-                var (destI, destJ) = transform(i, j);
-
-                // Handle 3D tensors [N, H, W] (grayscale)
-                // Note: dest is always 4D [N, H, W, C] but source may be 3D
-                if (source.Shape.Length == 3)
-                {
-                    dest[destIdx, destI, destJ, 0] = source[srcIdx, i, j];
-                }
-                // Handle 4D tensors [N, H, W, C] (color images)
-                else
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        dest[destIdx, destI, destJ, c] = source[srcIdx, i, j, c];
-                    }
-                }
-            }
-        }
+        return Engine.TensorStack(rotations, 1);
     }
 
     /// <summary>
@@ -230,87 +150,23 @@ public class RotationPredictionLoss<T> : LossFunctionBase<T>, ISelfSupervisedLos
                 $"Got {flattenedSize} elements which is not a perfect square.");
         }
 
-        // Create augmented data with rotations
+        // Create augmented data with rotations: each row is a square image, rotated exactly as the
+        // tensor path rotates [N, H, W, C] images (a single channel here).
         int totalAugmented = numImages * 4;
-        var augmentedX = new Matrix<T>(totalAugmented, flattenedSize);
-        var augmentedY = new Matrix<T>(totalAugmented, 4);  // 4-class one-hot encoding (consistent with tensor path)
-
-        int outputIdx = 0;
-        for (int imgIdx = 0; imgIdx < numImages; imgIdx++)
-        {
-            for (int rotationClass = 0; rotationClass < 4; rotationClass++)
-            {
-                // Perform rotation on the flattened image
-                for (int flatIdx = 0; flatIdx < flattenedSize; flatIdx++)
-                {
-                    // Convert flat index to 2D coordinates
-                    int i = flatIdx / imageSize;
-                    int j = flatIdx % imageSize;
-
-                    // Apply rotation transformation
-                    int srcI = i;
-                    int srcJ = j;
-
-                    switch (rotationClass)
-                    {
-                        case 0: // 0 degrees - no rotation
-                            srcI = i;
-                            srcJ = j;
-                            break;
-                        case 1: // 90 degrees clockwise
-                            srcI = imageSize - 1 - j;
-                            srcJ = i;
-                            break;
-                        case 2: // 180 degrees
-                            srcI = imageSize - 1 - i;
-                            srcJ = imageSize - 1 - j;
-                            break;
-                        case 3: // 270 degrees clockwise
-                            srcI = j;
-                            srcJ = imageSize - 1 - i;
-                            break;
-                    }
-
-                    // Get source value from original image
-                    int srcFlatIdx = srcI * imageSize + srcJ;
-                    augmentedX[outputIdx, flatIdx] = input[imgIdx, srcFlatIdx];
-                }
-
-                // Assign rotation label (one-hot encoding, consistent with tensor path)
-                for (int classIdx = 0; classIdx < 4; classIdx++)
-                {
-                    augmentedY[outputIdx, classIdx] = (classIdx == rotationClass) ? NumOps.One : NumOps.Zero;
-                }
-                outputIdx++;
-            }
-        }
+        var images = Engine.Reshape(Tensor<T>.FromMatrix(input), new[] { numImages, imageSize, imageSize, 1 });
+        var augmentedX = Engine.Reshape(RotateAll(images), new[] { totalAugmented, flattenedSize }).ToMatrix();
 
         // Handle output type conversion
-        // If TOutput is Vector<T>, convert one-hot Matrix to class indices Vector
-        // If TOutput is Matrix<T>, use the one-hot Matrix directly
+        // If TOutput is Vector<T>, the labels are class indices 0, 1, 2, 3 per image
+        // If TOutput is Matrix<T>, they are the 4-class one-hot rows (consistent with tensor path)
         object outputY;
         if (typeof(TOutput) == typeof(Vector<T>))
         {
-            // Convert one-hot Matrix to class index Vector
-            var classIndices = new Vector<T>(totalAugmented);
-            for (int i = 0; i < totalAugmented; i++)
-            {
-                // Find the class with value 1 (the rotation class)
-                for (int c = 0; c < 4; c++)
-                {
-                    // Check if this is the 1 in the one-hot encoding
-                    if (NumOps.Equals(augmentedY[i, c], NumOps.One))
-                    {
-                        classIndices[i] = NumOps.FromDouble(c);
-                        break;
-                    }
-                }
-            }
-            outputY = classIndices;
+            outputY = Engine.TensorTile(Engine.TensorArange<T>(0, 4, 1), new[] { numImages }).ToVector();
         }
         else
         {
-            outputY = augmentedY;
+            outputY = Engine.TensorTile(Engine.TensorEye<T>(4), new[] { numImages, 1 }).ToMatrix();
         }
 
         // Cast through object is required for generic type conversion at runtime
@@ -326,13 +182,10 @@ public class RotationPredictionLoss<T> : LossFunctionBase<T>, ISelfSupervisedLos
     /// </summary>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> target)
     {
-        T loss = NumOps.Zero;
         T eps = NumOps.FromDouble(1e-7);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            var clipped = NumOps.Add(predicted[i], eps);
-            loss = NumOps.Subtract(loss, NumOps.Multiply(target[i], NumericalStabilityHelper.SafeLog(clipped, NumericalStabilityHelper.SmallEpsilon)));
-        }
+        var clipped = Engine.TensorAddScalar(predicted.AsTensor(), eps);
+        var logP = SafeLogTensor(clipped, NumericalStabilityHelper.SmallEpsilon);
+        T loss = NumOps.Negate(Engine.TensorSum(Engine.TensorMultiply(target.AsTensor(), logP)));
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length / 4.0));
     }
 
