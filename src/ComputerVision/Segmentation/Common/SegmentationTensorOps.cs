@@ -609,4 +609,103 @@ public static class SegmentationTensorOps
     }
 
     private static double[] ToDoubleArray<T>(Tensor<T> values) => CvTensorOps<T>.ToDoubleArray(values);
+
+    /// <summary>
+    /// Instance candidates from a per-pixel class map: every 4-connected component of each non-background
+    /// class (1 .. <paramref name="numClasses"/>-1), in class then raster order, that covers at least four
+    /// pixels and whose mean class probability reaches <paramref name="confidenceThreshold"/>; at most
+    /// <paramref name="maxInstances"/>. Each carries its binary mask, its tight XYXY pixel box (exclusive
+    /// right/bottom) and its mean probability as confidence.
+    /// </summary>
+    internal static List<InstanceSegmentation.InstanceMask<T>> ComponentInstances<T>(
+        Tensor<T> classMap, Tensor<T> probMap, int numClasses, double confidenceThreshold, int maxInstances = 100)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int h = classMap.Shape[0], w = classMap.Shape[1];
+        var instances = new List<InstanceSegmentation.InstanceMask<T>>();
+        for (int cls = 1; cls < numClasses && instances.Count < maxInstances; cls++)
+        {
+            var (labelMap, count) = LabelConnectedComponents(classMap, cls);
+            if (count == 0) continue;
+
+            var componentIds = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(1, count + 1, 1), [count, 1, 1]), [count, h, w]);
+            var masks = engine.TensorEquals(engine.TensorBroadcastTo(engine.Reshape(labelMap, [1, h, w]), [count, h, w]), componentIds);
+            var classProb = engine.TensorBroadcastTo(engine.TensorSlice(probMap, [cls, 0, 0], [1, h, w]), [count, h, w]);
+            var area = engine.ReduceSum(masks, [1, 2], keepDims: false);
+            var confidence = SafeRatio(engine.ReduceSum(engine.TensorMultiply(masks, classProb), [1, 2], keepDims: false), area);
+            var (minX, minY, maxX, maxY) = MaskExtents(masks, h, w);
+
+            var areas = CvTensorOps<T>.ToDoubleArray(area);
+            var confidences = confidence.ToArray();
+            var confidenceValues = CvTensorOps<T>.ToDoubleArray(confidence);
+            var x1 = minX.ToArray();
+            var y1 = minY.ToArray();
+            var x2 = engine.TensorAddScalar(maxX, numOps.One).ToArray();
+            var y2 = engine.TensorAddScalar(maxY, numOps.One).ToArray();
+            for (int comp = 0; comp < count && instances.Count < maxInstances; comp++)
+            {
+                if (areas[comp] < 4) continue;
+                if (confidenceValues[comp] < confidenceThreshold) continue;
+                var box = new BoundingBox<T>(x1[comp], y1[comp], x2[comp], y2[comp], BoundingBoxFormat.XYXY, cls);
+                var mask = engine.Reshape(engine.TensorSlice(masks, [comp, 0, 0], [1, h, w]), [h, w]);
+                instances.Add(new InstanceSegmentation.InstanceMask<T>(box, mask, cls, confidences[comp]));
+            }
+        }
+
+        return instances;
+    }
+
+    /// <summary>
+    /// Per mask of a <c>[N, H, W]</c> binary stack, the smallest and largest column and row it covers
+    /// (each <c>[N]</c>). An empty mask yields <c>(W, H, 0, 0)</c>, the scan's starting values.
+    /// </summary>
+    internal static (Tensor<T> MinX, Tensor<T> MinY, Tensor<T> MaxX, Tensor<T> MaxY) MaskExtents<T>(Tensor<T> masks, int h, int w)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = masks.Shape[0];
+        var inside = engine.TensorGreaterThan(masks, numOps.Zero);
+        var cols = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, w, 1), [1, 1, w]), [n, h, w]);
+        var rows = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, h, 1), [1, h, 1]), [n, h, w]);
+        var widthFill = CvTensorOps<T>.Fill([n, h, w], numOps.FromDouble(w));
+        var heightFill = CvTensorOps<T>.Fill([n, h, w], numOps.FromDouble(h));
+        var zeros = new Tensor<T>([n, h, w]);
+        var minX = engine.Reshape(engine.TensorAmin(engine.TensorWhere(inside, cols, widthFill), [1, 2], false), [n]);
+        var minY = engine.Reshape(engine.TensorAmin(engine.TensorWhere(inside, rows, heightFill), [1, 2], false), [n]);
+        var maxX = engine.Reshape(engine.ReduceMax(engine.TensorWhere(inside, cols, zeros), [1, 2], false), [n]);
+        var maxY = engine.Reshape(engine.ReduceMax(engine.TensorWhere(inside, rows, zeros), [1, 2], false), [n]);
+        return (minX, minY, maxX, maxY);
+    }
+
+    /// <summary>
+    /// Greedy mask NMS: visits the instances by descending confidence (stable for ties) and keeps each one
+    /// whose mask IoU with every instance already kept is below <paramref name="iouThreshold"/>.
+    /// </summary>
+    internal static List<InstanceSegmentation.InstanceMask<T>> MaskNms<T>(
+        List<InstanceSegmentation.InstanceMask<T>> instances, double iouThreshold)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var sorted = SortByConfidenceDescending(instances);
+        var kept = new List<InstanceSegmentation.InstanceMask<T>>();
+        while (sorted.Count > 0)
+        {
+            var best = sorted[0];
+            kept.Add(best);
+            sorted.RemoveAt(0);
+            sorted = sorted.Where(inst => best.ComputeMaskIoU(inst, numOps) < iouThreshold).ToList();
+        }
+
+        return kept;
+    }
+
+    /// <summary>The instances ordered by descending confidence; ties keep their input order.</summary>
+    internal static List<InstanceSegmentation.InstanceMask<T>> SortByConfidenceDescending<T>(
+        List<InstanceSegmentation.InstanceMask<T>> instances)
+    {
+        if (instances.Count == 0) return new List<InstanceSegmentation.InstanceMask<T>>();
+        var confidences = new Tensor<T>([instances.Count], new Vector<T>(instances.Select(i => i.Confidence).ToArray()));
+        var keys = CvTensorOps<T>.ToDoubleArray(confidences);
+        return Enumerable.Range(0, instances.Count).OrderByDescending(i => keys[i]).Select(i => instances[i]).ToList();
+    }
 }

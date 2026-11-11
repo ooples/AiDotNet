@@ -92,13 +92,8 @@ public class InstanceMask<T>
     /// </summary>
     public int GetMaskArea(INumericOperations<T> numOps)
     {
-        int area = 0;
-        for (int i = 0; i < Mask.Length; i++)
-        {
-            if (numOps.ToDouble(Mask[i]) > 0.5)
-                area++;
-        }
-        return area;
+        var engine = AiDotNetEngine.Current;
+        return (int)numOps.ToDouble(engine.TensorSum(engine.TensorGreaterThan(Mask, numOps.FromDouble(0.5))));
     }
 
     /// <summary>
@@ -109,19 +104,15 @@ public class InstanceMask<T>
         if (Mask.Shape[0] != other.Mask.Shape[0] || Mask.Shape[1] != other.Mask.Shape[1])
             return 0;
 
-        int intersection = 0;
-        int union = 0;
+        // Pixels above 0.5 count as inside; intersection = both inside, union = either inside.
+        var engine = AiDotNetEngine.Current;
+        var half = numOps.FromDouble(0.5);
+        var a = engine.TensorGreaterThan(Mask, half);
+        var b = engine.TensorGreaterThan(other.Mask, half);
+        double intersection = numOps.ToDouble(engine.TensorSum(engine.TensorMultiply(a, b)));
+        double union = numOps.ToDouble(engine.TensorSum(engine.TensorMax(a, b)));
 
-        for (int i = 0; i < Mask.Length; i++)
-        {
-            bool a = numOps.ToDouble(Mask[i]) > 0.5;
-            bool b = numOps.ToDouble(other.Mask[i]) > 0.5;
-
-            if (a && b) intersection++;
-            if (a || b) union++;
-        }
-
-        return union > 0 ? (double)intersection / union : 0;
+        return union > 0 ? intersection / union : 0;
     }
 }
 
@@ -420,58 +411,17 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
     /// </summary>
     protected Tensor<T> ResizeMask(Tensor<T> mask, int targetHeight, int targetWidth)
     {
-        int srcH = mask.Shape[0];
-        int srcW = mask.Shape[1];
-
-        var resized = new Tensor<T>(new[] { targetHeight, targetWidth });
-
-        for (int h = 0; h < targetHeight; h++)
-        {
-            for (int w = 0; w < targetWidth; w++)
-            {
-                double srcY = (double)h / targetHeight * srcH;
-                double srcX = (double)w / targetWidth * srcW;
-
-                int y0 = (int)Math.Floor(srcY);
-                int x0 = (int)Math.Floor(srcX);
-                int y1 = Math.Min(y0 + 1, srcH - 1);
-                int x1 = Math.Min(x0 + 1, srcW - 1);
-
-                double wy1 = srcY - y0;
-                double wy0 = 1.0 - wy1;
-                double wx1 = srcX - x0;
-                double wx0 = 1.0 - wx1;
-
-                double v00 = NumOps.ToDouble(mask[y0, x0]);
-                double v01 = NumOps.ToDouble(mask[y0, x1]);
-                double v10 = NumOps.ToDouble(mask[y1, x0]);
-                double v11 = NumOps.ToDouble(mask[y1, x1]);
-
-                double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-                resized[h, w] = NumOps.FromDouble(val);
-            }
-        }
-
-        return resized;
+        // Asymmetric bilinear mapping src = dst * in / out with the far tap clamped to the last row/column.
+        var nchw = Engine.Reshape(mask, new[] { 1, 1, mask.Shape[0], mask.Shape[1] });
+        var resized = AiDotNet.ComputerVision.CvTensorOps<T>.ResizeBilinearAsymmetric(nchw, targetHeight, targetWidth);
+        return Engine.Reshape(resized, new[] { targetHeight, targetWidth });
     }
 
     /// <summary>
     /// Binarizes a mask using threshold.
     /// </summary>
     protected Tensor<T> BinarizeMask(Tensor<T> mask, T threshold)
-    {
-        var binarized = new Tensor<T>(mask._shape);
-        double threshVal = NumOps.ToDouble(threshold);
-
-        for (int i = 0; i < mask.Length; i++)
-        {
-            binarized[i] = NumOps.ToDouble(mask[i]) > threshVal
-                ? NumOps.FromDouble(1.0)
-                : NumOps.FromDouble(0.0);
-        }
-
-        return binarized;
-    }
+        => Engine.TensorGreaterThan(mask, threshold);
 
     /// <summary>
     /// Crops a mask to bounding box region.
@@ -489,36 +439,22 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
         if (cropW <= 0 || cropH <= 0)
             return new Tensor<T>(new[] { 1, 1 });
 
+        // The part of the box inside the mask is copied; any part past the mask's extent stays zero.
         var cropped = new Tensor<T>(new[] { cropH, cropW });
+        int copyH = Math.Min(cropH, mask.Shape[0] - y1);
+        int copyW = Math.Min(cropW, mask.Shape[1] - x1);
+        if (copyH <= 0 || copyW <= 0)
+            return cropped;
 
-        for (int h = 0; h < cropH; h++)
-        {
-            for (int w = 0; w < cropW; w++)
-            {
-                int srcH = y1 + h;
-                int srcW = x1 + w;
-
-                if (srcH < mask.Shape[0] && srcW < mask.Shape[1])
-                {
-                    cropped[h, w] = mask[srcH, srcW];
-                }
-            }
-        }
-
-        return cropped;
+        var inside = Engine.TensorSlice(mask, new[] { y1, x1 }, new[] { copyH, copyW });
+        return Engine.TensorSetSlice(cropped, inside, new[] { 0, 0 });
     }
 
     /// <summary>
     /// Applies sigmoid activation to tensor.
     /// </summary>
     protected void ApplySigmoid(Tensor<T> tensor)
-    {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double x = NumOps.ToDouble(tensor[i]);
-            tensor[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-x)));
-        }
-    }
+        => Engine.SigmoidInPlace(tensor);
 
     /// <summary>
     /// Applies NMS to filter overlapping instances.
@@ -528,23 +464,6 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
         if (instances.Count <= 1)
             return instances;
 
-        // Sort by confidence descending
-        var sorted = instances.OrderByDescending(i => NumOps.ToDouble(i.Confidence)).ToList();
-        var keep = new List<InstanceMask<T>>();
-
-        while (sorted.Count > 0)
-        {
-            var best = sorted[0];
-            keep.Add(best);
-            sorted.RemoveAt(0);
-
-            sorted = sorted.Where(inst =>
-            {
-                double iou = best.ComputeMaskIoU(inst, NumOps);
-                return iou < iouThreshold;
-            }).ToList();
-        }
-
-        return keep;
+        return Common.SegmentationTensorOps.MaskNms(instances, iouThreshold);
     }
 }
