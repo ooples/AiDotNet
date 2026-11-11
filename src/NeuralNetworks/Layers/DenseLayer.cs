@@ -386,6 +386,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         if (input.Rank < 2 || input.Shape[input.Rank - 1] != inputSize || input.Length != rows * inputSize)
             return null;
 
+        if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            DropQuantizedWeights();
+
         var hidden = input.Rank == 2 ? input : Engine.Reshape(input, new[] { rows, inputSize });
         Tensor<T> weightToUse;
         Tensor<T> biasToUse;
@@ -417,6 +421,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             vocabRowsAreInputMajor = true;
             return false;
         }
+        if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            DropQuantizedWeights();
         vocabRows = _weights;
         bias = UseBias ? _biases : null;
         vocabRowsAreInputMajor = true;

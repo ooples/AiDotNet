@@ -8222,11 +8222,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private Tensor<T> FusedReadoutObjective(IFusedReadoutLossLayer<T> head, Tensor<T> readoutInput, Tensor<T> target,
         ILossFunction<T> loss, Tensor<T> compositeInput)
     {
-        if (head.TryComputeFusedLoss(readoutInput, target, loss) is { } fused)
+        if (loss is LossFunctions.LossFunctionBase<T> && head.TryComputeFusedLoss(readoutInput, target, loss) is { } fused)
             return ApplyCompositeObjective(fused, compositeInput);
         var prediction = Layers[^1].Forward(readoutInput);
-        return ApplyCompositeObjective(loss.ComputeTapeLoss(prediction, AlignTargetToOutputShape(prediction, target)),
-            compositeInput);
+        var baseLoss = loss.ComputeTapeLoss(prediction, AlignTargetToOutputShape(prediction, target));
+        return loss is LossFunctions.LossFunctionBase<T>
+            ? ApplyCompositeObjective(baseLoss, compositeInput)
+            : baseLoss;
     }
 
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
@@ -19869,12 +19871,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // streaming snapshots that must be promoted before its weights participate in backward.
         var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
         var pairedTarget = pair.Target ?? target;
-        if (FusedReadoutForTraining() is { } fusedReadout)
+        var resolved = lossFunction ?? LossFunction;
+        if (resolved is LossFunctions.LossFunctionBase<T> && FusedReadoutForTraining() is { } fusedReadout)
         {
             SetTrainingMode(true);
-            var trainingInput = PrepareInputForTraining(pair.Input);
+            var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
+                ? pair.Input
+                : PrepareInputForTraining(pair.Input);
             var readoutInput = ForwardForTrainingToReadout(trainingInput);
-            var resolved = lossFunction ?? LossFunction;
             return FusedReadoutObjective(fusedReadout, readoutInput, pairedTarget, resolved, pair.Input);
         }
         var prediction = ForwardPreparedForTraining(pair.Input, pairTransformed: true);

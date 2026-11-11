@@ -390,6 +390,9 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
             vocabRowsAreInputMajor = false;
             return false;
         }
+        if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            DropQuantizedTable();
         vocabRows = table;
         bias = null;
         vocabRowsAreInputMajor = false;

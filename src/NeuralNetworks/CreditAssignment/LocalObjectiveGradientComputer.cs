@@ -103,38 +103,6 @@ internal static class LocalObjectiveGradientComputer<T>
 
             Tensor<T> Readout(Tensor<T> h) => layers[headIndex].Forward(PreHeadReadout(h));
 
-            bool preHeadAllDetachable = true;
-            for (int i = readoutStart; i < headIndex; i++)
-            {
-                if (paramsOf[i].Count > 0 && layers[i] is not IDetachablePreHeadLayer<T>)
-                {
-                    preHeadAllDetachable = false;
-                    break;
-                }
-            }
-
-            var preHeadDetachedStates = preHeadAllDetachable && headIndex > readoutStart
-                ? new object?[headIndex - readoutStart]
-                : Array.Empty<object?>();
-
-            Tensor<T> PreHeadReadoutDetached(Tensor<T> h)
-            {
-                var r = h;
-                for (int i = readoutStart; i < headIndex; i++)
-                {
-                    if (layers[i] is IDetachablePreHeadLayer<T> detachable)
-                    {
-                        int slot = i - readoutStart;
-                        r = detachable.ForwardWithDetachedParameters(r, ref preHeadDetachedStates[slot]);
-                    }
-                    else
-                    {
-                        r = layers[i].Forward(r);
-                    }
-                }
-                return r;
-            }
-
             Tensor<T> LossFn(Tensor<T> p, Tensor<T> t) => ReduceToScalar(engine, loss.ComputeTapeLoss(p, t));
 
             // Any readout whose terminal layer implements IFusedReadoutLossLayer<T> (even when preceded by RMSNorm or
@@ -151,10 +119,57 @@ internal static class LocalObjectiveGradientComputer<T>
             Tensor<T>? detachedHeadWeight = null;
             Tensor<T>? detachedHeadBias = null;
 
-            // Evaluate the terminal layer's pre-head activation once. When the active credit rule does not inspect the
-            // materialized [rows, vocabulary] prediction tensor in BuildOutputObjective, fuse the terminal output
-            // objective as well so zero [rows, vocabulary] tensors are allocated across the entire training step.
+            // Evaluate the terminal layer's pre-head activation once. Running PreHeadReadout(current) first also
+            // initializes any lazy pre-head layer before we inspect its parameters and detach/batching capabilities.
             var preHeadFinal = PreHeadReadout(current);
+            for (int i = readoutStart; i < headIndex; i++)
+                paramsOf[i] = CollectParameters(layers[i]);
+
+            bool preHeadAllDetachable = true;
+            bool preHeadBatchIndependent = true;
+            for (int i = readoutStart; i < headIndex; i++)
+            {
+                bool hasParamsOrLazy = paramsOf[i].Count > 0 || layers[i] is LayerBase<T> { IsInitialized: false };
+                if (layers[i] is IDetachablePreHeadLayer<T> detachablePreHead)
+                {
+                    if (!detachablePreHead.CanForwardWithDetachedParameters && hasParamsOrLazy)
+                        preHeadAllDetachable = false;
+                    if (!detachablePreHead.PreservesIndependentStackedBatches(preHeadFinal.Rank))
+                        preHeadBatchIndependent = false;
+                }
+                else
+                {
+                    if (hasParamsOrLazy)
+                        preHeadAllDetachable = false;
+                    preHeadBatchIndependent = false;
+                }
+            }
+
+            var preHeadDetachedStates = preHeadAllDetachable && headIndex > readoutStart
+                ? new object?[headIndex - readoutStart]
+                : Array.Empty<object?>();
+
+            Tensor<T> PreHeadReadoutDetached(Tensor<T> h)
+            {
+                var r = h;
+                for (int i = readoutStart; i < headIndex; i++)
+                {
+                    if (layers[i] is IDetachablePreHeadLayer<T> { CanForwardWithDetachedParameters: true } detachable)
+                    {
+                        int slot = i - readoutStart;
+                        r = detachable.ForwardWithDetachedParameters(r, ref preHeadDetachedStates[slot]);
+                    }
+                    else
+                    {
+                        r = layers[i].Forward(r);
+                    }
+                }
+                return r;
+            }
+
+            // When the active credit rule does not inspect the materialized [rows, vocabulary] prediction tensor in
+            // BuildOutputObjective, fuse the terminal output objective as well so zero [rows, vocabulary] tensors are
+            // allocated across the entire training step.
             bool canTryFuseTerminal = fusedHead is not null
                 && rule is IOutputPredictionOptionalRule { UsesOutputPrediction: false };
 
@@ -193,12 +208,18 @@ internal static class LocalObjectiveGradientComputer<T>
                 prediction = layers[headIndex].Forward(preHeadFinal);
                 alignedTarget = alignTarget(prediction, target);
                 defaultLoss = LossFn(prediction, alignedTarget);
+                if (detachableFusedHead is null && layers[headIndex] is not LayerBase<T> { IsInitialized: false })
+                {
+                    fusedHead = layers[headIndex] as IFusedReadoutLossLayer<T>;
+                    detachableFusedHead = fusedHead as IDetachableFusedReadoutLossLayer<T>;
+                }
                 if (detachableFusedHead is not null)
                 {
                     preparedIds = detachableFusedHead.TryPrepareClassIndexTarget(
                         alignedTarget, loss, preHeadFinal.Rank, preHeadFinal.Shape.ToArray(), out preparedVocabSize);
                 }
             }
+            paramsOf[headIndex] = CollectParameters(layers[headIndex]);
 
             Tensor<T> ReadoutLossCore(Tensor<T> h, Tensor<T> t)
             {
@@ -268,8 +289,6 @@ internal static class LocalObjectiveGradientComputer<T>
                 if (preparedIds is null || detachableFusedHead is null
                     || preparedVocabSize < 2 || maxCandidates >= preparedVocabSize)
                     return false;
-                if (detachParams && !preHeadAllDetachable)
-                    return false;
                 if (cachedSampledWeight is not null && cachedSampleMax == maxCandidates
                     && cachedSampleDetach == detachParams && cachedSampleSeed == stepSeed)
                     return true;
@@ -328,9 +347,52 @@ internal static class LocalObjectiveGradientComputer<T>
                 if (!ReferenceEquals(t, alignedTarget) || !TryEnsureSampledReadoutCache(maxCandidates, detachParams, stepSeed))
                     return null;
 
-                var preHead = detachParams ? PreHeadReadoutDetached(h) : PreHeadReadout(h);
                 int rows = cachedRemappedIds!.Length;
                 int inputDim = cachedSampledWeight!.Shape[0];
+
+                if (detachParams && !preHeadAllDetachable)
+                {
+                    // Preserve the exact sampled-vocabulary objective (without falling back to full readout) while
+                    // respecting any custom/subclassed pre-head ForwardTraced override on an isolated inner tape.
+                    var hDetached = engine.StopGradient(h);
+                    Tensor<T>? innerLossVal = null;
+                    Tensor<T>? gradH = null;
+                    using (var innerTape = new GradientTape<T>())
+                    {
+                        var preHeadInner = PreHeadReadout(hDetached);
+                        if (preHeadInner.Rank >= 2
+                            && preHeadInner.Shape[preHeadInner.Rank - 1] == inputDim
+                            && preHeadInner.Length == rows * inputDim)
+                        {
+                            var flatInner = preHeadInner.Rank == 2
+                                ? preHeadInner
+                                : engine.Reshape(preHeadInner, new[] { rows, inputDim });
+                            DenseLayer<T>.CountFusedReadoutLoss();
+                            innerLossVal = ReduceToScalar(
+                                engine,
+                                engine.FusedLinearCrossEntropyWithLogits(
+                                    flatInner, cachedSampledWeight!, cachedSampledBias!, cachedRemappedIds!));
+                            var innerGrads = innerTape.ComputeGradients(innerLossVal, sources: new[] { hDetached });
+                            innerTape.Retain(innerLossVal);
+                            if (innerGrads.TryGetValue(hDetached, out var gh))
+                            {
+                                innerTape.Retain(gh);
+                                gradH = gh;
+                            }
+                            else
+                            {
+                                gradH = new Tensor<T>(h.Shape.ToArray());
+                            }
+                        }
+                    }
+                    if (innerLossVal is null || gradH is null)
+                        return null;
+                    var dot = ReduceToScalar(engine, engine.TensorMultiply(h, gradH));
+                    var dotConst = engine.StopGradient(dot);
+                    return engine.TensorAdd(engine.StopGradient(innerLossVal), engine.TensorSubtract(dot, dotConst));
+                }
+
+                var preHead = detachParams ? PreHeadReadoutDetached(h) : PreHeadReadout(h);
                 if (preHead.Rank < 2 || preHead.Shape[preHead.Rank - 1] != inputDim || preHead.Length != rows * inputDim)
                     return null;
 
@@ -366,6 +428,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 double baseWeight = batchedRule.BaseLocalWeight;
 
                 if (mode != BatchedLocalReadoutMode.None
+                    && preHeadBatchIndependent
                     && ((detach && preHeadAllDetachable) || (!detach && !progressive)))
                 {
                     int lastHidden = hiddenIdx.Count - 1;
@@ -530,7 +593,7 @@ internal static class LocalObjectiveGradientComputer<T>
         }
     }
 
-    private static void BuildSampledCandidates(
+    internal static void BuildSampledCandidates(
         Tensor<int> targetIds,
         int vocabSize,
         int maxCandidates,

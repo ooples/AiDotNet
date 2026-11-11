@@ -30,6 +30,10 @@ public interface IFusedReadoutLossLayer<T>
 /// </summary>
 internal interface IDetachablePreHeadLayer<T>
 {
+    bool CanForwardWithDetachedParameters { get; }
+
+    bool PreservesIndependentStackedBatches(int inputRank);
+
     Tensor<T> ForwardWithDetachedParameters(Tensor<T> input, ref object? detachedState);
 }
 

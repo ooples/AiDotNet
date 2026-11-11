@@ -548,6 +548,11 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract, 
         return output;
     }
 
+    bool IDetachablePreHeadLayer<T>.CanForwardWithDetachedParameters => GetType() == typeof(LayerNormalizationLayer<T>);
+
+    bool IDetachablePreHeadLayer<T>.PreservesIndependentStackedBatches(int inputRank) =>
+        GetType() == typeof(LayerNormalizationLayer<T>) && inputRank >= 2;
+
     Tensor<T> IDetachablePreHeadLayer<T>.ForwardWithDetachedParameters(Tensor<T> input, ref object? detachedState)
     {
         EnsureInitializedFromInput(input);
