@@ -56,11 +56,7 @@ public sealed class MultiOutputRegressor<T>
         _heads.Clear();
         for (var j = 0; j < expectedOutput.Columns; j++)
         {
-            var yj = new Vector<T>(expectedOutput.Rows);
-            for (var i = 0; i < expectedOutput.Rows; i++)
-            {
-                yj[i] = expectedOutput[i, j];
-            }
+            var yj = AiDotNetEngine.Current.GetColumn(expectedOutput, j);
 
             var head = _baseFactory();
             head.Train(input, yj);
@@ -85,10 +81,7 @@ public sealed class MultiOutputRegressor<T>
                 throw new InvalidOperationException(
                     $"MultiOutputRegressor head {j} predicted {col.Length} values for {input.Rows} input rows.");
             }
-            for (var i = 0; i < input.Rows; i++)
-            {
-                result[i, j] = col[i];
-            }
+            AiDotNetEngine.Current.SetColumn(result, j, col);
         }
 
         return result;
@@ -110,7 +103,7 @@ public sealed class MultiOutputRegressor<T>
 
     public Vector<T> GetParameters()
     {
-        var all = new List<T>();
+        var all = new List<Vector<T>>();
         foreach (var head in _heads)
         {
             var p = AsParameterizable(head)?.GetParameters();
@@ -119,13 +112,10 @@ public sealed class MultiOutputRegressor<T>
                 continue;
             }
 
-            for (var i = 0; i < p.Length; i++)
-            {
-                all.Add(p[i]);
-            }
+            all.Add(p);
         }
 
-        return new Vector<T>(all.ToArray());
+        return all.Count == 0 ? new Vector<T>(0) : Vector<T>.Concatenate(all);
     }
 
     public void SetParameters(Vector<T> parameters)
@@ -140,13 +130,7 @@ public sealed class MultiOutputRegressor<T>
             }
 
             var count = (int)param.ParameterCount;
-            var seg = new T[count];
-            for (var i = 0; i < count; i++)
-            {
-                seg[i] = parameters[offset + i];
-            }
-
-            param.SetParameters(new Vector<T>(seg));
+            param.SetParameters(parameters.GetSubVector(offset, count));
             offset += count;
         }
     }
@@ -167,25 +151,44 @@ public sealed class MultiOutputRegressor<T>
 
     public Dictionary<string, T> GetFeatureImportance()
     {
-        var acc = new Dictionary<string, T>();
-        foreach (var head in _heads)
+        var engine = AiDotNetEngine.Current;
+        var perHead = _heads.Select(h => h.GetFeatureImportance()).ToList();
+
+        // Union of feature names in first-seen order (matches the previous insertion order).
+        var keys = new List<string>();
+        var seen = new HashSet<string>();
+        foreach (var importance in perHead)
         {
-            foreach (var kv in head.GetFeatureImportance())
+            foreach (var key in importance.Keys)
             {
-                acc[kv.Key] = acc.TryGetValue(kv.Key, out var existing) ? NumOps.Add(existing, kv.Value) : kv.Value;
+                if (seen.Add(key))
+                {
+                    keys.Add(key);
+                }
             }
+        }
+
+        if (keys.Count == 0)
+        {
+            return new Dictionary<string, T>();
+        }
+
+        // A head that lacks a feature contributes zero, exactly like the previous running sum.
+        var zero = NumOps.Zero;
+        var total = engine.FillZero(keys.Count);
+        foreach (var importance in perHead)
+        {
+            var aligned = new Vector<T>(keys.Select(k => importance.TryGetValue(k, out var v) ? v : zero));
+            total = engine.Add(total, aligned);
         }
 
         if (_heads.Count > 1)
         {
-            var denom = NumOps.FromDouble(_heads.Count);
-            foreach (var key in acc.Keys.ToList())
-            {
-                acc[key] = NumOps.Divide(acc[key], denom);
-            }
+            total = engine.Divide(total, NumOps.FromDouble(_heads.Count));
         }
 
-        return acc;
+        return keys.Zip(total, (k, v) => new KeyValuePair<string, T>(k, v))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
     }
 
     public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)

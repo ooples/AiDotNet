@@ -263,13 +263,8 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-
-        return predictions;
+        // Each row is its own weighted least-squares fit, so rows are solved one at a time.
+        return new Vector<T>(input.GetRows().Select(PredictSingle));
     }
 
     /// <summary>
@@ -312,10 +307,9 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 
         // If all weights are zero (query point is outside bandwidth of all training data),
         // fall back to the global mean of y to avoid NaN from a zero-weight solve.
-        double totalWeight = 0;
-        for (int i = 0; i < weights.Length; i++)
-            totalWeight += NumOps.ToDouble(weights[i]);
-        if (totalWeight < ZeroWeightTolerance)
+        var engine = AiDotNetEngine.Current;
+        T totalWeight = engine.Sum(weights);
+        if (NumOps.LessThan(totalWeight, NumOps.FromDouble(ZeroWeightTolerance)))
         {
             return _yTrain.Mean();
         }
@@ -323,7 +317,7 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Create the weighted design matrix and target vector
         // For weighted least squares, we multiply each row of X by its corresponding weight
         // This is equivalent to W^0.5 * X where W is the diagonal weight matrix
-        var sqrtWeights = weights.Transform(w => NumOps.Sqrt(w));
+        var sqrtWeights = engine.Sqrt(weights);
         // Add intercept column to training data for bias term
         var xWithIntercept = _xTrain.AddConstantColumn(NumOps.One);
         var weightedX = sqrtWeights.CreateDiagonal().Multiply(xWithIntercept);
@@ -335,16 +329,16 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Add ridge regularization penalty to ensure numerical stability.
         // The tricube kernel can produce many zero weights, making X^T*W*X nearly singular.
         // Scale regularization relative to diagonal magnitude.
-        double diagMean = 0;
-        for (int i = 0; i < xTx.Rows; i++)
-            diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
-        diagMean = xTx.Rows > 0 ? diagMean / xTx.Rows : 1.0;
-        var stabilityStrength = NumOps.FromDouble(
-            Math.Max(diagMean * StabilityStrengthScale, MinimumStabilityStrength));
-        for (int i = 0; i < xTx.Rows; i++)
+        T diagMean = xTx.Rows > 0
+            ? NumOps.Divide(engine.Sum(engine.Abs(xTx.Diagonal())), NumOps.FromDouble(xTx.Rows))
+            : NumOps.One;
+        var stabilityStrength = NumOps.Multiply(diagMean, NumOps.FromDouble(StabilityStrengthScale));
+        var minimumStrength = NumOps.FromDouble(MinimumStabilityStrength);
+        if (NumOps.LessThan(stabilityStrength, minimumStrength))
         {
-            xTx[i, i] = NumOps.Add(xTx[i, i], stabilityStrength);
+            stabilityStrength = minimumStrength;
         }
+        xTx = engine.MatrixAdd(xTx, Matrix<T>.CreateDiagonal(engine.Fill(xTx.Rows, stabilityStrength)));
 
         var xTy = weightedX.Transpose().Multiply(weightedY);
         var coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
@@ -357,10 +351,8 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 
         // Make prediction: AddConstantColumn puts intercept at index 0
         // coefficients[0] is intercept, coefficients[1..p] are feature weights
-        T prediction = coefficients[0]; // intercept (first column)
-        for (int j = 0; j < input.Length; j++)
-            prediction = NumOps.Add(prediction, NumOps.Multiply(input[j], coefficients[j + 1]));
-        return prediction;
+        T intercept = coefficients[0]; // intercept (first column)
+        return NumOps.Add(intercept, engine.DotProduct(input, coefficients.GetSubVector(1, input.Length)));
     }
 
     /// <summary>
@@ -370,23 +362,27 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// <returns>A vector of weights for each training example.</returns>
     private Vector<T> ComputeWeights(Vector<T> input)
     {
-        var weights = new Vector<T>(_xTrain.Rows);
-
-        var distances = new double[_xTrain.Rows];
-        for (int i = 0; i < _xTrain.Rows; i++)
+        if (_xTrain.Rows == 0)
         {
-            distances[i] = Convert.ToDouble(VectorHelper.EuclideanDistance(input, _xTrain.GetRow(i)));
+            return new Vector<T>(0);
         }
 
-        double bandwidth = LocalBandwidth(distances);
-        if (bandwidth <= 0) bandwidth = MinimumStabilityStrength;
+        // Euclidean distance from the query point to every training row at once.
+        var engine = AiDotNetEngine.Current;
+        var query = engine.TensorBroadcastTo(
+            new Tensor<T>(new[] { 1, input.Length }, input),
+            new[] { _xTrain.Rows, _xTrain.Columns });
+        var diff = engine.TensorSubtract(Tensor<T>.FromMatrix(_xTrain), query);
+        var distances = engine.TensorSqrt(
+            engine.ReduceSum(engine.TensorSquare(diff), new[] { 1 }, keepDims: false)).ToVector();
 
-        for (int i = 0; i < _xTrain.Rows; i++)
+        T bandwidth = LocalBandwidth(distances);
+        if (NumOps.LessThanOrEquals(bandwidth, NumOps.Zero))
         {
-            weights[i] = KernelFunction(NumOps.FromDouble(distances[i] / bandwidth));
+            bandwidth = NumOps.FromDouble(MinimumStabilityStrength);
         }
 
-        return weights;
+        return KernelWeights(engine.Divide(distances, bandwidth));
     }
 
     /// <summary>
@@ -409,15 +405,15 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// tuned one keep their numbers.
     /// </para>
     /// </remarks>
-    private double LocalBandwidth(double[] distances)
+    private T LocalBandwidth(Vector<T> distances)
     {
         // Read from the model's own state, seeded from options at construction. The override still
         // wins where it is set -- Bandwidth is kept as an escape hatch, per the design -- but both
         // values travel in the payload, so a restored model predicts from the neighbourhood it was
         // fitted with rather than from whatever the options object degraded to.
         var bandwidth = _bandwidth > 0 ? _bandwidth : _options.Bandwidth;
-        if (bandwidth > 0) return bandwidth;
-        if (distances.Length == 0) return MinimumStabilityStrength;
+        if (bandwidth > 0) return NumOps.FromDouble(bandwidth);
+        if (distances.Length == 0) return NumOps.FromDouble(MinimumStabilityStrength);
 
         var configured = _span > 0 ? _span : _options.Span;
         double span = configured > 0 ? configured : 0.75;
@@ -426,8 +422,7 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 
         // Only the q-th smallest is needed, but n is the training-set size and a sort here is clearer
         // than a selection algorithm at this scale; revisit if a profile says otherwise.
-        var ordered = (double[])distances.Clone();
-        Array.Sort(ordered);
+        var (ordered, _) = AiDotNetEngine.Current.TensorSort(Tensor<T>.FromVector(distances));
         return ordered[q - 1];
     }
 
@@ -435,16 +430,16 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Applies a kernel function to transform distances into weights.
     /// </summary>
-    /// <param name="u">The normalized distance value to transform.</param>
-    /// <returns>The weight value after applying the kernel function.</returns>
-    private T KernelFunction(T u)
+    /// <param name="u">The normalized distance values to transform.</param>
+    /// <returns>The weight values after applying the kernel function.</returns>
+    private Vector<T> KernelWeights(Vector<T> u)
     {
-        // Tricube kernel function
-        var absU = NumOps.Abs(u);
-        if (NumOps.GreaterThan(absU, NumOps.One))
-            return NumOps.Zero;
-        var temp = NumOps.Subtract(NumOps.One, NumOps.Power(absU, NumOps.FromDouble(3)));
-        return NumOps.Power(temp, NumOps.FromDouble(3));
+        // Tricube kernel (1 - |u|^3)^3 for |u| <= 1, else 0. Clamping |u| to 1 yields exactly 0 there.
+        var engine = AiDotNetEngine.Current;
+        var three = NumOps.FromDouble(3);
+        var absU = engine.Clamp(engine.Abs(u), NumOps.Zero, NumOps.One);
+        var temp = engine.Subtract(engine.Fill(u.Length, NumOps.One), engine.Power(absU, three));
+        return engine.Power(temp, three);
     }
 
     /// <summary>
