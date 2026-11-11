@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining.Layers;
@@ -41,7 +42,7 @@ internal sealed class CopyToTensorParallelRegion<T> : AutogradFunction<T>
 
     public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs) => inputs[0];
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         if (_backend.WorldSize <= 1) return [gradOutput];
         var v = gradOutput.ToVector();
@@ -74,7 +75,7 @@ internal sealed class ReduceFromTensorParallelRegion<T> : AutogradFunction<T>
         return Tensor<T>.FromVector(v).Reshape(inputs[0]._shape);
     }
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput) => [gradOutput];
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput) => [gradOutput];
 }
 
 /// <summary>
@@ -136,7 +137,7 @@ internal sealed class GatherFromTensorParallelRegion<T> : AutogradFunction<T>
         return full;
     }
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         // Adjoint of the column-gather: hand each rank back only its own output-column block.
         if (_backend.WorldSize <= 1) return [gradOutput];
@@ -166,7 +167,7 @@ internal sealed class AverageGradientAcrossRanks<T> : AutogradFunction<T>
 
     public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs) => inputs[0];
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         if (_backend.WorldSize <= 1) return [gradOutput];
         var v = gradOutput.ToVector();

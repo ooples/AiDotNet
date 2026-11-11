@@ -1,5 +1,4 @@
-﻿using AiDotNet.Autodiff;
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 

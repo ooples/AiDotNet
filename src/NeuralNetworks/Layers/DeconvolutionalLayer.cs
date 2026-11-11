@@ -608,15 +608,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return result;
     }
 
-    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation == null)
-            return input;
-
-        // Use generic activation support - works for ALL 39 built-in activations
-        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
-    }
-
 
     /// <summary>
     /// Fallback activation gradient computation for unsupported GPU activation types.

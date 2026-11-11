@@ -539,19 +539,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public bool DeterministicForward { get; set; }
 
     /// <summary>
-    /// When true, Forward() records operations to a computation graph instead of executing them.
-    /// Used by the JIT compiler to capture the full forward pass for compilation.
-    /// Set via <see cref="SetCaptureMode"/>.
-    /// </summary>
-    protected bool IsCapturing;
-
-    /// <summary>
-    /// The captured computation graph output node from the last capture-mode Forward() call.
-    /// Null when not capturing or when no graph has been captured yet.
-    /// </summary>
-    protected ComputationNode<T>? CapturedGraphOutput;
-
-    /// <summary>
     /// Tracks whether Dispose has been called.
     /// </summary>
     private bool _disposed;
@@ -4062,15 +4049,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// every such cache write should be gated on:
     /// <code>if (ShouldCacheForBackward) _lastInput = input;</code>
     /// It is false whenever no eager manual backward will read the caches —
-    /// during graph capture (<see cref="IsCapturing"/>), under a recording
-    /// <see cref="GradientTape{T}"/> (unless <see cref="KeepActivationCacheUnderTape"/>),
+    /// under a recording <see cref="GradientTape{T}"/> (unless <see cref="KeepActivationCacheUnderTape"/>),
     /// in eval mode (<see cref="IsTrainingMode"/> is false), or inside an
     /// <see cref="InferenceMode"/> scope — so the redundant reference is dropped and the
     /// inference caching allocator can safely recycle the buffer (issue #1668).
     /// </summary>
     protected bool ShouldCacheForBackward
         => IsTrainingMode
-        && !IsCapturing
         && !InferenceMode.IsActive
         && (GradientTape<T>.Current is null || KeepActivationCacheUnderTape);
 
@@ -4299,22 +4284,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < _registeredSubLayers.Count; i++)
         {
             (_registeredSubLayers[i] as LayerBase<T>)?.SetDeterministicForward(deterministic);
-        }
-    }
-
-    /// <summary>
-    /// Sets the graph capture mode for this layer.
-    /// When capturing, Forward() should record operations to a computation graph
-    /// instead of executing them. Used by the JIT compiler to capture the full
-    /// forward pass for compilation and optimization.
-    /// </summary>
-    /// <param name="isCapturing">True to enable capture mode, false to disable.</param>
-    public virtual void SetCaptureMode(bool isCapturing)
-    {
-        IsCapturing = isCapturing;
-        if (!isCapturing)
-        {
-            CapturedGraphOutput = null;
         }
     }
 
@@ -5665,23 +5634,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         //     all, so the push is pure dead weight that accumulates one entry
         //     per Forward call indefinitely.
         //
-        //   - JIT graph capture (IsCapturing == true): Forward is recording
-        //     operations into a computation graph rather than executing the
-        //     eager activation derivative, so ApplyActivationDerivativeFromOutput
-        //     is never invoked during capture. IsCapturing can be set while
-        //     IsTrainingMode is also true, so checking training-mode alone
-        //     isn't sufficient.
-        //
         // Only push when we know the eager backward will drain it: training
-        // mode ON, not capturing, not inside an inference scope, no tape recording.
+        // mode ON, not inside an inference scope, no tape recording.
         // The tape path already preserves the pre-activation reference through its
-        // recorded GradFn closures; the capture path encodes it into the graph node;
-        // an InferenceMode scope guarantees no backward at all — all three make the
-        // cache redundant (and leaving it set would alias arena scratch across a
-        // denoise-loop Reset — issue #1668).
+        // recorded GradFn closures, and an InferenceMode scope guarantees no backward
+        // at all — both make the cache redundant (and leaving it set would alias arena
+        // scratch across a denoise-loop Reset — issue #1668).
         bool eagerBackwardWillRun =
             IsTrainingMode
-            && !IsCapturing
             && !InferenceMode.IsActive
             && GradientTape<T>.Current is null;
         if (eagerBackwardWillRun)

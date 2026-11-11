@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining.Layers;
@@ -53,7 +54,7 @@ internal sealed class FsdpAllGatherParameter<T> : AutogradFunction<T>
         return Tensor<T>.FromVector(new Vector<T>(trimmed)).Reshape(_fullShape);
     }
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         // gradOutput = d(full parameter). Reduce-scatter (Average) so each rank keeps its shard grad.
         var gradFlat = gradOutput.ToVector();

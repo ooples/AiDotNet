@@ -617,26 +617,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Applies the activation function to a computation node.
-    /// </summary>
-    private ComputationNode<T> ApplyActivationToComputationNode(ComputationNode<T> node)
-    {
-        // ScalarActivation is guaranteed non-null here since this method is only called when ScalarActivation is not null
-        if (ScalarActivation is null)
-            throw new InvalidOperationException("ScalarActivation cannot be null when applying activation to computation node.");
-
-        // Use ApplyToGraph if the activation supports JIT compilation
-        if (ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(node);
-        }
-
-        // Fallback: apply activation directly to values and wrap as constant
-        var activated = ScalarActivation.Activate(node.Value);
-        return TensorOperations<T>.Constant(activated, "activated_output");
-    }
-
-    /// <summary>
     /// Creates a vector at the origin of hyperbolic space.
     /// </summary>
     private Vector<T> CreateOriginVector(int dimension)

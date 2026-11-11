@@ -598,20 +598,6 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     #region JIT Compilation
 
 
-    /// <summary>
-    /// Builds a Conv2D computation node from a ConvolutionalLayer.
-    /// </summary>
-    private static ComputationNode<T> BuildConvNode(ConvolutionalLayer<T> conv, ComputationNode<T> input, string namePrefix)
-    {
-        var biases = conv.GetBiases();
-        return TensorOperations<T>.Conv2D(
-            input,
-            TensorOperations<T>.Constant(conv.GetFilters(), $"{namePrefix}kernel"),
-            biases is not null ? TensorOperations<T>.Constant(biases, $"{namePrefix}bias") : null,
-            stride: new int[] { conv.Stride, conv.Stride },
-            padding: new int[] { conv.Padding, conv.Padding });
-    }
-
     #endregion
 
 }

@@ -1698,29 +1698,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return flatResult.Reshape(gradOutput._shape);
     }
 
-    /// <summary>
-    /// Applies scalar activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        return ScalarActivation switch
-        {
-            ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
-            SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
-            TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
-            ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
-            LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
-            GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
-            SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
-            SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input), // SiLU is same as Swish
-            SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
-            SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
-            IdentityActivation<T> => input, // Identity just returns input as-is
-            _ => throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode. " +
-                "Supported: ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
-        };
-    }
-
     [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _kernelsVelocity;
     [AiDotNet.Attributes.Buffer]
