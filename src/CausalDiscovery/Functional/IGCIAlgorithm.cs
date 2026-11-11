@@ -72,7 +72,7 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
 
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, double>();
 
         // Pairwise IGCI score computation
         for (int i = 0; i < d; i++)
@@ -86,11 +86,11 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
                 {
                     if (score < 0)
                     {
-                        W[i, j] = NumOps.FromDouble(-score);
+                        weights[i * d + j] = -score;
                     }
                     else
                     {
-                        W[j, i] = NumOps.FromDouble(score);
+                        weights[j * d + i] = score;
                     }
                 }
                 else
@@ -104,7 +104,7 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
             }
         }
 
-        return W;
+        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
 
     /// <summary>
