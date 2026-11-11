@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -130,6 +131,25 @@ internal static class ClusteringTensorOps
         }
 
         return Engine.TensorArgMin(ToTensor(values), 1).ToArray();
+    }
+
+    /// <summary>Index of the smallest entry of a non-empty vector (first one on ties).</summary>
+    internal static int ArgMin<T>(Vector<T> values) => Engine.TensorArgMin(values.AsTensor(), 0).ToArray()[0];
+
+    /// <summary>Index of the largest entry of a non-empty vector (first one on ties).</summary>
+    internal static int ArgMax<T>(Vector<T> values) => Engine.TensorArgMax(values.AsTensor(), 0).ToArray()[0];
+
+    /// <summary>Largest entry of the vector, or zero when it is empty or every entry is negative.</summary>
+    internal static T MaxOrZero<T>(Vector<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (values.Length == 0)
+        {
+            return numOps.Zero;
+        }
+
+        T max = Engine.TensorMaxValue(values.AsTensor());
+        return numOps.GreaterThan(max, numOps.Zero) ? max : numOps.Zero;
     }
 
     /// <summary>Smallest entry of every row.</summary>
@@ -315,5 +335,71 @@ internal static class ClusteringTensorOps
         }
 
         return flags;
+    }
+
+    /// <summary>True when any entry of the matrix is NaN or infinite.</summary>
+    internal static bool ContainsNonFinite<T>(Matrix<T> m)
+    {
+        if (m.Rows == 0 || m.Columns == 0)
+        {
+            return false;
+        }
+
+        var engine = Engine;
+        var t = ToTensor(m);
+        return engine.TensorMaskedSelect(t, engine.TensorLogicalNot(engine.TensorIsFinite(t))).Length > 0;
+    }
+
+    /// <summary>
+    /// Draws an index with probability proportional to the (non-negative) weights: the first index whose running
+    /// sum reaches u * total for u = random.NextDouble(), or 0 when none does (same rule as a sequential scan).
+    /// </summary>
+    internal static int SampleProportional<T>(Vector<T> weights, Random random)
+    {
+        if (weights.Length == 0)
+        {
+            return 0;
+        }
+
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var cumulative = engine.TensorCumSum(weights.AsTensor(), 0);
+
+        // The weights are non-negative, so the running sum ends at its maximum.
+        T total = engine.TensorMaxValue(cumulative);
+        T threshold = numOps.Multiply(numOps.FromDouble(random.NextDouble()), total);
+        int position = engine.TensorSearchSorted(cumulative, Vector<T>.FromArray(new[] { threshold }).AsTensor(), false).ToArray()[0];
+        return position < weights.Length ? position : 0;
+    }
+
+    /// <summary>Distance (configured metric) from every row of x to one point, evaluated as metric(row, point).</summary>
+    internal static Vector<T> DistancesToPoint<T>(IDistanceMetric<T> metric, Matrix<T> x, Vector<T> point)
+        => Tensor<T>.FromMatrix(metric.ComputePairwise(x, Tensor<T>.FromVector(point, new[] { 1, point.Length }).ToMatrix())).ToVector();
+
+    /// <summary>Distance (configured metric) between row k of a and row k of b, for every k.</summary>
+    internal static Vector<T> RowwiseDistances<T>(IDistanceMetric<T> metric, Matrix<T> a, Matrix<T> b)
+        => Engine.TensorDiagonal(Tensor<T>.FromMatrix(metric.ComputePairwise(a, b))).ToVector();
+
+    /// <summary>Nearest-center label (first one on ties) for every row of x under the configured metric.</summary>
+    internal static int[] NearestCenters<T>(IDistanceMetric<T> metric, Matrix<T> x, Matrix<T> centers)
+        => ArgMinRows(metric.ComputePairwise(x, centers));
+
+    /// <summary>Distance (configured metric) from every sample to the center of its label; zero for invalid labels.</summary>
+    internal static Vector<T> AssignedDistances<T>(IDistanceMetric<T> metric, Matrix<T> x, Vector<T> labels, Matrix<T> centers)
+    {
+        var engine = Engine;
+        var mask = OneHotMask(labels, centers.Rows);
+        var distances = Tensor<T>.FromMatrix(metric.ComputePairwise(x, centers));
+        return engine.ReduceSum(engine.TensorMultiply(distances, mask), new[] { 1 }, false).ToVector();
+    }
+
+    /// <summary>Rows of <paramref name="candidate"/> where the count is positive, rows of <paramref name="fallback"/> elsewhere.</summary>
+    internal static Matrix<T> RowsWherePositive<T>(Vector<T> counts, Matrix<T> candidate, Matrix<T> fallback)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var positive = engine.TensorGreaterThan(counts.AsTensor(), numOps.Zero);
+        var condition = engine.TensorBroadcastTo(engine.Reshape(positive, new[] { candidate.Rows, 1 }), new[] { candidate.Rows, candidate.Columns });
+        return engine.TensorWhere(condition, ToTensor(candidate), ToTensor(fallback)).ToMatrix();
     }
 }
