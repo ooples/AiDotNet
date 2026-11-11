@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
 
