@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -26,73 +27,25 @@ internal static class TemperatureSampling<T>
     /// </summary>
     public static Vector<T> Apply(Vector<T> distribution, T temperature)
     {
-        if (NumOps.Equals(temperature, NumOps.One))
-        {
-            // A copy, like every other path, so a caller that edits the result never edits its input.
-            var copy = new Vector<T>(distribution.Length);
-            for (int i = 0; i < distribution.Length; i++)
-            {
-                copy[i] = distribution[i];
-            }
+        // A copy on every path, so a caller that edits the result never edits its input.
+        if (NumOps.Equals(temperature, NumOps.One)) return (Vector<T>)distribution.Clone();
+        if (distribution.Length == 0) return new Vector<T>(0);
+        if (IsGreedy(temperature)) return Vector<T>.CreateStandardBasis(distribution.Length, ArgMax(distribution));
 
-            return copy;
-        }
-
-        var result = new Vector<T>(distribution.Length);
-        if (IsGreedy(temperature))
-        {
-            if (distribution.Length > 0)
-            {
-                result[ArgMax(distribution)] = NumOps.One;
-            }
-            return result;
-        }
-
-        T maxProb = NumOps.Zero;
-        for (int i = 0; i < distribution.Length; i++)
-        {
-            if (NumOps.GreaterThan(distribution[i], maxProb))
-            {
-                maxProb = distribution[i];
-            }
-        }
-
+        // Entries at or below zero carry no mass; the rest are scaled by the largest first, so raising to
+        // 1/temperature at a low positive temperature sets the maximum to 1 instead of underflowing them all to 0.
+        var engine = AiDotNetEngine.Current;
+        var mass = (Vector<T>)engine.ReLU(distribution);
+        T maxProb = TensorPrimitivesHelper<T>.Max(mass);
         if (NumOps.GreaterThan(maxProb, NumOps.Zero))
         {
-            T invTemp = NumOps.Divide(NumOps.One, temperature);
-            T sum = NumOps.Zero;
-            for (int i = 0; i < distribution.Length; i++)
-            {
-                if (NumOps.GreaterThan(distribution[i], NumOps.Zero))
-                {
-                    // Normalize by maxProb first so raising to 1/temperature at low positive temperatures
-                    // sets the maximum entry to 1^invTemp = 1 and prevents all entries from underflowing to 0.
-                    result[i] = NumOps.Power(NumOps.Divide(distribution[i], maxProb), invTemp);
-                    sum = NumOps.Add(sum, result[i]);
-                }
-                else
-                {
-                    result[i] = NumOps.Zero;
-                }
-            }
-
-            if (NumOps.GreaterThan(sum, NumOps.Zero))
-            {
-                for (int i = 0; i < result.Length; i++)
-                {
-                    result[i] = NumOps.Divide(result[i], sum);
-                }
-                return result;
-            }
+            var scaled = (Vector<T>)engine.Power(engine.Divide(mass, maxProb), NumOps.Divide(NumOps.One, temperature));
+            T sum = engine.Sum(scaled);
+            if (NumOps.GreaterThan(sum, NumOps.Zero)) return (Vector<T>)engine.Divide(scaled, sum);
         }
 
         // Every entry underflowed (a very low temperature): the limit is the greedy one-hot.
-        var oneHot = new Vector<T>(distribution.Length);
-        if (distribution.Length > 0)
-        {
-            oneHot[ArgMax(distribution)] = NumOps.One;
-        }
-        return oneHot;
+        return Vector<T>.CreateStandardBasis(distribution.Length, ArgMax(distribution));
     }
 
     /// <summary>
@@ -111,39 +64,44 @@ internal static class TemperatureSampling<T>
             throw new ArgumentException("The distribution must not be empty.", nameof(distribution));
         }
 
-        T r = NumOps.FromDouble(random.NextDouble());
-        T cumulative = NumOps.Zero;
-        int lastNonZero = -1;
+        // Inverse CDF: the first index whose cumulative mass exceeds r. A zero entry repeats the previous
+        // cumulative value, so the search never lands on it.
+        var engine = AiDotNetEngine.Current;
+        var mass = (Vector<T>)engine.ReLU(distribution);
+        var cumulative = engine.TensorCumSum(mass.AsTensor(), 0);
+        var r = Vector<T>.FromArray(new[] { NumOps.FromDouble(random.NextDouble()) }).AsTensor();
+        int index = engine.TensorSearchSorted(cumulative, r, true).GetFlat(0);
+        if (index < distribution.Length) return index;
 
-        for (int i = 0; i < distribution.Length; i++)
+        // Rounding left the total mass just below r: the last index with mass is the right answer.
+        int lastWithMass = -1;
+        foreach (int i in mass.NonZeroIndices()) lastWithMass = i;
+        return lastWithMass >= 0 ? lastWithMass : ArgMax(distribution);
+    }
+
+    /// <summary>
+    /// Speculative acceptance over a run of draft tokens: token <c>i</c> is accepted with probability
+    /// <c>min(1, p_target[i] / p_draft[i])</c>, and a draft probability at or below zero accepts exactly when the
+    /// target gives the token mass, without a random draw. Stops at the first rejection, and after an accepted
+    /// <paramref name="stopToken"/>.
+    /// </summary>
+    /// <returns>The number of leading draft tokens accepted.</returns>
+    public static int CountAccepted(Vector<T> targetProbabilities, Vector<T> draftProbabilities, Random random,
+        int[]? tokens = null, int? stopToken = null)
+    {
+        double[] target = targetProbabilities.Transform(NumOps.ToDouble).ToArray();
+        double[] draft = draftProbabilities.Transform(NumOps.ToDouble).ToArray();
+        for (int i = 0; i < target.Length; i++)
         {
-            if (!NumOps.GreaterThan(distribution[i], NumOps.Zero))
-            {
-                continue;
-            }
-            lastNonZero = i;
-            cumulative = NumOps.Add(cumulative, distribution[i]);
-            if (NumOps.LessThan(r, cumulative))
-            {
-                return i;
-            }
+            double ratio = draft[i] > 0 ? target[i] / draft[i] : 0;
+            bool accept = draft[i] <= 0 ? target[i] > 0 : random.NextDouble() < (ratio < 1 ? ratio : 1);
+            if (!accept) return i;
+            if (stopToken.HasValue && tokens is not null && tokens[i] == stopToken.Value) return i + 1;
         }
 
-        // Rounding left the cumulative sum just below r: the last index with mass is the right answer.
-        return lastNonZero >= 0 ? lastNonZero : ArgMax(distribution);
+        return target.Length;
     }
 
     /// <summary>Index of the largest entry (the first one on ties).</summary>
-    public static int ArgMax(Vector<T> distribution)
-    {
-        int best = 0;
-        for (int i = 1; i < distribution.Length; i++)
-        {
-            if (NumOps.GreaterThan(distribution[i], distribution[best]))
-            {
-                best = i;
-            }
-        }
-        return best;
-    }
+    public static int ArgMax(Vector<T> distribution) => distribution.Length == 0 ? 0 : distribution.IndexOfMax();
 }
