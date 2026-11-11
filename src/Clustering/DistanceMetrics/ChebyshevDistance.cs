@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
@@ -49,14 +50,9 @@ public class ChebyshevDistance<T> : DistanceMetricBase<T>
             return NumOps.Zero;
         }
 
-        T maxDiff = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            T absDiff = Abs(diff);
-            maxDiff = Max(maxDiff, absDiff);
-        }
-
-        return maxDiff;
+        return Engine.TensorMaxValue(Engine.Abs(Engine.Subtract(a, b)).AsTensor());
     }
+
+    /// <inheritdoc />
+    protected override Tensor<T> ComputeRowPairs(Tensor<T> a, Tensor<T> b) => ClusteringTensorOps.RowChebyshev(a, b);
 }
