@@ -198,18 +198,7 @@ public partial class AffinityPropagation<T> : ClusteringBase<T>
     }
 
     /// <summary>Centers and scales every column to unit (population) standard deviation; near-constant columns keep scale 1.</summary>
-    private Matrix<T> StandardizeColumns(Matrix<T> x)
-    {
-        int n = x.Rows;
-        int d = x.Columns;
-        var data = Tensor<T>.FromMatrix(x);
-        var mean = Engine.TensorBroadcastTo(Engine.ReduceMean(data, new[] { 0 }, true), new[] { n, d });
-        var centered = Engine.TensorSubtract(data, mean);
-        var std = Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, true));
-        var tiny = Engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
-        var scale = Engine.TensorWhere(tiny, Engine.TensorOnesLike(std), std);
-        return Engine.TensorDivide(centered, Engine.TensorBroadcastTo(scale, new[] { n, d })).ToMatrix();
-    }
+    private static Matrix<T> StandardizeColumns(Matrix<T> x) => ClusteringTensorOps.StandardizeColumns(x, out _, out _);
 
     /// <summary>For each cluster, the first training sample of that cluster closest to its center (0 when the cluster is empty).</summary>
     private int[] NearestMembersToCenters(Matrix<T> x, Vector<T> labels, Matrix<T> centers, int k)

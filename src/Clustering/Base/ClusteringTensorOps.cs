@@ -414,4 +414,34 @@ internal static class ClusteringTensorOps
         var condition = engine.TensorBroadcastTo(engine.Reshape(positive, new[] { candidate.Rows, 1 }), new[] { candidate.Rows, candidate.Columns });
         return engine.TensorWhere(condition, ToTensor(candidate), ToTensor(fallback)).ToMatrix();
     }
+
+    /// <summary>
+    /// Column means and population standard deviations of x (deviations below 1e-10 become 1), and x standardized with them.
+    /// </summary>
+    internal static Matrix<T> StandardizeColumns<T>(Matrix<T> x, out Vector<T> means, out Vector<T> stds)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        means = ColumnMeans(x);
+        var centered = SubtractRow(x, means);
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false));
+        var tiny = engine.TensorLessThan(std, numOps.FromDouble(1e-10));
+        stds = engine.TensorWhere(tiny, engine.TensorOnesLike(std), std).ToVector();
+        return engine.TensorDivide(centered, TileRow(stds, x.Rows)).ToMatrix();
+    }
+
+    /// <summary>(x - means) / stds applied to every row.</summary>
+    internal static Matrix<T> Standardize<T>(Matrix<T> x, Vector<T> means, Vector<T> stds)
+        => Engine.TensorDivide(SubtractRow(x, means), TileRow(stds, x.Rows)).ToMatrix();
+
+    /// <summary>x * stds + means applied to every row (inverse of <see cref="Standardize{T}"/>).</summary>
+    internal static Matrix<T> Destandardize<T>(Matrix<T> x, Vector<T> means, Vector<T> stds)
+    {
+        var engine = Engine;
+        return engine.TensorAdd(engine.TensorMultiply(ToTensor(x), TileRow(stds, x.Rows)), TileRow(means, x.Rows)).ToMatrix();
+    }
+
+    /// <summary>A [rows, d] tensor whose every row is <paramref name="row"/>.</summary>
+    internal static Tensor<T> TileRow<T>(Vector<T> row, int rows)
+        => Engine.TensorTile(Tensor<T>.FromVector(row, new[] { 1, row.Length }), new[] { rows, 1 });
 }
