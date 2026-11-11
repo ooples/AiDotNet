@@ -28,24 +28,6 @@ public class ResNetBackboneOptions : DetectionBackboneOptions
     public ResNetVariant Variant { get; set; } = ResNetVariant.ResNet50;
 
     /// <summary>
-    /// Gets or sets whether the batch normalizations keep normalizing with their running statistics while the
-    /// backbone trains. Default: <c>false</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Faster R-CNN and Cascade R-CNN set this: their FPN recipes (Detectron2's FrozenBN, mmdetection's
-    /// <c>norm_eval=True</c>) fix the backbone's statistics because a detection batch holds one or two images, too
-    /// few for useful batch statistics. The scale and shift still train. A training step then computes the same
-    /// backbone features Predict does, so the proposals it trains on are the ones inference produces.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Batch normalization usually measures the average and spread of each training batch.
-    /// Turning this on makes it use the stored averages instead, in training as well as in prediction.
-    /// </para>
-    /// </remarks>
-    public bool FreezeBatchNormStatistics { get; set; }
-
-    /// <summary>
     /// Throws when a value on this instance cannot produce a working backbone.
     /// </summary>
     /// <exception cref="ArgumentException">

@@ -165,17 +165,6 @@ public class ObjectDetectionOptions<T> : ModelOptions
     /// many are sampled, or how strongly boxes are corrected.</para>
     /// </remarks>
     public AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions? TwoStageLoss { get; set; }
-
-    /// <summary>
-    /// Whether Faster R-CNN and Cascade R-CNN keep their ResNet backbone's batch normalization statistics fixed while
-    /// training, or null for the published recipe (fixed).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Leave this empty to train as the papers do, with the backbone normalizing by its
-    /// stored statistics. Set it to <c>false</c> to have the backbone measure each training batch instead. See
-    /// <see cref="AiDotNet.ComputerVision.Detection.Backbones.ResNetBackboneOptions.FreezeBatchNormStatistics"/>.</para>
-    /// </remarks>
-    public bool? FreezeBackboneBatchNormStatistics { get; set; }
 }
 
 /// <summary>

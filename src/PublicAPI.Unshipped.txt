@@ -1219,7 +1219,3 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
-AiDotNet.ComputerVision.Detection.Backbones.ResNetBackboneOptions.FreezeBatchNormStatistics.get -> bool
-AiDotNet.ComputerVision.Detection.Backbones.ResNetBackboneOptions.FreezeBatchNormStatistics.set -> void
-AiDotNet.Models.Options.ObjectDetectionOptions<T>.FreezeBackboneBatchNormStatistics.get -> bool?
-AiDotNet.Models.Options.ObjectDetectionOptions<T>.FreezeBackboneBatchNormStatistics.set -> void
