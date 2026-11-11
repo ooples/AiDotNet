@@ -82,8 +82,8 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             totalSamples = _options.MaxSamples.Value;
         _sampleCount = totalSamples;
 
-        var featuresData = new double[totalSamples * PixelsPerImage];
-        var labelsData = new double[totalSamples * NumClasses];
+        var featuresData = new int[totalSamples * PixelsPerImage];
+        var labelsData = new int[totalSamples * NumClasses];
 
         var engine = AiDotNetEngine.Current;
         int dst = 0;
@@ -102,9 +102,9 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                 // in (h, w, c) HWC order, and the first `take` samples are copied as one block.
                 var raw = new byte[X.Length];
                 Buffer.BlockCopy(X, 0, raw, 0, X.Length);
-                var values = new double[X.Length];
+                var values = new int[X.Length];
                 Array.Copy(raw, values, X.Length);
-                var sampleMajor = engine.TensorPermute(new Tensor<double>(values, new[] { PixelsPerImage, n }), new[] { 1, 0 })
+                var sampleMajor = engine.TensorPermute(new Tensor<int>(values, new[] { PixelsPerImage, n }), new[] { 1, 0 })
                     .Contiguous();
                 sampleMajor.AsSpan().Slice(0, take * PixelsPerImage)
                     .CopyTo(featuresData.AsSpan(dst * PixelsPerImage, take * PixelsPerImage));
@@ -116,20 +116,20 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                 int label1 = y[i];           // 1..10 in source
                 int label = label1 == 10 ? 0 : label1; // map 10 -> 0 (digit 0)
                 if (label >= 0 && label < NumClasses)
-                    labelsData[dst * NumClasses + label] = 1.0;
+                    labelsData[dst * NumClasses + label] = 1;
             }
             if (dst >= totalSamples) break;
         }
 
-        var features = new Tensor<double>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
+        var features = new Tensor<int>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 }).Cast<T>();
         if (_options.Normalize)
         {
             // Raw bytes -> [0, 1] in one engine op (rows never filled stay 0)
-            features = engine.TensorDivideScalar(features, 255.0);
+            features = engine.TensorDivideScalar(features, NumOps.FromDouble(255.0));
         }
 
-        LoadedFeatures = features.Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
+        LoadedFeatures = features;
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
         await Task.CompletedTask;
     }

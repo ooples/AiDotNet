@@ -156,15 +156,13 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         var engine = AiDotNetEngine.Current;
 
         // Train-id lookup table with one extra slot holding IgnoreLabel for ids outside the table
-        var trainIdTable = new double[IdToTrainId.Length + 1];
+        var trainIdTable = new int[IdToTrainId.Length + 1];
         Array.Copy(IdToTrainId, trainIdTable, IdToTrainId.Length);
         trainIdTable[IdToTrainId.Length] = IgnoreLabel;
-        var trainIdTensor = new Tensor<double>(trainIdTable, new[] { trainIdTable.Length });
+        var trainIdTensor = new Tensor<int>(trainIdTable, new[] { trainIdTable.Length });
 
         // R channel = every third entry of the interleaved RGB label image
-        var redChannel = new int[pixelsPerLabel];
-        for (int p = 0; p < pixelsPerLabel; p++)
-            redChannel[p] = p * 3;
+        var redChannel = Enumerable.Range(0, pixelsPerLabel).Select(p => p * 3).ToArray();
         var redChannelIndices = new Tensor<int>(redChannel, new[] { pixelsPerLabel });
 
         for (int i = 0; i < totalSamples; i++)
@@ -195,19 +193,19 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
 
             // Take the R channel (engine gather), round to the nearest id, then optionally map through the
             // train-id table (engine gather; out-of-range ids hit the IgnoreLabel slot).
-            var labelPixels = new Tensor<double>(DoubleStorage.ToDoubles(lblPixels), new[] { lblPixels.Length });
+            var labelPixels = new Tensor<T>(lblPixels, new[] { lblPixels.Length });
             var srcIds = engine.TensorRound(engine.TensorIndexSelect(labelPixels, redChannelIndices, 0));
-            Tensor<double> outIds = srcIds;
+            Tensor<T> outIds = srcIds;
             if (_options.MapToTrainIds)
             {
                 var ids = srcIds.Cast<int>().AsSpan().ToArray();
                 var slots = new int[ids.Length];
                 for (int p = 0; p < ids.Length; p++)
                     slots[p] = ids[p] >= 0 && ids[p] < IdToTrainId.Length ? ids[p] : IdToTrainId.Length;
-                outIds = engine.TensorIndexSelect(trainIdTensor, new Tensor<int>(slots, new[] { slots.Length }), 0);
+                outIds = engine.TensorIndexSelect(trainIdTensor, new Tensor<int>(slots, new[] { slots.Length }), 0).Cast<T>();
             }
 
-            outIds.Cast<T>().AsSpan().CopyTo(labelsData.AsSpan(lblOff, pixelsPerLabel));
+            outIds.AsSpan().CopyTo(labelsData.AsSpan(lblOff, pixelsPerLabel));
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _h, _w, 3 });

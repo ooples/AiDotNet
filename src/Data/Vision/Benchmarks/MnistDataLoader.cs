@@ -171,26 +171,26 @@ public class MnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         int pixelsPerImage = rows * cols;
 
         // Build feature tensor
-        double[] featuresData;
+        int[] featuresData;
         int[] featureShape;
 
         if (_options.Flatten)
         {
-            featuresData = new double[samplesToLoad * pixelsPerImage];
+            featuresData = new int[samplesToLoad * pixelsPerImage];
             featureShape = new[] { samplesToLoad, pixelsPerImage };
         }
         else if (_options.Layout == ImageTensorLayout.NCHW)
         {
-            featuresData = new double[samplesToLoad * 1 * rows * cols];
+            featuresData = new int[samplesToLoad * 1 * rows * cols];
             featureShape = new[] { samplesToLoad, 1, rows, cols };
         }
         else
         {
-            featuresData = new double[samplesToLoad * rows * cols * 1];
+            featuresData = new int[samplesToLoad * rows * cols * 1];
             featureShape = new[] { samplesToLoad, rows, cols, 1 };
         }
 
-        var labelsData = new double[samplesToLoad * 10];
+        var labelsData = new int[samplesToLoad * 10];
 
         for (int i = 0; i < samplesToLoad; i++)
         {
@@ -211,18 +211,18 @@ public class MnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             }
 
             int labelOffset = i * 10;
-            labelsData[labelOffset + label] = 1.0;
+            labelsData[labelOffset + label] = 1;
         }
 
-        var features = new Tensor<double>(featuresData, featureShape);
+        var features = new Tensor<int>(featuresData, featureShape).Cast<T>();
         if (_options.Normalize)
         {
             // Raw bytes -> [0, 1] in one engine op
-            features = AiDotNetEngine.Current.TensorDivideScalar(features, 255.0);
+            features = AiDotNetEngine.Current.TensorDivideScalar(features, NumOps.FromDouble(255.0));
         }
 
-        LoadedFeatures = features.Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { samplesToLoad, 10 }).Cast<T>();
+        LoadedFeatures = features;
+        LoadedLabels = new Tensor<int>(labelsData, new[] { samplesToLoad, 10 }).Cast<T>();
         InitializeIndices(samplesToLoad);
     }
 

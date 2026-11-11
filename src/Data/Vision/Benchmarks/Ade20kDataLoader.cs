@@ -78,8 +78,9 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         int featureSize = w * h * 3;
         int labelSize = w * h;
         var featuresData = new T[totalSamples * featureSize];
-        var labelsData = new double[totalSamples * labelSize];
+        var labelsData = new T[totalSamples * labelSize];
 
+        T numClasses = NumOps.FromDouble(_options.NumClasses);
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -105,11 +106,11 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
                     var shape = new[] { annToRead };
                     var annPrefix = new T[annToRead];
                     Array.Copy(annPixels, annPrefix, annToRead);
-                    var values = new Tensor<double>(DoubleStorage.ToDoubles(annPrefix), shape);
-                    var ones = new Tensor<double>(shape);
-                    ones.Fill(1.0);
-                    var classCount = new Tensor<double>(shape);
-                    classCount.Fill(_options.NumClasses);
+                    var values = new Tensor<T>(annPrefix, shape);
+                    var ones = new Tensor<T>(shape);
+                    ones.Fill(NumOps.One);
+                    var classCount = new Tensor<T>(shape);
+                    classCount.Fill(numClasses);
                     var truncated = engine.TensorSubtract(values, engine.TensorFmod(values, ones));
                     engine.TensorFmod(truncated, classCount).AsSpan().CopyTo(labelsData.AsSpan(lblOff, annToRead));
                 }
@@ -117,7 +118,7 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, labelSize }).Cast<T>();
+        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, labelSize });
         InitializeIndices(totalSamples);
     }
 

@@ -78,9 +78,10 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         _sampleCount = totalSamples;
 
         var featuresData = new T[totalSamples * 32 * 32 * 3];
-        var labelsData = new double[totalSamples * _numClasses];
+        var labelsData = new int[totalSamples * _numClasses];
 
         bool nchw = _options.Layout == ImageTensorLayout.NCHW;
+        T scale = NumOps.FromDouble(_options.Normalize ? 1.0 / 255.0 : 1.0);
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -91,12 +92,10 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             int featureOffset = i * 32 * 32 * 3;
             int pixelStart = sampleOffset + 2;
             const int ppi = 32 * 32 * 3;
-            double scale = _options.Normalize ? 1.0 / 255.0 : 1.0;
-            var pixelValues = new double[ppi];
+            var pixelValues = new int[ppi];
             Array.Copy(data, pixelStart, pixelValues, 0, ppi);
             var sampleTensor = AiDotNetEngine.Current
-                .TensorMultiplyScalar(new Tensor<double>(pixelValues, new[] { 3, 32, 32 }), scale)
-                .Cast<T>();
+                .TensorMultiplyScalar(new Tensor<int>(pixelValues, new[] { 3, 32, 32 }).Cast<T>(), scale);
 
             if (!nchw)
                 sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);
@@ -106,14 +105,14 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             sampleTensor.CopyTo(featuresData.AsSpan(featureOffset, ppi));
 
             if (label >= 0 && label < _numClasses)
-                labelsData[i * _numClasses + label] = 1.0;
+                labelsData[i * _numClasses + label] = 1;
         }
 
         int[] shape = nchw
             ? new[] { totalSamples, 3, 32, 32 }
             : new[] { totalSamples, 32, 32, 3 };
         LoadedFeatures = new Tensor<T>(featuresData, shape);
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, _numClasses }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, _numClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

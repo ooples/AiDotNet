@@ -92,8 +92,8 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
             totalSamples = _options.MaxSamples.Value;
 
         _sampleCount = totalSamples;
-        var featuresData = new double[totalSamples * _featureSize];
-        var labelsData = new double[totalSamples * NumClasses];
+        var featuresData = new int[totalSamples * _featureSize];
+        var labelsData = new int[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -115,18 +115,18 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                 Array.Copy(imageBytes, 0, featuresData, featureOffset, pixelCount);
             }
 
-            labelsData[i * NumClasses + classIndex] = 1.0;
+            labelsData[i * NumClasses + classIndex] = 1;
         }
 
-        var features = new Tensor<double>(featuresData, new[] { totalSamples, _featureSize });
+        var features = new Tensor<int>(featuresData, new[] { totalSamples, _featureSize }).Cast<T>();
         if (_options.Normalize)
         {
             // Raw bytes -> [0, 1] in one engine op (unfilled positions stay 0)
-            features = AiDotNetEngine.Current.TensorDivideScalar(features, 255.0);
+            features = AiDotNetEngine.Current.TensorDivideScalar(features, NumOps.FromDouble(255.0));
         }
 
-        LoadedFeatures = features.Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
+        LoadedFeatures = features;
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

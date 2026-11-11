@@ -105,20 +105,20 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         }
 
         var engine = AiDotNetEngine.Current;
-        var labelsData = new double[totalSamples * NumClasses];
+        var labelsData = new int[totalSamples * NumClasses];
 
         // STL-10 storage: per-image, the bytes are organized as 3 channels of
         // 96×96 each, stored column-major within the channel. We transpose to
         // (h, w, c) row-major HWC for the output tensor.
         // The raw block is [N, c, col, row]; one engine permute gives [N, row, col, c] (HWC).
-        var rawPixels = new double[totalSamples * PixelsPerImage];
+        var rawPixels = new int[totalSamples * PixelsPerImage];
         Array.Copy(xBytes, 0, rawPixels, 0, rawPixels.Length);
         var features = engine.TensorPermute(
-            new Tensor<double>(rawPixels, new[] { totalSamples, 3, ImageSize, ImageSize }), new[] { 0, 3, 2, 1 })
+            new Tensor<int>(rawPixels, new[] { totalSamples, 3, ImageSize, ImageSize }).Cast<T>(), new[] { 0, 3, 2, 1 })
             .Contiguous();
         if (_options.Normalize)
         {
-            features = engine.TensorDivideScalar(features, 255.0);
+            features = engine.TensorDivideScalar(features, NumOps.FromDouble(255.0));
         }
 
         for (int i = 0; i < totalSamples; i++)
@@ -130,12 +130,12 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
                 if (label < 0 || label >= NumClasses)
                     throw new InvalidDataException(
                         $"STL-10 {yFile} contains out-of-range label {labelBytes[i]} at index {i}. Expected 1..{NumClasses}.");
-                labelsData[i * NumClasses + label] = 1.0;
+                labelsData[i * NumClasses + label] = 1;
             }
         }
 
-        LoadedFeatures = features.Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
+        LoadedFeatures = features;
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 
