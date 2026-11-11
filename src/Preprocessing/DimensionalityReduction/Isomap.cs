@@ -38,8 +38,8 @@ public class Isomap<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly IsomapPathAlgorithm _pathAlgorithm;
 
     // Fitted parameters
-    private double[,]? _embedding;
-    private double[,]? _geodesicDistances;
+    private Matrix<T>? _embedding;
+    private Matrix<T>? _geodesicDistances;
     private int _nSamples;
     private int _nFeaturesIn;
 
@@ -56,12 +56,12 @@ public class Isomap<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the geodesic distance matrix.
     /// </summary>
-    public double[,]? GeodesicDistances => _geodesicDistances;
+    public Matrix<T>? GeodesicDistances => _geodesicDistances;
 
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -107,328 +107,100 @@ public class Isomap<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         _nSamples = data.Rows;
         _nFeaturesIn = data.Columns;
-        int n = data.Rows;
-        int p = data.Columns;
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
 
         // Step 1: Compute pairwise Euclidean distances
-        var distances = ComputeDistanceMatrix(X, n, p);
+        var distances = DimensionalityReductionOps.EuclideanDistances(x, x);
 
         // Step 2: Build k-nearest neighbors graph
-        var graph = BuildNeighborGraph(distances, n);
+        var graph = BuildNeighborGraph(distances);
 
         // Step 3: Compute shortest path distances (geodesic)
-        _geodesicDistances = _pathAlgorithm == IsomapPathAlgorithm.FloydWarshall
-            ? FloydWarshall(graph, n)
-            : Dijkstra(graph, n);
+        var geodesic = _pathAlgorithm == IsomapPathAlgorithm.FloydWarshall
+            ? FloydWarshall(graph)
+            : Dijkstra(graph);
 
         // Check for disconnected graph
-        for (int i = 0; i < n; i++)
+        if (NumOps.IsInfinity(Engine.TensorMaxValue(geodesic)))
         {
-            for (int j = 0; j < n; j++)
-            {
-                if (double.IsPositiveInfinity(_geodesicDistances[i, j]))
-                {
-                    throw new InvalidOperationException(
-                        "The neighborhood graph is disconnected. Try increasing n_neighbors.");
-                }
-            }
+            throw new InvalidOperationException(
+                "The neighborhood graph is disconnected. Try increasing n_neighbors.");
         }
+
+        _geodesicDistances = geodesic.ToMatrix();
 
         // Step 4: Apply classical MDS to geodesic distance matrix
-        _embedding = ClassicalMDS(_geodesicDistances, n);
+        _embedding = DimensionalityReductionOps.ClassicalMds(geodesic, _nComponents).ToMatrix();
     }
 
-    private double[,] ComputeDistanceMatrix(double[,] X, int n, int p)
+    /// <summary>
+    /// Symmetric k-nearest-neighbour graph: edge weight = distance, 0 on the diagonal, +infinity where there is no edge.
+    /// </summary>
+    private Tensor<T> BuildNeighborGraph(Tensor<T> distances)
     {
-        var distances = new double[n, n];
+        var engine = Engine;
+        int n = distances.Shape[0];
+        var infinity = NumOps.FromDouble(double.PositiveInfinity);
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = X[i, k] - X[j, k];
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
+        var neighbors = DimensionalityReductionOps.NearestNeighbors(distances, _nNeighbors);
+        var directed = DimensionalityReductionOps.ScatterRows(
+            neighbors, DimensionalityReductionOps.TakeRows(distances, neighbors), n, infinity);
 
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
-
-        return distances;
-    }
-
-    private double[,] BuildNeighborGraph(double[,] distances, int n)
-    {
-        // Initialize graph with infinity
-        var graph = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                graph[i, j] = i == j ? 0 : double.PositiveInfinity;
-            }
-        }
-
-        // Find k-nearest neighbors for each point
-        for (int i = 0; i < n; i++)
-        {
-            // Get indices sorted by distance
-            var neighbors = Enumerable.Range(0, n)
-                .Where(j => j != i)
-                .OrderBy(j => distances[i, j])
-                .Take(_nNeighbors)
-                .ToList();
-
-            // Add edges to nearest neighbors
-            foreach (int j in neighbors)
-            {
-                graph[i, j] = distances[i, j];
-                graph[j, i] = distances[j, i]; // Make symmetric
-            }
-        }
-
+        // An edge found from either end is kept in both directions
+        var graph = engine.TensorMin(directed, engine.TensorTranspose(directed));
+        engine.TensorFillDiagonalInPlace(graph, NumOps.Zero);
         return graph;
     }
 
-    private double[,] FloydWarshall(double[,] graph, int n)
+    /// <summary>
+    /// All-pairs shortest paths by Floyd-Warshall: dist = min(dist, dist[:, k] + dist[k, :]) for every k.
+    /// </summary>
+    private Tensor<T> FloydWarshall(Tensor<T> graph)
     {
-        var dist = (double[,])graph.Clone();
-
+        var engine = Engine;
+        int n = graph.Shape[0];
+        var dist = graph;
         for (int k = 0; k < n; k++)
         {
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (dist[i, k] + dist[k, j] < dist[i, j])
-                    {
-                        dist[i, j] = dist[i, k] + dist[k, j];
-                    }
-                }
-            }
+            var throughK = engine.TensorAdd(engine.TensorNarrow(dist, 1, k, 1), engine.TensorNarrow(dist, 0, k, 1));
+            dist = engine.TensorMin(dist, throughK);
         }
 
         return dist;
     }
 
-    private double[,] Dijkstra(double[,] graph, int n)
+    /// <summary>
+    /// All-pairs shortest paths by Dijkstra, run for every source at once: each step settles, per source row,
+    /// the closest unsettled vertex u and relaxes d[source, v] = min(d[source, v], d[source, u] + w(u, v)).
+    /// </summary>
+    private Tensor<T> Dijkstra(Tensor<T> graph)
     {
-        var dist = new double[n, n];
+        var engine = Engine;
+        int n = graph.Shape[0];
+        var infinity = NumOps.FromDouble(double.PositiveInfinity);
+        var infinite = DimensionalityReductionOps.Full(new[] { n, n }, infinity);
 
-        for (int source = 0; source < n; source++)
+        var dist = infinite.Clone();
+        engine.TensorFillDiagonalInPlace(dist, NumOps.Zero);
+        var settled = new Tensor<T>(new[] { n, n });
+        var settleMark = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.One);
+
+        for (int step = 0; step < n; step++)
         {
-            // Initialize distances
-            var d = new double[n];
-            var visited = new bool[n];
+            // Closest unsettled vertex for every source (first index among equal distances)
+            var open = engine.TensorWhere(settled, infinite, dist);
+            var closest = engine.Reshape(engine.TensorArgMin(open, 1), new[] { n, 1 });
+            settled = engine.TensorScatter(settled, closest, settleMark, 1);
 
-            for (int i = 0; i < n; i++)
-            {
-                d[i] = double.PositiveInfinity;
-            }
-            d[source] = 0;
-
-            // Priority queue simulation using linear search
-            for (int count = 0; count < n; count++)
-            {
-                // Find minimum distance unvisited vertex
-                int u = -1;
-                double minDist = double.PositiveInfinity;
-                for (int i = 0; i < n; i++)
-                {
-                    if (!visited[i] && d[i] < minDist)
-                    {
-                        minDist = d[i];
-                        u = i;
-                    }
-                }
-
-                if (u == -1) break;
-                visited[u] = true;
-
-                // Update distances
-                for (int v = 0; v < n; v++)
-                {
-                    if (!visited[v] && graph[u, v] < double.PositiveInfinity)
-                    {
-                        double newDist = d[u] + graph[u, v];
-                        if (newDist < d[v])
-                        {
-                            d[v] = newDist;
-                        }
-                    }
-                }
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                dist[source, i] = d[i];
-            }
+            // Relax through the settled vertex; an unreachable vertex (infinite distance) changes nothing
+            var throughClosest = engine.TensorAdd(
+                engine.TensorTakeAlongDim(dist, closest, 1),
+                engine.TensorIndexSelect(graph, engine.Reshape(closest, new[] { n }), 0));
+            dist = engine.TensorMin(dist, throughClosest);
         }
 
         return dist;
-    }
-
-    private double[,] ClassicalMDS(double[,] D, int n)
-    {
-        // Convert distance matrix to squared distances
-        var D2 = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                D2[i, j] = D[i, j] * D[i, j];
-            }
-        }
-
-        // Double centering: B = -0.5 * J * D^2 * J where J = I - 1/n * 1*1'
-        var B = new double[n, n];
-
-        // Compute row means and grand mean
-        var rowMeans = new double[n];
-        double grandMean = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                rowMeans[i] += D2[i, j];
-            }
-            rowMeans[i] /= n;
-            grandMean += rowMeans[i];
-        }
-        grandMean /= n;
-
-        var colMeans = new double[n];
-        for (int j = 0; j < n; j++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                colMeans[j] += D2[i, j];
-            }
-            colMeans[j] /= n;
-        }
-
-        // B = -0.5 * (D^2 - row_mean - col_mean + grand_mean)
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                B[i, j] = -0.5 * (D2[i, j] - rowMeans[i] - colMeans[j] + grandMean);
-            }
-        }
-
-        // Eigenvalue decomposition of B
-        var (eigenvalues, eigenvectors) = ComputeEigen(B, n);
-
-        // Sort by eigenvalue descending
-        var indices = Enumerable.Range(0, n)
-            .OrderByDescending(i => eigenvalues[i])
-            .ToArray();
-
-        // Take top k components
-        int k = Math.Min(_nComponents, n);
-        var embedding = new double[n, k];
-
-        for (int d = 0; d < k; d++)
-        {
-            int idx = indices[d];
-            double scale = Math.Sqrt(Math.Max(eigenvalues[idx], 0));
-
-            for (int i = 0; i < n; i++)
-            {
-                embedding[i, d] = eigenvectors[idx, i] * scale;
-            }
-        }
-
-        return embedding;
-    }
-
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeEigen(double[,] matrix, int n)
-    {
-        var eigenvalues = new double[n];
-        var eigenvectors = new double[n, n];
-        var A = (double[,])matrix.Clone();
-
-        for (int k = 0; k < n; k++)
-        {
-            var v = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = 1.0 / Math.Sqrt(n);
-            }
-
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                double norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double eigenvalue = 0;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[k] = eigenvalue;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[k, i] = v[i];
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
     }
 
     /// <summary>
@@ -449,19 +221,7 @@ public class Isomap<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int k = _embedding.GetLength(1);
-        var result = new T[n, k];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>

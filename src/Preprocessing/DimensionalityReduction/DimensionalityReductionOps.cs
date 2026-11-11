@@ -186,6 +186,33 @@ internal static class DimensionalityReductionOps
     /// <summary>The inverse of a square matrix by LU with partial pivoting.</summary>
     internal static Tensor<T> Inverse<T>(Tensor<T> a) => Solve(a, Identity<T>(a.Shape[0]));
 
-    /// <summary>Converts a scalar to int by truncation toward zero.</summary>
-    internal static int ToInt<T>(T value) => (int)MathHelper.GetNumericOperations<T>().ToDouble(value);
+    /// <summary>
+    /// Double centering of a squared-distance matrix: B = -1/2 (D2 - row means - column means + grand mean).
+    /// </summary>
+    internal static Tensor<T> DoubleCenter<T>(Tensor<T> squaredDistances)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var rowMeans = engine.ReduceMean(squaredDistances, new[] { 1 }, true);
+        var columnMeans = engine.ReduceMean(squaredDistances, new[] { 0 }, true);
+        var grandMean = engine.TensorMean(rowMeans);
+        var centered = engine.TensorAddScalar(
+            engine.TensorSubtract(engine.TensorSubtract(squaredDistances, rowMeans), columnMeans), grandMean);
+        return engine.TensorMultiplyScalar(centered, numOps.FromDouble(-0.5));
+    }
+
+    /// <summary>
+    /// Classical (Torgerson) MDS of a distance matrix: the leading <paramref name="components"/> eigenvectors of the
+    /// double-centred squared distances, each scaled by sqrt(max(eigenvalue, 0)).
+    /// </summary>
+    internal static Tensor<T> ClassicalMds<T>(Tensor<T> distances, int components)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int k = Math.Min(components, distances.Shape[0]);
+        var b = DoubleCenter(engine.TensorSquare(distances));
+        var (values, vectors) = SymmetricEigen(b, descending: true);
+        var scale = engine.TensorSqrt(engine.TensorClampMin(engine.TensorNarrow(values, 0, 0, k), numOps.Zero));
+        return ScaleColumns(FirstColumns(vectors, k), scale);
+    }
 }
