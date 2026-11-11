@@ -226,15 +226,6 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
-    /// A [d x d] tensor of ones with a zero diagonal.
-    /// </summary>
-    private protected Tensor<T> OffDiagonalMask(int d)
-    {
-        var identity = Engine.TensorEye<T>(d);
-        return Engine.TensorSubtract(Engine.TensorOnesLike(identity), identity);
-    }
-
-    /// <summary>
     /// Projects a weighted directed graph onto a DAG by retaining the strongest
     /// edges that do not introduce a directed cycle.
     /// </summary>

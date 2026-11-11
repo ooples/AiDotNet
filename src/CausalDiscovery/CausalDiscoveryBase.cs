@@ -156,6 +156,26 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     }
 
     /// <summary>
+    /// A [d x d] tensor of ones with a zero diagonal.
+    /// </summary>
+    private protected Tensor<T> OffDiagonalMask(int d)
+    {
+        var identity = Engine.TensorEye<T>(d);
+        return Engine.TensorSubtract(Engine.TensorOnesLike(identity), identity);
+    }
+
+    /// <summary>
+    /// sigmoid(x / tau), saturated to exactly 1 above 20 and 0 below -20.
+    /// </summary>
+    private protected Tensor<T> ClampedSigmoid(Tensor<T> logits, double tau)
+    {
+        var x = Engine.TensorDivideScalar(logits, NumOps.FromDouble(tau));
+        var sigmoid = Engine.TensorSigmoid(x);
+        sigmoid = Engine.TensorWhere(Engine.TensorGreaterThan(x, NumOps.FromDouble(20)), Engine.TensorOnesLike(x), sigmoid);
+        return Engine.TensorWhere(Engine.TensorLessThan(x, NumOps.FromDouble(-20)), Engine.TensorZerosLike(x), sigmoid);
+    }
+
+    /// <summary>
     /// Subtracts each column's mean from an [n x d] tensor.
     /// </summary>
     private protected Tensor<T> CenterColumns(Tensor<T> x)
