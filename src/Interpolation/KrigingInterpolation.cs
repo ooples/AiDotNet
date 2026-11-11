@@ -206,43 +206,56 @@ public partial class KrigingInterpolation<T> : I2DInterpolation<T>
     private void EstimateVariogramParameters()
     {
         const int numBins = 10;
-        var distances = new List<T>();
-        var gammas = new List<T>();
+        var engine = AiDotNetEngine.Current;
+        int n = _x.Length;
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
+        Tensor<T> zs = _z.AsTensor();
 
-        // Calculate distances and semivariances
-        for (int i = 0; i < _x.Length; i++)
-        {
-            for (int j = i + 1; j < _x.Length; j++)
-            {
-                T distance = CalculateDistance(_x[i], _y[i], _x[j], _y[j]);
-                T diff = _numOps.Subtract(_z[i], _z[j]);
-                T squaredDiff = _numOps.Multiply(diff, diff);
-                T gamma = _numOps.Divide(squaredDiff, _numOps.FromDouble(2));
+        // Calculate distances and semivariances for every pair i < j, kept in row-major (i, then j) order
+        Tensor<T> dx = engine.TensorSubtract(xs.Reshape(n, 1), xs.Reshape(1, n));
+        Tensor<T> dy = engine.TensorSubtract(ys.Reshape(n, 1), ys.Reshape(1, n));
+        Tensor<T> dz = engine.TensorSubtract(zs.Reshape(n, 1), zs.Reshape(1, n));
+        Tensor<T> pairDistances = engine.TensorSqrt(engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy)));
+        Tensor<T> pairGammas = engine.TensorDivideScalar(engine.TensorMultiply(dz, dz), _numOps.FromDouble(2));
+        var aboveDiagonal = engine.TensorEqScalar(engine.TensorTriangularMask<T>(n, upper: true, diagonal: 1), _numOps.One);
 
-                distances.Add(distance);
-                gammas.Add(gamma);
-            }
-        }
+        var distances = new List<T>(engine.TensorMaskedSelect(pairDistances, aboveDiagonal).ToVector());
+        var gammas = new List<T>(engine.TensorMaskedSelect(pairGammas, aboveDiagonal).ToVector());
 
         // Sort distances and gammas
         var sortedPairs = distances.Zip(gammas, (d, g) => new { Distance = d, Gamma = g })
                                    .OrderBy(pair => Convert.ToDouble(pair.Distance))
                                    .ToList();
 
-        // Bin the data
-        var binnedDistances = new List<T>();
-        var binnedGammas = new List<T>();
+        // Bin the data: numBins consecutive bins of pairsPerBin sorted pairs each, averaged per bin
         int pairsPerBin = sortedPairs.Count / numBins;
-
-        for (int i = 0; i < numBins; i++)
+        if (pairsPerBin == 0)
         {
-            var bin = sortedPairs.Skip(i * pairsPerBin).Take(pairsPerBin);
-            binnedDistances.Add(_numOps.FromDouble(bin.Average(p => Convert.ToDouble(p.Distance))));
-            binnedGammas.Add(_numOps.FromDouble(bin.Average(p => Convert.ToDouble(p.Gamma))));
+            // An empty bin has no average (Enumerable.Average threw this for it before the bins were vectorized)
+            throw new InvalidOperationException("Sequence contains no elements");
         }
+
+        var binnedDistances = new List<T>(BinMeans(new Vector<T>(sortedPairs.Select(pair => pair.Distance)), numBins, pairsPerBin));
+        var binnedGammas = new List<T>(BinMeans(new Vector<T>(sortedPairs.Select(pair => pair.Gamma)), numBins, pairsPerBin));
 
         // Fit exponential variogram model using least squares
         FitExponentialVariogram(binnedDistances, binnedGammas);
+    }
+
+    /// <summary>
+    /// Averages the first <paramref name="binCount"/> * <paramref name="binSize"/> values in consecutive bins.
+    /// </summary>
+    /// <param name="values">The values, in bin order.</param>
+    /// <param name="binCount">The number of bins.</param>
+    /// <param name="binSize">The number of values in each bin; values past the last full bin are ignored.</param>
+    /// <returns>The mean of each bin.</returns>
+    private static Vector<T> BinMeans(Vector<T> values, int binCount, int binSize)
+    {
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> binned = engine.TensorSlice(values.AsTensor(), new[] { 0 }, new[] { binCount * binSize })
+            .Reshape(binCount, binSize);
+        return engine.ReduceMean(binned, new[] { 1 }, keepDims: false).ToVector();
     }
 
     /// <summary>
@@ -262,20 +275,17 @@ public partial class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <param name="gammas">List of binned semi-variance values corresponding to the distances.</param>
     private void FitExponentialVariogram(List<T> distances, List<T> gammas)
     {
+        var engine = AiDotNetEngine.Current;
         int n = distances.Count;
-        T sumX = _numOps.Zero, sumY = _numOps.Zero, sumXY = _numOps.Zero, sumX2 = _numOps.Zero;
         T maxGamma = gammas.Max() ?? _numOps.Zero;
 
-        for (int i = 0; i < n; i++)
-        {
-            T x = distances[i];
-            T y = _numOps.Log(_numOps.Subtract(maxGamma, gammas[i]));
+        Tensor<T> x = new Vector<T>(distances).AsTensor();
+        Tensor<T> y = engine.TensorLog(engine.ScalarMinusTensor(maxGamma, new Vector<T>(gammas).AsTensor()));
 
-            sumX = _numOps.Add(sumX, x);
-            sumY = _numOps.Add(sumY, y);
-            sumXY = _numOps.Add(sumXY, _numOps.Multiply(x, y));
-            sumX2 = _numOps.Add(sumX2, _numOps.Multiply(x, x));
-        }
+        T sumX = engine.TensorSum(x);
+        T sumY = engine.TensorSum(y);
+        T sumXY = engine.TensorSum(engine.TensorMultiply(x, y));
+        T sumX2 = engine.TensorSum(engine.TensorMultiply(x, x));
 
         T slope = _numOps.Divide(
             _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(n), sumXY), _numOps.Multiply(sumX, sumY)),
@@ -293,28 +303,5 @@ public partial class KrigingInterpolation<T> : I2DInterpolation<T>
 
         // Ensure nugget is non-negative
         _nugget = MathHelper.Max(_nugget, _numOps.Zero);
-    }
-
-    /// <summary>
-    /// Calculates the Euclidean distance between two points in 2D space.
-    /// </summary>
-    /// <remarks>
-    /// This method computes the straight-line distance between two points using the Pythagorean theorem.
-    /// 
-    /// <b>For Beginners:</b> This calculates how far apart two points are in a straight line,
-    /// just like measuring the distance between two pins on a map with a ruler.
-    /// It uses the familiar formula from geometry: distance = v((x2-x1)² + (y2-y1)²).
-    /// </remarks>
-    /// <param name="x1">The x-coordinate of the first point.</param>
-    /// <param name="y1">The y-coordinate of the first point.</param>
-    /// <param name="x2">The x-coordinate of the second point.</param>
-    /// <param name="y2">The y-coordinate of the second point.</param>
-    /// <returns>The distance between the two points.</returns>
-    private T CalculateDistance(T x1, T y1, T x2, T y2)
-    {
-        T dx = _numOps.Subtract(x1, x2);
-        T dy = _numOps.Subtract(y1, y2);
-
-        return _numOps.Sqrt(_numOps.Add(_numOps.Multiply(dx, dx), _numOps.Multiply(dy, dy)));
     }
 }
