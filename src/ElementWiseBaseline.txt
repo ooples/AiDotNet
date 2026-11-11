@@ -17202,7 +17202,6 @@
 1	ADNELEM002|AiDotNet.NeuralNetworks.Layers.DenseBlockLayer<T>.ApplyReluDerivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 2	ADNELEM002|AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.ConvertToOnnx(AiDotNet.Onnx.OnnxGraphBuilder, AiDotNet.Onnx.OnnxLayerInputs)
 2	ADNELEM002|AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.EnsureWeightShapeForInput(int)
-1	ADNELEM002|AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Interfaces.ILossFunction<T>)
 9	ADNELEM002|AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<T>.ComputeTimeGradientsDirect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int)
 7	ADNELEM002|AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<T>.ComputeTimeGradientsSpectral(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int)
 1	ADNELEM002|AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<T>.EnsureEigenbasisForExecution()
