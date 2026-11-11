@@ -339,7 +339,18 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
             return;
         }
 
-        var inputKernel = Tensor<T>.FromMatrix(InputKernelMatrix());
+        // Input kernel matrix Kx[i, j] = k(x_i, x_j) over the training inputs
+        var inputKernelMatrix = new Matrix<T>(_X.Rows, _X.Rows);
+        for (int ri = 0; ri < _X.Rows; ri++)
+        {
+            var rowA = _X.GetRow(ri);
+            for (int cj = 0; cj < _X.Rows; cj++)
+            {
+                inputKernelMatrix[ri, cj] = _kernel.Calculate(rowA, _X.GetRow(cj));
+            }
+        }
+
+        var inputKernel = Tensor<T>.FromMatrix(inputKernelMatrix);
 
         // Targets stacked task by task: y[t*n + i] = Y[i, t] - mean_t
         var targets = engine.TensorTranspose(CenteredTargets()).Reshape(new[] { size, 1 });
@@ -427,6 +438,12 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         const double Beta2 = 0.999;
         const double Epsilon = 1e-8;
         T half = _numOps.FromDouble(0.5);
+        T beta1 = _numOps.FromDouble(Beta1);
+        T oneMinusBeta1 = _numOps.FromDouble(1 - Beta1);
+        T beta2 = _numOps.FromDouble(Beta2);
+        T oneMinusBeta2 = _numOps.FromDouble(1 - Beta2);
+        T learningRate = _numOps.FromDouble(LearningRate);
+        T epsilon = _numOps.FromDouble(Epsilon);
 
         for (int step = 0; step <= _hyperparameterOptimizationSteps; step++)
         {
@@ -480,16 +497,16 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
 
             // Adam, ascending the evidence.
             firstMoment = engine.TensorAdd(
-                engine.TensorMultiplyScalar(firstMoment, _numOps.FromDouble(Beta1)),
-                engine.TensorMultiplyScalar(gradient, _numOps.FromDouble(1 - Beta1)));
+                engine.TensorMultiplyScalar(firstMoment, beta1),
+                engine.TensorMultiplyScalar(gradient, oneMinusBeta1));
             secondMoment = engine.TensorAdd(
-                engine.TensorMultiplyScalar(secondMoment, _numOps.FromDouble(Beta2)),
-                engine.TensorMultiplyScalar(engine.TensorSquare(gradient), _numOps.FromDouble(1 - Beta2)));
+                engine.TensorMultiplyScalar(secondMoment, beta2),
+                engine.TensorMultiplyScalar(engine.TensorSquare(gradient), oneMinusBeta2));
             var firstHat = engine.TensorDivideScalar(firstMoment, _numOps.FromDouble(1 - Math.Pow(Beta1, step + 1)));
             var secondHat = engine.TensorDivideScalar(secondMoment, _numOps.FromDouble(1 - Math.Pow(Beta2, step + 1)));
             var stepSize = engine.TensorDivide(
-                engine.TensorMultiplyScalar(firstHat, _numOps.FromDouble(LearningRate)),
-                engine.TensorAddScalar(engine.TensorSqrt(secondHat), _numOps.FromDouble(Epsilon)));
+                engine.TensorMultiplyScalar(firstHat, learningRate),
+                engine.TensorAddScalar(engine.TensorSqrt(secondHat), epsilon));
             theta = engine.TensorAdd(theta, stepSize);
         }
 
@@ -536,7 +553,15 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         int totalSize = n * _numTasks;
 
         // Compute input kernel matrix
-        var Kx = InputKernelMatrix();
+        var Kx = new Matrix<T>(_X.Rows, _X.Rows);
+        for (int ri = 0; ri < _X.Rows; ri++)
+        {
+            var rowA = _X.GetRow(ri);
+            for (int cj = 0; cj < _X.Rows; cj++)
+            {
+                Kx[ri, cj] = _kernel.Calculate(rowA, _X.GetRow(cj));
+            }
+        }
 
         // Build combined kernel using Kronecker structure: K[t1·n + i, t2·n + j] = B[t1, t2] · Kx[i, j]
         var engine = Engine;
@@ -564,39 +589,6 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         var targets = Tensor<T>.FromMatrix(_Y);
         var means = Tensor<T>.FromVector(_taskMeans).Reshape(new[] { 1, _numTasks });
         return engine.TensorSubtract(targets, engine.TensorBroadcastTo(means, new[] { _Y.Rows, _numTasks }));
-    }
-
-    /// <summary>
-    /// Input kernel matrix Kx[i, j] = k(x_i, x_j) over the training inputs.
-    /// </summary>
-    private Matrix<T> InputKernelMatrix()
-    {
-        int n = _X.Rows;
-        var Kx = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                Kx[i, j] = _kernel.Calculate(_X.GetRow(i), _X.GetRow(j));
-            }
-        }
-
-        return Kx;
-    }
-
-    /// <summary>
-    /// Cross kernel vector k(x, x_i) over the training inputs.
-    /// </summary>
-    private Vector<T> CrossKernelVector(Vector<T> x)
-    {
-        int n = _X.Rows;
-        var kStar = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            kStar[i] = _kernel.Calculate(x, _X.GetRow(i));
-        }
-
-        return kStar;
     }
 
     private void ComputeAlpha()
@@ -638,7 +630,12 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         int n = _X.Rows;
 
         // Compute kernel vector between test point and training points
-        var kStar = CrossKernelVector(x);
+        var kStar = new Vector<T>(_X.Rows);
+        for (int ri = 0; ri < _X.Rows; ri++)
+        {
+            kStar[ri] = _kernel.Calculate(x, _X.GetRow(ri));
+        }
+
         var engine = Engine;
         var taskCovariance = Tensor<T>.FromMatrix(_taskCovariance);
         T kStarStar = _kernel.Calculate(x, x);

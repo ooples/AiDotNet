@@ -557,6 +557,9 @@ public class HyperparameterOptimizer<T>
         var foldScores = new List<double>();
         int startIdx = 0;
 
+        T varianceFloor = _numOps.FromDouble(1e-10);
+        T twoPi = _numOps.FromDouble(2 * Math.PI);
+        T minusHalf = _numOps.FromDouble(-0.5);
         for (int fold = 0; fold < numFolds; fold++)
         {
             int foldSize = baseFoldSize + (fold < remainder ? 1 : 0);
@@ -592,12 +595,12 @@ public class HyperparameterOptimizer<T>
                 var predictionTensor = engine.TensorSlice(Tensor<T>.FromVector(predictions), new[] { 0 }, new[] { foldSize });
                 var varianceTensor = engine.TensorMax(
                     engine.TensorSlice(Tensor<T>.FromVector(variances), new[] { 0 }, new[] { foldSize }),
-                    _numOps.FromDouble(1e-10));
+                    varianceFloor);
                 var diff = engine.TensorSubtract(Tensor<T>.FromVector(yTest), predictionTensor);
                 var terms = engine.TensorAdd(
-                    engine.TensorLog(engine.TensorMultiplyScalar(varianceTensor, _numOps.FromDouble(2 * Math.PI))),
+                    engine.TensorLog(engine.TensorMultiplyScalar(varianceTensor, twoPi)),
                     engine.TensorDivide(engine.TensorSquare(diff), varianceTensor));
-                T testLl = _numOps.Multiply(_numOps.FromDouble(-0.5), engine.TensorSum(terms));
+                T testLl = _numOps.Multiply(minusHalf, engine.TensorSum(terms));
 
                 foldScores.Add(_numOps.ToDouble(testLl) / foldSize);
             }

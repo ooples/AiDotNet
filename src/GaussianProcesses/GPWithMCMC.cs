@@ -318,7 +318,20 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
         // outputVar and adds noiseVar to the diagonal), so it is constant across every evaluation —
         // computing it once here removes ~n^2/2 generic kernel calls from each slice-sampling evaluation.
         _centeredTargets = Tensor<T>.FromVector(_y).Reshape(new[] { n, 1 });
-        _baseKernel = Tensor<T>.FromMatrix(BuildBaseKernelMatrix());
+        // Base kernel matrix K_base[a, b] = k(x_a, x_b) over the training inputs (symmetric).
+        var kernelMatrix = new Matrix<T>(n, n);
+        for (int a = 0; a < n; a++)
+        {
+            var xa = GetRow(X, a);
+            for (int b = a; b < n; b++)
+            {
+                T kval = _kernel.Calculate(xa, GetRow(X, b));
+                kernelMatrix[a, b] = kval;
+                kernelMatrix[b, a] = kval;
+            }
+        }
+
+        _baseKernel = Tensor<T>.FromMatrix(kernelMatrix);
         _identity = engine.TensorEye<T>(n);
 
         // Initialize hyperparameters in log-space
@@ -399,7 +412,14 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
         var noiseVars = Tensor<T>.FromVector(
             GaussianProcessEngineOps.FromDoubles<T>(_samples.Select(sample => sample[2]).ToArray()));
 
-        var baseCross = Tensor<T>.FromVector(BaseCrossCovariance(x));
+        // Base cross-covariance k(x, x_i) over the training inputs
+        var kernelCross = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            kernelCross[i] = _kernel.Calculate(x, GetRow(FittedX, i));
+        }
+
+        var baseCross = Tensor<T>.FromVector(kernelCross);
         var kstars = engine.TensorMultiply(
             engine.TensorBroadcastTo(outputVars.Reshape(new[] { numSamples, 1 }), new[] { numSamples, n }),
             engine.TensorBroadcastTo(baseCross.Reshape(new[] { 1, n }), new[] { numSamples, n }));
@@ -635,7 +655,8 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
         var noiseVars = Tensor<T>.FromVector(
             GaussianProcessEngineOps.FromDoubles<T>(_samples.Select(sample => sample[2]).ToArray()));
         var batchShape = new[] { numSamples, n, n };
-        var baseKernel = Tensor<T>.FromMatrix(BuildBaseKernelMatrix()).Reshape(new[] { 1, n, n });
+        var cachedKernel = _baseKernel ?? throw new InvalidOperationException("Base kernel has not been computed.");
+        var baseKernel = cachedKernel.Reshape(new[] { 1, n, n });
         var identity = engine.TensorEye<T>(n).Reshape(new[] { 1, n, n });
         var kernels = engine.TensorAdd(
             engine.TensorMultiply(
@@ -659,42 +680,6 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
         _alphaVectors = Enumerable.Range(0, numSamples)
             .Select(s => engine.TensorSlice(alphas, new[] { s, 0, 0 }, new[] { 1, n, 1 }).Reshape(new[] { n }).ToVector())
             .ToList();
-    }
-
-    /// <summary>
-    /// Base kernel matrix K_base[i, j] = k(x_i, x_j) over the training inputs (symmetric).
-    /// </summary>
-    private Matrix<T> BuildBaseKernelMatrix()
-    {
-        int n = FittedX.Rows;
-        var K = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            var xi = GetRow(FittedX, i);
-            for (int j = i; j < n; j++)
-            {
-                T kval = _kernel.Calculate(xi, GetRow(FittedX, j));
-                K[i, j] = kval;
-                K[j, i] = kval;
-            }
-        }
-
-        return K;
-    }
-
-    /// <summary>
-    /// Base cross-covariance k(x, x_i) over the training inputs.
-    /// </summary>
-    private Vector<T> BaseCrossCovariance(Vector<T> x)
-    {
-        int n = FittedX.Rows;
-        var kstar = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            kstar[i] = _kernel.Calculate(x, GetRow(FittedX, i));
-        }
-
-        return kstar;
     }
 
     /// <summary>

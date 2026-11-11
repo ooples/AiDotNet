@@ -125,27 +125,32 @@ internal static class GaussianProcessEvidence
         T half = numOps.FromDouble(0.5);
         T countValue = numOps.FromDouble(count);
 
-        T AdamStep(T gradient, ref T first, ref T second, int step)
+        // Scalar Adam update of a log-parameter, ascending the evidence; gradient = 0.5 * scale * traceValue.
+        T AdamStep(T log, T scale, T traceValue, ref T first, ref T second, int step)
         {
+            T gradient = numOps.Multiply(half, numOps.Multiply(scale, traceValue));
             first = numOps.Add(numOps.Multiply(beta1, first), numOps.Multiply(oneMinusBeta1, gradient));
             second = numOps.Add(numOps.Multiply(beta2, second),
                 numOps.Multiply(oneMinusBeta2, numOps.Multiply(gradient, gradient)));
             T firstHat = numOps.Divide(first, numOps.FromDouble(1 - Math.Pow(Beta1, step + 1)));
             T secondHat = numOps.Divide(second, numOps.FromDouble(1 - Math.Pow(Beta2, step + 1)));
-            return numOps.Divide(numOps.Multiply(numOps.FromDouble(LearningRate), firstHat),
-                numOps.Add(numOps.Sqrt(secondHat), numOps.FromDouble(Epsilon)));
+            return numOps.Add(log, numOps.Divide(numOps.Multiply(numOps.FromDouble(LearningRate), firstHat),
+                numOps.Add(numOps.Sqrt(secondHat), numOps.FromDouble(Epsilon))));
         }
+
+        T SignalOf(T log) => numOps.Exp(log);
+        bool Improves(T evidence, T best) => numOps.GreaterThan(evidence, best);
 
         for (int step = 0; step <= steps; step++)
         {
-            T signal = numOps.Exp(logSignal);
+            T signal = SignalOf(logSignal);
             T noise = NoiseOf(logNoise);
             var lower = FactorOf(signal, noise);
             if (lower is null)
                 break;
 
             T evidence = LogMarginalLikelihood(lower, columns);
-            if (numOps.GreaterThan(evidence, bestEvidence))
+            if (Improves(evidence, bestEvidence))
             {
                 bestEvidence = evidence;
                 bestSignal = signal;
@@ -164,13 +169,11 @@ internal static class GaussianProcessEvidence
             T kernelTrace = engine.TensorSum(engine.TensorMultiply(w, kernelTransposed));
             T trace = engine.TensorTrace(w);
 
-            T gradientSignal = numOps.Multiply(half, numOps.Multiply(signal, kernelTrace));
-            logSignal = numOps.Add(logSignal, AdamStep(gradientSignal, ref m1Signal, ref v1Signal, step));
+            logSignal = AdamStep(logSignal, signal, kernelTrace, ref m1Signal, ref v1Signal, step);
 
             if (learnNoise)
             {
-                T gradientNoise = numOps.Multiply(half, numOps.Multiply(noise, trace));
-                logNoise = numOps.Add(logNoise, AdamStep(gradientNoise, ref m1Noise, ref v1Noise, step));
+                logNoise = AdamStep(logNoise, noise, trace, ref m1Noise, ref v1Noise, step);
             }
         }
 

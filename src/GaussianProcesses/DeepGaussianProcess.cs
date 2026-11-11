@@ -837,20 +837,49 @@ internal class DGPLayer<T>
 
     internal void ComputeKuu()
     {
-        // Kernel matrix of the inducing inputs plus jitter on the diagonal
-        _Kuu = GaussianProcessEngineOps.AddToDiagonal(
-            KernelMatrix(_inducingInputs, _inducingInputs), _numOps.FromDouble(1e-6));
+        // Kernel matrix of the inducing inputs k(z_i, z_j)
+        var kernelUU = new Matrix<T>(_inducingInputs.Rows, _inducingInputs.Rows);
+        for (int i = 0; i < _inducingInputs.Rows; i++)
+        {
+            var ai = _inducingInputs.GetRow(i);
+            for (int j = 0; j < _inducingInputs.Rows; j++)
+            {
+                kernelUU[i, j] = _kernel.Calculate(ai, _inducingInputs.GetRow(j));
+            }
+        }
+
+        // plus jitter on the diagonal
+        _Kuu = GaussianProcessEngineOps.AddToDiagonal(kernelUU, _numOps.FromDouble(1e-6));
     }
 
     public Matrix<T> Forward(Matrix<T> input, int numSamples, Random random)
     {
         // Compute kernel between input and inducing points
-        var Kxu = KernelMatrix(input, _inducingInputs);
+        var Kxu = new Matrix<T>(input.Rows, _inducingInputs.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            var ai = input.GetRow(i);
+            for (int j = 0; j < _inducingInputs.Rows; j++)
+            {
+                Kxu[i, j] = _kernel.Calculate(ai, _inducingInputs.GetRow(j));
+            }
+        }
+
 
         // Compute predictive mean: Kxu * Kuu^(-1) * m, with Kuu jittered for numerical stability.
         // One Cholesky factor of Kuu solves all output dimensions at once.
-        var Kuu = GaussianProcessEngineOps.AddToDiagonal(
-            KernelMatrix(_inducingInputs, _inducingInputs), _numOps.FromDouble(1e-6));
+        // Kernel matrix of the inducing inputs k(z_i, z_j)
+        var kernelUU = new Matrix<T>(_inducingInputs.Rows, _inducingInputs.Rows);
+        for (int r = 0; r < _inducingInputs.Rows; r++)
+        {
+            var ai = _inducingInputs.GetRow(r);
+            for (int j = 0; j < _inducingInputs.Rows; j++)
+            {
+                kernelUU[r, j] = _kernel.Calculate(ai, _inducingInputs.GetRow(j));
+            }
+        }
+
+        var Kuu = GaussianProcessEngineOps.AddToDiagonal(kernelUU, _numOps.FromDouble(1e-6));
         var alpha = LinalgDispatch<T>.CholeskySolve(Tensor<T>.FromMatrix(_variationalMean), Factor(Kuu), upper: false);
 
         return AiDotNetEngine.Current.TensorMatMul(Tensor<T>.FromMatrix(Kxu), alpha).ToMatrix();
@@ -914,7 +943,16 @@ internal class DGPLayer<T>
         int m = _Kuu.Rows;
 
         // Compute Kuf (kernel between inducing and input points)
-        var Kuf = KernelMatrix(_inducingInputs, layerInput);
+        var Kuf = new Matrix<T>(_inducingInputs.Rows, layerInput.Rows);
+        for (int i = 0; i < _inducingInputs.Rows; i++)
+        {
+            var ai = _inducingInputs.GetRow(i);
+            for (int j = 0; j < layerInput.Rows; j++)
+            {
+                Kuf[i, j] = _kernel.Calculate(ai, layerInput.GetRow(j));
+            }
+        }
+
         var L = Factor(_Kuu);
 
         // Data term gradient: Kuu⁻¹ * Kuf * errorSignal
@@ -943,7 +981,17 @@ internal class DGPLayer<T>
         // Compute sensitivity: how changes in our output affect next layer's variational mean
         // This is approximated by computing the kernel-weighted influence
         var engine = AiDotNetEngine.Current;
-        var Kxu = KernelMatrix(input, _inducingInputs);
+        // Kernel between input and inducing points
+        var Kxu = new Matrix<T>(input.Rows, _inducingInputs.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            var ai = input.GetRow(i);
+            for (int j = 0; j < _inducingInputs.Rows; j++)
+            {
+                Kxu[i, j] = _kernel.Calculate(ai, _inducingInputs.GetRow(j));
+            }
+        }
+
 
         // Update variational mean based on gradient signal from next layer
         // Gradient is approximated as: kernel-weighted sum of next layer's variational updates
@@ -985,24 +1033,6 @@ internal class DGPLayer<T>
         {
             ComputeKuu();
         }
-    }
-
-    /// <summary>
-    /// Kernel matrix k(a_i, b_j) between the rows of <paramref name="A"/> and <paramref name="B"/>.
-    /// </summary>
-    private Matrix<T> KernelMatrix(Matrix<T> A, Matrix<T> B)
-    {
-        var K = new Matrix<T>(A.Rows, B.Rows);
-        for (int i = 0; i < A.Rows; i++)
-        {
-            var ai = A.GetRow(i);
-            for (int j = 0; j < B.Rows; j++)
-            {
-                K[i, j] = _kernel.Calculate(ai, B.GetRow(j));
-            }
-        }
-
-        return K;
     }
 
     /// <summary>

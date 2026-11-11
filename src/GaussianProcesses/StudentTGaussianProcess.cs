@@ -604,7 +604,14 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
             engine.TensorBroadcastTo(sqrtTau, new[] { n, nNew }), engine.TensorTranspose(kStar));
         var v = LinalgDispatch<T>.SolveTriangular(lower, scaledCross, upper: false);
         var vTv = engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, keepDims: false);
-        var kStarStar = Tensor<T>.FromVector(KernelDiagonal(XNew));
+        var selfKernel = new Vector<T>(XNew.Rows);
+        for (int ri = 0; ri < XNew.Rows; ri++)
+        {
+            var rowA = XNew.GetRow(ri);
+            selfKernel[ri] = _kernel.Calculate(rowA, rowA);
+        }
+
+        var kStarStar = Tensor<T>.FromVector(selfKernel);
         var variance = engine.TensorMax(
             engine.TensorAddScalar(engine.TensorSubtract(kStarStar, vTv), _numOps.FromDouble(_scale * _scale)),
             _numOps.FromDouble(1e-10)).ToVector();
@@ -638,28 +645,49 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     private static Vector<T> GetRow(Matrix<T> matrix, int row) => matrix.GetRow(row);
 
     /// <summary>
-    /// Kernel self-similarities k(x_i, x_i) for every row of <paramref name="X"/>.
+    /// Lower Cholesky factor with every pivot floored at 1e-10:
+    /// L_jj = sqrt(max(K_jj - Σ_k L_jk², 1e-10)), so a kernel matrix that is not positive definite
+    /// still yields a usable factor instead of an exception.
     /// </summary>
-    private Vector<T> KernelDiagonal(Matrix<T> X)
+    private static Tensor<T> CholeskyDecomposition(Matrix<T> K)
     {
-        var diagonal = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        T floor = numOps.FromDouble(1e-10);
+        var unclamped = GaussianProcessEngineOps.UnclampedCholesky(K, floor);
+        if (unclamped is not null)
+            return unclamped;
+
+        int n = K.Rows;
+        // Fallback: column-by-column factorization with the pivot floor applied as each pivot is formed.
+        var L = new Matrix<T>(n, n);
+        for (int i = 0; i < n; i++)
         {
-            var xi = GetRow(X, i);
-            diagonal[i] = _kernel.Calculate(xi, xi);
+            var rowI = L.GetRow(i);
+            for (int j = 0; j <= i; j++)
+            {
+                // Entries of row i at and past column j are still zero, so the full dot products are Σ_{k<j}.
+                T sum = engine.DotProduct(rowI, j == i ? rowI : L.GetRow(j));
+                if (i == j)
+                {
+                    rowI[j] = numOps.Sqrt(MathHelper.Max(numOps.Subtract(K[i, i], sum), floor));
+                }
+                else
+                {
+                    rowI[j] = numOps.Divide(numOps.Subtract(K[i, j], sum), L[j, j]);
+                }
+            }
+
+            L.SetRow(i, rowI);
         }
 
-        return diagonal;
+        return Tensor<T>.FromMatrix(L);
     }
 
     /// <summary>
     /// Lower Cholesky factor of a symmetric matrix with every pivot floored at 1e-10.
     /// </summary>
-    private static Tensor<T> CholeskyFactor(Tensor<T> matrix)
-    {
-        // Pivots floored at 1e-10, as the factorization has always done; never throws.
-        return GaussianProcessEngineOps.ClampedCholesky(matrix.ToMatrix(), 1e-10);
-    }
+    private static Tensor<T> CholeskyFactor(Tensor<T> matrix) => CholeskyDecomposition(matrix.ToMatrix());
 
     /// <summary>
     /// Computes log gamma function.

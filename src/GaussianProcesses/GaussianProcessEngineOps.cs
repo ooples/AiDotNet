@@ -87,41 +87,55 @@ internal static class GaussianProcessEngineOps
     internal static void AddAdaptiveJitter<T>(Matrix<T> K)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var engine = AiDotNetEngine.Current;
         double jitterValue = 1e-6;
         const double maxJitter = 1e-1;
 
         while (jitterValue <= maxJitter)
         {
-            var jitter = numOps.FromDouble(jitterValue);
-            AddToDiagonalInPlace(K, jitter);
+            if (TryAddJitter(K, jitterValue))
+                return;
 
-            try
-            {
-                var chol = new CholeskyDecomposition<T>(K);
-                var diagonal = Tensor<T>.FromVector(Diagonal(chol.L));
-                bool wellConditioned = diagonal.Length == 0;
-                if (!wellConditioned && AllFinite(diagonal))
-                {
-                    T minDiag = engine.TensorMinValue(diagonal);
-                    T maxDiag = engine.TensorMaxValue(diagonal);
-                    wellConditioned = numOps.GreaterThan(minDiag, numOps.Zero)
-                        && numOps.LessThan(numOps.Divide(maxDiag, minDiag), numOps.FromDouble(1e8));
-                }
-
-                if (wellConditioned)
-                    return;
-            }
-            catch (ArgumentException)
-            {
-                // Cholesky failed - remove this jitter and try a larger value below.
-            }
-
-            AddToDiagonalInPlace(K, numOps.Negate(jitter));
             jitterValue *= 10;
         }
 
         AddToDiagonalInPlace(K, numOps.FromDouble(maxJitter));
+    }
+
+    /// <summary>
+    /// Adds <paramref name="jitterValue"/> to the diagonal of <paramref name="K"/> and keeps it when the
+    /// Cholesky factor exists and is well conditioned (max/min diagonal ratio below 1e8); otherwise
+    /// removes it again and returns false.
+    /// </summary>
+    private static bool TryAddJitter<T>(Matrix<T> K, double jitterValue)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var jitter = numOps.FromDouble(jitterValue);
+        AddToDiagonalInPlace(K, jitter);
+
+        try
+        {
+            var chol = new CholeskyDecomposition<T>(K);
+            var diagonal = Tensor<T>.FromVector(Diagonal(chol.L));
+            bool wellConditioned = diagonal.Length == 0;
+            if (!wellConditioned && AllFinite(diagonal))
+            {
+                T minDiag = engine.TensorMinValue(diagonal);
+                T maxDiag = engine.TensorMaxValue(diagonal);
+                wellConditioned = numOps.GreaterThan(minDiag, numOps.Zero)
+                    && numOps.LessThan(numOps.Divide(maxDiag, minDiag), numOps.FromDouble(1e8));
+            }
+
+            if (wellConditioned)
+                return true;
+        }
+        catch (ArgumentException)
+        {
+            // Cholesky failed - remove this jitter so a larger value can be tried.
+        }
+
+        AddToDiagonalInPlace(K, numOps.Negate(jitter));
+        return false;
     }
 
     /// <summary>
@@ -153,21 +167,19 @@ internal static class GaussianProcessEngineOps
     }
 
     /// <summary>
-    /// Lower Cholesky factor with every pivot floored: L_jj = sqrt(max(A_jj - Σ_k L_jk², <paramref name="pivotFloor"/>)).
+    /// Engine Cholesky factor of <paramref name="A"/> when it equals the pivot-floored factor
+    /// L_jj = sqrt(max(A_jj - Σ_k L_jk², <paramref name="floor"/>)); null when a pivot needs the floor.
     /// </summary>
     /// <remarks>
-    /// Matches the clamped factorization the Gaussian process models have always used, so a matrix that is not
-    /// positive definite gets a usable factor instead of an exception. When the standard factorization succeeds
-    /// and no pivot falls below the floor the two are identical, so the engine factor is returned; only a
-    /// clamped pivot takes the sequential fallback, because clamping one pivot changes every later column.
+    /// When the standard factorization succeeds and no pivot falls below the floor the clamped and standard
+    /// factors are identical. On null the caller runs the sequential clamped factorization, because clamping
+    /// one pivot changes every later column.
     /// </remarks>
-    internal static Tensor<T> ClampedCholesky<T>(Matrix<T> A, double pivotFloor = 1e-10)
+    internal static Tensor<T>? UnclampedCholesky<T>(Matrix<T> A, T floor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
-        int n = A.Rows;
-        T floor = numOps.FromDouble(pivotFloor);
-        if (n == 0)
+        if (A.Rows == 0)
             return new Tensor<T>(new[] { 0, 0 });
 
         var (factor, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(A), upper: false);
@@ -177,28 +189,6 @@ internal static class GaussianProcessEngineOps
             return factor;
         }
 
-        // Fallback: column-by-column factorization with the pivot floor applied as each pivot is formed.
-        var L = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            var rowI = L.GetRow(i);
-            for (int j = 0; j <= i; j++)
-            {
-                // Entries of row i at and past column j are still zero, so the full dot products are Σ_{k<j}.
-                T sum = engine.DotProduct(rowI, j == i ? rowI : L.GetRow(j));
-                if (i == j)
-                {
-                    rowI[j] = numOps.Sqrt(MathHelper.Max(numOps.Subtract(A[i, i], sum), floor));
-                }
-                else
-                {
-                    rowI[j] = numOps.Divide(numOps.Subtract(A[i, j], sum), L[j, j]);
-                }
-            }
-
-            L.SetRow(i, rowI);
-        }
-
-        return Tensor<T>.FromMatrix(L);
+        return null;
     }
 }

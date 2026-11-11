@@ -396,7 +396,14 @@ public class VariationalStrategies<T>
             _numOps.Multiply(halfBeta, engine.TensorSumOfSquares(residuals)));
 
         // Trace term for variance correction: Σ_i (k_ii - Σ_j alpha[j,i]²)
-        var kernelDiagonal = Tensor<T>.FromVector(KernelDiagonal(X, kernel));
+        var selfKernel = new Vector<T>(X.Rows);
+        for (int ri = 0; ri < X.Rows; ri++)
+        {
+            var rowA = X.GetRow(ri);
+            selfKernel[ri] = kernel.Calculate(rowA, rowA);
+        }
+
+        var kernelDiagonal = Tensor<T>.FromVector(selfKernel);
         T traceTerm = _numOps.Subtract(engine.TensorSum(kernelDiagonal), engine.TensorSumOfSquares(alpha));
         logLikeTerm = _numOps.Subtract(logLikeTerm, _numOps.Multiply(halfBeta, traceTerm));
 
@@ -429,21 +436,6 @@ public class VariationalStrategies<T>
     /// <summary>
     /// Computes a kernel matrix between two sets of points.
     /// </summary>
-    /// <summary>
-    /// Kernel self-similarities k(x_i, x_i) for every row of <paramref name="X"/>.
-    /// </summary>
-    private Vector<T> KernelDiagonal(Matrix<T> X, IKernelFunction<T> kernel)
-    {
-        var diagonal = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var xi = GetRow(X, i);
-            diagonal[i] = kernel.Calculate(xi, xi);
-        }
-
-        return diagonal;
-    }
-
     private Matrix<T> ComputeKernelMatrix(Matrix<T> A, Matrix<T> B, IKernelFunction<T> kernel)
     {
         int n = A.Rows;

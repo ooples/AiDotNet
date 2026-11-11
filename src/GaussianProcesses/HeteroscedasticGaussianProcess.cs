@@ -324,8 +324,18 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         if (_X is null || _y is null || _noiseVariances is null) return;
 
         // Kernel matrix with heteroscedastic noise + jitter on the diagonal
+        var meanKernelMatrix = new Matrix<T>(_X.Rows, _X.Rows);
+        for (int ri = 0; ri < _X.Rows; ri++)
+        {
+            var rowA = _X.GetRow(ri);
+            for (int cj = 0; cj < _X.Rows; cj++)
+            {
+                meanKernelMatrix[ri, cj] = _meanKernel.Calculate(rowA, _X.GetRow(cj));
+            }
+        }
+
         var K = GaussianProcessEngineOps.AddToDiagonal(
-            GaussianProcessEngineOps.AddToDiagonal(KernelMatrix(_meanKernel, _X, _X), _noiseVariances),
+            GaussianProcessEngineOps.AddToDiagonal(meanKernelMatrix, _noiseVariances),
             _numOps.FromDouble(_jitter));
 
         // Adaptive jitter for numerical stability - same approach as StandardGaussianProcess.
@@ -334,7 +344,7 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         GaussianProcessEngineOps.AddAdaptiveJitter(K);
 
         // Cholesky decomposition (pivots floored at 1e-10)
-        _L = Factor(K).ToMatrix();
+        _L = CholeskyDecomposition(K).ToMatrix();
 
         // Solve K * alpha = y using the properly-conditioned matrix
         _alpha = MatrixSolutionHelper.SolveLinearSystem(K, _y, Enums.MatrixDecompositionType.Cholesky);
@@ -358,7 +368,17 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         int n = _X.Rows;
 
         // Residuals of the mean GP at the training inputs
-        var predictions = engine.MatrixVectorMultiply(KernelMatrix(_meanKernel, _X, _X), _alpha);
+        var meanKernelMatrix = new Matrix<T>(_X.Rows, _X.Rows);
+        for (int ri = 0; ri < _X.Rows; ri++)
+        {
+            var rowA = _X.GetRow(ri);
+            for (int cj = 0; cj < _X.Rows; cj++)
+            {
+                meanKernelMatrix[ri, cj] = _meanKernel.Calculate(rowA, _X.GetRow(cj));
+            }
+        }
+
+        var predictions = engine.MatrixVectorMultiply(meanKernelMatrix, _alpha);
         var residuals = Tensor<T>.FromVector(engine.Subtract(_y, predictions));
 
         // Target for noise GP: log of squared residuals,
@@ -368,8 +388,16 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
             _numOps.FromDouble(-23.0));
 
         // Solve noise GP
-        var rawNoiseKernel = KernelMatrix(_noiseKernel, _X, _X);
-        var L_noise = Factor(GaussianProcessEngineOps.AddToDiagonal(
+        var rawNoiseKernel = new Matrix<T>(_X.Rows, _X.Rows);
+        for (int ri = 0; ri < _X.Rows; ri++)
+        {
+            var rowA = _X.GetRow(ri);
+            for (int cj = 0; cj < _X.Rows; cj++)
+            {
+                rawNoiseKernel[ri, cj] = _noiseKernel.Calculate(rowA, _X.GetRow(cj));
+            }
+        }
+        var L_noise = CholeskyDecomposition(GaussianProcessEngineOps.AddToDiagonal(
             rawNoiseKernel, _numOps.FromDouble(_noisePriorVariance + _jitter)));
         var alpha_noise = LinalgDispatch<T>.CholeskySolve(logResidualsSq.Reshape(new[] { n, 1 }), L_noise, upper: false);
 
@@ -440,14 +468,44 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         int nNew = XNew.Rows;
 
         // For noise GP prediction
-        var L_noise = Factor(GaussianProcessEngineOps.AddToDiagonal(
-            KernelMatrix(_noiseKernel, _X, _X), _numOps.FromDouble(_noisePriorVariance + _jitter)));
+        var noiseKernelMatrix = new Matrix<T>(_X.Rows, _X.Rows);
+        for (int ri = 0; ri < _X.Rows; ri++)
+        {
+            var rowA = _X.GetRow(ri);
+            for (int cj = 0; cj < _X.Rows; cj++)
+            {
+                noiseKernelMatrix[ri, cj] = _noiseKernel.Calculate(rowA, _X.GetRow(cj));
+            }
+        }
+
+        var L_noise = CholeskyDecomposition(GaussianProcessEngineOps.AddToDiagonal(
+            noiseKernelMatrix, _numOps.FromDouble(_noisePriorVariance + _jitter)));
         var alpha_noise = LinalgDispatch<T>.CholeskySolve(
             Tensor<T>.FromVector(_noiseLatentValues).Reshape(new[] { n, 1 }), L_noise, upper: false);
 
         // k_* rows: covariance between each new point and the training points, [nNew, n]
-        var kStar = Tensor<T>.FromMatrix(KernelMatrix(_meanKernel, XNew, _X));
-        var kStarNoise = Tensor<T>.FromMatrix(KernelMatrix(_noiseKernel, XNew, _X));
+        var meanCross = new Matrix<T>(XNew.Rows, _X.Rows);
+        for (int ri = 0; ri < XNew.Rows; ri++)
+        {
+            var rowA = XNew.GetRow(ri);
+            for (int cj = 0; cj < _X.Rows; cj++)
+            {
+                meanCross[ri, cj] = _meanKernel.Calculate(rowA, _X.GetRow(cj));
+            }
+        }
+
+        var noiseCross = new Matrix<T>(XNew.Rows, _X.Rows);
+        for (int ri = 0; ri < XNew.Rows; ri++)
+        {
+            var rowA = XNew.GetRow(ri);
+            for (int cj = 0; cj < _X.Rows; cj++)
+            {
+                noiseCross[ri, cj] = _noiseKernel.Calculate(rowA, _X.GetRow(cj));
+            }
+        }
+
+        var kStar = Tensor<T>.FromMatrix(meanCross);
+        var kStarNoise = Tensor<T>.FromMatrix(noiseCross);
 
         // Mean prediction: k_*^T * alpha + yMean (add back centered mean)
         var alpha = Tensor<T>.FromVector(_alpha).Reshape(new[] { n, 1 });
@@ -456,7 +514,14 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         // Predictive variance: k_** - k_*^T * K^{-1} * k_* = k_** - ||L^{-1} k_*||^2
         var v = LinalgDispatch<T>.SolveTriangular(Tensor<T>.FromMatrix(_L), engine.TensorTranspose(kStar), upper: false);
         var vTv = engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, keepDims: false);
-        var kStarStar = Tensor<T>.FromVector(KernelDiagonal(_meanKernel, XNew));
+        var meanSelf = new Vector<T>(XNew.Rows);
+        for (int ri = 0; ri < XNew.Rows; ri++)
+        {
+            var rowA = XNew.GetRow(ri);
+            meanSelf[ri] = _meanKernel.Calculate(rowA, rowA);
+        }
+
+        var kStarStar = Tensor<T>.FromVector(meanSelf);
         var predictiveVar = engine.TensorMax(engine.TensorSubtract(kStarStar, vTv), _numOps.FromDouble(1e-10));
 
         // Noise variance prediction
@@ -530,45 +595,43 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
     #region Linear Algebra Helpers
 
     /// <summary>
-    /// Kernel matrix k(a_i, b_j) between the rows of <paramref name="A"/> and <paramref name="B"/>.
+    /// Lower Cholesky factor with every pivot floored at 1e-10:
+    /// L_jj = sqrt(max(K_jj - Σ_k L_jk², 1e-10)), so a kernel matrix that is not positive definite
+    /// still yields a usable factor instead of an exception.
     /// </summary>
-    private static Matrix<T> KernelMatrix(IKernelFunction<T> kernel, Matrix<T> A, Matrix<T> B)
+    private static Tensor<T> CholeskyDecomposition(Matrix<T> K)
     {
-        var K = new Matrix<T>(A.Rows, B.Rows);
-        for (int i = 0; i < A.Rows; i++)
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        T floor = numOps.FromDouble(1e-10);
+        var unclamped = GaussianProcessEngineOps.UnclampedCholesky(K, floor);
+        if (unclamped is not null)
+            return unclamped;
+
+        int n = K.Rows;
+        // Fallback: column-by-column factorization with the pivot floor applied as each pivot is formed.
+        var L = new Matrix<T>(n, n);
+        for (int i = 0; i < n; i++)
         {
-            var ai = A.GetRow(i);
-            for (int j = 0; j < B.Rows; j++)
+            var rowI = L.GetRow(i);
+            for (int j = 0; j <= i; j++)
             {
-                K[i, j] = kernel.Calculate(ai, B.GetRow(j));
+                // Entries of row i at and past column j are still zero, so the full dot products are Σ_{k<j}.
+                T sum = engine.DotProduct(rowI, j == i ? rowI : L.GetRow(j));
+                if (i == j)
+                {
+                    rowI[j] = numOps.Sqrt(MathHelper.Max(numOps.Subtract(K[i, i], sum), floor));
+                }
+                else
+                {
+                    rowI[j] = numOps.Divide(numOps.Subtract(K[i, j], sum), L[j, j]);
+                }
             }
+
+            L.SetRow(i, rowI);
         }
 
-        return K;
-    }
-
-    /// <summary>
-    /// Kernel self-similarities k(x_i, x_i) for every row of <paramref name="X"/>.
-    /// </summary>
-    private static Vector<T> KernelDiagonal(IKernelFunction<T> kernel, Matrix<T> X)
-    {
-        var diagonal = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var xi = X.GetRow(i);
-            diagonal[i] = kernel.Calculate(xi, xi);
-        }
-
-        return diagonal;
-    }
-
-    /// <summary>
-    /// Lower Cholesky factor with every pivot floored at 1e-10, so a kernel matrix that is not
-    /// positive definite still yields a usable factor.
-    /// </summary>
-    private static Tensor<T> Factor(Matrix<T> K)
-    {
-        return GaussianProcessEngineOps.ClampedCholesky(K, 1e-10);
+        return Tensor<T>.FromMatrix(L);
     }
 
     #endregion
