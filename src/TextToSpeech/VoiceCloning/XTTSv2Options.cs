@@ -17,15 +17,15 @@ public class XTTSv2Options : CodecTtsOptions
 
     /// <summary>The text embedding rows, paired with the loaded tokenizer vocabulary.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("VocabSize must match the loaded tokenizer's rows; native contracts reject unpaired counts and load paired tokenizer/embedding vocabularies.")]
-    public new int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
+    public override int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
 
     /// <summary>The released dVAE's single codebook.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("The native XTTS dVAE supports one codebook; native contracts reject other counts and encode/decode its single-stream tokens.")]
-    public new int NumCodebooks { get => base.NumCodebooks; set => base.NumCodebooks = value; }
+    public override int NumCodebooks { get => base.NumCodebooks; set => base.NumCodebooks = value; }
 
     /// <summary>The dVAE vocabulary, paired with the audio vocabulary and special IDs.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("CodebookSize must pair with AudioVocabularySize=CodebookSize+2 and the following start/stop IDs; native tests reject unpaired values and encode/decode paired vocabularies.")]
-    public new int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
+    public override int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
 
     /// <summary>The language ids in the released checkpoint, in model-card order.</summary>
     public static readonly string[] ReleasedLanguages =
@@ -68,7 +68,7 @@ public class XTTSv2Options : CodecTtsOptions
         _stopAudioToken = other._stopAudioToken;
         MaxPromptTokens = other.MaxPromptTokens;
         ConditioningBlocks = other.ConditioningBlocks;
-        ConditioningHeads = other.ConditioningHeads;
+        _conditioningHeads = other._conditioningHeads;
         PerceiverDepth = other.PerceiverDepth;
         PerceiverLatents = other.PerceiverLatents;
         PerceiverHeads = other.PerceiverHeads;
@@ -150,8 +150,12 @@ public class XTTSv2Options : CodecTtsOptions
 
     /// <summary>Gets or sets the conditioning blocks. Defaults to <c>6</c>.</summary>
     public int ConditioningBlocks { get; set; } = 6;
-    /// <summary>Gets or sets the number of attention heads in the conditioning. Defaults to <c>16</c>.</summary>
-    public int ConditioningHeads { get; set; } = 16;
+    /// <summary>
+    /// Gets or sets the number of attention heads in the conditioning encoder. Unless set, the released 64-wide
+    /// heads across <see cref="CodecTtsOptions.LLMDim"/> (16 at the released 1,024).
+    /// </summary>
+    public int ConditioningHeads { get => _conditioningHeads ?? System.Math.Max(1, LLMDim / 64); set => _conditioningHeads = value; }
+    private int? _conditioningHeads;
     /// <summary>Gets or sets the perceiver depth. Defaults to <c>2</c>.</summary>
     public int PerceiverDepth { get; set; } = 2;
     /// <summary>Gets or sets the perceiver latents. Defaults to <c>32</c>.</summary>
