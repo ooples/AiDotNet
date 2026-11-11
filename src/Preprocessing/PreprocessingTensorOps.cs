@@ -386,6 +386,29 @@ internal static class PreprocessingTensorOps
     /// <summary>Column <paramref name="column"/> of a matrix as an [n] tensor.</summary>
     public static Tensor<T> Column<T>(Matrix<T> data, int column) => Tensor<T>.FromVector(data.GetColumn(column));
 
+    /// <summary>
+    /// For each row of a 0/1 mask ([n, w]), the column of its first non-zero entry, or <c>w</c> when the row is all zero.
+    /// </summary>
+    public static int[] FirstNonZeroPerRow<T>(Tensor<T> mask)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = mask.Shape[0];
+        int w = mask.Shape[1];
+        if (n == 0)
+            return Array.Empty<int>();
+        if (w == 0)
+            return new int[n];
+
+        var columnIndex = engine.TensorBroadcastTo(engine.Reshape(Range<T>(w), new[] { 1, w }), new[] { n, w });
+        var candidates = engine.TensorWhere(mask, columnIndex, Filled(new[] { n, w }, MathHelper.GetNumericOperations<T>().FromDouble(w)));
+        var first = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidates), new[] { 1 }, false));
+        return first.Cast<int>().AsSpan().ToArray();
+    }
+
+    /// <summary>The values 0, 1, ..., count - 1 as a 1-D tensor.</summary>
+    public static Tensor<T> Range<T>(int count) =>
+        new Tensor<int>(Enumerable.Range(0, count).ToArray(), new[] { count }).Cast<T>();
+
     /// <summary>The positions where a 0/1 mask tensor is non-zero, in ascending order.</summary>
     public static int[] MaskPositions<T>(Tensor<T> mask)
     {
