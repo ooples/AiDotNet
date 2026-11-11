@@ -241,7 +241,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
 
         // Step 4: Initialize trees and feature importances
         _trees = new List<HistTreeNode>(_options.NumberOfIterations);
-        _featureImportances = engine.FillZero(_numFeatures);
+        _featureImportances = engine.FillZero<T>(_numFeatures);
 
         // Step 5: Build trees iteratively
         for (int iteration = 0; iteration < _options.NumberOfIterations; iteration++)
@@ -893,7 +893,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         {
             var engine = AiDotNetEngine.Current;
             var treeImportance = engine.TensorScatterAdd(
-                Tensor<T>.FromVector(engine.FillZero(_featureImportances.Length)),
+                Tensor<T>.FromVector(engine.FillZero<T>(_featureImportances.Length)),
                 new Tensor<int>(importanceFeatures.ToArray(), new[] { importanceFeatures.Count }),
                 Tensor<T>.FromVector(new Vector<T>(importanceGains)),
                 0).ToVector();
@@ -1007,8 +1007,8 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             counts[bin]++;
         }
 
-        var gradientSum = engine.FillZero(numBins);
-        var hessianSum = engine.FillZero(numBins);
+        var gradientSum = engine.FillZero<T>(numBins);
+        var hessianSum = engine.FillZero<T>(numBins);
         if (bins.Length > 0)
         {
             var binIndex = new Tensor<int>(bins, new[] { bins.Length });

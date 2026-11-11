@@ -496,7 +496,7 @@ internal static class RegressionEngineOps2
             // Pivot: first row at or below col with the largest |value| in this column.
             var column = augmented.GetColumn(col);
             var candidates = engine.Abs(column.GetSubVector(col, n - col));
-            int maxRow = col + engine.TensorArgMax(candidates.AsTensor(), 0)[0];
+            int maxRow = col + engine.TensorArgMax(candidates.AsTensor(), 0).ToArray()[0];
             if (maxRow != col)
             {
                 var pivotCandidate = augmented.GetRow(maxRow);

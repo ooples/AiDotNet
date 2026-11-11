@@ -246,7 +246,7 @@ public partial class OrthogonalRegression<T> : RegressionBase<T>
     {
         return Engine.TensorWhere(
             Engine.TensorLessThan(Engine.TensorAbs(Tensor<T>.FromVector(scaleX)), tolerance),
-            Tensor<T>.FromVector(Engine.FillZero(coefficients.Length)),
+            Tensor<T>.FromVector(Engine.FillZero<T>(coefficients.Length)),
             Tensor<T>.FromVector(coefficients)).ToVector();
     }
 

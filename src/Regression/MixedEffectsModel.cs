@@ -721,7 +721,7 @@ public partial class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             allRows.AddRange(rows);
         }
 
-        var result = Engine.FillZero(n);
+        var result = Engine.FillZero<T>(n);
         if (allRows.Count == 0)
         {
             return result;

@@ -270,7 +270,7 @@ public partial class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRe
         }
 
         var engine = AiDotNetEngine.Current;
-        var sum = engine.FillZero(input.Rows);
+        var sum = engine.FillZero<T>(input.Rows);
         foreach (var p in predictions)
         {
             sum = engine.Add(sum, p.Length == input.Rows ? p : p.GetSubVector(0, input.Rows));
@@ -311,7 +311,7 @@ public partial class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRe
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks, _options.MaxDegreeOfParallelism);
 
         var engine = AiDotNetEngine.Current;
-        var sum = engine.FillZero(numFeatures);
+        var sum = engine.FillZero<T>(numFeatures);
         foreach (var imp in allImportances)
         {
             sum = engine.Add(sum, imp.Length == numFeatures ? imp : imp.GetSubVector(0, numFeatures));

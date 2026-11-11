@@ -369,7 +369,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         {
             int[] rows = kvp.Value.ToArray();
             var groupEffect = re.GetGroupEffect(kvp.Key);
-            var contribution = Engine.FillZero(rows.Length);
+            var contribution = Engine.FillZero<T>(rows.Length);
 
             // Random intercept
             if (re.IsRandomIntercept && groupEffect.Length > 0)
@@ -415,7 +415,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private Vector<T> ScatterRows(int n, List<int> rows, List<Vector<T>> values)
     {
-        var result = Engine.FillZero(n);
+        var result = Engine.FillZero<T>(n);
         if (rows.Count == 0)
         {
             return result;
@@ -555,10 +555,10 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         T halfVariance = NumOps.Multiply(ComputeVariance(residuals), NumOps.FromDouble(0.5));
         _residualVariance = halfVariance;
 
+        T componentVariance = NumOps.Divide(halfVariance, NumOps.FromDouble(_randomEffects.Count));
         foreach (var re in _randomEffects)
         {
             int dim = re.Dimension;
-            T componentVariance = NumOps.Divide(halfVariance, NumOps.FromDouble(_randomEffects.Count));
             re.CovarianceMatrix = Matrix<T>.CreateDiagonal(Engine.Fill(dim, componentVariance));
         }
     }
@@ -624,24 +624,42 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
             T sigmaE = _residualVariance;
             T sigmaU = re.CovarianceMatrix != null ? FirstDiagonal(re.CovarianceMatrix) : NumOps.One;
 
-            foreach (var kvp in groups)
+            if (groups.Count == 0)
             {
-                var indices = kvp.Value;
-                T ni = NumOps.FromDouble(indices.Count);
+                continue;
+            }
 
-                // BLUP of the random intercept: shrinkage * mean residual,
-                // shrinkage = sigmaU / (sigmaU + sigmaE / n_i)
-                T meanResid = NumOps.Divide(Engine.Sum(RegressionEngineOps.Gather(residuals, indices.ToArray())), ni);
-                T shrinkage = NumOps.Divide(sigmaU, NumOps.Add(sigmaU, NumOps.Divide(sigmaE, ni)));
-                T blup = NumOps.Multiply(shrinkage, meanResid);
+            // Per-group residual sums and sizes n_i, gathered into vectors so the BLUP arithmetic
+            // below runs once over all groups.
+            var groupList = groups.ToList();
+            var sumParts = new List<Vector<T>>(groupList.Count);
+            var sizeParts = new List<Vector<T>>(groupList.Count);
+            foreach (var kvp in groupList)
+            {
+                sumParts.Add(Engine.Fill(1, Engine.Sum(RegressionEngineOps.Gather(residuals, kvp.Value.ToArray()))));
+                sizeParts.Add(Engine.Fill(1, Engine.Sum(Engine.Fill(kvp.Value.Count, NumOps.One))));
+            }
 
+            var sizes = Vector<T>.Concatenate(sizeParts);
+            int groupCount = groupList.Count;
+
+            // BLUP of the random intercept: shrinkage * mean residual,
+            // shrinkage = sigmaU / (sigmaU + sigmaE / n_i)
+            var meanResid = Engine.Divide(Vector<T>.Concatenate(sumParts), sizes);
+            var shrinkageDenominator = RegressionEngineOps2.AddScalar(
+                Engine.Divide(Engine.Fill(groupCount, sigmaE), sizes), sigmaU);
+            var shrinkage = Engine.Divide(Engine.Fill(groupCount, sigmaU), shrinkageDenominator);
+            var blups = Engine.Multiply(shrinkage, meanResid);
+
+            for (int g = 0; g < groupCount; g++)
+            {
                 var blupVector = new Vector<T>(re.Dimension);
                 if (re.IsRandomIntercept && re.Dimension > 0)
                 {
-                    blupVector = Vector<T>.Concatenate(new[] { Engine.Fill(1, blup), new Vector<T>(re.Dimension - 1) });
+                    blupVector = Vector<T>.Concatenate(new[] { blups.GetSubVector(g, 1), new Vector<T>(re.Dimension - 1) });
                 }
 
-                re.SetGroupEffect(kvp.Key, blupVector);
+                re.SetGroupEffect(groupList[g].Key, blupVector);
             }
         }
     }

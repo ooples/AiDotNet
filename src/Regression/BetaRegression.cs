@@ -435,7 +435,7 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         if (_options.UseRegularization)
         {
             T lambda = NumOps.FromDouble(_options.RegularizationStrength);
-            var penalty = Vector<T>.Concatenate(new[] { Engine.FillZero(1), Engine.Fill(p, lambda) });
+            var penalty = Vector<T>.Concatenate(new[] { Engine.FillZero<T>(1), Engine.Fill(p, lambda) });
             xtwx = Engine.MatrixAdd(xtwx, Matrix<T>.CreateDiagonal(penalty));
         }
 
@@ -574,7 +574,7 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         signed = Engine.TensorWhere(
             Engine.TensorGreaterEqual(pTensor, Tensor<T>.FromVector(ones)), positiveInfinity, signed);
         signed = Engine.TensorWhere(
-            Engine.TensorLessEqual(pTensor, Tensor<T>.FromVector(Engine.FillZero(n))), negativeInfinity, signed);
+            Engine.TensorLessEqual(pTensor, Tensor<T>.FromVector(Engine.FillZero<T>(n))), negativeInfinity, signed);
         return signed.ToVector();
     }
 
@@ -602,8 +602,13 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         // Lanczos approximation (Numerical Recipes gammln); +inf for x <= 0
         int n = x.Length;
-        double[] c = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-                       -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
+        // Literal Lanczos coefficients, converted to T once before the recurrence.
+        T[] c =
+        {
+            NumOps.FromDouble(76.18009172947146), NumOps.FromDouble(-86.50532032941677),
+            NumOps.FromDouble(24.01409824083091), NumOps.FromDouble(-1.231739572450155),
+            NumOps.FromDouble(0.1208650973866179e-2), NumOps.FromDouble(-0.5395239384953e-5)
+        };
 
         var y = x;
         var tmp = Engine.Add(x, Engine.Fill(n, NumOps.FromDouble(5.5)));
@@ -611,10 +616,10 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         var ones = Engine.Fill(n, NumOps.One);
         var ser = Engine.Fill(n, NumOps.FromDouble(1.000000000190015));
-        foreach (double coefficient in c)
+        foreach (T coefficient in c)
         {
             y = Engine.Add(y, ones);
-            ser = Engine.Add(ser, Engine.Divide(Engine.Fill(n, NumOps.FromDouble(coefficient)), y));
+            ser = Engine.Add(ser, Engine.Divide(Engine.Fill(n, coefficient), y));
         }
 
         var result = Tensor<T>.FromVector(Engine.Add(
@@ -655,12 +660,13 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         int n = x.Length;
         var ones = Engine.Fill(n, NumOps.One);
-        var zeros = Tensor<T>.FromVector(Engine.FillZero(n));
-        var correction = Engine.FillZero(n);
+        var zeros = Tensor<T>.FromVector(Engine.FillZero<T>(n));
+        var correction = Engine.FillZero<T>(n);
         var current = x;
+        T six = NumOps.FromDouble(6);
         for (int step = 0; step < 6; step++)
         {
-            var active = Engine.TensorLessThan(Tensor<T>.FromVector(current), NumOps.FromDouble(6));
+            var active = Engine.TensorLessThan(Tensor<T>.FromVector(current), six);
             var term = Engine.Reciprocal(square ? Engine.Multiply(current, current) : current);
             correction = Engine.Add(correction, Engine.TensorWhere(active, Tensor<T>.FromVector(term), zeros).ToVector());
             current = Engine.TensorWhere(

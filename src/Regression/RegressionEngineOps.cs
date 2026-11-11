@@ -140,7 +140,7 @@ internal static class RegressionEngineOps
         return engine.TensorWhere(
             engine.TensorGreaterThan(Tensor<T>.FromVector(sumW), numOps.Zero),
             Tensor<T>.FromVector(raw),
-            Tensor<T>.FromVector(engine.FillZero(sumW.Length))).ToVector();
+            Tensor<T>.FromVector(engine.FillZero<T>(sumW.Length))).ToVector();
     }
 
     /// <summary>

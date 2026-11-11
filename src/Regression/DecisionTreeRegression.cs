@@ -1008,7 +1008,7 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         // Traverse the tree and record each split's weighted improvement
         CalculateNodeImportance(Root, NumOps.One);
 
-        _featureImportances = engine.FillZero(featureCount);
+        _featureImportances = engine.FillZero<T>(featureCount);
         if (importanceFeatures.Count > 0)
         {
             var improvements = new Vector<T>(importanceValues);

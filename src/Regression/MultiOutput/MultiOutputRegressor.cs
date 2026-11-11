@@ -186,7 +186,7 @@ public sealed class MultiOutputRegressor<T>
 
         // A head that lacks a feature contributes zero, exactly like the previous running sum.
         var zero = NumOps.Zero;
-        var total = engine.FillZero(keys.Count);
+        var total = engine.FillZero<T>(keys.Count);
         foreach (var importance in perHead)
         {
             var aligned = new Vector<T>(keys.Select(k => importance.TryGetValue(k, out var v) ? v : zero));

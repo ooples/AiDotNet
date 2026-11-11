@@ -245,7 +245,7 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
 
         // The first non-positive value (NaN compares false, so it is not reported).
         var nonPositive = RegressionEngineOps.NonzeroIndices(Engine.TensorLessEqual(
-            Tensor<T>.FromVector(y), Tensor<T>.FromVector(Engine.FillZero(y.Length))));
+            Tensor<T>.FromVector(y), Tensor<T>.FromVector(Engine.FillZero<T>(y.Length))));
         if (nonPositive.Length > 0)
         {
             int i = nonPositive[0];
@@ -288,7 +288,7 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
             InverseGaussianLinkFunction.Log => Engine.Exp(eta),
             // μ = 1/sqrt(-2η), but need to handle sign carefully: large positive if η >= 0 (invalid)
             InverseGaussianLinkFunction.InverseSquared => Engine.TensorWhere(
-                Engine.TensorGreaterEqual(Tensor<T>.FromVector(eta), Tensor<T>.FromVector(Engine.FillZero(eta.Length))),
+                Engine.TensorGreaterEqual(Tensor<T>.FromVector(eta), Tensor<T>.FromVector(Engine.FillZero<T>(eta.Length))),
                 Tensor<T>.FromVector(Engine.Fill(eta.Length, NumOps.FromDouble(1e10))),
                 Tensor<T>.FromVector(Engine.Reciprocal(Engine.Sqrt(Engine.Multiply(eta, NumOps.FromDouble(-2.0)))))).ToVector(),
             InverseGaussianLinkFunction.Inverse => Engine.Reciprocal(eta),

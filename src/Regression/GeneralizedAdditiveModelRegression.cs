@@ -346,7 +346,7 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
         return Engine.TensorWhere(
             Engine.TensorGreaterThan(diffTensor, NumOps.Zero),
             Engine.TensorPower(diffTensor, NumOps.FromDouble(degree)),
-            Tensor<T>.FromVector(Engine.FillZero(feature.Length))).ToVector();
+            Tensor<T>.FromVector(Engine.FillZero<T>(feature.Length))).ToVector();
     }
 
     /// <summary>

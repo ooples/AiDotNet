@@ -458,7 +458,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     /// <param name="left">The first set of rows.</param>
     /// <param name="right">The second set of rows (same feature count).</param>
     /// <returns>A [left.Rows, right.Rows] matrix of kernel values.</returns>
-    protected Matrix<T> KernelMatrix(Matrix<T> left, Matrix<T> right)
+    private protected Matrix<T> KernelMatrix(Matrix<T> left, Matrix<T> right)
     {
         if (left.Rows == 0 || right.Rows == 0)
         {
@@ -932,7 +932,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         int rows = Math.Min(Alphas.Length, SupportVectors.Rows);
         if (rows == 0 || SupportVectors.Columns == 0)
         {
-            return Tensor<T>.FromVector(engine.FillZero(SupportVectors.Columns));
+            return Tensor<T>.FromVector(engine.FillZero<T>(SupportVectors.Columns));
         }
 
         var alphas = rows == Alphas.Length ? Alphas : Alphas.GetSubVector(0, rows);
@@ -1029,7 +1029,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         var masked = engine.TensorWhere(
             keep,
             Tensor<T>.FromMatrix(SupportVectors),
-            Tensor<T>.FromVector(engine.FillZero(keep.Length)).Reshape(new[] { SupportVectors.Rows, SupportVectors.Columns }));
+            Tensor<T>.FromVector(engine.FillZero<T>(keep.Length)).Reshape(new[] { SupportVectors.Rows, SupportVectors.Columns }));
         masked.ToMatrix().AsSpan().CopyTo(SupportVectors.AsWritableSpan());
     }
 
@@ -1047,7 +1047,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         int rows = Math.Min(Alphas.Length, SupportVectors.Rows);
         if (rows == 0)
         {
-            importance = engine.FillZero(SupportVectors.Columns);
+            importance = engine.FillZero<T>(SupportVectors.Columns);
         }
         else
         {
@@ -1274,7 +1274,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
                 {
                     // Forward difference: f(x + h) - f(x) / h, perturbing only alpha i
                     var step = Engine.TensorScatter(
-                        Tensor<T>.FromVector(Engine.FillZero(alphaCount)),
+                        Tensor<T>.FromVector(Engine.FillZero<T>(alphaCount)),
                         new Tensor<int>(new[] { i }, new[] { 1 }),
                         Tensor<T>.FromVector(Engine.Fill(1, epsilon)),
                         0).ToVector();

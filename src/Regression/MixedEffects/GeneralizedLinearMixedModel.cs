@@ -351,7 +351,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         {
             int[] rows = kvp.Value.ToArray();
             var groupEffect = re.GetGroupEffect(kvp.Key);
-            var contribution = Engine.FillZero(rows.Length);
+            var contribution = Engine.FillZero<T>(rows.Length);
 
             // Random intercept
             if (re.IsRandomIntercept && groupEffect.Length > 0)
@@ -397,7 +397,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private Vector<T> ScatterRows(int n, List<int> rows, List<Vector<T>> values)
     {
-        var result = Engine.FillZero(n);
+        var result = Engine.FillZero<T>(n);
         if (rows.Count == 0)
         {
             return result;
@@ -768,18 +768,25 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
                 .Where(blup => blup.Length > 0)
                 .Select(blup => blup.GetSubVector(0, 1))
                 .ToList();
-            T sumSqBlup = NumOps.Zero;
-            if (intercepts.Count > 0)
+            if (groups.Count == 0)
             {
-                var interceptVector = Vector<T>.Concatenate(intercepts);
-                sumSqBlup = Engine.DotProduct(interceptVector, interceptVector);
+                continue;
             }
 
-            T newVar = NumOps.Divide(sumSqBlup, NumOps.FromDouble(groups.Count));
-            if (_options.BoundVarianceComponents && NumOps.LessThan(newVar, NumOps.Zero))
+            // Groups without an intercept contribute zero, so the mean runs over every group.
+            if (intercepts.Count < groups.Count)
             {
-                newVar = NumOps.Zero;
+                intercepts.Add(new Vector<T>(groups.Count - intercepts.Count));
             }
+
+            var interceptVector = Vector<T>.Concatenate(intercepts);
+            var squares = Engine.Multiply(interceptVector, interceptVector);
+            if (_options.BoundVarianceComponents)
+            {
+                squares = RegressionEngineOps2.ClampMin(squares, NumOps.Zero);
+            }
+
+            T newVar = Engine.Mean(squares);
 
             if (re.CovarianceMatrix != null && re.CovarianceMatrix.Rows > 0)
             {
@@ -1012,7 +1019,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         var positiveInfinity = Tensor<T>.FromVector(Engine.Fill(n, NumOps.FromDouble(double.PositiveInfinity)));
         signed = Engine.TensorWhere(Engine.TensorGreaterEqual(pTensor, Tensor<T>.FromVector(ones)), positiveInfinity, signed);
         signed = Engine.TensorWhere(
-            Engine.TensorLessEqual(pTensor, Tensor<T>.FromVector(Engine.FillZero(n))), negativeInfinity, signed);
+            Engine.TensorLessEqual(pTensor, Tensor<T>.FromVector(Engine.FillZero<T>(n))), negativeInfinity, signed);
         return signed.ToVector();
     }
 
@@ -1026,14 +1033,16 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         var t = Engine.Reciprocal(Engine.Add(Engine.Fill(n, NumOps.One), Engine.Multiply(Engine.Abs(x), NumOps.FromDouble(0.5))));
 
         // Horner from the innermost coefficient outwards: c_k + t * (...)
-        double[] coefficients =
+        T[] coefficients =
         {
-            -0.82215223, 1.48851587, -1.13520398, 0.27886807, -0.18628806, 0.09678418, 0.37409196, 1.00002368
+            NumOps.FromDouble(-0.82215223), NumOps.FromDouble(1.48851587), NumOps.FromDouble(-1.13520398),
+            NumOps.FromDouble(0.27886807), NumOps.FromDouble(-0.18628806), NumOps.FromDouble(0.09678418),
+            NumOps.FromDouble(0.37409196), NumOps.FromDouble(1.00002368)
         };
         var horner = Engine.Multiply(t, NumOps.FromDouble(0.17087277));
         for (int k = 0; k < coefficients.Length; k++)
         {
-            var level = Engine.Add(Engine.Fill(n, NumOps.FromDouble(coefficients[k])), horner);
+            var level = Engine.Add(Engine.Fill(n, coefficients[k]), horner);
             horner = k == coefficients.Length - 1 ? level : Engine.Multiply(t, level);
         }
 
@@ -1045,7 +1054,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
 
         // x >= 0 ? 1 - tau : tau - 1
         var ones = Engine.Fill(n, NumOps.One);
-        var nonNegative = Engine.TensorGreaterEqual(Tensor<T>.FromVector(x), Tensor<T>.FromVector(Engine.FillZero(n)));
+        var nonNegative = Engine.TensorGreaterEqual(Tensor<T>.FromVector(x), Tensor<T>.FromVector(Engine.FillZero<T>(n)));
         return Engine.TensorWhere(
             nonNegative,
             Tensor<T>.FromVector(Engine.Subtract(ones, tau)),
@@ -1068,7 +1077,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
 
         return Engine.TensorWhere(
             RegressionEngineOps.LessOrEqualMask(x, NumOps.Zero),
-            Tensor<T>.FromVector(Engine.FillZero(n)),
+            Tensor<T>.FromVector(Engine.FillZero<T>(n)),
             Tensor<T>.FromVector(series)).ToVector();
     }
 }

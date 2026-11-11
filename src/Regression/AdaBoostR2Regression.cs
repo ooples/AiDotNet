@@ -271,7 +271,7 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
             // Use unweighted average instead
             sumWeights = NumOps.FromDouble(_ensemble.Count);
 
-            var result0 = Engine.FillZero(input.Rows);
+            var result0 = Engine.FillZero<T>(input.Rows);
             foreach (var (tree, _) in _ensemble)
             {
                 result0 = Engine.Add(result0, tree.Predict(input));
@@ -288,7 +288,7 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
 
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(tasks);
 
-        var result = Engine.FillZero(input.Rows);
+        var result = Engine.FillZero<T>(input.Rows);
         foreach (var (prediction, weight) in predictions)
         {
             result = Engine.Add(result, Engine.Multiply(prediction, weight));
@@ -456,7 +456,7 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
 
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(tasks);
 
-        var importances = Engine.FillZero(numFeatures);
+        var importances = Engine.FillZero<T>(numFeatures);
         foreach (var treeImportance in allImportances)
         {
             importances = Engine.Add(importances, treeImportance);
