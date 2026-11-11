@@ -217,6 +217,30 @@ internal static class RegressionEngineOps
     }
 
     /// <summary>
+    /// All row differences left[i] - right[j] as a [left.Rows, right.Rows, features] tensor.
+    /// </summary>
+    public static Tensor<T> PairwiseDifferences<T>(Matrix<T> left, Matrix<T> right)
+    {
+        var engine = AiDotNetEngine.Current;
+        int m = left.Rows;
+        int n = right.Rows;
+        int d = left.Columns;
+        var shape = new[] { m, n, d };
+        var l = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(left), new[] { m, 1, d }), shape);
+        var r = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(right), new[] { 1, n, d }), shape);
+        return engine.TensorSubtract(l, r);
+    }
+
+    /// <summary>
+    /// All row dot products left[i] . right[j] as a [left.Rows, right.Rows] tensor.
+    /// </summary>
+    public static Tensor<T> CrossDotProducts<T>(Matrix<T> left, Matrix<T> right)
+    {
+        return AiDotNetEngine.Current.TensorMatMul(
+            Tensor<T>.FromMatrix(left), Tensor<T>.FromMatrix(right.Transpose()));
+    }
+
+    /// <summary>
     /// Gathers <paramref name="source"/> at <paramref name="indices"/> (in the given order).
     /// </summary>
     public static Vector<T> Gather<T>(Vector<T> source, int[] indices)

@@ -269,13 +269,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     /// </remarks>
     public virtual Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-
-        return predictions;
+        return new Vector<T>(input.GetRows().Select(PredictSingle));
     }
 
     /// <summary>
@@ -394,45 +388,32 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
                 nameof(coefficients));
         }
 
-        int[] supportVectorIndices = Enumerable.Range(0, coefficients.Length)
-            .Where(i => NumOps.GreaterThan(NumOps.Abs(coefficients[i]), SupportVectorSelectionTolerance))
-            .ToArray();
+        int[] supportVectorIndices = Array.Empty<int>();
+        Vector<T> magnitudes = new Vector<T>(0);
+        if (coefficients.Length > 0)
+        {
+            magnitudes = Engine.Abs(coefficients);
+            supportVectorIndices = RegressionEngineOps.NonzeroIndices(
+                Engine.TensorGreaterThan(Tensor<T>.FromVector(magnitudes), SupportVectorSelectionTolerance));
+        }
 
         // If all alphas are near-zero, keep the single largest-magnitude alpha as a fallback.
         // This avoids producing an empty model that cannot be exported or JIT-compiled.
         if (supportVectorIndices.Length == 0 && coefficients.Length > 0 && candidates.Rows > 0)
         {
-            int bestIndex = 0;
-            T bestAbs = NumOps.Abs(coefficients[0]);
-
-            for (int i = 1; i < coefficients.Length; i++)
-            {
-                T abs = NumOps.Abs(coefficients[i]);
-                if (NumOps.GreaterThan(abs, bestAbs))
-                {
-                    bestAbs = abs;
-                    bestIndex = i;
-                }
-            }
-
-            supportVectorIndices = new[] { bestIndex };
+            supportVectorIndices = new[] { RegressionEngineOps.ArgMaxFirst(magnitudes) };
         }
 
         int featureCount = candidates.Columns;
-        SupportVectors = new Matrix<T>(supportVectorIndices.Length, featureCount);
-        var newAlphas = new Vector<T>(supportVectorIndices.Length);
-
-        for (int i = 0; i < supportVectorIndices.Length; i++)
+        if (supportVectorIndices.Length == 0)
         {
-            int index = supportVectorIndices[i];
-            for (int j = 0; j < featureCount; j++)
-            {
-                SupportVectors[i, j] = candidates[index, j];
-            }
-            newAlphas[i] = coefficients[index];
+            SupportVectors = new Matrix<T>(0, featureCount);
+            Alphas = new Vector<T>(0);
+            return;
         }
 
-        Alphas = newAlphas;
+        SupportVectors = candidates.GetRows(supportVectorIndices);
+        Alphas = RegressionEngineOps.Gather(coefficients, supportVectorIndices);
     }
 
     /// <summary>
@@ -457,14 +438,70 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     /// </remarks>
     protected virtual T PredictSingle(Vector<T> input)
     {
-        T result = B;
-        for (int i = 0; i < SupportVectors.Rows; i++)
+        if (SupportVectors.Rows == 0)
         {
-            Vector<T> supportVector = SupportVectors.GetRow(i);
-            result = NumOps.Add(result, NumOps.Multiply(Alphas[i], KernelFunction(input, supportVector)));
+            return B;
         }
 
-        return result;
+        // result = B + sum_i alpha_i * K(input, sv_i), with every kernel value computed at once
+        var queryRow = new Tensor<T>(new[] { 1, input.Length }, input).ToMatrix();
+        var kernelValues = KernelMatrix(queryRow, SupportVectors).GetRow(0);
+        var alphas = Alphas.Length == kernelValues.Length ? Alphas : Alphas.GetSubVector(0, kernelValues.Length);
+        return NumOps.Add(B, Engine.DotProduct(alphas, kernelValues));
+    }
+
+    /// <summary>
+    /// Computes the kernel value K(left[i], right[j]) for every pair of rows at once.
+    /// </summary>
+    /// <param name="left">The first set of rows.</param>
+    /// <param name="right">The second set of rows (same feature count).</param>
+    /// <returns>A [left.Rows, right.Rows] matrix of kernel values.</returns>
+    protected Matrix<T> KernelMatrix(Matrix<T> left, Matrix<T> right)
+    {
+        if (left.Rows == 0 || right.Rows == 0)
+        {
+            return new Matrix<T>(left.Rows, right.Rows);
+        }
+
+        var engine = Engine;
+        T gamma = NumOps.FromDouble(Options.Gamma);
+        T negativeGamma = NumOps.FromDouble(-Options.Gamma);
+        T coef0 = NumOps.FromDouble(Options.Coef0);
+        Tensor<T> gram;
+        switch (Options.KernelType)
+        {
+            case KernelType.Linear:
+                gram = RegressionEngineOps.CrossDotProducts(left, right);
+                break;
+
+            case KernelType.RBF:
+                gram = engine.TensorExp(engine.TensorMultiplyScalar(
+                    engine.ReduceSum(engine.TensorSquare(RegressionEngineOps.PairwiseDifferences(left, right)), new[] { 2 }, keepDims: false),
+                    negativeGamma));
+                break;
+
+            case KernelType.Polynomial:
+                gram = engine.TensorPower(
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(RegressionEngineOps.CrossDotProducts(left, right), gamma), coef0),
+                    NumOps.FromDouble(Options.PolynomialDegree));
+                break;
+
+            case KernelType.Sigmoid:
+                gram = engine.TensorTanh(
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(RegressionEngineOps.CrossDotProducts(left, right), gamma), coef0));
+                break;
+
+            case KernelType.Laplacian:
+                gram = engine.TensorExp(engine.TensorMultiplyScalar(
+                    engine.ReduceSum(engine.TensorAbs(RegressionEngineOps.PairwiseDifferences(left, right)), new[] { 2 }, keepDims: false),
+                    negativeGamma));
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(Options.KernelType), Options.KernelType, "Unsupported kernel type");
+        }
+
+        return gram.ToMatrix();
     }
 
     /// <summary>
@@ -500,7 +537,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
             case KernelType.RBF:
                 // VECTORIZED: Use Engine operations for element-wise subtract and sum
                 var diff = (Vector<T>)Engine.Subtract(x1, x2);
-                T squaredDistance = diff.Transform(v => NumOps.Square(v)).Sum();
+                T squaredDistance = Engine.DotProduct(diff, diff);
                 return NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-Options.Gamma), squaredDistance));
 
             case KernelType.Polynomial:
@@ -784,19 +821,8 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        // Create a vector to hold all parameters (bias + alphas)
-        var parameters = new Vector<T>(Alphas.Length + 1);
-
-        // Set the bias term as the first parameter
-        parameters[0] = B;
-
-        // Copy all alpha coefficients
-        for (int i = 0; i < Alphas.Length; i++)
-        {
-            parameters[i + 1] = Alphas[i];
-        }
-
-        return parameters;
+        // All parameters: the bias term first, then all alpha coefficients
+        return Vector<T>.Concatenate(new[] { new Vector<T>(new[] { B }), Alphas });
     }
 
     /// <summary>
@@ -835,10 +861,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         clone.B = parameters[0];
 
         // Set the alpha coefficients
-        for (int i = 0; i < Alphas.Length; i++)
-        {
-            clone.Alphas[i] = parameters[i + 1];
-        }
+        clone.Alphas = parameters.GetSubVector(1, Alphas.Length);
 
         return clone;
     }
@@ -871,24 +894,40 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         var activeIndices = new HashSet<int>();
 
         // Identify features that have non-zero weight in support vectors with non-zero alpha
-        for (int i = 0; i < Alphas.Length; i++)
+        foreach (int j in RegressionEngineOps.NonzeroIndices(ActiveSupportCounts(activityTolerance)))
         {
-            // Skip if the alpha coefficient is effectively zero
-            if (NumOps.LessThan(NumOps.Abs(Alphas[i]), activityTolerance))
-                continue;
-
-            // Check each feature in this support vector
-            for (int j = 0; j < SupportVectors.Columns; j++)
-            {
-                // If the feature has a non-zero value, consider it active
-                if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, j]), activityTolerance))
-                {
-                    activeIndices.Add(j);
-                }
-            }
+            activeIndices.Add(j);
         }
 
         return activeIndices;
+    }
+
+    /// <summary>
+    /// For every feature, the number of support vectors whose alpha and feature value are both not
+    /// below <paramref name="activityTolerance"/> in magnitude.
+    /// </summary>
+    private Tensor<T> ActiveSupportCounts(T activityTolerance)
+    {
+        var engine = Engine;
+        int rows = Math.Min(Alphas.Length, SupportVectors.Rows);
+        if (rows == 0 || SupportVectors.Columns == 0)
+        {
+            return Tensor<T>.FromVector(engine.FillZero(SupportVectors.Columns));
+        }
+
+        var alphas = rows == Alphas.Length ? Alphas : Alphas.GetSubVector(0, rows);
+        var supportVectors = rows == SupportVectors.Rows
+            ? SupportVectors
+            : SupportVectors.GetSubMatrix(0, 0, rows, SupportVectors.Columns);
+
+        // 1 where |value| is not below the tolerance (NaN counts as active), else 0
+        var activeAlpha = engine.ScalarMinusTensor(NumOps.One,
+            engine.TensorLessThan(Tensor<T>.FromVector(engine.Abs(alphas)), activityTolerance));
+        var activeValue = engine.ScalarMinusTensor(NumOps.One,
+            engine.TensorLessThan(engine.TensorAbs(Tensor<T>.FromMatrix(supportVectors)), activityTolerance));
+
+        return Tensor<T>.FromVector(engine.MatrixVectorMultiply(
+            engine.MatrixTranspose(activeValue.ToMatrix()), activeAlpha.ToVector()));
     }
 
     /// <summary>
@@ -923,20 +962,8 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         T activityTolerance = SupportVectorSelectionTolerance;
 
         // Check if the feature has a non-zero value in any support vector with non-zero alpha
-        for (int i = 0; i < Alphas.Length; i++)
-        {
-            // Skip if the alpha coefficient is effectively zero
-            if (NumOps.LessThan(NumOps.Abs(Alphas[i]), activityTolerance))
-                continue;
-
-            // Check if this feature has a non-zero value in this support vector
-            if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, featureIndex]), activityTolerance))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        var counts = ActiveSupportCounts(activityTolerance);
+        return NumOps.GreaterThan(counts[featureIndex], NumOps.Zero);
     }
 
     /// <summary>
@@ -955,14 +982,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
 
         // Resize Alphas if needed (optimizer may call before training initializes Alphas)
         int alphaCount = parameters.Length - 1;
-        if (Alphas.Length != alphaCount)
-        {
-            Alphas = new Vector<T>(alphaCount);
-        }
-        for (int i = 0; i < alphaCount; i++)
-        {
-            Alphas[i] = parameters[i + 1];
-        }
+        Alphas = alphaCount == 0 ? new Vector<T>(0) : parameters.GetSubVector(1, alphaCount);
     }
 
     /// <summary>
@@ -972,17 +992,25 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         var activeSet = new HashSet<int>(featureIndices);
-
-        for (int i = 0; i < SupportVectors.Rows; i++)
+        if (SupportVectors.Rows == 0 || SupportVectors.Columns == 0)
         {
-            for (int j = 0; j < SupportVectors.Columns; j++)
-            {
-                if (!activeSet.Contains(j))
-                {
-                    SupportVectors[i, j] = NumOps.Zero;
-                }
-            }
+            return;
         }
+
+        // Zero every column that is not active, for all support vectors at once
+        var engine = Engine;
+        var keepColumn = Enumerable.Range(0, SupportVectors.Columns).Select(activeSet.Contains).ToArray();
+        var keep = new bool[SupportVectors.Rows * SupportVectors.Columns];
+        for (int k = 0; k < keep.Length; k++)
+        {
+            keep[k] = keepColumn[k % SupportVectors.Columns];
+        }
+
+        var masked = engine.TensorWhere(
+            keep,
+            Tensor<T>.FromMatrix(SupportVectors),
+            Tensor<T>.FromVector(engine.FillZero(keep.Length)).Reshape(new[] { SupportVectors.Rows, SupportVectors.Columns }));
+        masked.ToMatrix().AsSpan().CopyTo(SupportVectors.AsWritableSpan());
     }
 
     /// <summary>
@@ -992,25 +1020,33 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
         var result = new Dictionary<string, T>();
-        var importance = new T[SupportVectors.Columns];
+        var engine = Engine;
 
-        for (int j = 0; j < SupportVectors.Columns; j++)
+        // importance_j = sum_i |alpha_i| * |sv_ij|
+        Vector<T> importance;
+        int rows = Math.Min(Alphas.Length, SupportVectors.Rows);
+        if (rows == 0)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < Alphas.Length; i++)
-            {
-                T weighted = NumOps.Multiply(NumOps.Abs(Alphas[i]), NumOps.Abs(SupportVectors[i, j]));
-                sum = NumOps.Add(sum, weighted);
-            }
-            importance[j] = sum;
+            importance = engine.FillZero(SupportVectors.Columns);
+        }
+        else
+        {
+            var supportVectors = rows == SupportVectors.Rows
+                ? SupportVectors
+                : SupportVectors.GetSubMatrix(0, 0, rows, SupportVectors.Columns);
+            var alphas = rows == Alphas.Length ? Alphas : Alphas.GetSubVector(0, rows);
+            var absSupportVectors = engine.TensorAbs(Tensor<T>.FromMatrix(supportVectors)).ToMatrix();
+            importance = engine.MatrixVectorMultiply(engine.MatrixTranspose(absSupportVectors), engine.Abs(alphas));
         }
 
-        for (int i = 0; i < importance.Length; i++)
+        int i = 0;
+        foreach (var value in importance)
         {
             string featureName = FeatureNames != null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[featureName] = importance[i];
+            result[featureName] = value;
+            i++;
         }
 
         return result;
@@ -1204,25 +1240,36 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
 
         // Compute gradient for each alpha (support vector weight)
         // Use try-finally to ensure state is restored even if exceptions occur
-        for (int i = 0; i < Alphas.Length; i++)
+        int alphaCount = Alphas.Length;
+        if (alphaCount > 0)
         {
-            var originalAlpha = Alphas[i];
+            var originalAlphas = Alphas;
+            var lossesPlus = new List<T>(alphaCount);
             try
             {
-                // Forward difference: f(x + h) - f(x) / h
-                Alphas[i] = NumOps.Add(originalAlpha, epsilon);
-                var predPlus = Predict(input);
-                var lossPlus = loss.CalculateLoss(predPlus, target);
-
-                var lossCurrent = loss.CalculateLoss(predictions, target);
-
-                gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossCurrent), epsilon);
+                for (int i = 0; i < alphaCount; i++)
+                {
+                    // Forward difference: f(x + h) - f(x) / h, perturbing only alpha i
+                    var step = Engine.TensorScatter(
+                        Tensor<T>.FromVector(Engine.FillZero(alphaCount)),
+                        new Tensor<int>(new[] { i }, new[] { 1 }),
+                        Tensor<T>.FromVector(Engine.Fill(1, epsilon)),
+                        0).ToVector();
+                    Alphas = Engine.Add(originalAlphas, step);
+                    var predPlus = Predict(input);
+                    lossesPlus.Add(loss.CalculateLoss(predPlus, target));
+                }
             }
             finally
             {
                 // Always restore original state, even if exception occurs
-                Alphas[i] = originalAlpha;
+                Alphas = originalAlphas;
             }
+
+            var lossCurrent = loss.CalculateLoss(predictions, target);
+            var alphaGradients = Engine.Divide(
+                Engine.Subtract(new Vector<T>(lossesPlus), Engine.Fill(alphaCount, lossCurrent)), epsilon);
+            alphaGradients.AsSpan().CopyTo(gradients.AsWritableSpan());
         }
 
         // Gradient for bias term
