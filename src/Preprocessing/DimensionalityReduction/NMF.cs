@@ -43,8 +43,8 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _randomState;
 
     // Fitted parameters
-    private double[,]? _components; // H matrix (nComponents × nFeatures)
-    private double _reconstructionError;
+    private Matrix<T>? _components; // H matrix (nComponents × nFeatures)
+    private T _reconstructionError = MathHelper.GetNumericOperations<T>().Zero;
     private int _nIterations;
     private int _nFeaturesIn;
 
@@ -61,12 +61,12 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the learned components (H matrix).
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets the final reconstruction error.
     /// </summary>
-    public double ReconstructionError => _reconstructionError;
+    public T ReconstructionError => _reconstructionError;
 
     /// <summary>
     /// Gets the number of iterations performed.
@@ -127,485 +127,223 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         _nFeaturesIn = data.Columns;
-        int n = data.Rows;
-        int p = data.Columns;
         int k = _nComponents;
 
-        // Convert to double and verify non-negativity
-        var V = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < 0)
-                {
-                    throw new ArgumentException(
-                        $"NMF requires non-negative input. Found negative value at ({i}, {j}): {val}");
-                }
-                V[i, j] = val;
-            }
-        }
+        // Validate non-negativity
+        var v = Tensor<T>.FromMatrix(data);
+        ThrowIfNegative(v);
 
         // Initialize W and H
-        var (W, H) = InitializeMatrices(V, n, p, k);
+        var (w, h) = InitializeMatrices(v, k);
 
         // Run solver
         if (_solver == NMFSolver.MU)
         {
-            (W, H, _nIterations) = SolveMultiplicativeUpdate(V, W, H, n, p, k);
+            (w, h, _nIterations) = SolveMultiplicativeUpdate(v, w, h);
         }
         else
         {
-            (W, H, _nIterations) = SolveCoordinateDescent(V, W, H, n, p, k);
+            (w, h, _nIterations) = SolveCoordinateDescent(v, w, h);
         }
 
-        // Store components (H matrix)
-        _components = H;
+        // Store components (H)
+        _components = h.ToMatrix();
 
         // Compute reconstruction error
-        _reconstructionError = ComputeReconstructionError(V, W, H, n, p, k);
+        _reconstructionError = ComputeReconstructionError(v, w, h);
     }
 
-    private (double[,] W, double[,] H) InitializeMatrices(double[,] V, int n, int p, int k)
+    /// <summary>Throws for the first (row-major) negative entry, naming its position and value.</summary>
+    private void ThrowIfNegative(Tensor<T> v)
     {
-        var W = new double[n, k];
-        var H = new double[k, p];
+        var engine = Engine;
+        if (!DimensionalityReductionOps.Below(engine.TensorMinValue(v), NumOps.Zero))
+        {
+            return;
+        }
+
+        int p = v.Shape[1];
+        int flat = DimensionalityReductionOps.FirstArgMax(
+            engine.Reshape(engine.TensorLessThan(v, NumOps.Zero), new[] { v.Length }));
+        throw new ArgumentException(
+            $"NMF requires non-negative input. Found negative value at ({flat / p}, {flat % p}): {v[flat / p, flat % p]}");
+    }
+
+    private (Tensor<T> W, Tensor<T> H) InitializeMatrices(Tensor<T> v, int k)
+    {
+        var engine = Engine;
+        int n = v.Shape[0];
+        int p = v.Shape[1];
         var random = RandomHelper.CreateSeededRandom(_randomState);
 
         switch (_init)
         {
-            case NMFInit.Random:
-                // Random initialization
-                double scale = Math.Sqrt(V.Cast<double>().Average() / k);
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < k; j++)
-                    {
-                        W[i, j] = Math.Abs(random.NextDouble() * scale);
-                    }
-                }
-                for (int i = 0; i < k; i++)
-                {
-                    for (int j = 0; j < p; j++)
-                    {
-                        H[i, j] = Math.Abs(random.NextDouble() * scale);
-                    }
-                }
-                break;
-
             case NMFInit.NNDSVD:
-                // Non-negative Double SVD initialization
-                InitializeNNDSVD(V, W, H, n, p, k, random);
-                break;
+                return InitializeNNDSVD(v, k);
 
             case NMFInit.NNDSVDa:
-                // NNDSVD with small values set to average
-                InitializeNNDSVD(V, W, H, n, p, k, random);
-                double avg = V.Cast<double>().Average();
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < k; j++)
-                    {
-                        if (W[i, j] < 1e-10) W[i, j] = avg;
-                    }
-                }
-                for (int i = 0; i < k; i++)
-                {
-                    for (int j = 0; j < p; j++)
-                    {
-                        if (H[i, j] < 1e-10) H[i, j] = avg;
-                    }
-                }
-                break;
-        }
-
-        return (W, H);
-    }
-
-    private void InitializeNNDSVD(double[,] V, double[,] W, double[,] H, int n, int p, int k, Random random)
-    {
-        // Simplified NNDSVD: use SVD and take absolute values
-        // First, compute V^T V for eigendecomposition
-        var VTV = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = i; j < p; j++)
             {
-                double sum = 0;
-                for (int l = 0; l < n; l++)
-                {
-                    sum += V[l, i] * V[l, j];
-                }
-                VTV[i, j] = sum;
-                VTV[j, i] = sum;
+                // NNDSVD with (near) zero entries filled by the data average
+                var (w, h) = InitializeNNDSVD(v, k);
+                T avg = engine.TensorMean(v);
+                T floor = NumOps.FromDouble(1e-10);
+                w = engine.TensorWhere(engine.TensorLessThan(w, floor), engine.TensorFullLike(w, avg), w);
+                h = engine.TensorWhere(engine.TensorLessThan(h, floor), engine.TensorFullLike(h, avg), h);
+                return (w, h);
             }
-        }
 
-        var (eigenvalues, eigenvectors) = ComputeEigen(VTV, p, k);
-
-        // Sort by eigenvalue descending
-        var indices = Enumerable.Range(0, k)
-            .OrderByDescending(i => eigenvalues[i])
-            .ToArray();
-
-        // Initialize H with absolute values of right singular vectors
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < p; j++)
+            default:
             {
-                H[i, j] = Math.Abs(eigenvectors[indices[i], j]);
-            }
-        }
-
-        // Initialize W by projecting V onto H
-        for (int i = 0; i < n; i++)
-        {
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    sum += V[i, j] * H[c, j];
-                }
-                W[i, c] = Math.Max(0, sum);
+                // Random initialization scaled by sqrt(mean(V) / k): W draws first, then H
+                T scale = NumOps.Sqrt(NumOps.Divide(engine.TensorMean(v), NumOps.FromDouble(k)));
+                var w = engine.TensorAbs(engine.TensorMultiplyScalar(DimensionalityReductionOps.Uniform<T>(random, n, k), scale));
+                var h = engine.TensorAbs(engine.TensorMultiplyScalar(DimensionalityReductionOps.Uniform<T>(random, k, p), scale));
+                return (w, h);
             }
         }
     }
 
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeEigen(double[,] matrix, int n, int k)
+    /// <summary>
+    /// NNDSVD-style initialization: H rows are |leading eigenvectors of V^T V| (zero rows beyond rank p) and
+    /// W = max(0, V H^T).
+    /// </summary>
+    private (Tensor<T> W, Tensor<T> H) InitializeNNDSVD(Tensor<T> v, int k)
     {
-        var eigenvalues = new double[k];
-        var eigenvectors = new double[k, n];
-        var A = (double[,])matrix.Clone();
-        var random = RandomHelper.CreateSeededRandom(_randomState);
+        var engine = Engine;
+        int p = v.Shape[1];
+        int available = Math.Min(k, p);
 
-        for (int m = 0; m < k; m++)
+        var (_, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(
+            DimensionalityReductionOps.TransposeMatMul(v, v), descending: true);
+        var h = engine.TensorAbs(engine.TensorTranspose(DimensionalityReductionOps.FirstColumns(eigenvectors, available)));
+        if (available < k)
         {
-            var v = new double[n];
-            double norm = 0;
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = random.NextDouble() - 0.5;
-                norm += v[i] * v[i];
-            }
-            norm = Math.Sqrt(norm);
-            for (int i = 0; i < n; i++)
-            {
-                v[i] /= norm;
-            }
-
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10)
-                {
-                    // Av is nearly zero - keep current normalized v as eigenvector
-                    // Ensure v is still normalized (it should be from previous iteration or init)
-                    double vNorm = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        vNorm += v[i] * v[i];
-                    }
-                    vNorm = Math.Sqrt(vNorm);
-                    if (vNorm > 1e-10)
-                    {
-                        for (int i = 0; i < n; i++)
-                        {
-                            v[i] /= vNorm;
-                        }
-                    }
-                    break;
-                }
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            double eigenvalue = 0;
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[m] = Math.Max(0, eigenvalue);
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[m, i] = v[i];
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
+            h = engine.TensorConcatenate(new[] { h, new Tensor<T>(new[] { k - available, p }) }, 0);
         }
 
-        return (eigenvalues, eigenvectors);
+        var w = engine.TensorClampMin(DimensionalityReductionOps.MatMulTranspose(v, h), NumOps.Zero);
+        return (w, h);
     }
 
-    private (double[,] W, double[,] H, int Iterations) SolveMultiplicativeUpdate(
-        double[,] V, double[,] W, double[,] H, int n, int p, int k)
+    private (Tensor<T> W, Tensor<T> H, int Iterations) SolveMultiplicativeUpdate(Tensor<T> v, Tensor<T> w, Tensor<T> h)
     {
-        double eps = 1e-10;
-        double prevError = double.MaxValue;
+        var engine = Engine;
+        T eps = NumOps.FromDouble(1e-10);
+        T betaMinus2 = NumOps.FromDouble(_beta - 2);
+        T betaMinus1 = NumOps.FromDouble(_beta - 1);
+        T l1Reg = NumOps.FromDouble(_alpha * _l1Ratio);
+        T l2Reg = NumOps.FromDouble(_alpha * (1 - _l1Ratio));
+        T prevError = NumOps.MaxValue;
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Compute WH (reconstruction)
-            var WH = new double[n, p];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double sum = 0;
-                    for (int c = 0; c < k; c++)
-                    {
-                        sum += W[i, c] * H[c, j];
-                    }
-                    WH[i, j] = Math.Max(eps, sum);
-                }
-            }
+            // Update H: H *= W^T (WH^(beta-2) * V) / (W^T WH^(beta-1) + l1 + l2 H + eps)
+            var wh = engine.TensorClampMin(engine.TensorMatMul(w, h), eps);
+            var numeratorH = DimensionalityReductionOps.TransposeMatMul(
+                w, engine.TensorMultiply(engine.TensorPower(wh, betaMinus2), v));
+            var denominatorH = engine.TensorAddScalar(
+                engine.TensorAdd(
+                    DimensionalityReductionOps.TransposeMatMul(w, engine.TensorPower(wh, betaMinus1)),
+                    engine.TensorMultiplyScalar(h, l2Reg)),
+                NumOps.Add(l1Reg, eps));
+            h = engine.TensorClampMin(engine.TensorMultiply(h, engine.TensorDivide(numeratorH, denominatorH)), eps);
 
-            // Beta-divergence multiplicative update
-            // For beta = 2 (Frobenius): standard update
-            // For beta = 1 (KL-divergence): special case
-            // For beta = 0 (Itakura-Saito): special case
-            // General: uses (WH)^(beta-2) and (WH)^(beta-1)
-
-            // Update H: H *= (W^T * ((WH)^(beta-2) * V)) / (W^T * (WH)^(beta-1) + reg)
-            var numeratorH = new double[k, p];
-            var denominatorH = new double[k, p];
-
-            for (int i = 0; i < k; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double numSum = 0;
-                    double denSum = 0;
-                    for (int l = 0; l < n; l++)
-                    {
-                        double whPowBetaMinus2 = Math.Pow(WH[l, j], _beta - 2);
-                        double whPowBetaMinus1 = Math.Pow(WH[l, j], _beta - 1);
-                        numSum += W[l, i] * whPowBetaMinus2 * V[l, j];
-                        denSum += W[l, i] * whPowBetaMinus1;
-                    }
-                    numeratorH[i, j] = numSum;
-                    // Add L1/L2 regularization
-                    double l1Reg = _alpha * _l1Ratio;
-                    double l2Reg = _alpha * (1 - _l1Ratio) * H[i, j];
-                    denominatorH[i, j] = denSum + l1Reg + l2Reg + eps;
-                }
-            }
-
-            // Update H
-            for (int i = 0; i < k; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    H[i, j] *= numeratorH[i, j] / denominatorH[i, j];
-                    H[i, j] = Math.Max(eps, H[i, j]);
-                }
-            }
-
-            // Recompute WH after H update
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double sum = 0;
-                    for (int c = 0; c < k; c++)
-                    {
-                        sum += W[i, c] * H[c, j];
-                    }
-                    WH[i, j] = Math.Max(eps, sum);
-                }
-            }
-
-            // Update W: W *= (((WH)^(beta-2) * V) * H^T) / ((WH)^(beta-1) * H^T + reg)
-            var numeratorW = new double[n, k];
-            var denominatorW = new double[n, k];
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double numSum = 0;
-                    double denSum = 0;
-                    for (int l = 0; l < p; l++)
-                    {
-                        double whPowBetaMinus2 = Math.Pow(WH[i, l], _beta - 2);
-                        double whPowBetaMinus1 = Math.Pow(WH[i, l], _beta - 1);
-                        numSum += whPowBetaMinus2 * V[i, l] * H[j, l];
-                        denSum += whPowBetaMinus1 * H[j, l];
-                    }
-                    numeratorW[i, j] = numSum;
-                    // Add L1/L2 regularization
-                    double l1Reg = _alpha * _l1Ratio;
-                    double l2Reg = _alpha * (1 - _l1Ratio) * W[i, j];
-                    denominatorW[i, j] = denSum + l1Reg + l2Reg + eps;
-                }
-            }
-
-            // Update W
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    W[i, j] *= numeratorW[i, j] / denominatorW[i, j];
-                    W[i, j] = Math.Max(eps, W[i, j]);
-                }
-            }
+            // Update W: W *= (WH^(beta-2) * V) H^T / (WH^(beta-1) H^T + l1 + l2 W + eps)
+            wh = engine.TensorClampMin(engine.TensorMatMul(w, h), eps);
+            var numeratorW = DimensionalityReductionOps.MatMulTranspose(
+                engine.TensorMultiply(engine.TensorPower(wh, betaMinus2), v), h);
+            var denominatorW = engine.TensorAddScalar(
+                engine.TensorAdd(
+                    DimensionalityReductionOps.MatMulTranspose(engine.TensorPower(wh, betaMinus1), h),
+                    engine.TensorMultiplyScalar(w, l2Reg)),
+                NumOps.Add(l1Reg, eps));
+            w = engine.TensorClampMin(engine.TensorMultiply(w, engine.TensorDivide(numeratorW, denominatorW)), eps);
 
             // Check convergence
-            double error = ComputeReconstructionError(V, W, H, n, p, k);
-            double relChange = Math.Abs(prevError - error) / (prevError + eps);
-
-            if (relChange < _tolerance)
+            T error = ComputeReconstructionError(v, w, h);
+            if (RelativeChangeBelow(prevError, error))
             {
-                return (W, H, iter + 1);
+                return (w, h, iter + 1);
             }
 
             prevError = error;
         }
 
-        return (W, H, _maxIterations);
+        return (w, h, _maxIterations);
     }
 
-    private (double[,] W, double[,] H, int Iterations) SolveCoordinateDescent(
-        double[,] V, double[,] W, double[,] H, int n, int p, int k)
+    private (Tensor<T> W, Tensor<T> H, int Iterations) SolveCoordinateDescent(Tensor<T> v, Tensor<T> w, Tensor<T> h)
     {
         // Simplified coordinate descent
-        double eps = 1e-10;
-        double prevError = double.MaxValue;
+        var engine = Engine;
+        int k = h.Shape[0];
+        T eps = NumOps.FromDouble(1e-10);
+        T l2Reg = NumOps.FromDouble(_alpha * (1 - _l1Ratio));
+        T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio);
+        T prevError = NumOps.MaxValue;
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Update H by minimizing ||V - WH||^2 + regularization with H >= 0
+            // Update H row by row: H[c] = max(0, S(W[:, c]^T R_c, l1) / (eps + |W[:, c]|^2 + l2))
             for (int c = 0; c < k; c++)
             {
-                for (int j = 0; j < p; j++)
-                {
-                    double numerator = 0;
-                    double denominator = eps;
-
-                    for (int i = 0; i < n; i++)
-                    {
-                        // Residual without current component
-                        double residual = V[i, j];
-                        for (int l = 0; l < k; l++)
-                        {
-                            if (l != c)
-                            {
-                                residual -= W[i, l] * H[l, j];
-                            }
-                        }
-                        numerator += W[i, c] * residual;
-                        denominator += W[i, c] * W[i, c];
-                    }
-
-                    // L2 regularization: add to denominator
-                    denominator += _alpha * (1 - _l1Ratio);
-
-                    // L1 regularization: soft-thresholding on numerator
-                    double l1Penalty = _alpha * _l1Ratio;
-                    double thresholdedNum = Math.Max(0, numerator - l1Penalty) -
-                                            Math.Max(0, -numerator - l1Penalty);
-
-                    H[c, j] = Math.Max(0, thresholdedNum / denominator);
-                }
+                var wColumn = engine.TensorNarrow(w, 1, c, 1);                              // [n, 1]
+                var residual = ResidualWithout(v, w, h, c);                                 // [n, p]
+                var numerator = DimensionalityReductionOps.TransposeMatMul(wColumn, residual); // [1, p]
+                var denominator = engine.TensorAddScalar(
+                    engine.ReduceSum(engine.TensorSquare(wColumn), new[] { 0 }, true), NumOps.Add(eps, l2Reg));
+                var updated = engine.TensorClampMin(
+                    engine.TensorDivide(DimensionalityReductionOps.SoftThreshold(numerator, l1Penalty), denominator), NumOps.Zero);
+                h = DimensionalityReductionOps.WithRow(h, c, updated);
             }
 
-            // Update W by minimizing ||V - WH||^2 + regularization with W >= 0
-            for (int i = 0; i < n; i++)
+            // Update W column by column: W[:, c] = max(0, S(R_c H[c]^T, l1) / (eps + |H[c]|^2 + l2))
+            for (int c = 0; c < k; c++)
             {
-                for (int c = 0; c < k; c++)
-                {
-                    double numerator = 0;
-                    double denominator = eps;
-
-                    for (int j = 0; j < p; j++)
-                    {
-                        double residual = V[i, j];
-                        for (int l = 0; l < k; l++)
-                        {
-                            if (l != c)
-                            {
-                                residual -= W[i, l] * H[l, j];
-                            }
-                        }
-                        numerator += H[c, j] * residual;
-                        denominator += H[c, j] * H[c, j];
-                    }
-
-                    // L2 regularization: add to denominator
-                    denominator += _alpha * (1 - _l1Ratio);
-
-                    // L1 regularization: soft-thresholding on numerator
-                    double l1Penalty = _alpha * _l1Ratio;
-                    double thresholdedNum = Math.Max(0, numerator - l1Penalty) -
-                                            Math.Max(0, -numerator - l1Penalty);
-
-                    W[i, c] = Math.Max(0, thresholdedNum / denominator);
-                }
+                var hRow = engine.TensorNarrow(h, 0, c, 1);                                 // [1, p]
+                var residual = ResidualWithout(v, w, h, c);
+                var numerator = DimensionalityReductionOps.MatMulTranspose(residual, hRow); // [n, 1]
+                var denominator = engine.TensorAddScalar(
+                    engine.ReduceSum(engine.TensorSquare(hRow), new[] { 1 }, true), NumOps.Add(eps, l2Reg));
+                var updated = engine.TensorClampMin(
+                    engine.TensorDivide(DimensionalityReductionOps.SoftThreshold(numerator, l1Penalty), denominator), NumOps.Zero);
+                w = DimensionalityReductionOps.WithColumn(w, c, updated);
             }
 
             // Check convergence
-            double error = ComputeReconstructionError(V, W, H, n, p, k);
-            double relChange = Math.Abs(prevError - error) / (prevError + eps);
-
-            if (relChange < _tolerance)
+            T error = ComputeReconstructionError(v, w, h);
+            if (RelativeChangeBelow(prevError, error))
             {
-                return (W, H, iter + 1);
+                return (w, h, iter + 1);
             }
 
             prevError = error;
         }
 
-        return (W, H, _maxIterations);
+        return (w, h, _maxIterations);
     }
 
-    private double ComputeReconstructionError(double[,] V, double[,] W, double[,] H, int n, int p, int k)
+    /// <summary>V - W H + W[:, c] H[c]: the residual that component c is fit to.</summary>
+    private Tensor<T> ResidualWithout(Tensor<T> v, Tensor<T> w, Tensor<T> h, int c)
     {
-        double error = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double WH_ij = 0;
-                for (int c = 0; c < k; c++)
-                {
-                    WH_ij += W[i, c] * H[c, j];
-                }
-                double diff = V[i, j] - WH_ij;
-                error += diff * diff;
-            }
-        }
-        return Math.Sqrt(error);
+        var engine = Engine;
+        return engine.TensorAdd(
+            engine.TensorSubtract(v, engine.TensorMatMul(w, h)),
+            engine.TensorMatMul(engine.TensorNarrow(w, 1, c, 1), engine.TensorNarrow(h, 0, c, 1)));
+    }
+
+    /// <summary>|previous - current| / (previous + 1e-10) &lt; tolerance.</summary>
+    private bool RelativeChangeBelow(T previous, T current)
+    {
+        T relChange = NumOps.Divide(
+            NumOps.Abs(NumOps.Subtract(previous, current)), NumOps.Add(previous, NumOps.FromDouble(1e-10)));
+        return NumOps.LessThan(relChange, NumOps.FromDouble(_tolerance));
+    }
+
+    /// <summary>Frobenius norm of V - W H.</summary>
+    private T ComputeReconstructionError(Tensor<T> v, Tensor<T> w, Tensor<T> h)
+    {
+        return DimensionalityReductionOps.Norm(Engine.TensorSubtract(v, Engine.TensorMatMul(w, h)));
     }
 
     /// <summary>
@@ -620,11 +358,11 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("NMF has not been fitted.");
         }
 
+        var engine = Engine;
         int n = data.Rows;
         int p = data.Columns;
-        int k = _components.GetLength(0);
+        int k = _components.Rows;
 
-        // Validate feature count matches training data
         if (p != _nFeaturesIn)
         {
             throw new ArgumentException(
@@ -632,111 +370,31 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        // Convert to double, enforcing non-negativity (required for NMF)
-        var V = new double[n, p];
-        bool hasNegatives = false;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < 0)
-                {
-                    hasNegatives = true;
-                    val = 0;
-                }
-                V[i, j] = val;
-            }
-        }
-
-        if (hasNegatives)
+        var v = Tensor<T>.FromMatrix(data);
+        if (DimensionalityReductionOps.Below(engine.TensorMinValue(v), NumOps.Zero))
         {
             throw new ArgumentException(
                 "NMF requires non-negative input data. Negative values were detected.",
                 nameof(data));
         }
 
-        // Initialize W
-        var W = new double[n, k];
-        double scale = Math.Sqrt(V.Cast<double>().Average() / k);
+        // Initialize W randomly (scaled by sqrt(mean(V) / k))
+        var h = Tensor<T>.FromMatrix(_components);
+        T scale = NumOps.Sqrt(NumOps.Divide(engine.TensorMean(v), NumOps.FromDouble(k)));
         var random = RandomHelper.CreateSeededRandom(_randomState);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                W[i, j] = Math.Abs(random.NextDouble() * scale);
-            }
-        }
+        var w = engine.TensorAbs(engine.TensorMultiplyScalar(DimensionalityReductionOps.Uniform<T>(random, n, k), scale));
 
-        // Solve for W with fixed H
-        double eps = 1e-10;
+        // Multiplicative updates for W with H fixed: W *= (V H^T) / (W H H^T + eps)
+        T eps = NumOps.FromDouble(1e-10);
+        var vht = DimensionalityReductionOps.MatMulTranspose(v, h);
+        var hht = DimensionalityReductionOps.MatMulTranspose(h, h);
         for (int iter = 0; iter < 100; iter++)
         {
-            // W *= (V H^T) / (W H H^T + eps)
-            var VHT = new double[n, k];
-            var HHT = new double[k, k];
-            var WHHT = new double[n, k];
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < p; l++)
-                    {
-                        sum += V[i, l] * _components[j, l];
-                    }
-                    VHT[i, j] = sum;
-                }
-            }
-
-            for (int i = 0; i < k; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < p; l++)
-                    {
-                        sum += _components[i, l] * _components[j, l];
-                    }
-                    HHT[i, j] = sum;
-                }
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < k; l++)
-                    {
-                        sum += W[i, l] * HHT[l, j];
-                    }
-                    WHHT[i, j] = sum + eps;
-                }
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    W[i, j] *= VHT[i, j] / WHHT[i, j];
-                    W[i, j] = Math.Max(eps, W[i, j]);
-                }
-            }
+            var whht = engine.TensorAddScalar(engine.TensorMatMul(w, hht), eps);
+            w = engine.TensorClampMin(engine.TensorMultiply(w, engine.TensorDivide(vht, whht)), eps);
         }
 
-        // Convert to output
-        var result = new T[n, k];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                result[i, j] = NumOps.FromDouble(W[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return w.ToMatrix();
     }
 
     /// <summary>
@@ -751,12 +409,10 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("NMF has not been fitted.");
         }
 
-        int n = data.Rows;
         int inputColumns = data.Columns;
-        int p = _nFeaturesIn;
-        int k = _components.GetLength(0);
+        int k = _components.Rows;
 
-        // Validate input column count matches number of components
+        // Validate that input has k columns (coefficient matrix W should be n x k)
         if (inputColumns != k)
         {
             throw new ArgumentException(
@@ -765,22 +421,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        var result = new T[n, p];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int c = 0; c < k; c++)
-                {
-                    sum += NumOps.ToDouble(data[i, c]) * _components[c, j];
-                }
-                result[i, j] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return Engine.TensorMatMul(Tensor<T>.FromMatrix(data), Tensor<T>.FromMatrix(_components)).ToMatrix();
     }
 
     /// <summary>
@@ -788,7 +429,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        int k = _components?.GetLength(0) ?? _nComponents;
+        int k = _components?.Rows ?? _nComponents;
         var names = new string[k];
         for (int i = 0; i < k; i++)
         {
