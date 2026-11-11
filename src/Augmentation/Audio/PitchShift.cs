@@ -175,7 +175,7 @@ public class PitchShift<T> : AudioAugmenterBase<T>
 
         // Normalize by window weights to prevent amplitude changes
         var covered = engine.TensorGreaterThan(windowWeights, NumOps.FromDouble(0.001));
-        var safeWeights = engine.TensorWhere(covered, windowWeights, AiDotNet.Augmentation.Image.ImageTensor<T>.Constant(windowWeights, 1.0));
+        var safeWeights = engine.TensorWhere(covered, windowWeights, OnesLike(engine, windowWeights));
         return engine.TensorWhere(covered, engine.TensorDivide(output, safeWeights), output);
     }
 
@@ -209,7 +209,7 @@ public class PitchShift<T> : AudioAugmenterBase<T>
         var windowNorms = engine.ReduceSum(engine.TensorMultiply(windows, windows), [1], true);
         var denominator = engine.TensorSqrt(engine.TensorMultiplyScalar(windowNorms, referenceNorm));
         var usable = engine.TensorGreaterThan(denominator, NumOps.FromDouble(0.0001));
-        var safeDenominator = engine.TensorWhere(usable, denominator, AiDotNet.Augmentation.Image.ImageTensor<T>.Constant(denominator, 1.0));
+        var safeDenominator = engine.TensorWhere(usable, denominator, OnesLike(engine, denominator));
         var score = engine.TensorWhere(usable, engine.TensorDivide(correlation, safeDenominator), correlation);
 
         int best = engine.TensorArgMax(engine.Reshape(score, [offsets]), 0).GetFlat(0);
@@ -220,6 +220,16 @@ public class PitchShift<T> : AudioAugmenterBase<T>
     /// Linear resampling to <paramref name="targetLength"/> samples: output i reads source position
     /// i * (inputLength - 1) / (targetLength - 1); positions at or past the last sample take it.
     /// </summary>
+    /// <summary>
+    /// Returns a tensor shaped like <paramref name="like"/> with every element set to one.
+    /// </summary>
+    private static Tensor<T> OnesLike(IEngine engine, Tensor<T> like)
+    {
+        var ones = new Tensor<T>((int[])like._shape.Clone());
+        engine.TensorFill(ones, NumOps.One);
+        return ones;
+    }
+
     private static Tensor<T> ResampleLinear(IEngine engine, Tensor<T> input, int targetLength)
     {
         int inputLength = input.Length;
