@@ -86,6 +86,58 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// Stacks equal-length column vectors into a [length, columns.Count] matrix.
+    /// </summary>
+    /// <param name="columns">The columns, in order (at least one).</param>
+    /// <returns>The matrix whose j-th column is <paramref name="columns"/>[j].</returns>
+    protected Matrix<T> StackColumns(IReadOnlyList<Vector<T>> columns)
+    {
+        var stacked = new Tensor<T>[columns.Count];
+        for (int k = 0; k < stacked.Length; k++)
+        {
+            stacked[k] = columns[k].AsTensor();
+        }
+
+        return Engine.TensorStack(stacked, 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// 1 where <paramref name="values"/>[i] &gt;= <paramref name="threshold"/>, otherwise 0 (NaN gives 0).
+    /// </summary>
+    /// <param name="values">The values to threshold.</param>
+    /// <param name="threshold">The threshold.</param>
+    /// <returns>The 0/1 indicator vector.</returns>
+    protected Vector<T> AtLeast(Vector<T> values, T threshold)
+    {
+        if (values.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var thresholds = new Tensor<T>(new[] { values.Length });
+        Engine.TensorFill(thresholds, threshold);
+        return Engine.TensorGreaterEqual(values.AsTensor(), thresholds).ToVector();
+    }
+
+    /// <summary>
+    /// <paramref name="values"/> truncated or zero-padded to <paramref name="length"/> elements.
+    /// </summary>
+    protected static Vector<T> FitToLength(Vector<T> values, int length)
+    {
+        if (values.Length == length)
+        {
+            return values;
+        }
+
+        if (values.Length > length)
+        {
+            return values.GetSubVector(0, length);
+        }
+
+        return Vector<T>.Concatenate(values, new Vector<T>(length - values.Length));
+    }
+
+    /// <summary>
     /// Gets the numeric operations provider for type T.
     /// </summary>
     protected INumericOperations<T> NumOps { get; }
