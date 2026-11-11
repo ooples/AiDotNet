@@ -82,7 +82,6 @@ public class CompositeLoss<T> : LossFunctionBase<T>
         }
 
         _losses = new LossFunctionBase<T>[terms.Length];
-        _weights = new T[terms.Length];
         for (int i = 0; i < terms.Length; i++)
         {
             if (terms[i].Loss is null)
@@ -90,8 +89,11 @@ public class CompositeLoss<T> : LossFunctionBase<T>
             if (double.IsNaN(terms[i].Weight) || double.IsInfinity(terms[i].Weight))
                 throw new ArgumentException($"Weight for loss term {i} must be finite.", nameof(terms));
             _losses[i] = terms[i].Loss;
-            _weights[i] = NumOps.FromDouble(terms[i].Weight);
         }
+
+        _weights = Vector<double>.Wrap(terms.Select(term => term.Weight).ToArray())
+            .Transform(NumOps.FromDouble)
+            .ToArray();
     }
 
     /// <summary>Gets the number of terms in this composite objective.</summary>
@@ -100,10 +102,9 @@ public class CompositeLoss<T> : LossFunctionBase<T>
     /// <inheritdoc/>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
-        T total = NumOps.Zero;
-        for (int i = 0; i < _losses.Length; i++)
-            total = NumOps.Add(total, NumOps.Multiply(_weights[i], _losses[i].CalculateLoss(predicted, actual)));
-        return total;
+        // Σ wᵢ·Lᵢ as one engine dot product over the per-term losses.
+        var termLosses = _losses.Select(loss => loss.CalculateLoss(predicted, actual)).ToArray();
+        return Engine.DotProduct(Vector<T>.Wrap(_weights), Vector<T>.Wrap(termLosses));
     }
 
 

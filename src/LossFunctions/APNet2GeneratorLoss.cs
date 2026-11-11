@@ -325,11 +325,14 @@ public sealed partial class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     {
         if (_window is not null) return _window;
 
-        var window = new Tensor<T>(new[] { _fftSize });
-        for (int n = 0; n < _fftSize; n++)
+        // Periodic Hann: 0.5 - 0.5·cos(2πn/N), the DFT-even form. A constant, so it stays off the tape.
+        Tensor<T> window;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            double value = 0.5 - (0.5 * Math.Cos(TwoPi * n / _fftSize));
-            window[n] = NumOps.FromDouble(value);
+            var sampleIndex = Engine.TensorArange<T>(0, _fftSize, 1);
+            var angle = Engine.TensorMultiplyScalar(sampleIndex, NumOps.FromDouble(TwoPi / _fftSize));
+            window = Engine.ScalarMinusTensor(
+                NumOps.FromDouble(0.5), Engine.TensorMultiplyScalar(Engine.TensorCos(angle), NumOps.FromDouble(0.5)));
         }
 
         _window = window;
@@ -352,16 +355,19 @@ public sealed partial class APNet2GeneratorLoss<T> : LossFunctionBase<T>
             if (_dftCos is not null && _dftCos.Shape[1] == bins) return;
         }
 
-        var cos = new Tensor<T>(new[] { _fftSize, bins });
-        var sin = new Tensor<T>(new[] { _fftSize, bins });
-        for (int n = 0; n < _fftSize; n++)
+        // angle[n, k] = 2π·((n·k) mod N)/N. Reducing n·k modulo N first is exact (both are integers)
+        // and keeps the angle in [0, 2π), so cos/sin lose no precision to a large argument.
+        Tensor<T> cos;
+        Tensor<T> sin;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int k = 0; k < bins; k++)
-            {
-                double angle = TwoPi * n * k / _fftSize;
-                cos[(n * bins) + k] = NumOps.FromDouble(Math.Cos(angle));
-                sin[(n * bins) + k] = NumOps.FromDouble(Math.Sin(angle));
-            }
+            var sampleIndex = Engine.TensorArange<T>(0, _fftSize, 1);
+            var binIndex = Engine.TensorArange<T>(0, bins, 1);
+            var product = Engine.TensorOuter(sampleIndex, binIndex);
+            var wrapped = Engine.TensorRemainder(product, Engine.TensorFullLike(product, NumOps.FromDouble(_fftSize)));
+            var angle = Engine.TensorMultiplyScalar(wrapped, NumOps.FromDouble(TwoPi / _fftSize));
+            cos = Engine.TensorCos(angle);
+            sin = Engine.TensorSin(angle);
         }
 
         lock (_dftBasisLock)
@@ -420,13 +426,10 @@ public sealed partial class APNet2GeneratorLoss<T> : LossFunctionBase<T>
         var filterbank = Engine.CreateMelFilterbank(
             _melChannels, _fftSize, _sampleRate, NumOps.Zero, NumOps.FromDouble(_sampleRate / 2.0));
 
-        var transposed = new Tensor<T>(new[] { bins, _melChannels });
-        for (int m = 0; m < _melChannels; m++)
+        Tensor<T> transposed;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int b = 0; b < bins; b++)
-            {
-                transposed[(b * _melChannels) + m] = filterbank[(m * bins) + b];
-            }
+            transposed = Engine.TensorTranspose(Engine.Reshape(filterbank, new[] { _melChannels, bins })).Contiguous();
         }
 
         _melTransposed = transposed;
@@ -566,10 +569,7 @@ public sealed partial class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     /// <summary>A constant tensor shaped like <paramref name="like"/>, staying on the tape.</summary>
     private Tensor<T> Const(Tensor<T> like, double value)
     {
-        var constant = new Tensor<T>(like.Shape.ToArray());
-        var scalar = NumOps.FromDouble(value);
-        for (int i = 0; i < constant.Length; i++) constant[i] = scalar;
-        return constant;
+        return Tensor<T>.CreateDefault(like.Shape.ToArray(), NumOps.FromDouble(value));
     }
 
     private Tensor<T> Scale(Tensor<T> x, double weight)
