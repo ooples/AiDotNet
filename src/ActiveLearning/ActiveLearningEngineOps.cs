@@ -178,6 +178,51 @@ internal static class ActiveLearningEngineOps
     }
 
     /// <summary>
+    /// Exact squared Euclidean distances sum((a_i - b_j)^2) between every row of a [m, d] tensor and
+    /// every row of a [k, d] tensor, computed blockwise over the rows of <paramref name="a"/>.
+    /// </summary>
+    /// <returns>A [m, k] tensor.</returns>
+    internal static Tensor<T> SquaredDistances<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        int m = a.Shape[0];
+        int k = b.Shape[0];
+        int d = a.Shape[1];
+        if (d == 0 || m == 0 || k == 0)
+        {
+            return new Tensor<T>(new[] { m, k });
+        }
+
+        var blockRows = BlockRows(m, (long)k * d);
+        var all = b.Reshape(new[] { 1, k, d });
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < m; start += blockRows)
+        {
+            int count = Math.Min(blockRows, m - start);
+            var shape = new[] { count, k, d };
+            var block = engine.TensorSlice(a, new[] { start, 0 }, new[] { count, d }).Reshape(new[] { count, 1, d });
+            var diff = engine.TensorSubtract(engine.TensorBroadcastTo(block, shape), engine.TensorBroadcastTo(all, shape));
+            blocks.Add(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 2 }, keepDims: false));
+        }
+
+        return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// Stacks equal-length vectors into a [count, length] tensor.
+    /// </summary>
+    internal static Tensor<T> StackVectors<T>(IReadOnlyList<Vector<T>> vectors)
+    {
+        var rows = new Tensor<T>[vectors.Count];
+        for (int i = 0; i < vectors.Count; i++)
+        {
+            rows[i] = Tensor<T>.FromVector(vectors[i]);
+        }
+
+        return AiDotNetEngine.Current.TensorStack(rows, 0);
+    }
+
+    /// <summary>
     /// Dot products between rows [start, start + count) of a [n, d] tensor and all of its rows.
     /// </summary>
     /// <returns>A [count, n] tensor.</returns>
