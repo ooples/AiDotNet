@@ -398,9 +398,10 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.Audio.Classification.GenreClassifier<T> genre && option is "BeatWindow" or "BeatHop" or "TextureWindowFrames")
             // Tzanetakis and Cook's beat histogram reads 65,536-sample windows every 32,768 samples, and the texture
             // window spans 43 analysis frames; the fixture's clip is shorter than one beat window. Twelve seconds at
-            // 22.05 kHz hold several of each.
-            return OptionSensitivityHarness.Fingerprint(genre.Classify(Waveform<T>(262144)).AllProbabilities
-                .OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble(p.Value)));
+            // 22.05 kHz hold several of each. The options shape the 30 surface features; an unfitted classifier's
+            // softmax over raw features (centroids in Hz) saturates, so the features themselves are observed.
+            return OptionSensitivityHarness.Fingerprint(((AiDotNet.Interfaces.IGenreClassifier<T>)genre).ExtractFeatures(Waveform<T>(262144))
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
         if (network is AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor<T> or AiDotNet.Audio.Speaker.SpeakerVerifier<T>
             && option is "SampleRate" or "FftSize" or "HopLength" or "NormalizationWindowFrames")
             // The MFCC front end (Kaldi's 25 ms / 10 ms frames, 3-second sliding mean normalization) runs on a waveform;
@@ -622,6 +623,25 @@ internal static class OptionSensitivityFixtureSetup
                 });
                 return OptionSensitivityHarness.Fingerprint(new[] { numeric.ToDouble(objective) });
             }
+        }
+
+        if (network is AiDotNet.ComputerVision.Segmentation.Video.EfficientTAM<T> tam && option == "MemoryCrossAttention")
+        {
+            // The efficient memory cross-attention (Xiong et al. 2024, section 3.3) pools the memory bank of a tracked
+            // video; Predict segments single images, which attend to no memory. Track one object from a square mask on
+            // frame 0 through three more frames of a moving pattern, so later frames attend to two memories.
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var tamOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            const int side = 64;
+            var clip = engine.TensorMultiplyScalar(ShiftedClip<T>(4, side), tamOps.FromDouble(1.0 / 255));
+            Tensor<T> Frame(int f) => engine.Reshape(engine.TensorSlice(clip, new[] { f, 0, 0, 0 }, new[] { 1, 3, side, side }), new[] { 3, side, side });
+            var band = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { side / 4 }), engine.TensorLinspace(tamOps.One, tamOps.One, side / 2),
+                new Tensor<T>(new[] { side / 4 }) }, 0);
+            var square = engine.Reshape(engine.TensorOuter(band, band), new[] { 1, side, side });
+            tam.InitializeTracking(Frame(0), square, new[] { 1 });
+            var tracked = new List<double>();
+            for (int f = 1; f < 4; f++) tracked.AddRange(tam.PropagateToFrame(Frame(f)).Masks.Select(tamOps.ToDouble));
+            return OptionSensitivityHarness.Fingerprint(tracked);
         }
 
         if (network is AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T> groundedSam && option is "MaskThreshold" or "SamDecoderHeads")
@@ -2050,7 +2070,9 @@ internal static class OptionSensitivityFixtureSetup
                 speechGptOptions.Stage = AiDotNet.TextToSpeech.MultiModal.SpeechGptTrainingStage.ChainOfModality;
             if (option is "VocoderLearningRate" or "VocoderLearningRateDecay" or "VocoderSegmentSize" or "VocoderUpdatesPerEpoch")
                 speechGptOptions.IncludeVocoderDiscriminators = true;
-            if (option == "VocoderLearningRateDecay") speechGptOptions.VocoderUpdatesPerEpoch = 1;
+            // At the default 1,000 updates per epoch the probe's few updates never reach a decay; from one, the epoch
+            // count (and so the decayed rate) differs from the second update.
+            if (option is "VocoderLearningRateDecay" or "VocoderUpdatesPerEpoch") speechGptOptions.VocoderUpdatesPerEpoch = 1;
         }
         if (options is AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions chatTts && option == "CodeTopK")
         {
@@ -2068,6 +2090,17 @@ internal static class OptionSensitivityFixtureSetup
             dia.PadToken = 18;
             dia.BeginToken = 19;
         }
+        if (options is AiDotNet.ComputerVision.Segmentation.Video.EfficientTAMOptions tamSize && option == "ModelSize")
+        {
+            // The size picks the ViT's width and heads (ViT-S 384/6, ViT-Ti 192/3); the fixture's explicit width and heads
+            // override both presets. Leave them to the size.
+            tamSize.VitEmbeddingDimension = null;
+            tamSize.VitHeadCount = null;
+        }
+        if (options is AiDotNet.SpeechRecognition.Robust.AVHuBERTOptions avMask && option == "AudioMaskProbability")
+            // The probe's 12 audio frames hold three starts for 10-frame spans, and at least two spans are drawn, so every
+            // probability masks two. Two-frame spans leave eleven starts, where p sets the count (p T / l + U).
+            avMask.AudioMaskLength = 2;
         if (options is AiDotNet.Video.Options.RealBasicVSROptions realBasic && option == "InferenceCleaningThreshold")
             // The compact cleaning module's mean |residue| is below every perturbation of 1.5/255, so each threshold
             // stops after the first pass. From 0 (run every pass) the +0.1 perturbation stops after one.
