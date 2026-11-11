@@ -88,6 +88,9 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
         Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        // One Mimi frame per hop: Moshi has no mel frontend, so the hop is the codec's samples per frame (1920 at 24 kHz,
+        // 12.5 Hz), not the base's 256 a callers' supervision would size a recording by.
+        base.HopSize = MoshiCore<T>.MimiConfiguration(_options).SamplesPerFrame;
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
@@ -103,6 +106,9 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
         Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
+        // One Mimi frame per hop: Moshi has no mel frontend, so the hop is the codec's samples per frame (1920 at 24 kHz,
+        // 12.5 Hz), not the base's 256 a callers' supervision would size a recording by.
+        base.HopSize = MoshiCore<T>.MimiConfiguration(_options).SamplesPerFrame;
         base.HiddenDim = _options.HiddenDim;
         InitializeLayers();
     }
