@@ -77,32 +77,39 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
             throw new ArgumentException("Predicted vector cannot be empty.");
         }
 
-        T sum = NumOps.Zero;
-        int sampleCount = 0;
+        int sampleCount = actual.Length;
+        int numClasses = predicted.Length;
 
-        // Process each sample
-        for (int i = 0; i < actual.Length; i++)
+        // Class indices are the targets rounded to the nearest integer (NumOps.ToInt32);
+        // every one must lie in [0, numClasses).
+        var rawIndices = actual.AsTensor();
+        var classIndices = Engine.TensorRound(rawIndices);
+        var invalid = Engine.TensorMax(
+            Engine.TensorMax(
+                Engine.TensorLessThan(classIndices, NumOps.Zero),
+                Engine.TensorGreaterThan(classIndices, NumOps.FromDouble(numClasses - 1))),
+            Engine.TensorNotEquals(classIndices, classIndices));
+        if (sampleCount > 0 && NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
         {
-            // Extract class index from actual (convert T to int)
-            int classIndex = NumOps.ToInt32(actual[i]);
+            int position = Engine.TensorArgMax(invalid, 0).GetFlat(0);
+            int classIndex = NumOps.ToInt32(rawIndices.GetFlat(position));
+            throw new ArgumentException(
+                $"Class index {classIndex} at position {position} is out of bounds. " +
+                $"Expected value between 0 and {predicted.Length - 1}.");
+        }
 
-            // Validate class index
-            if (classIndex < 0 || classIndex >= predicted.Length)
-            {
-                throw new ArgumentException(
-                    $"Class index {classIndex} at position {i} is out of bounds. " +
-                    $"Expected value between 0 and {predicted.Length - 1}.");
-            }
+        T sum = NumOps.Zero;
+        if (sampleCount > 0)
+        {
+            // Get predicted probability for each sample's true class
+            var probabilities = Engine.TensorBroadcastTo(
+                Engine.Reshape(predicted.AsTensor(), new[] { 1, numClasses }), new[] { sampleCount, numClasses });
+            var predictedProb = Engine.TensorGatherClassValues(probabilities, classIndices);
 
-            // Get predicted probability for the true class
-            T predictedProb = predicted[classIndex];
-
-            // Clamp to prevent log(0) using NumericalStabilityHelper
-            predictedProb = NumericalStabilityHelper.ClampProbability(predictedProb, NumericalStabilityHelper.SmallEpsilon);
-
-            // Compute -log(predicted_probability) with safe log
-            sum = NumOps.Add(sum, NumOps.Negate(NumericalStabilityHelper.SafeLog(predictedProb, NumericalStabilityHelper.SmallEpsilon)));
-            sampleCount++;
+            // Clamp to prevent log(0) (NumericalStabilityHelper.ClampProbability), then -log(p)
+            T eps = NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon);
+            predictedProb = Engine.TensorClamp(predictedProb, eps, NumOps.Subtract(NumOps.One, eps));
+            sum = NumOps.Negate(Engine.TensorSum(Engine.TensorLog(predictedProb)));
         }
 
         // Return average loss
@@ -151,24 +158,41 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
             }
         }
 
-        var classIndices = new int[sampleCount];
-        for (int i = 0; i < sampleCount; i++)
+        // Validate every class index at once: (int)rawIdx truncates, the value must be within 1e-6 of
+        // that integer, and the integer must lie in [0, numClasses). NaN is never a valid index.
+        var flatTarget = Engine.Reshape(target, new[] { sampleCount });
+        var truncated = Engine.TensorTrunc(flatTarget);
+        var notInteger = Engine.TensorGreaterThan(
+            Engine.TensorAbs(Engine.TensorSubtract(flatTarget, truncated)), NumOps.FromDouble(1e-6));
+        var outOfRange = Engine.TensorMax(
+            Engine.TensorMax(
+                Engine.TensorLessThan(truncated, NumOps.Zero),
+                Engine.TensorGreaterThan(truncated, NumOps.FromDouble(numClasses - 1))),
+            Engine.TensorNotEquals(flatTarget, flatTarget));
+        var invalid = Engine.TensorMax(notInteger, outOfRange);
+        if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
         {
-            double rawIdx = NumOps.ToDouble(target[i]);
+            // First offending position, reported exactly as the per-element check did.
+            int i = Engine.TensorArgMax(invalid, 0).GetFlat(0);
+            double rawIdx = NumOps.ToDouble(flatTarget.GetFlat(i));
             int classIdx = (int)rawIdx;
             if (Math.Abs(rawIdx - classIdx) > 1e-6)
                 throw new ArgumentException(
                     $"Target at position {i} is {rawIdx}, expected an integer class index.",
                     nameof(target));
-            if (classIdx < 0 || classIdx >= numClasses)
-                throw new ArgumentException(
-                    $"Target index {classIdx} at position {i} is out of bounds. " +
-                    $"Expected a value in [0, {numClasses}).",
-                    nameof(target));
-            classIndices[i] = classIdx;
+            throw new ArgumentException(
+                $"Target index {classIdx} at position {i} is out of bounds. " +
+                $"Expected a value in [0, {numClasses}).",
+                nameof(target));
         }
 
-        // TensorOneHot returns [sampleCount, numClasses]. Restore higher-rank batch/sequence
+        // One one-hot row per sample: compare each class index against 0..numClasses-1.
+        var rowShape = new[] { sampleCount, numClasses };
+        var oneHotRows = Engine.TensorEquals(
+            Engine.TensorBroadcastTo(Engine.Reshape(truncated, new[] { sampleCount, 1 }), rowShape),
+            Engine.TensorBroadcastTo(Engine.TensorArange<T>(0, numClasses, 1), rowShape));
+
+        // The one-hot is [target shape..., numClasses]. Restore higher-rank batch/sequence
         // geometry when it corresponds exactly to the prediction. For the legacy rank-1 API,
         // one prediction vector can be evaluated against several class indices. Its supervision
         // is a constant class-count mask: constructing that constant outside the tape is correct,
@@ -176,15 +200,12 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         Tensor<T> oneHot;
         if (predicted.Rank == 1 && sampleCount > 1)
         {
-            var classCounts = new T[numClasses];
-            for (int i = 0; i < classIndices.Length; i++)
-                classCounts[classIndices[i]] = NumOps.Add(classCounts[classIndices[i]], NumOps.One);
-            oneHot = new Tensor<T>(classCounts, new[] { numClasses });
+            oneHot = Engine.ReduceSum(oneHotRows, new[] { 0 }, keepDims: false);
         }
         else
         {
-            var indexTensor = new Tensor<int>(classIndices, target.Shape.ToArray());
-            oneHot = Engine.TensorOneHot<T>(indexTensor, numClasses);
+            var oneHotShape = target.Shape.ToArray().Concat(new[] { numClasses }).ToArray();
+            oneHot = Engine.Reshape(oneHotRows, oneHotShape);
             if (predicted.Rank > 1 && !oneHot.Shape.ToArray().SequenceEqual(predicted.Shape.ToArray()))
                 oneHot = Engine.Reshape(oneHot, predicted.Shape.ToArray());
         }

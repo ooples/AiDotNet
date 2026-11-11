@@ -99,65 +99,69 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         ValidateInputs(logProbs, targets, inputLengths, targetLengths);
 
         int batchSize = inputLengths.Length;
-        T batchLoss = NumOps.Zero;
 
-        // Process each batch item
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Create the extended target sequence with blanks
-            List<int> extendedLabels = new List<int>(targetLengths[b] * 2 + 1);
-            extendedLabels.Add(_blankIndex); // Start with blank
-
-            for (int i = 0; i < targetLengths[b]; i++)
-            {
-                extendedLabels.Add(targets[b][i]);
-                extendedLabels.Add(_blankIndex);
-            }
-
-            int extendedLength = extendedLabels.Count;
-            int sequenceLength = inputLengths[b];
-
-            // Create forward and backward variables for dynamic programming
-            T[,] alpha = new T[sequenceLength, extendedLength];
-            T[,] beta = new T[sequenceLength, extendedLength];
-
-            // Initialize with log zero probability
-            for (int t = 0; t < sequenceLength; t++)
-            {
-                for (int s = 0; s < extendedLength; s++)
-                {
-                    alpha[t, s] = _logZero;
-                    beta[t, s] = _logZero;
-                }
-            }
-
-            // Forward pass (alpha)
-            ComputeAlpha(b, alpha, extendedLabels, logProbs, sequenceLength, extendedLength);
-
-            // Backward pass (beta)
-            ComputeBeta(b, beta, extendedLabels, logProbs, sequenceLength, extendedLength);
-
-            // Compute log probability by summing over all valid paths
-            T logProb = _logZero;
-
-            // Sum probabilities for all valid ending positions (last blank and last label)
-            if (extendedLength > 1) // More than just a blank
-            {
-                logProb = LogSumExp(alpha[sequenceLength - 1, extendedLength - 1],
-                                  alpha[sequenceLength - 1, extendedLength - 2]);
-            }
-            else
-            {
-                logProb = alpha[sequenceLength - 1, 0]; // Just the blank
-            }
-
-            // Negative log likelihood
-            T loss = NumOps.Negate(logProb);
-            batchLoss = NumOps.Add(batchLoss, loss);
-        }
+        // The engine's CTC primitive runs the same forward (alpha) recursion over the blank-extended
+        // label lattice and returns -log p(target | input) per batch item, reading only the first
+        // inputLengths[b] frames and targetLengths[b] labels. It is the primitive ComputeTapeLoss
+        // differentiates, so both paths score a batch identically.
+        var logSpace = _inputsAreLogProbs
+            ? logProbs
+            : SafeLogTensor(logProbs, NumericalStabilityHelper.SmallEpsilon);
+        var timeMajorLogProbs = Engine.TensorPermute(logSpace, new[] { 1, 0, 2 });
+        var perItemLoss = Engine.TensorCTCLoss(
+            timeMajorLogProbs, ConcatenateTargets(targets, targetLengths), inputLengths, targetLengths, _blankIndex);
 
         // Return average loss
-        return NumOps.Divide(batchLoss, NumOps.FromDouble(batchSize));
+        return NumOps.Divide(Engine.TensorSum(perItemLoss), NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Concatenates the first <c>targetLengths[b]</c> labels of every target sequence, the layout the
+    /// engine's CTC primitive expects.
+    /// </summary>
+    private static Tensor<int> ConcatenateTargets(int[][] targets, int[] targetLengths)
+    {
+        var concatenated = new int[targetLengths.Sum()];
+        int offset = 0;
+        for (int b = 0; b < targets.Length; b++)
+        {
+            Array.Copy(targets[b], 0, concatenated, offset, targetLengths[b]);
+            offset += targetLengths[b];
+        }
+
+        return new Tensor<int>(concatenated, new[] { concatenated.Length });
+    }
+
+    /// <summary>
+    /// Decodes the flat CTC target encoding <c>[batch, len_0, labels_0..., len_1, labels_1..., ...]</c>.
+    /// </summary>
+    /// <param name="encoded">The encoded targets.</param>
+    /// <param name="batchSize">The number of sequences to decode.</param>
+    /// <returns>The label sequences and their lengths.</returns>
+    private static (int[][] Targets, int[] TargetLengths) DecodeTargets(Vector<T> encoded, int batchSize)
+    {
+        // The encoding holds integer metadata (lengths and label ids), converted once in bulk.
+        int[] codes = encoded.Transform(value => (int)Convert.ToDouble(value)).ToArray();
+
+        var targets = new int[batchSize][];
+        var targetLengths = new int[batchSize];
+        int index = 1;
+        for (int b = 0; b < batchSize; b++)
+        {
+            if (index >= codes.Length)
+                throw new ArgumentOutOfRangeException("index");
+
+            int length = codes[index++];
+            targetLengths[b] = length;
+            targets[b] = new int[length];
+            if (length > codes.Length - index)
+                throw new ArgumentOutOfRangeException("index");
+
+            Array.Copy(codes, index, targets[b], 0, length);
+            index += length;
+        }
+
+        return (targets, targetLengths);
     }
 
     /// <summary>
@@ -485,27 +489,12 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
             throw new ArgumentException("Invalid batch size encoded in actual vector");
 
         int timeStepsTotal = predicted.Length / (_numClasses * batchSize);
-        var logProbs = new Tensor<T>(new[] { batchSize, timeStepsTotal, _numClasses });
+        int usedLength = batchSize * timeStepsTotal * _numClasses;
+        var logProbs = Tensor<T>.FromVector(
+            predicted.GetSubVector(0, usedLength), new[] { batchSize, timeStepsTotal, _numClasses });
 
-        int index = 0;
-        for (int b = 0; b < batchSize; b++)
-            for (int t = 0; t < timeStepsTotal; t++)
-                for (int c = 0; c < _numClasses; c++)
-                    logProbs[new[] { b, t, c }] = predicted[index++];
-
-        int actualIndex = 1;
-        var targets = new int[batchSize][];
-        var inputLengths = new int[batchSize];
-        var targetLengths = new int[batchSize];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            targetLengths[b] = (int)Convert.ToDouble(actual[actualIndex++]);
-            inputLengths[b] = timeStepsTotal;
-            targets[b] = new int[targetLengths[b]];
-            for (int i = 0; i < targetLengths[b]; i++)
-                targets[b][i] = (int)Convert.ToDouble(actual[actualIndex++]);
-        }
+        var (targets, targetLengths) = DecodeTargets(actual, batchSize);
+        var inputLengths = Enumerable.Repeat(timeStepsTotal, batchSize).ToArray();
 
         return CalculateLoss(logProbs, targets, inputLengths, targetLengths);
     }
@@ -523,22 +512,9 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         int timeSteps = predicted.Shape.Length == 3 ? predicted.Shape[1]
             : predicted.Length / (_numClasses * batchSize);
 
-        var inputLengths = new int[batchSize];
-        var targetLengths = new int[batchSize];
-        var allTargets = new List<int>();
-        int idx = 1;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            inputLengths[b] = timeSteps;
-            int tLen = (int)Convert.ToDouble(NumOps.ToDouble(target[idx++]));
-            targetLengths[b] = tLen;
-            for (int t = 0; t < tLen; t++)
-                allTargets.Add((int)Convert.ToDouble(NumOps.ToDouble(target[idx++])));
-        }
-
-        var targetsArray = allTargets.ToArray();
-        var targetsTensor = new Tensor<int>(targetsArray, new[] { targetsArray.Length });
+        var (targets, targetLengths) = DecodeTargets(target.ToVector(), batchSize);
+        var inputLengths = Enumerable.Repeat(timeSteps, batchSize).ToArray();
+        var targetsTensor = ConcatenateTargets(targets, targetLengths);
 
         var logProbs = predicted;
         if (predicted.Shape.Length != 3)
