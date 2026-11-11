@@ -126,7 +126,8 @@ public partial class SelfOrganizingMap<T> : ClusteringBase<T>
             Engine.TensorLessThan(range, NumOps.FromDouble(1e-10)), Engine.TensorOnesLike(range), range);
 
         // Initialize weights randomly within the data range (neuron r * width + c, row by row)
-        var uniform = Tensor<T>.FromMatrix(RandomUniform(numNeurons, d, rand));
+        // [numNeurons, d] rand.NextDouble() draws in row-major order (keeps the seeded stream order)
+        var uniform = Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(rand, numNeurons, d));
         var shape = new[] { numNeurons, d };
         _weights = Engine.TensorAdd(
             Engine.TensorBroadcastTo(minVals, shape),
@@ -220,21 +221,6 @@ public partial class SelfOrganizingMap<T> : ClusteringBase<T>
         }
 
         IsTrained = true;
-    }
-
-    /// <summary>Uniform [0, 1) draws from <paramref name="rand"/> filling a [rows, columns] matrix row by row.</summary>
-    private Matrix<T> RandomUniform(int rows, int columns, Random rand)
-    {
-        var values = new Matrix<T>(rows, columns);
-        for (int r = 0; r < rows; r++)
-        {
-            for (int j = 0; j < columns; j++)
-            {
-                values[r, j] = NumOps.FromDouble(rand.NextDouble());
-            }
-        }
-
-        return values;
     }
 
     private int FindBMU(Vector<T> sample)

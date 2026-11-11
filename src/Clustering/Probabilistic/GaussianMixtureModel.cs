@@ -649,18 +649,30 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
         var rand = Random ?? RandomHelper.CreateSecureRandom();
         int k = NumClusters;
         int d = NumFeatures;
-        var uniforms = DrawSampleNoise(rand, numSamples, d, out var normals);
+
+        // Per sample, one uniform draw (component choice) followed by d standard normal draws, consumed
+        // from the caller's Random in that order so seeded sampling stays reproducible.
+        var noise = new Matrix<T>(numSamples, d + 1);
+        for (int i = 0; i < numSamples; i++)
+        {
+            for (int j = 0; j <= d; j++)
+            {
+                noise[i, j] = NumOps.FromDouble(j == 0 ? rand.NextDouble() : rand.NextGaussian());
+            }
+        }
+
         if (numSamples == 0 || k == 0)
         {
             return new Matrix<T>(numSamples, d);
         }
 
         // Component: first c with u < cumulative weight c (k - 1 when none), i.e. k - #{c : u < cumulative_c}
+        var noiseDraws = Tensor<T>.FromMatrix(noise);
         var cumulative = Engine.TensorCumSum(Engine.TensorSlice(FittedWeights.AsTensor(), new[] { 0 }, new[] { k }), 0);
         var shape = new[] { numSamples, k };
         var above = Engine.TensorGreaterThan(
             Engine.TensorBroadcastTo(Engine.Reshape(cumulative, new[] { 1, k }), shape),
-            Engine.TensorBroadcastTo(Tensor<T>.FromVector(uniforms, new[] { numSamples, 1 }), shape));
+            Engine.TensorBroadcastTo(Engine.TensorSlice(noiseDraws, new[] { 0, 0 }, new[] { numSamples, 1 }), shape));
         var components = Engine.TensorMin(
             Engine.ScalarMinusTensor(NumOps.FromDouble(k), Engine.ReduceSum(above, new[] { 1 }, true)), NumOps.FromDouble(k - 1));
         var chosen = Engine.TensorEquals(
@@ -669,7 +681,7 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
 
         // sample = mean + L z for the chosen component's Cholesky factor L
         T floor = NumOps.FromDouble(1e-10);
-        var z = Tensor<T>.FromMatrix(normals);
+        var z = Engine.TensorSlice(noiseDraws, new[] { 0, 1 }, new[] { numSamples, d });
         var samples = Tensor<T>.CreateZeros(new[] { numSamples, d });
         for (int c = 0; c < k; c++)
         {
@@ -682,25 +694,5 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
         }
 
         return samples.ToMatrix();
-    }
-
-    /// <summary>
-    /// Per sample, one uniform draw (component choice) followed by d standard normal draws, consumed from the
-    /// caller's Random in that order so seeded sampling stays reproducible.
-    /// </summary>
-    private Vector<T> DrawSampleNoise(Random rand, int count, int d, out Matrix<T> normals)
-    {
-        var uniforms = new Vector<T>(count);
-        normals = new Matrix<T>(count, d);
-        for (int i = 0; i < count; i++)
-        {
-            uniforms[i] = NumOps.FromDouble(rand.NextDouble());
-            for (int j = 0; j < d; j++)
-            {
-                normals[i, j] = NumOps.FromDouble(rand.NextGaussian());
-            }
-        }
-
-        return uniforms;
     }
 }

@@ -255,7 +255,12 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
 
         // Initialize with random vectors
         var rand = Random ?? RandomHelper.CreateSecureRandom();
-        var vectors = RandomStartVectors(rand, k, n);
+        // [k, n] start vectors with entries rand.NextDouble() - 0.5, drawn in row-major order,
+        // each row normalized to unit length
+        var starts = Engine.TensorSubtractScalar(
+            Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(rand, k, n)), NumOps.FromDouble(0.5));
+        var startNorms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(starts), new[] { 1 }, true));
+        var vectors = Engine.TensorDivide(starts, Engine.TensorBroadcastTo(startNorms, new[] { k, n })).ToMatrix();
 
         // Shifted power iteration: use (sigma I - L) to find smallest eigenvalues
         // as largest eigenvalues of the shifted matrix.
@@ -269,7 +274,6 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
         for (int vec = 0; vec < k; vec++)
         {
             var v = vectors.GetRow(vec);
-            v = Engine.Divide(v, NumOps.Sqrt(Engine.DotProduct(v, v)));
 
             for (int iter = 0; iter < 300; iter++)
             {
@@ -312,24 +316,6 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
 
     /// <summary>True when <paramref name="value"/> is strictly below <paramref name="threshold"/>.</summary>
     private bool IsBelow(T value, T threshold) => NumOps.LessThan(value, threshold);
-
-    /// <summary>
-    /// [count, n] start vectors with entries rand.NextDouble() - 0.5, drawn in row-major order from the caller's
-    /// Random so seeded runs stay reproducible.
-    /// </summary>
-    private Matrix<T> RandomStartVectors(Random rand, int count, int n)
-    {
-        var vectors = new Matrix<T>(count, n);
-        for (int i = 0; i < count; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                vectors[i, j] = NumOps.FromDouble(rand.NextDouble() - 0.5);
-            }
-        }
-
-        return vectors;
-    }
 
     private Matrix<T> NormalizeRows(Matrix<T> embedding)
     {

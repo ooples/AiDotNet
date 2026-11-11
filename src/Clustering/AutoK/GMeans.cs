@@ -240,7 +240,10 @@ public partial class GMeans<T> : ClusteringBase<T>
         var centeredT = Engine.TensorTranspose(centered);
 
         // Compute first principal component using power iteration
-        var pc = RandomStartDirection(d);
+        // Seeded start vector in [-0.5, 0.5)^d: d rand.NextDouble() draws, shifted by 0.5
+        var rand = RandomHelper.CreateSeededRandom(42);
+        var pc = Engine.TensorSubtractScalar(
+            Tensor<T>.FromVector(Vector<T>.CreateRandom(rand, d), new[] { d, 1 }), NumOps.FromDouble(0.5));
 
         // Normalize
         pc = Engine.TensorDivideScalar(pc, NumOps.Sqrt(Engine.TensorSum(Engine.TensorSquare(pc))));
@@ -260,19 +263,6 @@ public partial class GMeans<T> : ClusteringBase<T>
 
         // Project data onto PC
         return Engine.TensorMatMul(centered, pc).ToVector();
-    }
-
-    /// <summary>Seeded random start vector in [-0.5, 0.5)^d as a [d, 1] column.</summary>
-    private Tensor<T> RandomStartDirection(int d)
-    {
-        var rand = RandomHelper.CreateSeededRandom(42);
-        var start = new Vector<T>(d);
-        for (int j = 0; j < d; j++)
-        {
-            start[j] = NumOps.FromDouble(rand.NextDouble() - 0.5);
-        }
-
-        return Tensor<T>.FromVector(start, new[] { d, 1 });
     }
 
     /// <summary>True when a norm is too small to normalize by.</summary>
