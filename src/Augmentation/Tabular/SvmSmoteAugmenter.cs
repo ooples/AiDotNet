@@ -195,7 +195,6 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
         // Train simplified linear SVM to identify support vectors
         int majorityCount = GetSampleCount(majorityData);
         int totalSamples = minorityCount + majorityCount;
-        var samples = TabularEngineOps<T>.ConcatenateRows(minorityData, majorityData);
 
         // Initialize weights; the hyper-parameters are converted to T once
         var weights = new Vector<T>(cols);
@@ -212,7 +211,8 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
             for (int i = 0; i < totalSamples; i++)
             {
                 T label = i < minorityCount ? one : negativeOne;
-                var sample = samples.GetRow(i);
+                // Rows are read from the caller's matrices; the two classes are never copied into one matrix
+                var sample = i < minorityCount ? minorityData.GetRow(i) : majorityData.GetRow(i - minorityCount);
                 T decision = NumOps.Add(bias, engine.DotProduct(weights, sample));
 
                 // Hinge loss gradient: w += lr * (label * x - w / C); otherwise w -= lr * w / C
