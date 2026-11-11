@@ -579,16 +579,7 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
 
                         // LU on singular matrices may silently produce NaN/Infinity instead of throwing.
                         // Detect this and fall through to SVD which handles rank-deficient matrices.
-                        bool hasInvalid = false;
-                        for (int i = 0; i < result.Length; i++)
-                        {
-                            double val = NumOps.ToDouble(result[i]);
-                            if (double.IsNaN(val) || double.IsInfinity(val))
-                            {
-                                hasInvalid = true;
-                                break;
-                            }
-                        }
+                        bool hasInvalid = !RegressionEngineOps2.AllFinite(result);
                         if (hasInvalid)
                         {
                             throw new InvalidOperationException("LU solution contains NaN or Infinity values.");
@@ -662,21 +653,10 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
     {
         // Create a new vector with enough space for coefficients + intercept (if used)
         int paramCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
-        Vector<T> parameters = new Vector<T>(paramCount);
-
-        // Copy coefficients to the parameters vector
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            parameters[i] = Coefficients[i];
-        }
-
-        // Add the intercept as the last element (if used)
-        if (Options.UseIntercept)
-        {
-            parameters[Coefficients.Length] = Intercept;
-        }
-
-        return parameters;
+        // Coefficients, then the intercept as the last element (if used)
+        return Options.UseIntercept
+            ? RegressionEngineOps2.Append(Coefficients, Intercept)
+            : Coefficients.Clone();
     }
 
     /// <summary>
@@ -689,10 +669,8 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         if (!registry.HasComponents) return core;
 
         var additional = registry.GetParameters();
-        var result = new Vector<T>(checked(core.Length + additional.Length));
-        for (int i = 0; i < core.Length; i++) result[i] = core[i];
-        for (int i = 0; i < additional.Length; i++) result[core.Length + i] = additional[i];
-        return result;
+        _ = checked(core.Length + additional.Length);
+        return Vector<T>.Concatenate(core, additional);
     }
 
     /// <summary>
@@ -752,11 +730,7 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         var newModel = (RegressionBase<T>)CreateNewInstance();
 
         // Extract coefficients
-        Vector<T> newCoefficients = new Vector<T>(coefficientCount);
-        for (int i = 0; i < coefficientCount; i++)
-        {
-            newCoefficients[i] = parameters[i];
-        }
+        Vector<T> newCoefficients = parameters.GetSubVector(0, coefficientCount);
 
         // Set the coefficients in the new model
         newModel.Coefficients = newCoefficients;
@@ -804,14 +778,16 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         // Coefficients.Length may exceed the input feature count when the model includes
         // intercept terms or generated features (e.g., in genetic/symbolic regression).
         int maxIndex = TrainingFeatureCount > 0 ? TrainingFeatureCount : Coefficients.Length;
-        for (int i = 0; i < Math.Min(Coefficients.Length, maxIndex); i++)
+        int count = Math.Min(Coefficients.Length, maxIndex);
+        if (count <= 0)
         {
-            // If the coefficient is not zero (using a threshold for floating-point comparison)
-            if (!NumOps.Equals(Coefficients[i], NumOps.Zero))
-            {
-                yield return i;
-            }
+            return Array.Empty<int>();
         }
+
+        // Positions whose coefficient is not exactly zero (NaN counts as non-zero), ascending.
+        var used = Coefficients.GetSubVector(0, count).AsTensor();
+        var nonZero = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorEquals(used, NumOps.Zero));
+        return Engine.TensorNonzero(nonZero).ToArray();
     }
 
     /// <summary>
@@ -886,11 +862,8 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
             throw new ArgumentException($"Expected {expectedCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
-        // Extract and set coefficients
-        for (int i = 0; i < coefficientCount; i++)
-        {
-            Coefficients[i] = parameters[i];
-        }
+        // Extract and set coefficients (copied into the existing vector, in place)
+        parameters.AsSpan().Slice(0, coefficientCount).CopyTo(Coefficients.AsWritableSpan());
 
         // Set the intercept if used
         if (Options.UseIntercept)
@@ -923,12 +896,10 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
                 $"Expected {coreCount + additionalCount} parameters, got {parameters.Length}.",
                 nameof(parameters));
 
-        var core = new Vector<T>(coreCount);
-        for (int i = 0; i < coreCount; i++) core[i] = parameters[i];
+        var core = parameters.GetSubVector(0, coreCount);
         SetCoreParameters(core);
 
-        var additional = new Vector<T>(additionalCount);
-        for (int i = 0; i < additionalCount; i++) additional[i] = parameters[coreCount + i];
+        var additional = parameters.GetSubVector(coreCount, additionalCount);
         registry.SetParameters(additional);
     }
 
@@ -956,12 +927,12 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         var activeSet = new HashSet<int>(featureIndices);
 
         // Set coefficients to zero for inactive features
-        for (int i = 0; i < Coefficients.Length; i++)
+        var active = Enumerable.Range(0, Coefficients.Length).Select(activeSet.Contains).ToArray();
+        if (active.Length > 0)
         {
-            if (!activeSet.Contains(i))
-            {
-                Coefficients[i] = NumOps.Zero;
-            }
+            var coefficients = Coefficients.AsTensor();
+            var kept = Engine.TensorWhere(active, coefficients, Engine.TensorZerosLike(coefficients)).ToVector();
+            kept.AsSpan().CopyTo(Coefficients.AsWritableSpan());
         }
     }
 
@@ -999,12 +970,15 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         var importances = CalculateFeatureImportances();
         var result = new Dictionary<string, T>();
 
-        for (int i = 0; i < importances.Length; i++)
+        // Pure data movement from the vector into the name-keyed dictionary.
+        int i = 0;
+        foreach (T importance in importances)
         {
             string featureName = FeatureNames != null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[featureName] = importances[i];
+            result[featureName] = importance;
+            i++;
         }
 
         return result;
@@ -1199,24 +1173,24 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         var gradCoefficients = input.Transpose().Multiply(errors).Divide(n);
 
         // Build full gradient vector (coefficients + intercept)
-        var gradients = new Vector<T>((int)(ExpectedParameterCount));
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            gradients[i] = gradCoefficients[i];
-        }
+        int parameterCount = (int)(ExpectedParameterCount);
+        var parts = new List<Vector<T>> { gradCoefficients.GetSubVector(0, Coefficients.Length) };
 
         // Gradient for intercept is mean of errors
         if (Options.UseIntercept)
         {
-            T interceptGrad = NumOps.Zero;
-            for (int i = 0; i < errors.Length; i++)
-            {
-                interceptGrad = NumOps.Add(interceptGrad, errors[i]);
-            }
-            gradients[Coefficients.Length] = NumOps.Divide(interceptGrad, n);
+            T interceptGrad = errors.Length == 0 ? NumOps.Zero : Engine.Sum(errors);
+            parts.Add(new Vector<T>(new[] { NumOps.Divide(interceptGrad, n) }));
         }
 
-        return gradients;
+        // Any remaining slots (e.g. additional registered parameters) stay zero.
+        int filled = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
+        if (parameterCount > filled)
+        {
+            parts.Add(Engine.FillZero<T>(parameterCount - filled));
+        }
+
+        return Vector<T>.Concatenate(parts);
     }
 
     /// <inheritdoc/>
