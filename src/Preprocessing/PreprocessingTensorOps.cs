@@ -506,6 +506,26 @@ internal static class PreprocessingTensorOps
             engine.TensorBroadcastTo(engine.Reshape(found, new[] { rows, 1 }), new[] { rows, cols }));
     }
 
+    /// <summary>Column <paramref name="column"/> of <paramref name="data"/> truncated toward zero to integer ids.</summary>
+    public static int[] IntColumn<T>(Matrix<T> data, int column) =>
+        data.Rows == 0
+            ? Array.Empty<int>()
+            : AiDotNetEngine.Current.TensorTrunc(Column(data, column)).Cast<int>().AsSpan().ToArray();
+
+    /// <summary>
+    /// <c>(x - min(x)) / (max(x) - min(x))</c>, dividing by 1 instead when the range is not positive.
+    /// </summary>
+    public static Tensor<T> MinMaxNormalize<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T min = engine.TensorMinValue(x);
+        T range = ops.Subtract(engine.TensorMaxValue(x), min);
+        if (!ops.GreaterThan(range, ops.Zero))
+            range = ops.One;
+        return engine.TensorDivideScalar(engine.TensorSubtractScalar(x, min), range);
+    }
+
     /// <summary>The values 0, 1, ..., count - 1 as a 1-D tensor.</summary>
     public static Tensor<T> Range<T>(int count) =>
         new Tensor<int>(Enumerable.Range(0, count).ToArray(), new[] { count }).Cast<T>();

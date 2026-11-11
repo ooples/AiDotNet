@@ -95,53 +95,23 @@ public class TemporalSpatialSplitter<T> : DataSplitterBase<T>
                 $"Required columns ({_timeColumn}, {_xColumn}, {_yColumn}) exceed feature count ({nFeatures}).");
         }
 
-        // Extract and normalize coordinates
-        var times = new double[nSamples];
-        var xCoords = new double[nSamples];
-        var yCoords = new double[nSamples];
-
-        double minTime = double.MaxValue, maxTime = double.MinValue;
-        double minX = double.MaxValue, maxX = double.MinValue;
-        double minY = double.MaxValue, maxY = double.MinValue;
-
-        for (int i = 0; i < nSamples; i++)
-        {
-            times[i] = Convert.ToDouble(X[i, _timeColumn]);
-            xCoords[i] = Convert.ToDouble(X[i, _xColumn]);
-            yCoords[i] = Convert.ToDouble(X[i, _yColumn]);
-
-            minTime = Math.Min(minTime, times[i]);
-            maxTime = Math.Max(maxTime, times[i]);
-            minX = Math.Min(minX, xCoords[i]);
-            maxX = Math.Max(maxX, xCoords[i]);
-            minY = Math.Min(minY, yCoords[i]);
-            maxY = Math.Max(maxY, yCoords[i]);
-        }
-
-        double timeRange = maxTime - minTime;
-        double xRange = maxX - minX;
-        double yRange = maxY - minY;
-
-        if (timeRange <= 0) timeRange = 1;
-        if (xRange <= 0) xRange = 1;
-        if (yRange <= 0) yRange = 1;
+        // Normalized time and coordinates (a non-positive range divides by 1)
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var normalizedTime = PreprocessingTensorOps.MinMaxNormalize(PreprocessingTensorOps.Column(X, _timeColumn));
+        var normalizedX = PreprocessingTensorOps.MinMaxNormalize(PreprocessingTensorOps.Column(X, _xColumn));
+        var normalizedY = PreprocessingTensorOps.MinMaxNormalize(PreprocessingTensorOps.Column(X, _yColumn));
 
         // Calculate combined score for each sample (higher = later time, farther from origin)
-        var scores = new double[nSamples];
-        for (int i = 0; i < nSamples; i++)
-        {
-            double normalizedTime = (times[i] - minTime) / timeRange;
-            double normalizedX = (xCoords[i] - minX) / xRange;
-            double normalizedY = (yCoords[i] - minY) / yRange;
-            double spatialDist = Math.Sqrt(normalizedX * normalizedX + normalizedY * normalizedY) / Math.Sqrt(2);
-
-            scores[i] = _temporalWeight * normalizedTime + _spatialWeight * spatialDist;
-        }
+        var spatialDist = engine.TensorDivideScalar(
+            engine.TensorSqrt(engine.TensorAdd(
+                engine.TensorMultiply(normalizedX, normalizedX), engine.TensorMultiply(normalizedY, normalizedY))),
+            NumOps.FromDouble(Math.Sqrt(2)));
+        var scores = engine.TensorAdd(
+            engine.TensorMultiplyScalar(normalizedTime, NumOps.FromDouble(_temporalWeight)),
+            engine.TensorMultiplyScalar(spatialDist, NumOps.FromDouble(_spatialWeight)));
 
         // Sort by combined score
-        var sortedIndices = Enumerable.Range(0, nSamples)
-            .OrderBy(i => scores[i])
-            .ToArray();
+        var sortedIndices = engine.TensorArgsort(scores, 0, false).AsSpan().ToArray();
 
         // Split: earlier/closer samples for training, later/farther for testing
         var trainIndices = sortedIndices.Take(nSamples - targetTestSize).ToArray();
