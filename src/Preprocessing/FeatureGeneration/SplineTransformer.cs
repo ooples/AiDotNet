@@ -39,7 +39,7 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly SplineExtrapolation _extrapolation;
 
     // Fitted parameters
-    private double[][]? _knots; // Knots for each feature
+    private Tensor<T>[]? _knots; // Knots for each feature
     private int _nInputFeatures;
     private int _nOutputFeatures;
     private int _nSplineFeatures; // Features per input column
@@ -72,7 +72,7 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the fitted knots for each feature.
     /// </summary>
-    public double[][]? Knots => _knots;
+    public Vector<T>[]? Knots => _knots?.Select(k => k.ToVector()).ToArray();
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -131,7 +131,7 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
         var processSet = new HashSet<int>(columnsToProcess);
 
-        _knots = new double[_nInputFeatures][];
+        _knots = new Tensor<T>[_nInputFeatures];
 
         // Number of spline basis functions per feature
         // For B-splines with m knots and degree d: number of basis = m - d - 1
@@ -151,19 +151,13 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             if (!processSet.Contains(col))
             {
                 // Pass-through columns
-                _knots[col] = Array.Empty<double>();
+                _knots[col] = new Tensor<T>(new[] { 0 });
                 numOutputCols += 1;
                 continue;
             }
 
-            // Collect all values for this column
-            var values = new List<double>();
-            for (int i = 0; i < data.Rows; i++)
-            {
-                values.Add(NumOps.ToDouble(data[i, col]));
-            }
-
-            values.Sort();
+            // Sorted values of this column
+            var values = Engine.TensorSort(PreprocessingTensorOps.Column(data, col)).Item1;
 
             // Create knots based on strategy
             _knots[col] = CreateKnots(values);
@@ -173,70 +167,52 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nOutputFeatures = numOutputCols;
     }
 
-    private double[] CreateKnots(List<double> sortedValues)
+    /// <summary>
+    /// Builds the full knot vector of a column from its ascending values: (degree + 1) repeated boundary
+    /// knots at each end around the uniform or quantile internal knots.
+    /// </summary>
+    private Tensor<T> CreateKnots(Tensor<T> sortedValues)
     {
-        double minVal = sortedValues[0];
-        double maxVal = sortedValues[sortedValues.Count - 1];
+        var engine = Engine;
+        int count = sortedValues.Length;
+        T minVal = sortedValues.GetFlat(0);
+        T maxVal = sortedValues.GetFlat(count - 1);
+        var positions = engine.TensorAddScalar(PreprocessingTensorOps.Range<T>(_nKnots), NumOps.One); // i + 1
 
         // Create internal knots
-        var internalKnots = new double[_nKnots];
-
+        Tensor<T> internalKnots;
         if (_knotStrategy == SplineKnotStrategy.Uniform)
         {
-            // Evenly spaced knots
-            for (int i = 0; i < _nKnots; i++)
-            {
-                internalKnots[i] = minVal + (i + 1) * (maxVal - minVal) / (_nKnots + 1);
-            }
+            // Evenly spaced knots: min + (i + 1) * (max - min) / (nKnots + 1)
+            internalKnots = engine.TensorAddScalar(
+                engine.TensorDivideScalar(
+                    engine.TensorMultiplyScalar(positions, NumOps.Subtract(maxVal, minVal)),
+                    NumOps.FromDouble(_nKnots + 1)),
+                minVal);
         }
         else // Quantile
         {
-            // Knots at quantile positions
-            for (int i = 0; i < _nKnots; i++)
-            {
-                double percentile = (i + 1) * 100.0 / (_nKnots + 1);
-                internalKnots[i] = CalculatePercentile(sortedValues, percentile);
-            }
+            // Knots at quantile positions, linearly interpolated between the neighbouring order statistics
+            var percentile = engine.TensorDivideScalar(
+                engine.TensorMultiplyScalar(positions, NumOps.FromDouble(100.0)), NumOps.FromDouble(_nKnots + 1));
+            var index = engine.TensorMultiplyScalar(
+                engine.TensorDivideScalar(percentile, NumOps.FromDouble(100.0)), NumOps.FromDouble(count - 1));
+            var lower = engine.TensorFloor(index);
+            var fraction = engine.TensorSubtract(index, lower);
+            var lowerValues = engine.TensorIndexSelect(sortedValues, lower.Cast<int>(), 0);
+            var upperValues = engine.TensorIndexSelect(sortedValues, engine.TensorCeiling(index).Cast<int>(), 0);
+            internalKnots = engine.TensorAdd(lowerValues,
+                engine.TensorMultiply(fraction, engine.TensorSubtract(upperValues, lowerValues)));
         }
 
         // Create full knot vector with boundary knots
         // For B-splines, we need (degree + 1) repeated knots at boundaries
-        var fullKnots = new double[_nKnots + 2 * (_degree + 1)];
-
-        // Lower boundary knots (repeated)
-        for (int i = 0; i <= _degree; i++)
+        return engine.TensorConcatenate(new[]
         {
-            fullKnots[i] = minVal;
-        }
-
-        // Internal knots
-        for (int i = 0; i < _nKnots; i++)
-        {
-            fullKnots[_degree + 1 + i] = internalKnots[i];
-        }
-
-        // Upper boundary knots (repeated)
-        for (int i = 0; i <= _degree; i++)
-        {
-            fullKnots[_nKnots + _degree + 1 + i] = maxVal;
-        }
-
-        return fullKnots;
-    }
-
-    private static double CalculatePercentile(List<double> sortedValues, double percentile)
-    {
-        if (sortedValues.Count == 0) return 0;
-        if (sortedValues.Count == 1) return sortedValues[0];
-
-        double index = (percentile / 100.0) * (sortedValues.Count - 1);
-        int lowerIndex = (int)Math.Floor(index);
-        int upperIndex = (int)Math.Ceiling(index);
-
-        if (lowerIndex == upperIndex) return sortedValues[lowerIndex];
-
-        double fraction = index - lowerIndex;
-        return sortedValues[lowerIndex] + fraction * (sortedValues[upperIndex] - sortedValues[lowerIndex]);
+            PreprocessingTensorOps.Filled(new[] { _degree + 1 }, minVal),
+            internalKnots,
+            PreprocessingTensorOps.Filled(new[] { _degree + 1 }, maxVal),
+        }, 0);
     }
 
     /// <summary>
@@ -258,119 +234,99 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
-        var columnsToProcess = GetColumnsToProcess(data.Columns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        int outputCol = 0;
+        var processSet = new HashSet<int>(GetColumnsToProcess(data.Columns));
+        var blocks = new List<Tensor<T>>(data.Columns);
+        int startIdx = _includeIntercept ? 0 : 1;
 
         for (int col = 0; col < data.Columns; col++)
         {
+            var column = PreprocessingTensorOps.Column(data, col);
             if (!processSet.Contains(col) || _knots[col].Length == 0)
             {
                 // Pass-through column
-                for (int i = 0; i < numRows; i++)
-                {
-                    result[i, outputCol] = data[i, col];
-                }
-                outputCol++;
+                blocks.Add(engine.Reshape(column, new[] { numRows, 1 }));
                 continue;
             }
 
             // Compute B-spline basis for this column
-            for (int i = 0; i < numRows; i++)
-            {
-                double x = NumOps.ToDouble(data[i, col]);
-                double[] basisValues = ComputeBSplineBasis(x, _knots[col]);
-
-                int startIdx = _includeIntercept ? 0 : 1;
-                for (int j = startIdx; j < basisValues.Length; j++)
-                {
-                    result[i, outputCol + (j - startIdx)] = NumOps.FromDouble(basisValues[j]);
-                }
-            }
-
-            outputCol += _nSplineFeatures;
+            var basis = ComputeBSplineBasis(column, _knots[col]);
+            int nBasis = basis.Shape[1];
+            blocks.Add(engine.TensorSlice(basis, new[] { 0, startIdx }, new[] { numRows, nBasis - startIdx }));
         }
 
-        return new Matrix<T>(result);
+        if (blocks.Count == 0)
+            return new Matrix<T>(numRows, 0);
+        return engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
     }
 
-    private double[] ComputeBSplineBasis(double x, double[] knots)
+    /// <summary>
+    /// The <c>[rows, basis]</c> B-spline basis values of every entry of <paramref name="x"/> (Cox-de Boor recursion).
+    /// </summary>
+    private Tensor<T> ComputeBSplineBasis(Tensor<T> x, Tensor<T> knots)
     {
-        int n = knots.Length - _degree - 1; // Number of basis functions
-        var basis = new double[n];
+        var engine = Engine;
+        int rows = x.Length;
+        int nKnotValues = knots.Length;
+        int n = nKnotValues - _degree - 1; // Number of basis functions
+        var shape = new[] { rows, n };
 
-        // Handle extrapolation
-        double minKnot = knots[_degree];
-        double maxKnot = knots[knots.Length - _degree - 1];
+        // Handle extrapolation: Constant clamps to the boundary knots, Linear leaves x as is
+        if (_extrapolation == SplineExtrapolation.Constant)
+            x = engine.TensorClamp(x, knots.GetFlat(_degree), knots.GetFlat(nKnotValues - _degree - 1));
 
-        if (x < minKnot)
-        {
-            if (_extrapolation == SplineExtrapolation.Constant)
-            {
-                x = minKnot;
-            }
-            // For Linear extrapolation, x stays as is (basis will extrapolate)
-        }
-        else if (x > maxKnot)
-        {
-            if (_extrapolation == SplineExtrapolation.Constant)
-            {
-                x = maxKnot;
-            }
-        }
+        var xs = engine.TensorBroadcastTo(engine.Reshape(x, new[] { rows, 1 }), shape);
+        Tensor<T> KnotRow(int offset) =>
+            engine.TensorBroadcastTo(engine.Reshape(engine.TensorSlice(knots, new[] { offset }, new[] { n }), new[] { 1, n }), shape);
 
-        // De Boor's algorithm for B-spline basis
-        // Start with degree 0 (step functions)
-        var N = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            if (i + 1 < knots.Length)
-            {
-                N[i] = (x >= knots[i] && x < knots[i + 1]) ? 1.0 : 0.0;
-            }
-        }
+        // Start with degree 0 (step functions): knots[i] <= x < knots[i + 1]
+        var basis = engine.TensorMultiply(
+            PreprocessingTensorOps.Not(engine.TensorLessThan(xs, KnotRow(0))),
+            engine.TensorLessThan(xs, KnotRow(1)));
 
         // Handle the last interval (include right endpoint)
-        if (x == knots[knots.Length - 1])
-        {
-            N[n - 1] = 1.0;
-        }
+        var atEnd = engine.TensorEquals(x, knots.GetFlat(nKnotValues - 1));
+        var lastColumn = new Tensor<T>(new[] { 1, n });
+        lastColumn.AsSpan()[n - 1] = NumOps.One;
+        var setLast = engine.TensorMultiply(
+            engine.TensorBroadcastTo(engine.Reshape(atEnd, new[] { rows, 1 }), shape),
+            engine.TensorBroadcastTo(lastColumn, shape));
+        basis = engine.TensorAdd(basis, engine.TensorMultiply(setLast, PreprocessingTensorOps.OneMinus(basis)));
 
         // Recursively build higher degree basis functions
+        T epsilon = NumOps.FromDouble(1e-10);
+        T one = NumOps.One;
+        var hasNext = engine.TensorBroadcastTo(engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { 1, n }, one), lastColumn), shape);
         for (int d = 1; d <= _degree; d++)
         {
-            var newN = new double[n];
+            var left = KnotRow(0);
+            var leftNext = KnotRow(1);
+            var right = KnotRow(d);
+            var rightNext = KnotRow(d + 1);
+            var denom1 = engine.TensorSubtract(right, left);
+            var denom2 = engine.TensorSubtract(rightNext, leftNext);
+            var valid1 = engine.TensorGreaterThan(denom1, epsilon);
+            var valid2 = engine.TensorMultiply(engine.TensorGreaterThan(denom2, epsilon), hasNext);
 
-            for (int i = 0; i < n; i++)
-            {
-                if (i + d < knots.Length)
+            // term1 = (x - knots[i]) / denom1 * N[i]; term2 = (knots[i + d + 1] - x) / denom2 * N[i + 1]
+            var safe1 = engine.TensorWhere(valid1, denom1, PreprocessingTensorOps.Filled(shape, one));
+            var safe2 = engine.TensorWhere(valid2, denom2, PreprocessingTensorOps.Filled(shape, one));
+            var nextBasis = n > 1
+                ? engine.TensorConcatenate(new[]
                 {
-                    double denom1 = knots[i + d] - knots[i];
-                    double denom2 = knots[i + d + 1] - knots[i + 1];
-
-                    double term1 = 0;
-                    if (denom1 > 1e-10)
-                    {
-                        term1 = (x - knots[i]) / denom1 * N[i];
-                    }
-
-                    double term2 = 0;
-                    if (denom2 > 1e-10 && i + 1 < n)
-                    {
-                        term2 = (knots[i + d + 1] - x) / denom2 * N[i + 1];
-                    }
-
-                    newN[i] = term1 + term2;
-                }
-            }
-
-            N = newN;
+                    engine.TensorSlice(basis, new[] { 0, 1 }, new[] { rows, n - 1 }),
+                    new Tensor<T>(new[] { rows, 1 }),
+                }, 1)
+                : new Tensor<T>(shape);
+            var term1 = engine.TensorMultiply(
+                engine.TensorMultiply(engine.TensorDivide(engine.TensorSubtract(xs, left), safe1), basis), valid1);
+            var term2 = engine.TensorMultiply(
+                engine.TensorMultiply(engine.TensorDivide(engine.TensorSubtract(rightNext, xs), safe2), nextBasis), valid2);
+            basis = engine.TensorAdd(term1, term2);
         }
 
-        return N;
+        return basis;
     }
 
     /// <summary>
