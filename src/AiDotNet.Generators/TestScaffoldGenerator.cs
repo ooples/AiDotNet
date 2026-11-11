@@ -16039,7 +16039,15 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1024 };");
             }
-            else if (model.ClassName is "MetaVoice1B" or "Kokoro" or "DiTToTTS" or "TortoiseTTS" or "UniAudio" or "VoiceCraft")
+            else if (model.ClassName == "Kokoro")
+            {
+                // Kokoro reads phoneme ids and renders 600 samples (24 kHz, iSTFTNet hop) per predicted frame. The fixture
+                // speaks at Speed = 20, so each token lasts max(1, round(sum of its 50 duration bins / 20)) frames: one while
+                // the bins' sigmoids sum under 30 (the initialized predictor's sum near 25), so four ids render 2400 samples.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 2400 };");
+            }
+            else if (model.ClassName is "MetaVoice1B" or "DiTToTTS" or "TortoiseTTS" or "UniAudio" or "VoiceCraft")
             {
                 // Public predictors consume text IDs and render mono audio.
                 // Their internal conditioning widths are not public input channels.
