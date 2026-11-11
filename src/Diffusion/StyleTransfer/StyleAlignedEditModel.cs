@@ -68,9 +68,13 @@ public partial class StyleAlignedEditModel<T> : LatentDiffusionModelBase<T>
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
 
+    /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
     public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
     public StyleAlignedEditModel(
@@ -97,6 +101,7 @@ public partial class StyleAlignedEditModel<T> : LatentDiffusionModelBase<T>
 
 
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "StyleAligned-Edit", Version = "1.0",

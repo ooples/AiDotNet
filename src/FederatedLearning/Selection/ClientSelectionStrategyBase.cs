@@ -11,8 +11,10 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// </remarks>
 public abstract class ClientSelectionStrategyBase : IClientSelectionStrategy
 {
+    /// <inheritdoc />
     public abstract List<int> SelectClients(ClientSelectionRequest request);
 
+    /// <inheritdoc />
     public abstract string GetStrategyName();
 
     protected static int GetDesiredClientCount(IReadOnlyList<int> candidates, double fraction)

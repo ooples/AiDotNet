@@ -84,12 +84,13 @@ public sealed class IsotropicPrior<T> : LearnedPrior<T>
                 bSum = numOps.Add(bSum, _anchorPhoto[y, x, 2]);
             }
         }
-        T count = numOps.FromDouble(aH * aW);
+        T count = numOps.FromDouble((double)aH * aW);
         _rMean = numOps.Divide(rSum, count);
         _gMean = numOps.Divide(gSum, count);
         _bMean = numOps.Divide(bSum, count);
     }
 
+    /// <inheritdoc />
     public override Tensor<T> SynthesizeNovelView(
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,

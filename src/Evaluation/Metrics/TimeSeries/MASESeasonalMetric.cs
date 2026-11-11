@@ -23,13 +23,21 @@ public class MASESeasonalMetric<T> : ITimeSeriesMetric<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly int _defaultSeasonalPeriod;
 
+    /// <inheritdoc />
     public string Name => "MASESeasonal";
+    /// <inheritdoc />
     public string Category => "TimeSeries";
+    /// <inheritdoc />
     public string Description => "MASE compared to seasonal naive forecast.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => default;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
     /// <summary>
@@ -41,6 +49,7 @@ public class MASESeasonalMetric<T> : ITimeSeriesMetric<T>
         _defaultSeasonalPeriod = Math.Max(1, defaultSeasonalPeriod);
     }
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, int? seasonalPeriod = null)
     {
         if (predictions.Length != actuals.Length)

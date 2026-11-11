@@ -13,9 +13,12 @@ using AiDotNet.Interfaces;
 /// </remarks>
 public abstract class PrivacyMechanismBase<TModel, T> : FederatedLearningComponentBase<T>, IPrivacyMechanism<TModel>
 {
+    /// <inheritdoc />
     public abstract TModel ApplyPrivacy(TModel model, double epsilon, double delta);
 
+    /// <inheritdoc />
     public abstract double GetPrivacyBudgetConsumed();
 
+    /// <inheritdoc />
     public abstract string GetMechanismName();
 }

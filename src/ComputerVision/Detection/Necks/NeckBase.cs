@@ -168,32 +168,12 @@ public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <returns>Feature map with new channel count.</returns>
     protected Tensor<T> Conv1x1(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias = null)
     {
-        int batch = input.Shape[0];
-        int inChannels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-        int outChannels = weights.Shape[0];
-
-        // A 1x1 convolution is a matmul over the channel axis: NCHW -> [B*H*W, C_in] @ W^T -> NCHW.
-        // Every reshape and transpose here is an ENGINE op. Tensor<T>.Reshape and .Transpose bypass
-        // the autodiff tape, so using them on the input severed the gradient to the backbone, and
-        // using them on the WEIGHTS meant the neck's own weights never received a gradient either.
-        var inputFlat = Engine.Reshape(
-            Engine.TensorPermute(input, new[] { 0, 2, 3, 1 }),
-            new[] { batch * height * width, inChannels });
-
-        var outputFlat = Engine.TensorMatMul(inputFlat, Engine.TensorPermute(weights, new[] { 1, 0 }));
-
-        if (bias is not null)
-        {
-            outputFlat = Engine.TensorAdd(
-                outputFlat,
-                Engine.TensorBroadcastTo(Engine.Reshape(bias, new[] { 1, outChannels }), new[] { batch * height * width, outChannels }));
-        }
-
-        return Engine.TensorPermute(
-            Engine.Reshape(outputFlat, new[] { batch, height, width, outChannels }),
-            new[] { 0, 3, 1, 2 });
+        // The weights reshape through the ENGINE so the tape carries their gradient: Tensor<T>.Reshape bypasses it,
+        // and the neck's own weights then never received one. The engine convolution and channel-bias add replace a
+        // permute / matmul / broadcast / permute chain that materialized four activation-sized intermediates.
+        var kernel = Engine.Reshape(weights, new[] { weights.Shape[0], weights.Shape[1], 1, 1 });
+        var output = Engine.Conv2D(input, kernel, new[] { 1, 1 }, new[] { 0, 0 }, new[] { 1, 1 });
+        return bias is null ? output : Engine.TensorChannelBiasAdd(output, bias);
     }
 
     /// <summary>

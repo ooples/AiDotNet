@@ -228,6 +228,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
 
     private bool _useOLS;
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (_randomEffects.Count == 0)

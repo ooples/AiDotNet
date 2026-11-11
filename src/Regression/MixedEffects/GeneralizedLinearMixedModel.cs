@@ -226,6 +226,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (_randomEffects.Count == 0)

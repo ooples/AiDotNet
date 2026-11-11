@@ -115,6 +115,7 @@ public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
         return metadata;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
         => ToTokenTensorForFacade(Tokenize(text));
 

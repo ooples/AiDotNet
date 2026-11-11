@@ -30,6 +30,7 @@ public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutpu
         _winsorizeFraction = winsorizeFraction;
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -85,6 +86,7 @@ public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutpu
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "WinsorizedMean";
 }
 

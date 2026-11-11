@@ -14,6 +14,7 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
         _replacementRate = replacementRate;
     }
 
+    /// <inheritdoc />
     protected override ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> CreateNextGeneration(
         TInput trainingInput,
         TOutput trainingOutput,
@@ -69,6 +70,7 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
         return sortedPopulation;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();

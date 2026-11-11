@@ -89,6 +89,7 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int NumFeatures => _numFeatures;
     internal new int NumFrames => _numFrames;
@@ -205,6 +206,7 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
 
     #region Inference
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
@@ -247,6 +249,7 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
         return stacked;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
 
     #endregion
@@ -277,6 +280,7 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

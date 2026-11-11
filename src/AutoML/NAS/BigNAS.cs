@@ -61,8 +61,11 @@ namespace AiDotNet.AutoML.NAS
         // Hardware cost model
         private readonly HardwareCostModel<T> _hardwareCostModel;
 
+        /// <inheritdoc />
         protected override INumericOperations<T> NumOps => _ops;
+        /// <inheritdoc />
         protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        /// <inheritdoc />
         protected override int NasNumNodes => Math.Max(_nasSearchSpace.MaxNodes, _elasticDepths.Max());
 
         public BigNAS(SearchSpaceBase<T> searchSpace,
@@ -349,6 +352,7 @@ namespace AiDotNet.AutoML.NAS
             return mutated;
         }
 
+        /// <inheritdoc />
         protected override Architecture<T> SearchArchitecture(
             Tensor<T> inputs,
             Tensor<T> targets,

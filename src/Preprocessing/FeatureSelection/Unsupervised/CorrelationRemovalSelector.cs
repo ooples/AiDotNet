@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Unsupervised;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatureSelector<T>
 {
     private readonly double _threshold;
 
@@ -31,7 +31,9 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
 
     public double Threshold => _threshold;
     public double[,]? CorrelationMatrix => _correlationMatrix;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public CorrelationRemovalSelector(
@@ -45,6 +47,7 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
         _threshold = threshold;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -109,6 +112,7 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -125,11 +129,13 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("CorrelationRemovalSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -142,6 +148,7 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

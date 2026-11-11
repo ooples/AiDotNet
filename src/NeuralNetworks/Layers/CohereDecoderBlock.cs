@@ -51,6 +51,7 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly DenseLayer<T> _ffnDown;
     private readonly int _hiddenSize;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     /// <summary>The single shared LayerNorm feeding both sublayers.</summary>

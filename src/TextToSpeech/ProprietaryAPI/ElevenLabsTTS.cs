@@ -76,7 +76,13 @@ public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         _options = options ?? new ElevenLabsTTSOptions();
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The configured rate and decay: AdamW's own defaults (1e-3, 0.01) ignored both options.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -85,8 +91,11 @@ public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int HiddenDim => _options.HiddenDim;
+    /// <inheritdoc />
     public int NumFlowSteps => _options.NumFlowSteps;
 
     /// <summary>Synthesizes speech using ElevenLabs's API-compatible local inference pipeline.</summary>
@@ -100,6 +109,7 @@ public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return PostprocessAudio(output);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         int len = Math.Min(text.Length, _options.MaxTextLength);
@@ -109,6 +119,7 @@ public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -125,11 +136,13 @@ public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
                     _options.NumEncoderLayers,
                     _options.NumDecoderLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -147,6 +160,7 @@ public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -174,6 +188,7 @@ public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(ElevenLabsTTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

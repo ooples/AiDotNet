@@ -89,6 +89,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         _homomorphicEncryptionProviderOverride = homomorphicEncryptionProvider;
     }
 
+    /// <inheritdoc />
     public override FederatedLearningMetadata TrainRound(
         Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientData,
         double clientSelectionFraction = 1.0,
@@ -97,6 +98,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         return Train(clientData, 1, clientSelectionFraction, localEpochs);
     }
 
+    /// <inheritdoc />
     public override FederatedLearningMetadata Train(
         Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientData,
         int rounds,

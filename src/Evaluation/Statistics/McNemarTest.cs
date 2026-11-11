@@ -29,7 +29,9 @@ public class McNemarTest<T> : ITwoSampleTest<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "McNemar's Test";
+    /// <inheritdoc />
     public string Description => "Compares performance of two classifiers on the same data.";
 
     /// <summary>

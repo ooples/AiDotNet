@@ -107,6 +107,7 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 
     private readonly INumericOperations<Complex<T>> _complexOps;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -321,6 +322,7 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         // Use Engine operations for gradient update
@@ -351,6 +353,7 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         _angleGradients.Fill(NumOps.Zero);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _angleGradients = new Tensor<T>([_numQubits]);

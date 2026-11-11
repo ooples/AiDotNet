@@ -14,6 +14,7 @@ public class AutoAugment<T> : ImageAugmenterBase<T>
         Policy = policy;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var policies = GetPolicies();
@@ -165,6 +166,7 @@ public class AutoAugment<T> : ImageAugmenterBase<T>
         };
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

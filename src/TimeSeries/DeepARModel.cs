@@ -403,6 +403,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         return _head.ComputeBatchLoss(hiddenSteps, obsSteps, target);
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
@@ -463,6 +464,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         return predictions;
     }
 
+    /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
         var (mean, _) = PredictDistribution(input);
@@ -717,6 +719,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         return Engine.TensorTranspose(last);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -736,6 +739,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new DeepARModel<T>(new DeepAROptions<T>(_options));

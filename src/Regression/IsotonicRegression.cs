@@ -424,6 +424,7 @@ public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
         return Math.Max(0, left - 1);
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new IsotonicRegression<T>(Options, Regularization);

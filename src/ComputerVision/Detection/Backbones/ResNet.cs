@@ -48,6 +48,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
     // UpdateParameters delegated straight to SetParameters. The base does that now.
     private readonly ConvolutionalLayer<T> _conv1;
+    private readonly BatchNormalizationLayer<T> _bn1;
     private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
     private readonly int _inChannels;
@@ -59,7 +60,9 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
     public bool IsFrozen { get; private set; }
     public string Name => $"ResNet-{GetLayerCount(_variant)}";
+    /// <inheritdoc />
     public IReadOnlyList<int> OutputChannels { get; }
+    /// <inheritdoc />
     public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
@@ -89,8 +92,14 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         // torchvision's nn.Conv2d(in_channels, 64, kernel_size=7, ...). Sizing it here means
         // ParameterCount and GetParameters are exact before any data flows, and the weights are
         // allocated once rather than materialized mid-forward.
+        // He et al. 2016 normalize after every convolution ("batch normalization right after each convolution and
+        // before activation"), so the convolutions carry no bias. Without it this backbone, trained from scratch,
+        // left 37% of its weights with no gradient after one step: an unnormalized 50-layer stack's ReLUs sit mostly
+        // in their flat region.
         _conv1 = ConvolutionalLayer<T>.WithInputDepth(
-            inputDepth: options.InChannels, outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
+            inputDepth: options.InChannels, outputDepth: 64, kernelSize: 7, stride: 2, padding: 3,
+            biasMode: BiasMode.Never);
+        _bn1 = new BatchNormalizationLayer<T>(64);
 
         int[] blockCounts = GetBlockCounts(options.Variant);
         int currentChannels = 64;
@@ -102,6 +111,25 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
             _stages.Add(stage);
             currentChannels = outChannels * expansion;
         }
+
+        // Layers are created in training mode; a new backbone predicts, so its batch norms must start on running
+        // statistics (as VGG16BNBackbone's do). In training mode a batch of images was normalized with that batch's
+        // statistics, so DetectBatch disagreed with detecting each image alone, and inference overwrote the running
+        // statistics. The non-virtual helper keeps an override from running before a derived constructor.
+        ApplyTrainingMode(false);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The stem and stage layers are held directly rather than in Layers, so the mode is passed to each.</remarks>
+    public override void SetTrainingMode(bool isTraining) => ApplyTrainingMode(isTraining);
+
+    private void ApplyTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _conv1.SetTrainingMode(isTraining);
+        _bn1.SetTrainingMode(isTraining);
+        foreach (var stage in _stages)
+            foreach (var layer in stage.EnumerateLayers()) layer.SetTrainingMode(isTraining);
     }
 
     private static int GetLayerCount(ResNetVariant variant) => variant switch
@@ -124,6 +152,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         _ => new[] { 3, 4, 6, 3 }
     };
 
+    /// <inheritdoc />
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         // Backbones accept a single [C,H,W] image or a batched [N,C,H,W] tensor.
@@ -138,7 +167,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
                 $"[{string.Join(",", input.Shape.ToArray())}].", nameof(input));
 
         var features = new List<Tensor<T>>();
-        var x = _conv1.Forward(input);
+        var x = _bn1.Forward(_conv1.Forward(input));
         x = _activation.Activate(x);
         x = CvTensorOps<T>.MaxPoolPadded(x, kernelSize: 3, stride: 2, padding: 1);
         for (int i = 0; i < _stages.Count; i++)
@@ -149,6 +178,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return features;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
@@ -173,7 +203,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
                 $"[{string.Join(",", input.Shape.ToArray())}].", nameof(input));
 
         var activations = new Dictionary<string, Tensor<T>>();
-        var x = _conv1.Forward(input);
+        var x = _bn1.Forward(_conv1.Forward(input));
         x = _activation.Activate(x);
         x = CvTensorOps<T>.MaxPoolPadded(x, kernelSize: 3, stride: 2, padding: 1);
         activations["Stem"] = x.Clone();
@@ -186,14 +216,17 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     }
 
 
+    /// <inheritdoc />
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);
         writer.Write(_stages.Count);
         BackboneSerialization.WriteLayerParameters(writer, _conv1);
+        BackboneSerialization.WriteLayerParameters(writer, _bn1);
         foreach (var stage in _stages) stage.WriteParameters(writer);
     }
 
+    /// <inheritdoc />
     public void ReadParameters(BinaryReader reader)
     {
         var variant = (ResNetVariant)reader.ReadInt32();
@@ -203,6 +236,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         if (stageCount != _stages.Count)
             throw new InvalidOperationException($"ResNet stage count mismatch: expected {_stages.Count}, got {stageCount}.");
         BackboneSerialization.ReadLayerParameters(reader, _conv1);
+        BackboneSerialization.ReadLayerParameters(reader, _bn1);
         foreach (var stage in _stages) stage.ReadParameters(reader);
     }
 
@@ -210,6 +244,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var features = ExtractFeatures(input);
@@ -224,6 +259,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         // Backbones own their per-stage layers directly; the inherited Layers list stays empty.
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -238,6 +274,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
 
 
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones. " +
@@ -310,15 +347,23 @@ internal class ResidualBlock<T>
     internal IEnumerable<LayerBase<T>> EnumerateLayers()
     {
         yield return _conv1;
+        yield return _bn1;
         yield return _conv2;
+        yield return _bn2;
         if (_conv3 is not null) yield return _conv3;
+        if (_bn3 is not null) yield return _bn3;
         if (_downsample is not null) yield return _downsample;
+        if (_downsampleBn is not null) yield return _downsampleBn;
     }
 
     private readonly ConvolutionalLayer<T> _conv1;
+    private readonly BatchNormalizationLayer<T> _bn1;
     private readonly ConvolutionalLayer<T> _conv2;
+    private readonly BatchNormalizationLayer<T> _bn2;
     private readonly ConvolutionalLayer<T>? _conv3;
+    private readonly BatchNormalizationLayer<T>? _bn3;
     private readonly ConvolutionalLayer<T>? _downsample;
+    private readonly BatchNormalizationLayer<T>? _downsampleBn;
     private readonly bool _useBottleneck;
     private readonly IActivationFunction<T> _activation;
 
@@ -331,40 +376,53 @@ internal class ResidualBlock<T>
         // Every fan-in here is already known from inChannels and the block's own widths, so size the
         // convolutions up front rather than deferring to the first forward (torchvision's
         // BasicBlock / Bottleneck pass in_channels explicitly for exactly these convs).
+        // Every convolution is followed by batch normalization (He et al. 2016, Sec. 3.4), so none carries a bias.
         if (useBottleneck)
         {
-            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 1, stride: 1, padding: 0);
-            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels, kernelSize: 3, stride: stride, padding: 1);
-            _conv3 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 1, stride: 1, padding: 0);
+            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 1, stride: 1, padding: 0, biasMode: BiasMode.Never);
+            _bn1 = new BatchNormalizationLayer<T>(outChannels);
+            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels, kernelSize: 3, stride: stride, padding: 1, biasMode: BiasMode.Never);
+            _bn2 = new BatchNormalizationLayer<T>(outChannels);
+            _conv3 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 1, stride: 1, padding: 0, biasMode: BiasMode.Never);
+            _bn3 = new BatchNormalizationLayer<T>(outChannels * expansion);
         }
         else
         {
-            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 3, stride: stride, padding: 1);
-            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 3, stride: 1, padding: 1);
+            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 3, stride: stride, padding: 1, biasMode: BiasMode.Never);
+            _bn1 = new BatchNormalizationLayer<T>(outChannels);
+            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 3, stride: 1, padding: 1, biasMode: BiasMode.Never);
+            _bn2 = new BatchNormalizationLayer<T>(outChannels * expansion);
         }
 
         if (downsample)
+        {
             _downsample = ConvolutionalLayer<T>.WithInputDepth(
-                inChannels, outChannels * expansion, kernelSize: 1, stride: stride, padding: 0);
+                inChannels, outChannels * expansion, kernelSize: 1, stride: stride, padding: 0, biasMode: BiasMode.Never);
+            _downsampleBn = new BatchNormalizationLayer<T>(outChannels * expansion);
+        }
     }
 
     public Tensor<T> Forward(Tensor<T> input)
     {
-        var identity = _downsample is not null ? _downsample.Forward(input) : input;
-        var x = _conv1.Forward(input);
+        var identity = _downsample is not null && _downsampleBn is not null
+            ? _downsampleBn.Forward(_downsample.Forward(input))
+            : input;
+        var x = _bn1.Forward(_conv1.Forward(input));
         x = _activation.Activate(x);
-        x = _conv2.Forward(x);
-        x = _activation.Activate(x);
-        if (_useBottleneck && _conv3 is not null) x = _conv3.Forward(x);
+        x = _bn2.Forward(_conv2.Forward(x));
+        if (_useBottleneck && _conv3 is not null && _bn3 is not null)
+        {
+            x = _activation.Activate(x);
+            x = _bn3.Forward(_conv3.Forward(x));
+        }
         x = BackboneOps<T>.AddResidual(x, identity);
         return _activation.Activate(x);
     }
 
     public long GetParameterCount()
     {
-        long count = _conv1.ParameterCount + _conv2.ParameterCount;
-        if (_conv3 is not null) count += _conv3.ParameterCount;
-        if (_downsample is not null) count += _downsample.ParameterCount;
+        long count = 0;
+        foreach (var layer in EnumerateLayers()) count += layer.ParameterCount;
         return count;
     }
 
@@ -372,10 +430,7 @@ internal class ResidualBlock<T>
     {
         writer.Write(_useBottleneck);
         writer.Write(_downsample is not null);
-        BackboneSerialization.WriteLayerParameters(writer, _conv1);
-        BackboneSerialization.WriteLayerParameters(writer, _conv2);
-        if (_useBottleneck && _conv3 is not null) BackboneSerialization.WriteLayerParameters(writer, _conv3);
-        if (_downsample is not null) BackboneSerialization.WriteLayerParameters(writer, _downsample);
+        foreach (var layer in EnumerateLayers()) BackboneSerialization.WriteLayerParameters(writer, layer);
     }
 
     public void ReadParameters(BinaryReader reader)
@@ -386,9 +441,6 @@ internal class ResidualBlock<T>
             throw new InvalidOperationException("ResidualBlock bottleneck mismatch.");
         if (hasDownsample != (_downsample is not null))
             throw new InvalidOperationException("ResidualBlock downsample mismatch.");
-        BackboneSerialization.ReadLayerParameters(reader, _conv1);
-        BackboneSerialization.ReadLayerParameters(reader, _conv2);
-        if (_useBottleneck && _conv3 is not null) BackboneSerialization.ReadLayerParameters(reader, _conv3);
-        if (_downsample is not null) BackboneSerialization.ReadLayerParameters(reader, _downsample);
+        foreach (var layer in EnumerateLayers()) BackboneSerialization.ReadLayerParameters(reader, layer);
     }
 }

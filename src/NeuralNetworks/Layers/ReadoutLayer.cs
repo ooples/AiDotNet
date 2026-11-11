@@ -130,6 +130,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
 
     private int[] _originalInputShape = [];
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
@@ -352,6 +353,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_bias);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _weightGradients = new Tensor<T>(_weights._shape);

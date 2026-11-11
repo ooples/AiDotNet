@@ -214,11 +214,15 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         InitializeLayers();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public bool SupportsGeneration => _options.SupportsGeneration;
 
     /// <summary>
@@ -544,6 +548,7 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -573,11 +578,14 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
     // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var meta = new ModelMetadata<T>
@@ -609,6 +617,7 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
             throw new ObjectDisposedException(GetType().FullName ?? nameof(JanusPro<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

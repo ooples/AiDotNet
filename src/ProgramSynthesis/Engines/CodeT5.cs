@@ -154,6 +154,7 @@ public partial class CodeT5<T> : CodeModelBase<T>
         CodeTransformerLayerFactory.AddOutputProjection(Layers, CodeArchitecture);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return CreateTransformerModelMetadata(

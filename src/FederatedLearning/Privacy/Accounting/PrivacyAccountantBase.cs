@@ -11,14 +11,19 @@ namespace AiDotNet.FederatedLearning.Privacy.Accounting;
 /// </remarks>
 public abstract class PrivacyAccountantBase : FederatedLearningComponentBase<double>, IPrivacyAccountant
 {
+    /// <inheritdoc />
     public abstract void AddRound(double epsilon, double delta, double samplingRate);
 
+    /// <inheritdoc />
     public abstract double GetTotalEpsilonConsumed();
 
+    /// <inheritdoc />
     public abstract double GetTotalDeltaConsumed();
 
+    /// <inheritdoc />
     public abstract double GetEpsilonAtDelta(double targetDelta);
 
+    /// <inheritdoc />
     public abstract string GetAccountantName();
 }
 

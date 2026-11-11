@@ -31,10 +31,15 @@ public class OxfordPetsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     private int _sampleCount;
     private int _imageSize;
 
+    /// <inheritdoc />
     public override string Name => "Oxford-IIIT Pets";
+    /// <inheritdoc />
     public override string Description => "Oxford-IIIT Pet dataset (37 breeds)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _imageSize * _imageSize * 3;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public OxfordPetsDataLoader(OxfordPetsDataLoaderOptions? options = null)

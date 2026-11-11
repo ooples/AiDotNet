@@ -155,6 +155,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
     // breaks training. The generator registers lazily, never from a constructor.
 
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
@@ -238,6 +239,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
         return new Tensor<T>(output, [numPoints, numFeatures]);
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in _mlpLayers)
@@ -250,6 +252,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         foreach (var layer in _mlpLayers)
@@ -262,6 +265,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -289,6 +293,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
 
         Parameters = parameters;
     }
+    /// <inheritdoc />
     public override void ResetState()
     {
         _transformMatrix = null;
@@ -305,6 +310,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
         _maxPooling.ResetState();
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     private static int[] ValidateChannelArray(int[] values, string paramName)

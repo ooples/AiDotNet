@@ -221,6 +221,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     /// <summary>Reference link threshold on the affinity score.</summary>
     internal const double LinkThreshold = 0.4;
 
+    /// <inheritdoc />
     protected override List<TextRegion<T>> PostProcess(
         List<Tensor<T>> outputs,
         int imageWidth,
@@ -279,7 +280,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
             var character = component.Where(p => !linkOnly[p.H, p.W]).ToList();
             int boxW = component.Max(p => p.W) - component.Min(p => p.W) + 1;
             int boxH = component.Max(p => p.H) - component.Min(p => p.H) + 1;
-            int niter = (int)(Math.Sqrt(component.Count * (double)Math.Min(boxW, boxH) / (boxW * boxH)) * 2);
+            int niter = (int)(Math.Sqrt(component.Count * (double)Math.Min(boxW, boxH) / ((double)boxW * boxH)) * 2);
             int dilationPixels = (1 + niter) / 2; // floor((1 + niter) / 2) whole pixels, as the reference
             double dilation = dilationPixels;
             var polygon = TextBoxGeometry.MinAreaRectangle(character.Count > 0 ? character : component, (_, _) => dilation)

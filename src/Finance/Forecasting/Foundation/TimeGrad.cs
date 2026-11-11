@@ -748,6 +748,7 @@ public partial class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

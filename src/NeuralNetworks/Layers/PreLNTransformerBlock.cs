@@ -74,6 +74,7 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _hiddenSize;
     private readonly int _ffnDim;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>The pre-attention RMSNorm sublayer (exposed for tensor-parallel serving partitioning).</summary>

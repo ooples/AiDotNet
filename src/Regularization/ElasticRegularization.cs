@@ -83,6 +83,7 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         }));
     }
 
+    /// <inheritdoc />
     public override TOutput Regularize(TOutput gradient, TOutput coefficients)
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);

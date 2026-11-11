@@ -95,6 +95,7 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         Parameters = Vector<T>.Empty(); // No trainable parameters
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _numPoints = input.Shape[0];
@@ -125,16 +126,19 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         return pooledOutput;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         // No gradients to clear
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _maxIndices = null;
         _numPoints = 0;
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false; // No parameters to update; still participates in backprop
 }
