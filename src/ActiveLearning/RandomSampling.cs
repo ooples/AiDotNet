@@ -94,21 +94,10 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
         // ensuring consistency: SelectSamples(k=1) result appears in SelectSamples(k=5).
         var scores = ComputeInformativenessScores(model, unlabeledPool);
 
-        // Select top-scoring indices
-        var indexedScores = new (int index, T score)[numSamples];
-        for (int i = 0; i < numSamples; i++)
-            indexedScores[i] = (i, scores[i]);
-
-        Array.Sort(indexedScores, (a, b) =>
-        {
-            if (_numOps.GreaterThan(a.score, b.score)) return -1;
-            if (_numOps.GreaterThan(b.score, a.score)) return 1;
-            return 0;
-        });
-
+        // Select top-scoring indices (descending argsort, same comparison sort as before)
+        var order = AiDotNetEngine.Current.ArgSort(Tensor<T>.FromVector(scores), -1, descending: true).ToArray();
         var result = new int[batchSize];
-        for (int i = 0; i < batchSize; i++)
-            result[i] = indexedScores[i].index;
+        Array.Copy(order, result, batchSize);
 
         return result;
     }
