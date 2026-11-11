@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 
@@ -20,7 +22,7 @@ internal sealed class LocalObjectiveGradients<T>
     /// <summary>The scalar output objective (what the step reports as its loss).</summary>
     public Tensor<T> OutputLoss { get; }
 
-    /// <summary>The readout's prediction for the step.</summary>
+    /// <summary>The readout's prediction for the step (or the pre-head hidden state when the terminal readout loss was fused).</summary>
     public Tensor<T> Prediction { get; }
 
     /// <summary>Hidden trainable layers offered a local objective.</summary>
@@ -35,7 +37,7 @@ internal sealed class LocalObjectiveGradients<T>
 /// the input of every trainable pre-readout layer is detached, a combined objective
 /// <c>output_objective(readout(h_last)) + Σ_k local_objective_k(h_k)</c>, and one backward. Because each hidden
 /// layer's output depends only on its own parameters, the gradient a hidden layer receives is exactly the gradient of
-/// its own local objective; the readout layers receive the output objective plus every local objective that was
+/// its own local objective; the readout layers receive the output objective plus any non-detached local objective
 /// routed through them.
 /// </summary>
 internal static class LocalObjectiveGradientComputer<T>
@@ -57,6 +59,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 "layers; the readout must be at least one layer and leave at least one layer before it.");
         }
         int readoutStart = layers.Count - readoutCount;
+        int headIndex = layers.Count - 1;
 
         var paramsOf = new List<Tensor<T>>[layers.Count];
         for (int i = 0; i < layers.Count; i++)
@@ -91,38 +94,465 @@ internal static class LocalObjectiveGradientComputer<T>
                 if (paramsOf[i].Count > 0) hiddenOut[i] = current;
             }
 
-            Tensor<T> Readout(Tensor<T> h)
+            Tensor<T> PreHeadReadout(Tensor<T> h)
             {
                 var r = h;
-                for (int i = readoutStart; i < layers.Count; i++) r = layers[i].Forward(r);
+                for (int i = readoutStart; i < headIndex; i++) r = layers[i].Forward(r);
                 return r;
             }
 
-            // The last hidden layer feeds the readout un-detached, so it (and the readout) are trained exactly by the
-            // output objective, as in back-propagation through the readout alone.
-            var prediction = Readout(current);
-            var alignedTarget = alignTarget(prediction, target);
-            Tensor<T> LossFn(Tensor<T> p, Tensor<T> t) => ReduceToScalar(engine, loss.ComputeTapeLoss(p, t));
-            // A single-layer readout that fuses itself with the loss (an LM head + cross-entropy) serves every hidden
-            // layer's readout loss without putting a [rows, vocabulary] tensor on the tape per layer.
-            var fusedReadout = readoutCount == 1 ? layers[readoutStart] as IFusedReadoutLossLayer<T> : null;
-            Tensor<T> ReadoutLossFn(Tensor<T> h, Tensor<T> t) =>
-                fusedReadout?.TryComputeFusedLoss(h, t, loss) is { } fused ? ReduceToScalar(engine, fused) : LossFn(Readout(h), t);
-            var step = new LocalObjectiveStep<T>(input, alignedTarget, engine, Readout, LossFn, hiddenIdx.Count, ReadoutLossFn);
+            Tensor<T> Readout(Tensor<T> h) => layers[headIndex].Forward(PreHeadReadout(h));
 
-            var defaultLoss = LossFn(prediction, alignedTarget);
+            Tensor<T> LossFn(Tensor<T> p, Tensor<T> t) => ReduceToScalar(engine, loss.ComputeTapeLoss(p, t));
+
+            // Any readout whose terminal layer implements IFusedReadoutLossLayer<T> (even when preceded by RMSNorm or
+            // LayerNorm, i.e. readoutCount >= 2) fuses the [rows, vocabulary] head + cross-entropy without putting a
+            // [rows, vocabulary] logits tensor on the tape per layer.
+            var fusedHead = layers[headIndex] is LayerBase<T> { IsInitialized: false }
+                ? null
+                : layers[headIndex] as IFusedReadoutLossLayer<T>;
+            var detachableFusedHead = fusedHead as IDetachableFusedReadoutLossLayer<T>;
+
+            Tensor<int>? preparedIds = null;
+            int preparedVocabSize = 0;
+            FusedReadoutPreparedState<T> headPreparedState = default;
+
+            // Evaluate the terminal layer's pre-head activation once. Running PreHeadReadout(current) first also
+            // initializes any lazy pre-head layer before we inspect its parameters and detach/batching capabilities.
+            var preHeadFinal = PreHeadReadout(current);
+            for (int i = readoutStart; i < headIndex; i++)
+                paramsOf[i] = CollectParameters(layers[i]);
+
+            bool preHeadAllDetachable = true;
+            bool preHeadBatchIndependent = true;
+            for (int i = readoutStart; i < headIndex; i++)
+            {
+                bool hasParamsOrLazy = paramsOf[i].Count > 0 || layers[i] is LayerBase<T> { IsInitialized: false };
+                if (layers[i] is IDetachablePreHeadLayer<T> detachablePreHead)
+                {
+                    if (!detachablePreHead.CanForwardWithDetachedParameters && hasParamsOrLazy)
+                        preHeadAllDetachable = false;
+                    if (!detachablePreHead.PreservesIndependentStackedBatches(preHeadFinal.Rank))
+                        preHeadBatchIndependent = false;
+                }
+                else
+                {
+                    if (hasParamsOrLazy)
+                        preHeadAllDetachable = false;
+                    preHeadBatchIndependent = false;
+                }
+            }
+
+            var preHeadDetachedStates = preHeadAllDetachable && headIndex > readoutStart
+                ? new object?[headIndex - readoutStart]
+                : Array.Empty<object?>();
+
+            Tensor<T> PreHeadReadoutDetached(Tensor<T> h)
+            {
+                var r = h;
+                for (int i = readoutStart; i < headIndex; i++)
+                {
+                    if (layers[i] is IDetachablePreHeadLayer<T> { CanForwardWithDetachedParameters: true } detachable)
+                    {
+                        int slot = i - readoutStart;
+                        r = detachable.ForwardWithDetachedParameters(r, ref preHeadDetachedStates[slot]);
+                    }
+                    else
+                    {
+                        r = layers[i].Forward(r);
+                    }
+                }
+                return r;
+            }
+
+            // When the active credit rule does not inspect the materialized [rows, vocabulary] prediction tensor in
+            // BuildOutputObjective, fuse the terminal output objective as well so zero [rows, vocabulary] tensors are
+            // allocated across the entire training step.
+            bool canTryFuseTerminal = fusedHead is not null
+                && rule is IOutputPredictionOptionalRule { UsesOutputPrediction: false };
+
+            Tensor<T> prediction;
+            Tensor<T> alignedTarget;
+            Tensor<T> defaultLoss;
+
+            if (canTryFuseTerminal && detachableFusedHead is not null)
+            {
+                preparedIds = detachableFusedHead.TryPrepareClassIndexTarget(
+                    target, loss, preHeadFinal.Rank, preHeadFinal.Shape.ToArray(), out preparedVocabSize);
+                if (preparedIds is not null
+                    && detachableFusedHead.TryComputeFusedLossPrepared(
+                        preHeadFinal, preparedIds, detachParameters: false,
+                        ref headPreparedState) is { } fusedOut)
+                {
+                    prediction = preHeadFinal;
+                    alignedTarget = target;
+                    defaultLoss = ReduceToScalar(engine, fusedOut);
+                }
+                else
+                {
+                    prediction = layers[headIndex].Forward(preHeadFinal);
+                    alignedTarget = alignTarget(prediction, target);
+                    defaultLoss = LossFn(prediction, alignedTarget);
+                }
+            }
+            else if (canTryFuseTerminal && fusedHead!.TryComputeFusedLoss(preHeadFinal, target, loss) is { } genericFusedOut)
+            {
+                prediction = preHeadFinal;
+                alignedTarget = target;
+                defaultLoss = ReduceToScalar(engine, genericFusedOut);
+            }
+            else
+            {
+                prediction = layers[headIndex].Forward(preHeadFinal);
+                alignedTarget = alignTarget(prediction, target);
+                defaultLoss = LossFn(prediction, alignedTarget);
+                if (detachableFusedHead is null && layers[headIndex] is not LayerBase<T> { IsInitialized: false })
+                {
+                    fusedHead = layers[headIndex] as IFusedReadoutLossLayer<T>;
+                    detachableFusedHead = fusedHead as IDetachableFusedReadoutLossLayer<T>;
+                }
+                if (detachableFusedHead is not null)
+                {
+                    preparedIds = detachableFusedHead.TryPrepareClassIndexTarget(
+                        alignedTarget, loss, preHeadFinal.Rank, preHeadFinal.Shape.ToArray(), out preparedVocabSize);
+                }
+            }
+            paramsOf[headIndex] = CollectParameters(layers[headIndex]);
+
+            Tensor<T> ReadoutLossCore(Tensor<T> h, Tensor<T> t)
+            {
+                var preHead = PreHeadReadout(h);
+                if (ReferenceEquals(t, alignedTarget) && preparedIds is not null && detachableFusedHead is not null
+                    && detachableFusedHead.TryComputeFusedLossPrepared(
+                        preHead, preparedIds, detachParameters: false,
+                        ref headPreparedState) is { } preparedFused)
+                {
+                    return ReduceToScalar(engine, preparedFused);
+                }
+                if (fusedHead?.TryComputeFusedLoss(preHead, t, loss) is { } fused)
+                    return ReduceToScalar(engine, fused);
+                return LossFn(layers[headIndex].Forward(preHead), t);
+            }
+
+            Tensor<T> ReadoutLossDetachedFn(Tensor<T> h, Tensor<T> t)
+            {
+                if (preHeadAllDetachable && ReferenceEquals(t, alignedTarget) && preparedIds is not null
+                    && detachableFusedHead is not null)
+                {
+                    var preHead = PreHeadReadoutDetached(h);
+                    if (detachableFusedHead.TryComputeFusedLossPrepared(
+                        preHead, preparedIds, detachParameters: true,
+                        ref headPreparedState) is { } detachedFused)
+                    {
+                        return ReduceToScalar(engine, detachedFused);
+                    }
+                }
+
+                // Universal exact fallback for any arbitrary readout stack: compute d/dh[ReadoutLoss(h, t)] on an
+                // isolated inner tape and attach a straight-through linear surrogate on the outer tape so outer-tape
+                // readout parameters receive identically zero gradient from this hidden layer.
+                var hDetached = engine.StopGradient(h);
+                Tensor<T> lossVal;
+                Tensor<T> gradH;
+                using (var innerTape = new GradientTape<T>())
+                {
+                    lossVal = ReadoutLossCore(hDetached, t);
+                    var innerGrads = innerTape.ComputeGradients(lossVal, sources: new[] { hDetached });
+                    innerTape.Retain(lossVal);
+                    if (innerGrads.TryGetValue(hDetached, out var gh))
+                    {
+                        innerTape.Retain(gh);
+                        gradH = gh;
+                    }
+                    else
+                    {
+                        gradH = new Tensor<T>(h.Shape.ToArray());
+                    }
+                }
+                var dot = ReduceToScalar(engine, engine.TensorMultiply(h, gradH));
+                var dotConst = engine.StopGradient(dot);
+                return engine.TensorAdd(engine.StopGradient(lossVal), engine.TensorSubtract(dot, dotConst));
+            }
+
+            // Per-step cache for sampled candidate vocabulary readout (built lazily at most once per step).
+            int cachedSampleMax = -1;
+            bool cachedSampleDetach = false;
+            int cachedSampleSeed = 0;
+            Tensor<int>? cachedRemappedIds = null;
+            Tensor<T>? cachedSampledWeight = null;
+            Tensor<T>? cachedSampledBias = null;
+
+            bool TryEnsureSampledReadoutCache(int maxCandidates, bool detachParams, int stepSeed)
+            {
+                if (preparedIds is null || detachableFusedHead is null
+                    || preparedVocabSize < 2 || maxCandidates >= preparedVocabSize)
+                    return false;
+                if (cachedSampledWeight is not null && cachedSampleMax == maxCandidates
+                    && cachedSampleDetach == detachParams && cachedSampleSeed == stepSeed)
+                    return true;
+                if (!detachableFusedHead.TryGetVocabularyRowsForSampling(
+                    out var vocabRows, out var headBias, out bool vocabRowsAreInputMajor))
+                    return false;
+
+                BuildSampledCandidates(preparedIds, preparedVocabSize, maxCandidates, stepSeed,
+                    out var candidateIds, out var remappedIds);
+                int u = candidateIds.Length;
+
+                if (detachParams)
+                {
+                    using (new NoGradScope<T>())
+                    {
+                        if (vocabRowsAreInputMajor)
+                        {
+                            cachedSampledWeight = engine.StopGradient(
+                                engine.TensorIndexSelect(vocabRows, candidateIds, axis: 1));
+                        }
+                        else
+                        {
+                            var pickedRows = engine.TensorEmbeddingLookup<T, int>(vocabRows, candidateIds);
+                            cachedSampledWeight = engine.StopGradient(engine.TensorTranspose(pickedRows));
+                        }
+                        cachedSampledBias = headBias is not null
+                            ? engine.StopGradient(engine.TensorIndexSelect(headBias, candidateIds, axis: 0))
+                            : new Tensor<T>(new[] { u });
+                    }
+                }
+                else
+                {
+                    if (vocabRowsAreInputMajor)
+                    {
+                        cachedSampledWeight = engine.TensorIndexSelect(vocabRows, candidateIds, axis: 1);
+                    }
+                    else
+                    {
+                        var pickedRows = engine.TensorEmbeddingLookup<T, int>(vocabRows, candidateIds);
+                        cachedSampledWeight = engine.TensorTranspose(pickedRows);
+                    }
+                    cachedSampledBias = headBias is not null
+                        ? engine.TensorIndexSelect(headBias, candidateIds, axis: 0)
+                        : new Tensor<T>(new[] { u });
+                }
+
+                cachedRemappedIds = remappedIds;
+                cachedSampleMax = maxCandidates;
+                cachedSampleDetach = detachParams;
+                cachedSampleSeed = stepSeed;
+                return true;
+            }
+
+            Tensor<T>? TrySampledReadoutLossFn(Tensor<T> h, Tensor<T> t, int maxCandidates, bool detachParams, int stepSeed)
+            {
+                if (!ReferenceEquals(t, alignedTarget) || !TryEnsureSampledReadoutCache(maxCandidates, detachParams, stepSeed))
+                    return null;
+
+                int rows = cachedRemappedIds!.Length;
+                int inputDim = cachedSampledWeight!.Shape[0];
+
+                if (detachParams && !preHeadAllDetachable)
+                {
+                    // Preserve the exact sampled-vocabulary objective (without falling back to full readout) while
+                    // respecting any custom/subclassed pre-head ForwardTraced override on an isolated inner tape.
+                    var hDetached = engine.StopGradient(h);
+                    Tensor<T>? innerLossVal = null;
+                    Tensor<T>? gradH = null;
+                    using (var innerTape = new GradientTape<T>())
+                    {
+                        var preHeadInner = PreHeadReadout(hDetached);
+                        if (preHeadInner.Rank >= 2
+                            && preHeadInner.Shape[preHeadInner.Rank - 1] == inputDim
+                            && preHeadInner.Length == rows * inputDim)
+                        {
+                            var flatInner = preHeadInner.Rank == 2
+                                ? preHeadInner
+                                : engine.Reshape(preHeadInner, new[] { rows, inputDim });
+                            DenseLayer<T>.CountFusedReadoutLoss();
+                            innerLossVal = ReduceToScalar(
+                                engine,
+                                engine.FusedLinearCrossEntropyWithLogits(
+                                    flatInner, cachedSampledWeight!, cachedSampledBias!, cachedRemappedIds!));
+                            var innerGrads = innerTape.ComputeGradients(innerLossVal, sources: new[] { hDetached });
+                            innerTape.Retain(innerLossVal);
+                            if (innerGrads.TryGetValue(hDetached, out var gh))
+                            {
+                                innerTape.Retain(gh);
+                                gradH = gh;
+                            }
+                            else
+                            {
+                                gradH = new Tensor<T>(h.Shape.ToArray());
+                            }
+                        }
+                    }
+                    if (innerLossVal is null || gradH is null)
+                        return null;
+                    var dot = ReduceToScalar(engine, engine.TensorMultiply(h, gradH));
+                    var dotConst = engine.StopGradient(dot);
+                    return engine.TensorAdd(engine.StopGradient(innerLossVal), engine.TensorSubtract(dot, dotConst));
+                }
+
+                var preHead = detachParams ? PreHeadReadoutDetached(h) : PreHeadReadout(h);
+                if (preHead.Rank < 2 || preHead.Shape[preHead.Rank - 1] != inputDim || preHead.Length != rows * inputDim)
+                    return null;
+
+                var flatHidden = preHead.Rank == 2 ? preHead : engine.Reshape(preHead, new[] { rows, inputDim });
+                DenseLayer<T>.CountFusedReadoutLoss();
+                var sampledLoss = engine.FusedLinearCrossEntropyWithLogits(
+                    flatHidden, cachedSampledWeight, cachedSampledBias!, cachedRemappedIds);
+                return ReduceToScalar(engine, sampledLoss);
+            }
+
+            var step = new LocalObjectiveStep<T>(
+                input, alignedTarget, engine, Readout, LossFn, hiddenIdx.Count,
+                ReadoutLossCore, ReadoutLossDetachedFn, TrySampledReadoutLossFn);
+
             var outputObjective = rule.BuildOutputObjective(step, prediction, defaultLoss) ?? defaultLoss;
             var combined = outputObjective;
 
             int locals = 0;
-            for (int k = 0; k < hiddenIdx.Count; k++)
+            bool handledByBatchedReadout = false;
+
+            // Depth-stacked single-GEMM readout fast path: instead of launching m separate memory-bound
+            // [rows, D] x [D, V] (or [D, U]) GEMMs and allocating m separate [D, V] dWeight buffers, concatenate all
+            // selected intermediate hidden states [h_k0; ...; h_k(m-1)] along axis 0 and evaluate the shared pre-head
+            // normalization + fused cross-entropy in ONE batched GEMM.
+            if (rule is IBatchedLocalReadoutRule batchedRule
+                && preparedIds is not null
+                && detachableFusedHead is not null)
             {
-                int i = hiddenIdx[k];
-                var local = rule.BuildLocalObjective(new LocalObjectiveContext<T>(step, k, i, layers[i],
-                    hiddenOut[i] ?? throw new InvalidOperationException($"Hidden layer {i} produced no output.")));
-                if (local is null) continue;
-                combined = engine.TensorAdd(combined, ReduceToScalar(engine, local));
-                locals++;
+                var mode = batchedRule.BatchedReadoutMode;
+                bool detach = batchedRule.DetachReadoutOnHiddenLayers;
+                bool progressive = batchedRule.UseDepthProgressiveWeight;
+                int stride = batchedRule.LayerStride;
+                double baseWeight = batchedRule.BaseLocalWeight;
+
+                if (CanBatchReadout(mode, preHeadBatchIndependent, detach, preHeadAllDetachable, progressive))
+                {
+                    int lastHidden = hiddenIdx.Count - 1;
+                    var selectedHidden = new List<int>(Math.Max(0, lastHidden));
+                    bool allSameShape = true;
+                    for (int k = 0; k < lastHidden; k++)
+                    {
+                        if (stride > 1 && ((lastHidden - 1 - k) % stride) != 0)
+                            continue;
+                        var hCandidate = hiddenOut[hiddenIdx[k]];
+                        if (hCandidate is null || !SameShape(hCandidate, current))
+                        {
+                            allSameShape = false;
+                            break;
+                        }
+                        selectedHidden.Add(k);
+                    }
+
+                    if (allSameShape)
+                    {
+                        int m = selectedHidden.Count;
+                        if (m == 0)
+                        {
+                            handledByBatchedReadout = true;
+                        }
+                        else
+                        {
+                            var numOps = MathHelper.GetNumericOperations<T>();
+                            var stackedInputs = new Tensor<T>[m];
+                            int hCount = hiddenIdx.Count;
+                            for (int j = 0; j < m; j++)
+                            {
+                                int k = selectedHidden[j];
+                                var hk = hiddenOut[hiddenIdx[k]]!;
+                                if (progressive)
+                                {
+                                    // detach == true is guaranteed here. Rescale backward Jacobian by w_j while
+                                    // preserving bit-identical forward values tilde_h == hk (zero ULP drift).
+                                    double depthFrac = (k + 1.0) / hCount;
+                                    double w = baseWeight * depthFrac * depthFrac;
+                                    if (BitConverter.DoubleToInt64Bits(w) == BitConverter.DoubleToInt64Bits(1.0))
+                                    {
+                                        stackedInputs[j] = hk;
+                                    }
+                                    else
+                                    {
+                                        var scaled = engine.TensorMultiplyScalar(hk, numOps.FromDouble(w));
+                                        var delta = engine.TensorSubtract(scaled, engine.StopGradient(scaled));
+                                        stackedInputs[j] = engine.TensorAdd(engine.StopGradient(hk), delta);
+                                    }
+                                }
+                                else
+                                {
+                                    stackedInputs[j] = hk;
+                                }
+                            }
+
+                            var hStacked = m == 1
+                                ? stackedInputs[0]
+                                : engine.TensorConcatenate(stackedInputs, axis: 0);
+                            Tensor<T>? batchedLoss = null;
+
+                            if (mode == BatchedLocalReadoutMode.SampledVocabulary)
+                            {
+                                int stepSeed = batchedRule.AdvanceAndGetStepSeed(input);
+                                if (preparedVocabSize >= 2
+                                    && batchedRule.SampledMaxCandidates < preparedVocabSize
+                                    && TryEnsureSampledReadoutCache(batchedRule.SampledMaxCandidates, detach, stepSeed))
+                                {
+                                    var preHeadStacked = detach ? PreHeadReadoutDetached(hStacked) : PreHeadReadout(hStacked);
+                                    int singleRows = cachedRemappedIds!.Length;
+                                    int totalRows = m * singleRows;
+                                    int inputDim = cachedSampledWeight!.Shape[0];
+                                    if (preHeadStacked.Rank >= 2
+                                        && preHeadStacked.Shape[preHeadStacked.Rank - 1] == inputDim
+                                        && preHeadStacked.Length == totalRows * inputDim)
+                                    {
+                                        var flatStacked = preHeadStacked.Rank == 2
+                                            ? preHeadStacked
+                                            : engine.Reshape(preHeadStacked, new[] { totalRows, inputDim });
+                                        var tiledRemapped = TileIntIds(cachedRemappedIds, m);
+                                        DenseLayer<T>.CountFusedReadoutLoss();
+                                        batchedLoss = ReduceToScalar(
+                                            engine,
+                                            engine.FusedLinearCrossEntropyWithLogits(
+                                                flatStacked, cachedSampledWeight, cachedSampledBias!, tiledRemapped));
+                                    }
+                                }
+                            }
+
+                            if (batchedLoss is null)
+                            {
+                                var preHeadStacked = detach ? PreHeadReadoutDetached(hStacked) : PreHeadReadout(hStacked);
+                                var tiledIds = TileIntIds(preparedIds, m);
+                                if (detachableFusedHead.TryComputeFusedLossPrepared(
+                                    preHeadStacked, tiledIds, detachParameters: detach,
+                                    ref headPreparedState) is { } fusedBatched)
+                                {
+                                    batchedLoss = ReduceToScalar(engine, fusedBatched);
+                                }
+                            }
+
+                            if (batchedLoss is not null)
+                            {
+                                double scale = progressive ? m : m * baseWeight;
+                                var scaledBatched = BitConverter.DoubleToInt64Bits(scale) == BitConverter.DoubleToInt64Bits(1.0)
+                                    ? batchedLoss
+                                    : engine.TensorMultiplyScalar(batchedLoss, numOps.FromDouble(scale));
+                                combined = engine.TensorAdd(combined, scaledBatched);
+                                locals = m;
+                                handledByBatchedReadout = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!handledByBatchedReadout)
+            {
+                for (int k = 0; k < hiddenIdx.Count; k++)
+                {
+                    int i = hiddenIdx[k];
+                    var local = rule.BuildLocalObjective(new LocalObjectiveContext<T>(step, k, i, layers[i],
+                        hiddenOut[i] ?? throw new InvalidOperationException($"Hidden layer {i} produced no output.")));
+                    if (local is null) continue;
+                    combined = engine.TensorAdd(combined, ReduceToScalar(engine, local));
+                    locals++;
+                }
             }
 
             var sources = new List<Tensor<T>>();
@@ -159,13 +589,107 @@ internal static class LocalObjectiveGradientComputer<T>
         }
     }
 
+    internal static void BuildSampledCandidates(
+        Tensor<int> targetIds,
+        int vocabSize,
+        int maxCandidates,
+        int stepSeed,
+        out Tensor<int> candidateIds,
+        out Tensor<int> remappedIds)
+    {
+        int rows = targetIds.Length;
+        var map = new Dictionary<int, int>(Math.Min(vocabSize, Math.Max(rows, maxCandidates)));
+        var candidates = new List<int>(Math.Min(vocabSize, Math.Max(rows, maxCandidates)));
+        remappedIds = new Tensor<int>(new[] { rows });
+
+        for (int r = 0; r < rows; r++)
+        {
+            int id = targetIds.GetFlat(r);
+            if (!map.TryGetValue(id, out int localIdx))
+            {
+                localIdx = candidates.Count;
+                map[id] = localIdx;
+                candidates.Add(id);
+            }
+            remappedIds.SetFlat(r, localIdx);
+        }
+
+        int targetCount = Math.Min(vocabSize, Math.Max(candidates.Count, maxCandidates));
+        uint state = unchecked((uint)stepSeed * 2654435761u) ^ 0x9E3779B9u;
+        if (state == 0u) state = 0x6D2B79F5u;
+
+        // Fill remaining slots with uniform distinct negative vocabulary indices; fall back to linear probe if dense.
+        int attempts = 0;
+        int maxRandomAttempts = (targetCount - candidates.Count) * 4;
+        while (candidates.Count < targetCount && attempts < maxRandomAttempts)
+        {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            int neg = (int)(state % (uint)vocabSize);
+            attempts++;
+            if (!map.ContainsKey(neg))
+            {
+                map[neg] = candidates.Count;
+                candidates.Add(neg);
+            }
+        }
+
+        if (candidates.Count < targetCount)
+        {
+            int start = (int)(state % (uint)vocabSize);
+            for (int offset = 0; offset < vocabSize && candidates.Count < targetCount; offset++)
+            {
+                int neg = (start + offset) % vocabSize;
+                if (!map.ContainsKey(neg))
+                {
+                    map[neg] = candidates.Count;
+                    candidates.Add(neg);
+                }
+            }
+        }
+
+        candidateIds = new Tensor<int>(candidates.ToArray(), new[] { candidates.Count });
+    }
+
+    private static bool SameShape(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Rank != b.Rank) return false;
+        for (int axis = 0; axis < a.Rank; axis++)
+            if (a.Shape[axis] != b.Shape[axis]) return false;
+        return true;
+    }
+
+    private static Tensor<int> TileIntIds(Tensor<int> ids, int count)
+    {
+        if (count == 1) return ids;
+        int rows = ids.Length;
+        var tiled = new int[count * rows];
+        for (int r = 0; r < rows; r++)
+            tiled[r] = ids.GetFlat(r);
+        for (int c = 1; c < count; c++)
+            Array.Copy(tiled, 0, tiled, c * rows, rows);
+        return new Tensor<int>(tiled, new[] { count * rows });
+    }
+
+    private static bool CanBatchReadout(
+        BatchedLocalReadoutMode mode,
+        bool preHeadBatchIndependent,
+        bool detach,
+        bool preHeadAllDetachable,
+        bool progressive)
+    {
+        if (mode == BatchedLocalReadoutMode.None || !preHeadBatchIndependent)
+            return false;
+        return detach ? preHeadAllDetachable : !progressive;
+    }
+
     private static Tensor<T> ReduceToScalar(IEngine engine, Tensor<T> t)
     {
         if (t.Shape.Length == 0) return t;
         var axes = Enumerable.Range(0, t.Shape.Length).ToArray();
         return engine.ReduceSum(t, axes, keepDims: false);
     }
-
 
     internal static List<Tensor<T>> CollectParameters(ILayer<T> layer)
     {
