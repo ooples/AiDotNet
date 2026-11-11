@@ -212,23 +212,14 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
             }
 
             // Split data
-            var trainX = new Matrix<T>(trainSize, x.Columns);
-            var trainY = new Vector<T>(trainSize);
-            var calibX = new Matrix<T>(calibSize, x.Columns);
-            var calibY = new Vector<T>(calibSize);
-
-            for (int i = 0; i < trainSize; i++)
-            {
-                for (int j = 0; j < x.Columns; j++)
-                    trainX[i, j] = x[indices[i], j];
-                trainY[i] = y[indices[i]];
-            }
-            for (int i = 0; i < calibSize; i++)
-            {
-                for (int j = 0; j < x.Columns; j++)
-                    calibX[i, j] = x[indices[trainSize + i], j];
-                calibY[i] = y[indices[trainSize + i]];
-            }
+            var trainIndices = new int[trainSize];
+            var calibIndices = new int[calibSize];
+            Array.Copy(indices, 0, trainIndices, 0, trainSize);
+            Array.Copy(indices, trainSize, calibIndices, 0, calibSize);
+            var trainX = x.GetRows(trainIndices);
+            var trainY = GatherElements(y, trainIndices);
+            var calibX = x.GetRows(calibIndices);
+            var calibY = GatherElements(y, calibIndices);
 
             // Train base classifier
             _baseClassifier.Train(trainX, trainY);
@@ -261,8 +252,8 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
             (indices[i], indices[j]) = (indices[j], indices[i]);
         }
 
-        // Collect out-of-fold predictions
-        var allPredictions = new Matrix<T>(n, NumClasses);
+        // Collect out-of-fold predictions; fold blocks are stacked in shuffled order and un-shuffled at the end
+        var foldPredictions = new Tensor<T>[k];
         int foldSize = n / k;
 
         for (int fold = 0; fold < k; fold++)
@@ -272,27 +263,15 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
             int testSize = foldEnd - foldStart;
             int trainSize = n - testSize;
 
-            var trainX = new Matrix<T>(trainSize, x.Columns);
-            var trainY = new Vector<T>(trainSize);
-            var testX = new Matrix<T>(testSize, x.Columns);
+            var testIndices = new int[testSize];
+            var trainIndices = new int[trainSize];
+            Array.Copy(indices, foldStart, testIndices, 0, testSize);
+            Array.Copy(indices, 0, trainIndices, 0, foldStart);
+            Array.Copy(indices, foldEnd, trainIndices, foldStart, n - foldEnd);
 
-            int trainIdx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (i >= foldStart && i < foldEnd)
-                {
-                    int testIdx = i - foldStart;
-                    for (int j = 0; j < x.Columns; j++)
-                        testX[testIdx, j] = x[indices[i], j];
-                }
-                else
-                {
-                    for (int j = 0; j < x.Columns; j++)
-                        trainX[trainIdx, j] = x[indices[i], j];
-                    trainY[trainIdx] = y[indices[i]];
-                    trainIdx++;
-                }
-            }
+            var trainX = x.GetRows(trainIndices);
+            var trainY = GatherElements(y, trainIndices);
+            var testX = x.GetRows(testIndices);
 
             // Clone and train on this fold's training data
             IFullModel<T, Matrix<T>, Vector<T>> foldModel;
@@ -309,12 +288,18 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
 
             // Get predictions on test fold
             var foldPreds = ((IProbabilisticClassifier<T>)foldModel).PredictProbabilities(testX);
-            for (int i = foldStart; i < foldEnd; i++)
-            {
-                for (int c = 0; c < NumClasses; c++)
-                    allPredictions[indices[i], c] = foldPreds[i - foldStart, c];
-            }
+            foldPredictions[fold] = Tensor<T>.FromMatrix(foldPreds.GetSubMatrix(0, 0, testSize, NumClasses));
         }
+
+        // Row r of the stacked folds belongs to sample indices[r]; invert the shuffle to restore sample order
+        var inverse = new int[n];
+        for (int r = 0; r < n; r++)
+        {
+            inverse[indices[r]] = r;
+        }
+
+        var stacked = Engine.TensorConcatenate(foldPredictions, 0);
+        var allPredictions = Engine.TensorIndexSelect(stacked, new Tensor<int>(inverse, new[] { n }), 0).ToMatrix();
 
         // Fit calibration on all out-of-fold predictions
         FitCalibration(allPredictions, y);
@@ -333,20 +318,14 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
                 "Per-class calibration is not implemented. Use binary classification or add per-class parameters.");
         }
 
-        // For binary classification, use probability of positive class (last column)
-        var probs = new Vector<T>(n);
-        var targets = new Vector<T>(n);
-
         // Use last class as the "positive" class for calibration
         int positiveClassIdx = NumClasses - 1;
         var classLabels = ClassLabels ?? throw new InvalidOperationException("Class labels not initialized.");
         var positiveLabel = classLabels[positiveClassIdx];
 
-        for (int i = 0; i < n; i++)
-        {
-            probs[i] = uncalibrated[i, positiveClassIdx];
-            targets[i] = NumOps.Compare(actuals[i], positiveLabel) == 0 ? NumOps.One : NumOps.Zero;
-        }
+        // For binary classification, use probability of positive class (last column)
+        var probs = n == 0 ? new Vector<T>(0) : uncalibrated.GetColumn(positiveClassIdx);
+        var targets = n == 0 ? new Vector<T>(0) : Engine.TensorEquals(actuals.AsTensor(), positiveLabel).ToVector();
 
         switch (_options.CalibrationMethod)
         {
@@ -374,62 +353,14 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     /// </summary>
     private void FitPlattScaling(Vector<T> probs, Vector<T> targets)
     {
-        // Fit sigmoid: P_calibrated = 1 / (1 + exp(-(A * logit(P) + B)))
-        T a = NumOps.Zero;
-        T b = NumOps.Zero;
-        T lr = NumOps.FromDouble(0.01);
-        int maxIter = 1000;
-        T tolerance = NumOps.FromDouble(1e-8);
-        T prevLoss = NumOps.MaxValue;
-        T eps = NumOps.FromDouble(1e-10);
-        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
-        T nT = NumOps.FromDouble(probs.Length);
+        // Fit sigmoid: P_calibrated = 1 / (1 + exp(-(A * logit(P) + B))) by gradient descent on the
+        // design matrix [logit(P), 1] with parameters [A, B].
+        var logit = Logit(ClampProbabilities(probs.AsTensor()));
+        var design = StackColumns(new[] { logit, FilledVector(probs.Length, NumOps.One) });
+        var parameters = FitLogisticByGradientDescent(design, targets, new Vector<T>(2));
 
-        for (int iter = 0; iter < maxIter; iter++)
-        {
-            T gradA = NumOps.Zero, gradB = NumOps.Zero;
-            T loss = NumOps.Zero;
-
-            for (int i = 0; i < probs.Length; i++)
-            {
-                // Clamp probability to avoid log(0)
-                T p = probs[i];
-                if (NumOps.LessThan(p, eps)) p = eps;
-                if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
-                T logit = NumOps.Log(NumOps.Divide(p, NumOps.Subtract(NumOps.One, p)));
-
-                T z = NumOps.Add(NumOps.Multiply(a, logit), b);
-                T sigmoid = SigmoidT(z);
-
-                T error = NumOps.Subtract(sigmoid, targets[i]);
-                gradA = NumOps.Add(gradA, NumOps.Multiply(error, logit));
-                gradB = NumOps.Add(gradB, error);
-
-                // Cross-entropy loss
-                T clampedSigmoid = sigmoid;
-                if (NumOps.LessThan(clampedSigmoid, eps)) clampedSigmoid = eps;
-                if (NumOps.GreaterThan(clampedSigmoid, oneMinusEps)) clampedSigmoid = oneMinusEps;
-                loss = NumOps.Subtract(loss,
-                    NumOps.Add(
-                        NumOps.Multiply(targets[i], NumOps.Log(clampedSigmoid)),
-                        NumOps.Multiply(NumOps.Subtract(NumOps.One, targets[i]),
-                            NumOps.Log(NumOps.Subtract(NumOps.One, clampedSigmoid)))));
-            }
-
-            a = NumOps.Subtract(a, NumOps.Multiply(lr, NumOps.Divide(gradA, nT)));
-            b = NumOps.Subtract(b, NumOps.Multiply(lr, NumOps.Divide(gradB, nT)));
-
-            // Check convergence
-            T lossDiff = NumOps.Abs(NumOps.Subtract(loss, prevLoss));
-            if (NumOps.LessThan(lossDiff, tolerance))
-            {
-                break;
-            }
-            prevLoss = loss;
-        }
-
-        _plattA = a;
-        _plattB = b;
+        _plattA = parameters[0];
+        _plattB = parameters[1];
     }
 
     /// <summary>
@@ -542,65 +473,19 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     /// </summary>
     private void FitBetaCalibration(Vector<T> probs, Vector<T> targets)
     {
-        // Beta calibration: P_calibrated = sigmoid(a * log(P) - b * log(1-P) + c)
-        T a = NumOps.One, b = NumOps.One, c = NumOps.Zero;
-        T lr = NumOps.FromDouble(0.01);
-        int maxIter = 1000;
-        T tolerance = NumOps.FromDouble(1e-8);
-        T prevLoss = NumOps.MaxValue;
-        T eps = NumOps.FromDouble(1e-10);
-        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
-        T nT = NumOps.FromDouble(probs.Length);
+        // Beta calibration: P_calibrated = sigmoid(a * log(P) - b * log(1-P) + c), fitted by gradient descent
+        // on the design matrix [log(P), -log(1-P), 1] with parameters [a, b, c].
+        var engine = Engine;
+        var p = ClampProbabilities(probs.AsTensor());
+        var logP = engine.TensorLog(p).ToVector();
+        var negLog1mP = engine.TensorNegate(engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, p))).ToVector();
+        var design = StackColumns(new[] { logP, negLog1mP, FilledVector(probs.Length, NumOps.One) });
+        var initial = Vector<T>.Concatenate(FilledVector(2, NumOps.One), new Vector<T>(1));
+        var parameters = FitLogisticByGradientDescent(design, targets, initial);
 
-        for (int iter = 0; iter < maxIter; iter++)
-        {
-            T gradA = NumOps.Zero, gradB = NumOps.Zero, gradC = NumOps.Zero;
-            T loss = NumOps.Zero;
-
-            for (int i = 0; i < probs.Length; i++)
-            {
-                T p = probs[i];
-                if (NumOps.LessThan(p, eps)) p = eps;
-                if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
-
-                T logP = NumOps.Log(p);
-                T log1mP = NumOps.Log(NumOps.Subtract(NumOps.One, p));
-                T z = NumOps.Add(NumOps.Subtract(NumOps.Multiply(a, logP),
-                    NumOps.Multiply(b, log1mP)), c);
-                T calibratedP = SigmoidT(z);
-
-                T error = NumOps.Subtract(calibratedP, targets[i]);
-
-                gradA = NumOps.Add(gradA, NumOps.Multiply(error, logP));
-                gradB = NumOps.Add(gradB, NumOps.Multiply(error, NumOps.Negate(log1mP)));
-                gradC = NumOps.Add(gradC, error);
-
-                // Cross-entropy loss
-                T clampedCalib = calibratedP;
-                if (NumOps.LessThan(clampedCalib, eps)) clampedCalib = eps;
-                if (NumOps.GreaterThan(clampedCalib, oneMinusEps)) clampedCalib = oneMinusEps;
-                loss = NumOps.Subtract(loss,
-                    NumOps.Add(
-                        NumOps.Multiply(targets[i], NumOps.Log(clampedCalib)),
-                        NumOps.Multiply(NumOps.Subtract(NumOps.One, targets[i]),
-                            NumOps.Log(NumOps.Subtract(NumOps.One, clampedCalib)))));
-            }
-
-            a = NumOps.Subtract(a, NumOps.Multiply(lr, NumOps.Divide(gradA, nT)));
-            b = NumOps.Subtract(b, NumOps.Multiply(lr, NumOps.Divide(gradB, nT)));
-            c = NumOps.Subtract(c, NumOps.Multiply(lr, NumOps.Divide(gradC, nT)));
-
-            T lossDiff = NumOps.Abs(NumOps.Subtract(loss, prevLoss));
-            if (NumOps.LessThan(lossDiff, tolerance))
-            {
-                break;
-            }
-            prevLoss = loss;
-        }
-
-        _betaA = a;
-        _betaB = b;
-        _betaC = c;
+        _betaA = parameters[0];
+        _betaB = parameters[1];
+        _betaC = parameters[2];
     }
 
     /// <summary>
@@ -608,60 +493,122 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     /// </summary>
     private void FitTemperatureScaling(Vector<T> probs, Vector<T> targets)
     {
-        // Find temperature T that minimizes NLL via grid search
-        T bestTemp = NumOps.One;
-        T bestLoss = NumOps.MaxValue;
-        T eps = NumOps.FromDouble(1e-10);
-        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
-
-        // Grid search over temperature
+        // Find temperature T that minimizes NLL via grid search over T = 0.1, 0.15, ..., 9.95 (or up to 10).
+        int gridSize = 0;
         for (double tVal = 0.1; tVal <= 10.0; tVal += 0.05)
         {
-            T t = NumOps.FromDouble(tVal);
-            T loss = NumOps.Zero;
-            for (int i = 0; i < probs.Length; i++)
-            {
-                T p = probs[i];
-                if (NumOps.LessThan(p, eps)) p = eps;
-                if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
-                T logit = NumOps.Log(NumOps.Divide(p, NumOps.Subtract(NumOps.One, p)));
-                T calibratedP = SigmoidT(NumOps.Divide(logit, t));
-
-                T clampedCalib = calibratedP;
-                if (NumOps.LessThan(clampedCalib, eps)) clampedCalib = eps;
-                if (NumOps.GreaterThan(clampedCalib, oneMinusEps)) clampedCalib = oneMinusEps;
-                loss = NumOps.Subtract(loss,
-                    NumOps.Add(
-                        NumOps.Multiply(targets[i], NumOps.Log(clampedCalib)),
-                        NumOps.Multiply(NumOps.Subtract(NumOps.One, targets[i]),
-                            NumOps.Log(NumOps.Subtract(NumOps.One, clampedCalib)))));
-            }
-
-            if (NumOps.LessThan(loss, bestLoss))
-            {
-                bestLoss = loss;
-                bestTemp = t;
-            }
+            gridSize++;
         }
 
-        _temperature = bestTemp;
+        int n = probs.Length;
+        if (n == 0 || gridSize == 0)
+        {
+            _temperature = NumOps.One;
+            return;
+        }
+
+        // Every grid temperature is evaluated at once: z[i, g] = logit(p_i) / T_g
+        var engine = Engine;
+        var temperatures = engine.TensorArange<T>(0.1, 0.1 + (gridSize - 0.5) * 0.05, 0.05);
+        var logit = Logit(ClampProbabilities(probs.AsTensor()));
+        var z = engine.TensorDivide(logit.AsTensor().Reshape(n, 1), temperatures.Reshape(1, gridSize));
+        var calibrated = ClampProbabilities(engine.Sigmoid(z));
+
+        // NLL per temperature: -sum_i (y_i log(q) + (1 - y_i) log(1 - q))
+        var yColumn = targets.AsTensor().Reshape(n, 1);
+        var oneMinusY = engine.ScalarMinusTensor(NumOps.One, yColumn);
+        var perSample = engine.TensorAdd(
+            engine.TensorMultiply(engine.TensorLog(calibrated), yColumn),
+            engine.TensorMultiply(engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, calibrated)), oneMinusY));
+        var losses = engine.TensorNegate(engine.ReduceSum(perSample, new[] { 0 }, false));
+
+        // First temperature with the smallest loss
+        int best = engine.TensorArgMin(losses, 0).ToArray()[0];
+        _temperature = engine.TensorGather(temperatures, new Tensor<int>(new[] { best }, new[] { 1 }), 0).ToArray()[0];
     }
 
     /// <summary>
-    /// Numerically stable sigmoid in type T.
+    /// Clamps probabilities to [1e-10, 1 - 1e-10] so logarithms stay finite.
     /// </summary>
-    private T SigmoidT(T x)
+    private Tensor<T> ClampProbabilities(Tensor<T> probabilities)
     {
-        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero))
+        T eps = NumOps.FromDouble(1e-10);
+        return Engine.TensorClamp(probabilities, eps, NumOps.Subtract(NumOps.One, eps));
+    }
+
+    /// <summary>
+    /// logit(p) = log(p / (1 - p)).
+    /// </summary>
+    private Vector<T> Logit(Tensor<T> p)
+    {
+        var engine = Engine;
+        return engine.TensorLog(engine.TensorDivide(p, engine.ScalarMinusTensor(NumOps.One, p))).ToVector();
+    }
+
+    /// <summary>
+    /// Fits sigmoid(design * w) to the 0/1 targets by full-batch gradient descent on the mean cross-entropy
+    /// (learning rate 0.01, at most 1000 iterations, stopping when the loss changes by less than 1e-8).
+    /// </summary>
+    private Vector<T> FitLogisticByGradientDescent(Matrix<T> design, Vector<T> targets, Vector<T> initial)
+    {
+        var engine = Engine;
+        var weights = initial;
+        T step = NumOps.Divide(NumOps.FromDouble(0.01), NumOps.FromDouble(targets.Length));
+        T prevLoss = NumOps.MaxValue;
+        var designT = engine.MatrixTranspose(design);
+        var targetsT = targets.AsTensor();
+        var oneMinusTargets = engine.ScalarMinusTensor(NumOps.One, targetsT);
+
+        for (int iter = 0; iter < 1000; iter++)
         {
-            T ez = NumOps.Exp(NumOps.Negate(x));
-            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, ez));
+            var predicted = engine.Sigmoid(engine.MatrixVectorMultiply(design, weights));
+            var error = engine.Subtract(predicted, targets);
+            var gradient = engine.MatrixVectorMultiply(designT, error);
+
+            // Cross-entropy loss on the clamped predictions
+            var q = ClampProbabilities(predicted.AsTensor());
+            var perSample = engine.TensorAdd(
+                engine.TensorMultiply(targetsT, engine.TensorLog(q)),
+                engine.TensorMultiply(oneMinusTargets, engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, q))));
+            T loss = NumOps.Negate(engine.TensorSum(perSample));
+
+            weights = engine.Subtract(weights, engine.Multiply(gradient, step));
+
+            // Check convergence
+            if (HasConverged(loss, ref prevLoss))
+            {
+                break;
+            }
         }
-        else
+
+        return weights;
+    }
+
+    /// <summary>
+    /// True when |loss - previous| &lt; 1e-8; otherwise records the loss as the new previous value.
+    /// </summary>
+    private bool HasConverged(T loss, ref T previous)
+    {
+        if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(loss, previous)), NumOps.FromDouble(1e-8)))
         {
-            T ez = NumOps.Exp(x);
-            return NumOps.Divide(ez, NumOps.Add(NumOps.One, ez));
+            return true;
         }
+
+        previous = loss;
+        return false;
+    }
+
+    /// <summary>
+    /// Selects the elements of <paramref name="values"/> at <paramref name="indices"/>.
+    /// </summary>
+    private Vector<T> GatherElements(Vector<T> values, int[] indices)
+    {
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorGather(values.AsTensor(), new Tensor<int>(indices, new[] { indices.Length }), 0).ToVector();
     }
 
     /// <summary>
@@ -690,93 +637,97 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
                 "For multiclass, apply one-vs-rest calibration externally.");
         }
 
-        var calibrated = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // Binary classification: calibrate positive class
-            T p = uncalibrated[i, 1];
-            T calibP = CalibrateProb(p);
-
-            calibrated[i, 0] = NumOps.Subtract(NumOps.One, calibP);
-            calibrated[i, 1] = calibP;
+            return new Matrix<T>(0, NumClasses);
         }
 
-        return calibrated;
+        // Binary classification: calibrate positive class
+        var calibP = CalibrateProbabilities(uncalibrated.GetColumn(1));
+        var calibN = Engine.ScalarMinusTensor(NumOps.One, calibP.AsTensor()).ToVector();
+        return StackColumns(new[] { calibN, calibP });
     }
 
     /// <summary>
-    /// Applies the fitted calibration to a single probability.
+    /// Applies the fitted calibration to every probability in <paramref name="probabilities"/>.
     /// </summary>
-    private T CalibrateProb(T p)
+    private Vector<T> CalibrateProbabilities(Vector<T> probabilities)
     {
-        T eps = NumOps.FromDouble(1e-10);
-        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
-        if (NumOps.LessThan(p, eps)) p = eps;
-        if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
+        var engine = Engine;
+        var p = ClampProbabilities(probabilities.AsTensor());
 
-        return _options.CalibrationMethod switch
+        switch (_options.CalibrationMethod)
         {
-            ProbabilityCalibrationMethod.PlattScaling =>
-                SigmoidT(NumOps.Add(NumOps.Multiply(_plattA,
-                    NumOps.Log(NumOps.Divide(p, NumOps.Subtract(NumOps.One, p)))), _plattB)),
+            case ProbabilityCalibrationMethod.PlattScaling:
+                return engine.Sigmoid(engine.TensorAddScalar(
+                    engine.TensorMultiplyScalar(Logit(p).AsTensor(), _plattA), _plattB)).ToVector();
 
-            ProbabilityCalibrationMethod.IsotonicRegression =>
-                InterpolateIsotonic(p),
+            case ProbabilityCalibrationMethod.IsotonicRegression:
+                return InterpolateIsotonic(p);
 
-            ProbabilityCalibrationMethod.BetaCalibration =>
-                SigmoidT(NumOps.Add(NumOps.Subtract(
-                    NumOps.Multiply(_betaA, NumOps.Log(p)),
-                    NumOps.Multiply(_betaB, NumOps.Log(NumOps.Subtract(NumOps.One, p)))),
-                    _betaC)),
+            case ProbabilityCalibrationMethod.BetaCalibration:
+                var logP = engine.TensorMultiplyScalar(engine.TensorLog(p), _betaA);
+                var log1mP = engine.TensorMultiplyScalar(
+                    engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, p)), _betaB);
+                return engine.Sigmoid(engine.TensorAddScalar(engine.TensorSubtract(logP, log1mP), _betaC)).ToVector();
 
-            ProbabilityCalibrationMethod.TemperatureScaling =>
-                SigmoidT(NumOps.Divide(
-                    NumOps.Log(NumOps.Divide(p, NumOps.Subtract(NumOps.One, p))),
-                    _temperature)),
+            case ProbabilityCalibrationMethod.TemperatureScaling:
+                return engine.Sigmoid(engine.TensorDivideScalar(Logit(p).AsTensor(), _temperature)).ToVector();
 
-            ProbabilityCalibrationMethod.Auto => p,
-            ProbabilityCalibrationMethod.None => p,
-            _ => p
-        };
+            default:
+                return p.ToVector();
+        }
     }
 
     /// <summary>
     /// Interpolates isotonic regression mapping.
     /// </summary>
-    private T InterpolateIsotonic(T p)
+    private Vector<T> InterpolateIsotonic(Tensor<T> p)
     {
         if (_isotonicMapping == null || _isotonicMapping.Length == 0)
-            return p;
+            return p.ToVector();
 
-        int low = 0, high = _isotonicMapping.Length - 1;
-
-        // Boundary cases
-        if (NumOps.LessThanOrEquals(p, _isotonicMapping[low].prob))
-            return _isotonicMapping[low].calibrated;
-        if (NumOps.GreaterThanOrEquals(p, _isotonicMapping[high].prob))
-            return _isotonicMapping[high].calibrated;
-
-        // Binary search for bracketing points
-        while (high - low > 1)
+        var engine = Engine;
+        int m = _isotonicMapping.Length;
+        var knotProbs = new T[m];
+        var knotValues = new T[m];
+        for (int k = 0; k < m; k++)
         {
-            int mid = (low + high) / 2;
-            if (NumOps.LessThanOrEquals(_isotonicMapping[mid].prob, p))
-                low = mid;
-            else
-                high = mid;
+            (knotProbs[k], knotValues[k]) = _isotonicMapping[k];
         }
 
-        // Linear interpolation
-        T range = NumOps.Subtract(_isotonicMapping[high].prob, _isotonicMapping[low].prob);
-        T rangeEps = NumOps.FromDouble(1e-10);
-        if (NumOps.LessThan(range, rangeEps))
-            return _isotonicMapping[low].calibrated;
+        var xs = new Tensor<T>(knotProbs, new[] { m });
+        var ys = new Tensor<T>(knotValues, new[] { m });
+        if (m == 1)
+        {
+            return FilledVector(p.Length, knotValues[0]);
+        }
 
-        T t = NumOps.Divide(NumOps.Subtract(p, _isotonicMapping[low].prob), range);
-        return NumOps.Add(
-            NumOps.Multiply(_isotonicMapping[low].calibrated, NumOps.Subtract(NumOps.One, t)),
-            NumOps.Multiply(_isotonicMapping[high].calibrated, t));
+        // Bracketing knots: low = last knot with prob <= p (clamped so that low + 1 exists)
+        var low = engine.TensorClamp(
+            engine.TensorAddScalar(engine.TensorSearchSorted(xs, p, true), -1), 0, m - 2);
+        var high = engine.TensorAddScalar(low, 1);
+        var xLow = engine.TensorGather(xs, low, 0);
+        var xHigh = engine.TensorGather(xs, high, 0);
+        var yLow = engine.TensorGather(ys, low, 0);
+        var yHigh = engine.TensorGather(ys, high, 0);
+
+        // Linear interpolation (falls back to the low knot when the bracket is narrower than 1e-10)
+        var range = engine.TensorSubtract(xHigh, xLow);
+        var narrow = engine.TensorLessThan(range, NumOps.FromDouble(1e-10));
+        var safeRange = engine.TensorWhere(narrow, FilledVector(p.Length, NumOps.One).AsTensor(), range);
+        var t = engine.TensorDivide(engine.TensorSubtract(p, xLow), safeRange);
+        var interpolated = engine.TensorAdd(
+            engine.TensorMultiply(yLow, engine.ScalarMinusTensor(NumOps.One, t)),
+            engine.TensorMultiply(yHigh, t));
+        var result = engine.TensorWhere(narrow, yLow, interpolated);
+
+        // Boundary cases: at or below the first knot / at or above the last knot
+        var belowFirst = engine.TensorLessEqual(p, FilledVector(p.Length, knotProbs[0]).AsTensor());
+        var aboveLast = engine.TensorGreaterEqual(p, FilledVector(p.Length, knotProbs[m - 1]).AsTensor());
+        result = engine.TensorWhere(belowFirst, FilledVector(p.Length, knotValues[0]).AsTensor(), result);
+        result = engine.TensorWhere(aboveLast, FilledVector(p.Length, knotValues[m - 1]).AsTensor(), result);
+        return result.ToVector();
     }
 
     /// <inheritdoc/>
