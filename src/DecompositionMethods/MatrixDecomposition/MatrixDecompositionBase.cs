@@ -254,7 +254,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// (L[i,j] = (A[i,j] - sum_k L[i,k] L[j,k] D[k]) / D[j]); it works for indefinite matrices with
     /// non-zero leading minors and, like that form, divides by a zero pivot rather than throwing.
     /// </remarks>
-    protected (Matrix<T> L, Vector<T> D) ComputeUnpivotedLdl(Matrix<T> matrix)
+    private protected (Matrix<T> L, Vector<T> D) ComputeUnpivotedLdl(Matrix<T> matrix)
     {
         int n = matrix.Rows;
         if (n == 0)
@@ -293,7 +293,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Solves (L D L^T) x = b with two unit-triangular engine solves and one diagonal scaling.
     /// </summary>
-    protected static Matrix<T> SolveLdlSystem(Matrix<T> unitLower, Vector<T> diagonal, Matrix<T> rhs)
+    private protected static Matrix<T> SolveLdlSystem(Matrix<T> unitLower, Vector<T> diagonal, Matrix<T> rhs)
     {
         var engine = AiDotNetEngine.Current;
         var l = Tensor<T>.FromMatrix(unitLower);
@@ -316,7 +316,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// using u = (x - alpha e1) / ‖x - alpha e1‖; steps whose ‖x‖ or ‖u‖ is below 1e-14 are
     /// skipped. Each reflection is applied as two rank-1 whole-matrix engine updates.
     /// </remarks>
-    protected (Matrix<T> H, Matrix<T> Q) ReduceByHouseholderSimilarity(Matrix<T> matrix)
+    private protected (Matrix<T> H, Matrix<T> Q) ReduceByHouseholderSimilarity(Matrix<T> matrix)
     {
         int n = matrix.Rows;
         var h = Tensor<T>.FromMatrix(matrix.Clone());
@@ -370,7 +370,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// Q e1 = e1 is unique up to exactly this sign scaling. d_0 = 1 and d_(k+1) = d_k sign(H[k+1,k])
     /// (sign(0) = +1), computed with an engine cumulative product.
     /// </remarks>
-    protected (Matrix<T> H, Matrix<T> Q) NormalizeSubdiagonalSigns(Matrix<T> hMatrix, Matrix<T> qMatrix)
+    private protected (Matrix<T> H, Matrix<T> Q) NormalizeSubdiagonalSigns(Matrix<T> hMatrix, Matrix<T> qMatrix)
     {
         int n = hMatrix.Rows;
         if (n < 2)
@@ -400,7 +400,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// <param name="upper">True when <paramref name="triangular"/> is upper triangular; false for lower.</param>
     /// <param name="unitDiagonal">True to treat the diagonal as all ones without reading it.</param>
     /// <returns>The solution vector x.</returns>
-    protected static Vector<T> SolveTriangularSystem(Matrix<T> triangular, Vector<T> rhs, bool upper, bool unitDiagonal = false)
+    private protected static Vector<T> SolveTriangularSystem(Matrix<T> triangular, Vector<T> rhs, bool upper, bool unitDiagonal = false)
     {
         var solution = Linalg.SolveTriangular(
             Tensor<T>.FromMatrix(triangular),
@@ -413,7 +413,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Solves a triangular system <c>T X = B</c> for every column of <paramref name="rhs"/> at once.
     /// </summary>
-    protected static Matrix<T> SolveTriangularSystem(Matrix<T> triangular, Matrix<T> rhs, bool upper, bool unitDiagonal = false)
+    private protected static Matrix<T> SolveTriangularSystem(Matrix<T> triangular, Matrix<T> rhs, bool upper, bool unitDiagonal = false)
     {
         return Linalg.SolveTriangular(
             Tensor<T>.FromMatrix(triangular),
@@ -426,7 +426,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// True when any element of <paramref name="value"/> (typically a single-element tensor) is
     /// strictly below <paramref name="threshold"/>; evaluated with an engine comparison.
     /// </summary>
-    protected bool AnyBelow(Tensor<T> value, T threshold)
+    private protected bool AnyBelow(Tensor<T> value, T threshold)
     {
         return Engine.TensorCountNonzero(Engine.TensorLessThan(value, threshold)) > 0;
     }
@@ -435,7 +435,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// True when any element of <paramref name="value"/> (typically a single-element tensor) is
     /// strictly above <paramref name="threshold"/>; evaluated with an engine comparison.
     /// </summary>
-    protected bool AnyAbove(Tensor<T> value, T threshold)
+    private protected bool AnyAbove(Tensor<T> value, T threshold)
     {
         return Engine.TensorCountNonzero(Engine.TensorGreaterThan(value, threshold)) > 0;
     }
@@ -454,7 +454,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// The engine QR uses Householder reflections; its signs are normalized here by scaling
     /// column j of Q and row j of R by sign(R[j,j]).
     /// </remarks>
-    protected (Matrix<T> Q, Matrix<T> R) ComputePositiveDiagonalQr(Matrix<T> matrix)
+    private protected (Matrix<T> Q, Matrix<T> R) ComputePositiveDiagonalQr(Matrix<T> matrix)
     {
         return ComputeSignNormalizedQr(matrix, complete: false, nonNegativeDiagonal: true);
     }
@@ -475,7 +475,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// Column j of Q and row j of R are scaled by the same sign, so A = QR is preserved. For a
     /// full-column-rank matrix this pins down the leading min(m, n) columns of Q uniquely.
     /// </remarks>
-    protected (Matrix<T> Q, Matrix<T> R) ComputeSignNormalizedQr(Matrix<T> matrix, bool complete, bool nonNegativeDiagonal)
+    private protected (Matrix<T> Q, Matrix<T> R) ComputeSignNormalizedQr(Matrix<T> matrix, bool complete, bool nonNegativeDiagonal)
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
