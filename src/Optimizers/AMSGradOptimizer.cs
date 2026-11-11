@@ -336,41 +336,30 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         T biasCorrection1 = NumOps.FromDouble(FirstMomentCorrection(_t));
         T biasCorrection2 = NumOps.FromDouble(SecondMomentCorrection(_t));
 
-        // Update all three state vectors in place and write the result directly. This retains
-        // AMSGrad's raw-second-moment maximum while eliminating the former vector-op chain.
-        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var mSpan = _m.AsWritableSpan();
-        var vSpan = _v.AsWritableSpan();
-        var vHatSpan = _vHat.AsWritableSpan();
-        var outSpan = updatedParams.AsWritableSpan();
-        T learningRate = CurrentLearningRate;
+        // Update all three state vectors in place with whole-vector engine ops. This retains
+        // AMSGrad's raw-second-moment maximum (vHat = max(vHat, v)).
+        var engine = Engine;
+        var g = gradient.AsTensor();
+        var mState = _m.AsTensor();
+        var vState = _v.AsTensor();
+        var vHatState = _vHat.AsTensor();
 
-        for (int i = 0; i < pSpan.Length; i++)
-        {
-            T g = gSpan[i];
+        var m = engine.TensorAdd(
+            engine.TensorMultiplyScalar(mState, beta1),
+            engine.TensorMultiplyScalar(g, oneMinusBeta1));
+        var v = engine.TensorAdd(
+            engine.TensorMultiplyScalar(vState, beta2),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), oneMinusBeta2));
+        var vHat = engine.TensorMax(vHatState, v);
+        engine.TensorCopy(m, mState);
+        engine.TensorCopy(v, vState);
+        engine.TensorCopy(vHat, vHatState);
 
-            T m = NumOps.Add(
-                NumOps.Multiply(mSpan[i], beta1),
-                NumOps.Multiply(g, oneMinusBeta1));
-            mSpan[i] = m;
-
-            T v = NumOps.Add(
-                NumOps.Multiply(vSpan[i], beta2),
-                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
-            vSpan[i] = v;
-
-            T vHat = NumOps.GreaterThan(vHatSpan[i], v) ? vHatSpan[i] : v;
-            vHatSpan[i] = vHat;
-
-            T mHat = NumOps.Divide(m, biasCorrection1);
-            T denominator = NumOps.Add(NumOps.Sqrt(NumOps.Divide(vHat, biasCorrection2)), epsilon);
-            T update = NumOps.Divide(NumOps.Multiply(mHat, learningRate), denominator);
-            outSpan[i] = NumOps.Subtract(pSpan[i], update);
-        }
-
-        return updatedParams;
+        var mHat = engine.TensorDivideScalar(m, biasCorrection1);
+        var denominator = engine.TensorAddScalar(
+            engine.TensorSqrt(engine.TensorDivideScalar(vHat, biasCorrection2)), epsilon);
+        var update = engine.TensorDivide(engine.TensorMultiplyScalar(mHat, CurrentLearningRate), denominator);
+        return engine.TensorSubtract(parameters.AsTensor(), update).AsVector();
     }
 
     // Per-parameter AMSGrad state for tape-based training
@@ -398,6 +387,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         bool gpuAdam = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
         foreach (var param in context.Parameters)
         {
             // True sparse scatter AMSGrad: m + v + vMax + param at touched indices.
@@ -413,7 +403,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
                 double bc2 = SecondMomentCorrection(_tapeStep);
                 if (SparseEmbeddingOptimizerHelpers.TryApplyAmsgradSparse(
                         param, mSp, vSp, vHatSp,
-                        NumOps.ToDouble(CurrentLearningRate),
+                        learningRateValue,
                         _options.Beta1, _options.Beta2, bc1, bc2,
                         _options.Epsilon, weightDecay: 0.0))
                 {
@@ -430,7 +420,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
 
             // The GPU kernel is PyTorch's bias-corrected AMSGrad; KernelLearningRateAndEpsilon makes it compute the
             // configured variant exactly.
-            var (kernelLr, kernelEps) = KernelLearningRateAndEpsilon(NumOps.ToDouble(CurrentLearningRate), _tapeStep);
+            var (kernelLr, kernelEps) = KernelLearningRateAndEpsilon(learningRateValue, _tapeStep);
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAmsgradStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)v, (Tensor<float>)(object)vHat,
                     kernelLr, (float)_options.Beta1, (float)_options.Beta2, kernelEps, 0f, _tapeStep))
