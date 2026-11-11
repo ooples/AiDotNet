@@ -91,8 +91,10 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
             Engine.TensorNotEquals(classIndices, classIndices));
         if (sampleCount > 0 && NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
         {
-            int position = Engine.TensorArgMax(invalid, 0).GetFlat(0);
-            int classIndex = NumOps.ToInt32(rawIndices.GetFlat(position));
+            // First offending position (nonzero lists positions in ascending order on every engine). The raw
+            // value is reported as is: converting it could itself overflow (for example 3000000000m).
+            int position = Engine.TensorNonzero(invalid).GetFlat(0);
+            T classIndex = rawIndices.GetFlat(position);
             throw new ArgumentException(
                 $"Class index {classIndex} at position {position} is out of bounds. " +
                 $"Expected value between 0 and {predicted.Length - 1}.");
@@ -102,9 +104,8 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         if (sampleCount > 0)
         {
             // Get predicted probability for each sample's true class
-            var probabilities = Engine.TensorBroadcastTo(
-                Engine.Reshape(predicted.AsTensor(), new[] { 1, numClasses }), new[] { sampleCount, numClasses });
-            var predictedProb = Engine.TensorGatherClassValues(probabilities, classIndices);
+            // Indexed gather straight from the class vector (the indices were validated above)
+            var predictedProb = Engine.TensorIndexSelect(predicted.AsTensor(), classIndices.Cast<int>(), 0);
 
             // Clamp to prevent log(0) (NumericalStabilityHelper.ClampProbability), then -log(p)
             T eps = NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon);
@@ -175,8 +176,9 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         var invalid = Engine.TensorMax(notInteger, outOfRange);
         if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
         {
-            // First offending position, reported exactly as the per-element check did.
-            int i = Engine.TensorArgMax(invalid, 0).GetFlat(0);
+            // First offending position, reported exactly as the per-element check did (nonzero lists
+            // positions in ascending order on every engine).
+            int i = Engine.TensorNonzero(invalid).GetFlat(0);
             T rawIdx = flatTarget.GetFlat(i);
             if (NumOps.GreaterThan(notInteger.GetFlat(i), NumOps.Zero))
                 throw new ArgumentException(

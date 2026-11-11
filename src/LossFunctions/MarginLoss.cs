@@ -69,15 +69,13 @@ public class MarginLoss<T> : LossFunctionBase<T>
         var v = predicted.AsTensor();
         var y = actual.AsTensor();
 
-        // max(0, y * (m+ - v))²
-        var term1 = Engine.TensorMax(Engine.TensorMultiply(y, Engine.ScalarMinusTensor(_mPlus, v)), NumOps.Zero);
-        term1 = Engine.TensorMultiply(term1, term1);
+        // Sabour et al. (2017): y * max(0, m+ - v)² + λ * (1 - y) * max(0, v - m-)². The label weights the squared
+        // hinge (it is not squared itself), matching ComputeTapeLoss for fractional labels as well as 0/1 labels.
+        var hinge1 = Engine.TensorMax(Engine.ScalarMinusTensor(_mPlus, v), NumOps.Zero);
+        var term1 = Engine.TensorMultiply(y, Engine.TensorMultiply(hinge1, hinge1));
 
-        // max(0, (1 - y) * (v - m-))²
-        var term2 = Engine.TensorMax(
-            Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, y), Engine.TensorSubtractScalar(v, _mMinus)),
-            NumOps.Zero);
-        term2 = Engine.TensorMultiply(term2, term2);
+        var hinge2 = Engine.TensorMax(Engine.TensorSubtractScalar(v, _mMinus), NumOps.Zero);
+        var term2 = Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, y), Engine.TensorMultiply(hinge2, hinge2));
 
         T loss = Engine.TensorSum(Engine.TensorAdd(term1, Engine.TensorMultiplyScalar(term2, _lambda)));
 
@@ -88,15 +86,15 @@ public class MarginLoss<T> : LossFunctionBase<T>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
         // Margin (capsule): mean(t * max(0, m+ - p)² + λ * (1-t) * max(0, p - m-)²)
-        var posDiff = Engine.ScalarMinusTensor(NumOps.FromDouble(0.9), predicted);
+        var posDiff = Engine.ScalarMinusTensor(_mPlus, predicted);
         var posHinged = Engine.ReLU(posDiff);
         var posSq = Engine.TensorMultiply(posHinged, posHinged);
-        var negDiff = Engine.TensorSubtractScalar(predicted, NumOps.FromDouble(0.1));
+        var negDiff = Engine.TensorSubtractScalar(predicted, _mMinus);
         var negHinged = Engine.ReLU(negDiff);
         var negSq = Engine.TensorMultiply(negHinged, negHinged);
         var oneMinusT = Engine.ScalarMinusTensor(NumOps.One, target);
         var posLoss = Engine.TensorMultiply(target, posSq);
-        var negLoss = Engine.TensorMultiplyScalar(Engine.TensorMultiply(oneMinusT, negSq), NumOps.FromDouble(0.5));
+        var negLoss = Engine.TensorMultiplyScalar(Engine.TensorMultiply(oneMinusT, negSq), _lambda);
         var result = Engine.TensorAdd(posLoss, negLoss);
         var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
         return Engine.ReduceMean(result, allAxes, keepDims: false);
