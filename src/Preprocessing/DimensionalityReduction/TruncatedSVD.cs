@@ -171,7 +171,6 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var scores = DimensionalityReductionOps.FirstColumns(Tensor<T>.FromMatrix(data), k);
         return Engine.TensorMatMul(scores, Tensor<T>.FromMatrix(_components)).ToMatrix();
     }
-    }
 
     /// <summary>
     /// Gets the output feature names after transformation.
