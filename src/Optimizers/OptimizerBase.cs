@@ -2757,6 +2757,28 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         return InitializeRandomSolution(lowerBounds, upperBounds);
     }
 
+    /// <summary>
+    /// Mean absolute deviation of a population from its per-coordinate mean, averaged over every member and every
+    /// coordinate: (1 / (count * dimension)) * sum_k sum_i |x_k,i - mean_i|. The derivative-free searches stop when
+    /// this falls below their tolerance.
+    /// </summary>
+    private protected double PopulationMeanAbsoluteDeviation(IReadOnlyList<Vector<T>> points, int dimension)
+    {
+        int count = points.Count;
+        var flat = new Vector<T>(count * dimension);
+        var flatSpan = flat.AsWritableSpan();
+        for (int k = 0; k < count; k++)
+        {
+            points[k].AsSpan().Slice(0, dimension).CopyTo(flatSpan.Slice(k * dimension, dimension));
+        }
+
+        var engine = Engine;
+        var members = engine.Reshape(flat.AsTensor(), new[] { count, dimension });
+        var mean = engine.TensorDivideScalar(engine.ReduceSum(members, new[] { 0 }), NumOps.FromDouble(count));
+        var centered = engine.TensorSubtract(members, engine.TensorOuter(FilledVector(count, NumOps.One).AsTensor(), mean));
+        return NumOps.ToDouble(engine.TensorSum(engine.TensorAbs(centered))) / (count * dimension);
+    }
+
     /// <summary>A vector of <paramref name="length"/> copies of <paramref name="value"/>.</summary>
     private static Vector<T> FilledVector(int length, T value)
     {

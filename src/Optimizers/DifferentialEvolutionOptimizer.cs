@@ -372,7 +372,7 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
                 }
             }
 
-            if (PopulationSpread(population, dimension) < stop) break;
+            if (PopulationMeanAbsoluteDeviation(population, dimension) < stop) break;
         }
 
         return search.BestPoint;
@@ -393,23 +393,5 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
     }
 
     /// <summary>The mean absolute deviation of the population, coordinate by coordinate.</summary>
-    private double PopulationSpread(Vector<T>[] population, int dimension)
-    {
-        double total = 0.0;
-
-        for (int i = 0; i < dimension; i++)
-        {
-            double mean = 0.0;
-            foreach (var member in population) mean += Convert.ToDouble(member[i]);
-            mean /= population.Length;
-
-            foreach (var member in population)
-            {
-                total += Math.Abs(Convert.ToDouble(member[i]) - mean);
-            }
-        }
-
-        return total / (population.Length * dimension);
-    }
 
 }
