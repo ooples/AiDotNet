@@ -437,6 +437,48 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Computes sum_k weights[k] * vectors[k] as one matrix-vector product.
+    /// </summary>
+    /// <param name="vectors">Equal-length vectors (for example per-tree predictions).</param>
+    /// <param name="weights">One weight per vector.</param>
+    /// <param name="length">The vector length, used when <paramref name="vectors"/> is empty.</param>
+    /// <returns>The weighted sum, or a zero vector when there is nothing to add.</returns>
+    protected Vector<T> WeightedSumOfVectors(IReadOnlyList<Vector<T>> vectors, Vector<T> weights, int length)
+    {
+        if (vectors.Count == 0 || length == 0)
+        {
+            return new Vector<T>(length);
+        }
+
+        var engine = Engine;
+        var stacked = new Tensor<T>[vectors.Count];
+        for (int k = 0; k < stacked.Length; k++)
+        {
+            stacked[k] = vectors[k].AsTensor();
+        }
+
+        var rows = engine.TensorStack(stacked, 0);
+        var sum = engine.TensorMatMul(weights.AsTensor().Reshape(1, vectors.Count), rows);
+        return sum.Reshape(length).ToVector();
+    }
+
+    /// <summary>
+    /// Stacks equal-length column vectors into a [length, columns.Count] matrix.
+    /// </summary>
+    /// <param name="columns">The columns, in order.</param>
+    /// <returns>The matrix whose j-th column is <paramref name="columns"/>[j].</returns>
+    protected Matrix<T> StackColumns(IReadOnlyList<Vector<T>> columns)
+    {
+        var stacked = new Tensor<T>[columns.Count];
+        for (int k = 0; k < stacked.Length; k++)
+        {
+            stacked[k] = columns[k].AsTensor();
+        }
+
+        return Engine.TensorStack(stacked, 1).ToMatrix();
+    }
+
+    /// <summary>
     /// Converts class indices to their class label values from <see cref="ClassLabels"/>.
     /// </summary>
     /// <param name="indices">Class indices in [0, ClassLabels.Length).</param>
