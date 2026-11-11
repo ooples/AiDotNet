@@ -272,78 +272,17 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
     /// <summary>
     /// Selects top-scoring samples without diversity consideration.
     /// </summary>
-    private int[] SelectTopScoring(Vector<T> scores, int batchSize)
+    private static int[] SelectTopScoring(Vector<T> scores, int batchSize)
     {
-        var indexedScores = new List<(int Index, T Score)>();
-        for (int i = 0; i < scores.Length; i++)
-        {
-            indexedScores.Add((i, scores[i]));
-        }
-
-        return indexedScores
-            .OrderByDescending(x => _numOps.ToDouble(x.Score))
-            .Take(batchSize)
-            .Select(x => x.Index)
-            .ToArray();
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSize);
     }
 
     /// <summary>
     /// Selects samples considering both density-weighted scores and diversity.
     /// </summary>
-    private int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
+    private static int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
     {
-        var selected = new List<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, scores.Length));
-        var featureSize = pool.Length / pool.Shape[0];
-
-        while (selected.Count < batchSize && remaining.Count > 0)
-        {
-            var best = -1;
-            var bestCombinedScore = _numOps.MinValue;
-
-            foreach (var idx in remaining)
-            {
-                var dwScore = scores[idx];
-                var diversityScore = selected.Count == 0
-                    ? _numOps.One
-                    : ComputeMinDistanceToSelected(pool, idx, selected, featureSize);
-
-                var combinedScore = _numOps.Multiply(dwScore, diversityScore);
-
-                if (_numOps.GreaterThan(combinedScore, bestCombinedScore))
-                {
-                    bestCombinedScore = combinedScore;
-                    best = idx;
-                }
-            }
-
-            if (best >= 0)
-            {
-                selected.Add(best);
-                remaining.Remove(best);
-            }
-        }
-
-        return [.. selected];
-    }
-
-    /// <summary>
-    /// Computes minimum distance from a sample to already selected samples.
-    /// </summary>
-    private T ComputeMinDistanceToSelected(Tensor<T> pool, int sampleIdx, List<int> selected, int featureSize)
-    {
-        var minDist = _numOps.MaxValue;
-
-        foreach (var selIdx in selected)
-        {
-            var dist = ComputeEuclideanDistance(pool, sampleIdx, selIdx, featureSize);
-            if (_numOps.LessThan(dist, minDist))
-            {
-                minDist = dist;
-            }
-        }
-
-        return minDist;
+        return ActiveLearningEngineOps.SelectWithDiversity(scores, pool, batchSize);
     }
 
     /// <summary>
@@ -372,19 +311,6 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
     {
         if (scores.Length == 0) return;
 
-        _lastMinScore = scores[0];
-        _lastMaxScore = scores[0];
-        var sum = _numOps.Zero;
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (_numOps.LessThan(scores[i], _lastMinScore))
-                _lastMinScore = scores[i];
-            if (_numOps.GreaterThan(scores[i], _lastMaxScore))
-                _lastMaxScore = scores[i];
-            sum = _numOps.Add(sum, scores[i]);
-        }
-
-        _lastMeanScore = _numOps.Divide(sum, _numOps.FromDouble(scores.Length));
+        (_lastMinScore, _lastMaxScore, _lastMeanScore) = ActiveLearningEngineOps.Statistics(scores);
     }
 }
