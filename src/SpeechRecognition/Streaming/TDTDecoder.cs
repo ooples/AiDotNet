@@ -42,6 +42,9 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PreprocessesInput("ConformerAsrNetwork.Features converts each waveform row to an 80-band log-mel spectrogram, and Encode "
+    + "feeds it to the 4x subsampling convolution as a [1, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width)]
 [ResearchPaper("Efficient Sequence Transduction by Jointly Predicting Tokens and Durations", "https://arxiv.org/abs/2304.06795", Year = 2023, Authors = "Xu et al.")]
 public partial class TDTDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
