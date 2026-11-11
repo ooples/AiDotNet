@@ -126,10 +126,7 @@ public class TokenizedTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             cancellationToken.ThrowIfCancellationRequested();
 
             int featureOffset = i * _sequenceLength;
-            for (int j = 0; j < _sequenceLength; j++)
-            {
-                featuresData[featureOffset + j] = _tokenIds[i][j];
-            }
+            Array.Copy(_tokenIds[i], 0, featuresData, featureOffset, _sequenceLength);
 
             int labelOffset = i * _numClasses;
             if (_labels[i] >= 0 && _labels[i] < _numClasses)

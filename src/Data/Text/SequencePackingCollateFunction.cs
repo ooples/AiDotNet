@@ -54,11 +54,9 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
         {
             int seqLen = sample.Shape.Length > 1 ? sample.Shape[1] : sample.Shape[0];
 
-            for (int j = 0; j < seqLen; j++)
-            {
-                T token = sample.Shape.Length > 1 ? sample[0, j] : sample[j];
-                allTokens.Add(token);
-            }
+            // Row 0 of a [rows, seq_len] sample (or the whole 1-D sample) is its first seqLen elements in
+            // row-major order, so append it as one block.
+            allTokens.AddRange(sample.Contiguous().AsSpan().Slice(0, seqLen).ToArray());
         }
 
         // Pack into blocks

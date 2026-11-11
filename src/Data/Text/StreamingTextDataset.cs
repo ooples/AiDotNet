@@ -96,28 +96,17 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
                 $"Total tokens: {allTokenIds.Count}, required: {seqLen + 1}.");
 
         _sampleCount = totalSeqs;
-        var featuresData = new T[totalSeqs * seqLen];
-        var labelsData = new T[totalSeqs * seqLen];
+        // Sequence i covers tokens [i * seqLen, (i + 1) * seqLen), so the inputs are one contiguous run of the
+        // token stream and the targets are the same run shifted by one; positions past the end stay zero.
+        int total = totalSeqs * seqLen;
+        var tokenArray = allTokenIds.ToArray();
+        var featuresData = new double[total];
+        var labelsData = new double[total];
+        Array.Copy(tokenArray, 0, featuresData, 0, Math.Min(total, tokenArray.Length));
+        Array.Copy(tokenArray, Math.Min(1, tokenArray.Length), labelsData, 0, Math.Max(0, Math.Min(total, tokenArray.Length - 1)));
 
-        for (int i = 0; i < totalSeqs; i++)
-        {
-            int offset = i * seqLen;
-            for (int j = 0; j < seqLen; j++)
-            {
-                int tokenIdx = offset + j;
-                featuresData[i * seqLen + j] = tokenIdx < allTokenIds.Count
-                    ? NumOps.FromDouble(allTokenIds[tokenIdx])
-                    : NumOps.Zero;
-
-                int targetIdx = offset + j + 1;
-                labelsData[i * seqLen + j] = targetIdx < allTokenIds.Count
-                    ? NumOps.FromDouble(allTokenIds[targetIdx])
-                    : NumOps.Zero;
-            }
-        }
-
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSeqs, seqLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSeqs, seqLen });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSeqs, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSeqs, seqLen }).Cast<T>();
         InitializeIndices(totalSeqs);
     }
 

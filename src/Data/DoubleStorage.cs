@@ -32,7 +32,8 @@ internal static class DoubleStorage
     internal static double[] ToDoubles<T>(Tensor<T> values)
     {
         if (values.Length == 0) return Array.Empty<double>();
-        return values.Cast<double>().AsSpan().ToArray();
+        // Cast reads the backing storage linearly, so materialize views (offset/strided) first.
+        return values.Contiguous().Cast<double>().AsSpan().ToArray();
     }
 
     /// <summary>Returns <c>0, 1, ..., count - 1</c> as <typeparamref name="T"/> values (one bulk cast).</summary>
