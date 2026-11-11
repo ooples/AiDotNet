@@ -683,7 +683,10 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             T nextValue = nextValues[i];
             if (doneFlags[i])
             {
+                // A terminal step ends its episode: GAE sums (gamma lambda)^l delta_{t+l} within the episode
+                // (Schulman et al. 2016, Eq. 16), so the next episode's advantage must not leak back into it.
                 nextValue = NumOps.Zero;
+                gaeAdvantage = NumOps.Zero;
             }
 
             var delta = NumOps.Add(rewards[i], NumOps.Multiply(discountFactor, nextValue));
