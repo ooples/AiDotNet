@@ -137,14 +137,7 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The index of the starting point of the interval containing x.</returns>
     private int FindInterval(T x)
     {
-        for (int i = 1; i < _x.Length - 2; i++)
-        {
-            if (_numOps.LessThanOrEquals(x, _x[i + 1]))
-            {
-                return i;
-            }
-        }
-        return _x.Length - 3;
+        return InterpolationSearch.FirstSegmentReaching(_x, x, 1, _x.Length - 3);
     }
 
     /// <summary>
