@@ -1521,7 +1521,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         return GradientOptions.GradientClippingMethod switch
         {
-            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNorm(gradient, GradientOptions.MaxGradientNorm) ?? gradient,
+            // PyTorch's coefficient, as the tape step and the fused plan apply it (see ClipByNormPyTorchCoefficient).
+            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNormPyTorchCoefficient(gradient, GradientOptions.MaxGradientNorm),
             GradientClippingMethod.ByValue => GradientClippingHelper.ClipByValue(gradient, GradientOptions.MaxGradientValue) ?? gradient,
             _ => gradient
         };
