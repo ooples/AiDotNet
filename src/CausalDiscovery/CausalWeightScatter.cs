@@ -1,0 +1,65 @@
+namespace AiDotNet.CausalDiscovery;
+
+/// <summary>
+/// Builds dense [rows x cols] weight matrices from per-edge statistics with one engine scatter,
+/// for algorithms that score edges one at a time.
+/// </summary>
+internal static class CausalWeightScatter
+{
+    /// <summary>
+    /// A zero matrix holding <c>weights[p]</c> at the row-major position <c>p</c> of each entry.
+    /// </summary>
+    internal static Matrix<T> FromStatistics<T>(int rows, int cols, Dictionary<int, double> weights)
+    {
+        var flat = new Tensor<T>(new[] { rows * cols });
+        if (weights.Count > 0)
+        {
+            var positions = new List<int>(weights.Keys);
+            var values = new List<double>(positions.Count);
+            values.AddRange(positions.Select(p => weights[p]));
+            flat = AiDotNetEngine.Current.TensorScatter(flat,
+                new Tensor<int>(positions.ToArray(), new[] { positions.Count }),
+                Vector<double>.FromList(values).AsTensor().Cast<T>(), 0);
+        }
+
+        return flat.Reshape(new[] { rows, cols }).ToMatrix();
+    }
+
+    /// <summary>
+    /// A zero matrix holding <c>weights[p]</c> at the row-major position <c>p</c> of each entry.
+    /// </summary>
+    internal static Matrix<T> FromValues<T>(int rows, int cols, Dictionary<int, T> weights)
+    {
+        var flat = new Tensor<T>(new[] { rows * cols });
+        if (weights.Count > 0)
+        {
+            var positions = new List<int>(weights.Keys);
+            var values = new List<T>(positions.Count);
+            values.AddRange(positions.Select(p => weights[p]));
+            flat = AiDotNetEngine.Current.TensorScatter(flat,
+                new Tensor<int>(positions.ToArray(), new[] { positions.Count }),
+                Vector<T>.FromList(values).AsTensor(), 0);
+        }
+
+        return flat.Reshape(new[] { rows, cols }).ToMatrix();
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="source"/> ([rows x cols]) at the given row-major positions and zeroes the rest.
+    /// </summary>
+    internal static Matrix<T> KeepPositions<T>(Tensor<T> source, IEnumerable<int> positions)
+    {
+        var engine = AiDotNetEngine.Current;
+        int rows = source.Shape[0], cols = source.Shape[1];
+        var flatSource = source.Reshape(new[] { rows * cols });
+        var flat = new Tensor<T>(new[] { rows * cols });
+        var distinct = new SortedSet<int>(positions);
+        if (distinct.Count > 0)
+        {
+            var index = new Tensor<int>(distinct.ToArray(), new[] { distinct.Count });
+            flat = engine.TensorScatter(flat, index, engine.TensorIndexSelect(flatSource, index, 0), 0);
+        }
+
+        return flat.Reshape(new[] { rows, cols }).ToMatrix();
+    }
+}
