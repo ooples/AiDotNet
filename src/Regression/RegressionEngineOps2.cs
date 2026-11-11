@@ -438,6 +438,32 @@ internal static class RegressionEngineOps2
     }
 
     /// <summary>
+    /// Per-feature powers: column j * degree + d holds x[:, j]^(d + 1) for d = 0 .. degree - 1.
+    /// </summary>
+    public static Matrix<T> PolynomialExpand<T>(Matrix<T> x, int degree)
+    {
+        int rows = x.Rows;
+        int cols = x.Columns * degree;
+        if (degree <= 0 || rows == 0 || x.Columns == 0)
+        {
+            return new Matrix<T>(rows, cols);
+        }
+
+        // Stack the per-degree powers on a trailing axis ([rows, columns, degree]) and flatten it
+        // into the column axis.
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var xTensor = Tensor<T>.FromMatrix(x);
+        var powers = new Tensor<T>[degree];
+        for (int d = 0; d < degree; d++)
+        {
+            powers[d] = engine.TensorPower(xTensor, numOps.FromDouble(d + 1));
+        }
+
+        return engine.TensorStack(powers, 2).Reshape(new[] { rows, cols }).ToMatrix();
+    }
+
+    /// <summary>
     /// True when any element of <paramref name="mask"/> is non-zero.
     /// </summary>
     public static bool Any<T>(Tensor<T> mask)
