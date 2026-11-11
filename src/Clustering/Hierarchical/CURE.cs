@@ -372,9 +372,10 @@ public partial class CURE<T> : ClusteringBase<T>
         T epsilon = NumOps.FromDouble(1e-10);
         var minToReps = ClusteringTensorOps.DistancesToPoint(_distanceMetric, members, members.GetRow(chosen[0])).AsTensor();
         var isRep = Engine.TensorLessThan(minToReps, epsilon);
+        T minusOne = NumOps.Negate(NumOps.One);
         while (chosen.Count < numReps)
         {
-            var candidates = Engine.TensorWhere(isRep, Engine.TensorFullLike(minToReps, NumOps.Negate(NumOps.One)), minToReps).ToVector();
+            var candidates = Engine.TensorWhere(isRep, Engine.TensorFullLike(minToReps, minusOne), minToReps).ToVector();
             int next = ClusteringTensorOps.ArgMax(candidates);
             if (!IsCandidate(candidates, next))
             {

@@ -232,6 +232,7 @@ public partial class MeanShift<T> : ClusteringBase<T>
         int d = data.Columns;
         T bandwidthSq = NumOps.Multiply(_bandwidth, _bandwidth);
         var dataT = Tensor<T>.FromMatrix(data);
+        T minusHalf = NumOps.FromDouble(-0.5);
 
         var shifted = new Matrix<T>(m, d);
         int block = Math.Max(1, (1 << 22) / Math.Max(1, data.Rows));
@@ -241,7 +242,7 @@ public partial class MeanShift<T> : ClusteringBase<T>
             var chunk = centers.GetSubMatrix(start, 0, rows, d);
             var distSq = Tensor<T>.FromMatrix(ClusteringTensorOps.SquaredDistances(chunk, data));
             var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(
-                Engine.TensorDivideScalar(distSq, bandwidthSq), NumOps.FromDouble(-0.5)));
+                Engine.TensorDivideScalar(distSq, bandwidthSq), minusHalf));
             var inside = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorGreaterThan(distSq, bandwidthSq));
             var weights = Engine.TensorMultiply(kernel, inside);
 
