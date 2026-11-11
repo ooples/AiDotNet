@@ -178,12 +178,11 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
         var baselineScore = _scoreFunction(y, basePredictions);
 
         // Compute importance for each feature
-        var importances = new T[numFeatures];
-        var importanceStds = new T[numFeatures];
+        var permutedScores = new List<Vector<T>>(numFeatures);
 
         for (int j = 0; j < numFeatures; j++)
         {
-            var scores = new double[_nRepeats];
+            var scores = new List<T>(_nRepeats);
 
             for (int r = 0; r < _nRepeats; r++)
             {
@@ -193,21 +192,29 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
 
                 // Compute score with permuted feature
                 var permutedPredictions = _predictFunction(XPermuted);
-                var permutedScore = _scoreFunction(y, permutedPredictions);
-
-                // Importance = drop in score
-                scores[r] = NumOps.ToDouble(baselineScore) - NumOps.ToDouble(permutedScore);
+                scores.Add(_scoreFunction(y, permutedPredictions));
             }
 
-            // Compute mean and std of importance
-            importances[j] = NumOps.FromDouble(scores.Average());
-            double variance = scores.Select(s => (s - scores.Average()) * (s - scores.Average())).Average();
-            importanceStds[j] = NumOps.FromDouble(Math.Sqrt(variance));
+            permutedScores.Add(new Vector<T>(scores));
+        }
+
+        // Importance = drop in score; mean and (population) std over the repeats
+        var engine = AiDotNetEngine.Current;
+        var importances = new Vector<T>(numFeatures);
+        var importanceStds = new Vector<T>(numFeatures);
+        if (numFeatures > 0 && _nRepeats > 0)
+        {
+            var stacked = ExplainerTensorOps<T>.Stack(permutedScores);
+            var drops = engine.TensorSubtract(engine.TensorFullLike(stacked, baselineScore), stacked);
+            var mean = engine.ReduceMean(drops, new[] { 1 }, true);
+            var deviations = engine.TensorSubtract(drops, engine.TensorBroadcastTo(mean, drops.Shape));
+            importances = mean.ToVector();
+            importanceStds = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(deviations), new[] { 1 }, false)).ToVector();
         }
 
         return new FeatureImportanceResult<T>(
-            importances: new Vector<T>(importances),
-            importanceStds: new Vector<T>(importanceStds),
+            importances: importances,
+            importanceStds: importanceStds,
             baselineScore: baselineScore,
             featureNames: _featureNames);
     }
@@ -219,12 +226,18 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
     {
         int n = matrix.Rows;
 
-        // Fisher-Yates shuffle
+        // Fisher-Yates shuffle of the row order (the same draws as shuffling the column in place)
+        var order = Enumerable.Range(0, n).ToArray();
         for (int i = n - 1; i > 0; i--)
         {
             int j = rand.Next(i + 1);
-            (matrix[i, columnIndex], matrix[j, columnIndex]) = (matrix[j, columnIndex], matrix[i, columnIndex]);
+            (order[i], order[j]) = (order[j], order[i]);
         }
+
+        var engine = AiDotNetEngine.Current;
+        var column = matrix.GetColumn(columnIndex).AsTensor();
+        var shuffled = engine.TensorIndexSelect(column, new Tensor<int>(order, new[] { n }), 0).ToVector();
+        engine.SetColumn(matrix, columnIndex, shuffled);
     }
 
     private static T ComputeR2(Vector<T> actual, Vector<T> predicted)
@@ -235,22 +248,14 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
         int n = actual.Length;
         if (n == 0) return NumOps.Zero;
 
-        double meanActual = 0;
-        for (int i = 0; i < n; i++)
-            meanActual += NumOps.ToDouble(actual[i]);
-        meanActual /= n;
+        var engine = AiDotNetEngine.Current;
+        var actualTensor = actual.AsTensor();
+        T meanActual = engine.TensorMean(actualTensor);
+        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actualTensor, predicted.AsTensor()));
+        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actualTensor, meanActual));
 
-        double ssRes = 0, ssTot = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double a = NumOps.ToDouble(actual[i]);
-            double p = NumOps.ToDouble(predicted[i]);
-            ssRes += (a - p) * (a - p);
-            ssTot += (a - meanActual) * (a - meanActual);
-        }
-
-        if (ssTot < 1e-10) return NumOps.Zero;
-        return NumOps.FromDouble(1 - ssRes / ssTot);
+        if (NumOps.LessThan(ssTot, NumOps.FromDouble(1e-10))) return NumOps.Zero;
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
     }
 
     private static T ComputeAccuracy(Vector<T> actual, Vector<T> predicted)
@@ -261,16 +266,11 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
         int n = actual.Length;
         if (n == 0) return NumOps.Zero;
 
-        int correct = 0;
-        for (int i = 0; i < n; i++)
-        {
-            // Round predictions for classification
-            int actualClass = (int)Math.Round(NumOps.ToDouble(actual[i]));
-            int predictedClass = (int)Math.Round(NumOps.ToDouble(predicted[i]));
-            if (actualClass == predictedClass) correct++;
-        }
-
-        return NumOps.FromDouble((double)correct / n);
+        // Round predictions for classification (banker's rounding, as Math.Round)
+        var engine = AiDotNetEngine.Current;
+        var actualClass = engine.TensorRound(actual.AsTensor());
+        var predictedClass = engine.TensorRound(predicted.AsTensor());
+        return engine.TensorMean(engine.TensorEquals(actualClass, predictedClass));
     }
 
     private static TInput ConvertToModelInput<TInput>(Matrix<T> data)
@@ -381,10 +381,10 @@ public class FeatureImportanceResult<T>
     public Dictionary<string, T> ToDictionary()
     {
         var result = new Dictionary<string, T>();
-        for (int i = 0; i < NumFeatures; i++)
+        var keys = Enumerable.Range(0, NumFeatures).Select(i => FeatureNames?[i] ?? $"Feature{i}");
+        foreach (var (key, importance) in keys.Zip(Importances, (name, value) => (name, value)))
         {
-            string key = FeatureNames?[i] ?? $"Feature{i}";
-            result[key] = Importances[i];
+            result[key] = importance;
         }
         return result;
     }
