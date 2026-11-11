@@ -250,7 +250,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
                 denominator = Engine.TensorAdd(denominator, regularization);
             }
 
-            var nextX = Engine.TensorMatMul(Engine.TensorMatMul(x, numerator), Linalg.Inv(denominator));
+            var nextX = Engine.TensorMatMul(Engine.TensorMatMul(x, numerator), LinalgDispatch<T>.Inv(denominator));
             var error = Engine.TensorNorm(Engine.TensorSubtract(nextX, x));
             x = nextX;
 
@@ -363,7 +363,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
                 return;
             }
 
-            var inverseTransposed = Engine.TensorTranspose(Linalg.Inv(x));
+            var inverseTransposed = Engine.TensorTranspose(LinalgDispatch<T>.Inv(x));
             var xNew = Engine.TensorMultiplyScalar(Engine.TensorAdd(x, inverseTransposed), half);
 
             // Check convergence

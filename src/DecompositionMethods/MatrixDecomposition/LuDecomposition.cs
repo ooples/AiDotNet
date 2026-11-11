@@ -148,7 +148,7 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         // PA = LU with partial (row) pivoting in one engine factorization.
-        var (permutation, lower, upper) = Linalg.LU(Tensor<T>.FromMatrix(matrix));
+        var (permutation, lower, upper) = LinalgDispatch<T>.LU(Tensor<T>.FromMatrix(matrix));
 
         // The k-th pivot is the largest |A[i,k]| in the remaining column, i.e. |U[k,k]|; report the
         // first zero or non-finite one as the elimination did.
@@ -246,7 +246,7 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
             {
                 int size = n - k;
                 var block = Engine.TensorAbs(Engine.TensorSlice(Tensor<T>.FromMatrix(work), new[] { k, k }, new[] { size, size }));
-                int flat = Engine.TensorArgMax(block.Reshape(new[] { size * size }), 0)[0];
+                int flat = Engine.TensorArgMax(block.Reshape(new[] { size * size }), 0).GetFlat(0);
                 int pivotRow = k + flat / size;
                 int pivotCol = k + flat % size;
                 EnsureUsablePivot(Engine.TensorSlice(block, new[] { flat / size, flat % size }, new[] { 1, 1 }), k);
@@ -326,7 +326,7 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
 
         // A = L L^T in one engine factorization; like the scalar recurrence, a matrix that is not
         // positive definite yields a non-finite factor rather than an exception.
-        var (factor, _) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(matrix), upper: false);
+        var (factor, _) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(matrix), upper: false);
         Matrix<T> L = factor.ToMatrix();
         return (L, L.Transpose(), identityOrder);
     }

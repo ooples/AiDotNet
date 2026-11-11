@@ -155,7 +155,7 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
             return (new Matrix<T>(m, n), Matrix<T>.CreateIdentity(n));
         }
 
-        var (q, r) = Linalg.QR(Engine.TensorTranspose(Tensor<T>.FromMatrix(matrix)), "complete");
+        var (q, r) = LinalgDispatch<T>.QR(Engine.TensorTranspose(Tensor<T>.FromMatrix(matrix)), "complete");
 
         if (positiveDiagonal)
         {

@@ -190,10 +190,10 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     private Matrix<T> SolveFactored(Matrix<T> rhs)
     {
         var u = Tensor<T>.FromMatrix(U);
-        var y = Linalg.SolveTriangular(u, Tensor<T>.FromMatrix(rhs), upper: true, unitDiagonal: true);
+        var y = LinalgDispatch<T>.SolveTriangular(u, Tensor<T>.FromMatrix(rhs), upper: true, unitDiagonal: true);
         var d = Engine.TensorBroadcastTo(Tensor<T>.FromVector(D, new[] { D.Length, 1 }), new[] { rhs.Rows, rhs.Columns });
         y = Engine.TensorMultiply(y, Engine.TensorReciprocal(d));
-        return Linalg.SolveTriangular(Engine.TensorTranspose(u), y, upper: false, unitDiagonal: true).ToMatrix();
+        return LinalgDispatch<T>.SolveTriangular(Engine.TensorTranspose(u), y, upper: false, unitDiagonal: true).ToMatrix();
     }
 
     /// <summary>
