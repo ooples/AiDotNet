@@ -164,41 +164,36 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
 
         // Scale the matrix to have spectral norm close to 1 for convergence
         T norm = MatrixHelper<T>.SpectralNorm(A);
-        Matrix<T> X = A.Multiply(NumOps.Divide(NumOps.One, norm));
+        var x = Tensor<T>.FromMatrix(A.Multiply(NumOps.Divide(NumOps.One, norm)));
 
         T tolerance = NumOps.FromDouble(1e-10);
+        T divergence = NumOps.FromDouble(1e6);
+        T half = NumOps.FromDouble(0.5);
+        var threeI = Engine.TensorMultiplyScalar(Engine.TensorEye<T>(n), NumOps.FromDouble(3.0));
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
         {
             // Standard Newton-Schulz iteration: X_{k+1} = (1/2) * X_k * (3*I - X_k^T * X_k)
-            Matrix<T> XtX = X.Transpose().Multiply(X);
-            Matrix<T> I = Matrix<T>.CreateIdentityMatrix(n);
+            var xtx = Engine.TensorMatMul(Engine.TensorTranspose(x), x);
+            var nextX = Engine.TensorMultiplyScalar(Engine.TensorMatMul(x, Engine.TensorSubtract(threeI, xtx)), half);
 
-            // Compute 3*I - X^T * X
-            Matrix<T> term = I.Multiply(NumOps.FromDouble(3.0)).Subtract(XtX);
+            var error = Engine.TensorNorm(Engine.TensorSubtract(nextX, x));
+            x = nextX;
 
-            // X_{k+1} = (1/2) * X * term
-            Matrix<T> nextX = X.Multiply(term).Multiply(NumOps.FromDouble(0.5));
-
-            T error = nextX.Subtract(X).FrobeniusNorm();
-
-            if (NumOps.LessThan(error, tolerance))
+            if (AnyBelow(error, tolerance))
             {
-                X = nextX;
                 break;
             }
 
-            X = nextX;
-
             // Check for divergence
-            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
+            if (AnyAbove(error, divergence))
             {
                 throw new InvalidOperationException("Newton-Schulz iteration diverged.");
             }
         }
 
-        U = X;
+        U = x.ToMatrix();
         P = U.Transpose().Multiply(A);
     }
 
@@ -232,55 +227,47 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
             return;
         }
 
-        Matrix<T> X = A.Multiply(NumOps.Divide(NumOps.One, norm));
+        var x = Tensor<T>.FromMatrix(A.Multiply(NumOps.Divide(NumOps.One, norm)));
 
         T tolerance = NumOps.FromDouble(1e-10);
+        T divergence = NumOps.FromDouble(1e10);
+        T three = NumOps.FromDouble(3.0);
+        var identity = Engine.TensorEye<T>(n);
+        var threeI = Engine.TensorMultiplyScalar(identity, three);
+        var regularization = Engine.TensorMultiplyScalar(identity, NumOps.FromDouble(1e-10));
         int maxIterations = 100;
-        Matrix<T> I = Matrix<T>.CreateIdentityMatrix(n);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            // Correct Halley iteration: X_{k+1} = X_k * (X_k^T*X_k + 3*I) * (3*X_k^T*X_k + I)^{-1}
-            // Note: Order matters! It's X * numerator * (denominator)^{-1}
-            Matrix<T> XtX = X.Transpose().Multiply(X);
+            // Halley iteration: X_{k+1} = X_k * (X_k^T*X_k + 3*I) * (3*X_k^T*X_k + I)^{-1}
+            var xtx = Engine.TensorMatMul(Engine.TensorTranspose(x), x);
+            var numerator = Engine.TensorAdd(xtx, threeI);
+            var denominator = Engine.TensorAdd(Engine.TensorMultiplyScalar(xtx, three), identity);
 
-            // numerator = X^T*X + 3*I
-            Matrix<T> numerator = XtX.Add(I.Multiply(NumOps.FromDouble(3.0)));
-
-            // denominator = 3*X^T*X + I
-            Matrix<T> denominator = XtX.Multiply(NumOps.FromDouble(3.0)).Add(I);
-
-            // Check invertibility with regularization if needed
-            if (!MatrixHelper<T>.IsInvertible(denominator))
+            // Regularize a singular denominator for numerical stability
+            if (!MatrixHelper<T>.IsInvertible(denominator.ToMatrix()))
             {
-                // Add small regularization for numerical stability
-                denominator = denominator.Add(I.Multiply(NumOps.FromDouble(1e-10)));
+                denominator = Engine.TensorAdd(denominator, regularization);
             }
 
-            // X_{k+1} = X * numerator * denominator^{-1}
-            Matrix<T> nextX = X.Multiply(numerator).Multiply(denominator.Inverse());
+            var nextX = Engine.TensorMatMul(Engine.TensorMatMul(x, numerator), Linalg.Inv(denominator));
+            var error = Engine.TensorNorm(Engine.TensorSubtract(nextX, x));
+            x = nextX;
 
-            T error = nextX.Subtract(X).FrobeniusNorm();
-
-            if (NumOps.LessThan(error, tolerance))
+            if (AnyBelow(error, tolerance))
             {
-                X = nextX;
                 break;
             }
 
-            X = nextX;
-
-            // Check for divergence - increase threshold
-            T xNorm = X.FrobeniusNorm();
-            if (NumOps.GreaterThan(xNorm, NumOps.FromDouble(1e10)))
+            // Fall back to SVD method if Halley diverges
+            if (AnyAbove(Engine.TensorNorm(x), divergence))
             {
-                // Fall back to SVD method if Halley diverges
                 DecomposeSVD();
                 return;
             }
         }
 
-        U = X;
+        U = x.ToMatrix();
         P = U.Transpose().Multiply(A);
     }
 
@@ -304,6 +291,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
         // This converges to U such that A = U * P
         Matrix<T> X = A.Clone();
         T tolerance = NumOps.FromDouble(1e-10);
+        T divergence = NumOps.FromDouble(1e6);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
@@ -311,19 +299,16 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
             var qr = new QrDecomposition<T>(X);
             Matrix<T> Q = qr.Q;
 
-            T error = Q.Subtract(X).FrobeniusNorm();
+            var error = Engine.TensorNorm(Engine.TensorSubtract(Tensor<T>.FromMatrix(Q), Tensor<T>.FromMatrix(X)));
+            X = Q;
 
-            if (NumOps.LessThan(error, tolerance))
+            if (AnyBelow(error, tolerance))
             {
-                X = Q;
                 break;
             }
 
-            X = Q;
-
             // Check for divergence (Q should always be bounded)
-            T xNorm = X.FrobeniusNorm();
-            if (NumOps.GreaterThan(xNorm, NumOps.FromDouble(1e6)))
+            if (AnyAbove(Engine.TensorNorm(Tensor<T>.FromMatrix(X)), divergence))
             {
                 throw new InvalidOperationException("QR iteration diverged.");
             }
@@ -354,61 +339,56 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
         // Standard Newton iteration for polar decomposition: X_{k+1} = (1/2)(X_k + X_k^{-T})
         // This converges to the orthogonal factor U when starting from X_0 = A (scaled)
         // Reference: Higham, "Computing the polar decomposition—with applications"
+        var x = Tensor<T>.FromMatrix(A.Clone());
 
-        Matrix<T> X = A.Clone();
-
-        // Scale the matrix to improve convergence
-        // Use Frobenius norm scaling: X = A / ||A||_F
-        T frobNorm = X.FrobeniusNorm();
+        // Scale the matrix to improve convergence: X = A / ||A||_F
+        T frobNorm = FrobeniusNorm(A);
         if (NumOps.GreaterThan(frobNorm, NumOps.FromDouble(1e-14)))
         {
-            X = X.Multiply(NumOps.Divide(NumOps.One, frobNorm));
+            x = Engine.TensorMultiplyScalar(x, NumOps.Divide(NumOps.One, frobNorm));
         }
 
         T tolerance = NumOps.FromDouble(1e-12);
+        T divergence = NumOps.FromDouble(1e6);
+        T half = NumOps.FromDouble(0.5);
         int maxIterations = 50;
 
         for (int i = 0; i < maxIterations; i++)
         {
             // Newton iteration: X_{k+1} = (1/2)(X_k + X_k^{-T})
-            if (!MatrixHelper<T>.IsInvertible(X))
+            if (!MatrixHelper<T>.IsInvertible(x.ToMatrix()))
             {
                 // Fall back to SVD-based method for singular matrices
                 DecomposeSVD();
                 return;
             }
 
-            Matrix<T> Xinv = X.Inverse();
-            Matrix<T> XinvT = Xinv.Transpose();
-            Matrix<T> Xnew = X.Add(XinvT).Multiply(NumOps.FromDouble(0.5));
+            var inverseTransposed = Engine.TensorTranspose(Linalg.Inv(x));
+            var xNew = Engine.TensorMultiplyScalar(Engine.TensorAdd(x, inverseTransposed), half);
 
             // Check convergence
-            T error = X.Subtract(Xnew).FrobeniusNorm();
+            var error = Engine.TensorNorm(Engine.TensorSubtract(x, xNew));
+            x = xNew;
 
-            X = Xnew;
-
-            if (NumOps.LessThan(error, tolerance))
+            if (AnyBelow(error, tolerance))
             {
                 break;
             }
 
-            // Check for divergence
-            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
+            // Check for divergence: fall back to the SVD-based method
+            if (AnyAbove(error, divergence))
             {
-                // Fall back to SVD-based method
                 DecomposeSVD();
                 return;
             }
         }
 
         // X has converged to an orthogonal matrix (the unitary factor)
-        U = X;
+        U = x.ToMatrix();
 
-        // P = U^T * A (the positive semi-definite factor)
+        // P = U^T * A (the positive semi-definite factor), symmetrized: P = (P + P^T) / 2
         P = U.Transpose().Multiply(A);
-
-        // Ensure P is symmetric by averaging: P = (P + P^T) / 2
-        P = P.Add(P.Transpose()).Multiply(NumOps.FromDouble(0.5));
+        P = P.Add(P.Transpose()).Multiply(half);
     }
 
     /// <summary>
