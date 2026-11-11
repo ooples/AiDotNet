@@ -206,6 +206,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         }
     }
 
+    /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
@@ -1038,6 +1039,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

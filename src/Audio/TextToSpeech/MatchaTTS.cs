@@ -204,6 +204,7 @@ public partial class MatchaTTS<T> : AlignedTextToMelModelBase<T>, ITextToSpeech<
             _options.DropoutRate, encoderStart: 1, decoderStart: decoderStart);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -227,8 +228,10 @@ public partial class MatchaTTS<T> : AlignedTextToMelModelBase<T>, ITextToSpeech<
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -281,6 +284,7 @@ public partial class MatchaTTS<T> : AlignedTextToMelModelBase<T>, ITextToSpeech<
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MatchaTTS<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

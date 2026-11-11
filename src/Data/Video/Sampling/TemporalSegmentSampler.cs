@@ -12,6 +12,7 @@ public class TemporalSegmentSampler : IVideoFrameSampler
         _random = seed.HasValue ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value) : Tensors.Helpers.RandomHelper.CreateSecureRandom();
     }
 
+    /// <inheritdoc />
     public int[] SampleFrameIndices(int totalFrames, int numFramesToSample)
     {
         if (totalFrames <= 0 || numFramesToSample <= 0)

@@ -305,6 +305,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         return new LoRALayer<T>(inputSize, outputSize, 1, alpha);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         Tensor<T> baseOutput = _baseLayer.Forward(input);
@@ -349,6 +350,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         if (_matrixMGradient == null)
@@ -372,6 +374,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
 
     }
 
+    /// <inheritdoc />
     public override ILayer<T> MergeToOriginalLayer()
     {
         // Compute full MoRA adaptation: R_d * M * R_c^T
@@ -416,6 +419,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         return CreateMergedLayerWithClone(mergedParams);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _baseLayer.ResetState();

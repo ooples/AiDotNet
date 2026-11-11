@@ -82,6 +82,7 @@ public sealed class TotalReturnReward : IPortfolioReward
         return double.IsNaN(r) || double.IsInfinity(r) ? 0.0 : r;
     }
 
+    /// <inheritdoc />
     public void Reset()
     {
     }
@@ -156,6 +157,7 @@ public sealed class DifferentialSharpeReward : IPortfolioReward
         return double.IsNaN(reward) || double.IsInfinity(reward) ? 0.0 : reward;
     }
 
+    /// <inheritdoc />
     public void Reset()
     {
         _a = 0.0;

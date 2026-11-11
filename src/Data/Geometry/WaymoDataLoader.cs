@@ -38,10 +38,15 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         ["Car"] = 0, ["Truck"] = 0, ["Van"] = 0 // KITTI-style aliases
     };
 
+    /// <inheritdoc />
     public override string Name => "Waymo";
+    /// <inheritdoc />
     public override string Description => "Waymo Open Dataset 3D detection (LiDAR)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.PointsPerSample * _channels;
+    /// <inheritdoc />
     public override int OutputDimension => 1;
 
     public WaymoDataLoader(WaymoDataLoaderOptions? options = null)
@@ -52,6 +57,7 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         _channels = _options.IncludeIntensity ? 4 : 3;
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         string splitDir = _options.Split == DatasetSplit.Test
@@ -172,11 +178,13 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         return bestClass;
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -195,6 +203,7 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         return (bf, bl);
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

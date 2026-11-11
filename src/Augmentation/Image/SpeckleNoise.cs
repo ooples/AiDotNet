@@ -15,6 +15,7 @@ public class SpeckleNoise<T> : ImageAugmenterBase<T>
         MinStd = minStd; MaxStd = maxStd;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         double std = context.GetRandomDouble(MinStd, MaxStd);
@@ -34,6 +35,7 @@ public class SpeckleNoise<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters(); p["min_std"] = MinStd; p["max_std"] = MaxStd; return p;

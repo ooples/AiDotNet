@@ -41,16 +41,18 @@ public class DocBankOptions : DocumentNeuralNetworkOptions
     public bool UseTextFeatures { get; set; }
 
     /// <summary>
-    /// Gets or sets the learning rate used when the model creates its own optimizer.
-    /// Default: 1e-3.
+    /// Gets or sets a learning rate that overrides the paper's training recipe.
+    /// Default: <c>null</c> (the paper's rate, 5e-5).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The model previously built a BARE optimizer -- <c>new AdamOptimizer&lt;...&gt;(this)</c> --
-    /// so it trained at the optimizer's own default and no configured rate could reach it. 1e-3
-    /// IS Adam's default, so this preserves the behaviour the model already had while making the
-    /// value visible and overridable. Supplying an optimizer explicitly still bypasses it.
+    /// DocBank trains with the recipe Li et al. (2020, Sec. 4) report: AdamW at an initial
+    /// learning rate of 5e-5. Setting this replaces that rate, and the recipe's learning-rate
+    /// schedule is built from the replacement, so the whole schedule follows it. Leaving it
+    /// <c>null</c> keeps the paper's rate. Supplying an optimizer explicitly bypasses both.
     /// </para>
+    /// <para><b>For Beginners:</b> leave this empty to train the way the paper did; set it only
+    /// when you want the model to take larger or smaller steps than the paper's.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 1e-3;
+    public double? LearningRate { get; set; }
 }

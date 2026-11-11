@@ -72,7 +72,9 @@ public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         _options.EncoderDim, _options.TimeDecay, _options.CurrentTokenBonus, _options.TokenShiftMix);
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => true;
     /// <summary>Always false: this model has no word alignment.</summary>
     /// <remarks>
@@ -108,6 +110,7 @@ public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration, Segments = Array.Empty<TranscriptionSegment<T>>() };
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     /// <summary>Not supported: this model has no language-identification head.</summary>
     /// <remarks>
@@ -132,9 +135,11 @@ public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         => throw new NotSupportedException(
             "RWKVTransducer has no language-identification head, so it cannot produce language " +
             "probabilities. Set the language with RWKVTransducerOptions.Language.");
+    /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new RWKVStreamingSession(this, language ?? _options.Language);
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultRWKVTransducerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, maxSequenceLength: _options.MaxEncoderFrames)); }
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
@@ -163,7 +168,9 @@ public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
 
         return rawAudio;
     }
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "RWKVTransducer-Native" : "RWKVTransducer-ONNX", Description = "RWKVTransducer: RWKV-Enhanced E-Branchformer (Song et al., 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
@@ -194,6 +201,7 @@ public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         return sb.ToString().Trim();
     }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(RWKVTransducer<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     private sealed class RWKVStreamingSession : IStreamingTranscriptionSession<T>

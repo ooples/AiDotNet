@@ -26,6 +26,7 @@ public sealed record TrainingLossEvent(
     long OutputLength)
     : TrainingDiagnosticEvent(TrainingDiagnosticLevel.Minimal)
 {
+    /// <inheritdoc />
     public override string ToString() =>
         $"[Minimal] TrainingLoss step={StepIndex} loss={LossValue:E4} outputRank={OutputRank} outputLen={OutputLength}";
 }
@@ -83,6 +84,7 @@ public sealed record GradientNormEvent : TrainingDiagnosticEvent
         this.LayerTypeName = LayerTypeName;
     }
 
+    /// <inheritdoc />
     public override string ToString()
     {
         string sh = ParamShape.Length == 0 ? "[]" : "[" + string.Join(",", ParamShape) + "]";
@@ -103,6 +105,7 @@ public sealed record FusedOptimizerPathEvent(
     string? Reason)
     : TrainingDiagnosticEvent(TrainingDiagnosticLevel.PerStep)
 {
+    /// <inheritdoc />
     public override string ToString() =>
         Hit
             ? $"[PerStep] FusedOptimizer step={StepIndex} HIT"
@@ -119,5 +122,6 @@ public sealed record TrainingMessageEvent(
     string Message)
     : TrainingDiagnosticEvent(MsgLevel)
 {
+    /// <inheritdoc />
     public override string ToString() => $"[{MsgLevel}] {Message}";
 }

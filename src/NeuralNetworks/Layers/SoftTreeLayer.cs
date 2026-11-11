@@ -328,6 +328,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_leafValues);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

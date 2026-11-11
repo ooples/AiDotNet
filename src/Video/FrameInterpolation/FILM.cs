@@ -576,6 +576,7 @@ public partial class FILM<T> : FrameInterpolationBase<T>
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

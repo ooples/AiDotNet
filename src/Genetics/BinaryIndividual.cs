@@ -69,26 +69,31 @@ public class BinaryIndividual : IEvolvable<BinaryGene, double>
         return min + (GetValueAsNormalizedDouble() * (max - min));
     }
 
+    /// <inheritdoc />
     public ICollection<BinaryGene> GetGenes()
     {
         return _genes;
     }
 
+    /// <inheritdoc />
     public void SetGenes(ICollection<BinaryGene> genes)
     {
         _genes = [.. genes];
     }
 
+    /// <inheritdoc />
     public double GetFitness()
     {
         return _fitness;
     }
 
+    /// <inheritdoc />
     public void SetFitness(double fitness)
     {
         _fitness = fitness;
     }
 
+    /// <inheritdoc />
     public IEvolvable<BinaryGene, double> Clone()
     {
         var clone = new BinaryIndividual([]);

@@ -187,6 +187,7 @@ public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
         return (options.ChannelDimensions.ToArray(), options.StageDepths.ToArray(), options.DecoderDimension);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -196,6 +197,7 @@ public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

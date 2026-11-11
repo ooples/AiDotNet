@@ -767,6 +767,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         Engine.TensorAddInPlace(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

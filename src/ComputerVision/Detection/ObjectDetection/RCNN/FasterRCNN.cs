@@ -56,10 +56,13 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
     private Random? _trainingRandom;
     private readonly RPN<T> _rpn;
     private readonly RoIAlign<T> _roiAlign;
+    // The box head of Faster R-CNN with FPN (Lin et al. 2017, Sec. 4.2: "two hidden 1,024-d fully-connected (fc)
+    // layers, each followed by ReLU, before the final classification and bounding box regression layers").
+    private readonly Dense<T> _fc6;
+    private readonly Dense<T> _fc7;
     private readonly Dense<T> _fcClassifier;
     private readonly Dense<T> _fcBoxRegressor;
     private readonly int _roiOutputSize;
-    private readonly int _hiddenDim;
     private readonly NMS<T> _nms;
 
     /// <inheritdoc/>
@@ -90,8 +93,7 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
     /// <param name="options">Detection options.</param>
     public FasterRCNN(ObjectDetectionOptions<T> options) : base(options)
     {
-        var (hiddenDim, roiOutputSize) = GetSizeConfig(options.Size);
-        _hiddenDim = hiddenDim;
+        int roiOutputSize = GetRoIOutputSize(options.Size);
         _roiOutputSize = roiOutputSize;
 
         // Backbone: ResNet-50 with FPN
@@ -99,30 +101,34 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         Neck = new FPN<T>(Backbone.OutputChannels.ToArray(), outputChannels: 256);
 
         // Region Proposal Network
-        _rpn = new RPN<T>(256, hiddenDim);
+        // The RPN head's 3x3 conv keeps the pyramid's width (Ren et al. 2015 on FPN features; torchvision's RPNHead).
+        _rpn = new RPN<T>(256, 256);
 
         // RoI feature extraction
         _roiAlign = new RoIAlign<T>(roiOutputSize, samplingRatio: 2);
 
         // Detection head: classification + bounding box regression
         int roiFeatureSize = 256 * roiOutputSize * roiOutputSize;
-        _fcClassifier = new Dense<T>(roiFeatureSize, options.NumClasses + 1); // +1 for background
-        _fcBoxRegressor = new Dense<T>(roiFeatureSize, (options.NumClasses + 1) * 4);
+        _fc6 = new Dense<T>(roiFeatureSize, BoxHeadWidth);
+        _fc7 = new Dense<T>(BoxHeadWidth, BoxHeadWidth);
+        _fcClassifier = new Dense<T>(BoxHeadWidth, options.NumClasses + 1); // +1 for background
+        _fcBoxRegressor = new Dense<T>(BoxHeadWidth, (options.NumClasses + 1) * 4);
 
         _nms = new NMS<T>();
         _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T>(options.NumClasses, 1,
             options.TwoStageLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions());
     }
 
-    private static (int hiddenDim, int roiOutputSize) GetSizeConfig(ModelSize size) => size switch
-    {
-        ModelSize.Nano => (128, 5),
-        ModelSize.Small => (192, 7),
-        ModelSize.Medium => (256, 7),
-        ModelSize.Large => (384, 7),
-        ModelSize.XLarge => (512, 7),
-        _ => (256, 7)
-    };
+    /// <summary>The width of the two fully connected layers of the box head (Lin et al. 2017, Sec. 4.2).</summary>
+    internal const int BoxHeadWidth = 1024;
+
+    /// <summary>RoIAlign's output grid: 7x7 as in the paper, 5x5 for the Nano size.</summary>
+    private static int GetRoIOutputSize(ModelSize size) => size == ModelSize.Nano ? 5 : 7;
+
+    /// <inheritdoc/>
+    /// <remarks>The forward pass classifies one image's proposals, so each image is detected on its own.</remarks>
+    public override BatchDetectionResult<T> DetectBatch(Tensor<T> images, double confidenceThreshold, double nmsThreshold)
+        => DetectEachImage(images, confidenceThreshold, nmsThreshold);
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
@@ -145,8 +151,24 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         };
     }
 
+    /// <summary>Proposals kept after the RPN's NMS (Ren et al. 2015 with FPN; torchvision's post_nms_top_n).</summary>
+    internal const int PostNmsTopK = 1000;
+
     /// <inheritdoc/>
-    protected override List<Tensor<T>> Forward(Tensor<T> input) => ForwardDetection(input, null, out _);
+    /// <remarks>
+    /// The per-RoI heads (logits, deltas and proposals) are padded with zero rows to <see cref="PostNmsTopK"/>, so
+    /// the raw prediction's layout depends on the input size alone. How many proposals NMS keeps depends on the
+    /// scores, which batch statistics change in training mode: without the padding a training forward and
+    /// <c>Predict</c> on the same image disagreed on the output's length. A padding row's proposal is empty, so it
+    /// decodes to an empty box that <see cref="PostProcess"/> drops.
+    /// </remarks>
+    protected override List<Tensor<T>> Forward(Tensor<T> input)
+    {
+        var outputs = ForwardDetection(input, null, out _);
+        for (int head = 0; head < 3; head++)
+            outputs[head] = CvTensorOps<T>.PadRows(outputs[head], PostNmsTopK);
+        return outputs;
+    }
 
     /// <summary>Trains the proposal network and the detection head with the Faster R-CNN objectives.</summary>
     /// <remarks>
@@ -180,7 +202,7 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         List<BoundingBox<T>> anchors = new();
         TrainWithTargets(input, targets,
-            image => ForwardDetection(image, gold, out anchors),
+            image => ForwardDetection(image, gold, out anchors, random),
             (heads, batch) => Engine.TensorAdd(
                 _detectionLoss.ComputeProposalLoss(TwoStageTargets.FirstImage(heads[3]), TwoStageTargets.FirstImage(heads[4]),
                     anchors, gold, _rpn.AnchorsPerLocation, random),
@@ -188,8 +210,16 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
     }
 
     /// <summary>The detection forward, optionally adding boxes to the proposals the detection head classifies.</summary>
+    /// <param name="input">The NCHW image batch.</param>
+    /// <param name="extraProposals">Boxes added to the proposals (the object boxes, in training).</param>
+    /// <param name="anchors">The RPN's anchors, for the proposal loss.</param>
+    /// <param name="sampleRandom">
+    /// In training, the generator the RoI sampler draws from: the head then runs only on the sampled RoIs (64 per
+    /// image by default) instead of every proposal. Running it on all ~1,000 proposals and sampling afterwards, as
+    /// this used to, did 16 times the box-head work and held two ~200 MB RoIAlign intermediates per step.
+    /// </param>
     private List<Tensor<T>> ForwardDetection(Tensor<T> input, IReadOnlyList<double[]>? extraProposals,
-        out List<BoundingBox<T>> anchors)
+        out List<BoundingBox<T>> anchors, Random? sampleRandom = null)
     {
         int imageHeight = input.Shape[2];
         int imageWidth = input.Shape[3];
@@ -212,7 +242,7 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
             objectness, bboxDeltas, levelAnchors,
             imageHeight, imageWidth,
             preNmsTopK: 1000,
-            postNmsTopK: 1000,
+            postNmsTopK: PostNmsTopK,
             nmsThreshold: 0.7,
             levelAnchorCounts: levelAnchorCounts);
 
@@ -220,7 +250,16 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         if (extraProposals is { Count: > 0 })
             proposalBoxes = TwoStageTargets.AppendBoxes(proposalBoxes, extraProposals);
 
-        if (proposalBoxes.Shape[0] == 0)
+        bool noRois = proposalBoxes.Shape[0] == 0;
+        if (sampleRandom is not null && extraProposals is not null && !noRois)
+        {
+            var rows = _detectionLoss.SampleStageRois(proposalBoxes, extraProposals, 0, sampleRandom);
+            noRois = rows.Length == 0;
+            if (!noRois)
+                proposalBoxes = CvTensorOps<T>.Select(proposalBoxes, rows, 0);
+        }
+
+        if (noRois)
         {
             // No proposals, return empty result
             return new List<Tensor<T>>
@@ -240,8 +279,9 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         var flattenedFeatures = FlattenRoIFeatures(roiFeatures);
 
         // Classification and box regression
-        var classLogits = _fcClassifier.Forward(flattenedFeatures);
-        var boxDeltas = _fcBoxRegressor.Forward(flattenedFeatures);
+        var hidden = AiDotNetEngine.Current.ReLU(_fc7.Forward(AiDotNetEngine.Current.ReLU(_fc6.Forward(flattenedFeatures))));
+        var classLogits = _fcClassifier.Forward(hidden);
+        var boxDeltas = _fcBoxRegressor.Forward(hidden);
 
         // The RPN's raw objectness and box deltas are outputs too: proposal selection is a
         // non-differentiable top-k, so without them nothing would train the RPN. PostProcess reads
@@ -376,6 +416,8 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
     protected override long GetHeadParameterCount()
     {
         return _rpn.GetParameterCount() +
+               _fc6.GetParameterCount() +
+               _fc7.GetParameterCount() +
                _fcClassifier.GetParameterCount() +
                _fcBoxRegressor.GetParameterCount();
     }
@@ -396,9 +438,10 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        // Version 2 added the box head's two fully connected layers; a version 1 file has no weights for them.
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+            throw new InvalidDataException($"Unsupported weight file version: {version}; this build reads version 2.");
         }
 
         // Read model configuration
@@ -418,6 +461,8 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         _rpn.ReadParameters(reader);
 
         // Read detection head parameters
+        _fc6.ReadParameters(reader);
+        _fc7.ReadParameters(reader);
         _fcClassifier.ReadParameters(reader);
         _fcBoxRegressor.ReadParameters(reader);
 
@@ -432,7 +477,7 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
 
         // Write magic number and version for identification
         writer.Write(0x52434E4E); // "RCNN" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: the box head has its two fully connected layers
 
         // Write model configuration
         writer.Write(Name);
@@ -447,6 +492,8 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         _rpn.WriteParameters(writer);
 
         // Write detection head parameters
+        _fc6.WriteParameters(writer);
+        _fc7.WriteParameters(writer);
         _fcClassifier.WriteParameters(writer);
         _fcBoxRegressor.WriteParameters(writer);
     }

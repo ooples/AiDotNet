@@ -114,6 +114,7 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>, IShapeContract
 
     private IEnumerable<Conv1DLayer<T>> InnerConvs() => _convs1.Concat(_convs2);
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>

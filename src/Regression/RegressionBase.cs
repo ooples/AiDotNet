@@ -1101,6 +1101,7 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         return CreateSerializedCopy();
     }
 
+    /// <inheritdoc />
     public virtual long ParameterCount
     {
         get { return checked(ExpectedParameterCount + AdditionalParameterRegistry.ParameterCount); }
@@ -1267,6 +1268,7 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

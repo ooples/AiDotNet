@@ -775,6 +775,7 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>
@@ -835,6 +836,7 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         return NormalizeFrames(rawFrames);
     }
 
+    /// <inheritdoc />
     protected override void ResolveLazyLayerShapes()
     {
         base.ResolveLazyLayerShapes();

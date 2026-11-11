@@ -123,12 +123,16 @@ public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
             _options.ImageSize = h;
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.FusionDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int FusionEmbeddingDim => _options.FusionDim;
+    /// <inheritdoc />
     public int MaxSequenceLength => _options.MaxSequenceLength;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -141,6 +145,7 @@ public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         return L2Normalize(c);
     }
 
+    /// <inheritdoc />
     public Tensor<T> FuseImageText(Tensor<T> image, string text)
     {
         ThrowIfDisposed();
@@ -211,6 +216,7 @@ public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         return visionOut.ConcatenateTensors(textState);
     }
 
+    /// <inheritdoc />
     public T ComputeMatchingScore(Tensor<T> image, string text)
     {
         // Run the full dual-stream + co-attention fusion so the matching
@@ -298,6 +304,7 @@ public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -313,11 +320,14 @@ public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
     // This forwarded to a helper the base now calls from its own
     // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -346,6 +356,7 @@ public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
             throw new ObjectDisposedException(GetType().FullName ?? nameof(METER<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

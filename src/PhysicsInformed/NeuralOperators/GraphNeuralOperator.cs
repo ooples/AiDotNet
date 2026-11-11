@@ -299,6 +299,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         // what the base already says. Deleting them also drops the (int) cast the count
         // applied to a long Sum, which truncated past 2^31 parameters.
 
+        /// <inheritdoc />
         public override Vector<T> GetGradients()
         {
             var gradients = new List<T>();
@@ -535,6 +536,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 : NumOps.Zero;
         }
 
+        /// <inheritdoc />
         public override bool SupportsTraining => true;
 
         private void ValidateGraphInput(T[,] nodeFeatures, T[,] adjacencyMatrix)

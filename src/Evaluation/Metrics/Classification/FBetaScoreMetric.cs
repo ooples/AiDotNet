@@ -28,13 +28,21 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
     private readonly double _beta;
     private readonly AveragingMethod _averaging;
 
+    /// <inheritdoc />
     public string Name => $"F{_beta:F1}Score";
+    /// <inheritdoc />
     public string Category => "Classification";
+    /// <inheritdoc />
     public string Description => $"F-beta score with beta={_beta}, weighting recall {(_beta > 1 ? "more" : _beta < 1 ? "less" : "equally")} than precision.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.HigherIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => true;
 
     public FBetaScoreMetric(double beta = 1.0, AveragingMethod averaging = AveragingMethod.Binary)
@@ -55,6 +63,7 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
         _averaging = averaging;
     }
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -135,6 +144,7 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
         return c;
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

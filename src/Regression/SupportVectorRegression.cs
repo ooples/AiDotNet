@@ -185,6 +185,7 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 
 
 
+    /// <inheritdoc />
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —

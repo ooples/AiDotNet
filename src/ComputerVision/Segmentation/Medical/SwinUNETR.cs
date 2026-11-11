@@ -215,6 +215,7 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         _ => ([48, 96, 192, 384], [2, 2, 6, 2], 256)
     };
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddLeadingBatchDimension(input);
@@ -224,6 +225,7 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

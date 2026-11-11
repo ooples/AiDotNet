@@ -1080,6 +1080,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         return DeepCopy();
     }
 
+    /// <inheritdoc />
     public virtual long ParameterCount
     {
         get { return Alphas.Length + 1; } // Alphas + bias term
@@ -1110,6 +1111,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -1130,6 +1132,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
     }
 
+    /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

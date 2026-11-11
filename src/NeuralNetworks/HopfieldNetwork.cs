@@ -401,6 +401,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 

@@ -189,6 +189,7 @@ public partial class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBa
     /// on net471, which this project still targets.
     /// </remarks>
     private const double NearestBelowOne = 0.99999999999999989;
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -206,6 +207,7 @@ public partial class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBa
     // UpdateParameters validated the length and distributed the vector across Layers, both of which
     // the base does. Removed under AIDN082.
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

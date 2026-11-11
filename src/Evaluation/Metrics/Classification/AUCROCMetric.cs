@@ -29,15 +29,24 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "AUCROC";
+    /// <inheritdoc />
     public string Category => "Classification";
+    /// <inheritdoc />
     public string Description => "Area Under the ROC Curve, measuring discrimination ability.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.HigherIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => true;
+    /// <inheritdoc />
     public bool SupportsMultiClass => true;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals, int numClasses = 2)
     {
         if (numClasses < 2)
@@ -143,6 +152,7 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
         return validClasses > 0 ? NumOps.FromDouble(sumAuc / validClasses) : NumOps.FromDouble(0.5);
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals,
         int numClasses = 2, ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

@@ -101,6 +101,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// </remarks>
     public override bool MakesUpstreamBiasRedundant => true;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -282,8 +283,10 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         Engine.InvalidatePersistentTensor(_beta);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _gammaGradient = null;

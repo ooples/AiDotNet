@@ -84,6 +84,7 @@ public partial class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = options.EpsilonStart;
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
@@ -94,6 +95,7 @@ public partial class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // Ensure states exist BEFORE accessing Q-table
@@ -161,12 +163,17 @@ public partial class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     private int GetGreedyAction(string stateKey) { int best = 0; T bestVal = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], bestVal)) { bestVal = _qTable[stateKey][a]; best = a; } return best; }
     private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
 
+    /// <inheritdoc />
     public override T Train() => NumOps.Zero;
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["epsilon"] = NumOps.FromDouble(_epsilon) };
+    /// <inheritdoc />
     public override void ResetEpisode() { foreach (var s in _eligibilityTraces.Keys.ToList()) for (int a = 0; a < _options.ActionSize; a++) _eligibilityTraces[s][a] = NumOps.Zero; }
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     /// <summary>
     /// The number of Q-values actually stored: the sum of each state's action entries.
@@ -198,7 +205,10 @@ public partial class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
             new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
                 () => _qTable));
     }
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
+    /// <inheritdoc />
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
+    /// <inheritdoc />
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

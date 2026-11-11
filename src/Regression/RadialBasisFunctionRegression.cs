@@ -161,6 +161,7 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         return Enumerable.Range(0, numFeatures);
     }
 
+    /// <inheritdoc />
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Auto-scale gamma if using the default value of 1.0

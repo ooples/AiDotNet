@@ -43,9 +43,11 @@ public partial class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly Vector<T> _unknownVector;
     private readonly bool _ignoreUnknown;
 
+    /// <inheritdoc />
     public override int EmbeddingDimension => _dimension;
 
     // Static models don't really have a token limit like transformers, but we set a reasonable default
+    /// <inheritdoc />
     public override int MaxTokens => 10000;
 
     /// <summary>
@@ -135,6 +137,7 @@ public partial class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
         return new StaticWordEmbeddingModel<T>(wordVectors, dimension);
     }
 
+    /// <inheritdoc />
     protected override Vector<T> EmbedCore(string text)
     {
         var words = Tokenize(text);

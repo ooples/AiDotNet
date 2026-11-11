@@ -29,6 +29,7 @@ public sealed class TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput> 
         _trimFraction = trimFraction;
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -70,6 +71,7 @@ public sealed class TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput> 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "TrimmedMean";
 }
 
