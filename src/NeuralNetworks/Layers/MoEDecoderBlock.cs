@@ -27,6 +27,7 @@ public partial class MoEDecoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly MoEFeedForwardLayer<T> _moe;
     private readonly int _hiddenSize;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     /// <summary>The pre-attention RMSNorm.</summary>

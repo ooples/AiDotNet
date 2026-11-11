@@ -69,8 +69,11 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
     private readonly ICodeModel<T> _codeModel;
     private readonly IProgramExecutionEngine? _executionEngine;
 
+    /// <inheritdoc />
     public SynthesisType SynthesisType => _architecture.SynthesisType;
+    /// <inheritdoc />
     public ProgramLanguage TargetLanguage => _architecture.TargetLanguage;
+    /// <inheritdoc />
     public int MaxProgramLength => _architecture.MaxProgramLength;
 
     /// <summary>
@@ -597,6 +600,7 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -610,6 +614,7 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

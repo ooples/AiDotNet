@@ -79,6 +79,7 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
             NumOps.Multiply(regularizationStrength, NumOps.SignOrZero(c))));
     }
 
+    /// <inheritdoc />
     public override TOutput Regularize(TOutput gradient, TOutput coefficients)
     {
         if (gradient is Vector<T> gradientVector && coefficients is Vector<T> coefficientVector)

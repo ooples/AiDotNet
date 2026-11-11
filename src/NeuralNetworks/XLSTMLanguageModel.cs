@@ -129,6 +129,7 @@ public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -144,6 +145,7 @@ public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

@@ -11,8 +11,10 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 /// </remarks>
 public abstract class FederatedServerOptimizerBase<T> : FederatedLearningComponentBase<T>, IFederatedServerOptimizer<T>
 {
+    /// <inheritdoc />
     public abstract Vector<T> Step(Vector<T> currentGlobalParameters, Vector<T> aggregatedTargetParameters);
 
+    /// <inheritdoc />
     public abstract string GetOptimizerName();
 
     protected static void ValidateVectors(Vector<T> currentGlobalParameters, Vector<T> aggregatedTargetParameters)

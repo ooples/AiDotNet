@@ -25,6 +25,7 @@ public class RandomErasing<T> : ImageAugmenterBase<T>
         MaxAttempts = maxAttempts;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -62,6 +63,7 @@ public class RandomErasing<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

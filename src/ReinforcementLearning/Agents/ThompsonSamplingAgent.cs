@@ -82,6 +82,7 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         }
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         int selectedArm = 0;
@@ -124,6 +125,7 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         int armIndex = ArgMax(action);
@@ -165,6 +167,7 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         return sum;
     }
 
+    /// <inheritdoc />
     public override T Train() => NumOps.Zero;
 
     private int ArgMax(Vector<T> values)
@@ -182,6 +185,7 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         return maxIndex;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         var metrics = new Dictionary<string, T>();
@@ -195,6 +199,7 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         return metrics;
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         for (int i = 0; i < _options.NumArms; i++)
@@ -204,11 +209,16 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         }
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    /// <inheritdoc />
     public override int FeatureCount => 1;
+    /// <inheritdoc />
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
+    /// <inheritdoc />
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

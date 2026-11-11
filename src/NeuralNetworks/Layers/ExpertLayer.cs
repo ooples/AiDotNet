@@ -420,6 +420,7 @@ public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         foreach (var layer in _layers)

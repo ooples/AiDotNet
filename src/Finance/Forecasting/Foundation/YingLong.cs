@@ -429,6 +429,7 @@ public partial class YingLong<T> : TimeSeriesFoundationModelBase<T>
         return current;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

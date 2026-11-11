@@ -70,6 +70,31 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task PositionalEncoding_EveryPositionAndDimension_MatchesFormula_OddWidth()
+    {
+        // The table is filled row by row through flat spans; checking every cell of a long table with an odd width
+        // catches a wrong row stride or a misplaced trailing sin column, which the few-cell tests above cannot.
+        const int maxSequenceLength = 300;
+        const int embeddingSize = 7;
+        var layer = new PositionalEncodingLayer<double>(maxSequenceLength, embeddingSize);
+
+        var output = layer.Forward(new Tensor<double>(new[] { maxSequenceLength, embeddingSize }));
+
+        for (int pos = 0; pos < maxSequenceLength; pos++)
+        {
+            for (int i = 0; i < embeddingSize / 2; i++)
+            {
+                double divTerm = 1.0 / Math.Pow(10000, 2.0 * i / embeddingSize);
+                Assert.Equal(Math.Sin(pos * divTerm), NumOps<double>.ToDouble(output[pos, 2 * i]), 1e-9);
+                Assert.Equal(Math.Cos(pos * divTerm), NumOps<double>.ToDouble(output[pos, 2 * i + 1]), 1e-9);
+            }
+
+            double lastDivTerm = 1.0 / Math.Pow(10000, 2.0 * ((embeddingSize - 1) / 2.0) / embeddingSize);
+            Assert.Equal(Math.Sin(pos * lastDivTerm), NumOps<double>.ToDouble(output[pos, embeddingSize - 1]), 1e-9);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task PositionalEncoding_DifferentPositions_AreDistinct()
     {
         // Different positions should produce different encoding vectors

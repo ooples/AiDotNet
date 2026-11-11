@@ -45,6 +45,19 @@ public class VaeDecodeAliasingTests
         return t;
     }
 
+    /// <summary>
+    /// The U-Net starts with its output conv and every residual block's second conv at zero (Ho et al.), so untrained
+    /// it predicts zero for every latent and the noise-prediction checks would compare two zero tensors. Random
+    /// weights make the latent reach the output.
+    /// </summary>
+    private static void Randomize(AiDotNet.Interfaces.INoisePredictor<double> predictor)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var parameters = predictor.GetParameters();
+        for (int i = 0; i < parameters.Length; i++) parameters[i] = rng.NextDouble() * 0.4 - 0.2;
+        predictor.SetParameters(parameters);
+    }
+
     private static double MaxAbsDiff(Tensor<double> a, Tensor<double> b)
     {
         double d = 0.0;
@@ -135,6 +148,7 @@ public class VaeDecodeAliasingTests
         // one. NeuralNetworkBase.Predict was swept too and is clean (it already returns a fresh tensor).
         var model = new UniVSTModel<double>(seed: 42);
         var np = model.NoisePredictor;
+        Randomize(np);
 
         var latentA = TexturedLatent(3);
         var latentB = TexturedLatent(4);
@@ -159,6 +173,7 @@ public class VaeDecodeAliasingTests
         // _preAllocatedOutput), so detaching only the compiled path left this failing.
         var model = new UniVSTModel<double>(seed: 42);
         var np = model.NoisePredictor;
+        Randomize(np);
 
         var first = np.PredictNoise(TexturedLatent(5), 10);
         var snapshot = new double[first.Length];

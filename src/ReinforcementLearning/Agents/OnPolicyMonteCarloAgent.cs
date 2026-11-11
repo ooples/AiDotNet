@@ -76,6 +76,7 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
         _random = Random;
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
@@ -134,6 +135,7 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         int actionIndex = ArgMax(action);
@@ -149,6 +151,7 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
         }
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         // Training happens during episode completion in StoreExperience
@@ -247,6 +250,7 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
         return maxIndex;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -257,11 +261,13 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         _episode.Clear();
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         return SelectAction(input, training: false);
@@ -278,6 +284,7 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -310,8 +317,10 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
                 () => _qTable));
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         throw new NotSupportedException(
@@ -319,6 +328,7 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
             "Use Serialize() for manual serialization or GetParameters() to extract Q-values.");
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         throw new NotSupportedException(

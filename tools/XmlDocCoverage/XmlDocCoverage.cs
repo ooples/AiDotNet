@@ -31,7 +31,8 @@ internal static class XmlDocCoverage
             StringComparer.Ordinal);
 
         var missing = new List<(Type DeclaringType, string Id)>();
-        foreach (Type type in LoadableTypes(assembly).Where(IsVisible).Where(type => !IsCompilerGenerated(type)))
+        foreach (Type type in LoadableTypes(assembly).Where(IsVisible)
+            .Where(type => !IsCompilerGenerated(type) && !IsProtocGenerated(type)))
         {
             foreach (string id in VisibleMemberIds(type).Where(id => !documented.Contains(id)))
             {
@@ -69,6 +70,32 @@ internal static class XmlDocCoverage
 
     private static bool IsCompilerGenerated(MemberInfo member)
         => member.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false);
+
+    /// <summary>
+    /// Whether a type was emitted by protoc (the vendored ONNX schema in src/Onnx/Protobuf/Generated): a message class,
+    /// an enum of the schema, or a type nested in one. protoc opens every file it writes with
+    /// <c>#pragma warning disable 1591</c>, so the compiler never reports these members, and the file is regenerated
+    /// rather than edited, so documentation added to it would be lost.
+    /// </summary>
+    private static bool IsProtocGenerated(Type type)
+    {
+        for (Type? current = type; current != null; current = current.DeclaringType)
+        {
+            if (current.GetInterfaces().Any(i => i.FullName == "Google.Protobuf.IMessage"))
+            {
+                return true;
+            }
+
+            // Schema enums carry protoc's [OriginalName] on every value.
+            if (current.IsEnum && current.GetFields(BindingFlags.Public | BindingFlags.Static).Any(field =>
+                    field.GetCustomAttributesData().Any(a => a.AttributeType.FullName == "Google.Protobuf.Reflection.OriginalNameAttribute")))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static bool IsVisible(MethodBase? method)
         => method != null && (method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly);

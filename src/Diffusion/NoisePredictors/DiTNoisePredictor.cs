@@ -583,6 +583,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
         return !tapeActive && ParameterCount > EffectiveResidentThreshold;
     }
 
+    /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
@@ -1450,6 +1451,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         EnsureLayersInitialized();

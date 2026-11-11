@@ -16,6 +16,7 @@ public class GlassBlur<T> : ImageAugmenterBase<T>
         Sigma = sigma; MaxDelta = maxDelta; Iterations = iterations;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -45,6 +46,7 @@ public class GlassBlur<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

@@ -31,10 +31,15 @@ public class Caltech101DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     private int _sampleCount;
     private int _imageSize;
 
+    /// <inheritdoc />
     public override string Name => "Caltech-101";
+    /// <inheritdoc />
     public override string Description => "Caltech-101 image classification (101 categories + background)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _imageSize * _imageSize * 3;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public Caltech101DataLoader(Caltech101DataLoaderOptions? options = null)

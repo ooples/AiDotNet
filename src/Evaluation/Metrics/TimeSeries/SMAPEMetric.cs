@@ -22,15 +22,24 @@ public class SMAPEMetric<T> : ITimeSeriesMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "SMAPE";
+    /// <inheritdoc />
     public string Category => "TimeSeries";
+    /// <inheritdoc />
     public string Description => "Symmetric Mean Absolute Percentage Error.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.FromDouble(200.0);
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, int? seasonalPeriod = null)
     {
         if (predictions.Length != actuals.Length)

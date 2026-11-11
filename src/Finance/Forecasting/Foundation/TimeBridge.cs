@@ -417,6 +417,7 @@ public partial class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

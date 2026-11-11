@@ -40,6 +40,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             _generator = generator;
         }
 
+        /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
         {
             string searchQuery = query;

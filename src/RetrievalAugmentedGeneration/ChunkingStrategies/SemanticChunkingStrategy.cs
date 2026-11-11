@@ -45,6 +45,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
             _breakpointPercentile = Math.Min(100.0, Math.Max(0.0, breakpointPercentile));
         }
 
+        /// <inheritdoc />
         protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
         {
             var sentences = SplitIntoSentences(text);

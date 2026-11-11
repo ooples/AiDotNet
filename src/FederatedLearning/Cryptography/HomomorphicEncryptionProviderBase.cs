@@ -14,6 +14,7 @@ namespace AiDotNet.FederatedLearning.Cryptography;
 /// </remarks>
 public abstract class HomomorphicEncryptionProviderBase<T> : FederatedLearningComponentBase<T>, IHomomorphicEncryptionProvider<T>
 {
+    /// <inheritdoc />
     public abstract Vector<T> AggregateEncryptedWeightedAverage(
         Dictionary<int, Vector<T>> clientParameters,
         Dictionary<int, double> clientWeights,
@@ -21,6 +22,7 @@ public abstract class HomomorphicEncryptionProviderBase<T> : FederatedLearningCo
         IReadOnlyList<int> encryptedIndices,
         HomomorphicEncryptionOptions options);
 
+    /// <inheritdoc />
     public abstract string GetProviderName();
 }
 

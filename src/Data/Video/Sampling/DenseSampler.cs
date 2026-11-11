@@ -5,6 +5,7 @@ namespace AiDotNet.Data.Video.Sampling;
 /// </summary>
 public class DenseSampler : IVideoFrameSampler
 {
+    /// <inheritdoc />
     public int[] SampleFrameIndices(int totalFrames, int numFramesToSample)
     {
         if (totalFrames <= 0 || numFramesToSample <= 0)

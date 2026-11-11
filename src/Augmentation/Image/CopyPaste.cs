@@ -57,12 +57,14 @@ public class CopyPaste<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         // Self copy-paste as fallback
         return ApplyCopyPaste(data, data, context);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

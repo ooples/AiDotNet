@@ -611,6 +611,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         }
     }
 
+    /// <inheritdoc />
     public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
     {
         get { _ = Components; return _parameterRegistry.ParameterLayout; }

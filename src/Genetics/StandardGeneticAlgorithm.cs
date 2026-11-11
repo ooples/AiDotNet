@@ -18,6 +18,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         _modelFactory = modelFactory;
     }
 
+    /// <inheritdoc />
     protected override ModelParameterGene<T> MutateGene(ModelParameterGene<T> gene)
     {
         double perturbation = (Random.NextDouble() * 2 - 1) * 0.1; // Small random change
@@ -30,6 +31,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         return clone;
     }
 
+    /// <inheritdoc />
     protected override ModelParameterGene<T> MutateGeneGaussian(ModelParameterGene<T> gene)
     {
         double stdDev = 0.1;
@@ -43,6 +45,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         return clone;
     }
 
+    /// <inheritdoc />
     public override ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> InitializePopulation(
         int populationSize,
         InitializationMethod initializationMethod)
@@ -378,6 +381,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
     // Field to track population index for grid initialization
     private int _populationIndex = -1;
 
+    /// <inheritdoc />
     public override ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> CreateIndividual(
         ICollection<ModelParameterGene<T>> genes)
     {
@@ -387,6 +391,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         );
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> IndividualToModel(
         ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> individual)
     {
@@ -394,6 +399,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         return IndividualGenesConvertToModel(genes);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetMetaData()
     {
         return new ModelMetadata<T>
@@ -409,6 +415,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         };
     }
 
+    /// <inheritdoc />
     protected override byte[] SerializeIndividual(ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> individual)
     {
         // Convert individual to model and use its serialization
@@ -428,6 +435,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         return ms.ToArray();
     }
 
+    /// <inheritdoc />
     protected override ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> DeserializeIndividual(byte[] data)
     {
         using var ms = new MemoryStream(data);
@@ -458,17 +466,20 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         return individual;
     }
 
+    /// <inheritdoc />
     protected override byte[] SerializeModelData()
     {
         // No additional data to serialize
         return Array.Empty<byte>();
     }
 
+    /// <inheritdoc />
     protected override void DeserializeModelData(byte[] data)
     {
         // Nothing to deserialize
     }
 
+    /// <inheritdoc />
     protected override byte[] SerializePopulation()
     {
         using var ms = new MemoryStream();
@@ -486,6 +497,7 @@ public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
         return ms.ToArray();
     }
 
+    /// <inheritdoc />
     protected override ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> DeserializePopulation(byte[] data)
     {
         var population = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();

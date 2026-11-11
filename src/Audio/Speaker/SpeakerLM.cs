@@ -250,6 +250,7 @@ public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<
             numHeads: _options.NumHeads, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -270,8 +271,10 @@ public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => NormalizeEmbedding(o);
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -295,6 +298,7 @@ public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SpeakerLM<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

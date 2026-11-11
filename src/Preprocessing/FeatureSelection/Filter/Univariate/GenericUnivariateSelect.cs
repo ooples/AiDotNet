@@ -30,7 +30,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly UnivariateSelectMode _mode;
     private readonly SelectKBestScoreFunc _scoringFunction;

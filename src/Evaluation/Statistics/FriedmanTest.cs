@@ -28,7 +28,9 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "Friedman Test";
+    /// <inheritdoc />
     public string Description => "Non-parametric test for comparing multiple algorithms across datasets.";
 
     /// <summary>
@@ -83,10 +85,10 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
 
         // Friedman statistic (chi-squared approximation)
         double sumSquaredRanks = ranks.Sum(r => r * r);
-        double chiSquared = 12.0 * n / (k * (k + 1)) * (sumSquaredRanks - k * Math.Pow((k + 1) / 2.0, 2));
+        double chiSquared = 12.0 * n / ((double)k * (k + 1)) * (sumSquaredRanks - k * Math.Pow((k + 1) / 2.0, 2));
 
         // Iman-Davenport correction (more conservative, recommended)
-        double fStat = (n - 1) * chiSquared / (n * (k - 1) - chiSquared);
+        double fStat = (n - 1) * chiSquared / ((double)n * (k - 1) - chiSquared);
         int df1 = k - 1;
         int df2 = (k - 1) * (n - 1);
 

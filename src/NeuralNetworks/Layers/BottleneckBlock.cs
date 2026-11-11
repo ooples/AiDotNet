@@ -139,6 +139,7 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
     private int _inputWidth;
     private readonly bool _zeroInitResidual;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -411,6 +412,7 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
         _downsampleBn?.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

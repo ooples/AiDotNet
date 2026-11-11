@@ -38,6 +38,7 @@ public sealed class RdpPrivacyAccountant : PrivacyAccountantBase
         _deltaTotal = 0.0;
     }
 
+    /// <inheritdoc />
     public override void AddRound(double epsilon, double delta, double samplingRate)
     {
         if (epsilon <= 0.0)
@@ -74,6 +75,7 @@ public sealed class RdpPrivacyAccountant : PrivacyAccountantBase
         _deltaTotal += delta;
     }
 
+    /// <inheritdoc />
     public override double GetTotalEpsilonConsumed()
     {
         // Default to a conservative report at delta_total if no explicit delta requested.
@@ -81,8 +83,10 @@ public sealed class RdpPrivacyAccountant : PrivacyAccountantBase
         return GetEpsilonAtDelta(delta);
     }
 
+    /// <inheritdoc />
     public override double GetTotalDeltaConsumed() => _deltaTotal;
 
+    /// <inheritdoc />
     public override double GetEpsilonAtDelta(double targetDelta)
     {
         if (targetDelta <= 0.0 || targetDelta >= 1.0)
@@ -106,6 +110,7 @@ public sealed class RdpPrivacyAccountant : PrivacyAccountantBase
         return double.IsPositiveInfinity(best) ? 0.0 : best;
     }
 
+    /// <inheritdoc />
     public override string GetAccountantName() => "RDP";
 }
 

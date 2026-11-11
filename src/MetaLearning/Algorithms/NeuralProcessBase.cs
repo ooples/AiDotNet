@@ -359,7 +359,9 @@ public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelB
     private Vector<T> _parameters;
     private readonly Vector<T>? _contextRepresentation;
 
+    /// <inheritdoc />
     public Vector<T>? AdaptedSupportFeatures => _contextRepresentation;
+    /// <inheritdoc />
     public double[]? ParameterModulationFactors => null;
 
     /// <summary>
@@ -384,12 +386,14 @@ public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelB
         _contextRepresentation = contextRepresentation;
     }
 
+    /// <inheritdoc />
     public override TOutput Predict(TInput input)
     {
         InterfaceGuard.Parameterizable(BaseModel).SetParameters(_parameters);
         return BaseModel.Predict(input);
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new NeuralProcessModel<T, TInput, TOutput>(BaseModel, parameters, _contextRepresentation);

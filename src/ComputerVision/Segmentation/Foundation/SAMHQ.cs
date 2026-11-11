@@ -203,6 +203,7 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
@@ -218,6 +219,7 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
         return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)

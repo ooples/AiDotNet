@@ -72,6 +72,7 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public bool AccumulatesAcrossTasks => true;
 
+    /// <inheritdoc />
     public double Lambda
     {
         get => _lambda;

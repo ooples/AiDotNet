@@ -29,7 +29,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly Func<Matrix<T>, Vector<T>, double[]>? _importanceFunc;
     private readonly double[]? _precomputedImportances;

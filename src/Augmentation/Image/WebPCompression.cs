@@ -17,6 +17,7 @@ public class WebPCompression<T> : ImageAugmenterBase<T>
         MinQuality = minQuality; MaxQuality = maxQuality;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         int quality = context.GetRandomInt(MinQuality, MaxQuality + 1);
@@ -55,6 +56,7 @@ public class WebPCompression<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters(); p["min_quality"] = MinQuality; p["max_quality"] = MaxQuality; return p;

@@ -38,6 +38,7 @@ public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<
         _epsilon = epsilon;
     }
 
+    /// <inheritdoc />
     public override Vector<T> Step(Vector<T> currentGlobalParameters, Vector<T> aggregatedTargetParameters)
     {
         ValidateVectors(currentGlobalParameters, aggregatedTargetParameters);
@@ -60,6 +61,7 @@ public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<
         return updated;
     }
 
+    /// <inheritdoc />
     public override string GetOptimizerName() => "FedAdagrad";
 }
 

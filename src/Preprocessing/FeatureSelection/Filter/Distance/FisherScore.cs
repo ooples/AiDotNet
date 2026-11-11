@@ -36,7 +36,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Distance;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 

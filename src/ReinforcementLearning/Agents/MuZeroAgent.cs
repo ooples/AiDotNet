@@ -193,6 +193,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, Random.Next());
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
     {
         // Encode observation to hidden state
@@ -585,6 +586,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
         // Validate transition shapes at this public ingestion boundary so a malformed experience
@@ -685,6 +687,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             ? SamplePrioritizedSlot(cumulative, scaled)
             : (Random.Next(cumulative.Length), 1.0);
 
+    /// <inheritdoc />
     public override T Train()
     {
         // Need at least one real transition (o_0, a_0, r_0, o_1) to unroll from. A single Experience
@@ -982,6 +985,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return maxIndex;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -991,6 +995,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         // No episode-specific state
@@ -1026,6 +1031,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -1033,14 +1039,17 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         };
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.ObservationSize;
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         var data = System.IO.File.ReadAllBytes(filepath);

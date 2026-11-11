@@ -101,6 +101,7 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int EmbedDim => _embedDim;
     internal int ImageSize => _imageSize;
@@ -285,6 +286,7 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => EstimateDepth(input);
 
     #endregion
@@ -330,6 +332,7 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>
