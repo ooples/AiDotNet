@@ -1173,3 +1173,5 @@ AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.LayerAttention.get 
 *REMOVED*AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.OriginalHeatmap.get -> T[,]!
 AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.Heatmap.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.OriginalHeatmap.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.Interpretability.Explainers.LayerAttributionResult<T>.ReshapeSpatial(int height, int width, int channels) -> T[,,]!
+AiDotNet.Interpretability.Explainers.LayerAttributionResult<T>.ReshapeSpatial(int height, int width, int channels) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
