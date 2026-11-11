@@ -1153,3 +1153,5 @@ AiDotNet.Interpretability.FaithfulnessReport<T>.DeletionAuc.get -> T
 AiDotNet.Interpretability.FaithfulnessReport<T>.FaithfulnessScore.get -> T
 AiDotNet.Interpretability.FaithfulnessReport<T>.InsertionAuc.get -> T
 AiDotNet.Interpretability.FaithfulnessReport<T>.Sufficiency.get -> T
+*REMOVED*AiDotNet.Interpretability.Explainers.TreeSHAPExplanation<T>.GetSumError() -> double
+AiDotNet.Interpretability.Explainers.TreeSHAPExplanation<T>.GetSumError() -> T
