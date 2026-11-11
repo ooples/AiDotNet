@@ -473,7 +473,6 @@ internal static class RegressionEngineOps2
     public static Matrix<T> GaussJordanInverse<T>(Matrix<T> a, T pivotFloor)
     {
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
         int n = a.Rows;
         if (n == 0)
         {
@@ -482,6 +481,40 @@ internal static class RegressionEngineOps2
 
         var augmented = engine.TensorConcatenate(
             new[] { Tensor<T>.FromMatrix(a), engine.TensorEye<T>(n) }, 1).ToMatrix();
+        return GaussJordanEliminate(augmented, n, pivotFloor).GetSubMatrix(0, n, n, n);
+    }
+
+    /// <summary>
+    /// Solves a x = b for the leading n x n block of <paramref name="a"/> by Gauss-Jordan
+    /// elimination on [a | b], with the same pivoting and pivot floor as
+    /// <see cref="GaussJordanInverse{T}(Matrix{T}, T)"/>.
+    /// </summary>
+    public static Vector<T> GaussJordanSolve<T>(Matrix<T> a, Vector<T> b, int n, T pivotFloor)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var block = a.Rows == n && a.Columns == n ? a : a.GetSubMatrix(0, 0, n, n);
+        var rhs = b.Length == n ? b : b.GetSubVector(0, n);
+        var augmented = engine.TensorConcatenate(
+            new[] { Tensor<T>.FromMatrix(block), new Tensor<T>(new[] { n, 1 }, rhs.Clone()) }, 1).ToMatrix();
+        return GaussJordanEliminate(augmented, n, pivotFloor).GetColumn(n);
+    }
+
+    /// <summary>
+    /// Gauss-Jordan elimination of the leading n columns of an augmented matrix: each column takes
+    /// the first row with the largest |value| at or below the diagonal as pivot (a strict-greater
+    /// scan), a pivot below <paramref name="pivotFloor"/> in magnitude is replaced by
+    /// <paramref name="pivotFloor"/>, the pivot row is scaled and the column is eliminated from
+    /// every other row with one rank-1 update.
+    /// </summary>
+    private static Matrix<T> GaussJordanEliminate<T>(Matrix<T> augmented, int n, T pivotFloor)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
         int width = augmented.Columns;
 
         for (int col = 0; col < n; col++)
@@ -517,7 +550,7 @@ internal static class RegressionEngineOps2
             augmented.SetRow(col, scaledPivotRow);
         }
 
-        return augmented.GetSubMatrix(0, n, n, n);
+        return augmented;
     }
 
     /// <summary>
