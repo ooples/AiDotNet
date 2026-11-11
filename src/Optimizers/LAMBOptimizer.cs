@@ -703,33 +703,15 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _t++;
 
         // Flatten matrix to vector
-        var paramVec = new Vector<T>(totalSize);
-        var gradVec = new Vector<T>(totalSize);
-        int idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                paramVec[idx] = parameters[i, j];
-                gradVec[idx] = gradient[i, j];
-                idx++;
-            }
-        }
+        var paramVec = parameters.ToRowVector();
+        var gradVec = gradient.ToRowVector();
 
         // Apply LAMB update
         var updatedVec = UpdateParametersLAMB(paramVec, gradVec, GetWarmupLearningRate());
 
         // Unflatten vector back to matrix
         var updatedMatrix = new Matrix<T>(parameters.Rows, parameters.Columns);
-        idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                updatedMatrix[i, j] = updatedVec[idx];
-                idx++;
-            }
-        }
+        updatedVec.AsSpan().CopyTo(updatedMatrix.AsWritableSpan());
 
         return updatedMatrix;
     }
