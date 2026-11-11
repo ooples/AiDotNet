@@ -20,8 +20,9 @@ public class AudioPaLMTaskTests
     [InlineData(false, 4)]
     [InlineData(true, 4)]
     [InlineData(true, 8)]
-    public void PairedSynthesisTokenizersProduceTheirConfiguredVocabulary(bool secondEncoder, int vocabulary)
+    public async Task PairedSynthesisTokenizersProduceTheirConfiguredVocabulary(bool secondEncoder, int vocabulary)
     {
+        await Task.Yield();
         var options = AudioPaLMFixture.Options();
         options.AudioTokens = options.SoundStorm.SemanticCodes = options.AudioLM.SemanticCodes = vocabulary;
         options.SpeechTokenizer = secondEncoder ? AudioPalmSpeechTokenizer.W2vBert2 : AudioPalmSpeechTokenizer.W2vBert;
@@ -36,8 +37,9 @@ public class AudioPaLMTaskTests
     }
 
     [Fact(Timeout = 120000)]
-    public void AlternateTokenizerLayerControlsTheNativeEncoderDepth()
+    public async Task AlternateTokenizerLayerControlsTheNativeEncoderDepth()
     {
+        await Task.Yield();
         var options = AudioPaLMFixture.Options();
         AudioPalmAsrOptionFixture.PrepareOptions(options, "W2vBert2Layer");
         using var first = new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(
@@ -55,8 +57,9 @@ public class AudioPaLMTaskTests
     }
 
     [Fact(Timeout = 120000)]
-    public void SynthesisVoicePromptDurationChangesTheNativeWaveformPrompt()
+    public async Task SynthesisVoicePromptDurationChangesTheNativeWaveformPrompt()
     {
+        await Task.Yield();
         var options = AudioPaLMFixture.Options();
         using var model = new AiDotNet.TextToSpeech.MultiModal.AudioPaLM<double>(
             new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
@@ -85,8 +88,9 @@ public class AudioPaLMTaskTests
     }
 
     [Fact(Timeout = 120000)]
-    public void AsrGradientNormControlsNativeClipping()
+    public async Task AsrGradientNormControlsNativeClipping()
     {
+        await Task.Yield();
         var firstOptions = AudioPaLMFixture.Options();
         firstOptions.MaxGradientNorm = .001;
         var secondOptions = AudioPaLMFixture.Options();
@@ -113,8 +117,9 @@ public class AudioPaLMTaskTests
     }
 
     [Fact(Timeout = 120000)]
-    public void AsrSamplingSeedChangesNativeTextAndPreservesState()
+    public async Task AsrSamplingSeedChangesNativeTextAndPreservesState()
     {
+        await Task.Yield();
         using var first = AudioPaLMFixture.Asr<double>();
         using var second = AudioPaLMFixture.Asr<double>();
         var options = (AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions)first.GetOptions();
@@ -132,8 +137,9 @@ public class AudioPaLMTaskTests
     }
 
     [Fact(Timeout = 120000)]
-    public void AsrDoesNotRequireSynthesisCodecGeometry()
+    public async Task AsrDoesNotRequireSynthesisCodecGeometry()
     {
+        await Task.Yield();
         var options = AudioPaLMFixture.Options();
         options.AudioTokens = 4;
         options.VoicePromptSeconds = 0;
@@ -152,8 +158,9 @@ public class AudioPaLMTaskTests
     }
 
     [Fact(Timeout = 120000)]
-    public void AsrRampScheduleAdvancesDuringNativeTraining()
+    public async Task AsrRampScheduleAdvancesDuringNativeTraining()
     {
+        await Task.Yield();
         var options = AudioPaLMFixture.Options();
         options.RampWarmupSteps = 2;
         options.RampDecaySteps = 2;
@@ -180,8 +187,9 @@ public class AudioPaLMTaskTests
     [Theory(Timeout = 120000)]
     [InlineData(false)]
     [InlineData(true)]
-    public void OptionsSeedControlsNativeDecoderInitialization(bool tts)
+    public async Task OptionsSeedControlsNativeDecoderInitialization(bool tts)
     {
+        await Task.Yield();
         using var fallback = new ArchitectureSeedFallback(42);
         var firstOptions = AudioPaLMFixture.Options();
         firstOptions.Seed = 7;

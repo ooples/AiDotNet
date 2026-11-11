@@ -25,8 +25,9 @@ public class MatchaTTSPaperTests
     private const int MelBins = 8;
 
     [Fact(Timeout = 120000)]
-    public void ConfiguredLearningRateChangesNativeUpdates()
+    public async Task ConfiguredLearningRateChangesNativeUpdates()
     {
+        await Task.Yield();
         double[] Fit(double learningRate)
         {
             using var template = CreateModel();
