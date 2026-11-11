@@ -61,10 +61,11 @@ public class NGramDraftModel<T> : IDraftModel<T>
     {
         foreach (var sequence in corpus)
         {
-            for (int i = _ngramSize - 1; i < sequence.Length; i++)
+            var tokens = sequence.AsSpan();
+            for (int i = _ngramSize - 1; i < tokens.Length; i++)
             {
                 var context = GetContext(sequence, i);
-                int nextToken = sequence[i];
+                int nextToken = tokens[i];
 
                 if (!_ngrams.TryGetValue(context, out var counts))
                 {
@@ -87,11 +88,7 @@ public class NGramDraftModel<T> : IDraftModel<T>
         var probs = new List<Vector<T>>();
         var tokenProbs = new List<T>();
 
-        var context = new List<int>();
-        for (int i = 0; i < inputTokens.Length; i++)
-        {
-            context.Add(inputTokens[i]);
-        }
+        var context = new List<int>(inputTokens.ToArray());
 
         for (int i = 0; i < numDraftTokens; i++)
         {
@@ -100,7 +97,7 @@ public class NGramDraftModel<T> : IDraftModel<T>
 
             tokens.Add(token);
             probs.Add(distribution);
-            tokenProbs.Add(distribution[token]);
+            tokenProbs.Add(distribution.AsSpan()[token]);
 
             context.Add(token);
             if (context.Count > _ngramSize - 1)
@@ -116,10 +113,7 @@ public class NGramDraftModel<T> : IDraftModel<T>
 
         for (int i = 0; i < probs.Count; i++)
         {
-            for (int v = 0; v < _vocabSize && v < probs[i].Length; v++)
-            {
-                resultProbs[i, v] = probs[i][v];
-            }
+            resultProbs.SetRow(i, probs[i]);
         }
 
         return new DraftResult<T>
@@ -142,10 +136,7 @@ public class NGramDraftModel<T> : IDraftModel<T>
         int start = Math.Max(0, position - _ngramSize + 1);
         int len = position - start;
 
-        for (int i = 0; i < len; i++)
-        {
-            contextTokens[_ngramSize - 1 - len + i] = sequence[start + i];
-        }
+        sequence.AsSpan().Slice(start, len).CopyTo(contextTokens.AsSpan(_ngramSize - 1 - len));
         return string.Join(",", contextTokens);
     }
 
@@ -173,11 +164,7 @@ public class NGramDraftModel<T> : IDraftModel<T>
         else
         {
             // Uniform distribution if unseen context
-            T uniform = NumOps.FromDouble(1.0 / _vocabSize);
-            for (int i = 0; i < _vocabSize; i++)
-            {
-                distribution[i] = uniform;
-            }
+            distribution.Fill(NumOps.FromDouble(1.0 / _vocabSize));
         }
 
         // Temperature 0 collapses to the greedy one-hot rather than dividing by zero.

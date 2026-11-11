@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -92,11 +93,7 @@ internal class TreeSpeculativeDecoder<T>
         int? eosToken = null,
         CancellationToken cancellationToken = default)
     {
-        var tokens = new List<int>();
-        for (int i = 0; i < inputTokens.Length; i++)
-        {
-            tokens.Add(inputTokens[i]);
-        }
+        var tokens = new List<int>(inputTokens.ToArray());
 
         int generated = 0;
         var stepStats = new List<TreeStepStatistics>();
@@ -117,16 +114,10 @@ internal class TreeSpeculativeDecoder<T>
             var batchSequences = new List<Vector<int>>();
             foreach (var path in paths)
             {
-                var seq = new Vector<int>(tokens.Count + path.Length);
-                for (int i = 0; i < tokens.Count; i++)
-                {
-                    seq[i] = tokens[i];
-                }
-                for (int i = 0; i < path.Length; i++)
-                {
-                    seq[tokens.Count + i] = path[i];
-                }
-                batchSequences.Add(seq);
+                var seq = new int[tokens.Count + path.Length];
+                tokens.CopyTo(seq);
+                Array.Copy(path.ToArray(), 0, seq, tokens.Count, path.Length);
+                batchSequences.Add(Vector<int>.Wrap(seq));
             }
 
             // Verify all paths in parallel
@@ -218,11 +209,7 @@ internal class TreeSpeculativeDecoder<T>
         _totalTokensGenerated += generated;
 
         var resultTokens = new Vector<int>(tokens.ToArray());
-        var newTokens = new Vector<int>(generated);
-        for (int i = 0; i < generated; i++)
-        {
-            newTokens[i] = tokens[inputTokens.Length + i];
-        }
+        var newTokens = Vector<int>.Wrap(tokens.GetRange(inputTokens.Length, generated).ToArray());
 
         return new TreeSpeculativeResult
         {
@@ -320,17 +307,10 @@ internal class TreeSpeculativeDecoder<T>
             current = current.Parent;
         }
 
-        var fullContext = new Vector<int>(baseContext.Length + pathTokens.Count);
-        for (int i = 0; i < baseContext.Length; i++)
-        {
-            fullContext[i] = baseContext[i];
-        }
-        for (int i = 0; i < pathTokens.Count; i++)
-        {
-            fullContext[baseContext.Length + i] = pathTokens[i];
-        }
-
-        return fullContext;
+        var fullContext = new int[baseContext.Length + pathTokens.Count];
+        baseContext.AsSpan().CopyTo(fullContext);
+        pathTokens.CopyTo(fullContext, baseContext.Length);
+        return Vector<int>.Wrap(fullContext);
     }
 
     private int VerifyPath(
@@ -380,31 +360,12 @@ internal class TreeSpeculativeDecoder<T>
     /// </summary>
     private static Vector<T> ComputeAdjustedDistribution(Vector<T> targetDist, Vector<T> draftDist)
     {
-        var adjusted = new Vector<T>(targetDist.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < targetDist.Length; i++)
-        {
-            T diff = NumOps.Subtract(targetDist[i], draftDist[i]);
-            adjusted[i] = NumOps.GreaterThan(diff, NumOps.Zero) ? diff : NumOps.Zero;
-            sum = NumOps.Add(sum, adjusted[i]);
-        }
-
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < adjusted.Length; i++)
-            {
-                adjusted[i] = NumOps.Divide(adjusted[i], sum);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < adjusted.Length; i++)
-            {
-                adjusted[i] = targetDist[i];
-            }
-        }
-
-        return adjusted;
+        // max(0, p_target - p_draft), normalized; falls back to the target distribution when nothing is left
+        var engine = AiDotNetEngine.Current;
+        var adjusted = (Vector<T>)engine.ReLU(engine.Subtract(targetDist, draftDist));
+        T sum = engine.Sum(adjusted);
+        return NumOps.GreaterThan(sum, NumOps.Zero)
+            ? (Vector<T>)engine.Divide(adjusted, sum)
+            : (Vector<T>)targetDist.Clone();
     }
 }

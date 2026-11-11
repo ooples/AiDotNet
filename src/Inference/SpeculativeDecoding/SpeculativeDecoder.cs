@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -144,10 +145,7 @@ internal class SpeculativeDecoder<T>
         }
 
         var tokens = new List<int>(inputTokens.Length + maxNewTokens);
-        for (int i = 0; i < inputTokens.Length; i++)
-        {
-            tokens.Add(inputTokens[i]);
-        }
+        tokens.AddRange(inputTokens.ToArray());
 
         int generated = 0;
         var stepStats = new List<StepStatistics>();
@@ -166,15 +164,10 @@ internal class SpeculativeDecoder<T>
             _totalDraftTokens += draft.NumTokens;
 
             // Verify with target model - create combined sequence
-            var verifyTokens = new Vector<int>(tokens.Count + draft.NumTokens);
-            for (int i = 0; i < tokens.Count; i++)
-            {
-                verifyTokens[i] = tokens[i];
-            }
-            for (int i = 0; i < draft.NumTokens; i++)
-            {
-                verifyTokens[tokens.Count + i] = draft.Tokens[i];
-            }
+            var verifyBuffer = new int[tokens.Count + draft.NumTokens];
+            tokens.CopyTo(verifyBuffer);
+            Array.Copy(draft.Tokens.ToArray(), 0, verifyBuffer, tokens.Count, draft.NumTokens);
+            var verifyTokens = Vector<int>.Wrap(verifyBuffer);
 
             var targetProbs = await Task.Run(() => _targetForward(verifyTokens), cancellationToken);
 
@@ -296,11 +289,7 @@ internal class SpeculativeDecoder<T>
         _totalTokensGenerated += generated;
 
         var resultTokens = new Vector<int>(tokens.ToArray());
-        var newTokens = new Vector<int>(generated);
-        for (int i = 0; i < generated; i++)
-        {
-            newTokens[i] = tokens[inputTokens.Length + i];
-        }
+        var newTokens = Vector<int>.Wrap(tokens.GetRange(inputTokens.Length, generated).ToArray());
 
         return new SpeculativeResult
         {
@@ -451,34 +440,12 @@ internal class SpeculativeDecoder<T>
     /// </summary>
     private static Vector<T> ComputeAdjustedDistribution(Vector<T> targetDist, Vector<T> draftDist)
     {
-        // Compute max(0, p_target - p_draft), then normalize
-        var adjusted = new Vector<T>(targetDist.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < targetDist.Length; i++)
-        {
-            T diff = NumOps.Subtract(targetDist[i], draftDist[i]);
-            adjusted[i] = NumOps.GreaterThan(diff, NumOps.Zero) ? diff : NumOps.Zero;
-            sum = NumOps.Add(sum, adjusted[i]);
-        }
-
-        // Normalize
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < adjusted.Length; i++)
-            {
-                adjusted[i] = NumOps.Divide(adjusted[i], sum);
-            }
-        }
-        else
-        {
-            // Fallback to target distribution
-            for (int i = 0; i < adjusted.Length; i++)
-            {
-                adjusted[i] = targetDist[i];
-            }
-        }
-
-        return adjusted;
+        // max(0, p_target - p_draft), normalized; falls back to the target distribution when nothing is left
+        var engine = AiDotNetEngine.Current;
+        var adjusted = (Vector<T>)engine.ReLU(engine.Subtract(targetDist, draftDist));
+        T sum = engine.Sum(adjusted);
+        return NumOps.GreaterThan(sum, NumOps.Zero)
+            ? (Vector<T>)engine.Divide(adjusted, sum)
+            : (Vector<T>)targetDist.Clone();
     }
 }

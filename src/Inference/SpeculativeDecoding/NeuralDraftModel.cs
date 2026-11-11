@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -74,11 +75,7 @@ public class NeuralDraftModel<T> : IDraftModel<T>
         var probs = new List<Vector<T>>();
         var tokenProbs = new List<T>();
 
-        var currentTokens = new List<int>();
-        for (int i = 0; i < inputTokens.Length; i++)
-        {
-            currentTokens.Add(inputTokens[i]);
-        }
+        var currentTokens = new List<int>(inputTokens.ToArray());
 
         for (int i = 0; i < numDraftTokens; i++)
         {
@@ -95,11 +92,11 @@ public class NeuralDraftModel<T> : IDraftModel<T>
             var distribution = Softmax(logits, temperature);
 
             // Sample
-            int token = SampleFromDistribution(distribution);
+            int token = TemperatureSampling<T>.Sample(distribution, _random);
 
             tokens.Add(token);
             probs.Add(distribution);
-            tokenProbs.Add(distribution[token]);
+            tokenProbs.Add(distribution.AsSpan()[token]);
 
             currentTokens.Add(token);
         }
@@ -111,10 +108,7 @@ public class NeuralDraftModel<T> : IDraftModel<T>
 
         for (int i = 0; i < probs.Count; i++)
         {
-            for (int v = 0; v < _vocabSize && v < probs[i].Length; v++)
-            {
-                resultProbs[i, v] = probs[i][v];
-            }
+            resultProbs.SetRow(i, probs[i]);
         }
 
         return new DraftResult<T>
@@ -134,59 +128,9 @@ public class NeuralDraftModel<T> : IDraftModel<T>
     /// <summary>
     /// Applies softmax with temperature to logits.
     /// </summary>
-    private Vector<T> Softmax(Vector<T> logits, T temperature)
+    private static Vector<T> Softmax(Vector<T> logits, T temperature)
     {
-        var result = new Vector<T>(logits.Length);
-
-        // Find max logit for numerical stability
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (NumOps.GreaterThan(logits[i], maxLogit))
-            {
-                maxLogit = logits[i];
-            }
-        }
-
-        // Apply temperature and compute exp
-        T sum = NumOps.Zero;
-        T one = NumOps.One;
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            T scaled = NumOps.Divide(NumOps.Subtract(logits[i], maxLogit), temperature);
-            result[i] = NumOps.Exp(scaled);
-            // Note: No Pow/Power needed here - we use exp((logit - max) / temp) for softmax
-            sum = NumOps.Add(sum, result[i]);
-        }
-
-        // Normalize
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Divide(result[i], sum);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Samples a token index from a probability distribution.
-    /// </summary>
-    private int SampleFromDistribution(Vector<T> distribution)
-    {
-        T r = NumOps.FromDouble(_random.NextDouble());
-        T cumulative = NumOps.Zero;
-
-        for (int i = 0; i < distribution.Length; i++)
-        {
-            cumulative = NumOps.Add(cumulative, distribution[i]);
-            if (NumOps.LessThanOrEquals(r, cumulative))
-                return i;
-        }
-
-        return distribution.Length - 1;
+        var engine = AiDotNetEngine.Current;
+        return (Vector<T>)engine.Softmax(engine.Divide(logits, temperature));
     }
 }
