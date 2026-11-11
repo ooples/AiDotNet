@@ -206,6 +206,26 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
+    /// One Adam step on a parameter tensor:
+    /// m = b1*m + (1-b1)*g, v = b2*v + (1-b2)*g², p - lr * (m/bc1) / (sqrt(v/bc2) + eps).
+    /// </summary>
+    /// <returns>The updated parameter and the new first and second moments.</returns>
+    private protected (Tensor<T> Parameter, Tensor<T> M, Tensor<T> V) AdamUpdate(
+        Tensor<T> parameter, Tensor<T> gradient, Tensor<T> m, Tensor<T> v,
+        double beta1, double beta2, double eps, double lr, double biasCorr1, double biasCorr2)
+    {
+        var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, NumOps.FromDouble(beta1)),
+            Engine.TensorMultiplyScalar(gradient, NumOps.FromDouble(1.0 - beta1)));
+        var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, NumOps.FromDouble(beta2)),
+            Engine.TensorMultiplyScalar(Engine.TensorSquare(gradient), NumOps.FromDouble(1.0 - beta2)));
+        var mHat = Engine.TensorDivideScalar(newM, NumOps.FromDouble(biasCorr1));
+        var vHat = Engine.TensorDivideScalar(newV, NumOps.FromDouble(biasCorr2));
+        var step = Engine.TensorDivide(Engine.TensorMultiplyScalar(mHat, NumOps.FromDouble(lr)),
+            Engine.TensorAddScalar(Engine.TensorSqrt(vHat), NumOps.FromDouble(eps)));
+        return (Engine.TensorSubtract(parameter, step), newM, newV);
+    }
+
+    /// <summary>
     /// A [d x d] tensor of ones with a zero diagonal.
     /// </summary>
     private protected Tensor<T> OffDiagonalMask(int d)

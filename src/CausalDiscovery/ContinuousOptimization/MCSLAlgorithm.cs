@@ -89,8 +89,8 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
         // recovery of the true sparse structure — the mask locks onto whichever edges
         // start large. Growing the edges from zero lets the L1 + acyclicity terms
         // select the correct sparse DAG, exactly as the sibling NOTEARS solver does.
-        var W = new Matrix<T>(d, d);
-        var M = new Matrix<T>(d, d);
+        var W = new Tensor<T>(new[] { d, d });
+        var M = new Tensor<T>(new[] { d, d });
 
         // Fixed temperature. The paper uses tau = 0.2 throughout (not annealed):
         // a small constant temperature keeps sigmoid(U/tau) close to a hard {0,1}
@@ -108,12 +108,8 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
         // per-coordinate step normalization is essential here: when rho grows large
         // the raw acyclicity gradient dominates, and plain SGD either stalls (tiny
         // lr) or explodes (large lr). Adam keeps a stable ~lr-sized step regardless.
-        double lr = _learningRateValue;
-        const double beta1 = 0.9, beta2 = 0.999, epsAdam = 1e-8;
-        var mW = new double[d, d];
-        var vW = new double[d, d];
-        var mM = new double[d, d];
-        var vM = new double[d, d];
+        var state = new McslAdamState(d);
+        var offDiagonal = OffDiagonalMask(d);
         int adamT = 0;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
@@ -121,85 +117,13 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
             for (int innerIter = 0; innerIter < _innerIterations; innerIter++)
             {
                 adamT++;
-
-                // Effective adjacency: W_eff[i,j] = W[i,j] * sigmoid(M[i,j] / tau)
-                var Weff = new Matrix<T>(d, d);
-                var mask = new Matrix<T>(d, d);
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                    {
-                        double sigmoidVal = Sigmoid(NumOps.ToDouble(M[i, j]) / tau);
-                        mask[i, j] = NumOps.FromDouble(sigmoidVal);
-                        Weff[i, j] = NumOps.Multiply(W[i, j], mask[i, j]);
-                    }
-
-                // Loss and acyclicity constraint on W_eff
-                var (_, lossGrad) = ComputeL2Loss(X, Weff);
-                var (h, hGrad) = ComputeNOTEARSConstraint(Weff);
-                double augCoeff = alpha + rho * h;
-
-                double biasCorr1 = 1.0 - Math.Pow(beta1, adamT);
-                double biasCorr2 = 1.0 - Math.Pow(beta2, adamT);
-
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                    {
-                        if (i == j) continue;
-
-                        double wVal = NumOps.ToDouble(W[i, j]);
-                        double maskVal = NumOps.ToDouble(mask[i, j]);
-
-                        // Gradient w.r.t. W_eff = loss grad + augmented acyclicity grad
-                        // plus an L1 sparsity subgradient on the effective edge
-                        // (paper penalizes lambda * ||g_tau(U)||_1).
-                        //
-                        // sign(NaN) is taken as 0 rather than passed to Math.Sign, which THROWS on
-                        // NaN ("Function does not accept floating point Not-a-Number values"). This
-                        // loop can produce NaN: rho multiplies by 10 on every outer iteration that
-                        // fails the constraint gate, up to _rhoMax = 1e16, so augCoeff * hGrad
-                        // overflows to Infinity and the Adam update writes Infinity or NaN into W.
-                        // The throw then tears the run down with no recovery path, where the outer
-                        // rho ceiling would otherwise have clamped it. Treating a NaN coordinate as
-                        // contributing no L1 subgradient matches the sklearn/scipy convention and is
-                        // the guard NOTEARSLowRank already applies for the same failure.
-                        double effectiveEdge = wVal * maskVal;
-                        double signEdge = double.IsNaN(effectiveEdge) ? 0.0 : Math.Sign(effectiveEdge);
-
-                        double gEff = NumOps.ToDouble(lossGrad[i, j])
-                                    + augCoeff * NumOps.ToDouble(hGrad[i, j])
-                                    + Lambda1 * signEdge;
-
-                        // Chain rule to the underlying parameters:
-                        //   dL/dW = gEff * mask
-                        //   dL/dM = gEff * W * sigmoid'(M/tau)/tau,  sigmoid' = s(1-s)
-                        double gradW = gEff * maskVal;
-                        double gradM = gEff * wVal * (maskVal * (1.0 - maskVal) / tau);
-
-                        // Adam step for W
-                        mW[i, j] = beta1 * mW[i, j] + (1.0 - beta1) * gradW;
-                        vW[i, j] = beta2 * vW[i, j] + (1.0 - beta2) * gradW * gradW;
-                        double mHatW = mW[i, j] / biasCorr1;
-                        double vHatW = vW[i, j] / biasCorr2;
-                        W[i, j] = NumOps.FromDouble(wVal - lr * mHatW / (Math.Sqrt(vHatW) + epsAdam));
-
-                        // Adam step for M (mask logits)
-                        mM[i, j] = beta1 * mM[i, j] + (1.0 - beta1) * gradM;
-                        vM[i, j] = beta2 * vM[i, j] + (1.0 - beta2) * gradM * gradM;
-                        double mHatM = mM[i, j] / biasCorr1;
-                        double vHatM = vM[i, j] / biasCorr2;
-                        double mCur = NumOps.ToDouble(M[i, j]);
-                        M[i, j] = NumOps.FromDouble(mCur - lr * mHatM / (Math.Sqrt(vHatM) + epsAdam));
-                    }
+                (W, M) = McslAdamStep(X, W, M, state, offDiagonal, alpha, rho, tau, adamT);
             }
 
             // Evaluate acyclicity on the masked weights and update the multipliers.
-            var Wfinal = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    Wfinal[i, j] = NumOps.Multiply(W[i, j],
-                                   NumOps.FromDouble(Sigmoid(NumOps.ToDouble(M[i, j]) / tau)));
+            var Wfinal = Engine.TensorMultiply(W, ClampedSigmoid(M, tau));
 
-            var (hVal, _) = ComputeNOTEARSConstraint(Wfinal);
+            var (hVal, _) = ComputeNOTEARSConstraint(Wfinal.ToMatrix());
             alpha += rho * hVal;
             if (hVal > gamma * prevH) rho = Math.Min(rho * 10.0, _rhoMax);
             prevH = hVal;
@@ -208,22 +132,99 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
         }
 
         // Final effective adjacency using the learned soft mask, then prune by weight.
-        var maskedW = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                double maskVal = Sigmoid(NumOps.ToDouble(M[i, j]) / tau);
-                maskedW[i, j] = NumOps.Multiply(W[i, j], NumOps.FromDouble(maskVal));
-            }
+        var effective = Engine.TensorMultiply(W, ClampedSigmoid(M, tau));
+        var maskedW = Engine.TensorWhere(offDiagonal, effective, Engine.TensorZerosLike(effective));
 
-        return ThresholdWithFallback(maskedW, WThreshold, data);
+        return ThresholdWithFallback(maskedW.ToMatrix(), WThreshold, data);
     }
 
-    private static double Sigmoid(double x)
+    /// <summary>Adam first and second moments for the weights W and the mask logits M.</summary>
+    private sealed class McslAdamState
     {
-        if (x > 20) return 1.0;
-        if (x < -20) return 0.0;
-        return 1.0 / (1.0 + Math.Exp(-x));
+        public McslAdamState(int d)
+        {
+            MW = new Tensor<T>(new[] { d, d });
+            VW = new Tensor<T>(new[] { d, d });
+            MM = new Tensor<T>(new[] { d, d });
+            VM = new Tensor<T>(new[] { d, d });
+        }
+
+        public Tensor<T> MW { get; set; }
+        public Tensor<T> VW { get; set; }
+        public Tensor<T> MM { get; set; }
+        public Tensor<T> VM { get; set; }
+    }
+
+    /// <summary>
+    /// One Adam step of the MCSL subproblem on the off-diagonal entries of W and M.
+    /// </summary>
+    private (Tensor<T> W, Tensor<T> M) McslAdamStep(Matrix<T> X, Tensor<T> W, Tensor<T> M, McslAdamState state,
+        Tensor<T> offDiagonal, double alpha, double rho, double tau, int adamT)
+    {
+        const double beta1 = 0.9, beta2 = 0.999, epsAdam = 1e-8;
+        double lr = _learningRateValue;
+
+        // Effective adjacency: W_eff[i,j] = W[i,j] * sigmoid(M[i,j] / tau)
+        var mask = ClampedSigmoid(M, tau);
+        var Weff = Engine.TensorMultiply(W, mask);
+
+        // Loss and acyclicity constraint on W_eff
+        var WeffMatrix = Weff.ToMatrix();
+        var (_, lossGrad) = ComputeL2Loss(X, WeffMatrix);
+        var (h, hGrad) = ComputeNOTEARSConstraint(WeffMatrix);
+        double augCoeff = alpha + rho * h;
+
+        double biasCorr1 = 1.0 - Math.Pow(beta1, adamT);
+        double biasCorr2 = 1.0 - Math.Pow(beta2, adamT);
+
+        // Gradient w.r.t. W_eff = loss grad + augmented acyclicity grad
+        // plus an L1 sparsity subgradient on the effective edge
+        // (paper penalizes lambda * ||g_tau(U)||_1).
+        //
+        // sign(NaN) is taken as 0 rather than passed to Math.Sign, which THROWS on
+        // NaN ("Function does not accept floating point Not-a-Number values"). This
+        // loop can produce NaN: rho multiplies by 10 on every outer iteration that
+        // fails the constraint gate, up to _rhoMax = 1e16, so augCoeff * hGrad
+        // overflows to Infinity and the Adam update writes Infinity or NaN into W.
+        // The throw then tears the run down with no recovery path, where the outer
+        // rho ceiling would otherwise have clamped it. Treating a NaN coordinate as
+        // contributing no L1 subgradient matches the sklearn/scipy convention and is
+        // the guard NOTEARSLowRank already applies for the same failure.
+        var zeros = Engine.TensorZerosLike(W);
+        var isNaN = Engine.TensorNotEquals(Weff, Weff);
+        var signEdge = Engine.TensorWhere(isNaN, zeros, Engine.TensorSign(Weff));
+
+        var gEff = Engine.TensorAdd(
+            Engine.TensorAdd(Tensor<T>.FromMatrix(lossGrad),
+                Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(hGrad), NumOps.FromDouble(augCoeff))),
+            Engine.TensorMultiplyScalar(signEdge, NumOps.FromDouble(Lambda1)));
+
+        // Chain rule to the underlying parameters:
+        //   dL/dW = gEff * mask
+        //   dL/dM = gEff * W * sigmoid'(M/tau)/tau,  sigmoid' = s(1-s)
+        // Self edges are never updated.
+        var gradW = Engine.TensorWhere(offDiagonal, Engine.TensorMultiply(gEff, mask), zeros);
+        var maskSlope = Engine.TensorDivideScalar(
+            Engine.TensorMultiply(mask, Engine.ScalarMinusTensor(NumOps.One, mask)), NumOps.FromDouble(tau));
+        var gradM = Engine.TensorWhere(offDiagonal,
+            Engine.TensorMultiply(Engine.TensorMultiply(gEff, W), maskSlope), zeros);
+
+        // Adam steps for W and for M (mask logits)
+        var (newW, mW, vW) = AdamUpdate(W, gradW, state.MW, state.VW, beta1, beta2, epsAdam, lr, biasCorr1, biasCorr2);
+        var (newM, mM, vM) = AdamUpdate(M, gradM, state.MM, state.VM, beta1, beta2, epsAdam, lr, biasCorr1, biasCorr2);
+        state.MW = mW; state.VW = vW; state.MM = mM; state.VM = vM;
+
+        return (Engine.TensorWhere(offDiagonal, newW, W), Engine.TensorWhere(offDiagonal, newM, M));
+    }
+
+    /// <summary>
+    /// sigmoid(x / tau), saturated to exactly 1 above 20 and 0 below -20.
+    /// </summary>
+    private Tensor<T> ClampedSigmoid(Tensor<T> logits, double tau)
+    {
+        var x = Engine.TensorDivideScalar(logits, NumOps.FromDouble(tau));
+        var sigmoid = Engine.TensorSigmoid(x);
+        sigmoid = Engine.TensorWhere(Engine.TensorGreaterThan(x, NumOps.FromDouble(20)), Engine.TensorOnesLike(x), sigmoid);
+        return Engine.TensorWhere(Engine.TensorLessThan(x, NumOps.FromDouble(-20)), Engine.TensorZerosLike(x), sigmoid);
     }
 }
