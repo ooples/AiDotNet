@@ -22,9 +22,27 @@ public sealed class LicenseService : ILicenseService
 
     private readonly ServingDbContext _db;
     private readonly ILogger<LicenseService> _logger;
+    private readonly TimeProvider _clock;
+
+    /// <summary>
+    /// How long an activation holds a seat after its machine was last seen. A seat is a LEASE, renewed by every
+    /// validation from that machine, not a permanent claim: an activation that has not validated within the lease
+    /// stops counting, so machines that are gone (a rebuilt laptop, every ephemeral CI runner, each of which has a
+    /// fresh machine id) free their seat without an administrator. A lapsed machine that comes back re-activates if a
+    /// seat is free. This is how heartbeat/lease licensing (Keygen machine heartbeats, FlexLM and JetBrains floating
+    /// leases) bounds seat use; counting every activation ever seen exhausts a CI key in days.
+    /// </summary>
+    public static readonly TimeSpan ActivationLease = TimeSpan.FromDays(7);
 
     public LicenseService(ServingDbContext db, ILogger<LicenseService> logger)
+        : this(db, logger, TimeProvider.System)
     {
+    }
+
+    /// <summary>Creates the service on an explicit clock, so lease expiry is testable.</summary>
+    public LicenseService(ServingDbContext db, ILogger<LicenseService> logger, TimeProvider clock)
+    {
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         Guard.NotNull(db);
         Guard.NotNull(logger);
         _db = db;
@@ -43,7 +61,7 @@ public sealed class LicenseService : ILicenseService
             throw new ArgumentException("CustomerName is required.", nameof(request));
         }
 
-        if (request.ExpiresAt is not null && request.ExpiresAt <= DateTimeOffset.UtcNow)
+        if (request.ExpiresAt is not null && request.ExpiresAt <= _clock.GetUtcNow())
         {
             throw new ArgumentException("ExpiresAt must be in the future.", nameof(request));
         }
@@ -75,7 +93,7 @@ public sealed class LicenseService : ILicenseService
                 CustomerEmail = request.CustomerEmail?.Trim(),
                 Tier = request.Tier,
                 MaxSeats = request.MaxSeats,
-                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = _clock.GetUtcNow(),
                 ExpiresAt = request.ExpiresAt,
                 Environment = request.Environment?.Trim(),
                 Notes = request.Notes?.Trim(),
@@ -167,7 +185,7 @@ public sealed class LicenseService : ILicenseService
         }
 
         // Check expiration
-        if (entity.ExpiresAt is not null && entity.ExpiresAt <= DateTimeOffset.UtcNow)
+        if (entity.ExpiresAt is not null && entity.ExpiresAt <= _clock.GetUtcNow())
         {
             return new LicenseValidationResponse
             {
@@ -178,18 +196,20 @@ public sealed class LicenseService : ILicenseService
             };
         }
 
-        // Count distinct active machine activations
-        int seatsUsed = await _db.LicenseActivations
-            .CountAsync(a => a.LicenseKeyId == entity.Id && a.IsActive, cancellationToken)
-            .ConfigureAwait(false);
+        // Seats held: active activations whose lease is current (see ActivationLease).
+        int seatsUsed = await CountLeasedSeatsAsync(entity.Id, cancellationToken).ConfigureAwait(false);
 
         // Check seat limit BEFORE activation to avoid over-activating under concurrency.
-        // A machine that is already active does not consume a new seat, so check for it first.
+        // A machine whose lease is current does not consume a new seat, so check for it first; a lapsed one does.
         if (!string.IsNullOrWhiteSpace(request.MachineId))
         {
-            bool alreadyActive = await _db.LicenseActivations
-                .AnyAsync(a => a.LicenseKeyId == entity.Id && a.MachineId == request.MachineId && a.IsActive, cancellationToken)
-                .ConfigureAwait(false);
+            var leaseStart = _clock.GetUtcNow() - ActivationLease;
+            bool alreadyActive = (await _db.LicenseActivations
+                .Where(a => a.LicenseKeyId == entity.Id && a.MachineId == request.MachineId && a.IsActive)
+                .Select(a => a.LastSeenAt)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+                .Any(lastSeen => lastSeen >= leaseStart);
 
             if (!alreadyActive && seatsUsed >= entity.MaxSeats)
             {
@@ -208,9 +228,7 @@ public sealed class LicenseService : ILicenseService
                 .ConfigureAwait(false);
 
             // Re-count after upsert to include this machine
-            seatsUsed = await _db.LicenseActivations
-                .CountAsync(a => a.LicenseKeyId == entity.Id && a.IsActive, cancellationToken)
-                .ConfigureAwait(false);
+            seatsUsed = await CountLeasedSeatsAsync(entity.Id, cancellationToken).ConfigureAwait(false);
         }
 
         // Final seat-limit guard (covers edge cases where MachineId is empty)
@@ -255,7 +273,7 @@ public sealed class LicenseService : ILicenseService
             return true;
         }
 
-        entity.RevokedAt = DateTimeOffset.UtcNow;
+        entity.RevokedAt = _clock.GetUtcNow();
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Revoked license key {KeyId}", entity.KeyId);
         return true;
@@ -315,6 +333,21 @@ public sealed class LicenseService : ILicenseService
         return info;
     }
 
+    /// <summary>
+    /// Active activations seen within <see cref="ActivationLease"/>. Evaluated in memory: a key has a handful of
+    /// activations, and SQLite cannot compare <see cref="DateTimeOffset"/> columns in SQL.
+    /// </summary>
+    private async Task<int> CountLeasedSeatsAsync(Guid licenseKeyId, CancellationToken cancellationToken)
+    {
+        var leaseStart = _clock.GetUtcNow() - ActivationLease;
+        var lastSeen = await _db.LicenseActivations
+            .Where(a => a.LicenseKeyId == licenseKeyId && a.IsActive)
+            .Select(a => a.LastSeenAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return lastSeen.Count(seen => seen >= leaseStart);
+    }
+
     private async Task UpsertActivationAsync(
         Guid licenseKeyId,
         string machineId,
@@ -330,7 +363,7 @@ public sealed class LicenseService : ILicenseService
 
         if (existing is not null)
         {
-            existing.LastSeenAt = DateTimeOffset.UtcNow;
+            existing.LastSeenAt = _clock.GetUtcNow();
             existing.IsActive = true;
             if (machineName is not null)
             {
@@ -351,8 +384,8 @@ public sealed class LicenseService : ILicenseService
                 MachineId = machineId,
                 MachineName = machineName,
                 Environment = environment,
-                FirstSeenAt = DateTimeOffset.UtcNow,
-                LastSeenAt = DateTimeOffset.UtcNow,
+                FirstSeenAt = _clock.GetUtcNow(),
+                LastSeenAt = _clock.GetUtcNow(),
                 IsActive = true
             });
         }

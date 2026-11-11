@@ -212,6 +212,68 @@ public class LicenseServiceIntegrationTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
+    public async Task SeatLease_A_machine_unseen_for_the_lease_frees_its_seat_and_cannot_reclaim_a_taken_one()
+    {
+        var clock = new ManualClock(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+        var svc = new LicenseService(_db, NullLogger<LicenseService>.Instance, clock);
+        var key = (await svc.CreateAsync(new LicenseCreateRequest { CustomerName = "Lease", MaxSeats = 1 })).LicenseKey;
+
+        Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, key, "A")).Status);
+        Assert.Equal(LicenseKeyStatus.SeatLimitReached, (await Validate(svc, key, "B")).Status);
+
+        clock.Advance(LicenseService.ActivationLease + TimeSpan.FromMinutes(1));
+        var b = await Validate(svc, key, "B");
+        Assert.Equal(LicenseKeyStatus.Active, b.Status);
+        Assert.Equal(1, b.SeatsUsed);
+
+        // A comes back after its lease lapsed: B now holds the only seat.
+        Assert.Equal(LicenseKeyStatus.SeatLimitReached, (await Validate(svc, key, "A")).Status);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SeatLease_Every_validation_renews_the_lease()
+    {
+        var clock = new ManualClock(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+        var svc = new LicenseService(_db, NullLogger<LicenseService>.Instance, clock);
+        var key = (await svc.CreateAsync(new LicenseCreateRequest { CustomerName = "Renew", MaxSeats = 1 })).LicenseKey;
+
+        Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, key, "A")).Status);
+        clock.Advance(LicenseService.ActivationLease - TimeSpan.FromDays(1));
+        Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, key, "A")).Status);
+        clock.Advance(LicenseService.ActivationLease - TimeSpan.FromDays(1));
+
+        // Past the first validation's lease, inside the renewed one.
+        Assert.Equal(LicenseKeyStatus.SeatLimitReached, (await Validate(svc, key, "B")).Status);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SeatLease_Ephemeral_machines_validating_once_each_do_not_exhaust_the_key()
+    {
+        // Every CI runner has a fresh machine id. Counting every activation ever seen used up a CI key in days.
+        var clock = new ManualClock(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+        var svc = new LicenseService(_db, NullLogger<LicenseService>.Instance, clock);
+        var key = (await svc.CreateAsync(new LicenseCreateRequest { CustomerName = "CI", MaxSeats = 2 })).LicenseKey;
+
+        for (var runner = 0; runner < 10; runner++)
+        {
+            Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, key, $"runner-{runner}")).Status);
+            clock.Advance(LicenseService.ActivationLease / 2 + TimeSpan.FromMinutes(1));
+        }
+    }
+
+    private static Task<LicenseValidationResponse> Validate(LicenseService svc, string key, string machine) =>
+        svc.ValidateAsync(new LicenseValidateRequest { Key = key, MachineId = machine });
+
+    private sealed class ManualClock(DateTimeOffset start) : TimeProvider
+    {
+        private DateTimeOffset _now = start;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_EncryptWithServerToken_DecryptSucceeds()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
