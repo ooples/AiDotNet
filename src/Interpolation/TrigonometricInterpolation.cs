@@ -249,7 +249,7 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
         for (int start = 0; start < rows; start += block)
         {
             int size = Math.Min(block, rows - start);
-            Tensor<T> angles = engine.TensorOuter(engine.TensorNarrow(frequencies, 0, start, size), _x.AsTensor());
+            Tensor<T> angles = engine.TensorOuter(engine.TensorNarrow(frequencies, 0, start, size).Contiguous(), _x.AsTensor());
             Tensor<T> basis = cosine ? engine.TensorCos(angles) : engine.TensorSin(angles);
             parts.Add(engine.TensorMatMul(basis, ys));
         }

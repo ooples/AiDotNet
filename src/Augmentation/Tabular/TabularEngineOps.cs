@@ -42,7 +42,7 @@ internal static class TabularEngineOps<T>
         for (int start = 0; start < rows; start += block)
         {
             int count = Math.Min(block, rows - start);
-            var left = engine.Reshape(engine.TensorNarrow(values, 0, start, count), [count, 1, cols]);
+            var left = engine.Reshape(engine.TensorNarrow(values, 0, start, count).Contiguous(), [count, 1, cols]);
             int[] tileShape = [count, rows, cols];
             var diff = engine.TensorSubtract(
                 engine.TensorBroadcastTo(left, tileShape), engine.TensorBroadcastTo(right, tileShape));
