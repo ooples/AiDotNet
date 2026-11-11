@@ -114,14 +114,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var output = outputTensor.ToVector();
 
             // Split output into mean and log_std
-            var mean = new Vector<T>(_actionSize);
-            var logStd = new Vector<T>(_actionSize);
-
-            for (int i = 0; i < _actionSize; i++)
-            {
-                mean[i] = output[i];
-                logStd[i] = output[_actionSize + i];
-            }
+            var mean = output.GetSubVector(0, _actionSize);
+            var logStd = output.GetSubVector(_actionSize, _actionSize);
 
             // Sample from Gaussian distribution
             var action = new Vector<T>(_actionSize);
@@ -158,31 +152,29 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var outputTensor = _policyNetwork.Predict(stateTensor);
             var output = outputTensor.ToVector();
 
-            T logProb = NumOps.Zero;
+            var engine = AiDotNetEngine.Current;
+            var mean = output.GetSubVector(0, _actionSize);
+            var logStd = output.GetSubVector(_actionSize, _actionSize);
+            var taken = RLTensorOps.Head(action, _actionSize);
 
-            for (int i = 0; i < _actionSize; i++)
+            if (!_useTanhSquashing)
             {
-                double meanValue = NumOps.ToDouble(output[i]);
-                double logStdValue = NumOps.ToDouble(output[_actionSize + i]);
-                double stdValue = Math.Exp(logStdValue);
-
-                double actionValue = NumOps.ToDouble(action[i]);
-
-                // Gaussian log probability: -0.5 * ((x - mu) / sigma)^2 - log(sigma) - 0.5 * log(2*pi)
-                double diff = (actionValue - meanValue) / stdValue;
-                double gaussianLogProb = -0.5 * diff * diff - Math.Log(stdValue) - 0.5 * Math.Log(2.0 * Math.PI);
-
-                if (_useTanhSquashing)
-                {
-                    // Correction for tanh squashing: log_prob -= log(1 - tanh^2(x))
-                    double tanhCorrection = Math.Log(1.0 - Math.Tanh(actionValue) * Math.Tanh(actionValue) + 1e-6);
-                    gaussianLogProb -= tanhCorrection;
-                }
-
-                logProb = NumOps.Add(logProb, NumOps.FromDouble(gaussianLogProb));
+                // Gaussian log probability: sum_i -0.5 * ((x - mu) / sigma)^2 - log(sigma) - 0.5 * log(2*pi)
+                return RLTensorOps.GaussianLogProb(mean, logStd, taken);
             }
 
-            return logProb;
+            // Tanh-squashed Gaussian (Haarnoja et al. 2018, SAC, Appendix C): the action is a = tanh(u) with
+            // u ~ N(mu, sigma), so log pi(a) = log N(u) - sum_i log(1 - a_i^2). The pre-squash sample is recovered
+            // as u = atanh(a) (a clipped just inside (-1, 1)), as Stable-Baselines3's TanhBijector does; the
+            // former code evaluated the Gaussian at the squashed action and squashed it a second time.
+            T epsilon = NumOps.FromDouble(1e-6);
+            var clipped = engine.Clamp(taken, NumOps.FromDouble(-1.0 + 1e-6), NumOps.FromDouble(1.0 - 1e-6));
+            T gaussianLogProb = RLTensorOps.GaussianLogProb(mean, logStd, engine.Atanh(clipped));
+            var oneMinusSquare = engine.Subtract(
+                Vector<T>.CreateDefault(_actionSize, NumOps.Add(NumOps.One, epsilon)),
+                engine.Multiply(taken, taken));
+            T correction = engine.Sum(engine.TensorLog(oneMinusSquare.AsTensor()).ToVector());
+            return NumOps.Subtract(gaussianLogProb, correction);
         }
 
         /// <inheritdoc />
