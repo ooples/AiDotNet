@@ -251,69 +251,7 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// </remarks>
     protected Matrix<T> EnforceAcyclic(Matrix<T> weights)
     {
-        int d = weights.Rows;
-        var flat = Tensor<T>.FromMatrix(weights).Reshape(new[] { d * d });
-        var magnitude = Engine.TensorAbs(flat);
-
-        // Candidate edges: off-diagonal entries with a non-zero magnitude, in row-major (from, to) order.
-        var candidate = Engine.TensorMultiply(
-            Engine.TensorGreaterThan(magnitude, NumOps.Zero), OffDiagonalMask(d).Reshape(new[] { d * d }));
-        int[] positions = Engine.TensorNonzero(candidate).ToArray();
-        var dag = new Tensor<T>(new[] { d * d });
-        if (positions.Length == 0)
-            return dag.Reshape(new[] { d, d }).ToMatrix();
-
-        // Strongest first; the stable sort keeps (from, to) order among equal magnitudes.
-        var positionIndex = new Tensor<int>(positions, new[] { positions.Length });
-        int[] order = Engine.TensorArgsort(Engine.TensorIndexSelect(magnitude, positionIndex, 0), -1, true).ToArray();
-
-        var reachable = new bool[d, d];
-        var kept = new List<int>();
-        foreach (int rank in order)
-        {
-            int position = positions[rank];
-            int from = position / d, to = position % d;
-
-            // Adding from -> to creates a cycle exactly when to already reaches from.
-            if (!HasDirectedPath(reachable, to, from))
-            {
-                reachable[from, to] = true;
-                kept.Add(position);
-            }
-        }
-
-        if (kept.Count == 0)
-            return dag.Reshape(new[] { d, d }).ToMatrix();
-
-        var keptIndex = new Tensor<int>(kept.ToArray(), new[] { kept.Count });
-        dag = Engine.TensorScatter(dag, keptIndex, Engine.TensorIndexSelect(flat, keptIndex, 0), 0);
-        return dag.Reshape(new[] { d, d }).ToMatrix();
-    }
-
-    private static bool HasDirectedPath(bool[,] graph, int start, int target)
-    {
-        if (start == target) return true;
-
-        int d = graph.GetLength(0);
-        var visited = new bool[d];
-        var pending = new Stack<int>();
-        pending.Push(start);
-
-        while (pending.Count > 0)
-        {
-            int node = pending.Pop();
-            if (node == target) return true;
-            if (visited[node]) continue;
-            visited[node] = true;
-
-            for (int next = 0; next < d; next++)
-            {
-                if (!visited[next] && graph[node, next])
-                    pending.Push(next);
-            }
-        }
-
-        return false;
+        return ProjectToAcyclic(weights);
     }
 
     /// <summary>
