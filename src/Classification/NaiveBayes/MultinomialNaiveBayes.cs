@@ -77,6 +77,7 @@ public partial class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// </summary>
     [Buffer]
     private Matrix<T>? _logFeatureProbs;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureMinShift;
 
     /// <summary>

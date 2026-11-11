@@ -104,6 +104,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Instead of storing exact values, features are grouped into
     /// bins. This array stores the boundaries between bins for each feature.</para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>[]? _binBoundaries;
 
     /// <summary>
@@ -113,6 +114,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Before any trees are added, the model makes a baseline
     /// prediction based on the class distribution in the training data.</para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _initialPrediction;
 
     /// <summary>
