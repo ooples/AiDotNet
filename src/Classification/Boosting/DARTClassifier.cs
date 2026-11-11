@@ -402,24 +402,6 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
         FeatureImportances = importances;
     }
 
-    /// <summary>
-    /// Truncates or zero-pads <paramref name="values"/> to exactly <paramref name="length"/> elements.
-    /// </summary>
-    private static Vector<T> FitToLength(Vector<T> values, int length)
-    {
-        if (values.Length == length)
-        {
-            return values;
-        }
-
-        if (values.Length > length)
-        {
-            return values.GetSubVector(0, length);
-        }
-
-        return Vector<T>.Concatenate(values, new Vector<T>(length - values.Length));
-    }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

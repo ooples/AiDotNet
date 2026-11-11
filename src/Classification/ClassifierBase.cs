@@ -463,6 +463,24 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Truncates or zero-pads <paramref name="values"/> to exactly <paramref name="length"/> elements.
+    /// </summary>
+    protected static Vector<T> FitToLength(Vector<T> values, int length)
+    {
+        if (values.Length == length)
+        {
+            return values;
+        }
+
+        if (values.Length > length)
+        {
+            return values.GetSubVector(0, length);
+        }
+
+        return Vector<T>.Concatenate(values, new Vector<T>(length - values.Length));
+    }
+
+    /// <summary>
     /// Creates a vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
     /// </summary>
     protected static Vector<T> FilledVector(int length, T value)
