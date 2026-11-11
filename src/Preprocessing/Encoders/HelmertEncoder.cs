@@ -34,8 +34,8 @@ public class HelmertEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly bool _reversed;
 
     // Fitted parameters
-    private Dictionary<int, List<double>>? _categories;
-    private Dictionary<int, double[,]>? _contrastMatrices;
+    private Dictionary<int, Tensor<T>>? _categories;
+    private Dictionary<int, Tensor<T>>? _contrastMatrices;
     private int _nInputFeatures;
     private int _nOutputFeatures;
 
@@ -83,31 +83,18 @@ public class HelmertEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nInputFeatures = data.Columns;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
-        _categories = new Dictionary<int, List<double>>();
-        _contrastMatrices = new Dictionary<int, double[,]>();
+        _categories = new Dictionary<int, Tensor<T>>();
+        _contrastMatrices = new Dictionary<int, Tensor<T>>();
 
         foreach (int col in columnsToProcess)
         {
-            var uniqueValues = new HashSet<double>();
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double value = NumOps.ToDouble(data[i, col]);
-                uniqueValues.Add(value);
-            }
-
-            var sortedCategories = uniqueValues.OrderBy(v => v).ToList();
+            var column = PreprocessingTensorOps.Column(data, col);
+            var sortedCategories = column.Length == 0 ? new Tensor<T>(new[] { 0 }) : PreprocessingTensorOps.SortedUnique(column);
             _categories[col] = sortedCategories;
 
-            // Build Helmert contrast matrix
-            int k = sortedCategories.Count;
-            if (k > 1)
-            {
-                var contrastMatrix = _reversed
-                    ? BuildReversedHelmertMatrix(k)
-                    : BuildHelmertMatrix(k);
-                _contrastMatrices[col] = contrastMatrix;
-            }
+            // Build the contrast matrix (one zero column when there are fewer than two levels)
+            int k = sortedCategories.Length;
+            _contrastMatrices[col] = k > 1 ? (_reversed ? BuildReversedHelmertMatrix(k) : BuildHelmertMatrix(k)) : new Tensor<T>(new[] { k, 1 });
         }
 
         // Calculate total output features
@@ -118,7 +105,7 @@ public class HelmertEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             if (processSet.Contains(col))
             {
-                int nCategories = _categories[col].Count;
+                int nCategories = _categories[col].Length;
                 _nOutputFeatures += Math.Max(1, nCategories - 1);
             }
             else
@@ -130,73 +117,25 @@ public class HelmertEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
-    private double[,] BuildHelmertMatrix(int k)
-    {
-        // Standard Helmert contrast matrix
-        // Compares each level to the mean of subsequent levels
-        var matrix = new double[k, k - 1];
+    /// <summary>
+    /// Standard Helmert contrast matrix: compares each level to the mean of subsequent levels.
+    /// Contrast col gives level col the weight nSubsequent / (nSubsequent + 1), each later level
+    /// -1 / (nSubsequent + 1) and earlier levels 0, where nSubsequent = k - col - 1.
+    /// </summary>
+    private static Tensor<T> BuildHelmertMatrix(int k) =>
+        PreprocessingTensorOps.RationalMatrix<T>(k, k - 1,
+            (row, col) => row < col ? 0 : row == col ? k - col - 1 : -1,
+            col => k - col);
 
-        for (int col = 0; col < k - 1; col++)
-        {
-            // For contrast col, we compare level col to mean of levels col+1 through k-1
-            int nSubsequent = k - col - 1;
-
-            for (int row = 0; row < k; row++)
-            {
-                if (row < col)
-                {
-                    // Levels before the comparison: 0
-                    matrix[row, col] = 0;
-                }
-                else if (row == col)
-                {
-                    // The level being compared: positive weight
-                    matrix[row, col] = (double)nSubsequent / (nSubsequent + 1);
-                }
-                else
-                {
-                    // Subsequent levels: negative weight (share of -1)
-                    matrix[row, col] = -1.0 / (nSubsequent + 1);
-                }
-            }
-        }
-
-        return matrix;
-    }
-
-    private double[,] BuildReversedHelmertMatrix(int k)
-    {
-        // Reversed Helmert contrast matrix
-        // Compares each level to the mean of previous levels
-        var matrix = new double[k, k - 1];
-
-        for (int col = 0; col < k - 1; col++)
-        {
-            // For contrast col, we compare level col+1 to mean of levels 0 through col
-            int nPrevious = col + 1;
-
-            for (int row = 0; row < k; row++)
-            {
-                if (row < col + 1)
-                {
-                    // Previous levels: negative weight
-                    matrix[row, col] = -1.0 / (nPrevious + 1);
-                }
-                else if (row == col + 1)
-                {
-                    // The level being compared: positive weight
-                    matrix[row, col] = (double)nPrevious / (nPrevious + 1);
-                }
-                else
-                {
-                    // Subsequent levels: 0
-                    matrix[row, col] = 0;
-                }
-            }
-        }
-
-        return matrix;
-    }
+    /// <summary>
+    /// Reversed Helmert contrast matrix: compares each level to the mean of previous levels.
+    /// Contrast col gives levels 0..col the weight -1 / (nPrevious + 1), level col + 1 the weight
+    /// nPrevious / (nPrevious + 1) and later levels 0, where nPrevious = col + 1.
+    /// </summary>
+    private static Tensor<T> BuildReversedHelmertMatrix(int k) =>
+        PreprocessingTensorOps.RationalMatrix<T>(k, k - 1,
+            (row, col) => row < col + 1 ? -1 : row == col + 1 ? col + 1 : 0,
+            col => col + 2);
 
     /// <summary>
     /// Transforms the data using Helmert coding.
@@ -208,67 +147,28 @@ public class HelmertEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("HelmertEncoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(_nInputFeatures));
+        var blocks = new List<Tensor<T>>(_nInputFeatures);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < _nInputFeatures; j++)
         {
-            int outCol = 0;
-
-            for (int j = 0; j < _nInputFeatures; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (!processSet.Contains(j))
             {
-                if (!processSet.Contains(j))
-                {
-                    result[i, outCol++] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-                var categories = _categories[j];
-                int nCategories = categories.Count;
-                int nCols = Math.Max(1, nCategories - 1);
-
-                int categoryIndex = categories.IndexOf(categoryValue);
-
-                if (categoryIndex < 0)
-                {
-                    // Unknown category
-                    switch (_handleUnknown)
-                    {
-                        case HelmertHandleUnknown.UseZeros:
-                            for (int c = 0; c < nCols; c++)
-                            {
-                                result[i, outCol++] = NumOps.FromDouble(0);
-                            }
-                            break;
-                        case HelmertHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            for (int c = 0; c < nCols; c++)
-                            {
-                                result[i, outCol++] = NumOps.FromDouble(0);
-                            }
-                            break;
-                    }
-                }
-                else if (nCategories <= 1)
-                {
-                    result[i, outCol++] = NumOps.FromDouble(0);
-                }
-                else
-                {
-                    var contrastMatrix = _contrastMatrices[j];
-                    for (int c = 0; c < nCols; c++)
-                    {
-                        result[i, outCol++] = NumOps.FromDouble(contrastMatrix[categoryIndex, c]);
-                    }
-                }
+                blocks.Add(engine.Reshape(column, new[] { numRows, 1 }));
+                continue;
             }
+
+            // Known categories take their contrast row; unknown ones are zeros (or throw)
+            blocks.Add(PreprocessingTensorOps.ContrastBlock(_categories[j], _contrastMatrices[j], column,
+                _handleUnknown == HelmertHandleUnknown.Error, j));
         }
 
-        return new Matrix<T>(result);
+        if (blocks.Count == 0)
+            return new Matrix<T>(numRows, 0);
+        return engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
     }
 
     /// <summary>
@@ -302,7 +202,7 @@ public class HelmertEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             if (processSet.Contains(col))
             {
                 var categories = _categories[col];
-                int nCols = Math.Max(1, categories.Count - 1);
+                int nCols = Math.Max(1, categories.Length - 1);
                 string suffix = _reversed ? "rev_helmert" : "helmert";
 
                 for (int c = 0; c < nCols; c++)

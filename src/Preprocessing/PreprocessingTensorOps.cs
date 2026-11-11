@@ -457,6 +457,55 @@ internal static class PreprocessingTensorOps
         return codes;
     }
 
+    /// <summary>
+    /// A <c>[rows, cols]</c> matrix with entry <c>numerator(row, col) / denominator(col)</c>, for contrast
+    /// matrices whose entries are ratios of small integers.
+    /// </summary>
+    public static Tensor<T> RationalMatrix<T>(int rows, int cols, Func<int, int, int> numerator, Func<int, int> denominator)
+    {
+        var num = new int[rows * cols];
+        var den = new int[cols];
+        for (int c = 0; c < cols; c++)
+            den[c] = denominator(c);
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                num[r * cols + c] = numerator(r, c);
+
+        var numerators = new Tensor<int>(num, new[] { rows, cols }).Cast<T>();
+        if (rows == 0 || cols == 0)
+            return numerators;
+
+        var engine = AiDotNetEngine.Current;
+        var denominators = new Tensor<int>(den, new[] { 1, cols }).Cast<T>();
+        return engine.TensorDivide(numerators, engine.TensorBroadcastTo(denominators, new[] { rows, cols }));
+    }
+
+    /// <summary>
+    /// Contrast-codes a column: each known category becomes its row of <paramref name="contrast"/> and unknown
+    /// values become zeros, or throw <see cref="ArgumentException"/> when <paramref name="throwOnUnknown"/> is set.
+    /// </summary>
+    public static Tensor<T> ContrastBlock<T>(
+        Tensor<T> sortedCategories, Tensor<T> contrast, Tensor<T> column, bool throwOnUnknown, int columnIndex)
+    {
+        var engine = AiDotNetEngine.Current;
+        int rows = column.Length;
+        int cols = contrast.Shape[1];
+        var position = LookupSorted(sortedCategories, column, out var found);
+        if (throwOnUnknown)
+        {
+            var missing = MaskPositions(Not(found));
+            if (missing.Length > 0)
+                throw new ArgumentException($"Unknown category value: {column.GetFlat(missing[0])} in column {columnIndex}");
+        }
+
+        if (rows == 0 || sortedCategories.Length == 0)
+            return new Tensor<T>(new[] { rows, cols });
+
+        return engine.TensorMultiply(
+            engine.TensorIndexSelect(contrast, position, 0),
+            engine.TensorBroadcastTo(engine.Reshape(found, new[] { rows, 1 }), new[] { rows, cols }));
+    }
+
     /// <summary>The values 0, 1, ..., count - 1 as a 1-D tensor.</summary>
     public static Tensor<T> Range<T>(int count) =>
         new Tensor<int>(Enumerable.Range(0, count).ToArray(), new[] { count }).Cast<T>();
