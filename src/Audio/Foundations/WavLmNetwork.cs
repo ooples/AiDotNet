@@ -17,6 +17,9 @@ internal sealed record WavLmConfiguration
     public int IntermediateSize { get; init; } = 3072;
     public int PositionalConvKernel { get; init; } = 128;
     public int PositionalConvGroups { get; init; } = 16;
+    /// <summary>Whether each query's head gates the shared relative position bias (WavLM's gated bias); false adds the
+    /// bucketed bias ungated, the plain relative position bias the paper's gate is measured against.</summary>
+    public bool GatedPositionBias { get; init; } = true;
     public int RelativePositionBuckets { get; init; } = 320;
     public int RelativePositionMaxDistance { get; init; } = 800;
     public double LayerNormEpsilon { get; init; } = 1e-5;
@@ -274,7 +277,7 @@ internal sealed class WavLmNetwork<T>
         return _engine.TensorPermute(_engine.Reshape(projection.Forward(x), new[] { length, heads, e }), new[] { 1, 0, 2 });
     }
 
-    private Tensor<T> Attention(Layer l, Tensor<T> x, Tensor<T> bias)
+    private Tensor<T> GatedBias(Layer l, Tensor<T> x, Tensor<T> bias)
     {
         int length = x.Shape[0], heads = Configuration.Heads, e = Configuration.HiddenSize / heads;
         // The gate: from the input split into heads, a linear map to eight values summed in two groups of four,
@@ -287,7 +290,13 @@ internal sealed class WavLmNetwork<T>
             new[] { 1, length }), new[] { heads * length, 1 });
         var gate = _engine.TensorAddScalar(_engine.TensorMultiply(a, _engine.TensorAddScalar(_engine.TensorMultiply(b, constant), NumOps.FromDouble(-1.0))),
             NumOps.FromDouble(2.0));
-        var gated = _engine.TensorMultiply(_engine.TensorTile(_engine.Reshape(gate, new[] { heads, length, 1 }), new[] { 1, 1, length }), bias);
+        return _engine.TensorMultiply(_engine.TensorTile(_engine.Reshape(gate, new[] { heads, length, 1 }), new[] { 1, 1, length }), bias);
+    }
+
+    private Tensor<T> Attention(Layer l, Tensor<T> x, Tensor<T> bias)
+    {
+        int length = x.Shape[0], heads = Configuration.Heads, e = Configuration.HiddenSize / heads;
+        var gated = Configuration.GatedPositionBias ? GatedBias(l, x, bias) : bias;
         var q = Heads(l.Query, x);
         var k = Heads(l.Key, x);
         var v = Heads(l.Value, x);

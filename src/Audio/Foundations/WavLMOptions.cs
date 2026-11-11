@@ -51,8 +51,8 @@ public class WavLMOptions : ModelOptions
     public int FeatureEncoderDim { get; set; } = 512;
 
     /// <summary>Gets or sets whether to use gated relative position bias.</summary>
-    /// <remarks>WavLM's network is defined by this bias (Chen et al. 2022, section III-B), so it must stay true; false is
-    /// rejected when the model is built.</remarks>
+    /// <remarks>True is WavLM's gated relative position bias (Chen et al. 2022, section III-B); false adds the same
+    /// bucketed relative position bias without the gate, the variant the gate is measured against.</remarks>
     public bool UseGatedRelativePositionBias { get; set; } = true;
 
     /// <summary>
@@ -103,6 +103,7 @@ public class WavLMOptions : ModelOptions
         LayerNormFeatureEncoder = StableLayerNorm,
         StableLayerNorm = StableLayerNorm,
         UseMaskEmbedding = true,
+        GatedPositionBias = UseGatedRelativePositionBias,
     };
 
     // Train-mode dropout, LayerDrop and SpecAugment time masking, drawn from the given generator.

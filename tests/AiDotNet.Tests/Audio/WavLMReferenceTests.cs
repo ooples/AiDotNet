@@ -74,13 +74,25 @@ public class WavLMReferenceTests
     }
 
     [Fact]
-    public void Defaults_AreWavLMBasePlus_AndTheBiasCannotBeTurnedOff()
+    public void Defaults_AreWavLMBasePlus_AndTheUngatedBiasIsTheAblation()
     {
         var configuration = new WavLMOptions().ToConfiguration();
-        Assert.Equal((768, 12, 12, 3072, false), (configuration.HiddenSize, configuration.Layers, configuration.Heads,
-            configuration.IntermediateSize, configuration.StableLayerNorm));
-        Assert.Throws<ArgumentException>(() => new WavLM<double>(
-            new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.SequenceToSequence, inputSize: 1600, outputSize: 16),
-            new WavLMOptions { HiddenDim = 16, NumLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, UseGatedRelativePositionBias = false }));
+        Assert.Equal((768, 12, 12, 3072, false, true), (configuration.HiddenSize, configuration.Layers, configuration.Heads,
+            configuration.IntermediateSize, configuration.StableLayerNorm, configuration.GatedPositionBias));
+        // Turning the gate off is the paper's ablation (plain relative position bias), not a rejected setting: the
+        // network builds, and its outputs differ from the gated network's with the same weights and input.
+        var architecture = new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.SequenceToSequence,
+            inputSize: 1600, outputSize: 16);
+        var gated = new WavLM<double>(architecture, new WavLMOptions { HiddenDim = 16, NumLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, Seed = 3 });
+        var ungated = new WavLM<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.SequenceToSequence, inputSize: 1600, outputSize: 16),
+            new WavLMOptions { HiddenDim = 16, NumLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, Seed = 3,
+                UseGatedRelativePositionBias = false });
+        var input = new Tensor<double>(new[] { 1600 });
+        for (int i = 0; i < input.Length; i++) input[i] = 0.4 * Math.Sin(i * 0.13);
+        var a = gated.Predict(input);
+        var b = ungated.Predict(input);
+        Assert.Equal(a.Length, b.Length);
+        Assert.Contains(Enumerable.Range(0, a.Length), i => a[i] != b[i]);
     }
 }

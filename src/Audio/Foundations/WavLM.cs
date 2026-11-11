@@ -229,8 +229,6 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
         if (!_useNativeMode) return;
         _network = null;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
-        if (!_options.UseGatedRelativePositionBias)
-            throw new ArgumentException("WavLM's network is defined by its gated relative position bias; UseGatedRelativePositionBias must stay true.");
         // The paper network: wav2vec 2.0's convolutional feature encoder over the raw waveform and Transformer, with the
         // gated relative position bias in every attention layer (Chen et al. 2022). It used to be a generic template with
         // the feature encoder approximated and no relative position bias (#2321).

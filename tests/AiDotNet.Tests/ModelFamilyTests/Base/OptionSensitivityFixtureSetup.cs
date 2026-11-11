@@ -546,6 +546,14 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Combine(fingerprint,
                 OptionSensitivityHarness.Fingerprint(codes.Cast<int>().Select(code => (double)code)));
         }
+        if (network is AiDotNet.VisionLanguage.Grounding.GroundingDINO<T> groundingDino && option == "TextThreshold")
+        {
+            // TextThreshold picks the caption words that label a detection, inside Ground; Predict returns the image
+            // tokens and never thresholds. PrepareOptions drops the box threshold so every query is a detection.
+            var detections = groundingDino.Ground(input, "cat . remote control .");
+            return OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(detections.SelectMany(d => d.Phrase.Select(c => (double)c).Append(-1.0))));
+        }
         if (network is AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T> convTransformer && option == "MaxTextLength")
         {
             // MaxTextLength bounds the greedy attention decode inside Transcribe; Predict returns encoder logits and
@@ -1249,6 +1257,8 @@ internal static class OptionSensitivityFixtureSetup
     {
         // Step schedules whose first switch is hundreds of thousands of batches out: bring the switch inside the
         // probe's training steps so the scheduled rate is the one a step actually uses.
+        if (options is AiDotNet.VisionLanguage.Grounding.GroundingDINOOptions grounding && option == "TextThreshold")
+            grounding.ConfidenceThreshold = 0.0;
         if (options is AiDotNet.Video.Options.VFITOptions vfit && option == "LearningRateSteps")
             vfit.LearningRateMilestones = new[] { 1, 2, 3, 4, 5 };
         if (options is AiDotNet.Video.Options.XVFIOptions xvfi && option == "LearningRateDecay")
