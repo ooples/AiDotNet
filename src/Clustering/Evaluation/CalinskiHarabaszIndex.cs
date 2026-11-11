@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
@@ -62,9 +64,10 @@ public class CalinskiHarabaszIndex<T> : IClusterMetric<T>
 
         // Get unique labels (excluding -1 for noise)
         var uniqueLabels = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 uniqueLabels.Add(label);
@@ -77,93 +80,23 @@ public class CalinskiHarabaszIndex<T> : IClusterMetric<T>
             return 0; // Need at least 2 clusters
         }
 
-        var labelList = uniqueLabels.ToList();
-
-        // Compute overall centroid
-        var overallCentroid = new double[d];
-        int validPoints = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            for (int j = 0; j < d; j++)
-            {
-                overallCentroid[j] += _numOps.ToDouble(data[i, j]);
-            }
-            validPoints++;
-        }
-
+        int validPoints = labelsIds.Count(label => label >= 0);
         if (validPoints == 0) return 0;
 
-        for (int j = 0; j < d; j++)
-        {
-            overallCentroid[j] /= validPoints;
-        }
+        // Cluster sums/counts over label slots 0..max (unused slots have zero members and contribute nothing)
+        var engine = AiDotNetEngine.Current;
+        int numSlots = labelsIds.Max() + 1;
+        var sums = ClusteringTensorOps.ClusterSums(data, labels, numSlots, out var counts);
+        var centroids = ClusteringTensorOps.DivideRows(sums, counts);
+        var overallCentroid = engine.Divide(
+            engine.ReduceSum(Tensor<T>.FromMatrix(sums), new[] { 0 }, false).ToVector(), _numOps.FromDouble(validPoints));
 
-        // Compute cluster centroids
-        var clusterCentroids = new Dictionary<int, double[]>();
-        var clusterCounts = new Dictionary<int, int>();
+        // Between-Group Sum of Squares (BGS): sum_c n_c * ||centroid_c - overall||^2
+        var centroidOffsets = ClusteringTensorOps.SquaredDistancesToPoint(overallCentroid, centroids);
+        double bgs = _numOps.ToDouble(engine.DotProduct(counts, centroidOffsets));
 
-        foreach (int label in labelList)
-        {
-            clusterCentroids[label] = new double[d];
-            clusterCounts[label] = 0;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            for (int j = 0; j < d; j++)
-            {
-                clusterCentroids[label][j] += _numOps.ToDouble(data[i, j]);
-            }
-            clusterCounts[label]++;
-        }
-
-        foreach (int label in labelList)
-        {
-            if (clusterCounts[label] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    clusterCentroids[label][j] /= clusterCounts[label];
-                }
-            }
-        }
-
-        // Compute Between-Group Sum of Squares (BGS)
-        double bgs = 0;
-        foreach (int label in labelList)
-        {
-            double distSq = 0;
-            for (int j = 0; j < d; j++)
-            {
-                double diff = clusterCentroids[label][j] - overallCentroid[j];
-                distSq += diff * diff;
-            }
-            bgs += clusterCounts[label] * distSq;
-        }
-
-        // Compute Within-Group Sum of Squares (WGS)
-        double wgs = 0;
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            double distSq = 0;
-            for (int j = 0; j < d; j++)
-            {
-                double diff = _numOps.ToDouble(data[i, j]) - clusterCentroids[label][j];
-                distSq += diff * diff;
-            }
-            wgs += distSq;
-        }
-
+        // Within-Group Sum of Squares (WGS)
+        double wgs = _numOps.ToDouble(ClusteringTensorOps.Inertia(data, labels, centroids));
         // Compute Calinski-Harabasz index
         if (wgs == 0 || validPoints <= k)
         {

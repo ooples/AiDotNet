@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
@@ -54,9 +56,10 @@ public class WCSS<T> : IClusterMetric<T>
 
         // Get unique labels (excluding -1 for noise)
         var uniqueLabels = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 uniqueLabels.Add(label);
@@ -68,56 +71,9 @@ public class WCSS<T> : IClusterMetric<T>
             return 0;
         }
 
-        // Compute centroids
-        var centroids = new Dictionary<int, double[]>();
-        var counts = new Dictionary<int, int>();
-
-        foreach (int label in uniqueLabels)
-        {
-            centroids[label] = new double[d];
-            counts[label] = 0;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            counts[label]++;
-            for (int j = 0; j < d; j++)
-            {
-                centroids[label][j] += _numOps.ToDouble(data[i, j]);
-            }
-        }
-
-        foreach (int label in uniqueLabels)
-        {
-            if (counts[label] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    centroids[label][j] /= counts[label];
-                }
-            }
-        }
-
-        // Compute WCSS
-        double wcss = 0;
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            double distSq = 0;
-            for (int j = 0; j < d; j++)
-            {
-                double diff = _numOps.ToDouble(data[i, j]) - centroids[label][j];
-                distSq += diff * diff;
-            }
-            wcss += distSq;
-        }
-
-        return wcss;
+        // WCSS = sum of squared distances of the non-noise samples to their cluster centroid
+        var centroids = ClusteringTensorOps.ClusterMeans(data, labels, labelsIds.Max() + 1, out _);
+        return _numOps.ToDouble(ClusteringTensorOps.Inertia(data, labels, centroids));
     }
 
     /// <summary>
@@ -126,73 +82,39 @@ public class WCSS<T> : IClusterMetric<T>
     /// <param name="data">The data matrix.</param>
     /// <param name="labels">The cluster assignments.</param>
     /// <returns>Dictionary mapping cluster labels to their WCSS values.</returns>
-    public Dictionary<int, double> ComputePerCluster(Matrix<T> data, Vector<T> labels)
+    public Dictionary<int, T> ComputePerCluster(Matrix<T> data, Vector<T> labels)
     {
         int n = data.Rows;
         int d = data.Columns;
 
         var uniqueLabels = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 uniqueLabels.Add(label);
             }
         }
 
-        // Compute centroids
-        var centroids = new Dictionary<int, double[]>();
-        var counts = new Dictionary<int, int>();
+        // Squared distance of every non-noise sample to its cluster centroid, summed per cluster
+        int numSlots = uniqueLabels.Count == 0 ? 0 : labelsIds.Max() + 1;
+        var result = new Dictionary<int, T>();
+        if (numSlots == 0)
+        {
+            return result;
+        }
 
+        var engine = AiDotNetEngine.Current;
+        var centroids = ClusteringTensorOps.ClusterMeans(data, labels, numSlots, out _);
+        var sampleDistances = ClusteringTensorOps.AssignedSquaredDistances(data, labels, centroids);
+        var mask = ClusteringTensorOps.OneHotMask(labels, numSlots);
+        var perSlot = engine.TensorMatMul(
+            engine.TensorTranspose(mask), Tensor<T>.FromVector(sampleDistances, new[] { n, 1 })).ToArray();
         foreach (int label in uniqueLabels)
         {
-            centroids[label] = new double[d];
-            counts[label] = 0;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            counts[label]++;
-            for (int j = 0; j < d; j++)
-            {
-                centroids[label][j] += _numOps.ToDouble(data[i, j]);
-            }
-        }
-
-        foreach (int label in uniqueLabels)
-        {
-            if (counts[label] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    centroids[label][j] /= counts[label];
-                }
-            }
-        }
-
-        // Compute WCSS per cluster
-        var result = new Dictionary<int, double>();
-        foreach (int label in uniqueLabels)
-        {
-            result[label] = 0;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            double distSq = 0;
-            for (int j = 0; j < d; j++)
-            {
-                double diff = _numOps.ToDouble(data[i, j]) - centroids[label][j];
-                distSq += diff * diff;
-            }
-            result[label] += distSq;
+            result[label] = perSlot[label];
         }
 
         return result;
@@ -246,9 +168,10 @@ public class BCSS<T> : IClusterMetric<T>
 
         // Get unique labels (excluding -1 for noise)
         var uniqueLabels = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 uniqueLabels.Add(label);
@@ -260,75 +183,18 @@ public class BCSS<T> : IClusterMetric<T>
             return 0; // Need at least 2 clusters
         }
 
-        // Compute overall centroid
-        var globalCentroid = new double[d];
-        int validPoints = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            validPoints++;
-            for (int j = 0; j < d; j++)
-            {
-                globalCentroid[j] += _numOps.ToDouble(data[i, j]);
-            }
-        }
-
+        int validPoints = labelsIds.Count(label => label >= 0);
         if (validPoints == 0) return 0;
 
-        for (int j = 0; j < d; j++)
-        {
-            globalCentroid[j] /= validPoints;
-        }
+        // Cluster centroids over label slots 0..max and the centroid of all non-noise points
+        var engine = AiDotNetEngine.Current;
+        var sums = ClusteringTensorOps.ClusterSums(data, labels, labelsIds.Max() + 1, out var counts);
+        var centroids = ClusteringTensorOps.DivideRows(sums, counts);
+        var globalCentroid = engine.Divide(
+            engine.ReduceSum(Tensor<T>.FromMatrix(sums), new[] { 0 }, false).ToVector(), _numOps.FromDouble(validPoints));
 
-        // Compute cluster centroids
-        var centroids = new Dictionary<int, double[]>();
-        var counts = new Dictionary<int, int>();
-
-        foreach (int label in uniqueLabels)
-        {
-            centroids[label] = new double[d];
-            counts[label] = 0;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            counts[label]++;
-            for (int j = 0; j < d; j++)
-            {
-                centroids[label][j] += _numOps.ToDouble(data[i, j]);
-            }
-        }
-
-        foreach (int label in uniqueLabels)
-        {
-            if (counts[label] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    centroids[label][j] /= counts[label];
-                }
-            }
-        }
-
-        // Compute BCSS
-        double bcss = 0;
-        foreach (int label in uniqueLabels)
-        {
-            double distSq = 0;
-            for (int j = 0; j < d; j++)
-            {
-                double diff = centroids[label][j] - globalCentroid[j];
-                distSq += diff * diff;
-            }
-            bcss += counts[label] * distSq;
-        }
-
-        return bcss;
+        // BCSS = sum_c n_c * ||centroid_c - global||^2
+        var offsets = ClusteringTensorOps.SquaredDistancesToPoint(globalCentroid, centroids);
+        return _numOps.ToDouble(engine.DotProduct(counts, offsets));
     }
 }

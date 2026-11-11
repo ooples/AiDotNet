@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
@@ -67,10 +68,12 @@ public class ClusteringEntropy<T> : IExternalClusterMetric<T>
         var clusterCounts = new Dictionary<int, int>();
         var trueClasses = new HashSet<int>();
 
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
         for (int i = 0; i < n; i++)
         {
-            int cluster = (int)_numOps.ToDouble(predictedLabels[i]);
-            int trueClass = (int)_numOps.ToDouble(trueLabels[i]);
+            int cluster = predictedLabelsIds[i];
+            int trueClass = trueLabelsIds[i];
 
             trueClasses.Add(trueClass);
 
@@ -125,10 +128,12 @@ public class ClusteringEntropy<T> : IExternalClusterMetric<T>
         var clusterCounts = new Dictionary<int, int>();
         var trueClasses = new HashSet<int>();
 
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
         for (int i = 0; i < n; i++)
         {
-            int cluster = (int)_numOps.ToDouble(predictedLabels[i]);
-            int trueClass = (int)_numOps.ToDouble(trueLabels[i]);
+            int cluster = predictedLabelsIds[i];
+            int trueClass = trueLabelsIds[i];
 
             trueClasses.Add(trueClass);
 
@@ -184,9 +189,10 @@ public class ClusteringEntropy<T> : IExternalClusterMetric<T>
 
         // Count number of classes
         var trueClasses = new HashSet<int>();
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
         for (int i = 0; i < n; i++)
         {
-            trueClasses.Add((int)_numOps.ToDouble(trueLabels[i]));
+            trueClasses.Add(trueLabelsIds[i]);
         }
 
         int numClasses = trueClasses.Count;
@@ -279,9 +285,10 @@ public class Homogeneity<T> : IExternalClusterMetric<T>
         int n = labels.Length;
         var counts = new Dictionary<int, int>();
 
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (!counts.ContainsKey(label))
                 counts[label] = 0;
             counts[label]++;
@@ -353,9 +360,10 @@ public class Completeness<T> : IExternalClusterMetric<T>
         int n = labels.Length;
         var counts = new Dictionary<int, int>();
 
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (!counts.ContainsKey(label))
                 counts[label] = 0;
             counts[label]++;

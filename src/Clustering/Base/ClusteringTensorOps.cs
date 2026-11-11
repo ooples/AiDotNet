@@ -161,8 +161,9 @@ internal static class ClusteringTensorOps
         int min = (int)Math.Floor(numOps.ToDouble(engine.TensorMinValue(values)));
         int max = (int)Math.Ceiling(numOps.ToDouble(engine.TensorMaxValue(values)));
         var table = engine.TensorArange<T>(min, (double)max + 1, 1);
-        var positions = engine.TensorSearchSorted(table, values, false);
-        return (min == 0 ? positions : engine.TensorAddScalar(positions, min)).ToArray();
+        // With right = true the position of an integral value v is (v - min + 1); fractional values round down.
+        var positions = engine.TensorSearchSorted(table, values, true);
+        return (min == 1 ? positions : engine.TensorAddScalar(positions, min - 1)).ToArray();
     }
 
     /// <summary>Converts integer values (labels, indices) to a <typeparamref name="T"/> vector with one bulk gather.</summary>

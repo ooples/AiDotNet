@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
@@ -76,7 +77,7 @@ public class BootstrapValidation<T>
             : RandomHelper.CreateSecureRandom();
 
         var silhouetteScores = new List<double>();
-        var inertiaValues = new List<double>();
+        var inertiaValues = new List<T>();
         var daviesBouldinScores = new List<double>();
         var calinskiHarabaszScores = new List<double>();
 
@@ -120,9 +121,9 @@ public class BootstrapValidation<T>
                     double calinskiHarabasz = calinskiHarabaszMetric.Compute(bootstrapSample, kmeans.Labels);
                     calinskiHarabaszScores.Add(calinskiHarabasz);
 
-                    if (kmeans.Inertia is not null)
+                    if (kmeans.Inertia is T inertia)
                     {
-                        inertiaValues.Add(_numOps.ToDouble(kmeans.Inertia));
+                        inertiaValues.Add(inertia);
                     }
                 }
             }
@@ -138,7 +139,7 @@ public class BootstrapValidation<T>
             ConfidenceLevel = confidenceLevel,
             NumBootstraps = _numBootstraps,
             Silhouette = ComputeConfidenceInterval(silhouetteScores, confidenceLevel),
-            Inertia = ComputeConfidenceInterval(inertiaValues, confidenceLevel),
+            Inertia = ComputeConfidenceInterval(inertiaValues.ConvertAll(_numOps.ToDouble), confidenceLevel),
             DaviesBouldin = ComputeConfidenceInterval(daviesBouldinScores, confidenceLevel),
             CalinskiHarabasz = ComputeConfidenceInterval(calinskiHarabaszScores, confidenceLevel)
         };
@@ -253,10 +254,11 @@ public class BootstrapValidation<T>
                 if (kmeans.Labels is not null)
                 {
                     // Record assignments
+                    var kmeansLabelIds = ClusteringTensorOps.ToIntArray(kmeans.Labels);
                     for (int i = 0; i < n; i++)
                     {
                         int originalIdx = indices[i];
-                        int cluster = (int)_numOps.ToDouble(kmeans.Labels[i]);
+                        int cluster = kmeansLabelIds[i];
 
                         pointAppearances[originalIdx]++;
                         if (!assignmentCounts[originalIdx].ContainsKey(cluster))
@@ -321,15 +323,7 @@ public class BootstrapValidation<T>
 
     private Matrix<T> ExtractSubMatrix(Matrix<T> data, int[] indices)
     {
-        var subMatrix = new Matrix<T>(indices.Length, data.Columns);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                subMatrix[i, j] = data[indices[i], j];
-            }
-        }
-        return subMatrix;
+        return ClusteringTensorOps.SelectRows(data, indices);
     }
 }
 

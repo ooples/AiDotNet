@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
@@ -69,15 +70,17 @@ public class JaccardIndex<T> : IExternalClusterMetric<T>
         long b = 0; // Same in true only
         long c = 0; // Same in predicted only
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueI = (int)_numOps.ToDouble(trueLabels[i]);
-            int predI = (int)_numOps.ToDouble(predictedLabels[i]);
+            int trueI = trueLabelsIds[i];
+            int predI = predictedLabelsIds[i];
 
             for (int j = i + 1; j < n; j++)
             {
-                int trueJ = (int)_numOps.ToDouble(trueLabels[j]);
-                int predJ = (int)_numOps.ToDouble(predictedLabels[j]);
+                int trueJ = trueLabelsIds[j];
+                int predJ = predictedLabelsIds[j];
 
                 bool sameTrue = trueI == trueJ;
                 bool samePred = predI == predJ;
@@ -114,15 +117,17 @@ public class JaccardIndex<T> : IExternalClusterMetric<T>
 
         long a = 0, b = 0, c = 0, d = 0;
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueI = (int)_numOps.ToDouble(trueLabels[i]);
-            int predI = (int)_numOps.ToDouble(predictedLabels[i]);
+            int trueI = trueLabelsIds[i];
+            int predI = predictedLabelsIds[i];
 
             for (int j = i + 1; j < n; j++)
             {
-                int trueJ = (int)_numOps.ToDouble(trueLabels[j]);
-                int predJ = (int)_numOps.ToDouble(predictedLabels[j]);
+                int trueJ = trueLabelsIds[j];
+                int predJ = predictedLabelsIds[j];
 
                 bool sameTrue = trueI == trueJ;
                 bool samePred = predI == predJ;
@@ -207,10 +212,12 @@ public class RandIndex<T> : IExternalClusterMetric<T>
         var trueCounts = new Dictionary<int, int>();
         var predCounts = new Dictionary<int, int>();
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueLabel = (int)_numOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)_numOps.ToDouble(predictedLabels[i]);
+            int trueLabel = trueLabelsIds[i];
+            int predLabel = predictedLabelsIds[i];
 
             var key = (trueLabel, predLabel);
             if (!contingency.ContainsKey(key))
