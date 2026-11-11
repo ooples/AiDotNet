@@ -325,17 +325,8 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
     {
         var encoderFeatures = _imageEmbedding ?? throw new InvalidOperationException("Call SetImage before SegmentFromPoints.");
         int numC = encoderFeatures.Shape[0], h = encoderFeatures.Shape[1], w = encoderFeatures.Shape[2];
-        var attention = new Tensor<T>([h, w]);
-        int numPts = points.Shape[0];
-        double sigma = Math.Max(h, w) / 10.0;
-        for (int i = 0; i < numPts; i++)
-        {
-            double px = NumOps.ToDouble(points[i, 0]), py = NumOps.ToDouble(points[i, 1]);
-            double sign = NumOps.GreaterThanOrEquals(labels[i], NumOps.FromDouble(0.5)) ? 1.0 : -1.0;
-            var g = Common.SegmentationTensorOps.GaussianMask<T>(h, w, px, py, sigma);
-            for (int j = 0; j < h * w; j++)
-                attention.Data.Span[j] = NumOps.Add(attention.Data.Span[j], NumOps.FromDouble(sign * NumOps.ToDouble(g.Data.Span[j])));
-        }
+        var positive = CvTensorOps<T>.GreaterOrEqual(labels, NumOps.FromDouble(0.5));
+        var attention = Common.SegmentationTensorOps.PointPromptAttention(points, positive, h, w);
         var sigAtt = Common.SegmentationTensorOps.Sigmoid(attention);
         var modulated = ModulateFeatures(encoderFeatures, sigAtt, numC, h, w);
         var decoded = DecodeFromFeatures(modulated);
@@ -371,78 +362,16 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);
-        var classMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(features);
-        int numC = features.Shape[0], h = classMap.Shape[0], w = classMap.Shape[1];
-        var results = new List<PromptedSegmentationResult<T>>();
-        for (int cls = 0; cls < numC && results.Count < 100; cls++)
-        {
-            double area = 0, confSum = 0;
-            var mask = new Tensor<T>([1, h, w]);
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if ((int)NumOps.ToDouble(classMap[y, x]) == cls)
-                    { mask[0, y, x] = NumOps.FromDouble(1.0); area++; confSum += NumOps.ToDouble(probs[cls, y, x]); }
-            if (area < 4) continue;
-            double conf = confSum / area;
-            results.Add(new PromptedSegmentationResult<T> { Masks = mask, Scores = [conf], StabilityScores = [conf > 0.7 ? 0.95 : conf] });
-        }
-        if (results.Count == 0)
-            results.Add(new PromptedSegmentationResult<T> { Masks = new Tensor<T>([1, features.Shape[1], features.Shape[2]]), Scores = [0.0], StabilityScores = [0.0] });
-        return results;
+        return Common.SegmentationTensorOps.ClassMaskCandidates(features, probs);
     }
 
     private Tensor<T> ModulateFeatures(Tensor<T> features, Tensor<T> spatialMask, int numC, int h, int w)
-    {
-        var modulated = new Tensor<T>(features._shape);
-        for (int c = 0; c < numC; c++)
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    modulated[c, y, x] = NumOps.Multiply(features[c, y, x], spatialMask[y, x]);
-        return modulated;
-    }
+        => Common.SegmentationTensorOps.ModulateBySpatialMask(features, spatialMask, h, w);
 
     private Tensor<T> ReduceChannelsToScoreMap(Tensor<T> output)
-    {
-        int numC = output.Shape[0], h = output.Shape[^2], w = output.Shape[^1];
-        var scoreMap = new Tensor<T>([h, w]);
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                double s = 0;
-                for (int c = 0; c < numC; c++) s += NumOps.ToDouble(output[c, y, x]);
-                scoreMap[y, x] = NumOps.FromDouble(s / numC);
-            }
-        return scoreMap;
-    }
+        => Common.SegmentationTensorOps.ChannelMean(output);
 
     private PromptedSegmentationResult<T> BuildPromptMaskResult(Tensor<T> scoreMap, int h, int w)
-    {
-        var probs = Common.SegmentationTensorOps.Sigmoid(scoreMap);
-        double[] thresholds = [0.3, 0.5, 0.7];
-        var masks = new Tensor<T>([3, h, w]);
-        var scores = new double[3];
-        var stability = new double[3];
-        for (int m = 0; m < 3; m++)
-        {
-            double area = 0, confSum = 0, areaLo = 0, areaHi = 0;
-            double tLo = thresholds[m] - 0.05, tHi = thresholds[m] + 0.05;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    double v = NumOps.ToDouble(probs[y, x]);
-                    if (v >= thresholds[m]) { masks[m, y, x] = NumOps.FromDouble(1.0); area++; confSum += v; }
-                    if (v >= tLo) areaLo++;
-                    if (v >= tHi) areaHi++;
-                }
-            scores[m] = area > 0 ? confSum / area : 0;
-            stability[m] = areaLo > 0 ? areaHi / areaLo : 0;
-        }
-        int lrH = Math.Max(1, h / 4), lrW = Math.Max(1, w / 4);
-        var lowRes = new Tensor<T>([1, lrH, lrW]);
-        for (int y = 0; y < lrH; y++)
-            for (int x = 0; x < lrW; x++)
-                lowRes[0, y, x] = scoreMap[Math.Min(y * 4, h - 1), Math.Min(x * 4, w - 1)];
-        return new PromptedSegmentationResult<T> { Masks = masks, Scores = scores, LowResLogits = lowRes, StabilityScores = stability };
-    }
+        => Common.SegmentationTensorOps.BuildPromptMaskResult(scoreMap, h, w);
     #endregion
 }

@@ -335,40 +335,64 @@ public static class SegmentationTensorOps
         => AiDotNetEngine.Current.ReduceMean(features, [0], keepDims: false);
 
     /// <summary>
-    /// Point-prompt score map: the channel mean of <paramref name="features"/> gated by the sigmoid of the
-    /// signed sum of one Gaussian per point (sigma = max(H, W) / 10). A point whose label equals one adds its
-    /// Gaussian; any other label subtracts it.
+    /// Point-prompt attention <c>[H, W]</c>: the signed sum of one Gaussian per point (sigma = max(H, W) / 10),
+    /// added where <paramref name="positive"/> is non-zero and subtracted elsewhere.
     /// </summary>
-    internal static Tensor<T> PointPromptScoreMap<T>(Tensor<T> features, Tensor<T> points, Tensor<T> labels)
+    /// <param name="points">Point coordinates <c>[N, 2+]</c> as (x, y).</param>
+    /// <param name="positive">Per-point indicator; only its first N elements are read.</param>
+    /// <param name="h">Map height.</param>
+    /// <param name="w">Map width.</param>
+    internal static Tensor<T> PointPromptAttention<T>(Tensor<T> points, Tensor<T> positive, int h, int w)
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        int h = features.Shape[1], w = features.Shape[2];
         int numPts = points.Shape[0];
-        var attention = new Tensor<T>([h, w]);
-        if (numPts > 0)
-        {
-            double sigma = Math.Max(h, w) / 10.0;
-            var px = engine.Reshape(engine.TensorSlice(points, [0, 0], [numPts, 1]), [numPts, 1, 1]);
-            var py = engine.Reshape(engine.TensorSlice(points, [0, 1], [numPts, 1]), [numPts, 1, 1]);
-            var cols = engine.Reshape(engine.TensorArange<T>(0, w, 1), [1, 1, w]);
-            var rows = engine.Reshape(engine.TensorArange<T>(0, h, 1), [1, h, 1]);
-            var dx2 = engine.TensorBroadcastTo(engine.TensorSquare(engine.TensorSubtract(
-                engine.TensorBroadcastTo(cols, [numPts, 1, w]), engine.TensorBroadcastTo(px, [numPts, 1, w]))), [numPts, h, w]);
-            var dy2 = engine.TensorBroadcastTo(engine.TensorSquare(engine.TensorSubtract(
-                engine.TensorBroadcastTo(rows, [numPts, h, 1]), engine.TensorBroadcastTo(py, [numPts, h, 1]))), [numPts, h, w]);
-            var gaussians = engine.TensorExp(engine.TensorMultiplyScalar(
-                engine.TensorAdd(dx2, dy2), numOps.FromDouble(-1.0 / (2.0 * sigma * sigma))));
+        if (numPts == 0) return new Tensor<T>([h, w]);
 
-            // sign = +1 for label one, -1 otherwise: 2 * [label == 1] - 1.
-            var pointLabels = engine.TensorSlice(engine.Reshape(labels, [labels.Length]), [0], [numPts]);
-            var sign = engine.TensorSubtractScalar(
-                engine.TensorMultiplyScalar(engine.TensorEquals(pointLabels, numOps.One), numOps.FromDouble(2.0)), numOps.One);
-            var signed = engine.TensorMultiply(gaussians, engine.TensorBroadcastTo(engine.Reshape(sign, [numPts, 1, 1]), [numPts, h, w]));
-            attention = engine.ReduceSum(signed, [0], keepDims: false);
-        }
+        double sigma = Math.Max(h, w) / 10.0;
+        var px = engine.Reshape(engine.TensorSlice(points, [0, 0], [numPts, 1]), [numPts, 1, 1]);
+        var py = engine.Reshape(engine.TensorSlice(points, [0, 1], [numPts, 1]), [numPts, 1, 1]);
+        var cols = engine.Reshape(engine.TensorArange<T>(0, w, 1), [1, 1, w]);
+        var rows = engine.Reshape(engine.TensorArange<T>(0, h, 1), [1, h, 1]);
+        var dx2 = engine.TensorBroadcastTo(engine.TensorSquare(engine.TensorSubtract(
+            engine.TensorBroadcastTo(cols, [numPts, 1, w]), engine.TensorBroadcastTo(px, [numPts, 1, w]))), [numPts, h, w]);
+        var dy2 = engine.TensorBroadcastTo(engine.TensorSquare(engine.TensorSubtract(
+            engine.TensorBroadcastTo(rows, [numPts, h, 1]), engine.TensorBroadcastTo(py, [numPts, h, 1]))), [numPts, h, w]);
+        var gaussians = engine.TensorExp(engine.TensorMultiplyScalar(
+            engine.TensorAdd(dx2, dy2), numOps.FromDouble(-1.0 / (2.0 * sigma * sigma))));
 
-        return engine.TensorMultiply(ChannelMean(features), Sigmoid(attention));
+        // sign = +1 for a positive point, -1 otherwise: 2 * [positive != 0] - 1.
+        var indicator = engine.TensorNotEquals(engine.TensorSlice(engine.Reshape(positive, [positive.Length]), [0], [numPts]), numOps.Zero);
+        var sign = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(indicator, numOps.FromDouble(2.0)), numOps.One);
+        var signed = engine.TensorMultiply(gaussians, engine.TensorBroadcastTo(engine.Reshape(sign, [numPts, 1, 1]), [numPts, h, w]));
+        return engine.ReduceSum(signed, [0], keepDims: false);
+    }
+
+    /// <summary>
+    /// Point-prompt score map: the channel mean of <paramref name="features"/> gated by the sigmoid of
+    /// <see cref="PointPromptAttention"/>, where a point is positive when its label equals one.
+    /// </summary>
+    internal static Tensor<T> PointPromptScoreMap<T>(Tensor<T> features, Tensor<T> points, Tensor<T> labels)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int h = features.Shape[1], w = features.Shape[2];
+        var positive = AiDotNetEngine.Current.TensorEquals(labels, numOps.One);
+        var attention = PointPromptAttention(points, positive, h, w);
+        return AiDotNetEngine.Current.TensorMultiply(ChannelMean(features), Sigmoid(attention));
+    }
+
+    /// <summary>
+    /// Scales every channel of a <c>[C, H, W]</c> feature map by the top-left <c>[H, W]</c> of
+    /// <paramref name="spatialMask"/>.
+    /// </summary>
+    internal static Tensor<T> ModulateBySpatialMask<T>(Tensor<T> features, Tensor<T> spatialMask, int h, int w)
+    {
+        var engine = AiDotNetEngine.Current;
+        var gate = spatialMask.Shape[0] == h && spatialMask.Shape[1] == w
+            ? spatialMask
+            : engine.TensorSlice(spatialMask, [0, 0], [h, w]);
+        int numC = features.Shape[0];
+        return engine.TensorMultiply(features, engine.TensorBroadcastTo(engine.Reshape(gate, [1, h, w]), [numC, h, w]));
     }
 
     /// <summary>
