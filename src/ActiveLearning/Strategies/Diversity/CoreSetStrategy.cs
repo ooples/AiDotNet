@@ -196,6 +196,30 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
     }
 
     /// <inheritdoc/>
+    public void UpdateState(int[] newlyLabeledIndices, TOutput[] labels)
+    {
+        if (_unlabeledFeatures == null) return;
+
+        // Move selected features to labeled set
+        _labeledFeatures ??= new List<Vector<T>>();
+
+        foreach (var index in newlyLabeledIndices)
+        {
+            if (index >= 0 && index < _unlabeledFeatures.Count)
+            {
+                _labeledFeatures.Add(_unlabeledFeatures[index]);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Reset()
+    {
+        _labeledFeatures = null;
+        _unlabeledFeatures = null;
+    }
+
+    /// <inheritdoc/>
     public int[] SelectDiverseSamples(
         IDataset<T, TInput, TOutput> unlabeledData,
         IDataset<T, TInput, TOutput>? labeledData,

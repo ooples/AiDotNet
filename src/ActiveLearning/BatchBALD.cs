@@ -147,9 +147,39 @@ public class BatchBALD<T> : IActiveLearningStrategy<T>
         for (int m = 0; m < _numMcSamples; m++)
         {
             var predictions = model.Predict(pool);
-            mcPredictions.Add(ActiveLearningEngineOps.AddSimulatedDropout(predictions, _dropoutRate, m));
+            mcPredictions.Add(AddDropoutNoise(predictions, _dropoutRate, m));
         }
         return mcPredictions;
+    }
+
+    /// <summary>
+    /// Adds simulated dropout noise to predictions.
+    /// </summary>
+    private Tensor<T> AddDropoutNoise(Tensor<T> predictions, double dropoutRate, int seed)
+    {
+        var random = RandomHelper.CreateSeededRandom(seed);
+        var noisyPredictions = new Tensor<T>(predictions._shape);
+
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            var value = _numOps.ToDouble(predictions[i]);
+
+            // Simulate MC Dropout: randomly zero neurons and scale survivors
+            if (random.NextDouble() < dropoutRate)
+            {
+                // Drop this neuron (set to zero)
+                value = 0.0;
+            }
+            else
+            {
+                // Scale up surviving values to maintain expected value (inverted dropout)
+                value *= 1.0 / (1.0 - dropoutRate);
+            }
+
+            noisyPredictions[i] = _numOps.FromDouble(value);
+        }
+
+        return noisyPredictions;
     }
 
     /// <summary>

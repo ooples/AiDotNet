@@ -50,10 +50,6 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     private readonly List<(IActiveLearningStrategy<T> Strategy, double Weight)> _strategies;
     private readonly CombinationMethod _method;
 
-    /// <summary>
-    /// Strategy weights converted once to the numeric type.
-    /// </summary>
-    private readonly T[] _weights;
     private bool _useBatchDiversity;
     private T _lastMinScore;
     private T _lastMaxScore;
@@ -98,12 +94,6 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
         if (_strategies.Count == 0)
         {
             throw new ArgumentException("At least one strategy must be provided.", nameof(strategies));
-        }
-
-        _weights = new T[_strategies.Count];
-        for (int s = 0; s < _strategies.Count; s++)
-        {
-            _weights[s] = _numOps.FromDouble(_strategies[s].Weight);
         }
     }
 
@@ -227,7 +217,7 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
         for (int s = 0; s < _strategies.Count; s++)
         {
             var scores = SamplePrefix(NormalizeScores(Tensor<T>.FromVector(allScores[s])), numSamples);
-            result = engine.TensorAdd(result, engine.TensorMultiplyScalar(scores, _weights[s]));
+            result = engine.TensorAdd(result, engine.TensorMultiplyScalar(scores, _numOps.FromDouble(_strategies[s].Weight)));
         }
 
         return result.ToVector();
@@ -250,7 +240,7 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
             var normalized = SamplePrefix(NormalizeScores(Tensor<T>.FromVector(allScores[s])), numSamples);
 
             // Add epsilon to avoid zero products, then apply weight as exponent
-            var weightedValue = engine.TensorPower(engine.TensorAddScalar(normalized, epsilon), _weights[s]);
+            var weightedValue = engine.TensorPower(engine.TensorAddScalar(normalized, epsilon), _numOps.FromDouble(_strategies[s].Weight));
             result = engine.TensorMultiply(result, weightedValue);
         }
 

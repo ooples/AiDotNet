@@ -511,7 +511,8 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         var residuals = engine.Subtract(yBinary, engine.Sigmoid(logOdds));
 
         // Check top feature pairs
-        var candidates = new List<(int, int, T)>();
+        var candidates = new List<(int, int)>();
+        var candidateScores = new List<T>();
 
         int maxFeaturesToConsider = Math.Min(_numFeatures, Math.Max(0, _options.MaxInteractionFeatures));
         if (maxFeaturesToConsider < 2)
@@ -523,18 +524,18 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         {
             for (int f2 = f1 + 1; f2 < maxFeaturesToConsider; f2++)
             {
-                T score = ComputeInteractionScore(sampleBins[f1], sampleBins[f2], _binEdges[f2].Length + 1, residuals);
-                candidates.Add((f1, f2, score));
+                candidateScores.Add(ComputeInteractionScore(sampleBins[f1], sampleBins[f2], _binEdges[f2].Length + 1, residuals));
+                candidates.Add((f1, f2));
             }
         }
 
-        // Select top interactions and initialize their terms
-        var topInteractions = candidates
-            .OrderByDescending(c => NumOps.ToDouble(c.Item3))
-            .Take(_options.MaxInteractions).ToList();
+        // Select top interactions (stable descending by score) and initialize their terms
+        var topIndices = AiDotNet.ActiveLearning.ActiveLearningEngineOps.SelectTopScoring(
+            new Vector<T>(candidateScores), _options.MaxInteractions);
 
-        foreach (var (f1, f2, _) in topInteractions)
+        foreach (int top in topIndices)
         {
+            var (f1, f2) = candidates[top];
             int numBins1 = Math.Min(_binEdges[f1].Length + 1, _options.MaxInteractionBins);
             int numBins2 = Math.Min(_binEdges[f2].Length + 1, _options.MaxInteractionBins);
             _interactionTerms[(f1, f2)] = new Matrix<T>(numBins1, numBins2);

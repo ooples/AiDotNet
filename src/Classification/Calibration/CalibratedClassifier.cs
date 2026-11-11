@@ -570,7 +570,7 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
             var perSample = engine.TensorAdd(
                 engine.TensorMultiply(targetsT, engine.TensorLog(q)),
                 engine.TensorMultiply(oneMinusTargets, engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, q))));
-            T loss = NumOps.Negate(engine.TensorSum(perSample));
+            T loss = engine.TensorSum(engine.TensorNegate(perSample));
 
             weights = engine.Subtract(weights, engine.Multiply(gradient, step));
 

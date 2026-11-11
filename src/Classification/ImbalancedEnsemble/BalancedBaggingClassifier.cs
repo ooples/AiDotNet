@@ -323,7 +323,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
         // Class distribution, majority class (the first wins ties) and class probabilities
         var engine = Engine;
         var sampleClasses = new Tensor<int>(_sampleClasses, new[] { _sampleClasses.Length });
-        var classCounts = ClassCounts(sampleClasses, sampleIndices);
+        var classCounts = CountClassSamples(sampleClasses, sampleIndices);
         int majorityClass = NumClasses == 0 ? 0 : engine.TensorArgMax(classCounts, 0).ToArray()[0];
         int total = sampleIndices.Length;
         var classProbs = engine.TensorDivideScalar(classCounts, NumOps.FromDouble(total)).ToVector();

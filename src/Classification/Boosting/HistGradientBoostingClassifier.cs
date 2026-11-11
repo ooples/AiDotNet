@@ -605,7 +605,10 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         // Find best split (strictly positive gain; the first feature, then the first bin, wins ties)
         int bestFeature = -1;
         int bestBin = -1;
-        T bestGain = NumOps.Zero;
+        var featureGains = new List<Tensor<T>>();
+        var featureIds = new List<int>();
+        var bestBinPerFeature = new List<int>();
+        T countValue = NumOps.FromDouble(count);
         T parentVal = NumOps.Divide(NumOps.Multiply(sumGrad, sumGrad), NumOps.Add(sumHess, lambda));
         T minLeaf = NumOps.FromDouble(_minSamplesLeaf);
         T half = NumOps.FromDouble(0.5);
@@ -630,7 +633,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
             var leftCount = engine.TensorCumSum(binCount, 0).Slice(0, 0, numBins - 1);
             var rightGrad = engine.ScalarMinusTensor(sumGrad, leftGrad);
             var rightHess = engine.ScalarMinusTensor(sumHess, leftHess);
-            var rightCount = engine.ScalarMinusTensor(NumOps.FromDouble(count), leftCount);
+            var rightCount = engine.ScalarMinusTensor(countValue, leftCount);
 
             // gain = 0.5 * (L^2 / (LH + lambda) + R^2 / (RH + lambda) - P^2 / (PH + lambda))
             var leftVal = engine.TensorDivide(engine.TensorMultiply(leftGrad, leftGrad), engine.TensorAddScalar(leftHess, lambda));
@@ -643,12 +646,20 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
                 engine.TensorGreaterEqual(rightCount, FilledVector(numBins - 1, minLeaf).AsTensor()));
             var candidates = engine.TensorWhere(allowed, gains, new Tensor<T>(new[] { numBins - 1 }));
             int bin = engine.TensorArgMax(candidates, 0).ToArray()[0];
-            T gain = candidates[bin];
-            if (NumOps.Compare(gain, bestGain) > 0)
+            featureGains.Add(engine.TensorSlice(candidates, new[] { bin }, new[] { 1 }));
+            featureIds.Add(j);
+            bestBinPerFeature.Add(bin);
+        }
+
+        // First feature with the largest gain wins, provided that gain is strictly positive
+        if (featureGains.Count > 0)
+        {
+            var allGains = engine.TensorConcatenate(featureGains.ToArray(), 0);
+            int bestPosition = engine.TensorArgMax(allGains, 0).ToArray()[0];
+            if (NumOps.GreaterThan(allGains[bestPosition], NumOps.Zero))
             {
-                bestGain = gain;
-                bestFeature = j;
-                bestBin = bin;
+                bestFeature = featureIds[bestPosition];
+                bestBin = bestBinPerFeature[bestPosition];
             }
         }
 
@@ -824,7 +835,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         {
             { "FeatureIndex", node.FeatureIndex },
             { "BinThreshold", node.BinThreshold },
-            { "LeafValue", node.LeafValue },
+            { "LeafValue", (object?)node.LeafValue ?? throw new InvalidOperationException("Tree leaf value is null.") },
             { "IsLeaf", node.LeftChild is null && node.RightChild is null }
         };
 

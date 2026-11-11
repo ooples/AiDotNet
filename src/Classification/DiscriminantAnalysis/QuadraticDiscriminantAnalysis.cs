@@ -275,7 +275,7 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
         // log|det| = sum of log|pivot| of partially pivoted elimination; a pivot below 1e-12 in magnitude
         // is replaced by 1e-12 and elimination continues with it
         ForwardEliminate(Tensor<T>.FromMatrix(matrix), matrix.Rows, SmallPivotHandling.FloorMagnitude, out var pivots);
-        return Engine.TensorSum(Engine.TensorLog(Engine.TensorAbs(Vector<T>.Wrap(pivots).AsTensor())));
+        return Engine.TensorSum(Engine.TensorLog(Engine.TensorAbs(pivots)));
     }
 
     /// <inheritdoc/>

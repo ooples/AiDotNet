@@ -506,7 +506,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="classes">The class index of every training sample.</param>
     /// <param name="samples">The samples to count.</param>
     /// <returns>The [NumClasses] counts.</returns>
-    private protected Tensor<T> ClassCounts(Tensor<int> classes, int[] samples)
+    private protected Tensor<T> CountClassSamples(Tensor<int> classes, int[] samples)
     {
         var engine = Engine;
         if (samples.Length == 0 || NumClasses == 0)
@@ -556,6 +556,9 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         T totalCount = NumOps.FromDouble(total);
         T half = NumOps.FromDouble(0.5);
         T minLeaf = NumOps.FromDouble(minSamplesLeaf);
+        var featureScores = new List<Tensor<T>>();
+        var featureThresholds = new List<Tensor<T>>();
+        var featureIds = new List<int>();
 
         foreach (int j in features)
         {
@@ -595,11 +598,23 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
             var maxValues = FilledVector(numDistinct - 1, NumOps.MaxValue).AsTensor();
             var scores = engine.TensorWhere(allowed, weighted, maxValues);
             int v = engine.TensorArgMin(scores, 0).ToArray()[0];
-            if (NumOps.Compare(allowed[v], NumOps.Zero) != 0 && NumOps.Compare(scores[v], bestGini) < 0)
+
+            // Disallowed splits score MaxValue, so they never beat the initial best below
+            featureScores.Add(engine.TensorSlice(scores, new[] { v }, new[] { 1 }));
+            featureThresholds.Add(engine.TensorMultiplyScalar(
+                engine.ReduceSum(engine.TensorSlice(distinct, new[] { v }, new[] { 2 }), new[] { 0 }, true), half));
+            featureIds.Add(j);
+        }
+
+        // First feature with the strictly lowest weighted Gini wins
+        if (featureScores.Count > 0)
+        {
+            var allScores = engine.TensorConcatenate(featureScores.ToArray(), 0);
+            int best = engine.TensorArgMin(allScores, 0).ToArray()[0];
+            if (NumOps.LessThan(allScores[best], bestGini))
             {
-                bestGini = scores[v];
-                bestFeature = j;
-                bestThreshold = NumOps.Multiply(NumOps.Add(distinct[v], distinct[v + 1]), half);
+                bestFeature = featureIds[best];
+                bestThreshold = featureThresholds[best][0];
             }
         }
 
@@ -653,16 +668,18 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         }
 
         // Augmented matrix [A | I]
-        var augmented = engine.TensorConcatenate(new[] { Tensor<T>.FromMatrix(matrix), engine.TensorEye<T>(n) }, 1);
+        var identity = engine.TensorEye<T>(n);
+        var augmented = engine.TensorConcatenate(new[] { Tensor<T>.FromMatrix(matrix), identity }, 1);
+        T minimum = NumOps.FromDouble(1e-12);
         for (int col = 0; col < n; col++)
         {
             augmented = SwapInPivotRow(augmented, col, n);
-            T pivot = ClampPivot(augmented[col, col], NumOps.FromDouble(1e-12));
+            var pivot = ClampPivot(engine.TensorSlice(augmented, new[] { col, col }, new[] { 1, 1 }), minimum);
 
-            // Scale the pivot row, then eliminate the column from every other row
-            var pivotRow = engine.TensorDivideScalar(augmented.Slice(0, col, col + 1), pivot);
-            var factors = augmented.Slice(1, col, col + 1).Clone();
-            factors[col, 0] = NumOps.Zero;
+            // Scale the pivot row, then eliminate the column from every other row (the pivot row's factor is 0)
+            var pivotRow = engine.TensorDivide(augmented.Slice(0, col, col + 1), engine.TensorBroadcastTo(pivot, new[] { 1, 2 * n }));
+            var column = augmented.Slice(1, col, col + 1);
+            var factors = engine.TensorSubtract(column, engine.TensorMultiply(column, identity.Slice(1, col, col + 1)));
             var eliminated = engine.TensorSubtract(augmented, engine.TensorMultiply(factors, pivotRow));
             augmented = ReplaceRow(eliminated, col, pivotRow);
         }
@@ -690,31 +707,46 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         T skipThreshold = NumOps.FromDouble(1e-10);
         var augmented = ForwardEliminate(
             engine.TensorConcatenate(new[] { a, b.AsTensor().Reshape(n, 1) }, 1), n, handling, out _);
+        var upper = augmented.Slice(1, 0, n);
+        var rhs = augmented.Slice(1, n, n + 1);
 
-        // Back substitution
-        var solution = new T[n];
-        for (int i = n - 1; i >= 0; i--)
+        // Divisor per row: ClampToMinimum turns |diag| < 1e-12 into +1e-12; SkipColumn solves rows with
+        // |diag| <= 1e-10 as 0 (divide by 1, then multiply by the 0 keep flag)
+        var diag = engine.TensorDiagonal(upper).Reshape(n, 1);
+        var absDiag = engine.TensorAbs(diag);
+        Tensor<T>? keep = null;
+        Tensor<T> divisor;
+        if (handling == SmallPivotHandling.ClampToMinimum)
         {
-            T sum = augmented[i, n];
-            if (i < n - 1)
-            {
-                var upper = augmented.Slice(0, i, i + 1).Slice(1, i + 1, n).Reshape(n - i - 1).ToVector();
-                var known = Vector<T>.Wrap(solution).GetSubVector(i + 1, n - i - 1);
-                sum = NumOps.Subtract(sum, engine.DotProduct(upper, known));
-            }
-
-            T diag = augmented[i, i];
-            if (handling == SmallPivotHandling.ClampToMinimum)
-            {
-                solution[i] = NumOps.Divide(sum, NumOps.Compare(NumOps.Abs(diag), clampThreshold) < 0 ? clampThreshold : diag);
-            }
-            else
-            {
-                solution[i] = NumOps.Compare(NumOps.Abs(diag), skipThreshold) > 0 ? NumOps.Divide(sum, diag) : NumOps.Zero;
-            }
+            divisor = engine.TensorWhere(engine.TensorLessThan(absDiag, clampThreshold), Filled(new[] { n, 1 }, clampThreshold), diag);
+        }
+        else
+        {
+            keep = engine.TensorGreaterThan(absDiag, skipThreshold);
+            divisor = engine.TensorWhere(keep, diag, Filled(new[] { n, 1 }, NumOps.One));
         }
 
-        return Vector<T>.Wrap(solution);
+        // Back substitution, one [1, 1] row of the [n, 1] solution at a time
+        var solution = new Tensor<T>(new[] { n, 1 });
+        for (int i = n - 1; i >= 0; i--)
+        {
+            var sum = rhs.Slice(0, i, i + 1);
+            if (i < n - 1)
+            {
+                var upperRow = upper.Slice(0, i, i + 1).Slice(1, i + 1, n);
+                sum = engine.TensorSubtract(sum, engine.TensorMatMul(upperRow, solution.Slice(0, i + 1, n)));
+            }
+
+            var value = engine.TensorDivide(sum, divisor.Slice(0, i, i + 1));
+            if (keep is not null)
+            {
+                value = engine.TensorMultiply(value, keep.Slice(0, i, i + 1));
+            }
+
+            solution = ReplaceRow(solution, i, value);
+        }
+
+        return solution.Reshape(n).ToVector();
     }
 
     /// <summary>
@@ -728,31 +760,34 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="handling">How pivots near zero are treated.</param>
     /// <param name="pivots">The pivot used for each column (after any adjustment).</param>
     /// <returns>The reduced matrix.</returns>
-    private protected Tensor<T> ForwardEliminate(Tensor<T> augmented, int n, SmallPivotHandling handling, out T[] pivots)
+    private protected Tensor<T> ForwardEliminate(Tensor<T> augmented, int n, SmallPivotHandling handling, out Tensor<T> pivots)
     {
         var engine = Engine;
         T minimum = NumOps.FromDouble(handling == SmallPivotHandling.SkipColumn ? 1e-10 : 1e-12);
-        pivots = new T[n];
+        var pivotList = new List<Tensor<T>>(n);
         for (int col = 0; col < n; col++)
         {
             augmented = SwapInPivotRow(augmented, col, n);
-            T pivot = augmented[col, col];
-            bool eliminate = true;
+            var pivot = engine.TensorSlice(augmented, new[] { col, col }, new[] { 1, 1 });
+
+            // SkipColumn: a column whose pivot is at most the minimum in magnitude is left as is
+            // (its factors are multiplied by the 0 keep flag; the divisor becomes 1)
+            Tensor<T>? keep = null;
             switch (handling)
             {
                 case SmallPivotHandling.ClampToMinimum:
                     pivot = ClampPivot(pivot, minimum);
                     break;
                 case SmallPivotHandling.FloorMagnitude:
-                    pivot = NumOps.Compare(NumOps.Abs(pivot), minimum) < 0 ? minimum : pivot;
+                    pivot = engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(pivot), minimum), Filled(new[] { 1, 1 }, minimum), pivot);
                     break;
                 default:
-                    eliminate = NumOps.Compare(NumOps.Abs(pivot), minimum) > 0;
+                    keep = engine.TensorGreaterThan(engine.TensorAbs(pivot), minimum);
                     break;
             }
 
-            pivots[col] = pivot;
-            if (!eliminate || col == n - 1)
+            pivotList.Add(pivot);
+            if (col == n - 1)
             {
                 continue;
             }
@@ -760,11 +795,18 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
             // row -= (row[col] / pivot) * pivotRow for every row below the pivot
             var pivotRow = augmented.Slice(0, col, col + 1);
             var below = augmented.Slice(0, col + 1, n);
-            var factors = engine.TensorDivideScalar(below.Slice(1, col, col + 1), pivot);
+            var divisor = keep is null ? pivot : engine.TensorWhere(keep, pivot, Filled(new[] { 1, 1 }, NumOps.One));
+            var factors = engine.TensorDivide(below.Slice(1, col, col + 1), engine.TensorBroadcastTo(divisor, new[] { n - col - 1, 1 }));
+            if (keep is not null)
+            {
+                factors = engine.TensorMultiply(factors, engine.TensorBroadcastTo(keep, new[] { n - col - 1, 1 }));
+            }
+
             var reduced = engine.TensorSubtract(below, engine.TensorMultiply(factors, pivotRow));
             augmented = engine.TensorConcatenate(new[] { augmented.Slice(0, 0, col + 1), reduced }, 0);
         }
 
+        pivots = n == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(pivotList.ToArray(), 0).Reshape(n);
         return augmented;
     }
 
@@ -812,17 +854,22 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
-    /// Replaces a pivot smaller than <paramref name="minimum"/> in magnitude by +/-minimum (sign kept, + for zero).
+    /// Replaces a [1, 1] pivot smaller than <paramref name="minimum"/> in magnitude by +/-minimum
+    /// (sign kept, + for zero).
     /// </summary>
-    private T ClampPivot(T pivot, T minimum)
+    private Tensor<T> ClampPivot(Tensor<T> pivot, T minimum)
     {
-        if (NumOps.Compare(NumOps.Abs(pivot), minimum) >= 0)
-        {
-            return pivot;
-        }
-
-        return NumOps.Compare(pivot, NumOps.Zero) < 0 ? NumOps.Negate(minimum) : minimum;
+        var engine = Engine;
+        var shape = pivot.Shape.ToArray();
+        var signed = engine.TensorWhere(
+            engine.TensorLessThan(pivot, NumOps.Zero), Filled(shape, NumOps.Negate(minimum)), Filled(shape, minimum));
+        return engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(pivot), minimum), signed, pivot);
     }
+
+    /// <summary>
+    /// A tensor of the given shape with every entry equal to <paramref name="value"/>.
+    /// </summary>
+    private Tensor<T> Filled(int[] shape, T value) => Engine.TensorAddScalar(new Tensor<T>(shape), value);
 
     /// <summary>
     /// Returns <paramref name="tensor"/> with row <paramref name="row"/> replaced by the [1, columns] <paramref name="newRow"/>.

@@ -269,20 +269,21 @@ public abstract partial class SemiSupervisedClassifierBase<T> : ClassifierBase<T
             }
         }
 
+        // One row of kernel values at a time; without self loops only the strict upper triangle is
+        // evaluated (the rest is 0) and it is mirrored by adding its transpose
+        T zero = NumOps.Zero;
+        var rows = new Tensor<T>[n];
         for (int i = 0; i < n; i++)
         {
-            for (int j = graphWithoutSelfLoops ? i + 1 : 0; j < m; j++)
-            {
-                var similarity = kernel.Calculate(left[i], right[j]);
-                similarities[i, j] = similarity;
-                if (graphWithoutSelfLoops)
-                {
-                    similarities[j, i] = similarity;
-                }
-            }
+            var row = left[i];
+            int first = graphWithoutSelfLoops ? i + 1 : 0;
+            rows[i] = new Vector<T>(Enumerable.Range(0, m).Select(j => j >= first ? kernel.Calculate(row, right[j]) : zero))
+                .AsTensor().Reshape(1, m);
         }
 
-        return similarities;
+        var engine = Engine;
+        var upper = engine.TensorConcatenate(rows, 0);
+        return graphWithoutSelfLoops ? engine.TensorAdd(upper, engine.TensorTranspose(upper)) : upper;
     }
 
     /// <summary>

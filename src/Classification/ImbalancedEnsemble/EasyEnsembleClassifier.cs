@@ -362,10 +362,11 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         var isZero = engine.TensorEquals(classValues, NumOps.Zero);
 
         var weakLearners = new List<WeakLearner>();
-        var alphas = new List<T>();
-        T learningRate = NumOps.FromDouble(_learningRate);
+        var alphas = new List<Tensor<T>>();
+        T halfLearningRate = NumOps.Multiply(NumOps.FromDouble(_learningRate), NumOps.FromDouble(0.5));
         T minError = NumOps.FromDouble(1e-10);
         T maxError = NumOps.FromDouble(1 - 1e-10);
+        T two = NumOps.FromDouble(2.0);
 
         for (int t = 0; t < _nEstimatorsPerSubset; t++)
         {
@@ -377,15 +378,16 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
                 engine.TensorMultiply(engine.ScalarMinusTensor(NumOps.One, predictions), isZero));
             var misclassified = engine.ScalarMinusTensor(NumOps.One, correct);
 
-            T weightedError = engine.TensorSum(engine.TensorMultiply(weights, misclassified));
-            weightedError = NumOps.Compare(weightedError, maxError) > 0 ? maxError : weightedError;
-            weightedError = NumOps.Compare(weightedError, minError) < 0 ? minError : weightedError;
-            T alpha = NumOps.Multiply(NumOps.Multiply(learningRate, NumOps.FromDouble(0.5)),
-                NumOps.Log(NumOps.Divide(NumOps.Subtract(NumOps.One, weightedError), weightedError)));
+            // [1] weighted error clamped to [1e-10, 1 - 1e-10]; alpha = lr * 0.5 * log((1 - err) / err)
+            var weightedError = engine.TensorClamp(
+                engine.ReduceSum(engine.TensorMultiply(weights, misclassified), new[] { 0 }, true), minError, maxError);
+            var alpha = engine.TensorMultiplyScalar(
+                engine.TensorLog(engine.TensorDivide(engine.ScalarMinusTensor(NumOps.One, weightedError), weightedError)),
+                halfLearningRate);
 
             // w *= exp(alpha * sign) with sign = +1 for misclassified and -1 otherwise, then normalize
-            var sign = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(misclassified, NumOps.FromDouble(2.0)), NumOps.One);
-            weights = engine.TensorMultiply(weights, engine.TensorExp(engine.TensorMultiplyScalar(sign, alpha)));
+            var sign = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(misclassified, two), NumOps.One);
+            weights = engine.TensorMultiply(weights, engine.TensorExp(engine.TensorMultiply(sign, engine.TensorBroadcastTo(alpha, new[] { n }))));
             weights = engine.TensorDivideScalar(weights, engine.TensorSum(weights));
 
             weakLearners.Add(learner);
@@ -395,7 +397,9 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         return new AdaBoostSubClassifier
         {
             WeakLearners = weakLearners,
-            Alphas = alphas
+            Alphas = alphas.Count == 0
+                ? new List<T>()
+                : new List<T>(engine.TensorConcatenate(alphas.ToArray(), 0).ToArray())
         };
     }
 
@@ -424,9 +428,11 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         // Samples of any other class are misclassified by every stump
         T otherTotal = n == 0 ? NumOps.Zero : NumOps.Subtract(NumOps.Subtract(engine.TensorSum(weights), oneTotal), zeroTotal);
 
-        var bestLearner = new WeakLearner();
-        T bestWeightedError = NumOps.MaxValue;
-        bool found = false;
+        var featureErrors = new List<Tensor<T>>();
+        var featureThresholds = new List<Tensor<T>>();
+        var featureIds = new List<int>();
+        var featurePolarities = new List<int>();
+        T two = NumOps.FromDouble(2.0);
 
         for (int j = 0; j < NumFeatures && n > 0; j++)
         {
@@ -454,26 +460,26 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             }, 1).Reshape(2 * (numDistinct - 1));
 
             int best = engine.TensorArgMin(errors, 0).ToArray()[0];
-            T weightedError = errors[best];
-            if (!found || NumOps.Compare(weightedError, bestWeightedError) < 0)
-            {
-                int v = best / 2;
-                found = true;
-                bestWeightedError = weightedError;
-                bestLearner = new WeakLearner
-                {
-                    FeatureIndex = j,
-                    Threshold = NumOps.Divide(NumOps.Add(distinct[v], distinct[v + 1]), NumOps.FromDouble(2.0)),
-                    Polarity = best % 2 == 0 ? -1 : 1
-                };
-            }
+            int v = best / 2;
+            featureErrors.Add(engine.TensorSlice(errors, new[] { best }, new[] { 1 }));
+            featureThresholds.Add(engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorSlice(distinct, new[] { v }, new[] { 2 }), new[] { 0 }, true), two));
+            featureIds.Add(j);
+            featurePolarities.Add(best % 2 == 0 ? -1 : 1);
         }
 
-        if (!found)
+        if (featureErrors.Count == 0)
             throw new InvalidOperationException(
                 "No valid split found: all features appear to be constant.");
 
-        return bestLearner;
+        // The first feature with the strictly lowest error wins
+        int bestFeature = engine.TensorArgMin(engine.TensorConcatenate(featureErrors.ToArray(), 0), 0).ToArray()[0];
+        return new WeakLearner
+        {
+            FeatureIndex = featureIds[bestFeature],
+            Threshold = featureThresholds[bestFeature][0],
+            Polarity = featurePolarities[bestFeature]
+        };
     }
 
     /// <summary>
@@ -518,6 +524,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         var features = Tensor<T>.FromMatrix(input);
         var classOne = new Tensor<T>(new[] { rows });
         var classZero = new Tensor<T>(new[] { rows });
+        T two = NumOps.FromDouble(2.0);
 
         foreach (var subClassifier in _subClassifiers)
         {
@@ -526,7 +533,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             if (_softVoting)
             {
                 // Average probabilities: P(class 1) = 1 / (1 + exp(-2 * score))
-                support = engine.TensorSigmoid(engine.TensorMultiplyScalar(score, NumOps.FromDouble(2.0)));
+                support = engine.TensorSigmoid(engine.TensorMultiplyScalar(score, two));
             }
             else
             {
@@ -551,10 +558,11 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
     {
         var engine = Engine;
         var score = new Tensor<T>(new[] { features.Shape[0] });
+        T two = NumOps.FromDouble(2.0);
         for (int t = 0; t < classifier.WeakLearners.Count; t++)
         {
             var sign = engine.TensorSubtractScalar(
-                engine.TensorMultiplyScalar(PredictWeakLearner(classifier.WeakLearners[t], features), NumOps.FromDouble(2.0)),
+                engine.TensorMultiplyScalar(PredictWeakLearner(classifier.WeakLearners[t], features), two),
                 NumOps.One);
             score = engine.TensorAdd(score, engine.TensorMultiplyScalar(sign, classifier.Alphas[t]));
         }

@@ -251,8 +251,7 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
         foreach (var member in _committee)
         {
             var prediction = member.Predict(input);
-            var probabilities = ConvertToProbabilities(prediction);
-            allProbabilities.Add(probabilities);
+            allProbabilities.Add(ConvertToProbabilities(prediction));
         }
 
         // Compute consensus (average) distribution
@@ -278,8 +277,7 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
         foreach (var member in _committee)
         {
             var prediction = member.Predict(input);
-            var probabilities = ConvertToProbabilities(prediction);
-            allProbabilities.Add(probabilities);
+            allProbabilities.Add(ConvertToProbabilities(prediction));
         }
 
         // Compute variance across committee for each class

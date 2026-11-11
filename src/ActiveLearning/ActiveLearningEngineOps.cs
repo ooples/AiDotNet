@@ -390,42 +390,6 @@ internal static class ActiveLearningEngineOps
     }
 
     /// <summary>
-    /// Simulates MC Dropout on predictions: each value is dropped with probability
-    /// <paramref name="dropoutRate"/> (seeded draw order) and survivors are scaled by 1 / (1 - rate).
-    /// </summary>
-    /// <remarks>
-    /// Kept as a scalar loop until the engine can draw uniforms from a caller-seeded Random in
-    /// row-major order (TensorUniformFromRng in missing-ops); engine RNG ops use a different stream.
-    /// </remarks>
-    internal static Tensor<T> AddSimulatedDropout<T>(Tensor<T> predictions, double dropoutRate, int seed)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var random = RandomHelper.CreateSeededRandom(seed);
-        var noisyPredictions = new Tensor<T>(predictions._shape);
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var value = numOps.ToDouble(predictions[i]);
-
-            // Simulate MC Dropout: randomly zero neurons and scale survivors
-            if (random.NextDouble() < dropoutRate)
-            {
-                // Drop this neuron (set to zero)
-                value = 0.0;
-            }
-            else
-            {
-                // Scale up surviving values to maintain expected value (inverted dropout)
-                value *= 1.0 / (1.0 - dropoutRate);
-            }
-
-            noisyPredictions[i] = numOps.FromDouble(value);
-        }
-
-        return noisyPredictions;
-    }
-
-    /// <summary>
     /// Selects the <paramref name="batchSize"/> highest-scoring indices, ties in index order
     /// (the order of the stable LINQ OrderByDescending this replaces).
     /// </summary>

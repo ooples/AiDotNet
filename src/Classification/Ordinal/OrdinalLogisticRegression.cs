@@ -313,16 +313,25 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     /// </summary>
     private Vector<T> EnforceIncreasing(Vector<T> thresholds, T gap)
     {
-        var values = thresholds.ToArray();
-        for (int k = 1; k < values.Length; k++)
+        int count = thresholds.Length;
+        if (count < 2)
         {
-            if (NumOps.LessThanOrEquals(values[k], values[k - 1]))
-            {
-                values[k] = NumOps.Add(values[k - 1], gap);
-            }
+            return Vector<T>.Wrap(thresholds.ToArray());
         }
 
-        return Vector<T>.Wrap(values);
+        // Each [1] slice depends on the already-fixed previous one
+        var engine = Engine;
+        var source = thresholds.AsTensor();
+        var previous = source.Slice(0, 0, 1);
+        var fixedValues = new List<Tensor<T>>(count) { previous };
+        for (int k = 1; k < count; k++)
+        {
+            var current = source.Slice(0, k, k + 1);
+            previous = engine.TensorWhere(engine.TensorLessEqual(current, previous), engine.TensorAddScalar(previous, gap), current);
+            fixedValues.Add(previous);
+        }
+
+        return engine.TensorConcatenate(fixedValues.ToArray(), 0).ToVector();
     }
 
     /// <summary>

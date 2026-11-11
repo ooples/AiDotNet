@@ -350,7 +350,7 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
             else
             {
                 // First sample whose cumulative distance reaches the threshold
-                var threshold = engine.TensorMultiplyScalar(totalDistance, NumOps.FromDouble(random.NextDouble()));
+                var threshold = engine.TensorMultiply(totalDistance, engine.TensorRandomUniform<T>(new[] { 1 }));
                 int selectedIdx = engine.TensorSearchSorted(cumulative, threshold).GetFlat(0);
                 if (selectedIdx >= n)
                 {
