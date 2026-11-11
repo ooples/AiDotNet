@@ -1,5 +1,3 @@
-using AiDotNet.DecompositionMethods.MatrixDecomposition;
-using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -85,11 +83,9 @@ internal static class DimensionalityReductionOps
     internal static (Tensor<T> Values, Tensor<T> Vectors) SymmetricEigen<T>(Tensor<T> a, bool descending)
     {
         var engine = Engine;
-        var eigen = new EigenDecomposition<T>(Symmetrize(a).ToMatrix(), EigenAlgorithmType.Jacobi);
-        var values = Tensor<T>.FromVector(eigen.EigenValues);
+        var (values, vectors) = LinalgDispatch<T>.Eigh(Symmetrize(a));
         var order = engine.TensorArgsort(values, 0, descending);
-        var vectors = engine.TensorIndexSelect(Tensor<T>.FromMatrix(eigen.EigenVectors), order, 1);
-        return (engine.TensorIndexSelect(values, order, 0), AlignColumnSigns(vectors));
+        return (engine.TensorIndexSelect(values, order, 0), AlignColumnSigns(engine.TensorIndexSelect(vectors, order, 1)));
     }
 
     /// <summary>Flips each column whose entries sum to a negative value.</summary>
@@ -173,15 +169,9 @@ internal static class DimensionalityReductionOps
     /// <summary>Solves a x = b for a square a and a [n] or [n, m] right-hand side by LU with partial pivoting.</summary>
     internal static Tensor<T> Solve<T>(Tensor<T> a, Tensor<T> b)
     {
-        var lu = new LuDecomposition<T>(a.ToMatrix());
         if (b.Rank == 1)
-            return Tensor<T>.FromVector(lu.Solve(b.ToVector()));
-
-        var rhs = b.ToMatrix();
-        var solution = new Matrix<T>(rhs.Rows, rhs.Columns);
-        for (int c = 0; c < rhs.Columns; c++)
-            solution.SetColumn(c, lu.Solve(rhs.GetColumn(c)));
-        return Tensor<T>.FromMatrix(solution);
+            return Engine.Reshape(LinalgDispatch<T>.SolveEx(a, Engine.Reshape(b, new[] { b.Shape[0], 1 })).Result, new[] { b.Shape[0] });
+        return LinalgDispatch<T>.SolveEx(a, b).Result;
     }
 
     /// <summary>The inverse of a square matrix by LU with partial pivoting.</summary>
@@ -396,13 +386,13 @@ internal static class DimensionalityReductionOps
     /// </summary>
     internal static Tensor<T> SolveEach<T>(Tensor<T> a, Tensor<T> b)
     {
-        var engine = Engine;
-        var systems = engine.TensorUnstack(a, 0);
-        var rhs = engine.TensorUnstack(b, 0);
-        var solutions = new Tensor<T>[systems.Length];
-        for (int i = 0; i < systems.Length; i++)
-            solutions[i] = Solve(systems[i], rhs[i]);
-        return engine.TensorStack(solutions, 0);
+        if (b.Rank == 2)
+        {
+            var column = Engine.Reshape(b, new[] { b.Shape[0], b.Shape[1], 1 });
+            return Engine.Reshape(LinalgDispatch<T>.SolveEx(a, column).Result, b.Shape.ToArray());
+        }
+
+        return LinalgDispatch<T>.SolveEx(a, b).Result;
     }
 
     /// <summary>
@@ -412,12 +402,16 @@ internal static class DimensionalityReductionOps
     internal static (Tensor<T> Values, Tensor<T> Vectors) SymmetricEigenEach<T>(Tensor<T> a, bool descending)
     {
         var engine = Engine;
-        var matrices = engine.TensorUnstack(a, 0);
-        var values = new Tensor<T>[matrices.Length];
-        var vectors = new Tensor<T>[matrices.Length];
-        for (int i = 0; i < matrices.Length; i++)
-            (values[i], vectors[i]) = SymmetricEigen(matrices[i], descending);
-        return (engine.TensorStack(values, 0), engine.TensorStack(vectors, 0));
+        var (values, vectors) = LinalgDispatch<T>.Eigh(engine.TensorMultiplyScalar(
+            engine.TensorAdd(a, engine.TensorSwapAxes(a, 1, 2)), MathHelper.GetNumericOperations<T>().FromDouble(0.5)));
+        var order = engine.TensorArgsort(values, 1, descending);
+        var sortedValues = engine.TensorTakeAlongDim(values, order, 1);
+        int k = a.Shape[1];
+        var columnOrder = engine.TensorTile(engine.Reshape(order, new[] { order.Shape[0], 1, k }), new[] { 1, k, 1 });
+        var sortedVectors = engine.TensorTakeAlongDim(vectors, columnOrder, 2);
+        var negative = engine.TensorLessThan(engine.ReduceSum(sortedVectors, new[] { 1 }, true), MathHelper.GetNumericOperations<T>().Zero);
+        var sign = engine.TensorAddScalar(engine.TensorMultiplyScalar(negative, MathHelper.GetNumericOperations<T>().FromDouble(-2.0)), MathHelper.GetNumericOperations<T>().One);
+        return (sortedValues, engine.TensorMultiply(sortedVectors, sign));
     }
 
     /// <summary>Per-matrix trace of an [n, k, k] batch.</summary>
