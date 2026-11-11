@@ -488,7 +488,6 @@ internal class SwinTransformerBlock<T>
         yield return _mlpFc2;
     }
 
-    private readonly INumericOperations<T> _numOps;
     private readonly int _dim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -510,7 +509,6 @@ internal class SwinTransformerBlock<T>
 
     public SwinTransformerBlock(int dim, int numHeads, int windowSize, int shiftSize)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _dim = dim;
         _numHeads = numHeads;
         _headDim = dim / numHeads;
@@ -539,12 +537,13 @@ internal class SwinTransformerBlock<T>
     {
         // Drawn from the model's initialization scope (#2201). A fixed seed of 42 here ignored the configured seed and gave every same-shape tensor identical values.
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
-        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
+        var values = new double[_relativePositionBiasTable.Length];
+        for (int i = 0; i < values.Length; i++)
         {
             double value = random.NextGaussian(0, 0.02);
-            value = Math.Max(-0.04, Math.Min(0.04, value));
-            _relativePositionBiasTable[i] = _numOps.FromDouble(value);
+            values[i] = Math.Max(-0.04, Math.Min(0.04, value));
         }
+        CvTensorOps<T>.FromDoubleArray(values, new[] { values.Length }).AsSpan().CopyTo(_relativePositionBiasTable.AsWritableSpan());
     }
 
     private int[,] ComputeRelativePositionIndex(int windowSize)
@@ -684,8 +683,7 @@ internal class SwinTransformerBlock<T>
 
         writer.Write(_relativePositionBiasTable.Shape[0]);
         writer.Write(_relativePositionBiasTable.Shape[1]);
-        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
-            writer.Write(_numOps.ToDouble(_relativePositionBiasTable[i]));
+        BackboneSerialization.WriteValues(writer, _relativePositionBiasTable);
 
         BackboneSerialization.WriteLayerParameters(writer, _mlpFc1);
         BackboneSerialization.WriteLayerParameters(writer, _mlpFc2);
@@ -702,8 +700,7 @@ internal class SwinTransformerBlock<T>
         int biasTableDim1 = reader.ReadInt32();
         if (biasTableDim0 != _relativePositionBiasTable.Shape[0] || biasTableDim1 != _relativePositionBiasTable.Shape[1])
             throw new InvalidOperationException("SwinTransformerBlock relative position bias table shape mismatch.");
-        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
-            _relativePositionBiasTable[i] = _numOps.FromDouble(reader.ReadDouble());
+        BackboneSerialization.ReadValuesInto(reader, _relativePositionBiasTable);
 
         BackboneSerialization.ReadLayerParameters(reader, _mlpFc1);
         BackboneSerialization.ReadLayerParameters(reader, _mlpFc2);
@@ -726,7 +723,6 @@ internal class SwinTransformerBlock<T>
 /// </summary>
 internal class SwinLayerNorm<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly int _dim;
     private readonly Tensor<T> _gamma;
     private readonly Tensor<T> _beta;
@@ -734,16 +730,10 @@ internal class SwinLayerNorm<T>
 
     public SwinLayerNorm(int dim, double eps = 1e-6)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _dim = dim;
         _eps = eps;
-        _gamma = new Tensor<T>(new[] { dim });
-        _beta = new Tensor<T>(new[] { dim });
-        for (int i = 0; i < dim; i++)
-        {
-            _gamma[i] = _numOps.FromDouble(1.0);
-            _beta[i] = _numOps.FromDouble(0.0);
-        }
+        _gamma = CvTensorOps<T>.Fill(new[] { dim }, 1.0);
+        _beta = CvTensorOps<T>.Fill(new[] { dim }, 0.0);
     }
 
     public Tensor<T> Forward(Tensor<T> x) => CvTensorOps<T>.LayerNormLastAxis(x, _gamma, _beta, _eps);
@@ -753,8 +743,8 @@ internal class SwinLayerNorm<T>
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write(_dim);
-        for (int i = 0; i < _dim; i++) writer.Write(_numOps.ToDouble(_gamma[i]));
-        for (int i = 0; i < _dim; i++) writer.Write(_numOps.ToDouble(_beta[i]));
+        BackboneSerialization.WriteValues(writer, _gamma);
+        BackboneSerialization.WriteValues(writer, _beta);
     }
 
     public void ReadParameters(BinaryReader reader)
@@ -762,8 +752,8 @@ internal class SwinLayerNorm<T>
         int dim = reader.ReadInt32();
         if (dim != _dim)
             throw new InvalidOperationException($"SwinLayerNorm dim mismatch: expected {_dim}, got {dim}.");
-        for (int i = 0; i < _dim; i++) _gamma[i] = _numOps.FromDouble(reader.ReadDouble());
-        for (int i = 0; i < _dim; i++) _beta[i] = _numOps.FromDouble(reader.ReadDouble());
+        BackboneSerialization.ReadValuesInto(reader, _gamma);
+        BackboneSerialization.ReadValuesInto(reader, _beta);
     }
 
     /// <summary>The learnable scale and shift, as live tensors.</summary>

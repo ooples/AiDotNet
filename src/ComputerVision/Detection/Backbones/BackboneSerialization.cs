@@ -43,4 +43,20 @@ internal static class BackboneSerialization
             wire[i] = reader.ReadDouble();
         layer.SetParameters(new Vector<T>(CvTensorOps<T>.FromDoubleArray(wire, new[] { len }).ToArray()));
     }
+
+    /// <summary>Writes every value of <paramref name="tensor"/> as a <see cref="double"/>, in order.</summary>
+    public static void WriteValues<T>(BinaryWriter writer, Tensor<T> tensor)
+    {
+        foreach (double value in CvTensorOps<T>.ToDoubleArray(tensor))
+            writer.Write(value);
+    }
+
+    /// <summary>Reads <c>tensor.Length</c> doubles and writes them through into <paramref name="tensor"/>.</summary>
+    public static void ReadValuesInto<T>(BinaryReader reader, Tensor<T> tensor)
+    {
+        var wire = new double[tensor.Length];
+        for (int i = 0; i < wire.Length; i++)
+            wire[i] = reader.ReadDouble();
+        CvTensorOps<T>.FromDoubleArray(wire, new[] { wire.Length }).AsSpan().CopyTo(tensor.AsWritableSpan());
+    }
 }
