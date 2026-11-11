@@ -182,14 +182,28 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         var seen = new System.Collections.Generic.HashSet<long>();
         foreach (var sparse in sparseList)
         {
-            int n = sparse.NumIndices;
-            for (int k = 0; k < n; k++)
+            // Integer row ids: a set-membership scan over the index span, no numeric work.
+            foreach (long row in sparse.Indices.AsSpan().Slice(0, sparse.NumIndices))
             {
-                long row = sparse.Indices[k];
                 if (!seen.Add(row)) return true;
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Sum of squares of the first <paramref name="count"/> elements (all of them when omitted) as one engine
+    /// reduction, read back as a double.
+    /// </summary>
+    internal static double SumOfSquares<T>(Tensor<T> values, int count = -1)
+    {
+        int length = count < 0 ? values.Length : count;
+        if (length == 0) return 0.0;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var source = length == values.Length
+            ? values
+            : Vector<T>.FromSpan(values.AsSpan().Slice(0, length)).AsTensor();
+        return MathHelper.GetNumericOperations<T>().ToDouble(engine.TensorSumOfSquares(source));
     }
 
     internal static bool TryGetEffectiveGradient<T>(
