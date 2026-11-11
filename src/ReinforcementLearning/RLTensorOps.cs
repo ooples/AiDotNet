@@ -381,6 +381,18 @@ internal static class RLTensorOps
         return Engine.TensorGather(flat, new Tensor<int>(flatIndices, new[] { count }), 0).ToVector();
     }
 
+    /// <summary>The first column of a [count, width] batched output (each row's V(s) or Q(s, a)).</summary>
+    internal static Vector<T> FirstColumn<T>(Tensor<T> batch, int count)
+    {
+        if (batch is null)
+        {
+            throw new ArgumentNullException(nameof(batch));
+        }
+
+        int width = count == 0 ? 0 : batch.ToVector().Length / count;
+        return PickPerRow(batch, count, width, new int[count]);
+    }
+
     /// <summary>
     /// One-step TD targets: r for a terminal transition, r + gamma * bootstrap otherwise (a terminal row's
     /// bootstrap value is never used).
