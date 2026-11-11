@@ -546,6 +546,17 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Combine(fingerprint,
                 OptionSensitivityHarness.Fingerprint(codes.Cast<int>().Select(code => (double)code)));
         }
+        if (network is AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T> convTransformer && option == "MaxTextLength")
+        {
+            // MaxTextLength bounds the greedy attention decode inside Transcribe; Predict returns encoder logits and
+            // never decodes. An untrained decoder rarely emits the end token, so the transcript runs to the bound.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var waveform = new Tensor<T>(new[] { 16000 });
+            for (int i = 0; i < waveform.Length; i++) waveform[i] = ops.FromDouble(0.4 * Math.Sin(i * .13) + 0.2 * Math.Cos(i * .37));
+            string text = convTransformer.Transcribe(waveform, includeTimestamps: false).Text;
+            return OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(text.Select(character => (double)character).Append(text.Length)));
+        }
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T> cif && option == "TailThreshold")
         {
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();

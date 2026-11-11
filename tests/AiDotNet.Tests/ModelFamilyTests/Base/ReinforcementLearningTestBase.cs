@@ -1383,6 +1383,13 @@ public abstract class ReinforcementLearningTestBase<T>
                 // every 16 steps, so the paper's 50 and every candidate near it clamped to 16 and measured
                 // Insensitive. Below the episode length the perturbation reaches the sequence it sizes.
                 TryLowerInt(options, "BatchLength", 8);
+
+                // TRPO's backtracking shrinks the step only after the full natural-gradient step is rejected, and on
+                // this two-state bandit the full step clears the default 0.1 accept ratio at once. Requiring 90% of
+                // the linear prediction rejects the full step, so line search runs and the shrink factor sets the
+                // step that is accepted.
+                if (option == "LineSearchBacktrackCoeff" && options is AiDotNet.Models.Options.TRPOOptions<T>)
+                    options.GetType().GetProperty("LineSearchAcceptRatio")?.SetValue(options, 0.9);
             },
             model => DescribeAgent(model, battery),
             controlGroup: option == "WarmupSteps" ? "rl-warmup"

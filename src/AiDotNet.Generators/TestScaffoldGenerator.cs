@@ -9773,7 +9773,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "RevAI" => "AttentionDecoderLayers = 1, ReverseDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
                     "CTCSegmentation" => "NumEncoderLayers = 1, AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
                     // Two layers, so the intermediate CTC loss reads the first.
-                    "InterCTC" or "SelfConditionedCTC" => "NumEncoderLayers = 2, IntermediateCtcLayers = new[] { 1 }, ",
+                    // Three layers leave two valid taps, so a perturbed tap position is a different, legal model.
+                    "InterCTC" or "SelfConditionedCTC" => "NumEncoderLayers = 3, IntermediateCtcLayers = new[] { 1 }, ",
                     "ParakeetCTC" => "SubsamplingChannels = 8, ",
                     "ParakeetRNNT" or "ParakeetTDT" => "SubsamplingChannels = 8, PredictionDim = 16, JointDim = 16, ",
                     "AssemblyAIUniversal2" => "PredictionDim = 16, JointDim = 16, AttentionChunkSize = 2, ",

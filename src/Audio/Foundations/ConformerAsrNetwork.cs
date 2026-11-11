@@ -295,6 +295,9 @@ internal sealed class ConformerAsrNetwork<T>
         foreach (int layer in _o.IntermediateCtcLayers)
             if (layer < 1 || layer >= _o.NumEncoderLayers)
                 throw new ArgumentException($"Intermediate CTC layer {layer} is not below the last of {_o.NumEncoderLayers}.", nameof(options));
+        if (_o.IntermediateCtcLayers.Distinct().Count() != _o.IntermediateCtcLayers.Length)
+            // Each listed layer taps the encoder once; a repeated index would name one tap twice.
+            throw new ArgumentException("Intermediate CTC layers must be distinct.", nameof(options));
         if (_o.SelfConditioning || _o.Block == ConformerAsrBlock.Transformer)
             CtcNorm = Own(new LayerNormalizationLayer<T>(d));
         if (_o.Decoder == ConformerAsrDecoder.None) return;
