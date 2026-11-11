@@ -266,11 +266,7 @@ public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBa
             var nextValues = new T[populationSize];
 
             // Elitism: the best member survives unchanged, so the best value cannot go backwards.
-            int elite = 0;
-            for (int p = 1; p < populationSize; p++)
-            {
-                if (NumOps.LessThan(values[p], values[elite])) elite = p;
-            }
+            int elite = Engine.TensorArgMin(Vector<T>.Wrap(values).AsTensor(), 0).AsSpan()[0];
 
             next[0] = population[elite].Clone();
             nextValues[0] = values[elite];
