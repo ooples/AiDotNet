@@ -576,6 +576,8 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjecti
     protected override IReadOnlyList<TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (_usingCustomLayers || !_useNativeMode) return null;
+        // Train on one NumFrames-frame clip of a longer sequence, as the paper's data pipeline does.
+        (input, expectedOutput) = TrainingClip(input, expectedOutput);
         int stage = TrainingStage;
         _trainingSteps++;
         var o = _options;

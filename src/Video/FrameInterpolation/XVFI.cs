@@ -289,6 +289,17 @@ public partial class XVFI<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
     }
 
     /// <summary>
+    /// Ends a training epoch, the release's <c>scheduler.step()</c>: MultiStepLR multiplies the rate by
+    /// <see cref="XVFIOptions.LearningRateDecay"/> at each of <see cref="XVFIOptions.LearningRateMilestones"/>.
+    /// </summary>
+    public void EndEpoch()
+    {
+        if (ReleaseOptimizer() is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer)
+            throw new InvalidOperationException("XVFI's milestone schedule runs on its release optimizer.");
+        optimizer.OnEpochEnd();
+    }
+
+    /// <summary>
     /// The release's loss on frames [N, 3, H, W] in [0, 1], computed in [−1, 1]: the L1 reconstruction loss averaged over
     /// every level's frame against the bicubically downscaled ground truth, plus the smoothness of level 0's refined
     /// flows against the ground truth downscaled by the scale factor.

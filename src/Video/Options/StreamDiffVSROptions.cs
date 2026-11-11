@@ -44,7 +44,6 @@ public class StreamDiffVSROptions : NeuralNetworkOptions
         VaeChannels = other.VaeChannels;
         EncoderBlocks = (int[])other.EncoderBlocks.Clone();
         DecoderBlocks = (int[])other.DecoderBlocks.Clone();
-        ScaleFactor = other.ScaleFactor;
         SamplingSteps = other.SamplingSteps;
         NumTrainTimesteps = other.NumTrainTimesteps;
         BetaStart = other.BetaStart;
@@ -109,8 +108,11 @@ public class StreamDiffVSROptions : NeuralNetworkOptions
 
     #region Sampling
 
-    /// <summary>The upscaling factor, the autoencoder's compression (4).</summary>
-    public int ScaleFactor { get; set; } = 4;
+    /// <summary>
+    /// The upscaling factor: the tiny autoencoder's compression, 2^(levels - 1) of <see cref="EncoderBlocks"/> (released: 4).
+    /// The condition embedding and the decoder must compress by the same factor.
+    /// </summary>
+    public int ScaleFactor => EncoderBlocks is { Length: > 0 } ? 1 << (EncoderBlocks.Length - 1) : 0;
 
     /// <summary>The DDIM steps at trailing timesteps (released: 4).</summary>
     public int SamplingSteps { get; set; } = 4;

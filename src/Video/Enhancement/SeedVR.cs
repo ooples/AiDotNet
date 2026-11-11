@@ -312,6 +312,16 @@ public partial class SeedVR<T> : VideoSuperResolutionBase<T>, ITrainingObjective
         return Engine.TensorConcatenate(new[] { noised, mask }, 1);
     }
 
+    /// <summary>The latent channels the DiT denoises.</summary>
+    internal int LatentChannelCount => _options.LatentChannels;
+
+    /// <summary>The DiT's positive-prompt velocity for latents <c>[B, C, n, h, w]</c> conditioned on themselves (no
+    /// augmentation noise) at one timestep: the denoiser on a latent grid of any size, such as a 720p one, where the
+    /// window counts cut the grid.</summary>
+    internal Tensor<T> LatentVelocity(Tensor<T> latents, double timestep)
+        => Velocity(latents, Condition(latents, 0, null), Enumerable.Repeat(timestep, latents.Shape[0]).ToArray(),
+            Prompt(_positivePrompt, _options.TextLength, latents.Shape[0]));
+
     // The velocity prediction for x_t [B, C, n, h, w] given the condition [B, C + 1, n, h, w].
     private Tensor<T> Velocity(Tensor<T> latents, Tensor<T> condition, IReadOnlyList<double> timesteps, Tensor<T> prompt)
         => Dit.Forward(Engine, Layers, Engine.TensorConcatenate(new[] { latents, condition }, 1), prompt, timesteps);

@@ -269,7 +269,7 @@ public abstract partial class VideoSuperResolutionBase<T> : VideoNeuralNetworkBa
     /// not carry the input's frame count (a model that predicts fewer frames than it reads) is returned unchanged.
     /// </para>
     /// </remarks>
-    protected (Tensor<T> Input, Tensor<T> Target) TrainingClip(Tensor<T> input, Tensor<T> target)
+    private protected (Tensor<T> Input, Tensor<T> Target) TrainingClip(Tensor<T> input, Tensor<T> target)
     {
         if (input is null) throw new System.ArgumentNullException(nameof(input));
         if (target is null) throw new System.ArgumentNullException(nameof(target));

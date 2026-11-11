@@ -269,6 +269,19 @@ public partial class FLAVR<T> : FrameInterpolationBase<T>, ITrainingObjectivePro
         return _optimizer;
     }
 
+    /// <summary>
+    /// Ends a training epoch with its validation loss, the release's <c>scheduler.step(test_loss)</c>: ReduceLROnPlateau
+    /// multiplies the rate by <see cref="FLAVROptions.PlateauFactor"/> once the loss has not improved for
+    /// <see cref="FLAVROptions.PlateauPatience"/> epochs.
+    /// </summary>
+    /// <param name="validationLoss">The epoch's validation loss.</param>
+    public void EndEpoch(double validationLoss)
+    {
+        if (ReleaseOptimizer() is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer)
+            throw new InvalidOperationException("FLAVR's plateau schedule runs on its release optimizer.");
+        optimizer.OnEpochEnd(validationLoss);
+    }
+
     /// <summary>The release's loss: the L1 distance over every output frame [N, 3·outputs, H, W] in [0, 1].</summary>
     internal Tensor<T> ReleaseLoss(Tensor<T> window, Tensor<T> target)
     {

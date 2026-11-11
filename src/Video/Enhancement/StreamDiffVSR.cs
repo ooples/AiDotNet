@@ -77,6 +77,9 @@ public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>, ITrainingOb
     private bool _disposed;
     private int _trainingSteps;
     private int _promptLayer;
+
+    /// <summary>The empty prompt's text embedding the U-Net and ControlNet cross-attend to, a frozen [1, PromptLength * CrossAttentionDim] vector.</summary>
+    internal ILayer<T> PromptEmbeddingLayer() => Layers[_promptLayer];
     private readonly LazyModuleGroup<T> _unetGroup = new(MgldInit.Default);
     private readonly LazyModuleGroup<T> _controlGroup = new(MgldInit.Default);
     private readonly LazyModuleGroup<T> _vaeGroup = new(MgldInit.Default);

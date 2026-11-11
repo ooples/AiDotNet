@@ -253,6 +253,8 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjectiveP
     protected override IReadOnlyList<TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (_usingCustomLayers || !_useNativeMode) return null;
+        // Train on one NumFrames-frame clip of a longer sequence, as the paper's data pipeline does.
+        (input, expectedOutput) = TrainingClip(input, expectedOutput);
         _trainingSteps++;
         var optimizer = BuildPaperOptimizer();
         return new[]
