@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System;
 using System.Linq;
 using AiDotNet.Enums;
@@ -34,8 +35,9 @@ internal static class CtcSegmentationOptionFixture
 public class CtcSegmentationOptionTests
 {
     [Fact(Timeout = 120000)]
-    public void ConfidenceWindowChangesConfidenceWithoutChangingAlignment()
+    public async Task ConfidenceWindowChangesConfidenceWithoutChangingAlignment()
     {
+        await Task.Yield();
         using var model = CtcSegmentationOptionFixture.Create<double>();
         var waveform = CtcSegmentationOptionFixture.Waveform<double>();
         var first = model.Segment(waveform, new[] { 1, 2, 1 });

@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
@@ -12,8 +13,9 @@ namespace AiDotNet.Tests.IntegrationTests.SyntheticData;
 public class SyntheticGeneratorSeedRoutingTests
 {
     [Fact(Timeout = 120000)]
-    public void CtabGradientPenaltyChangesTrainedCritic()
+    public async Task CtabGradientPenaltyChangesTrainedCritic()
     {
+        await Task.Yield();
         double[] Fit(double penalty)
         {
             var options = new CTABGANPlusOptions<double> { Seed = 7 };

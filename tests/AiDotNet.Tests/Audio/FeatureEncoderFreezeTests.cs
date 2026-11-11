@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System;
 using System.Linq;
 using AiDotNet.Enums;
@@ -23,8 +24,9 @@ public class FeatureEncoderFreezeTests
     [InlineData("Omnilangual", false)]
     [InlineData("Wav2Vec2", true)]
     [InlineData("Wav2Vec2", false)]
-    public void FineTuningFreezesOnlyTheConfiguredFeatureEncoder(string kind, bool freeze)
+    public async Task FineTuningFreezesOnlyTheConfiguredFeatureEncoder(string kind, bool freeze)
     {
+        await Task.Yield();
         var architecture = new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
             NeuralNetworkTaskType.SequenceToSequence, inputSize: 1600, outputSize: 8) { RandomSeed = 7 };
         TOptions Configure<TOptions>(TOptions options) where TOptions : ModelOptions
