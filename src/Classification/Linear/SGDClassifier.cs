@@ -100,14 +100,7 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
         }
 
         // Convert labels to +1/-1 for binary classification
-        T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        var yBinary = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            yBinary[i] = NumOps.Compare(y[i], positiveClass) == 0
-                ? NumOps.One
-                : NumOps.Negate(NumOps.One);
-        }
+        var yBinary = SignedBinaryTargets(y).ToArray();
 
         T learningRate = NumOps.FromDouble(Options.LearningRate);
         T alpha = NumOps.FromDouble(Options.Alpha);
@@ -120,41 +113,14 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
             int[] indices = Options.Shuffle
                 ? ShuffleIndices(x.Rows)
                 : Enumerable.Range(0, x.Rows).ToArray();
-            T epochLoss = NumOps.Zero;
+            var sampleLosses = new T[indices.Length];
+            int sampleCount = 0;
 
             foreach (int i in indices)
             {
-                // Extract sample
-                var sample = new Vector<T>(NumFeatures);
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    sample[j] = x[i, j];
-                }
-
-                // Compute prediction
-                T prediction = DecisionFunction(sample);
-                T target = yBinary[i];
-
-                // Compute loss and gradient based on loss type
-                T loss;
-                T gradient;
-                ComputeLossAndGradient(prediction, target, out loss, out gradient);
-                epochLoss = NumOps.Add(epochLoss, loss);
-
-                // Update weights
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    T update = NumOps.Multiply(learningRate, NumOps.Multiply(gradient, sample[j]));
-                    Weights[j] = NumOps.Subtract(Weights[j], update);
-                }
-
-                // Update intercept
-                if (Options.FitIntercept)
-                {
-                    T interceptUpdate = NumOps.Multiply(learningRate, gradient);
-                    Intercept = NumOps.Subtract(Intercept, interceptUpdate);
-                }
+                sampleLosses[sampleCount++] = SgdStep(GetSample(x, i), yBinary[i], learningRate);
             }
+
 
             // Apply regularization
             if (Options.Penalty == LinearPenalty.L2)
@@ -166,14 +132,11 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
                 ApplyL1Gradient(learningRate, alpha);
             }
 
-            // Check for convergence
-            T avgLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(x.Rows));
-            T improvement = NumOps.Abs(NumOps.Subtract(prevLoss, avgLoss));
-            if (NumOps.Compare(improvement, tolerance) < 0)
+            // Check for convergence on the mean epoch loss
+            if (HasConverged(sampleLosses, x.Rows, tolerance, ref prevLoss))
             {
                 break;
             }
-            prevLoss = avgLoss;
         }
     }
 
@@ -267,5 +230,41 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
                 gradient = NumOps.Zero;
                 break;
         }
+    }
+
+    /// <summary>
+    /// One SGD step on a single sample (w -= lr * gradient * x); returns the sample's loss.
+    /// </summary>
+    private T SgdStep(Vector<T> sample, T target, T learningRate)
+    {
+        // Compute loss and gradient based on loss type
+        ComputeLossAndGradient(DecisionFunction(sample), target, out T loss, out T gradient);
+
+        T scale = NumOps.Multiply(learningRate, gradient);
+        AddScaledSample(sample, NumOps.Negate(scale));
+        if (Options.FitIntercept)
+        {
+            Intercept = NumOps.Subtract(Intercept, scale);
+        }
+
+        return loss;
+    }
+
+    /// <summary>
+    /// Convergence check on the mean epoch loss: true when |previous - mean| &lt; tolerance, otherwise the
+    /// mean becomes the new previous loss.
+    /// </summary>
+    private bool HasConverged(T[] sampleLosses, int rows, T tolerance, ref T prevLoss)
+    {
+        T epochLoss = sampleLosses.Length == 0 ? NumOps.Zero : Engine.Sum(Vector<T>.Wrap(sampleLosses));
+        T avgLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(rows));
+        T improvement = NumOps.Abs(NumOps.Subtract(prevLoss, avgLoss));
+        if (NumOps.Compare(improvement, tolerance) < 0)
+        {
+            return true;
+        }
+
+        prevLoss = avgLoss;
+        return false;
     }
 }
