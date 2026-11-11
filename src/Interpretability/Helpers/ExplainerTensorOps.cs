@@ -136,6 +136,11 @@ internal static class ExplainerTensorOps<T>
         if (count == 0)
             return new Vector<T>(0);
 
+        int outputs = plusOutputs[0].Length;
+        if (outputIndex < 0 || outputIndex >= outputs)
+            throw new ArgumentOutOfRangeException(nameof(outputIndex),
+                $"Output index {outputIndex} is out of bounds for prediction with {outputs} outputs.");
+
         var plus = engine.TensorSliceAxis(engine.TensorStack(plusOutputs, 0), 1, outputIndex);
         var minus = engine.TensorSliceAxis(engine.TensorStack(minusOutputs, 0), 1, outputIndex);
         return engine.TensorDivideScalar(engine.TensorSubtract(plus, minus), NumOps.FromDouble(2 * epsilon)).ToVector();
