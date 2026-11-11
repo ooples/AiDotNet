@@ -244,9 +244,12 @@ public class CopyOnWriteCloneTests
         for (int i = 0; i < sourcePrediction.Length; i++)
             Assert.Equal(sourcePrediction[i], sharedPrediction[i], 5);
 
-        var mutated = destination.GetParameters().Clone();
-        for (int i = 0; i < mutated.Length; i++)
-            mutated[i] += 0.25f;
+        // The reference voice runs the H/ASP speaker encoder: about sixty convolutions behind frozen batch norms, which
+        // renormalize nothing. A 0.25 offset on every weight grows its activations geometrically (measured 3.3e24 before
+        // the attentive pooling), whose second moment then overflows float to NaN, as torch's does; 0.01 keeps the
+        // perturbed model finite (a 0.2 prediction change) so the probe measures sharing, not float range.
+        var current = destination.GetParameters();
+        var mutated = current.Add(new Vector<float>(Enumerable.Repeat(0.01f, current.Length).ToArray()));
         destination.SetParameters(mutated);
 
         var sourceParamsAfter = source.GetParameters();
