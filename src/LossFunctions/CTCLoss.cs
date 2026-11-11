@@ -511,6 +511,19 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
     /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        // The base contract is a scalar: the mean of the per-sequence losses, the value CalculateLoss reports.
+        return Engine.ReduceMean(ComputePerSequenceTapeLoss(predicted, target), new[] { 0 }, keepDims: false);
+    }
+
+    /// <summary>
+    /// The unreduced tape-tracked CTC loss, one entry per batch sequence ([batch]), for callers that weight the
+    /// sequences themselves before reducing (for example by label length).
+    /// </summary>
+    /// <param name="predicted">Log-probabilities [batch, time, classes].</param>
+    /// <param name="target">Encoded labels [batchSize, targetLen0, label0_0, ..., targetLen1, label1_0, ...].</param>
+    /// <returns>The per-sequence losses, shape [batch].</returns>
+    internal Tensor<T> ComputePerSequenceTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
         int batchSize = predicted.Shape.Length == 3 ? predicted.Shape[0]
             : (int)Convert.ToDouble(NumOps.ToDouble(target[0]));
         int timeSteps = predicted.Shape.Length == 3 ? predicted.Shape[1]
@@ -529,11 +542,7 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         // layout. Keep the public loss contract batch-first and transpose through the
         // engine so the operation remains tape-tracked.
         var timeMajorLogProbs = Engine.TensorPermute(logProbs, new[] { 1, 0, 2 });
-        var perItemLoss = Engine.TensorCTCLoss(
+        return Engine.TensorCTCLoss(
             timeMajorLogProbs, targetsTensor, inputLengths, targetLengths, _blankIndex);
-
-        // The engine returns one loss per batch item; the tape loss is their mean, the same scalar
-        // CalculateLoss returns, so the gradients are those of the reported loss.
-        return Engine.ReduceMean(perItemLoss, new[] { 0 }, keepDims: false);
     }
 }
