@@ -191,6 +191,10 @@ public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     public override LayerInputDomain GetInputDomain(int[]? inputShape) => LayerInputDomain.Continuous;
 
     /// <inheritdoc />
+    /// <remarks>Transcripts, predicted and trained on, are text token ids.</remarks>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape) => LayerInputDomain.Indices(_options.VocabSize);
+
+    /// <inheritdoc />
     /// <remarks>The decoder's layers are not a chain.</remarks>
     protected override void ResolveLazyLayerShapes()
     {

@@ -279,6 +279,7 @@ AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.OnnxOptions.get -> AiDotNet.O
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.OnnxOptions.set -> void
 
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.DropoutRate.get -> double
 AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.DropoutRate.set -> void
 AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.HiddenDim.get -> int
