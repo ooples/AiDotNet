@@ -42,10 +42,10 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly bool _whiten;
 
     // Fitted parameters
-    private double[]? _mean;
-    private double[,]? _whitening;
-    private double[,]? _components; // Unmixing matrix
-    private double[,]? _mixing; // Mixing matrix (inverse of unmixing)
+    private Vector<T>? _mean;
+    private Matrix<T>? _whitening;
+    private Matrix<T>? _components; // Unmixing matrix
+    private Matrix<T>? _mixing; // Mixing matrix (pseudo-inverse of the full unmixing)
     private int _nFeaturesIn;
 
     /// <summary>
@@ -66,12 +66,12 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the unmixing matrix (components).
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets the mixing matrix.
     /// </summary>
-    public double[,]? Mixing => _mixing;
+    public Matrix<T>? Mixing => _mixing;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -138,513 +138,237 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         int k = Math.Min(_nComponents, Math.Min(n, p));
 
-        // Convert to double and center
-        var X = new double[n, p];
-        _mean = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-                sum += X[i, j];
-            }
-            _mean[j] = sum / n;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] -= _mean[j];
-            }
-        }
+        // Center the data
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = DimensionalityReductionOps.ColumnMeans(x);
+        var centered = DimensionalityReductionOps.SubtractRow(x, mean);
+        _mean = mean.ToVector();
 
         // Whiten the data
-        double[,] X1;
+        Tensor<T> x1;
+        Tensor<T>? whitening = null;
         if (_whiten)
         {
-            X1 = WhitenData(X, n, p, out _whitening);
+            (x1, whitening) = WhitenData(centered);
         }
         else
         {
-            X1 = X;
-            _whitening = null;
+            x1 = centered;
         }
 
-        // Find independent components
-        if (_algorithm == ICAAlgorithm.Deflation)
-        {
-            _components = FastICADeflation(X1, n, p, k);
-        }
-        else
-        {
-            _components = FastICAParallel(X1, n, p, k);
-        }
+        // Run FastICA
+        var unmixing = _algorithm == ICAAlgorithm.Deflation
+            ? FastICADeflation(x1, k)
+            : FastICAParallel(x1, k);
+
+        _components = unmixing.ToMatrix();
+        _whitening = whitening?.ToMatrix();
 
         // Compute mixing matrix
-        ComputeMixingMatrix(k);
+        ComputeMixingMatrix(unmixing, whitening);
     }
 
-    private double[,] WhitenData(double[,] X, int n, int p, out double[,] whitening)
+    /// <summary>
+    /// Whitening by the eigen-decomposition of the (1/n) covariance: rows of the whitening matrix are the
+    /// eigenvectors scaled by 1/sqrt(eigenvalue) (0 for eigenvalues at most 1e-10), largest first.
+    /// </summary>
+    private (Tensor<T> Whitened, Tensor<T> Whitening) WhitenData(Tensor<T> x)
     {
+        var engine = Engine;
+        int n = x.Shape[0];
+
         // Compute covariance matrix
-        var cov = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = i; j < p; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < n; k++)
-                {
-                    sum += X[k, i] * X[k, j];
-                }
-                cov[i, j] = sum / n;
-                cov[j, i] = cov[i, j];
-            }
-        }
+        var cov = engine.TensorDivideScalar(DimensionalityReductionOps.TransposeMatMul(x, x), NumOps.FromDouble(n));
 
-        // Eigendecomposition of covariance
-        var (eigenvalues, eigenvectors) = ComputeEigen(cov, p, p);
+        // Eigendecomposition
+        var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(cov, descending: true);
 
-        // Sort by eigenvalue descending
-        var indices = Enumerable.Range(0, p)
-            .OrderByDescending(i => eigenvalues[i])
-            .ToArray();
+        // Whitening matrix: D^(-1/2) * E^T
+        var scale = engine.TensorWhere(
+            engine.TensorGreaterThan(eigenvalues, NumOps.FromDouble(1e-10)),
+            engine.TensorRsqrt(eigenvalues),
+            engine.TensorZerosLike(eigenvalues));
+        var whitening = engine.TensorTranspose(DimensionalityReductionOps.ScaleColumns(eigenvectors, scale));
 
-        // Compute whitening matrix: W = D^(-1/2) @ V^T
-        whitening = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            double scale = eigenvalues[indices[i]] > 1e-10 ? 1.0 / Math.Sqrt(eigenvalues[indices[i]]) : 0;
-            for (int j = 0; j < p; j++)
-            {
-                whitening[i, j] = eigenvectors[indices[i], j] * scale;
-            }
-        }
-
-        // Apply whitening: X_white = X @ W^T
-        var X1 = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    sum += X[i, k] * whitening[j, k];
-                }
-                X1[i, j] = sum;
-            }
-        }
-
-        return X1;
+        // Apply whitening
+        return (DimensionalityReductionOps.MatMulTranspose(x, whitening), whitening);
     }
 
-    private double[,] FastICADeflation(double[,] X, int n, int p, int nComponents)
+    private Tensor<T> FastICADeflation(Tensor<T> x, int nComponents)
     {
-        var W = new double[nComponents, p];
+        var engine = Engine;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
         var random = RandomHelper.CreateSeededRandom(_randomState);
+        T half = NumOps.FromDouble(0.5);
+        T sampleCount = NumOps.FromDouble(n);
+        T tolerance = NumOps.FromDouble(_tolerance);
+        T floor = NumOps.FromDouble(1e-10);
+        var rows = new Tensor<T>[nComponents];
 
         for (int c = 0; c < nComponents; c++)
         {
-            // Initialize random vector
-            var w = new double[p];
-            double norm = 0;
-            for (int i = 0; i < p; i++)
-            {
-                w[i] = random.NextDouble() - 0.5;
-                norm += w[i] * w[i];
-            }
-            norm = Math.Sqrt(norm);
-            for (int i = 0; i < p; i++)
-            {
-                w[i] /= norm;
-            }
+            // Random initialization
+            var w = UnitRow(engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, 1, p), half));
 
-            // Fixed-point iteration
             for (int iter = 0; iter < _maxIterations; iter++)
             {
-                var wOld = (double[])w.Clone();
+                var wOld = w;
 
-                // w_new = E{x * g(w^T * x)} - E{g'(w^T * x)} * w
-                var gWx = new double[n];
-                var gPrimeWx = new double[n];
+                // Fixed-point update: w = E[x g(w^T x)] - E[g'(w^T x)] w
+                var wx = DimensionalityReductionOps.MatMulTranspose(x, w);                        // [n, 1]
+                var (g, gPrime) = ApplyNonLinearity(wx);
+                var expectedXg = engine.TensorDivideScalar(DimensionalityReductionOps.TransposeMatMul(g, x), sampleCount);
+                w = engine.TensorSubtract(expectedXg, engine.TensorMultiplyScalar(wOld, engine.TensorMean(gPrime)));
 
-                for (int i = 0; i < n; i++)
-                {
-                    double wx = 0;
-                    for (int j = 0; j < p; j++)
-                    {
-                        wx += w[j] * X[i, j];
-                    }
-                    var (g, gPrime) = ApplyNonLinearity(wx);
-                    gWx[i] = g;
-                    gPrimeWx[i] = gPrime;
-                }
-
-                // Compute E{x * g(w^T * x)}
-                var E_xg = new double[p];
-                for (int j = 0; j < p; j++)
-                {
-                    double sum = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        sum += X[i, j] * gWx[i];
-                    }
-                    E_xg[j] = sum / n;
-                }
-
-                // Compute E{g'(w^T * x)}
-                double E_gPrime = gPrimeWx.Average();
-
-                // Update w
-                for (int j = 0; j < p; j++)
-                {
-                    w[j] = E_xg[j] - E_gPrime * wOld[j];
-                }
-
-                // Orthogonalize against previous components
+                // Decorrelate from previous components (Gram-Schmidt)
                 for (int prevC = 0; prevC < c; prevC++)
                 {
-                    double dot = 0;
-                    for (int j = 0; j < p; j++)
-                    {
-                        dot += w[j] * W[prevC, j];
-                    }
-                    for (int j = 0; j < p; j++)
-                    {
-                        w[j] -= dot * W[prevC, j];
-                    }
+                    var previous = rows[prevC];
+                    w = engine.TensorSubtract(w, engine.TensorMatMul(DimensionalityReductionOps.MatMulTranspose(w, previous), previous));
                 }
 
-                // Normalize
-                norm = 0;
-                for (int j = 0; j < p; j++)
+                // Normalize; a vanished direction restarts from a fresh random vector
+                T norm = DimensionalityReductionOps.Norm(w);
+                if (DimensionalityReductionOps.Below(norm, floor))
                 {
-                    norm += w[j] * w[j];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10)
-                {
-                    // Vector is near-zero, re-initialize with random unit vector
-                    double reinitNorm = 0;
-                    for (int j = 0; j < p; j++)
-                    {
-                        w[j] = random.NextDouble() - 0.5;
-                        reinitNorm += w[j] * w[j];
-                    }
-                    reinitNorm = Math.Sqrt(reinitNorm);
-                    for (int j = 0; j < p; j++)
-                    {
-                        w[j] /= reinitNorm;
-                    }
+                    w = UnitRow(engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, 1, p), half));
                     break;
                 }
 
-                for (int j = 0; j < p; j++)
-                {
-                    w[j] /= norm;
-                }
+                w = engine.TensorDivideScalar(w, norm);
 
-                // Check convergence
-                double change = 0;
-                for (int j = 0; j < p; j++)
+                // Check convergence: sum | |w| - |w_old| |
+                T change = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(engine.TensorAbs(w), engine.TensorAbs(wOld))));
+                if (DimensionalityReductionOps.Below(change, tolerance))
                 {
-                    change += Math.Abs(Math.Abs(w[j]) - Math.Abs(wOld[j]));
+                    break;
                 }
-
-                if (change < _tolerance) break;
             }
 
-            // Store component
-            for (int j = 0; j < p; j++)
-            {
-                W[c, j] = w[j];
-            }
+            rows[c] = w;
         }
 
-        return W;
+        return engine.TensorConcatenate(rows, 0);
     }
 
-    private double[,] FastICAParallel(double[,] X, int n, int p, int nComponents)
+    private Tensor<T> FastICAParallel(Tensor<T> x, int nComponents)
     {
-        var W = new double[nComponents, p];
+        var engine = Engine;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
         var random = RandomHelper.CreateSeededRandom(_randomState);
+        T sampleCount = NumOps.FromDouble(n);
+        T tolerance = NumOps.FromDouble(_tolerance);
 
-        // Initialize with random orthogonal matrix
-        for (int c = 0; c < nComponents; c++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                W[c, j] = random.NextDouble() - 0.5;
-            }
-        }
-        OrthogonalizeMatrix(W, nComponents, p);
+        // Random initialization, then orthogonalize
+        var w = OrthogonalizeMatrix(
+            engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, nComponents, p), NumOps.FromDouble(0.5)));
 
-        // Fixed-point iteration
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            var WOld = (double[,])W.Clone();
+            var wOld = w;
 
-            // Update all components simultaneously
-            for (int c = 0; c < nComponents; c++)
+            // Fixed-point update for every component at once: W = E[g(W x) x^T] - diag(E[g'(W x)]) W
+            var wx = DimensionalityReductionOps.MatMulTranspose(x, wOld);                          // [n, k]
+            var (g, gPrime) = ApplyNonLinearity(wx);
+            var expectedXg = engine.TensorDivideScalar(DimensionalityReductionOps.TransposeMatMul(g, x), sampleCount);
+            var expectedGPrime = DimensionalityReductionOps.ColumnMeans(gPrime);                   // [k]
+            w = engine.TensorSubtract(expectedXg, DimensionalityReductionOps.ScaleRows(wOld, expectedGPrime));
+
+            // Symmetric decorrelation (using Gram-Schmidt for simplicity)
+            w = OrthogonalizeMatrix(w);
+
+            // Check convergence: max | |W| - |W_old| |
+            T maxChange = DimensionalityReductionOps.MaxAbsDifference(engine.TensorAbs(w), engine.TensorAbs(wOld));
+            if (DimensionalityReductionOps.Below(maxChange, tolerance))
             {
-                var gWx = new double[n];
-                var gPrimeWx = new double[n];
-
-                for (int i = 0; i < n; i++)
-                {
-                    double wx = 0;
-                    for (int j = 0; j < p; j++)
-                    {
-                        wx += W[c, j] * X[i, j];
-                    }
-                    var (g, gPrime) = ApplyNonLinearity(wx);
-                    gWx[i] = g;
-                    gPrimeWx[i] = gPrime;
-                }
-
-                // Update
-                double E_gPrime = gPrimeWx.Average();
-                for (int j = 0; j < p; j++)
-                {
-                    double E_xg = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        E_xg += X[i, j] * gWx[i];
-                    }
-                    E_xg /= n;
-                    W[c, j] = E_xg - E_gPrime * WOld[c, j];
-                }
+                break;
             }
-
-            // Orthogonalize
-            OrthogonalizeMatrix(W, nComponents, p);
-
-            // Check convergence
-            double maxChange = 0;
-            for (int c = 0; c < nComponents; c++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double change = Math.Abs(Math.Abs(W[c, j]) - Math.Abs(WOld[c, j]));
-                    maxChange = Math.Max(maxChange, change);
-                }
-            }
-
-            if (maxChange < _tolerance) break;
         }
 
-        return W;
+        return w;
     }
 
-    private void OrthogonalizeMatrix(double[,] W, int rows, int cols)
+    /// <summary>Divides a row by its Euclidean norm.</summary>
+    private Tensor<T> UnitRow(Tensor<T> row) => Engine.TensorDivideScalar(row, DimensionalityReductionOps.Norm(row));
+
+    /// <summary>
+    /// Gram-Schmidt on the rows: each row has its projections on the earlier rows removed and is normalized;
+    /// a row whose norm is at most 1e-10 is replaced by a fresh unit random row seeded with randomState + row.
+    /// </summary>
+    private Tensor<T> OrthogonalizeMatrix(Tensor<T> w)
     {
-        // Gram-Schmidt orthogonalization
-        for (int i = 0; i < rows; i++)
+        var engine = Engine;
+        int rowsCount = w.Shape[0];
+        int cols = w.Shape[1];
+        T floor = NumOps.FromDouble(1e-10);
+        T half = NumOps.FromDouble(0.5);
+        var rows = new Tensor<T>[rowsCount];
+
+        for (int i = 0; i < rowsCount; i++)
         {
-            // Subtract projections onto previous rows
+            var row = engine.TensorNarrow(w, 0, i, 1);
             for (int j = 0; j < i; j++)
             {
-                double dot = 0;
-                for (int k = 0; k < cols; k++)
-                {
-                    dot += W[i, k] * W[j, k];
-                }
-                for (int k = 0; k < cols; k++)
-                {
-                    W[i, k] -= dot * W[j, k];
-                }
+                row = engine.TensorSubtract(row, engine.TensorMatMul(DimensionalityReductionOps.MatMulTranspose(row, rows[j]), rows[j]));
             }
 
-            // Normalize
-            double norm = 0;
-            for (int k = 0; k < cols; k++)
+            T norm = DimensionalityReductionOps.Norm(row);
+            if (DimensionalityReductionOps.Above(norm, floor))
             {
-                norm += W[i, k] * W[i, k];
-            }
-            norm = Math.Sqrt(norm);
-            if (norm > 1e-10)
-            {
-                for (int k = 0; k < cols; k++)
-                {
-                    W[i, k] /= norm;
-                }
+                rows[i] = engine.TensorDivideScalar(row, norm);
             }
             else
             {
-                // Vector is near-zero after orthogonalization (linearly dependent)
-                // Re-initialize with random unit vector to maintain orthonormality
+                // Reinitialize with random values if degenerate
                 var random = RandomHelper.CreateSeededRandom(_randomState + i);
-                double reinitNorm = 0;
-                for (int k = 0; k < cols; k++)
-                {
-                    W[i, k] = random.NextDouble() - 0.5;
-                    reinitNorm += W[i, k] * W[i, k];
-                }
-                reinitNorm = Math.Sqrt(reinitNorm);
-                for (int k = 0; k < cols; k++)
-                {
-                    W[i, k] /= reinitNorm;
-                }
+                rows[i] = UnitRow(engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, 1, cols), half));
             }
         }
+
+        return engine.TensorConcatenate(rows, 0);
     }
 
-    private (double G, double GPrime) ApplyNonLinearity(double u)
+    /// <summary>The contrast function g and its derivative g' applied to every projection.</summary>
+    private (Tensor<T> G, Tensor<T> GPrime) ApplyNonLinearity(Tensor<T> u)
     {
+        var engine = Engine;
         switch (_fun)
         {
-            case ICAFunction.LogCosh:
-                double tanh_u = Math.Tanh(u);
-                return (tanh_u, 1 - tanh_u * tanh_u);
-
             case ICAFunction.Exp:
-                double exp_u2 = Math.Exp(-u * u / 2);
-                return (u * exp_u2, (1 - u * u) * exp_u2);
+            {
+                // G(u) = -exp(-u^2/2), g(u) = u exp(-u^2/2), g'(u) = (1 - u^2) exp(-u^2/2)
+                var uSquared = engine.TensorSquare(u);
+                var expU2 = engine.TensorExp(engine.TensorMultiplyScalar(uSquared, NumOps.FromDouble(-0.5)));
+                return (engine.TensorMultiply(u, expU2),
+                    engine.TensorMultiply(engine.ScalarMinusTensor(NumOps.One, uSquared), expU2));
+            }
 
             case ICAFunction.Cube:
-                return (u * u * u, 3 * u * u);
+            {
+                // G(u) = u^4/4, g(u) = u^3, g'(u) = 3u^2
+                var uSquared = engine.TensorSquare(u);
+                return (engine.TensorMultiply(uSquared, u), engine.TensorMultiplyScalar(uSquared, NumOps.FromDouble(3.0)));
+            }
 
             default:
-                return (Math.Tanh(u), 1 - Math.Tanh(u) * Math.Tanh(u));
+            {
+                // LogCosh: g(u) = tanh(u), g'(u) = 1 - tanh^2(u)
+                var tanhU = engine.TensorTanh(u);
+                return (tanhU, engine.ScalarMinusTensor(NumOps.One, engine.TensorSquare(tanhU)));
+            }
         }
     }
 
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeEigen(double[,] matrix, int n, int k)
+    /// <summary>
+    /// Mixing matrix A = pinv(W K) (K the whitening matrix, identity without whitening), the matrix that maps
+    /// sources back to centered data, as scikit-learn's FastICA.mixing_.
+    /// </summary>
+    private void ComputeMixingMatrix(Tensor<T> unmixing, Tensor<T>? whitening)
     {
-        var eigenvalues = new double[k];
-        var eigenvectors = new double[k, n];
-        var A = (double[,])matrix.Clone();
-        var random = RandomHelper.CreateSeededRandom(_randomState);
-
-        for (int m = 0; m < k; m++)
-        {
-            var v = new double[n];
-            double norm = 0;
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = random.NextDouble() - 0.5;
-                norm += v[i] * v[i];
-            }
-            norm = Math.Sqrt(norm);
-            for (int i = 0; i < n; i++)
-            {
-                v[i] /= norm;
-            }
-
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10)
-                {
-                    // Av is near-zero, keep current normalized v as eigenvector
-                    // Ensure v is still normalized (it should be from previous iteration or init)
-                    double vNorm = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        vNorm += v[i] * v[i];
-                    }
-                    vNorm = Math.Sqrt(vNorm);
-                    if (vNorm > 1e-10)
-                    {
-                        for (int i = 0; i < n; i++)
-                        {
-                            v[i] /= vNorm;
-                        }
-                    }
-                    break;
-                }
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            double eigenvalue = 0;
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[m] = Math.Max(0, eigenvalue);
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[m, i] = v[i];
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
-    }
-
-    private void ComputeMixingMatrix(int k)
-    {
-        if (_components is null) return;
-
-        int p = _components.GetLength(1);
-        _mixing = new double[p, k];
-
-        // Mixing = pinv(Unmixing)
-        // For orthogonal W, this is just W^T
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                _mixing[i, j] = _components[j, i];
-            }
-        }
-
-        // If whitening was used, adjust mixing matrix
-        if (_whitening is not null)
-        {
-            // mixing = whitening^T @ mixing
-            var newMixing = new double[p, k];
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < p; l++)
-                    {
-                        sum += _whitening[l, i] * _mixing[l, j];
-                    }
-                    newMixing[i, j] = sum;
-                }
-            }
-            _mixing = newMixing;
-        }
+        var fullUnmixing = whitening is null ? unmixing : Engine.TensorMatMul(unmixing, whitening);
+        _mixing = DimensionalityReductionOps.PseudoInverse(fullUnmixing).ToMatrix();
     }
 
     /// <summary>
@@ -666,47 +390,15 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        int n = data.Rows;
-        int p = data.Columns;
-        int k = _components.GetLength(0);
-        var result = new T[n, k];
-
-        for (int i = 0; i < n; i++)
+        // Center and whiten
+        var x = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
+        if (_whitening is not null)
         {
-            // Center
-            var x = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                x[j] = NumOps.ToDouble(data[i, j]) - _mean[j];
-            }
-
-            // Whiten if applicable
-            if (_whitening is not null)
-            {
-                var xw = new double[p];
-                for (int j = 0; j < p; j++)
-                {
-                    for (int l = 0; l < p; l++)
-                    {
-                        xw[j] += _whitening[j, l] * x[l];
-                    }
-                }
-                x = xw;
-            }
-
-            // Apply unmixing matrix
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    sum += _components[c, j] * x[j];
-                }
-                result[i, c] = NumOps.FromDouble(sum);
-            }
+            x = DimensionalityReductionOps.MatMulTranspose(x, Tensor<T>.FromMatrix(_whitening));
         }
 
-        return new Matrix<T>(result);
+        // Apply unmixing
+        return DimensionalityReductionOps.MatMulTranspose(x, Tensor<T>.FromMatrix(_components)).ToMatrix();
     }
 
     /// <summary>
@@ -721,9 +413,7 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("FastICA has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = _nFeaturesIn;
-        int k = _mixing.GetLength(1);
+        int k = _mixing.Columns;
 
         if (data.Columns != k)
         {
@@ -732,22 +422,9 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        var result = new T[n, p];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = _mean[j];
-                for (int c = 0; c < k; c++)
-                {
-                    sum += _mixing[j, c] * NumOps.ToDouble(data[i, c]);
-                }
-                result[i, j] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        // X = S A^T + mean
+        var reconstructed = DimensionalityReductionOps.MatMulTranspose(Tensor<T>.FromMatrix(data), Tensor<T>.FromMatrix(_mixing));
+        return DimensionalityReductionOps.AddRow(reconstructed, Tensor<T>.FromVector(_mean)).ToMatrix();
     }
 
     /// <summary>
@@ -755,7 +432,7 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        int k = _components?.GetLength(0) ?? _nComponents;
+        int k = _components?.Rows ?? _nComponents;
         var names = new string[k];
         for (int i = 0; i < k; i++)
         {

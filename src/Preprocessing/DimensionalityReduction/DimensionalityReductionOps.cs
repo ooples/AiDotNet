@@ -341,4 +341,22 @@ internal static class DimensionalityReductionOps
         if (column + 1 < n) parts.Add(engine.TensorNarrow(matrix, 1, column + 1, n - column - 1));
         return parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 1);
     }
+
+    /// <summary>
+    /// Moore-Penrose pseudo-inverse of a [k, p] matrix with k &lt;= p: A^T (A A^T)^+, where (A A^T)^+ inverts the
+    /// eigenvalues above 1e-10 times the largest (Jacobi eigen solve of the small Gram matrix).
+    /// </summary>
+    internal static Tensor<T> PseudoInverse<T>(Tensor<T> a)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        bool wide = a.Shape[0] <= a.Shape[1];
+        var gram = wide ? MatMulTranspose(a, a) : TransposeMatMul(a, a);
+        var (values, vectors) = SymmetricEigen(gram, descending: true);
+        T cutoff = numOps.Multiply(engine.TensorMaxValue(engine.TensorAbs(values)), numOps.FromDouble(1e-10));
+        var inverted = engine.TensorWhere(
+            engine.TensorGreaterThan(values, cutoff), engine.TensorReciprocal(values), engine.TensorZerosLike(values));
+        var gramPinv = MatMulTranspose(ScaleColumns(vectors, inverted), vectors);
+        return wide ? TransposeMatMul(a, gramPinv) : MatMulTranspose(gramPinv, a);
+    }
 }
