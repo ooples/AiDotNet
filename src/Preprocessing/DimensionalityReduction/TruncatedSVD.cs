@@ -34,13 +34,12 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;
     private readonly int _nIterations;
-    private readonly int _randomState;
 
     // Fitted parameters
-    private double[,]? _components; // Right singular vectors (V^T)
-    private double[]? _singularValues;
-    private double[]? _explainedVariance;
-    private double[]? _explainedVarianceRatio;
+    private Matrix<T>? _components; // Right singular vectors (V^T)
+    private Vector<T>? _singularValues;
+    private Vector<T>? _explainedVariance;
+    private Vector<T>? _explainedVarianceRatio;
     private int _nFeaturesIn;
 
     /// <summary>
@@ -56,22 +55,22 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the components (right singular vectors).
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets the singular values.
     /// </summary>
-    public double[]? SingularValues => _singularValues;
+    public Vector<T>? SingularValues => _singularValues;
 
     /// <summary>
     /// Gets the explained variance for each component.
     /// </summary>
-    public double[]? ExplainedVariance => _explainedVariance;
+    public Vector<T>? ExplainedVariance => _explainedVariance;
 
     /// <summary>
     /// Gets the explained variance ratio for each component.
     /// </summary>
-    public double[]? ExplainedVarianceRatio => _explainedVarianceRatio;
+    public Vector<T>? ExplainedVarianceRatio => _explainedVarianceRatio;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -82,8 +81,8 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// Creates a new instance of <see cref="TruncatedSVD{T}"/>.
     /// </summary>
     /// <param name="nComponents">Number of components to keep. Defaults to 2.</param>
-    /// <param name="nIterations">Number of iterations for randomized SVD. Defaults to 5.</param>
-    /// <param name="randomState">Random seed for reproducibility. Defaults to 0.</param>
+    /// <param name="nIterations">Iteration budget kept for API compatibility (the decomposition is exact). Defaults to 5.</param>
+    /// <param name="randomState">Accepted for API compatibility; the exact eigen solve draws no random numbers. Defaults to 0.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public TruncatedSVD(
         int nComponents = 2,
@@ -104,7 +103,6 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         _nComponents = nComponents;
         _nIterations = nIterations;
-        _randomState = randomState;
     }
 
     /// <summary>
@@ -113,168 +111,28 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="data">The training data matrix.</param>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
         int k = Math.Min(_nComponents, Math.Min(n, p));
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Compute X^T * X for right singular vectors
-        var XTX = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = i; j < p; j++)
-            {
-                double sum = 0;
-                for (int l = 0; l < n; l++)
-                {
-                    sum += X[l, i] * X[l, j];
-                }
-                XTX[i, j] = sum;
-                XTX[j, i] = sum;
-            }
-        }
+        // Right singular vectors are the eigenvectors of X^T X; the singular values are sqrt(eigenvalues)
+        var gram = DimensionalityReductionOps.TransposeMatMul(x, x);
+        var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(gram, descending: true);
+        var explainedVariance = engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, k), NumOps.Zero);
 
-        // Compute eigenvalues and eigenvectors of X^T * X
-        var (eigenvalues, eigenvectors) = ComputeEigen(XTX, p, k);
+        T totalVariance = engine.TensorSum(engine.TensorSquare(x));
+        var explainedVarianceRatio = NumOps.GreaterThan(totalVariance, NumOps.FromDouble(1e-10))
+            ? engine.TensorDivideScalar(explainedVariance, totalVariance)
+            : new Tensor<T>(new[] { k });
 
-        // Sort by eigenvalue descending
-        var indices = Enumerable.Range(0, k)
-            .OrderByDescending(i => eigenvalues[i])
-            .ToArray();
-
-        _singularValues = new double[k];
-        _components = new double[k, p];
-        _explainedVariance = new double[k];
-
-        double totalVariance = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                totalVariance += X[i, j] * X[i, j];
-            }
-        }
-
-        for (int i = 0; i < k; i++)
-        {
-            double eigenvalue = Math.Max(0, eigenvalues[indices[i]]);
-            _singularValues[i] = Math.Sqrt(eigenvalue);
-            _explainedVariance[i] = eigenvalue;
-
-            for (int j = 0; j < p; j++)
-            {
-                _components[i, j] = eigenvectors[indices[i], j];
-            }
-        }
-
-        // Compute explained variance ratio
-        _explainedVarianceRatio = new double[k];
-        if (totalVariance > 1e-10)
-        {
-            for (int i = 0; i < k; i++)
-            {
-                _explainedVarianceRatio[i] = _explainedVariance[i] / totalVariance;
-            }
-        }
-    }
-
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeEigen(double[,] matrix, int n, int k)
-    {
-        // Power iteration with deflation
-        var eigenvalues = new double[k];
-        var eigenvectors = new double[k, n];
-        var A = (double[,])matrix.Clone();
-        var random = RandomHelper.CreateSeededRandom(_randomState);
-
-        for (int m = 0; m < k; m++)
-        {
-            // Initialize random vector
-            var v = new double[n];
-            double norm = 0;
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = random.NextDouble() - 0.5;
-                norm += v[i] * v[i];
-            }
-            norm = Math.Sqrt(norm);
-            for (int i = 0; i < n; i++)
-            {
-                v[i] /= norm;
-            }
-
-            // Power iteration
-            for (int iter = 0; iter < 50 + _nIterations * 10; iter++)
-            {
-                // Multiply A * v
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                // Normalize
-                norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            // Compute eigenvalue
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double eigenvalue = 0;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[m] = eigenvalue;
-
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[m, i] = v[i];
-            }
-
-            // Deflate
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
+        _components = engine.TensorTranspose(DimensionalityReductionOps.FirstColumns(eigenvectors, k)).ToMatrix();
+        _singularValues = engine.TensorSqrt(explainedVariance).ToVector();
+        _explainedVariance = explainedVariance.ToVector();
+        _explainedVarianceRatio = explainedVarianceRatio.ToVector();
     }
 
     /// <summary>
@@ -289,25 +147,7 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("TruncatedSVD has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = data.Columns;
-        int k = _components.GetLength(0);
-        var result = new T[n, k];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int m = 0; m < k; m++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    sum += NumOps.ToDouble(data[i, j]) * _components[m, j];
-                }
-                result[i, m] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return DimensionalityReductionOps.MatMulTranspose(Tensor<T>.FromMatrix(data), Tensor<T>.FromMatrix(_components)).ToMatrix();
     }
 
     /// <summary>
@@ -322,25 +162,10 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("TruncatedSVD has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = _nFeaturesIn;
-        int k = _components.GetLength(0);
-        var result = new T[n, p];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int m = 0; m < k; m++)
-                {
-                    sum += NumOps.ToDouble(data[i, m]) * _components[m, j];
-                }
-                result[i, j] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        int k = _components.Rows;
+        var scores = DimensionalityReductionOps.FirstColumns(Tensor<T>.FromMatrix(data), k);
+        return Engine.TensorMatMul(scores, Tensor<T>.FromMatrix(_components)).ToMatrix();
+    }
     }
 
     /// <summary>
@@ -348,7 +173,7 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        int k = _components?.GetLength(0) ?? _nComponents;
+        int k = _components?.Rows ?? _nComponents;
         var names = new string[k];
         for (int i = 0; i < k; i++)
         {
