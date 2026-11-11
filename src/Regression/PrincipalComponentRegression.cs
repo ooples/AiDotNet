@@ -185,18 +185,7 @@ public partial class PrincipalComponentRegression<T> : RegressionBase<T>
         // Center and scale the data
         (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yMean, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
 
-        bool hasVaryingFeature = false;
-        for (int i = 0; i < xScaled.Rows && !hasVaryingFeature; i++)
-        {
-            for (int j = 0; j < xScaled.Columns; j++)
-            {
-                if (!NumOps.Equals(xScaled[i, j], NumOps.Zero))
-                {
-                    hasVaryingFeature = true;
-                    break;
-                }
-            }
-        }
+        bool hasVaryingFeature = Engine.TensorCountNonzero(Tensor<T>.FromMatrix(xScaled)) > 0;
 
         if (!hasVaryingFeature)
         {
@@ -225,10 +214,7 @@ public partial class PrincipalComponentRegression<T> : RegressionBase<T>
         Coefficients = Regularization.Regularize(Coefficients);
 
         // Adjust for scaling
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            Coefficients[i] = NumOps.Divide(NumOps.Multiply(Coefficients[i], _yStd), _xStd[i]);
-        }
+        Coefficients = Engine.Divide(Engine.Multiply(Coefficients, _yStd), _xStd);
 
         // Calculate intercept
         Intercept = NumOps.Subtract(_yMean, Coefficients.DotProduct(_xMean));
@@ -321,17 +307,17 @@ public partial class PrincipalComponentRegression<T> : RegressionBase<T>
             return Math.Min(_options.NumComponents, explainedVariance.Length);
         }
 
-        T cumulativeVariance = NumOps.Zero;
-        for (int i = 0; i < explainedVariance.Length; i++)
+        if (explainedVariance.Length == 0)
         {
-            cumulativeVariance = NumOps.Add(cumulativeVariance, explainedVariance[i]);
-            if (NumOps.GreaterThanOrEquals(cumulativeVariance, NumOps.FromDouble(_options.ExplainedVarianceRatio)))
-            {
-                return i + 1;
-            }
+            return 0;
         }
 
-        return explainedVariance.Length;
+        // First prefix whose running sum reaches the target ratio.
+        var cumulative = Engine.TensorCumSum(explainedVariance.AsTensor(), 0);
+        var target = Engine.Fill(explainedVariance.Length, NumOps.FromDouble(_options.ExplainedVarianceRatio)).AsTensor();
+        var reached = Engine.TensorGreaterEqual(cumulative, target);
+        int first = Engine.TensorArgMax(reached, 0).ToArray()[0];
+        return NumOps.Equals(reached[first], NumOps.Zero) ? explainedVariance.Length : first + 1;
     }
 
     public override Vector<T> Predict(Matrix<T> input)

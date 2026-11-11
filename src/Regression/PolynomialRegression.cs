@@ -114,21 +114,23 @@ public partial class PolynomialRegression<T> : RegressionBase<T>
     private Matrix<T> CreatePolynomialFeatures(Matrix<T> x)
     {
         var rows = x.Rows;
-        var cols = x.Columns * _polyOptions.Degree;
-        var polyX = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
+        int degree = _polyOptions.Degree;
+        var cols = x.Columns * degree;
+        if (degree <= 0 || rows == 0 || x.Columns == 0)
         {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                for (int d = 0; d < _polyOptions.Degree; d++)
-                {
-                    polyX[i, j * _polyOptions.Degree + d] = NumOps.Power(x[i, j], NumOps.FromDouble(d + 1));
-                }
-            }
+            return new Matrix<T>(rows, cols);
         }
 
-        return polyX;
+        // Column j * degree + d holds x[:, j]^(d + 1): stack the per-degree powers on a trailing
+        // axis ([rows, columns, degree]) and flatten it into the column axis.
+        var xTensor = Tensor<T>.FromMatrix(x);
+        var powers = new Tensor<T>[degree];
+        for (int d = 0; d < degree; d++)
+        {
+            powers[d] = Engine.TensorPower(xTensor, NumOps.FromDouble(d + 1));
+        }
+
+        return Engine.TensorStack(powers, 2).Reshape(new[] { rows, cols }).ToMatrix();
     }
 
     /// <summary>
