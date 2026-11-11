@@ -15,6 +15,7 @@ namespace AiDotNet.FederatedLearning.Selection;
 [PipelineStage(PipelineStage.Training)]
 public sealed class StratifiedClientSelectionStrategy : ClientSelectionStrategyBase
 {
+    /// <inheritdoc />
     public override List<int> SelectClients(ClientSelectionRequest request)
     {
         if (request == null)
@@ -148,5 +149,6 @@ public sealed class StratifiedClientSelectionStrategy : ClientSelectionStrategyB
         return selected;
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "Stratified";
 }

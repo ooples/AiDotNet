@@ -138,8 +138,10 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     [Scratch]
     private Tensor<T>? _linear2BiasGradient;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

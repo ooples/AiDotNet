@@ -32,10 +32,15 @@ public class VctkDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "VCTK 0.92";
+    /// <inheritdoc />
     public override string Description => "VCTK multi-speaker English TTS corpus (110 speakers, ~44 hr)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.MaxTextLength;
+    /// <inheritdoc />
     public override int OutputDimension => _options.MaxAudioSamples;
 
     public VctkDataLoader(VctkDataLoaderOptions? options = null)

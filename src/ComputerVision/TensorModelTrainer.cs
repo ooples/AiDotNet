@@ -194,6 +194,10 @@ internal static class TensorModelTrainer<T>
         {
             if (!warmup.Complete)
             {
+                // No backward follows this forward. In training mode with no tape, activation layers would push their
+                // pre-activations for a manual backward that never pops them, and keep them for the model's life
+                // (100 MB on FasterRCNN at 320x320). The scope skips only those caches.
+                using var noBackward = AiDotNet.NeuralNetworks.Layers.InferenceMode.Enter();
                 forward(input);
                 System.Threading.Volatile.Write(ref warmup.Complete, true);
             }

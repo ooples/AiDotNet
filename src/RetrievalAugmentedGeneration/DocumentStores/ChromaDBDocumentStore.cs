@@ -33,7 +33,9 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     private int _documentCount;
     private readonly Dictionary<string, VectorDocument<T>> _cache;
 
+    /// <inheritdoc />
     public override int DocumentCount => _documentCount;
+    /// <inheritdoc />
     public override int VectorDimension => _vectorDimension;
 
     public ChromaDBDocumentStore(string endpoint, string collectionName, string apiKey)
@@ -74,6 +76,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         }
     }
 
+    /// <inheritdoc />
     protected override void AddCore(VectorDocument<T> vectorDocument)
         => AddCoreImplAsync(vectorDocument, CancellationToken.None).GetAwaiter().GetResult();
 
@@ -110,6 +113,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         _documentCount++;
     }
 
+    /// <inheritdoc />
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
         => AddBatchCoreImplAsync(vectorDocuments, CancellationToken.None).GetAwaiter().GetResult();
 
@@ -150,6 +154,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         _documentCount += vectorDocuments.Count;
     }
 
+    /// <inheritdoc />
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
         => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, CancellationToken.None).GetAwaiter().GetResult();
 
@@ -209,6 +214,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         return results;
     }
 
+    /// <inheritdoc />
     protected override Document<T>? GetByIdCore(string documentId)
     {
         if (_cache.TryGetValue(documentId, out var vectorDoc))

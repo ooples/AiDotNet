@@ -37,10 +37,15 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         ["Person_sitting"] = 4, ["Cyclist"] = 5, ["Tram"] = 6, ["Misc"] = 7
     };
 
+    /// <inheritdoc />
     public override string Name => "KITTI";
+    /// <inheritdoc />
     public override string Description => "KITTI 3D object detection (LiDAR)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.PointsPerSample * _channels;
+    /// <inheritdoc />
     public override int OutputDimension => 1;
 
     public KittiDataLoader(KittiDataLoaderOptions? options = null)
@@ -51,6 +56,7 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         _channels = _options.IncludeReflectance ? 4 : 3;
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         string splitDir = _options.Split == DatasetSplit.Test
@@ -159,11 +165,13 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         return bestClass;
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -191,6 +199,7 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         return (bf, bl);
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

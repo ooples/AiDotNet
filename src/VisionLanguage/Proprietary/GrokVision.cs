@@ -108,14 +108,20 @@ public partial class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM
         TryAutoEnableWeightStreaming();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
+    /// <inheritdoc />
     public string Provider => _options.Provider;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -170,6 +176,7 @@ public partial class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM
         return output;
     }
 
+    /// <inheritdoc />
     public Tensor<T> Chat(Tensor<T> image, string prompt) => GenerateFromImage(image, prompt);
 
     protected override void InitializeLayers()
@@ -217,6 +224,7 @@ public partial class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -239,9 +247,11 @@ public partial class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
     // Lazy decoder/vision blocks report ParameterCount == 0 until the first
@@ -249,6 +259,7 @@ public partial class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM
     // runner; a coarse structural estimate (~12·d² per transformer block plus
     // the token embedding) lets the auto-detector turn streaming on in the
     // constructor. ONNX mode keeps weights in the external runtime → no estimate.
+    /// <inheritdoc />
     protected override long EstimateStructuralParameterCount()
     {
         if (!_useNativeMode)
@@ -261,6 +272,7 @@ public partial class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM
         return vision + decoder + embeddings;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -287,6 +299,7 @@ public partial class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GrokVision<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

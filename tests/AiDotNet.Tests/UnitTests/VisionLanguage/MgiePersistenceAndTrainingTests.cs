@@ -125,9 +125,8 @@ public sealed class MgiePersistenceAndTrainingTests
     private static MGIE<float> CreateModel()
     {
         var model = new MGIE<float>(options: MgieConditioningContractTests.CreateOptions(),
-            unet: new UNetNoisePredictor<float>(inputChannels: 8, outputChannels: 4, baseChannels: 32,
-                channelMultipliers: new[] { 1 }, numResBlocks: 1, attentionResolutions: new[] { 1 },
-                contextDim: 768, numHeads: 2, inputHeight: 4, seed: 397525),
+            // Random U-Net weights: one at its zero-output start passes no gradient back to its inputs.
+            unet: new MgieConditioningContractTests.RecordingUnet(),
             vae: MgieConditioningContractTests.CreateVae(), seed: 397525);
         MgieJointMapperTests.Field<LLaVANeuralNetwork<float>>(model, "_instructionEncoder").SetTrainingMode(false);
         MgieJointMapperTests.Field<MultimodalEditMapperLayer<float>>(model, "_editMapper").SetTrainingMode(false);

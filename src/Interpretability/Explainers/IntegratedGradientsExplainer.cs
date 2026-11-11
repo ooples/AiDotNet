@@ -299,6 +299,7 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
     public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
         => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
 
+    /// <inheritdoc />
     public IntegratedGradientsExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new IntegratedGradientsExplanation<T>[instances.Rows];

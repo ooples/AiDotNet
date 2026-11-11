@@ -66,13 +66,21 @@ public partial class FateZeroModel<T> : VideoDiffusionModelBase<T>
     private TemporalVAE<T> _temporalVAE;
     private readonly IConditioningModule<T>? _conditioner;
 
+    /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
     public override IVAEModel<T> VAE => _temporalVAE;
+    /// <inheritdoc />
     public override IVAEModel<T>? TemporalVAE => _temporalVAE;
+    /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
     public override bool SupportsImageToVideo => false;
+    /// <inheritdoc />
     public override bool SupportsTextToVideo => true;
+    /// <inheritdoc />
     public override bool SupportsVideoToVideo => true;
 
     /// <summary>
@@ -132,6 +140,7 @@ public partial class FateZeroModel<T> : VideoDiffusionModelBase<T>
             seed: seed);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictVideoNoise(
         Tensor<T> latents,
         int timestep,
@@ -150,6 +159,7 @@ public partial class FateZeroModel<T> : VideoDiffusionModelBase<T>
         RegisterParameterComponent(_temporalVAE);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

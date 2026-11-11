@@ -42,6 +42,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         _memories = new List<(Vector<T>, Vector<T>)>();
     }
 
+    /// <inheritdoc />
     public void Associate(Vector<T> input, Vector<T> target)
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
@@ -59,6 +60,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         }
     }
 
+    /// <inheritdoc />
     public Vector<T> Retrieve(Vector<T> query)
     {
         if (query == null) throw new ArgumentNullException(nameof(query));
@@ -114,6 +116,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         return resultTensor.Reshape([_dimension]).ToVector();
     }
 
+    /// <inheritdoc />
     public void Update(Vector<T> input, Vector<T> target, T learningRate)
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
@@ -158,8 +161,10 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         Associate(input, target);
     }
 
+    /// <inheritdoc />
     public int Capacity => _capacity;
 
+    /// <inheritdoc />
     public void Clear()
     {
         _memories.Clear();

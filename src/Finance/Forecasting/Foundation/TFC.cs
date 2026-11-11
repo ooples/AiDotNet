@@ -770,6 +770,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         return ForwardNative(input);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

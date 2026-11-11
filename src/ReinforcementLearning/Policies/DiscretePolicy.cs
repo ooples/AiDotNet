@@ -95,6 +95,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
         }
 
+        /// <inheritdoc />
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             // Get action probabilities from network
@@ -117,6 +118,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return policyAction;
         }
 
+        /// <inheritdoc />
         public override T ComputeLogProb(Vector<T> state, Vector<T> action)
         {
             // Get logits from network
@@ -144,11 +146,13 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return NumOps.FromDouble(NumOps.ToDouble(logits[actionIndex]) - max - Math.Log(sum));
         }
 
+        /// <inheritdoc />
         public override IReadOnlyList<INeuralNetwork<T>> GetNetworks()
         {
             return new List<INeuralNetwork<T>> { _policyNetwork };
         }
 
+        /// <inheritdoc />
         public override void Reset()
         {
             _explorationStrategy.Reset();

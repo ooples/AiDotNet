@@ -137,6 +137,7 @@ public partial class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBas
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer;
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -157,6 +158,7 @@ public partial class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBas
     // the count and the distribution from ONE enumeration, so they cannot drift apart. Removed under
     // AIDN082.
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

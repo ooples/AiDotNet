@@ -132,13 +132,18 @@ public partial class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
             _options.ImageSize = h;
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -189,6 +194,7 @@ public partial class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         return output;
     }
 
+    /// <inheritdoc />
     public Tensor<T> Chat(
         Tensor<T> image,
         IEnumerable<(string Role, string Content)> conversationHistory,
@@ -302,11 +308,14 @@ public partial class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
     // This forwarded to a helper the base now calls from its own
     // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -334,6 +343,7 @@ public partial class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
             throw new ObjectDisposedException(GetType().FullName ?? nameof(QwenVL<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

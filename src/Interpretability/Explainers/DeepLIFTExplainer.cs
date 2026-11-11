@@ -246,6 +246,7 @@ public partial class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanati
     public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
         => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
 
+    /// <inheritdoc />
     public DeepLIFTExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new DeepLIFTExplanation<T>[instances.Rows];

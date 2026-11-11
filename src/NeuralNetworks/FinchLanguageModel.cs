@@ -144,6 +144,7 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 MaxGradientNorm = _options.MaxGradientNorm
             });
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -166,6 +167,7 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     // and clip bound; that was already corrected, and the clipping now lives in FinchOptions where a
     // caller can reach it.) Removed under AIDN082.
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

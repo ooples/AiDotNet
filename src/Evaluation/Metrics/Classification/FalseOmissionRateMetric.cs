@@ -23,13 +23,21 @@ public class FalseOmissionRateMetric<T> : IClassificationMetric<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly T _positiveLabel;
 
+    /// <inheritdoc />
     public string Name => "FalseOmissionRate";
+    /// <inheritdoc />
     public string Category => "Classification";
+    /// <inheritdoc />
     public string Description => "False Omission Rate (1 - NPV).";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
     public FalseOmissionRateMetric()
@@ -42,6 +50,7 @@ public class FalseOmissionRateMetric<T> : IClassificationMetric<T>
         _positiveLabel = positiveLabel;
     }
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -66,6 +75,7 @@ public class FalseOmissionRateMetric<T> : IClassificationMetric<T>
         return negatives > 0 ? NumOps.FromDouble((double)fn / negatives) : NumOps.Zero;
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

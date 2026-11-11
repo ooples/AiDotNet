@@ -85,13 +85,20 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public int NumCodebooks => _options.NumCodebooks;
+    /// <inheritdoc />
     public int CodebookSize => _options.CodebookSize;
+    /// <inheritdoc />
     public int CodecFrameRate => _options.CodecFrameRate;
+    /// <inheritdoc />
     public double MinReferenceDuration => _options.MinReferenceDurationSec;
+    /// <inheritdoc />
     public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
 
+    /// <inheritdoc />
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
@@ -124,6 +131,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
         return waveform;
     }
 
+    /// <inheritdoc />
     public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
     {
         var embedding = ExtractSpeakerEmbedding(referenceAudio);
@@ -143,6 +151,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
         return baseAudio;
     }
 
+    /// <inheritdoc />
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
     {
         if (referenceAudio.Length == 0)
@@ -178,6 +187,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
         return emb;
     }
 
+    /// <inheritdoc />
     public Tensor<T> EncodeToTokens(Tensor<T> audio)
     {
         int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
@@ -198,6 +208,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
         return tokens;
     }
 
+    /// <inheritdoc />
     public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
     {
         int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
@@ -214,6 +225,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
         return wave;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         if (text is null)
@@ -230,6 +242,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -253,6 +266,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -270,6 +284,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -311,6 +326,7 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
             throw new ObjectDisposedException(GetType().FullName ?? nameof(XTTSv2Clone<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

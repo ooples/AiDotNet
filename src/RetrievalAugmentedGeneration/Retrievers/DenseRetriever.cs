@@ -33,6 +33,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             _embeddingModel = embeddingModel;
         }
 
+        /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
         {
             var queryEmbedding = _embeddingModel.Embed(query);

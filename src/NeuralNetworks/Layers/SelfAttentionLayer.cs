@@ -889,12 +889,14 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

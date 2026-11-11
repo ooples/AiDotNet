@@ -160,6 +160,7 @@ public partial class UMamba<T> : Common.MedicalSegmentationBase<T>
     #endregion
 
     #region Private Methods
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddLeadingBatchDimension(input);
@@ -169,6 +170,7 @@ public partial class UMamba<T> : Common.MedicalSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

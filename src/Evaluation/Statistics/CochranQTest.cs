@@ -28,9 +28,13 @@ public class CochranQTest<T> : IClassifierComparisonTest<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "Cochran's Q Test";
+    /// <inheritdoc />
     public string Description => "Tests if multiple classifiers have equal error rates.";
+    /// <inheritdoc />
     public bool IsPaired => true;
+    /// <inheritdoc />
     public bool IsNonParametric => true;
 
     /// <summary>

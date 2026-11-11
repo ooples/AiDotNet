@@ -318,6 +318,7 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
     public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
         => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
 
+    /// <inheritdoc />
     public DeepSHAPExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new DeepSHAPExplanation<T>[instances.Rows];

@@ -135,6 +135,7 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int GrowthChannels => _growthChannels;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     #endregion
@@ -315,6 +316,7 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         foreach (var rdb in _rdbBlocks)

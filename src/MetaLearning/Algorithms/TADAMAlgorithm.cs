@@ -192,6 +192,7 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
         => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
 
+    /// <inheritdoc />
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)

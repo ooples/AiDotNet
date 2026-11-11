@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Multivariate;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _threshold;
 
@@ -32,7 +32,9 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int _nInputFeatures;
 
     public double[]? SymmetricalUncertainties => _symmetricalUncertainties;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public FCBF(
@@ -43,12 +45,14 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _threshold = threshold;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "FCBF requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -192,12 +196,14 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return denom > 1e-10 ? 2 * mi / denom : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -214,11 +220,13 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("FCBF does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -231,6 +239,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return Array.Empty<string>();
