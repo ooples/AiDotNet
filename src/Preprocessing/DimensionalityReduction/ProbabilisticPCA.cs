@@ -50,9 +50,9 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _W; // Loading matrix (p x d)
-    private double[]? _mean;
-    private double _noiseVariance;
+    private Matrix<T>? _W; // Loading matrix (p x d)
+    private Vector<T>? _mean;
+    private T _noiseVariance = MathHelper.GetNumericOperations<T>().Zero;
     private int _nFeatures;
 
     /// <summary>
@@ -63,12 +63,12 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the loading matrix W.
     /// </summary>
-    public double[,]? LoadingMatrix => _W;
+    public Matrix<T>? LoadingMatrix => _W;
 
     /// <summary>
     /// Gets the estimated noise variance.
     /// </summary>
-    public double NoiseVariance => _noiseVariance;
+    public T NoiseVariance => _noiseVariance;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -103,167 +103,44 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Fits Probabilistic PCA using the EM algorithm.
+    /// Fits Probabilistic PCA by the closed-form maximum-likelihood solution (Tipping and Bishop, 1999).
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         int n = data.Rows;
         int p = data.Columns;
         _nFeatures = p;
 
-        var random = _randomState.HasValue
-            ? RandomHelper.CreateSeededRandom(_randomState.Value)
-            : RandomHelper.CreateSeededRandom(42);
+        // Center the data
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = DimensionalityReductionOps.ColumnMeans(x);
+        var xc = DimensionalityReductionOps.SubtractRow(x, mean);
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        // Maximum-likelihood sample covariance S = Xc^T Xc / n
+        var s = engine.TensorDivideScalar(DimensionalityReductionOps.TransposeMatMul(xc, xc), NumOps.FromDouble(n));
 
-        // Step 1: Center the data
-        _mean = new double[p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                _mean[j] += X[i, j];
-            }
-        }
-        for (int j = 0; j < p; j++) _mean[j] /= n;
+        // Eigen-decomposition, eigenvalues descending and clamped at zero
+        var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(s, descending: true);
+        eigenvalues = engine.TensorClampMin(eigenvalues, NumOps.Zero);
 
-        var Xc = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                Xc[i, j] = X[i, j] - _mean[j];
-            }
-        }
-
-        // Step 2: Compute sample covariance matrix
-        var S = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < n; k++)
-                {
-                    S[i, j] += Xc[k, i] * Xc[k, j];
-                }
-                S[i, j] /= n;
-            }
-        }
-
-        // Step 3: Compute eigendecomposition of S
-        var eigenvalues = new double[p];
-        var eigenvectors = new double[p, p];
-        ComputeEigendecomposition(S, eigenvalues, eigenvectors, p, random);
-
-        // Step 4: Estimate noise variance (average of smallest eigenvalues)
-        _noiseVariance = 0;
+        // Noise variance: mean of the discarded eigenvalues (at least 1e-10)
+        T noiseVariance = NumOps.Zero;
         int numSmall = p - _nComponents;
         if (numSmall > 0)
         {
-            for (int i = _nComponents; i < p; i++)
-            {
-                _noiseVariance += eigenvalues[i];
-            }
-            _noiseVariance /= numSmall;
+            noiseVariance = NumOps.Divide(
+                engine.TensorSum(engine.TensorNarrow(eigenvalues, 0, _nComponents, numSmall)), NumOps.FromDouble(numSmall));
         }
-        _noiseVariance = Math.Max(_noiseVariance, 1e-10);
 
-        // Step 5: Compute W using closed-form solution
-        // W = U_q * (Λ_q - σ² * I)^(1/2) * R
-        // where U_q are top q eigenvectors, Λ_q are top q eigenvalues
-        // R is an arbitrary rotation matrix (we use identity)
-        _W = new double[p, _nComponents];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < _nComponents; j++)
-            {
-                double scale = Math.Sqrt(Math.Max(eigenvalues[j] - _noiseVariance, 1e-10));
-                _W[i, j] = eigenvectors[i, j] * scale;
-            }
-        }
-    }
+        T floor = NumOps.FromDouble(1e-10);
+        _noiseVariance = NumOps.GreaterThan(noiseVariance, floor) ? noiseVariance : floor;
 
-    private void ComputeEigendecomposition(
-        double[,] S, double[] eigenvalues, double[,] eigenvectors, int p, Random random)
-    {
-        // Power iteration with deflation for eigenvalues in descending order
-        var A = (double[,])S.Clone();
-
-        for (int d = 0; d < p; d++)
-        {
-            var v = new double[p];
-            for (int i = 0; i < p; i++) v[i] = random.NextDouble() - 0.5;
-
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[p];
-                for (int i = 0; i < p; i++)
-                {
-                    for (int j = 0; j < p; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                double norm = 0;
-                for (int i = 0; i < p; i++) norm += Av[i] * Av[i];
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                double change = 0;
-                for (int i = 0; i < p; i++)
-                {
-                    double newV = Av[i] / norm;
-                    change += Math.Abs(newV - v[i]);
-                    v[i] = newV;
-                }
-
-                if (change < 1e-10) break;
-            }
-
-            // Store eigenvector
-            for (int i = 0; i < p; i++)
-            {
-                eigenvectors[i, d] = v[i];
-            }
-
-            // Compute eigenvalue
-            var Av2 = new double[p];
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double lambda = 0;
-            for (int i = 0; i < p; i++)
-            {
-                lambda += v[i] * Av2[i];
-            }
-            eigenvalues[d] = Math.Max(lambda, 0);
-
-            // Deflate
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    A[i, j] -= lambda * v[i] * v[j];
-                }
-            }
-        }
+        // W = U_d * sqrt(max(lambda_d - sigma^2, 1e-10))
+        var leading = engine.TensorNarrow(eigenvalues, 0, 0, _nComponents);
+        var scale = engine.TensorSqrt(engine.TensorClampMin(engine.TensorSubtractScalar(leading, _noiseVariance), floor));
+        _W = DimensionalityReductionOps.ScaleColumns(DimensionalityReductionOps.FirstColumns(eigenvectors, _nComponents), scale).ToMatrix();
+        _mean = mean.ToVector();
     }
 
     /// <summary>
@@ -276,7 +153,6 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("ProbabilisticPCA has not been fitted.");
         }
 
-        int n = data.Rows;
         int p = data.Columns;
 
         if (p != _nFeatures)
@@ -286,71 +162,16 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        var engine = Engine;
+        var w = Tensor<T>.FromMatrix(_W);
+        var xc = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
 
-        // Center data
-        var Xc = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                Xc[i, j] = X[i, j] - _mean[j];
-            }
-        }
-
-        // Compute M = W^T * W + σ² * I
-        var WtW = new double[_nComponents, _nComponents];
-        for (int i = 0; i < _nComponents; i++)
-        {
-            for (int j = 0; j < _nComponents; j++)
-            {
-                for (int k = 0; k < p; k++)
-                {
-                    WtW[i, j] += _W[k, i] * _W[k, j];
-                }
-            }
-            WtW[i, i] += _noiseVariance;
-        }
-
-        // Invert M
-        var Minv = InvertMatrix(WtW, _nComponents);
-
-        // Compute posterior mean: E[z|x] = M^(-1) * W^T * (x - μ)
-        var result = new T[n, _nComponents];
-
-        for (int i = 0; i < n; i++)
-        {
-            // W^T * x_c
-            var Wtx = new double[_nComponents];
-            for (int d = 0; d < _nComponents; d++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    Wtx[d] += _W[j, d] * Xc[i, j];
-                }
-            }
-
-            // M^(-1) * W^T * x_c
-            for (int d = 0; d < _nComponents; d++)
-            {
-                double val = 0;
-                for (int k = 0; k < _nComponents; k++)
-                {
-                    val += Minv[d, k] * Wtx[k];
-                }
-                result[i, d] = NumOps.FromDouble(val);
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Posterior mean of the latent variables: M^-1 W^T (x - mu) with M = W^T W + sigma^2 I
+        var m = engine.TensorAdd(
+            DimensionalityReductionOps.TransposeMatMul(w, w),
+            engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(_nComponents), _noiseVariance));
+        var wtx = DimensionalityReductionOps.TransposeMatMul(w, engine.TensorTranspose(xc));
+        return engine.TensorTranspose(DimensionalityReductionOps.Solve(m, wtx)).ToMatrix();
     }
 
     /// <summary>
@@ -363,7 +184,6 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("ProbabilisticPCA has not been fitted.");
         }
 
-        int n = data.Rows;
         int d = data.Columns;
 
         if (d != _nComponents)
@@ -373,166 +193,48 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
-        var result = new T[n, _nFeatures];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                double val = _mean[j];
-                for (int k = 0; k < _nComponents; k++)
-                {
-                    val += NumOps.ToDouble(data[i, k]) * _W[j, k];
-                }
-                result[i, j] = NumOps.FromDouble(val);
-            }
-        }
-
-        return new Matrix<T>(result);
-    }
-
-    private double[,] InvertMatrix(double[,] A, int n)
-    {
-        // Gauss-Jordan elimination for small matrices
-        var augmented = new double[n, 2 * n];
-
-        // Initialize augmented matrix [A | I]
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = A[i, j];
-            }
-            augmented[i, n + i] = 1.0;
-        }
-
-        // Forward elimination
-        for (int col = 0; col < n; col++)
-        {
-            // Find pivot
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
-                {
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows
-            for (int j = 0; j < 2 * n; j++)
-            {
-                (augmented[col, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[col, j]);
-            }
-
-            // Scale pivot row
-            double pivot = augmented[col, col];
-            if (Math.Abs(pivot) < 1e-10)
-            {
-                // Add regularization for near-singular matrix
-                augmented[col, col] += 1e-6;
-                pivot = augmented[col, col];
-            }
-
-            for (int j = 0; j < 2 * n; j++)
-            {
-                augmented[col, j] /= pivot;
-            }
-
-            // Eliminate column
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    double factor = augmented[row, col];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        augmented[row, j] -= factor * augmented[col, j];
-                    }
-                }
-            }
-        }
-
-        // Extract inverse
-        var inverse = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                inverse[i, j] = augmented[i, n + j];
-            }
-        }
-
-        return inverse;
+        var reconstructed = DimensionalityReductionOps.MatMulTranspose(Tensor<T>.FromMatrix(data), Tensor<T>.FromMatrix(_W));
+        return DimensionalityReductionOps.AddRow(reconstructed, Tensor<T>.FromVector(_mean)).ToMatrix();
     }
 
     /// <summary>
     /// Computes the log-likelihood of the data under the model.
     /// </summary>
     /// <param name="data">The data to evaluate.</param>
-    /// <returns>The log-likelihood.</returns>
-    public double Score(Matrix<T> data)
+    /// <returns>The log-likelihood (summed over the rows) under N(mu, W W^T + sigma^2 I).</returns>
+    public T Score(Matrix<T> data)
     {
         if (_W is null || _mean is null)
         {
             throw new InvalidOperationException("ProbabilisticPCA has not been fitted.");
         }
 
+        var engine = Engine;
         int n = data.Rows;
         int p = data.Columns;
+        var w = Tensor<T>.FromMatrix(_W);
 
-        // Compute C = W * W^T + σ² * I
-        var C = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < _nComponents; k++)
-                {
-                    C[i, j] += _W[i, k] * _W[j, k];
-                }
-            }
-            C[i, i] += _noiseVariance;
-        }
+        // Model covariance C = W W^T + sigma^2 I
+        var c = engine.TensorAdd(
+            DimensionalityReductionOps.MatMulTranspose(w, w),
+            engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(p), _noiseVariance));
 
-        // Compute log determinant and inverse of C
-        // (Using approximation for numerical stability)
-        double logDet = 0;
-        for (int i = 0; i < p; i++)
-        {
-            logDet += Math.Log(Math.Max(C[i, i], 1e-10));
-        }
+        // log|C| from the eigenvalues of the symmetric positive-definite C
+        var (eigenvalues, _) = DimensionalityReductionOps.SymmetricEigen(c, descending: true);
+        T logDet = engine.TensorSum(engine.TensorLog(engine.TensorClampMin(eigenvalues, NumOps.FromDouble(1e-10))));
 
-        var Cinv = InvertMatrix(C, p);
+        // Mahalanobis terms (x - mu)^T C^-1 (x - mu) for every row
+        var xc = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
+        var solved = DimensionalityReductionOps.Solve(c, engine.TensorTranspose(xc));
+        T mahalanobis = engine.TensorSum(engine.TensorMultiply(engine.TensorTranspose(xc), solved));
 
-        // Compute log-likelihood
-        double logLik = 0;
-        double logConstant = -0.5 * p * Math.Log(2 * Math.PI) - 0.5 * logDet;
-
-        for (int i = 0; i < n; i++)
-        {
-            // Compute (x - μ)^T * C^(-1) * (x - μ)
-            var xc = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                xc[j] = NumOps.ToDouble(data[i, j]) - _mean[j];
-            }
-
-            double mahal = 0;
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    sum += Cinv[j, k] * xc[k];
-                }
-                mahal += xc[j] * sum;
-            }
-
-            logLik += logConstant - 0.5 * mahal;
-        }
-
-        return logLik;
+        // sum_i [-p/2 log(2 pi) - 1/2 log|C| - 1/2 mahal_i]
+        T logConstant = NumOps.Subtract(
+            NumOps.FromDouble(-0.5 * p * Math.Log(2 * Math.PI)),
+            NumOps.Multiply(NumOps.FromDouble(0.5), logDet));
+        return NumOps.Subtract(
+            NumOps.Multiply(NumOps.FromDouble(n), logConstant),
+            NumOps.Multiply(NumOps.FromDouble(0.5), mahalanobis));
     }
 
     /// <summary>
