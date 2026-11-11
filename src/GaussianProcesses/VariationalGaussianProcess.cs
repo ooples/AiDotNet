@@ -295,15 +295,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         double noiseVar = Math.Max(_noiseVariance, 1e-10);
 
         // Compute (K + σ²I)^(-1)
-        var KPlusNoise = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                KPlusNoise[i, j] = _K[i, j];
-            }
-            KPlusNoise[i, i] = _numOps.Add(KPlusNoise[i, i], _numOps.FromDouble(noiseVar));
-        }
+        var KPlusNoise = GaussianProcessEngineOps.AddToDiagonal(_K, _numOps.FromDouble(noiseVar));
 
         // Solve (K + σ²I) * alpha = y
         var alpha = MatrixSolutionHelper.SolveLinearSystem(KPlusNoise, _y, _decompositionType);
@@ -327,15 +319,8 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
             KKplusNoiseInv.SetColumn(j, solved);
         }
 
-        var S = new Matrix<T>(n, n);
         var KKpn = _K.Multiply(KKplusNoiseInv);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                S[i, j] = _numOps.Subtract(_K[i, j], KKpn[i, j]);
-            }
-        }
+        var S = Engine.MatrixSubtract(_K, KKpn);
 
         AddJitter(S);
         try
@@ -381,25 +366,13 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
             var KInvM = MatrixSolutionHelper.SolveLinearSystem(_K, _variationalMean, _decompositionType);
 
             // Total gradient for mean: grad_loglik - K^(-1) * m
-            var gradMean = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                gradMean[i] = _numOps.Subtract(gradLogLik[i], KInvM[i]);
-            }
+            var engine = Engine;
+            var gradMean = engine.Subtract(gradLogLik, KInvM);
 
             // Update variational mean
-            T maxChange = _numOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T update = _numOps.Multiply(_numOps.FromDouble(_learningRate), gradMean[i]);
-                _variationalMean[i] = _numOps.Add(_variationalMean[i], update);
-
-                T absUpdate = _numOps.Abs(update);
-                if (_numOps.ToDouble(absUpdate) > _numOps.ToDouble(maxChange))
-                {
-                    maxChange = absUpdate;
-                }
-            }
+            var update = engine.Multiply(gradMean, _numOps.FromDouble(_learningRate));
+            engine.Add(_variationalMean, update).AsSpan().CopyTo(_variationalMean.AsWritableSpan());
+            T maxChange = n == 0 ? _numOps.Zero : engine.TensorMaxValue(engine.TensorAbs(Tensor<T>.FromVector(update)));
 
             // Update covariance based on likelihood Hessian (simplified)
             if (iter == 0 || iter % 50 == 0)
@@ -408,7 +381,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
             }
 
             // Check convergence
-            if (_numOps.ToDouble(maxChange) < _tolerance)
+            if (_numOps.LessThan(maxChange, _numOps.FromDouble(_tolerance)))
             {
                 break;
             }
@@ -435,41 +408,23 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     private Vector<T> ComputeLikelihoodGradient()
     {
         int n = _variationalMean.Length;
-        var gradient = new Vector<T>(n);
-
+        var engine = Engine;
         switch (_likelihood)
         {
             case VGPLikelihood.Gaussian:
                 double noisePrecision = 1.0 / Math.Max(_noiseVariance, 1e-10);
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = _numOps.ToDouble(_y[i]) - _numOps.ToDouble(_variationalMean[i]);
-                    gradient[i] = _numOps.FromDouble(diff * noisePrecision);
-                }
-                break;
+                return engine.Multiply(engine.Subtract(_y, _variationalMean), _numOps.FromDouble(noisePrecision));
 
             case VGPLikelihood.Bernoulli:
-                for (int i = 0; i < n; i++)
-                {
-                    double m = _numOps.ToDouble(_variationalMean[i]);
-                    double sigmoid = 1.0 / (1.0 + Math.Exp(-m));
-                    double y = _numOps.ToDouble(_y[i]);
-                    gradient[i] = _numOps.FromDouble(y - sigmoid);
-                }
-                break;
+                return engine.Subtract(_y, engine.Sigmoid(_variationalMean));
 
             case VGPLikelihood.Poisson:
-                for (int i = 0; i < n; i++)
-                {
-                    double m = _numOps.ToDouble(_variationalMean[i]);
-                    double expM = Math.Exp(Math.Min(m, 20)); // Clip for numerical stability
-                    double y = _numOps.ToDouble(_y[i]);
-                    gradient[i] = _numOps.FromDouble(y - expM);
-                }
-                break;
+                // Clip for numerical stability
+                var expM = engine.TensorExp(engine.TensorMin(Tensor<T>.FromVector(_variationalMean), _numOps.FromDouble(20)));
+                return engine.TensorSubtract(Tensor<T>.FromVector(_y), expM).ToVector();
         }
 
-        return gradient;
+        return new Vector<T>(n);
     }
 
     /// <summary>
@@ -496,34 +451,23 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         int n = _variationalMean.Length;
 
         // Compute diagonal of negative Hessian of log-likelihood
+        var engine = Engine;
         var W = new Vector<T>(n);
 
         switch (_likelihood)
         {
             case VGPLikelihood.Gaussian:
                 double noisePrecision = 1.0 / Math.Max(_noiseVariance, 1e-10);
-                for (int i = 0; i < n; i++)
-                {
-                    W[i] = _numOps.FromDouble(noisePrecision);
-                }
+                W = Tensor<T>.CreateDefault(new[] { n }, _numOps.FromDouble(noisePrecision)).ToVector();
                 break;
 
             case VGPLikelihood.Bernoulli:
-                for (int i = 0; i < n; i++)
-                {
-                    double m = _numOps.ToDouble(_variationalMean[i]);
-                    double sigmoid = 1.0 / (1.0 + Math.Exp(-m));
-                    W[i] = _numOps.FromDouble(sigmoid * (1.0 - sigmoid));
-                }
+                var sigmoid = engine.TensorSigmoid(Tensor<T>.FromVector(_variationalMean));
+                W = engine.TensorMultiply(sigmoid, engine.ScalarMinusTensor(_numOps.One, sigmoid)).ToVector();
                 break;
 
             case VGPLikelihood.Poisson:
-                for (int i = 0; i < n; i++)
-                {
-                    double m = _numOps.ToDouble(_variationalMean[i]);
-                    double expM = Math.Exp(Math.Min(m, 20));
-                    W[i] = _numOps.FromDouble(expM);
-                }
+                W = engine.TensorExp(engine.TensorMin(Tensor<T>.FromVector(_variationalMean), _numOps.FromDouble(20))).ToVector();
                 break;
         }
 
@@ -539,15 +483,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         }
 
         // Add W to diagonal
-        var SInv = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                SInv[i, j] = KInv[i, j];
-            }
-            SInv[i, i] = _numOps.Add(SInv[i, i], W[i]);
-        }
+        var SInv = GaussianProcessEngineOps.AddToDiagonal(KInv, W);
 
         AddJitter(SInv);
 
@@ -597,16 +533,10 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         // more data instead of shrinking.
         if (_likelihood == VGPLikelihood.Gaussian && _KPlusNoise is not null && _alpha is not null)
         {
-            T gMean = _numOps.Zero;
-            for (int i = 0; i < _alpha.Length; i++)
-                gMean = _numOps.Add(gMean, _numOps.Multiply(kStar[i], _alpha[i]));
-
+            T gMean = Engine.DotProduct(kStar, _alpha);
             var KnInvKStar = MatrixSolutionHelper.SolveLinearSystem(_KPlusNoise, kStar, _decompositionType);
-            T gVariance = kStarStar;
-            for (int i = 0; i < kStar.Length; i++)
-                gVariance = _numOps.Subtract(gVariance, _numOps.Multiply(kStar[i], KnInvKStar[i]));
-
-            if (_numOps.ToDouble(gVariance) < 0)
+            T gVariance = _numOps.Subtract(kStarStar, Engine.DotProduct(kStar, KnInvKStar));
+            if (_numOps.LessThan(gVariance, _numOps.Zero))
                 gVariance = _numOps.FromDouble(1e-10);
 
             return (gMean, gVariance);
@@ -617,31 +547,20 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
 
         // Predictive mean: k*^T * K^(-1) * m_q
         // But m_q is already K * alpha for Gaussian, so we use a different formulation
-        T mean = _numOps.Zero;
-        for (int i = 0; i < _variationalMean.Length; i++)
-        {
-            mean = _numOps.Add(mean, _numOps.Multiply(KInvKStar[i], _variationalMean[i]));
-        }
+        var engine = Engine;
+        T mean = engine.DotProduct(KInvKStar, _variationalMean);
 
         // Predictive variance: k** - k*^T * K^(-1) * k* + k*^T * K^(-1) * S * K^(-1) * k*
         // Prior variance reduction
-        T variance = kStarStar;
-        for (int i = 0; i < kStar.Length; i++)
-        {
-            variance = _numOps.Subtract(variance, _numOps.Multiply(kStar[i], KInvKStar[i]));
-        }
+        T variance = _numOps.Subtract(kStarStar, engine.DotProduct(kStar, KInvKStar));
 
         // Add posterior variance contribution
         var LTKInvKStar = _variationalCovCholesky.Transpose().Multiply(KInvKStar);
-        T posteriorVar = _numOps.Zero;
-        for (int i = 0; i < LTKInvKStar.Length; i++)
-        {
-            posteriorVar = _numOps.Add(posteriorVar, _numOps.Multiply(LTKInvKStar[i], LTKInvKStar[i]));
-        }
+        T posteriorVar = engine.DotProduct(LTKInvKStar, LTKInvKStar);
         variance = _numOps.Add(variance, posteriorVar);
 
         // Ensure non-negative variance
-        if (_numOps.ToDouble(variance) < 0)
+        if (_numOps.LessThan(variance, _numOps.Zero))
         {
             variance = _numOps.FromDouble(1e-10);
         }
@@ -679,44 +598,37 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
             return _numOps.Zero;
 
         // Expected log-likelihood
-        double expLogLik = 0.0;
+        var engine = Engine;
+        T expLogLik = _numOps.Zero;
         int n = _y.Length;
+        var m = Tensor<T>.FromVector(_variationalMean);
+        var y = Tensor<T>.FromVector(_y);
 
         switch (_likelihood)
         {
             case VGPLikelihood.Gaussian:
                 double noiseVar = Math.Max(_noiseVariance, 1e-10);
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = _numOps.ToDouble(_y[i]) - _numOps.ToDouble(_variationalMean[i]);
-                    expLogLik -= 0.5 * diff * diff / noiseVar;
-                    expLogLik -= 0.5 * Math.Log(2 * Math.PI * noiseVar);
-                }
+                var diff = engine.Subtract(_y, _variationalMean);
+                expLogLik = _numOps.Negate(_numOps.Add(
+                    _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(0.5), engine.DotProduct(diff, diff)), _numOps.FromDouble(noiseVar)),
+                    _numOps.FromDouble(n * 0.5 * Math.Log(2 * Math.PI * noiseVar))));
                 break;
 
             case VGPLikelihood.Bernoulli:
-                for (int i = 0; i < n; i++)
-                {
-                    double m = _numOps.ToDouble(_variationalMean[i]);
-                    double y = _numOps.ToDouble(_y[i]);
-                    // log p(y|f) = y*log(σ(f)) + (1-y)*log(1-σ(f)) = y*f - log(1+exp(f))
-                    // Use numerically stable form: log(1+exp(m)) = m + log(1+exp(-m)) for m > 0
-                    double logSigmoid = m > 0
-                        ? -Math.Log(1 + Math.Exp(-m))
-                        : m - Math.Log(1 + Math.Exp(m));
-                    expLogLik += y * m + logSigmoid - m; // Simplifies to: y*m - log(1+exp(m))
-                }
+                // log p(y|f) = y*log(σ(f)) + (1-y)*log(1-σ(f)) = y*f - log(1+exp(f)) = y*m + log σ(m) - m
+                expLogLik = _numOps.Subtract(
+                    _numOps.Add(engine.TensorVecDot(y, m), engine.TensorSum(engine.TensorLogSigmoid(m))),
+                    engine.TensorSum(m));
                 break;
 
             case VGPLikelihood.Poisson:
-                for (int i = 0; i < n; i++)
-                {
-                    double m = _numOps.ToDouble(_variationalMean[i]);
-                    double y = _numOps.ToDouble(_y[i]);
-                    double expM = Math.Exp(Math.Min(m, 20));
-                    // log p(y|f) = y*f - exp(f) - log(y!)
-                    expLogLik += y * m - expM - LogFactorial((int)y);
-                }
+                // log p(y|f) = y*f - exp(f) - log(y!), with log(y!) = lgamma(max(trunc(y), 0) + 1)
+                var expM = engine.TensorExp(engine.TensorMin(m, _numOps.FromDouble(20)));
+                var counts = engine.TensorMax(Tensor<T>.FromVector(engine.Truncate(_y)), _numOps.Zero);
+                var logFactorial = engine.TensorLgamma(engine.TensorAddScalar(counts, _numOps.One));
+                expLogLik = _numOps.Subtract(
+                    engine.TensorVecDot(y, m),
+                    _numOps.Add(engine.TensorSum(expM), engine.TensorSum(logFactorial)));
                 break;
         }
 
@@ -724,72 +636,51 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         // Note: S = L_S * L_S^T is computed implicitly in trace term below
         var KInvM = MatrixSolutionHelper.SolveLinearSystem(_K, _variationalMean, _decompositionType);
 
-        double quadForm = 0.0;
-        for (int i = 0; i < n; i++)
-        {
-            quadForm += _numOps.ToDouble(_variationalMean[i]) * _numOps.ToDouble(KInvM[i]);
-        }
+        T quadForm = engine.DotProduct(_variationalMean, KInvM);
 
-        // log|K| using Cholesky
-        double logDetK = 0.0;
-        for (int i = 0; i < _LK.Rows; i++)
-        {
-            logDetK += 2.0 * Math.Log(Math.Abs(_numOps.ToDouble(_LK[i, i])));
-        }
-
-        // log|S| using Cholesky
-        double logDetS = 0.0;
-        for (int i = 0; i < _variationalCovCholesky.Rows; i++)
-        {
-            logDetS += 2.0 * Math.Log(Math.Abs(_numOps.ToDouble(_variationalCovCholesky[i, i])));
-        }
+        // log|K| and log|S| from the Cholesky diagonals
+        T logDetK = LogDeterminantFromCholesky(_LK);
+        T logDetS = LogDeterminantFromCholesky(_variationalCovCholesky);
 
         // Trace term: tr(K^(-1) * S)
         // Compute using S = L_S * L_S^T, so tr(K^(-1) * S) = ||L_K^(-1) * L_S||_F^2
         // For efficiency, we approximate using diagonal dominance when K is well-conditioned
-        double trace = 0.0;
+        T trace;
         try
         {
-            // Solve L_K * Y = L_S for Y, then trace = ||Y||_F^2
-            for (int j = 0; j < _variationalCovCholesky.Columns; j++)
-            {
-                var colS = _variationalCovCholesky.GetColumn(j);
-                var solved = MatrixSolutionHelper.SolveLinearSystem(_LK, colS, _decompositionType);
-                for (int i = 0; i < solved.Length; i++)
-                {
-                    trace += _numOps.ToDouble(_numOps.Multiply(solved[i], solved[i]));
-                }
-            }
+            // Solve L_K * Y = L_S for Y (one triangular solve for all columns), then trace = ||Y||_F^2
+            var solved = Linalg.SolveTriangular(
+                Tensor<T>.FromMatrix(_LK), Tensor<T>.FromMatrix(_variationalCovCholesky), upper: false);
+            trace = engine.TensorSumOfSquares(solved);
         }
         catch (ArgumentException)
         {
             // Fallback: use identity approximation (S ≈ K means trace ≈ n)
-            trace = n;
+            trace = _numOps.FromDouble(n);
         }
 
-        double kl = 0.5 * (trace + quadForm - n + logDetK - logDetS);
-        double elbo = expLogLik - kl;
+        T kl = _numOps.Multiply(
+            _numOps.FromDouble(0.5),
+            _numOps.Add(
+                _numOps.Subtract(_numOps.Add(trace, quadForm), _numOps.FromDouble(n)),
+                _numOps.Subtract(logDetK, logDetS)));
 
-        return _numOps.FromDouble(elbo);
-    }
-
-    /// <summary>
-    /// Computes log factorial for Poisson likelihood.
-    /// </summary>
-    private static double LogFactorial(int n)
-    {
-        if (n <= 1) return 0;
-        double result = 0;
-        for (int i = 2; i <= n; i++)
-        {
-            result += Math.Log(i);
-        }
-        return result;
+        return _numOps.Subtract(expLogLik, kl);
     }
 
     /// <summary>
     /// Calculates the kernel matrix between two sets of points.
     /// </summary>
+    /// <summary>
+    /// log|A| = 2 Σ log|L_ii| for A = L Lᵀ.
+    /// </summary>
+    private T LogDeterminantFromCholesky(Matrix<T> L)
+    {
+        var engine = Engine;
+        var diagonal = engine.TensorAbs(Tensor<T>.FromVector(GaussianProcessEngineOps.Diagonal(L)));
+        return _numOps.Multiply(_numOps.FromDouble(2.0), engine.TensorSum(engine.TensorLog(diagonal)));
+    }
+
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {
         var K = new Matrix<T>(X1.Rows, X2.Rows);
@@ -821,12 +712,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// </summary>
     private Matrix<T> CreateIdentityMatrix(int size)
     {
-        var identity = new Matrix<T>(size, size);
-        for (int i = 0; i < size; i++)
-        {
-            identity[i, i] = _numOps.One;
-        }
-        return identity;
+        return Engine.TensorEye<T>(size).ToMatrix();
     }
 
     /// <summary>
@@ -834,12 +720,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// </summary>
     private Matrix<T> CreateScaledIdentityMatrix(int size, double scale)
     {
-        var matrix = new Matrix<T>(size, size);
-        for (int i = 0; i < size; i++)
-        {
-            matrix[i, i] = _numOps.FromDouble(scale);
-        }
-        return matrix;
+        return Engine.TensorMultiplyScalar(Engine.TensorEye<T>(size), _numOps.FromDouble(scale)).ToMatrix();
     }
 
     /// <summary>
@@ -847,11 +728,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// </summary>
     private void AddJitter(Matrix<T> K)
     {
-        var jitter = _numOps.FromDouble(1e-6);
-        for (int i = 0; i < K.Rows; i++)
-        {
-            K[i, i] = _numOps.Add(K[i, i], jitter);
-        }
+        GaussianProcessEngineOps.AddToDiagonalInPlace(K, _numOps.FromDouble(1e-6));
     }
 }
 
