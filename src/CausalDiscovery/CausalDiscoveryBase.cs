@@ -648,9 +648,23 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     }
 
     /// <summary>
-    /// Inverts a small matrix using Gauss-Jordan elimination. Returns null if singular.
+    /// log|det(A)| from a partial-pivoting LU factorization, or negative infinity when any pivot
+    /// magnitude is below 1e-15 (the matrix is treated as singular).
     /// </summary>
-    private Matrix<T>? InvertSmallMatrix(Matrix<T> matrix)
+    private protected double LogAbsDeterminant(Tensor<T> matrix)
+    {
+        var (_, _, u) = LinalgDispatch<T>.LU(matrix);
+        var pivots = Engine.TensorAbs(Engine.TensorDiagonal(u));
+        if (Engine.TensorCountNonzero(Engine.TensorLessThan(pivots, NumOps.FromDouble(1e-15))) > 0)
+            return double.NegativeInfinity; // Singular
+
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorLog(pivots)));
+    }
+
+    /// <summary>
+    /// Inverts a small matrix through partial-pivoting LU. Returns null when a pivot magnitude is below 1e-12.
+    /// </summary>
+    private protected Matrix<T>? InvertSmallMatrix(Matrix<T> matrix)
     {
         // Partial-pivoting LU: its U diagonal holds exactly the pivots Gauss-Jordan elimination
         // with partial pivoting would divide by, so the singularity test is unchanged.
