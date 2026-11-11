@@ -138,7 +138,9 @@ public sealed class SampledTiedReadoutLocalErrorCreditRule<T>
             weight *= depthFrac * depthFrac;
         }
 
-        return weight == 1.0 ? local : s.Engine.TensorMultiplyScalar(local, Ops.FromDouble(weight));
+        return BitConverter.DoubleToInt64Bits(weight) == BitConverter.DoubleToInt64Bits(1.0)
+            ? local
+            : s.Engine.TensorMultiplyScalar(local, Ops.FromDouble(weight));
     }
 
     /// <inheritdoc />

@@ -358,6 +358,24 @@ public class FusedReadoutLossTests
             => throw new NotSupportedException();
     }
 
+    private sealed class AuxTapeNeuralNetwork : NeuralNetwork<double>
+    {
+        private readonly double _auxTerm;
+
+        public AuxTapeNeuralNetwork(NeuralNetworkArchitecture<double> architecture, double auxTerm)
+            : base(architecture)
+        {
+            _auxTerm = auxTerm;
+        }
+
+        protected override Tensor<double>? ConsumeAuxiliaryTapeLoss()
+        {
+            var t = new Tensor<double>(new[] { 1 });
+            t.SetFlat(0, _auxTerm);
+            return t;
+        }
+    }
+
     [Fact]
     public void NonBaseLoss_WithAuxiliaryLossLayer_MatchesEvaluateTrainingObjective()
     {
@@ -380,13 +398,22 @@ public class FusedReadoutLossTests
             inputSize: Dim,
             outputSize: Vocab,
             layers: layers) { RandomSeed = 22 };
-        var net = new NeuralNetwork<double>(arch);
-        net.Predict(x);
+        const double auxTerm = 0.75;
+        var net = new AuxTapeNeuralNetwork(arch, auxTerm);
+        var pred = net.Predict(x);
 
         var customLoss = new NonBaseSquaredLoss();
+        double rawExpected = customLoss.ComputeTapeLoss(pred, target).GetFlat(0);
+        var baseMse = new MeanSquaredErrorLoss<double>();
+
         net.SetTrainingMode(true);
+        double builtWithBase = net.BuildTrainingObjective(x, target, baseMse).GetFlat(0);
+        double rawMse = baseMse.ComputeTapeLoss(pred, target).GetFlat(0);
+        Assert.Equal(rawMse + auxTerm, builtWithBase, 12);
+
         double built = net.BuildTrainingObjective(x, target, customLoss).GetFlat(0);
         double evaluated = net.EvaluateTrainingObjective(x, target, customLoss);
+        Assert.Equal(rawExpected, built, 12);
         Assert.Equal(evaluated, built, 12);
     }
 
@@ -403,6 +430,7 @@ public class FusedReadoutLossTests
         var qs = new sbyte[inF * outF];
         var scales = new float[outF * (inF / 32)];
         head.SetQuantizedWeightsQ8_0(qs, scales, inF, outF);
+        Assert.True(head.HasCachedQ8Weights);
 
         var ids = new Tensor<float>(new[] { 1 });
         ids.SetFlat(0, 0f);
@@ -413,6 +441,7 @@ public class FusedReadoutLossTests
             var loss = head.TryComputeFusedLoss(x, ids, ce);
             Assert.NotNull(loss);
         }
+        Assert.False(head.HasCachedQ8Weights);
 
         // Mutate the underlying weight span directly without bumping Tensor.Version (matching in-place CPU Adam).
         var w = head.GetTrainableParameters()[0];

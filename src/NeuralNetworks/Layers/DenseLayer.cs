@@ -338,9 +338,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             target, loss, input.Rank, input.Shape.ToArray(), out _);
         if (ids is null) return null;
 
-        Tensor<T>? unusedTracedW = null, unusedDetachedW = null, unusedDetachedB = null;
+        FusedReadoutPreparedState<T> unusedState = default;
         return ((IDetachableFusedReadoutLossLayer<T>)this).TryComputeFusedLossPrepared(
-            input, ids, detachParameters: false, ref unusedTracedW, ref unusedDetachedW, ref unusedDetachedB);
+            input, ids, detachParameters: false, ref unusedState);
     }
 
     Tensor<int>? IDetachableFusedReadoutLossLayer<T>.TryPrepareClassIndexTarget(
@@ -376,9 +376,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         Tensor<T> input,
         Tensor<int> ids,
         bool detachParameters,
-        ref Tensor<T>? tracedWeight,
-        ref Tensor<T>? detachedWeight,
-        ref Tensor<T>? detachedBias)
+        ref FusedReadoutPreparedState<T> preparedState)
     {
         if (!IsEligibleForFusedReadout()) return null;
         int inputSize = _weights.Shape[0], outputSize = _weights.Shape[1];
@@ -395,15 +393,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         Tensor<T> biasToUse;
         if (detachParameters)
         {
-            detachedWeight ??= Engine.StopGradient(_weights);
-            detachedBias ??= UseBias ? Engine.StopGradient(_biases) : GetZeroBias(outputSize);
-            weightToUse = detachedWeight;
-            biasToUse = detachedBias;
+            preparedState.DetachedWeight ??= Engine.StopGradient(_weights);
+            preparedState.DetachedBias ??= UseBias ? Engine.StopGradient(_biases) : GetZeroBias(outputSize);
+            weightToUse = preparedState.DetachedWeight;
+            biasToUse = preparedState.DetachedBias;
         }
         else
         {
-            tracedWeight ??= _weights;
-            weightToUse = tracedWeight;
+            preparedState.TracedWeight ??= _weights;
+            weightToUse = preparedState.TracedWeight;
             biasToUse = UseBias ? _biases : GetZeroBias(outputSize);
         }
 
@@ -510,6 +508,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     // block-Q8_0 GEMM instead of expanding to fp32 — ~3.76× less weight memory + int8 dot throughput.
     private sbyte[]? _weightsQ8;
     private float[]? _weightScalesQ8;
+    internal bool HasCachedQ8Weights => _weightsQ8 is not null || _weightScalesQ8 is not null;
     private int _q8In;
     private int _q8Out;
 

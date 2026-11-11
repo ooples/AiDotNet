@@ -115,9 +115,7 @@ internal static class LocalObjectiveGradientComputer<T>
 
             Tensor<int>? preparedIds = null;
             int preparedVocabSize = 0;
-            Tensor<T>? tracedHeadWeight = null;
-            Tensor<T>? detachedHeadWeight = null;
-            Tensor<T>? detachedHeadBias = null;
+            FusedReadoutPreparedState<T> headPreparedState = default;
 
             // Evaluate the terminal layer's pre-head activation once. Running PreHeadReadout(current) first also
             // initializes any lazy pre-head layer before we inspect its parameters and detach/batching capabilities.
@@ -184,7 +182,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 if (preparedIds is not null
                     && detachableFusedHead.TryComputeFusedLossPrepared(
                         preHeadFinal, preparedIds, detachParameters: false,
-                        ref tracedHeadWeight, ref detachedHeadWeight, ref detachedHeadBias) is { } fusedOut)
+                        ref headPreparedState) is { } fusedOut)
                 {
                     prediction = preHeadFinal;
                     alignedTarget = target;
@@ -227,7 +225,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 if (ReferenceEquals(t, alignedTarget) && preparedIds is not null && detachableFusedHead is not null
                     && detachableFusedHead.TryComputeFusedLossPrepared(
                         preHead, preparedIds, detachParameters: false,
-                        ref tracedHeadWeight, ref detachedHeadWeight, ref detachedHeadBias) is { } preparedFused)
+                        ref headPreparedState) is { } preparedFused)
                 {
                     return ReduceToScalar(engine, preparedFused);
                 }
@@ -244,7 +242,7 @@ internal static class LocalObjectiveGradientComputer<T>
                     var preHead = PreHeadReadoutDetached(h);
                     if (detachableFusedHead.TryComputeFusedLossPrepared(
                         preHead, preparedIds, detachParameters: true,
-                        ref tracedHeadWeight, ref detachedHeadWeight, ref detachedHeadBias) is { } detachedFused)
+                        ref headPreparedState) is { } detachedFused)
                     {
                         return ReduceToScalar(engine, detachedFused);
                     }
@@ -427,9 +425,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 int stride = batchedRule.LayerStride;
                 double baseWeight = batchedRule.BaseLocalWeight;
 
-                if (mode != BatchedLocalReadoutMode.None
-                    && preHeadBatchIndependent
-                    && ((detach && preHeadAllDetachable) || (!detach && !progressive)))
+                if (CanBatchReadout(mode, preHeadBatchIndependent, detach, preHeadAllDetachable, progressive))
                 {
                     int lastHidden = hiddenIdx.Count - 1;
                     var selectedHidden = new List<int>(Math.Max(0, lastHidden));
@@ -469,7 +465,7 @@ internal static class LocalObjectiveGradientComputer<T>
                                     // preserving bit-identical forward values tilde_h == hk (zero ULP drift).
                                     double depthFrac = (k + 1.0) / hCount;
                                     double w = baseWeight * depthFrac * depthFrac;
-                                    if (w == 1.0)
+                                    if (BitConverter.DoubleToInt64Bits(w) == BitConverter.DoubleToInt64Bits(1.0))
                                     {
                                         stackedInputs[j] = hk;
                                     }
@@ -525,7 +521,7 @@ internal static class LocalObjectiveGradientComputer<T>
                                 var tiledIds = TileIntIds(preparedIds, m);
                                 if (detachableFusedHead.TryComputeFusedLossPrepared(
                                     preHeadStacked, tiledIds, detachParameters: detach,
-                                    ref tracedHeadWeight, ref detachedHeadWeight, ref detachedHeadBias) is { } fusedBatched)
+                                    ref headPreparedState) is { } fusedBatched)
                                 {
                                     batchedLoss = ReduceToScalar(engine, fusedBatched);
                                 }
@@ -534,7 +530,7 @@ internal static class LocalObjectiveGradientComputer<T>
                             if (batchedLoss is not null)
                             {
                                 double scale = progressive ? m : m * baseWeight;
-                                var scaledBatched = scale == 1.0
+                                var scaledBatched = BitConverter.DoubleToInt64Bits(scale) == BitConverter.DoubleToInt64Bits(1.0)
                                     ? batchedLoss
                                     : engine.TensorMultiplyScalar(batchedLoss, numOps.FromDouble(scale));
                                 combined = engine.TensorAdd(combined, scaledBatched);
@@ -674,6 +670,18 @@ internal static class LocalObjectiveGradientComputer<T>
         for (int c = 1; c < count; c++)
             Array.Copy(tiled, 0, tiled, c * rows, rows);
         return new Tensor<int>(tiled, new[] { count * rows });
+    }
+
+    private static bool CanBatchReadout(
+        BatchedLocalReadoutMode mode,
+        bool preHeadBatchIndependent,
+        bool detach,
+        bool preHeadAllDetachable,
+        bool progressive)
+    {
+        if (mode == BatchedLocalReadoutMode.None || !preHeadBatchIndependent)
+            return false;
+        return detach ? preHeadAllDetachable : !progressive;
     }
 
     private static Tensor<T> ReduceToScalar(IEngine engine, Tensor<T> t)

@@ -121,7 +121,9 @@ public sealed class TiedReadoutLocalErrorCreditRule<T>
         }
 
         // Skip scaling only for the exact identity coefficient.
-        return weight == 1.0 ? local : s.Engine.TensorMultiplyScalar(local, Ops.FromDouble(weight));
+        return BitConverter.DoubleToInt64Bits(weight) == BitConverter.DoubleToInt64Bits(1.0)
+            ? local
+            : s.Engine.TensorMultiplyScalar(local, Ops.FromDouble(weight));
     }
 
     /// <inheritdoc />
