@@ -42,6 +42,17 @@ internal static class AugmentationRandom<T>
     }
 
     /// <summary>
+    /// One <see cref="Random.NextDouble"/> per element in row-major order, compared with
+    /// <paramref name="threshold"/> in double precision: 1 where the draw is below it, else 0.
+    /// The comparison stays in double so integral or narrow <typeparamref name="T"/> cannot truncate
+    /// or round the draw onto the threshold.
+    /// </summary>
+    internal static Tensor<double> UnitBelow(AugmentationContext<T> context, int[] shape, double threshold)
+    {
+        return AiDotNetEngine.Current.TensorLessThan(Tensor<double>.CreateRandom(context.Random, shape), threshold);
+    }
+
+    /// <summary>
     /// <see cref="AugmentationContext{T}.GetRandomDouble"/>(min, max) per element in row-major order.
     /// </summary>
     internal static Tensor<T> Uniform(AugmentationContext<T> context, int[] shape, double min, double max)
