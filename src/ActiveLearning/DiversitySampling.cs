@@ -189,47 +189,38 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private int[] SelectFarthestFirst(Tensor<T> pool, int batchSize)
     {
+        var engine = AiDotNetEngine.Current;
         var numSamples = pool.Shape[0];
         var featureSize = pool.Length / numSamples;
+        var rows = ActiveLearningEngineOps.AsRows(pool, numSamples, featureSize);
+        var norms = CosineNorms(rows);
         var selected = new List<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, numSamples));
+        var excluded = new bool[numSamples];
 
         // Start with a random sample (or the centroid's nearest neighbor)
-        var centroid = ComputeCentroid(pool, numSamples, featureSize);
-        var first = FindNearestToCentroid(pool, centroid, numSamples, featureSize);
+        var centroid = ComputeCentroid(rows, numSamples);
+        var first = FindNearestToCentroid(rows, centroid);
         selected.Add(first);
-        remaining.Remove(first);
+        excluded[first] = true;
+
+        // Minimum distance from every sample to the selected set
+        var minDist = new Tensor<T>(new[] { 1, numSamples });
+        minDist.Fill(_numOps.MaxValue);
+        minDist = engine.TensorMin(minDist, ComputeDistanceBlock(rows, norms, first, 1));
 
         // Greedily add the farthest sample
-        while (selected.Count < batchSize && remaining.Count > 0)
+        while (selected.Count < batchSize && selected.Count < numSamples)
         {
-            var farthest = -1;
-            var maxMinDist = _numOps.MinValue;
-
-            foreach (var idx in remaining)
+            var farthest = ActiveLearningEngineOps.ArgMaxAbove(minDist, excluded, _numOps.MinValue);
+            if (farthest < 0)
             {
-                var minDist = _numOps.MaxValue;
-                foreach (var selIdx in selected)
-                {
-                    var dist = ComputeDistance(pool, idx, selIdx, featureSize);
-                    if (_numOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                    }
-                }
-
-                if (_numOps.GreaterThan(minDist, maxMinDist))
-                {
-                    maxMinDist = minDist;
-                    farthest = idx;
-                }
+                // No remaining sample has a comparable distance (e.g. NaN): stop instead of spinning.
+                break;
             }
 
-            if (farthest >= 0)
-            {
-                selected.Add(farthest);
-                remaining.Remove(farthest);
-            }
+            selected.Add(farthest);
+            excluded[farthest] = true;
+            minDist = engine.TensorMin(minDist, ComputeDistanceBlock(rows, norms, farthest, 1));
         }
 
         return [.. selected];
@@ -250,113 +241,87 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private int[] SelectDensityPeaks(Tensor<T> pool, int batchSize)
     {
+        var engine = AiDotNetEngine.Current;
         var numSamples = pool.Shape[0];
         var featureSize = pool.Length / numSamples;
+        var rows = ActiveLearningEngineOps.AsRows(pool, numSamples, featureSize);
+        var norms = CosineNorms(rows);
 
         // Compute local density for each sample
-        var densities = ComputeLocalDensities(pool, numSamples, featureSize);
+        var densities = ComputeLocalDensities(rows, norms);
 
         // Compute distance to nearest higher-density sample
-        var deltaDistances = ComputeDeltaDistances(pool, densities, numSamples, featureSize);
+        var deltaDistances = ComputeDeltaDistances(rows, norms, densities);
 
         // Score = density * delta (decision graph)
-        var scores = new Vector<T>(numSamples);
-        for (int i = 0; i < numSamples; i++)
-        {
-            scores[i] = _numOps.Multiply(densities[i], deltaDistances[i]);
-        }
+        var scores = engine.TensorMultiply(densities, deltaDistances).ToVector();
 
         // Select top-scoring samples (density peaks)
-        var indexedScores = new List<(int Index, T Score)>();
-        for (int i = 0; i < numSamples; i++)
-        {
-            indexedScores.Add((i, scores[i]));
-        }
-
-        return indexedScores
-            .OrderByDescending(x => _numOps.ToDouble(x.Score))
-            .Take(batchSize)
-            .Select(x => x.Index)
-            .ToArray();
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSize);
     }
 
     /// <summary>
     /// Computes local density for each sample using a Gaussian kernel.
     /// </summary>
-    private Vector<T> ComputeLocalDensities(Tensor<T> pool, int numSamples, int featureSize)
+    private Tensor<T> ComputeLocalDensities(Tensor<T> rows, Tensor<T>? norms)
     {
-        var densities = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
+        int numSamples = rows.Shape[0];
 
         // Compute average distance to estimate bandwidth
-        var avgDist = ComputeAverageNearestNeighborDistance(pool, numSamples, featureSize, k: 5);
-        var bandwidth = Math.Max(_numOps.ToDouble(avgDist), 1e-10);
+        var avgDist = ComputeAverageNearestNeighborDistance(rows, norms, k: 5);
+        var minBandwidth = _numOps.FromDouble(1e-10);
+        var bandwidth = _numOps.GreaterThan(avgDist, minBandwidth) ? avgDist : minBandwidth;
+        var denominator = _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2), bandwidth), bandwidth);
 
-        for (int i = 0; i < numSamples; i++)
+        var blockRows = ActiveLearningEngineOps.PairwiseBlockRows(numSamples, rows.Shape[1]);
+        var densities = new List<Tensor<T>>();
+        for (int start = 0; start < numSamples; start += blockRows)
         {
-            var density = _numOps.Zero;
-            for (int j = 0; j < numSamples; j++)
-            {
-                if (i != j)
-                {
-                    var dist = ComputeDistance(pool, i, j, featureSize);
-                    var distVal = _numOps.ToDouble(dist);
-                    var kernelVal = Math.Exp(-distVal * distVal / (2 * bandwidth * bandwidth));
-                    density = _numOps.Add(density, _numOps.FromDouble(kernelVal));
-                }
-            }
-            densities[i] = density;
+            int count = Math.Min(blockRows, numSamples - start);
+            var dist = ComputeDistanceBlock(rows, norms, start, count);
+            var kernel = engine.TensorExp(engine.TensorDivideScalar(engine.TensorNegate(engine.TensorMultiply(dist, dist)), denominator));
+            var others = engine.TensorMaskedFill(kernel, ActiveLearningEngineOps.SelfMask(start, count, numSamples), _numOps.Zero);
+            densities.Add(engine.ReduceSum(others, new[] { 1 }, keepDims: false));
         }
 
-        return densities;
+        return engine.TensorConcatenate(densities.ToArray(), 0);
     }
 
     /// <summary>
     /// Computes delta distance (distance to nearest higher-density sample).
     /// </summary>
-    private Vector<T> ComputeDeltaDistances(Tensor<T> pool, Vector<T> densities, int numSamples, int featureSize)
+    private Tensor<T> ComputeDeltaDistances(Tensor<T> rows, Tensor<T>? norms, Tensor<T> densities)
     {
-        var deltas = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
+        int numSamples = rows.Shape[0];
+        var blockRows = ActiveLearningEngineOps.PairwiseBlockRows(numSamples, rows.Shape[1]);
+        var densityRow = densities.Reshape(new[] { 1, numSamples });
+        var deltas = new List<Tensor<T>>();
 
-        for (int i = 0; i < numSamples; i++)
+        for (int start = 0; start < numSamples; start += blockRows)
         {
-            var minDistToHigherDensity = _numOps.MaxValue;
-            var foundHigher = false;
+            int count = Math.Min(blockRows, numSamples - start);
+            var shape = new[] { count, numSamples };
+            var dist = ComputeDistanceBlock(rows, norms, start, count);
 
-            for (int j = 0; j < numSamples; j++)
-            {
-                if (i != j && _numOps.GreaterThan(densities[j], densities[i]))
-                {
-                    var dist = ComputeDistance(pool, i, j, featureSize);
-                    if (_numOps.LessThan(dist, minDistToHigherDensity))
-                    {
-                        minDistToHigherDensity = dist;
-                        foundHigher = true;
-                    }
-                }
-            }
+            // Distance to the nearest sample with strictly higher density (a sample is never
+            // denser than itself)
+            var ownDensity = engine.TensorSlice(densities, new[] { start }, new[] { count }).Reshape(new[] { count, 1 });
+            var higher = engine.TensorGreaterThan(engine.TensorBroadcastTo(densityRow, shape), engine.TensorBroadcastTo(ownDensity, shape));
+            var unreachable = new Tensor<T>(shape);
+            unreachable.Fill(_numOps.MaxValue);
+            var minDistToHigherDensity = engine.TensorAmin(engine.TensorWhere(higher, dist, unreachable), new[] { 1 }, keepDims: false);
+            var foundHigher = engine.TensorLessThan(minDistToHigherDensity, _numOps.MaxValue);
 
             // If no higher density point, set delta to max distance
-            if (!foundHigher)
-            {
-                var maxDist = _numOps.Zero;
-                for (int j = 0; j < numSamples; j++)
-                {
-                    if (i != j)
-                    {
-                        var dist = ComputeDistance(pool, i, j, featureSize);
-                        if (_numOps.GreaterThan(dist, maxDist))
-                        {
-                            maxDist = dist;
-                        }
-                    }
-                }
-                minDistToHigherDensity = maxDist;
-            }
+            var others = engine.TensorMaskedFill(dist, ActiveLearningEngineOps.SelfMask(start, count, numSamples), _numOps.Zero);
+            var maxDist = engine.TensorMax(engine.ReduceMax(others, new[] { 1 }, keepDims: false), _numOps.Zero);
 
-            deltas[i] = minDistToHigherDensity;
+            deltas.Add(engine.TensorWhere(foundHigher, minDistToHigherDensity, maxDist));
         }
 
-        return deltas;
+        return engine.TensorConcatenate(deltas.ToArray(), 0);
     }
 
     /// <summary>
@@ -364,33 +329,20 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private Vector<T> ComputeDistanceScores(Tensor<T> pool, int numSamples, int featureSize)
     {
-        var scores = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
         var k = Math.Min(5, numSamples - 1);
-
-        for (int i = 0; i < numSamples; i++)
+        if (k <= 0)
         {
-            var distances = new List<T>();
-            for (int j = 0; j < numSamples; j++)
-            {
-                if (i != j)
-                {
-                    distances.Add(ComputeDistance(pool, i, j, featureSize));
-                }
-            }
-
-            // Sort and take average of k nearest
-            var sortedDist = distances.OrderBy(d => _numOps.ToDouble(d)).Take(k).ToList();
-            var sum = _numOps.Zero;
-            foreach (var d in sortedDist)
-            {
-                sum = _numOps.Add(sum, d);
-            }
-            scores[i] = _numOps.Divide(sum, _numOps.FromDouble(sortedDist.Count));
+            // No neighbours: the empty average divides zero by zero, as the scalar formula did
+            return engine.TensorDivideScalar(new Tensor<T>(new[] { numSamples }), _numOps.Zero).ToVector();
         }
 
-        // Invert scores so larger distance = higher score (more diverse)
-        // Actually, for outliers we want HIGH distance, so no inversion needed
-        return scores;
+        // Sort and take average of k nearest
+        var rows = ActiveLearningEngineOps.AsRows(pool, numSamples, featureSize);
+        var sums = SumOfNearestDistances(rows, CosineNorms(rows), k);
+
+        // For outliers we want HIGH distance, so no inversion needed
+        return engine.TensorDivideScalar(sums, _numOps.FromDouble(k)).ToVector();
     }
 
     /// <summary>
@@ -398,64 +350,64 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private Vector<T> ComputeDensityScores(Tensor<T> pool, int numSamples, int featureSize)
     {
-        var scores = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
         var k = Math.Min(5, numSamples - 1);
-
-        for (int i = 0; i < numSamples; i++)
+        Tensor<T> avgDist;
+        if (k <= 0)
         {
-            var distances = new List<T>();
-            for (int j = 0; j < numSamples; j++)
-            {
-                if (i != j)
-                {
-                    distances.Add(ComputeDistance(pool, i, j, featureSize));
-                }
-            }
-
-            var sortedDist = distances.OrderBy(d => _numOps.ToDouble(d)).Take(k).ToList();
-            var sum = _numOps.Zero;
-            foreach (var d in sortedDist)
-            {
-                sum = _numOps.Add(sum, d);
-            }
-            var avgDist = _numOps.Divide(sum, _numOps.FromDouble(sortedDist.Count));
-
-            // Density is inverse of distance
-            var epsilon = _numOps.FromDouble(1e-10);
-            scores[i] = _numOps.Divide(_numOps.One, _numOps.Add(avgDist, epsilon));
+            avgDist = engine.TensorDivideScalar(new Tensor<T>(new[] { numSamples }), _numOps.Zero);
+        }
+        else
+        {
+            var rows = ActiveLearningEngineOps.AsRows(pool, numSamples, featureSize);
+            var sums = SumOfNearestDistances(rows, CosineNorms(rows), k);
+            avgDist = engine.TensorDivideScalar(sums, _numOps.FromDouble(k));
         }
 
-        return scores;
+        // Density is inverse of distance
+        var epsilon = _numOps.FromDouble(1e-10);
+        return engine.TensorReciprocal(engine.TensorAddScalar(avgDist, epsilon)).ToVector();
     }
 
     /// <summary>
     /// Computes the average k-nearest neighbor distance.
     /// </summary>
-    private T ComputeAverageNearestNeighborDistance(Tensor<T> pool, int numSamples, int featureSize, int k)
+    private T ComputeAverageNearestNeighborDistance(Tensor<T> rows, Tensor<T>? norms, int k)
     {
-        var totalDist = _numOps.Zero;
-        var count = 0;
-
-        for (int i = 0; i < numSamples; i++)
+        var engine = AiDotNetEngine.Current;
+        int numSamples = rows.Shape[0];
+        var taken = Math.Min(k, numSamples - 1);
+        if (taken <= 0)
         {
-            var distances = new List<T>();
-            for (int j = 0; j < numSamples; j++)
-            {
-                if (i != j)
-                {
-                    distances.Add(ComputeDistance(pool, i, j, featureSize));
-                }
-            }
-
-            var sortedDist = distances.OrderBy(d => _numOps.ToDouble(d)).Take(k).ToList();
-            foreach (var d in sortedDist)
-            {
-                totalDist = _numOps.Add(totalDist, d);
-                count++;
-            }
+            return _numOps.One;
         }
 
-        return count > 0 ? _numOps.Divide(totalDist, _numOps.FromDouble(count)) : _numOps.One;
+        var totalDist = engine.TensorSum(SumOfNearestDistances(rows, norms, taken));
+        return _numOps.Divide(totalDist, _numOps.FromDouble((double)numSamples * taken));
+    }
+
+    /// <summary>
+    /// Sum of the <paramref name="k"/> smallest distances from each sample to the other samples
+    /// (1 &lt;= k &lt; numSamples).
+    /// </summary>
+    /// <returns>A [numSamples] tensor.</returns>
+    private Tensor<T> SumOfNearestDistances(Tensor<T> rows, Tensor<T>? norms, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        int numSamples = rows.Shape[0];
+        var blockRows = ActiveLearningEngineOps.PairwiseBlockRows(numSamples, rows.Shape[1]);
+        var sums = new List<Tensor<T>>();
+
+        for (int start = 0; start < numSamples; start += blockRows)
+        {
+            int count = Math.Min(blockRows, numSamples - start);
+            var dist = ComputeDistanceBlock(rows, norms, start, count);
+            var others = engine.TensorMaskedFill(dist, ActiveLearningEngineOps.SelfMask(start, count, numSamples), _numOps.MaxValue);
+            var (nearest, _) = engine.TopK(others, k, 1, false);
+            sums.Add(engine.ReduceSum(nearest, new[] { 1 }, keepDims: false));
+        }
+
+        return engine.TensorConcatenate(sums.ToArray(), 0);
     }
 
     /// <summary>
@@ -463,161 +415,123 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private T ComputeCoverageRadius(Tensor<T> pool, int[] selected)
     {
+        var engine = AiDotNetEngine.Current;
         var numSamples = pool.Shape[0];
         var featureSize = pool.Length / numSamples;
-        var maxMinDist = _numOps.Zero;
+        var rows = ActiveLearningEngineOps.AsRows(pool, numSamples, featureSize);
+        var norms = CosineNorms(rows);
 
-        for (int i = 0; i < numSamples; i++)
+        var minDist = new Tensor<T>(new[] { 1, numSamples });
+        minDist.Fill(_numOps.MaxValue);
+        foreach (var selIdx in selected)
         {
-            var minDist = _numOps.MaxValue;
-            foreach (var selIdx in selected)
-            {
-                var dist = ComputeDistance(pool, i, selIdx, featureSize);
-                if (_numOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                }
-            }
-
-            if (_numOps.GreaterThan(minDist, maxMinDist))
-            {
-                maxMinDist = minDist;
-            }
+            minDist = engine.TensorMin(minDist, ComputeDistanceBlock(rows, norms, selIdx, 1));
         }
 
-        return maxMinDist;
+        var maxMinDist = engine.TensorMaxValue(minDist);
+        return _numOps.GreaterThan(maxMinDist, _numOps.Zero) ? maxMinDist : _numOps.Zero;
     }
 
     /// <summary>
-    /// Computes distance between two samples based on the configured metric.
+    /// Row norms needed by the cosine metric, or null for the other metrics.
     /// </summary>
-    private T ComputeDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
+    private Tensor<T>? CosineNorms(Tensor<T> rows)
+    {
+        return _distanceMetric == DistanceMetric.Cosine ? ActiveLearningEngineOps.RowNorms(rows) : null;
+    }
+
+    /// <summary>
+    /// Computes distances between samples [start, start + count) and every sample based on the
+    /// configured metric.
+    /// </summary>
+    /// <returns>A [count, numSamples] tensor.</returns>
+    private Tensor<T> ComputeDistanceBlock(Tensor<T> rows, Tensor<T>? norms, int start, int count)
     {
         return _distanceMetric switch
         {
-            DistanceMetric.Euclidean => ComputeEuclideanDistance(pool, idx1, idx2, featureSize),
-            DistanceMetric.Cosine => ComputeCosineDistance(pool, idx1, idx2, featureSize),
-            DistanceMetric.Manhattan => ComputeManhattanDistance(pool, idx1, idx2, featureSize),
-            _ => ComputeEuclideanDistance(pool, idx1, idx2, featureSize)
+            DistanceMetric.Cosine => ComputeCosineDistance(rows, norms ?? ActiveLearningEngineOps.RowNorms(rows), start, count),
+            DistanceMetric.Manhattan => ComputeManhattanDistance(rows, start, count),
+            _ => ActiveLearningEngineOps.DistanceBlock(rows, start, count)
         };
     }
 
     /// <summary>
-    /// Computes Euclidean distance between two samples.
+    /// Computes cosine distance (1 - cosine similarity); pairs where either norm is (near) zero
+    /// get distance 1.
     /// </summary>
-    private T ComputeEuclideanDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
+    private Tensor<T> ComputeCosineDistance(Tensor<T> rows, Tensor<T> norms, int start, int count)
     {
-        var sumSquared = _numOps.Zero;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
+        var engine = AiDotNetEngine.Current;
+        int numSamples = rows.Shape[0];
+        var shape = new[] { count, numSamples };
+        var dotProduct = ActiveLearningEngineOps.DotBlock(rows, start, count);
 
-        for (int i = 0; i < featureSize; i++)
-        {
-            var diff = _numOps.Subtract(pool[start1 + i], pool[start2 + i]);
-            var squared = _numOps.Multiply(diff, diff);
-            sumSquared = _numOps.Add(sumSquared, squared);
-        }
+        var norm1 = engine.TensorBroadcastTo(engine.TensorSlice(norms, new[] { start }, new[] { count }).Reshape(new[] { count, 1 }), shape);
+        var norm2 = engine.TensorBroadcastTo(norms.Reshape(new[] { 1, numSamples }), shape);
+        var cosineSim = engine.TensorDivide(dotProduct, engine.TensorMultiply(norm1, norm2));
+        var distance = engine.ScalarMinusTensor(_numOps.One, cosineSim);
 
-        return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquared)));
+        var epsilon = _numOps.FromDouble(1e-10);
+        var degenerate = engine.TensorMax(engine.TensorLessThan(norm1, epsilon), engine.TensorLessThan(norm2, epsilon));
+        var ones = new Tensor<T>(shape);
+        ones.Fill(_numOps.One);
+        return engine.TensorWhere(degenerate, ones, distance);
     }
 
     /// <summary>
-    /// Computes cosine distance (1 - cosine similarity) between two samples.
+    /// Computes Manhattan (L1) distance.
     /// </summary>
-    private T ComputeCosineDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
+    private static Tensor<T> ComputeManhattanDistance(Tensor<T> rows, int start, int count)
     {
-        var dotProduct = _numOps.Zero;
-        var norm1Sq = _numOps.Zero;
-        var norm2Sq = _numOps.Zero;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
-
-        for (int i = 0; i < featureSize; i++)
+        var engine = AiDotNetEngine.Current;
+        int numSamples = rows.Shape[0];
+        int featureSize = rows.Shape[1];
+        if (featureSize == 0)
         {
-            var v1 = pool[start1 + i];
-            var v2 = pool[start2 + i];
-
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(v1, v2));
-            norm1Sq = _numOps.Add(norm1Sq, _numOps.Multiply(v1, v1));
-            norm2Sq = _numOps.Add(norm2Sq, _numOps.Multiply(v2, v2));
+            return new Tensor<T>(new[] { count, numSamples });
         }
 
-        var norm1 = Math.Sqrt(_numOps.ToDouble(norm1Sq));
-        var norm2 = Math.Sqrt(_numOps.ToDouble(norm2Sq));
-
-        if (norm1 < 1e-10 || norm2 < 1e-10)
-        {
-            return _numOps.One;
-        }
-
-        var cosineSim = _numOps.ToDouble(dotProduct) / (norm1 * norm2);
-        return _numOps.FromDouble(1.0 - cosineSim);
-    }
-
-    /// <summary>
-    /// Computes Manhattan (L1) distance between two samples.
-    /// </summary>
-    private T ComputeManhattanDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
-    {
-        var sum = _numOps.Zero;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
-
-        for (int i = 0; i < featureSize; i++)
-        {
-            var diff = _numOps.Subtract(pool[start1 + i], pool[start2 + i]);
-            var absDiff = _numOps.FromDouble(Math.Abs(_numOps.ToDouble(diff)));
-            sum = _numOps.Add(sum, absDiff);
-        }
-
-        return sum;
+        var shape = new[] { count, numSamples, featureSize };
+        var block = engine.TensorSlice(rows, new[] { start, 0 }, new[] { count, featureSize }).Reshape(new[] { count, 1, featureSize });
+        var all = rows.Reshape(new[] { 1, numSamples, featureSize });
+        var diff = engine.TensorSubtract(engine.TensorBroadcastTo(block, shape), engine.TensorBroadcastTo(all, shape));
+        return engine.ReduceSum(engine.TensorAbs(diff), new[] { 2 }, keepDims: false);
     }
 
     /// <summary>
     /// Computes the centroid of the data.
     /// </summary>
-    private Vector<T> ComputeCentroid(Tensor<T> pool, int numSamples, int featureSize)
+    /// <returns>A [1, featureSize] tensor.</returns>
+    private Tensor<T> ComputeCentroid(Tensor<T> rows, int numSamples)
     {
-        var centroid = new Vector<T>(featureSize);
-
-        for (int f = 0; f < featureSize; f++)
-        {
-            var sum = _numOps.Zero;
-            for (int i = 0; i < numSamples; i++)
-            {
-                sum = _numOps.Add(sum, pool[i * featureSize + f]);
-            }
-            centroid[f] = _numOps.Divide(sum, _numOps.FromDouble(numSamples));
-        }
-
-        return centroid;
+        var engine = AiDotNetEngine.Current;
+        var sum = engine.ReduceSum(rows, new[] { 0 }, keepDims: true);
+        return engine.TensorDivideScalar(sum, _numOps.FromDouble(numSamples));
     }
 
     /// <summary>
-    /// Finds the sample nearest to the centroid.
+    /// Finds the sample nearest to the centroid (first one on ties).
     /// </summary>
-    private int FindNearestToCentroid(Tensor<T> pool, Vector<T> centroid, int numSamples, int featureSize)
+    private int FindNearestToCentroid(Tensor<T> rows, Tensor<T> centroid)
     {
-        var minDist = _numOps.MaxValue;
-        var nearest = 0;
-
-        for (int i = 0; i < numSamples; i++)
+        var engine = AiDotNetEngine.Current;
+        int numSamples = rows.Shape[0];
+        int featureSize = rows.Shape[1];
+        Tensor<T> distSq;
+        if (featureSize == 0)
         {
-            var distSq = _numOps.Zero;
-            for (int f = 0; f < featureSize; f++)
-            {
-                var diff = _numOps.Subtract(pool[i * featureSize + f], centroid[f]);
-                distSq = _numOps.Add(distSq, _numOps.Multiply(diff, diff));
-            }
-
-            if (_numOps.LessThan(distSq, minDist))
-            {
-                minDist = distSq;
-                nearest = i;
-            }
+            distSq = new Tensor<T>(new[] { numSamples });
+        }
+        else
+        {
+            var diff = engine.TensorSubtract(rows, engine.TensorBroadcastTo(centroid, new[] { numSamples, featureSize }));
+            distSq = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
         }
 
-        return nearest;
+        // argmin over samples with distSq < MaxValue == argmax of -distSq above -MaxValue
+        var negated = engine.TensorNegate(distSq).Reshape(new[] { 1, numSamples });
+        var nearest = ActiveLearningEngineOps.ArgMaxAbove(negated, new bool[numSamples], _numOps.Negate(_numOps.MaxValue));
+        return nearest < 0 ? 0 : nearest;
     }
 
     /// <summary>
