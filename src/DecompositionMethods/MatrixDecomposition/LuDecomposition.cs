@@ -142,72 +142,35 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
-        Matrix<T> A = matrix.Clone();
-        Matrix<T> L = new(n, n);
-        Vector<int> P = new(n);
-
-        // Initialize permutation vector to identity
-        for (int i = 0; i < n; i++)
-            P[i] = i;
-
-        for (int k = 0; k < n - 1; k++)
+        if (n == 0)
         {
-            // Find pivot (largest absolute value in current column)
-            int pivotRow = k;
-            T pivotValue = NumOps.Abs(A[k, k]);
-            for (int i = k + 1; i < n; i++)
-            {
-                T absValue = NumOps.Abs(A[i, k]);
-                if (NumOps.GreaterThan(absValue, pivotValue))
-                {
-                    pivotRow = i;
-                    pivotValue = absValue;
-                }
-            }
-
-            EnsureUsablePivot(pivotValue, k);
-
-            // VECTORIZED: Use Engine.SwapRows for efficient row swapping
-            if (pivotRow != k)
-            {
-                Engine.SwapRows(A, k, pivotRow);
-                (P[pivotRow], P[k]) = (P[k], P[pivotRow]);
-                // Also swap the already-computed multipliers in L (columns 0 to k-1)
-                for (int j = 0; j < k; j++)
-                {
-                    (L[k, j], L[pivotRow, j]) = (L[pivotRow, j], L[k, j]);
-                }
-            }
-
-            // VECTORIZED: Perform elimination using Engine operations
-            for (int i = k + 1; i < n; i++)
-            {
-                T factor = NumOps.Divide(A[i, k], A[k, k]);
-                L[i, k] = factor;
-                // VECTORIZED: A[i,:] = A[i,:] - factor * A[k,:]
-                var rowK = Engine.GetRow(A, k);
-                var rowI = Engine.GetRow(A, i);
-                var scaled = (Vector<T>)Engine.Multiply(rowK, factor);
-                var updated = (Vector<T>)Engine.Subtract(rowI, scaled);
-                Engine.SetRow(A, i, updated);
-            }
+            return (new Matrix<T>(0, 0), new Matrix<T>(0, 0), new Vector<int>(0));
         }
 
-        if (n > 0) EnsureUsablePivot(A[n - 1, n - 1], n - 1);
+        // PA = LU with partial (row) pivoting in one engine factorization.
+        var (permutation, lower, upper) = Linalg.LU(Tensor<T>.FromMatrix(matrix));
 
-        // Extract U matrix from the modified A (upper triangular part)
-        // L already has the multipliers stored during elimination, just set diagonal to 1
-        Matrix<T> U = new(n, n);
-        for (int i = 0; i < n; i++)
+        // The k-th pivot is the largest |A[i,k]| in the remaining column, i.e. |U[k,k]|; report the
+        // first zero or non-finite one as the elimination did.
+        var unusable = UnusablePivotMask(Engine.TensorDiagonal(upper));
+        if (Engine.TensorCountNonzero(unusable) > 0)
         {
-            L[i, i] = NumOps.One;  // Set diagonal of L to 1
-            for (int j = i; j < n; j++)
-            {
-                U[i, j] = A[i, j];  // U gets upper triangular part including diagonal
-            }
+            int index = Engine.TensorArgMax(unusable, 0)[0];
+            throw new MatrixFactorizationException(
+                $"LU factorization encountered a zero or non-finite pivot at index {index}.");
         }
 
-        return (L, U, P);
+        // Row order P with (PA)[i] = A[P[i]] (pb[i] = b[P[i]]). Read it from whichever orientation
+        // of the returned permutation matrix reproduces L U.
+        var a = Tensor<T>.FromMatrix(matrix);
+        var lu = Engine.TensorMatMul(lower, upper);
+        T residual = Engine.TensorSumOfSquares(Engine.TensorSubtract(Engine.TensorMatMul(permutation, a), lu));
+        T transposedResidual = Engine.TensorSumOfSquares(Engine.TensorSubtract(
+            Engine.TensorMatMul(Engine.TensorTranspose(permutation), a), lu));
+        var rowOrder = NumOps.LessThanOrEquals(residual, transposedResidual)
+            ? Engine.TensorArgMax(permutation, 1)
+            : Engine.TensorArgMax(permutation, 0);
+        return (lower.ToMatrix(), upper.ToMatrix(), rowOrder.ToVector());
     }
 
     /// <summary>
@@ -231,96 +194,105 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
-        Matrix<T> A = matrix.Clone();
-        Matrix<T> L = new(n, n);
-        Vector<int> P = new(n);
-        Vector<int> Q = new(n);
-
-        for (int i = 0; i < n; i++)
+        var (L, U, rowOrder, columnOrder) = EliminateRightLooking(matrix, completePivoting: true, zeroPivotGivesZeroMultipliers: false);
+        if (n == 0)
         {
-            P[i] = i;
-            Q[i] = i;
+            return (L, U, rowOrder);
         }
+
+        // Undo the column pivoting: column j of U belongs at original column Q[j].
+        var adjustedU = Engine.TensorIndexCopy(
+            new Tensor<T>(new[] { n, n }),
+            1,
+            Tensor<int>.FromVector(columnOrder),
+            Tensor<T>.FromMatrix(U));
+
+        return (L, adjustedU.ToMatrix(), rowOrder);
+    }
+
+    /// <summary>
+    /// Gaussian elimination with right-looking whole-block engine updates: for each pivot k the
+    /// multipliers A[k+1:, k] / A[k, k] form column k of L and the trailing block receives the
+    /// rank-1 update l * A[k, k+1:].
+    /// </summary>
+    /// <param name="matrix">The square matrix (not modified).</param>
+    /// <param name="completePivoting">
+    /// True to bring the largest |A[i,j]| of the remaining block to the pivot position by a row and
+    /// a column swap (first maximum in row-major order) and reject zero or non-finite pivots.
+    /// </param>
+    /// <param name="zeroPivotGivesZeroMultipliers">True to use zero multipliers below a zero pivot.</param>
+    /// <returns>Unit lower L, upper U, the row order P and the column order Q (PAQ = LU).</returns>
+    private (Matrix<T> L, Matrix<T> U, Vector<int> rowOrder, Vector<int> columnOrder) EliminateRightLooking(
+        Matrix<T> matrix, bool completePivoting, bool zeroPivotGivesZeroMultipliers)
+    {
+        int n = matrix.Rows;
+        if (n == 0)
+        {
+            return (new Matrix<T>(0, 0), new Matrix<T>(0, 0), new Vector<int>(0), new Vector<int>(0));
+        }
+
+        var identityOrder = Engine.TensorArange<int>(0, n, 1).Reshape(new[] { n, 1 });
+
+        Matrix<T> work = matrix.Clone();
+        Matrix<T> multipliers = new(n, n);
+        Matrix<int> rowOrder = identityOrder.ToMatrix();
+        Matrix<int> columnOrder = identityOrder.ToMatrix();
+        T zero = NumOps.Zero;
 
         for (int k = 0; k < n - 1; k++)
         {
-            int pivotRow = k, pivotCol = k;
-            T pivotValue = NumOps.Abs(A[k, k]);
-
-            for (int i = k; i < n; i++)
+            int rest = n - k - 1;
+            if (completePivoting)
             {
-                for (int j = k; j < n; j++)
+                int size = n - k;
+                var block = Engine.TensorAbs(Engine.TensorSlice(Tensor<T>.FromMatrix(work), new[] { k, k }, new[] { size, size }));
+                int flat = Engine.TensorArgMax(block.Reshape(new[] { size * size }), 0)[0];
+                int pivotRow = k + flat / size;
+                int pivotCol = k + flat % size;
+                EnsureUsablePivot(Engine.TensorSlice(block, new[] { flat / size, flat % size }, new[] { 1, 1 }), k);
+
+                if (pivotRow != k)
                 {
-                    T absValue = NumOps.Abs(A[i, j]);
-                    if (NumOps.GreaterThan(absValue, pivotValue))
-                    {
-                        pivotRow = i;
-                        pivotCol = j;
-                        pivotValue = absValue;
-                    }
+                    Engine.SwapRows(work, k, pivotRow);
+                    // Columns k.. of the multiplier rows are still zero, so a full-row swap only
+                    // exchanges the multipliers computed so far.
+                    Engine.SwapRows(multipliers, k, pivotRow);
+                    Engine.SwapRows(rowOrder, k, pivotRow);
+                }
+
+                if (pivotCol != k)
+                {
+                    Engine.SwapColumns(work, k, pivotCol);
+                    Engine.SwapRows(columnOrder, k, pivotCol);
                 }
             }
 
-            EnsureUsablePivot(pivotValue, k);
-
-            // VECTORIZED: Use Engine.SwapRows for efficient row swapping
-            if (pivotRow != k)
+            var current = Tensor<T>.FromMatrix(work);
+            var inversePivot = Engine.TensorReciprocal(Engine.TensorSlice(current, new[] { k, k }, new[] { 1, 1 }));
+            if (zeroPivotGivesZeroMultipliers)
             {
-                Engine.SwapRows(A, k, pivotRow);
-                // Also swap the already-computed multipliers in L (columns 0 to k-1)
-                for (int j = 0; j < k; j++)
-                {
-                    (L[k, j], L[pivotRow, j]) = (L[pivotRow, j], L[k, j]);
-                }
-                (P[pivotRow], P[k]) = (P[k], P[pivotRow]);
+                inversePivot = Engine.TensorWhere(Engine.TensorIsFinite(inversePivot), inversePivot, Engine.TensorFullLike(inversePivot, zero));
             }
 
-            // VECTORIZED: Use Engine.SwapColumns for efficient column swapping
-            if (pivotCol != k)
-            {
-                Engine.SwapColumns(A, k, pivotCol);
-                (Q[pivotCol], Q[k]) = (Q[k], Q[pivotCol]);
-            }
+            var column = Engine.TensorSlice(current, new[] { k + 1, k }, new[] { rest, 1 });
+            var factors = Engine.TensorMultiplyScalar(column, Engine.TensorSum(inversePivot));
+            var pivotRowTail = Engine.TensorSlice(current, new[] { k, k + 1 }, new[] { 1, rest });
+            var trailing = Engine.TensorSlice(current, new[] { k + 1, k + 1 }, new[] { rest, rest });
+            trailing = Engine.TensorSubtract(trailing, Engine.TensorMatMul(factors, pivotRowTail));
 
-            // VECTORIZED: Use Engine operations for row updates
-            for (int i = k + 1; i < n; i++)
-            {
-                T factor = NumOps.Divide(A[i, k], A[k, k]);
-                L[i, k] = factor;
-                // VECTORIZED: A[i,:] = A[i,:] - factor * A[k,:]
-                var rowK = Engine.GetRow(A, k);
-                var rowI = Engine.GetRow(A, i);
-                var scaled = (Vector<T>)Engine.Multiply(rowK, factor);
-                var updated = (Vector<T>)Engine.Subtract(rowI, scaled);
-                Engine.SetRow(A, i, updated);
-            }
+            work.SetSubMatrix(k + 1, k + 1, trailing.ToMatrix());
+            multipliers.SetSubMatrix(k + 1, k, factors.ToMatrix());
         }
 
-        if (n > 0) EnsureUsablePivot(A[n - 1, n - 1], n - 1);
-
-        // Extract U matrix from the modified A (upper triangular part)
-        // L already has the multipliers stored during elimination, just set diagonal to 1
-        Matrix<T> U = new(n, n);
-        for (int i = 0; i < n; i++)
+        var final = Tensor<T>.FromMatrix(work);
+        if (completePivoting)
         {
-            L[i, i] = NumOps.One;  // Set diagonal of L to 1
-            for (int j = i; j < n; j++)
-            {
-                U[i, j] = A[i, j];  // U gets upper triangular part including diagonal
-            }
+            EnsureUsablePivot(Engine.TensorSlice(final, new[] { n - 1, n - 1 }, new[] { 1, 1 }), n - 1);
         }
 
-        // Adjust U and P for column permutations
-        Matrix<T> adjustedU = new(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                adjustedU[i, Q[j]] = U[i, j];
-            }
-        }
-
-        return (L, adjustedU, P);
+        var lower = Engine.TensorAdd(Tensor<T>.FromMatrix(multipliers), Engine.TensorEye<T>(n));
+        var upper = Engine.TensorTriu(final, 0);
+        return (lower.ToMatrix(), upper.ToMatrix(), rowOrder.GetColumn(0), columnOrder.GetColumn(0));
     }
 
     /// <summary>
@@ -345,41 +317,18 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
 
-        Matrix<T> L = new(n, n);
-        Vector<int> P = new(n);
-
-        for (int i = 0; i < n; i++)
-            P[i] = i;
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            for (int j = 0; j <= i; j++)
-            {
-                T sum = NumOps.Zero;
-
-                if (j == i)
-                {
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(L[j, k], L[j, k]));
-                    }
-                    L[j, j] = NumOps.Sqrt(NumOps.Subtract(matrix[j, j], sum));
-                }
-                else
-                {
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], L[j, k]));
-                    }
-
-                    L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
-                }
-            }
+            return (new Matrix<T>(0, 0), new Matrix<T>(0, 0), new Vector<int>(0));
         }
 
-        Matrix<T> U = L.Transpose();
+        var identityOrder = Engine.TensorArange<int>(0, n, 1).ToVector();
 
-        return (L, U, P);
+        // A = L L^T in one engine factorization; like the scalar recurrence, a matrix that is not
+        // positive definite yields a non-finite factor rather than an exception.
+        var (factor, _) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(matrix), upper: false);
+        Matrix<T> L = factor.ToMatrix();
+        return (L, L.Transpose(), identityOrder);
     }
 
     /// <summary>
@@ -403,41 +352,9 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
-        Matrix<T> L = new(n, n);
-        Matrix<T> U = new(n, n);
-        Vector<int> P = new(n);
-
-        // Initialize P as [0, 1, 2, ..., n-1]
-        for (int i = 0; i < n; i++)
-            P[i] = i;
-
-        for (int i = 0; i < n; i++)
-        {
-            // Upper Triangular
-            for (int k = i; k < n; k++)
-            {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < i; j++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], U[j, k]));
-                U[i, k] = NumOps.Subtract(matrix[i, k], sum);
-            }
-
-            // Lower Triangular
-            for (int k = i; k < n; k++)
-            {
-                if (i == k)
-                    L[i, i] = NumOps.One;
-                else
-                {
-                    T sum = NumOps.Zero;
-                    for (int j = 0; j < i; j++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(L[k, j], U[j, i]));
-                    L[k, i] = NumOps.Divide(NumOps.Subtract(matrix[k, i], sum), U[i, i]);
-                }
-            }
-        }
-
-        return (L, U, P);
+        // Doolittle: unit lower L, no pivoting.
+        var (L, U, rowOrder, _) = EliminateRightLooking(matrix, completePivoting: false, zeroPivotGivesZeroMultipliers: false);
+        return (L, U, rowOrder);
     }
 
     /// <summary>
@@ -468,50 +385,10 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
-        Matrix<T> L = new(n, n);
-        Matrix<T> U = new(n, n);
-        Vector<int> P = new(n);
-
-        // Initialize P as [0, 1, 2, ..., n-1]
-        for (int i = 0; i < n; i++)
-            P[i] = i;
-
-        for (int j = 0; j < n; j++)
-        {
-            U[j, j] = NumOps.One;
-        }
-
-        for (int j = 0; j < n; j++)
-        {
-            for (int i = j; i < n; i++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < j; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], U[k, j]));
-                }
-                L[i, j] = NumOps.Subtract(matrix[i, j], sum);
-            }
-
-            for (int i = j; i < n; i++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < j; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(L[j, k], U[k, i]));
-                }
-                if (!NumOps.Equals(L[j, j], NumOps.Zero))
-                {
-                    U[j, i] = NumOps.Divide(NumOps.Subtract(matrix[j, i], sum), L[j, j]);
-                }
-                else
-                {
-                    U[j, i] = NumOps.Zero;
-                }
-            }
-        }
-
-        return (L, U, P);
+        // Crout (L general lower, U unit upper) is the transposed Doolittle factorization of A^T:
+        // A^T = L' U'  =>  A = U'^T L'^T. A zero diagonal in L leaves that row of U zero.
+        var (lowerT, upperT, rowOrder, _) = EliminateRightLooking(matrix.Transpose(), completePivoting: false, zeroPivotGivesZeroMultipliers: true);
+        return (upperT.Transpose(), lowerT.Transpose(), rowOrder);
     }
 
     /// <summary>
@@ -533,13 +410,12 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private Vector<T> PermutateVector(Vector<T> b, Vector<int> P)
     {
-        var pb = new Vector<T>(b.Length);
-        for (int i = 0; i < b.Length; i++)
+        if (b.Length == 0)
         {
-            pb[i] = b[P[i]];
+            return new Vector<T>(0);
         }
 
-        return pb;
+        return Engine.TensorIndexSelect(Tensor<T>.FromVector(b), Tensor<int>.FromVector(P), 0).ToVector();
     }
 
     /// <summary>
@@ -562,35 +438,17 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private Vector<T> ForwardSubstitution(Matrix<T> L, Vector<T> b)
     {
-        var y = new Vector<T>(L.Rows);
-        for (int i = 0; i < L.Rows; i++)
+        if (L.Rows == 0)
         {
-            // VECTORIZED: Use dot product for sum computation
-            T sum = NumOps.Zero;
-            if (i > 0)
-            {
-                var rowSlice = new T[i];
-                var ySlice = new T[i];
-                for (int k = 0; k < i; k++)
-                {
-                    rowSlice[k] = L[i, k];
-                    ySlice[k] = y[k];
-                }
-                var rowVec = new Vector<T>(rowSlice);
-                var yVec = new Vector<T>(ySlice);
-                sum = rowVec.DotProduct(yVec);
-            }
-
-            T rhs = NumOps.Subtract(b[i], sum);
-            T diag = L[i, i];
-            if (!IsUsablePivot(diag))
-            {
-                throw new MatrixFactorizationException("The lower triangular factor is singular.");
-            }
-            y[i] = NumOps.Divide(rhs, diag);
+            return new Vector<T>(0);
         }
 
-        return y;
+        if (Engine.TensorCountNonzero(UnusablePivotMask(Engine.TensorDiagonal(Tensor<T>.FromMatrix(L)))) > 0)
+        {
+            throw new MatrixFactorizationException("The lower triangular factor is singular.");
+        }
+
+        return SolveTriangularSystem(L, b, upper: false);
     }
 
     /// <summary>
@@ -613,52 +471,41 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private Vector<T> BackSubstitution(Matrix<T> U, Vector<T> y)
     {
-        var x = new Vector<T>(U.Columns);
-        for (int i = U.Columns - 1; i >= 0; i--)
+        int n = U.Columns;
+        if (n == 0)
         {
-            // VECTORIZED: Use dot product for sum computation
-            T sum = NumOps.Zero;
-            if (i < U.Columns - 1)
-            {
-                int remaining = U.Columns - i - 1;
-                var rowSlice = new T[remaining];
-                var xSlice = new T[remaining];
-                for (int k = 0; k < remaining; k++)
-                {
-                    rowSlice[k] = U[i, i + 1 + k];
-                    xSlice[k] = x[i + 1 + k];
-                }
-                var rowVec = new Vector<T>(rowSlice);
-                var xVec = new Vector<T>(xSlice);
-                sum = rowVec.DotProduct(xVec);
-            }
-
-            T pivot = U[i, i];
-            if (!IsUsablePivot(pivot))
-            {
-                throw new MatrixFactorizationException(
-                    $"The upper triangular factor has an invalid pivot at index {i}.");
-            }
-
-            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), pivot);
+            return new Vector<T>(0);
         }
 
-        return x;
+        // Back substitution meets the pivots bottom-up, so the last invalid one is reported.
+        var unusable = UnusablePivotMask(Engine.TensorDiagonal(Tensor<T>.FromMatrix(U)));
+        if (Engine.TensorCountNonzero(unusable) > 0)
+        {
+            int fromEnd = Engine.TensorArgMax(Engine.TensorFlip(unusable, new[] { 0 }), 0)[0];
+            throw new MatrixFactorizationException(
+                $"The upper triangular factor has an invalid pivot at index {n - 1 - fromEnd}.");
+        }
+
+        return SolveTriangularSystem(U, y, upper: true);
     }
 
-    private void EnsureUsablePivot(T pivot, int index)
+    private void EnsureUsablePivot(Tensor<T> pivot, int index)
     {
-        if (!IsUsablePivot(pivot))
+        if (Engine.TensorCountNonzero(UnusablePivotMask(pivot)) > 0)
         {
             throw new MatrixFactorizationException(
                 $"LU factorization encountered a zero or non-finite pivot at index {index}.");
         }
     }
 
-    private bool IsUsablePivot(T pivot)
+    /// <summary>1 where a pivot is zero, NaN or infinite; 0 where it is usable.</summary>
+    private Tensor<T> UnusablePivotMask(Tensor<T> pivots)
     {
-        double value = NumOps.ToDouble(pivot);
-        return !double.IsNaN(value) && !double.IsInfinity(value) && !NumOps.Equals(pivot, NumOps.Zero);
+        var usable = Engine.TensorWhere(
+            Engine.TensorIsFinite(pivots),
+            Engine.TensorNotEquals(pivots, NumOps.Zero),
+            Engine.TensorFullLike(pivots, NumOps.Zero));
+        return Engine.TensorSubtract(Engine.TensorOnesLike(usable), usable);
     }
 
     /// <summary>
