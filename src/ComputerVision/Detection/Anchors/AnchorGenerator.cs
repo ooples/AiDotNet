@@ -91,10 +91,9 @@ public class AnchorGenerator<T>
         int stride,
         double baseSize)
     {
-        var anchors = new List<BoundingBox<T>>();
-
         // Generate base anchors (at origin) for all aspect ratios and scales
         var baseAnchors = GenerateBaseAnchors(baseSize);
+        var corners = new List<double>();
 
         // Place anchors at each feature map location
         for (int y = 0; y < featureHeight; y++)
@@ -113,15 +112,19 @@ public class AnchorGenerator<T>
                     double x2 = centerX + width / 2;
                     double y2 = centerY + height / 2;
 
-                    anchors.Add(new BoundingBox<T>(
-                        _numOps.FromDouble(x1),
-                        _numOps.FromDouble(y1),
-                        _numOps.FromDouble(x2),
-                        _numOps.FromDouble(y2),
-                        BoundingBoxFormat.XYXY));
+                    corners.Add(x1);
+                    corners.Add(y1);
+                    corners.Add(x2);
+                    corners.Add(y2);
                 }
             }
         }
+
+        // One bulk conversion of every corner to T.
+        var values = CvTensorOps<T>.FromDoubleArray(corners.ToArray(), new[] { corners.Count }).ToArray();
+        var anchors = new List<BoundingBox<T>>(values.Length / 4);
+        for (int offset = 0; offset < values.Length; offset += 4)
+            anchors.Add(new BoundingBox<T>(values[offset], values[offset + 1], values[offset + 2], values[offset + 3], BoundingBoxFormat.XYXY));
 
         return anchors;
     }

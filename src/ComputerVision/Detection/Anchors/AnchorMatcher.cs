@@ -212,6 +212,8 @@ public class AnchorMatcher<T>
             return result;
         }
 
+        var gtCorners = CornerValues(groundTruth);
+
         // For each anchor, check if its center is inside any GT box
         for (int i = 0; i < numAnchors; i++)
         {
@@ -223,11 +225,10 @@ public class AnchorMatcher<T>
 
             for (int j = 0; j < numGt; j++)
             {
-                var gt = groundTruth[j];
-                double x1 = _numOps.ToDouble(gt.X1);
-                double y1 = _numOps.ToDouble(gt.Y1);
-                double x2 = _numOps.ToDouble(gt.X2);
-                double y2 = _numOps.ToDouble(gt.Y2);
+                double x1 = gtCorners[j * 4];
+                double y1 = gtCorners[j * 4 + 1];
+                double x2 = gtCorners[j * 4 + 2];
+                double y2 = gtCorners[j * 4 + 3];
 
                 // Check if center is inside GT box
                 if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2)
@@ -298,22 +299,24 @@ public class AnchorMatcher<T>
             return result;
         }
 
+        var gtCorners = CornerValues(groundTruth);
+        var anchorCorners = CornerValues(anchors);
+
         // Step 1: Filter candidates by center distance
         var candidateIndices = new List<int>[numGt];
         for (int j = 0; j < numGt; j++)
         {
             candidateIndices[j] = new List<int>();
             var gt = groundTruth[j];
-            double gtCx = (_numOps.ToDouble(gt.X1) + _numOps.ToDouble(gt.X2)) / 2;
-            double gtCy = (_numOps.ToDouble(gt.Y1) + _numOps.ToDouble(gt.Y2)) / 2;
+            double gtCx = (gtCorners[j * 4] + gtCorners[j * 4 + 2]) / 2;
+            double gtCy = (gtCorners[j * 4 + 1] + gtCorners[j * 4 + 3]) / 2;
             double gtSize = Math.Sqrt(gt.Area());
             double radius = gtSize * 2.5; // Center prior radius
 
             for (int i = 0; i < numAnchors; i++)
             {
-                var anchor = anchors[i];
-                double anchorCx = (_numOps.ToDouble(anchor.X1) + _numOps.ToDouble(anchor.X2)) / 2;
-                double anchorCy = (_numOps.ToDouble(anchor.Y1) + _numOps.ToDouble(anchor.Y2)) / 2;
+                double anchorCx = (anchorCorners[i * 4] + anchorCorners[i * 4 + 2]) / 2;
+                double anchorCy = (anchorCorners[i * 4 + 1] + anchorCorners[i * 4 + 3]) / 2;
 
                 double dist = Math.Sqrt(Math.Pow(anchorCx - gtCx, 2) + Math.Pow(anchorCy - gtCy, 2));
                 if (dist <= radius)
@@ -365,6 +368,10 @@ public class AnchorMatcher<T>
 
         return result;
     }
+
+    /// <summary>The (X1, Y1, X2, Y2) of every box as a flat <see cref="double"/> array, in one bulk conversion.</summary>
+    private static double[] CornerValues(List<BoundingBox<T>> boxes)
+        => CvTensorOps<T>.ToDoubleArray(boxes.SelectMany(box => new[] { box.X1, box.Y1, box.X2, box.Y2 }).ToArray());
 }
 
 /// <summary>
