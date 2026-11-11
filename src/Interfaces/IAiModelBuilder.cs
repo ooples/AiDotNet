@@ -1474,8 +1474,8 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         AiDotNet.Configuration.SpeculativeDecodingOptions options);
 
     /// <summary>
-    /// Enables JIT (Just-In-Time) compilation for the built model's forward-pass
-    /// replay.
+    /// Configures JIT (Just-In-Time) compilation for the built model's forward-pass replay. Compilation is on by
+    /// default; pass <see cref="AiDotNet.Configuration.JitCompilationConfig.Disabled"/> to opt out.
     /// </summary>
     /// <param name="config">JIT config. <c>null</c> uses library defaults.</param>
     /// <returns>This builder for fluent chaining.</returns>

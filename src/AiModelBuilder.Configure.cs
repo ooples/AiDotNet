@@ -860,7 +860,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Enables JIT (Just-In-Time) compilation for the built model's forward and
+    /// Configures JIT (Just-In-Time) compilation, which is on by default (<see cref="AiDotNet.Configuration.JitCompilationConfig.Default"/>);
+    /// pass <see cref="AiDotNet.Configuration.JitCompilationConfig.Disabled"/> to opt out. Applies to the built model's forward and
     /// backward passes.
     /// </summary>
     /// <param name="config">JIT compilation configuration. If <c>null</c>, uses
