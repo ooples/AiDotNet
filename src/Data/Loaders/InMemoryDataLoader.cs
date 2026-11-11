@@ -215,11 +215,7 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
     {
         if (_labels is Vector<T> vector)
         {
-            var result = new Vector<T>(indices.Length);
-            for (int i = 0; i < indices.Length; i++)
-            {
-                result[i] = vector[indices[i]];
-            }
+            var result = BatchGather.Elements(vector, indices);
             return CastToDataType<Vector<T>, TOutput>(result);
         }
 
@@ -240,14 +236,7 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
         if (_labels is Matrix<T> matrix)
         {
             // Multi-output (n×H) target: gather the requested ROWS, preserving all output columns (horizons).
-            var result = new Matrix<T>(indices.Length, matrix.Columns);
-            for (int i = 0; i < indices.Length; i++)
-            {
-                for (int c = 0; c < matrix.Columns; c++)
-                {
-                    result[i, c] = matrix[indices[i], c];
-                }
-            }
+            var result = BatchGather.Rows(matrix, indices);
 
             return CastToDataType<Matrix<T>, TOutput>(result);
         }

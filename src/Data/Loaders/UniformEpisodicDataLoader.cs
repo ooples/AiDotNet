@@ -188,7 +188,8 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
                 signature = HashCombine(signature, selectedClasses[i]);
             }
 
-            // Step 2: For each selected class, sample and split examples
+            // Step 2: For each selected class, sample and split examples
+            var taskLabels = DoubleStorage.Ramp<T>(selectedClasses.Length);
             for (int classIdx = 0; classIdx < selectedClasses.Length; classIdx++)
             {
                 int classLabel = selectedClasses[classIdx];
@@ -218,14 +219,14 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
                 foreach (var idx in supportIndices)
                 {
                     supportExamples.Add(DatasetX.GetRow(idx));
-                    supportLabels.Add(NumOps.FromDouble(classIdx)); // Use index 0..nWay-1 for the task
+                    supportLabels.Add(taskLabels[classIdx]); // Use index 0..nWay-1 for the task
                 }
 
                 // Add query examples
                 foreach (var idx in queryIndices)
                 {
                     queryExamples.Add(DatasetX.GetRow(idx));
-                    queryLabels.Add(NumOps.FromDouble(classIdx)); // Use index 0..nWay-1 for the task
+                    queryLabels.Add(taskLabels[classIdx]); // Use index 0..nWay-1 for the task
                 }
             }
 

@@ -164,7 +164,8 @@ public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoader
         var supportLabels = new List<T>();
         var queryExamples = new List<Vector<T>>();
         var queryLabels = new List<T>();
-
+
+        var taskLabels = DoubleStorage.Ramp<T>(selectedClasses.Length);
         for (int classIdx = 0; classIdx < selectedClasses.Length; classIdx++)
         {
             int classLabel = selectedClasses[classIdx];
@@ -187,14 +188,14 @@ public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoader
             foreach (var idx in supportIndices)
             {
                 supportExamples.Add(DatasetX.GetRow(idx));
-                supportLabels.Add(NumOps.FromDouble(classIdx));
+                supportLabels.Add(taskLabels[classIdx]);
             }
 
             // Add query examples
             foreach (var idx in queryIndices)
             {
                 queryExamples.Add(DatasetX.GetRow(idx));
-                queryLabels.Add(NumOps.FromDouble(classIdx));
+                queryLabels.Add(taskLabels[classIdx]);
             }
         }
 
@@ -218,7 +219,7 @@ public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoader
             var randomValue = RandomInstance.NextDouble() * totalWeight;
 
             // Select based on weighted probability
-            double cumulative = NumOps.ToInt32(NumOps.Zero);
+            double cumulative = 0.0;
             int selectedClass = remaining[0];
 
             foreach (var classLabel in remaining)

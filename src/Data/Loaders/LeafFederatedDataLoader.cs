@@ -166,15 +166,8 @@ public sealed class LeafFederatedDataLoader<T> :
         var matrix = LoadedFeatures;
         var vector = LoadedLabels;
 
-        var batchX = new Matrix<T>(indices.Length, (matrix ?? throw new InvalidOperationException("matrix is null where it is required.")).Columns);
-        var batchY = new Vector<T>(indices.Length);
-
-        for (int i = 0; i < indices.Length; i++)
-        {
-            int rowIndex = indices[i];
-            batchX.SetRow(i, matrix.GetRow(rowIndex));
-            batchY[i] = (vector ?? throw new InvalidOperationException("vector is null where it is required."))[rowIndex];
-        }
+        var batchX = BatchGather.Rows(matrix ?? throw new InvalidOperationException("matrix is null where it is required."), indices);
+        var batchY = BatchGather.Elements(vector ?? throw new InvalidOperationException("vector is null where it is required."), indices);
 
         return (batchX, batchY);
     }
@@ -216,15 +209,8 @@ public sealed class LeafFederatedDataLoader<T> :
         var fullX = LoadedFeatures;
         var fullY = LoadedLabels;
 
-        var subsetX = new Matrix<T>(indices.Length, (fullX ?? throw new InvalidOperationException("fullX is null where it is required.")).Columns);
-        var subsetY = new Vector<T>(indices.Length);
-
-        for (int i = 0; i < indices.Length; i++)
-        {
-            int rowIndex = indices[i];
-            subsetX.SetRow(i, fullX.GetRow(rowIndex));
-            subsetY[i] = (fullY ?? throw new InvalidOperationException("fullY is null where it is required."))[rowIndex];
-        }
+        var subsetX = BatchGather.Rows(fullX ?? throw new InvalidOperationException("fullX is null where it is required."), indices);
+        var subsetY = BatchGather.Elements(fullY ?? throw new InvalidOperationException("fullY is null where it is required."), indices);
 
         return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(subsetX, subsetY);
     }
@@ -286,14 +272,17 @@ public sealed class LeafFederatedDataLoader<T> :
         var y = new Vector<T>(totalSamples);
 
         int row = 0;
+        var xSpan = x.AsWritableSpan();
+        var ySpan = y.AsWritableSpan();
         foreach (var dataset in clientData.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value))
         {
-            for (int i = 0; i < dataset.SampleCount; i++)
-            {
-                x.SetRow(row, dataset.Features.GetRow(i));
-                y[row] = dataset.Labels[i];
-                row++;
-            }
+            int count = dataset.SampleCount;
+            if (count <= 0) continue;
+
+            // Each client's first SampleCount rows/labels are copied as one contiguous block.
+            dataset.Features.AsSpan().Slice(0, count * featureCount).CopyTo(xSpan.Slice(row * featureCount, count * featureCount));
+            dataset.Labels.AsSpan().Slice(0, count).CopyTo(ySpan.Slice(row, count));
+            row += count;
         }
 
         return (x, y, totalSamples, featureCount);

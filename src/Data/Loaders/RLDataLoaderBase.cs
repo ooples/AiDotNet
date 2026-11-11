@@ -187,7 +187,8 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     {
         var stopwatch = Stopwatch.StartNew();
         var state = _environment.Reset();
-        var totalReward = NumOps.Zero;
+        // Rewards are collected per step and summed once with the engine after the episode.
+        var stepRewards = new List<T>();
         int steps = 0;
         bool done = false;
         bool success = false;
@@ -213,7 +214,7 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
             _replayBuffer.Add(experience);
 
             // Update state and counters
-            totalReward = NumOps.Add(totalReward, reward);
+            stepRewards.Add(reward);
             state = nextState;
             done = isDone;
             steps++;
@@ -228,6 +229,10 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
 
         stopwatch.Stop();
         _currentEpisode++;
+
+        var totalReward = stepRewards.Count == 0
+            ? NumOps.Zero
+            : AiDotNetEngine.Current.TensorSum(new Tensor<T>(stepRewards.ToArray(), new[] { stepRewards.Count }));
 
         var result = new EpisodeResult<T>(
             EpisodeNumber: _currentEpisode,
@@ -321,12 +326,21 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
             if (_environment.IsContinuousActionSpace)
             {
                 // Random continuous action in [-1, 1] range
-                var action = new Vector<T>(_environment.ActionSpaceSize);
-                for (int i = 0; i < _environment.ActionSpaceSize; i++)
+                // Draws stay in index order; the [0, 1) -> [-1, 1) map runs as one engine op.
+                var draws = new double[_environment.ActionSpaceSize];
+                for (int i = 0; i < draws.Length; i++)
                 {
-                    action[i] = NumOps.FromDouble(_random.NextDouble() * 2 - 1);
+                    draws[i] = _random.NextDouble();
                 }
-                return action;
+                if (draws.Length == 0)
+                {
+                    return new Vector<T>(0);
+                }
+
+                var engine = AiDotNetEngine.Current;
+                var scaled = engine.TensorSubtractScalar(
+                    engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { draws.Length }), 2.0), 1.0);
+                return scaled.Cast<T>().ToVector();
             }
             else
             {

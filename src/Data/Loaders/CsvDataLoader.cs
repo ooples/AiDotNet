@@ -138,9 +138,11 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
         _sampleCount = dataRows.Count;
         _featureCount = columnCount - 1;
 
-        // Build features matrix and labels vector
-        var features = new Matrix<T>(_sampleCount, _featureCount);
-        var labels = new Vector<T>(_sampleCount);
+        // Build features matrix and labels vector: stage the parsed doubles (feature columns are the row
+        // minus the label column, copied as the two runs either side of it) and cast to T once.
+        var featureData = new double[_sampleCount * _featureCount];
+        var labelData = new double[_sampleCount];
+        int afterLabel = columnCount - labelCol - 1;
 
         for (int row = 0; row < _sampleCount; row++)
         {
@@ -151,18 +153,15 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
                     $"Row {row + startLine + 1} has {rowData.Length} columns, expected {columnCount}.");
             }
 
-            labels[row] = NumOps.FromDouble(rowData[labelCol]);
+            labelData[row] = rowData[labelCol];
 
-            int featureIdx = 0;
-            for (int col = 0; col < columnCount; col++)
-            {
-                if (col != labelCol)
-                {
-                    features[row, featureIdx] = NumOps.FromDouble(rowData[col]);
-                    featureIdx++;
-                }
-            }
+            int featureOffset = row * _featureCount;
+            Array.Copy(rowData, 0, featureData, featureOffset, labelCol);
+            Array.Copy(rowData, labelCol + 1, featureData, featureOffset + labelCol, afterLabel);
         }
+
+        var features = Matrix<T>.FromMemory(DoubleStorage.ToArray<T>(featureData), _sampleCount, _featureCount);
+        var labels = Vector<T>.FromArray(DoubleStorage.ToArray<T>(labelData));
 
         LoadedFeatures = features;
         LoadedLabels = labels;
@@ -189,14 +188,8 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
             throw new InvalidOperationException("Data has not been loaded. Call LoadAsync() first.");
         }
 
-        var batchFeatures = new Matrix<T>(indices.Length, _featureCount);
-        var batchLabels = new Vector<T>(indices.Length);
-
-        for (int i = 0; i < indices.Length; i++)
-        {
-            batchLabels[i] = LoadedLabels[indices[i]];
-            batchFeatures.SetRow(i, LoadedFeatures.GetRow(indices[i]));
-        }
+        var batchFeatures = BatchGather.Rows(LoadedFeatures, indices);
+        var batchLabels = BatchGather.Elements(LoadedLabels, indices);
 
         return (batchFeatures, batchLabels);
     }
@@ -300,14 +293,8 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
             throw new InvalidOperationException("Data has not been loaded. Call LoadAsync() first.");
         }
 
-        var subsetFeatures = new Matrix<T>(indices.Length, _featureCount);
-        var subsetLabels = new Vector<T>(indices.Length);
-
-        for (int i = 0; i < indices.Length; i++)
-        {
-            subsetLabels[i] = LoadedLabels[indices[i]];
-            subsetFeatures.SetRow(i, LoadedFeatures.GetRow(indices[i]));
-        }
+        var subsetFeatures = BatchGather.Rows(LoadedFeatures, indices);
+        var subsetLabels = BatchGather.Elements(LoadedLabels, indices);
 
         return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(subsetFeatures, subsetLabels);
     }

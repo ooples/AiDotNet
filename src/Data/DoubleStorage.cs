@@ -35,6 +35,33 @@ internal static class DoubleStorage
         return values.Cast<double>().AsSpan().ToArray();
     }
 
+    /// <summary>Returns <c>0, 1, ..., count - 1</c> as <typeparamref name="T"/> values (one bulk cast).</summary>
+    internal static T[] Ramp<T>(int count)
+    {
+        var ramp = new int[Math.Max(count, 0)];
+        for (int i = 0; i < ramp.Length; i++)
+            ramp[i] = i;
+        if (ramp.Length == 0) return Array.Empty<T>();
+        return new Tensor<int>(ramp, new[] { ramp.Length }).Cast<T>().AsSpan().ToArray();
+    }
+
+    /// <summary>
+    /// Rounds every element to the nearest integer with the engine and returns them as <see cref="int"/>,
+    /// matching <c>INumericOperations&lt;T&gt;.ToInt32</c> element by element.
+    /// </summary>
+    internal static int[] RoundToInt32<T>(Tensor<T> values)
+    {
+        if (values.Length == 0) return Array.Empty<int>();
+        return AiDotNetEngine.Current.TensorRound(values).Cast<int>().AsSpan().ToArray();
+    }
+
+    /// <inheritdoc cref="RoundToInt32{T}(Tensor{T})"/>
+    internal static int[] RoundToInt32<T>(Vector<T> values)
+    {
+        if (values.Length == 0) return Array.Empty<int>();
+        return RoundToInt32(Tensor<T>.FromVector(values));
+    }
+
     /// <summary>
     /// Reinterprets <paramref name="count"/> doubles stored in machine byte order (as written by
     /// <see cref="BitConverter"/>) starting at <paramref name="byteOffset"/>.

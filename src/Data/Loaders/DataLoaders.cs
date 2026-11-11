@@ -109,15 +109,8 @@ public static class DataLoaders
                 nameof(labels));
         }
 
-        // Convert arrays to Matrix and Vector
-        var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = features[i, j];
-            }
-        }
+        // Convert arrays to Matrix and Vector (the 2-d array constructor copies the block)
+        var matrix = new Matrix<T>(features);
 
         var vector = new Vector<T>(labels);
 
@@ -194,15 +187,13 @@ public static class DataLoaders
             }
         }
 
-        // Convert to Matrix
-        var matrix = new Matrix<T>(rows, cols);
+        // Convert to Matrix: copy each (validated, equal-length) row into a row-major buffer
+        var flat = new T[rows * cols];
         for (int i = 0; i < rows; i++)
         {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = features[i][j];
-            }
+            Array.Copy(features[i], 0, flat, i * cols, cols);
         }
+        var matrix = Matrix<T>.FromMemory(flat, rows, cols);
 
         var vector = new Vector<T>(labels);
 
@@ -254,11 +245,7 @@ public static class DataLoaders
         }
 
         // Convert single feature to matrix with one column
-        var matrix = new Matrix<T>(features.Length, 1);
-        for (int i = 0; i < features.Length; i++)
-        {
-            matrix[i, 0] = features[i];
-        }
+        var matrix = Matrix<T>.FromMemory((T[])features.Clone(), features.Length, 1);
 
         var vector = new Vector<T>(labels);
 

@@ -313,10 +313,11 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     private Dictionary<int, List<int>> BuildClassIndex(Vector<T> datasetY)
     {
         var classToIndices = new Dictionary<int, List<int>>();
+        int[] classLabels = DoubleStorage.RoundToInt32(datasetY);
 
-        for (int i = 0; i < datasetY.Length; i++)
+        for (int i = 0; i < classLabels.Length; i++)
         {
-            int classLabel = NumOps.ToInt32(datasetY[i]);
+            int classLabel = classLabels[i];
 
             if (!classToIndices.ContainsKey(classLabel))
             {
@@ -362,6 +363,25 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     }
 
     /// <summary>
+    /// Stacks example rows into a matrix with one bulk row copy per example. Each row contributes its first
+    /// <paramref name="numFeatures"/> values.
+    /// </summary>
+    private static Matrix<T> BuildRowMatrix(List<Vector<T>> rows, int numFeatures)
+    {
+        var matrix = new Matrix<T>(rows.Count, numFeatures);
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            if (row.Length < numFeatures)
+                throw new ArgumentException(
+                    $"Example {i} has {row.Length} features but {numFeatures} are required.", nameof(rows));
+            matrix.SetRow(i, row.Length == numFeatures ? row : row.GetSubVector(0, numFeatures));
+        }
+
+        return matrix;
+    }
+
+    /// <summary>
     /// Builds a MetaLearningTask from lists of examples and labels.
     /// </summary>
     protected MetaLearningTask<T, TInput, TOutput> BuildMetaLearningTask(
@@ -372,29 +392,11 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     {
         // Build matrices from examples
         int numFeatures = DatasetX.Columns;
-        var supportMatrix = new Matrix<T>(supportExamples.Count, numFeatures);
-        var supportVector = new Vector<T>(supportLabels.Count);
+        var supportMatrix = BuildRowMatrix(supportExamples, numFeatures);
+        var supportVector = Vector<T>.FromArray(supportLabels.ToArray());
 
-        for (int i = 0; i < supportExamples.Count; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                supportMatrix[i, j] = supportExamples[i][j];
-            }
-            supportVector[i] = supportLabels[i];
-        }
-
-        var queryMatrix = new Matrix<T>(queryExamples.Count, numFeatures);
-        var queryVector = new Vector<T>(queryLabels.Count);
-
-        for (int i = 0; i < queryExamples.Count; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                queryMatrix[i, j] = queryExamples[i][j];
-            }
-            queryVector[i] = queryLabels[i];
-        }
+        var queryMatrix = BuildRowMatrix(queryExamples, numFeatures);
+        var queryVector = Vector<T>.FromArray(queryLabels.ToArray());
 
         // Convert to TInput/TOutput using type checking
         TInput supportX = ConvertMatrixToInput(supportMatrix);
