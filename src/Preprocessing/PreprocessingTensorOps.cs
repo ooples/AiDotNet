@@ -526,6 +526,26 @@ internal static class PreprocessingTensorOps
         return engine.TensorDivideScalar(engine.TensorSubtractScalar(x, min), range);
     }
 
+    /// <summary>
+    /// The equal-width block of each value: <c>min(trunc((x - min) / width), blocks - 1)</c> with
+    /// <c>width = (max - min) / blocks</c>, or width 1 when that is not positive.
+    /// </summary>
+    public static int[] EqualWidthBlockIndex<T>(Tensor<T> x, int blocks)
+    {
+        if (x.Length == 0)
+            return Array.Empty<int>();
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T min = engine.TensorMinValue(x);
+        T width = ops.Divide(ops.Subtract(engine.TensorMaxValue(x), min), ops.FromDouble(blocks));
+        if (!ops.GreaterThan(width, ops.Zero))
+            width = ops.One;
+
+        var block = engine.TensorTrunc(engine.TensorDivideScalar(engine.TensorSubtractScalar(x, min), width));
+        return engine.TensorClamp(block, ops.Zero, ops.FromDouble(blocks - 1)).Cast<int>().AsSpan().ToArray();
+    }
+
     /// <summary>The values 0, 1, ..., count - 1 as a 1-D tensor.</summary>
     public static Tensor<T> Range<T>(int count) =>
         new Tensor<int>(Enumerable.Range(0, count).ToArray(), new[] { count }).Cast<T>();

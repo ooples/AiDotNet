@@ -95,9 +95,10 @@ public class ImagePatchSplitter<T> : DataSplitterBase<T>
 
         // Group patches by image ID
         var imagePatches = new Dictionary<int, List<int>>();
+        var imageIds = PreprocessingTensorOps.IntColumn(X, _imageIdColumn);
         for (int i = 0; i < nSamples; i++)
         {
-            int imageId = (int)Convert.ToDouble(X[i, _imageIdColumn]);
+            int imageId = imageIds[i];
             if (!imagePatches.TryGetValue(imageId, out var list))
             {
                 list = new List<int>();
