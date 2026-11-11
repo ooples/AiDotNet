@@ -2129,7 +2129,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 chunks.Add(c);
                 var gradTensor = new Tensor<T>(c.Shape.ToArray());
                 var gradSpan = gradTensor.AsWritableSpan();
-                for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
+                flatGradient.AsSpan().Slice(offset, len).CopyTo(gradSpan);
                 gradients[c] = gradTensor;
             }
             offset += len;
@@ -2972,7 +2972,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var parameters = new List<Tensor<T>>(1) { parameterTensor };
         var gradients = new Dictionary<Tensor<T>, Tensor<T>> { [parameterTensor] = gradientTensor };
 
-        var reductionAxes = new[] { 0 };
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -2989,18 +2988,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             Engine.TensorCopy(Tensor<T>.FromVector(gradient), gradientTensor);
 
             var stepContext = new TapeStepContext<T>(parameters, gradients, objective);
-            double objectiveValue = NumOps.ToDouble(objective);
-            if (double.IsNaN(objectiveValue) || double.IsInfinity(objectiveValue) ||
-                HasAnomalousTapeGradients(stepContext))
+            if (IsNonFiniteObjective(objective) || HasAnomalousTapeGradients(stepContext))
             {
                 throw new ArithmeticException(
                     $"Objective or gradient became non-finite at function-optimization iteration {iteration}.");
             }
 
             // Convergence on the infinity norm of the gradient.
-            var maxAbsoluteGradient = Engine.ReduceMax(
-                Engine.TensorAbs(gradientTensor), reductionAxes, keepDims: false);
-            if (!NumOps.GreaterThan(maxAbsoluteGradient[0], tolerance))
+            if (GradientWithinTolerance(gradient, tolerance))
             {
                 break;
             }
@@ -3190,13 +3185,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (groups is null) return;
         foreach (var (layer, before, factor) in groups)
         {
-            var after = layer.GetParameters();
-            var scale = NumOps.FromDouble(factor);
-            var rescaled = new Vector<T>(after.Length);
-            for (int i = 0; i < after.Length; i++)
-                rescaled[i] = NumOps.Add(before[i], NumOps.Multiply(scale, NumOps.Subtract(after[i], before[i])));
-            layer.SetParameters(rescaled);
+            layer.SetParameters(RescaleChange(before, layer.GetParameters(), factor));
         }
+    }
+
+    /// <summary>Returns before + factor * (after - before).</summary>
+    private Vector<T> RescaleChange(Vector<T> before, Vector<T> after, double factor)
+    {
+        var scale = NumOps.FromDouble(factor);
+        return (Vector<T>)Engine.Add(before, Engine.Multiply(Engine.Subtract(after, before), scale));
     }
     /// <summary>The no-grad scope of the step in progress; released while the step re-evaluates.</summary>
     private NoGradScope<T>? _stepNoGrad;
@@ -3932,29 +3929,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var grads = ClippableGradients(context);
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // GPU engine: clamp on the device (clip_grad_value_), written back into each gradient tensor. The
-        // host loop below downloads every gradient and leaves the device copy to be re-uploaded.
-        if (AiDotNetEngine.Current.SupportsGpu)
-        {
-            var engine = AiDotNetEngine.Current;
-            T lo = numOps.FromDouble(-maxValue), hi = numOps.FromDouble(maxValue);
-            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            foreach (var grad in grads)
-                engine.TensorCopy(engine.TensorClamp(grad, lo, hi), grad);   // in place: callers hold the tensor
-            return;
-        }
-
+        // clip_grad_value_ as one engine clamp per gradient, written back into each gradient tensor (on the
+        // device for a GPU engine, so nothing is downloaded and re-uploaded).
+        var engine = AiDotNetEngine.Current;
+        T lo = numOps.FromDouble(-maxValue), hi = numOps.FromDouble(maxValue);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         foreach (var grad in grads)
-        {
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = numOps.ToDouble(span[i]);
-                if (v > maxValue) v = maxValue;
-                else if (v < -maxValue) v = -maxValue;
-                span[i] = numOps.FromDouble(v);
-            }
-        }
+            engine.TensorCopy(engine.TensorClamp(grad, lo, hi), grad);   // in place: callers hold the tensor
     }
 
     /// <summary>
@@ -3982,7 +3963,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (deviceSum is not null && deviceSum.IsFinite) return false;
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
         foreach (var kvp in context.Gradients)
         {
@@ -3994,12 +3974,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 if (double.IsNaN(sq) || double.IsInfinity(sq)) return true;
                 continue;
             }
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = numOps.ToDouble(span[i]);
-                if (double.IsNaN(v) || double.IsInfinity(v)) return true;
-            }
+            if (grad.Length == 0) continue;
+            using var finiteMask = AiDotNetEngine.Current.TensorIsFinite(grad);
+            if (AiDotNetEngine.Current.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False) return true;
         }
         return false;
     }
@@ -4066,19 +4043,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
 
         var learningRate = NumOps.FromDouble(_currentLearningRate);
-        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var parameterSpan = parameters.AsSpan();
-        var gradientSpan = gradient.AsSpan();
-        var updatedSpan = updatedParameters.AsWritableSpan();
-
-        for (int i = 0; i < updatedSpan.Length; i++)
-        {
-            updatedSpan[i] = NumOps.Subtract(
-                parameterSpan[i],
-                NumOps.Multiply(gradientSpan[i], learningRate));
-        }
-
-        return updatedParameters;
+        return (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(gradient, learningRate));
     }
 
     /// <summary>
@@ -4544,21 +4509,27 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     protected void EnsureFiniteEvaluation(T objective, Vector<T> gradient, int iteration, string methodName)
     {
-        double objectiveValue = NumOps.ToDouble(objective);
-        if (double.IsNaN(objectiveValue) || double.IsInfinity(objectiveValue))
+        if (IsNonFiniteObjective(objective))
         {
             throw new ArithmeticException($"Objective became non-finite at {methodName} iteration {iteration}.");
         }
 
-        for (int i = 0; i < gradient.Length; i++)
+        if (gradient.Length == 0) return;
+        using var finiteMask = Engine.TensorIsFinite(gradient.AsTensor());
+        if (Engine.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False)
         {
-            double value = NumOps.ToDouble(gradient[i]);
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                throw new ArithmeticException(
-                    $"Gradient component {i} became non-finite at {methodName} iteration {iteration}.");
-            }
+            // ArgMin over the mask is the first false entry, i.e. the first non-finite component.
+            int i = Engine.TensorArgMin(finiteMask, 0).AsSpan()[0];
+            throw new ArithmeticException(
+                $"Gradient component {i} became non-finite at {methodName} iteration {iteration}.");
         }
+    }
+
+    /// <summary>True when the objective value is NaN or infinite.</summary>
+    private bool IsNonFiniteObjective(T objective)
+    {
+        double value = NumOps.ToDouble(objective);
+        return double.IsNaN(value) || double.IsInfinity(value);
     }
 
     /// <summary>
