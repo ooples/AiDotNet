@@ -433,7 +433,7 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         // Add regularization (not on the intercept)
         T lambda = _options.UseRegularization ? NumOps.FromDouble(_options.RegularizationStrength) : NumOps.Zero;
-        var penalty = Vector<T>.Concatenate(new[] { Engine.FillZero(1), Engine.Fill(p, lambda) });
+        var penalty = Vector<T>.Concatenate(new[] { Engine.FillZero<T>(1), Engine.Fill(p, lambda) });
         xtwx = Engine.MatrixAdd(xtwx, Matrix<T>.CreateDiagonal(penalty));
 
         // Solve the system

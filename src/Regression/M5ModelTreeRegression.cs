@@ -373,7 +373,7 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         return engine.TensorWhere(
             engine.TensorGreaterThan(Tensor<T>.FromVector(count), NumOps.One),
             Tensor<T>.FromVector(variance),
-            Tensor<T>.FromVector(engine.FillZero(count.Length))).ToVector();
+            Tensor<T>.FromVector(engine.FillZero<T>(count.Length))).ToVector();
     }
 
     private T VarianceFromMoments(T sum, T sumSq, int count)

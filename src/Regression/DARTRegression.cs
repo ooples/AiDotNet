@@ -323,7 +323,7 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         int n = xData.Rows;
         var engine = AiDotNetEngine.Current;
-        var predictions = engine.FillZero(n);
+        var predictions = engine.FillZero<T>(n);
 
         foreach (int t in treeIndices)
         {

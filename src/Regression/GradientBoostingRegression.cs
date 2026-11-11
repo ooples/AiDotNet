@@ -329,7 +329,7 @@ public partial class GradientBoostingRegression<T> : AsyncDecisionTreeRegression
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks);
 
         // Aggregate importances
-        var importances = engine.FillZero(featureCount);
+        var importances = engine.FillZero<T>(featureCount);
         foreach (var treeImportance in allImportances)
         {
             importances = engine.Add(importances, treeImportance);

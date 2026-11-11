@@ -410,7 +410,7 @@ public partial class ExplainableBoostingMachineRegression<T> : AsyncDecisionTree
         var binUpdates = Engine.TensorWhere(
             enough,
             Engine.TensorMultiplyScalar(Engine.TensorDivide(binSums, binCounts), lr),
-            Tensor<T>.FromVector(Engine.FillZero(numBins))).ToVector();
+            Tensor<T>.FromVector(Engine.FillZero<T>(numBins))).ToVector();
         _shapeFunctions[featureIndex] = Engine.Add(_shapeFunctions[featureIndex], binUpdates);
 
         return Engine.Subtract(residuals, RegressionEngineOps.Gather(binUpdates, featureBins));
@@ -421,7 +421,7 @@ public partial class ExplainableBoostingMachineRegression<T> : AsyncDecisionTree
     /// </summary>
     private (Tensor<T> Sums, Tensor<T> Counts) BinSumsAndCounts(Vector<T> values, int[] bins, int numBins)
     {
-        var zeros = Tensor<T>.FromVector(Engine.FillZero(numBins));
+        var zeros = Tensor<T>.FromVector(Engine.FillZero<T>(numBins));
         if (bins.Length == 0)
         {
             return (zeros, zeros);
@@ -469,7 +469,7 @@ public partial class ExplainableBoostingMachineRegression<T> : AsyncDecisionTree
         var means = Engine.TensorDivide(sums, counts);
         var terms = Engine.TensorMultiply(counts, Engine.TensorSquare(means));
         var occupied = Engine.TensorGreaterThan(counts, NumOps.Zero);
-        var total = Engine.TensorSum(Engine.TensorWhere(occupied, terms, Tensor<T>.FromVector(Engine.FillZero(cellCount))));
+        var total = Engine.TensorSum(Engine.TensorWhere(occupied, terms, Tensor<T>.FromVector(Engine.FillZero<T>(cellCount))));
 
         // The ranking score is a double; the single total is converted once.
         return NumOps.ToDouble(total);
@@ -487,7 +487,7 @@ public partial class ExplainableBoostingMachineRegression<T> : AsyncDecisionTree
         var enough = Engine.TensorGreaterEqual(counts, Tensor<T>.FromVector(
             Engine.Fill(cellCount, NumOps.FromDouble(_options.MinSamplesPerBin))));
         var cellMeans = Engine.TensorWhere(
-            enough, Engine.TensorDivide(sums, counts), Tensor<T>.FromVector(Engine.FillZero(cellCount))).ToVector();
+            enough, Engine.TensorDivide(sums, counts), Tensor<T>.FromVector(Engine.FillZero<T>(cellCount))).ToVector();
 
         _interactionTerms[(f1, f2)] = new Tensor<T>(new[] { numBins1, numBins2 }, cellMeans).ToMatrix();
 

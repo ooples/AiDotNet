@@ -283,7 +283,7 @@ public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
             // Largest kernel value, floored at 0 (NaN values never raise it)
             var kernelTensor = Tensor<T>.FromVector(kernelValues);
             var floored = engine.TensorWhere(
-                engine.TensorIsNan(kernelTensor), Tensor<T>.FromVector(engine.FillZero(kernelValues.Length)), kernelTensor);
+                engine.TensorIsNan(kernelTensor), Tensor<T>.FromVector(engine.FillZero<T>(kernelValues.Length)), kernelTensor);
             T largest = engine.TensorMaxValue(floored);
             maxK = NumOps.GreaterThan(largest, NumOps.Zero) ? largest : NumOps.Zero;
         }
