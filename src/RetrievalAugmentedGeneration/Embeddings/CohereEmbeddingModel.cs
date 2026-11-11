@@ -36,7 +36,9 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly bool _ownsHttpClient;
     private bool _disposed;
 
+    /// <inheritdoc />
     public override int EmbeddingDimension => _dimension;
+    /// <inheritdoc />
     public override int MaxTokens => 512;
 
     public CohereEmbeddingModel(string apiKey, string model, string inputType, int dimension = 1024, HttpClient? httpClient = null)
@@ -64,6 +66,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
         }
     }
 
+    /// <inheritdoc />
     protected override Vector<T> EmbedCore(string text)
     {
         return EmbedAsync(text).ConfigureAwait(false).GetAwaiter().GetResult();
@@ -86,6 +89,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
         return await EmbedBatchCoreAsync(textList);
     }
 
+    /// <inheritdoc />
     protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
     {
         var requestBody = new
@@ -174,6 +178,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
         public List<double[]> Embeddings { get; set; } = new();
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)

@@ -25,6 +25,7 @@ public class GammaCorrection<T> : ImageAugmenterBase<T>
         MaxGamma = maxGamma;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         double gamma = context.GetRandomDouble(MinGamma, MaxGamma);
@@ -45,6 +46,7 @@ public class GammaCorrection<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

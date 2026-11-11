@@ -227,10 +227,13 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // Walk the tree against the matrix in place. A row copy (input.GetRow) per sample allocated and filled
+        // a full feature vector to read the handful of features on one root-to-leaf path; inside a forest's
+        // permutation-importance loop that copy was most of the prediction time.
         var predictions = new T[input.Rows];
         for (int i = 0; i < input.Rows; i++)
         {
-            predictions[i] = PredictSingle(input.GetRow(i), Root);
+            predictions[i] = PredictRow(input, i);
         }
 
         return new Vector<T>(predictions);
@@ -544,7 +547,7 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         // Create child nodes and continue building the tree
         node.IsLeaf = false;
         node.FeatureIndex = featureIndex;
-        node.SplitValue = threshold;  // Use SplitValue since PredictSingle uses SplitValue
+        node.SplitValue = threshold;  // Use SplitValue since PredictRow uses SplitValue
         node.Threshold = threshold;
         node.Left = new DecisionTreeNode<T>();
         node.Right = new DecisionTreeNode<T>();
@@ -845,31 +848,23 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Predicts the target value for a single sample by traversing the decision tree.
+    /// Predicts the target value for one row of <paramref name="input"/> by traversing the decision tree,
+    /// reading only the features on the row's root-to-leaf path.
     /// </summary>
-    /// <param name="input">The feature vector of the sample to predict.</param>
-    /// <param name="node">The current node in the traversal.</param>
-    /// <returns>The predicted value for the input sample.</returns>
-    private T PredictSingle(Vector<T> input, DecisionTreeNode<T>? node)
+    /// <param name="input">The feature matrix holding the sample.</param>
+    /// <param name="row">The index of the sample's row.</param>
+    /// <returns>The predicted value for the sample.</returns>
+    [AiDotNet.Attributes.ScalarKernel("A tree walk compares one feature per level, depth-many per row, against a node threshold; there is no array operation to vectorize.")]
+    private T PredictRow(Matrix<T> input, int row)
     {
-        if (node == null)
+        var features = input.GetRowReadOnlySpan(row);
+        var node = Root;
+        while (node != null && !node.IsLeaf)
         {
-            return NumOps.Zero;
+            node = NumOps.LessThan(features[node.FeatureIndex], node.SplitValue) ? node.Left : node.Right;
         }
 
-        if (node.IsLeaf)
-        {
-            return node.Prediction;
-        }
-
-        if (NumOps.LessThan(input[node.FeatureIndex], node.SplitValue))
-        {
-            return PredictSingle(input, node.Left);
-        }
-        else
-        {
-            return PredictSingle(input, node.Right);
-        }
+        return node == null ? NumOps.Zero : node.Prediction;
     }
 
     /// <summary>

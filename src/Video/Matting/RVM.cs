@@ -89,6 +89,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int NumFeatures => _numFeatures;
     internal int ImageHeight => _imageHeight;
@@ -328,6 +329,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
 
     #endregion
@@ -352,6 +354,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

@@ -81,6 +81,7 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
         return gradient.Add(coefficients.Multiply(regularizationStrength));
     }
 
+    /// <inheritdoc />
     public override TOutput Regularize(TOutput gradient, TOutput coefficients)
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);

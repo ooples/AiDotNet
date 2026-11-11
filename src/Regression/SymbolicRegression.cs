@@ -379,12 +379,14 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
 
 
 
+    /// <inheritdoc />
     protected override void ExtractModelParameters()
     {
         if (_useOLS) return;
         base.ExtractModelParameters();
     }
 
+    /// <inheritdoc />
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (_useOLS && _olsCoefficients is not null)
@@ -392,6 +394,7 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
         return base.GetActiveFeatureIndices();
     }
 
+    /// <inheritdoc />
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Use OLS for reliable predictions
@@ -399,8 +402,7 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
         var xWithInt = x.AddConstantColumn(NumOps.One);
         var xTx = xWithInt.Transpose().Multiply(xWithInt);
         var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        xTx = RegressionEngineOps2.AddDiagonal(xTx, NumOps.FromDouble(1e-10));
         var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
         _olsIntercept = solution[0];
         _olsCoefficients = solution.Slice(1, x.Columns);
@@ -477,15 +479,7 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
         // OLS path
         if (_useOLS && _olsCoefficients is not null)
         {
-            var predictions = new Vector<T>(X.Rows);
-            for (int i = 0; i < X.Rows; i++)
-            {
-                T pred = _olsIntercept;
-                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
-                predictions[i] = pred;
-            }
-            return predictions;
+            return RegressionEngineOps2.LinearPredict(X, _olsCoefficients, _olsIntercept);
         }
 
         return _bestModel?.Predict(X) ?? Vector<T>.Empty();
@@ -518,10 +512,7 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
         // OLS path
         if (_useOLS && _olsCoefficients is not null)
         {
-            T pred = _olsIntercept;
-            for (int j = 0; j < Math.Min(input.Length, _olsCoefficients.Length); j++)
-                pred = NumOps.Add(pred, NumOps.Multiply(input[j], _olsCoefficients[j]));
-            return pred;
+            return RegressionEngineOps2.LinearPredictSingle(input, _olsCoefficients, _olsIntercept);
         }
 
         if (_bestModel == null)

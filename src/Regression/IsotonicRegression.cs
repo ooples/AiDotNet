@@ -432,6 +432,7 @@ public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
         return result[0];
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new IsotonicRegression<T>(Options, Regularization);

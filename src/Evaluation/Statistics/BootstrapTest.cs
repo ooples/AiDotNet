@@ -30,9 +30,13 @@ public class BootstrapTest<T> : IStatisticalTest<T>
     private readonly int _numBootstraps;
     private readonly int? _randomSeed;
 
+    /// <inheritdoc />
     public string Name => "Bootstrap Test";
+    /// <inheritdoc />
     public string Description => "Non-parametric bootstrap test for comparing two distributions.";
+    /// <inheritdoc />
     public bool IsPaired => true;
+    /// <inheritdoc />
     public bool IsNonParametric => true;
 
     /// <summary>

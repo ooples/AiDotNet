@@ -18,6 +18,7 @@ public class MotionBlur<T> : ImageAugmenterBase<T>
         MaxKernelSize = maxKernelSize;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         int kSize = context.GetRandomInt(MinKernelSize, MaxKernelSize + 1);
@@ -71,6 +72,7 @@ public class MotionBlur<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

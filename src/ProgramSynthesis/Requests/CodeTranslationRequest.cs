@@ -10,6 +10,7 @@ namespace AiDotNet.ProgramSynthesis.Requests;
 /// </remarks>
 public sealed class CodeTranslationRequest : CodeTaskRequestBase
 {
+    /// <inheritdoc />
     public override CodeTask Task => CodeTask.Translation;
 
     public string Code { get; set; } = string.Empty;

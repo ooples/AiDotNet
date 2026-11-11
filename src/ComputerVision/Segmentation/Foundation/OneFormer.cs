@@ -255,6 +255,7 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
         if (_options.LearningRate <= 0.0)
@@ -318,6 +319,7 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
             throw new ArgumentException("OneFormer requires exactly four positive stage values.", parameterName);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
@@ -349,6 +351,7 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
         return base.GetNamedLayerActivations(input);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

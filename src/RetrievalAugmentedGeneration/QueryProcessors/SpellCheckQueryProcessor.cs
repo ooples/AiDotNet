@@ -54,6 +54,7 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
         }
     }
 
+    /// <inheritdoc />
     protected override string ProcessQueryCore(string query)
     {
         if (string.IsNullOrWhiteSpace(query))

@@ -227,6 +227,7 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
             numClasses: ClassLabels.Count, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -244,6 +245,7 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o)
     {
         // Per-class sigmoid, not softmax. This detector tags AudioSet labels
@@ -256,6 +258,7 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
         return Engine.Sigmoid(o);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -434,6 +437,7 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(AudioLDMClassifier<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

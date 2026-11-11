@@ -10,6 +10,7 @@ public class BBoxClipToImage<T> : SpatialImageAugmenterBase<T>
     {
     }
 
+    /// <inheritdoc />
     protected override (ImageTensor<T> data, IDictionary<string, object> parameters) ApplyWithTransformParams(
         ImageTensor<T> data, AugmentationContext<T> context)
     {
@@ -21,6 +22,7 @@ public class BBoxClipToImage<T> : SpatialImageAugmenterBase<T>
         return (data.Clone(), parms);
     }
 
+    /// <inheritdoc />
     protected override BoundingBox<T> TransformBoundingBox(BoundingBox<T> box,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
@@ -49,6 +51,7 @@ public class BBoxClipToImage<T> : SpatialImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override Keypoint<T> TransformKeypoint(Keypoint<T> keypoint,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
@@ -68,12 +71,14 @@ public class BBoxClipToImage<T> : SpatialImageAugmenterBase<T>
         return keypoint;
     }
 
+    /// <inheritdoc />
     protected override SegmentationMask<T> TransformMask(SegmentationMask<T> mask,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
         return mask;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         return base.GetParameters();

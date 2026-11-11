@@ -28,6 +28,7 @@ public abstract class BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput> : Sup
     {
     }
 
+    /// <inheritdoc />
     protected override Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(Type modelType, Dictionary<string, object> parameters)
     {
         if (typeof(TInput) != typeof(Matrix<T>) || typeof(TOutput) != typeof(Vector<T>))
@@ -40,6 +41,7 @@ public abstract class BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput> : Sup
         return Task.FromResult((IFullModel<T, TInput, TOutput>)model);
     }
 
+    /// <inheritdoc />
     protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
     {
         return AutoMLTabularSearchSpaceRegistry.GetDefaultSearchSpace(modelType);

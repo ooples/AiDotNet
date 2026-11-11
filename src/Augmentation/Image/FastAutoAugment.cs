@@ -16,6 +16,7 @@ public class FastAutoAugment<T> : ImageAugmenterBase<T>
         NumPolicies = numPolicies; NumOpsPerPolicy = numOpsPerPolicy;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         // Select a random policy
@@ -67,6 +68,7 @@ public class FastAutoAugment<T> : ImageAugmenterBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

@@ -86,6 +86,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         _normalizeFactors = normalizeFactors;
     }
 
+    /// <inheritdoc />
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
@@ -128,6 +129,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
+    /// <inheritdoc />
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);

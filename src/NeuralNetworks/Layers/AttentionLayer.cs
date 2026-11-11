@@ -919,6 +919,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         Engine.InvalidatePersistentTensor(_Wo);
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         // === Vectorized Parameter Updates (Phase B: US-GPU-015) ===
@@ -944,6 +945,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         Engine.InvalidatePersistentTensor(_Wv);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _dWq = null;

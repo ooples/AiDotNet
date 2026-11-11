@@ -80,6 +80,7 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int EmbedDim => _embedDim;
     internal int NumLayers => _numLayers;
@@ -243,6 +244,7 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
 
     #region Inference
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
@@ -300,6 +302,7 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
         return NumOps.FromDouble(value);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     #endregion
@@ -324,6 +327,7 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

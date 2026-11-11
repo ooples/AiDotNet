@@ -127,13 +127,16 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
     #region IMusicSourceSeparator Properties
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedSources => _options.Sources;
+    /// <inheritdoc />
     public int NumStems => _options.NumStems;
 
     #endregion
 
     #region IMusicSourceSeparator Methods
 
+    /// <inheritdoc />
     public SourceSeparationResult<T> Separate(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -144,15 +147,18 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         return BuildSeparationResult(audio, stft, masks);
     }
 
+    /// <inheritdoc />
     public Task<SourceSeparationResult<T>> SeparateAsync(Tensor<T> audio, CancellationToken ct = default)
         => Task.Run(() => Separate(audio), ct);
 
+    /// <inheritdoc />
     public Tensor<T> ExtractSource(Tensor<T> audio, string source)
     {
         var result = Separate(audio);
         return result.GetSource(source);
     }
 
+    /// <inheritdoc />
     public Tensor<T> RemoveSource(Tensor<T> audio, string source)
     {
         var result = Separate(audio);
@@ -166,6 +172,7 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         return output;
     }
 
+    /// <inheritdoc />
     public Tensor<T> GetSourceMask(Tensor<T> audio, string source)
     {
         var stft = ComputeSTFT(audio);
@@ -182,6 +189,7 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         return mask;
     }
 
+    /// <inheritdoc />
     public Tensor<T> Remix(SourceSeparationResult<T> separationResult, IReadOnlyDictionary<string, double> sourceVolumes)
     {
         int len = 0;
@@ -225,6 +233,7 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             numStems: _options.NumStems, numFreqBins: _options.NumFreqBins, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -237,9 +246,12 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -311,6 +323,7 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     #region Disposal
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(BandSplitRNN<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

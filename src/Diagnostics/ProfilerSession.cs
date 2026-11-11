@@ -319,7 +319,9 @@ public class ProfilerSessionEntry : IProfilerEntry
     private long _totalAllocations;
     private int _allocationCount;
 
+    /// <inheritdoc />
     public string Name => _name;
+    /// <inheritdoc />
     public int SampleCount { get { lock (_lock) return _count; } }
 
     internal ProfilerSessionEntry(string name, int reservoirSize = 1000)
@@ -381,6 +383,7 @@ public class ProfilerSessionEntry : IProfilerEntry
         }
     }
 
+    /// <inheritdoc />
     public ProfilerStats GetStats()
     {
         lock (_lock)

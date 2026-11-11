@@ -488,6 +488,7 @@ public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBas
             nameof(parameters));
     }
 
+    /// <inheritdoc />
     public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Create a new instance with the same options
@@ -910,6 +911,7 @@ public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBas
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -967,6 +969,7 @@ public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBas
         }
     }
 
+    /// <inheritdoc />
     public virtual long ParameterCount
     {
         get { return CountNodes(Root) * 4 + 1; }

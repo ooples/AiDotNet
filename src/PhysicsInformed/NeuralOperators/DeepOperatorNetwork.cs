@@ -799,6 +799,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
+        /// <inheritdoc />
         public override Vector<T> GetGradients()
         {
             return Vector<T>.Concatenate(_branchNet.GetGradients(), _trunkNet.GetGradients());
@@ -889,6 +890,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
         }
 
+        /// <inheritdoc />
         public override bool SupportsTraining => true;
     }
 }

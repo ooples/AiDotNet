@@ -64,6 +64,7 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
         _valueTable = new Dictionary<string, T>();
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
@@ -101,6 +102,7 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         string stateKey = GetStateKey(state);
@@ -125,6 +127,7 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
         _policy[stateKey][actionIndex] = NumOps.Add(_policy[stateKey][actionIndex], actorUpdate);
     }
 
+    /// <inheritdoc />
     public override T Train() => NumOps.Zero;
 
     private void EnsureStateExists(Vector<T> state)
@@ -173,11 +176,15 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
     private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
     private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_valueTable.Count) };
+    /// <inheritdoc />
     public override void ResetEpisode() { }
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     /// <inheritdoc />
     protected override void RegisterComponents()
@@ -192,6 +199,7 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
             new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
                 () => _policy));
     }
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
     /// <summary>
     /// The value-table states in a fixed order, so export and restore agree.
@@ -230,6 +238,8 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
 
         return entries;
     }
+    /// <inheritdoc />
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
+    /// <inheritdoc />
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

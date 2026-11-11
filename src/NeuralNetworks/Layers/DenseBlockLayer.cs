@@ -75,8 +75,10 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     [Scratch]
     private Tensor<T>? _lastInput;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -183,6 +185,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy gate — OnFirstForward resolves _inputChannels and replays
@@ -251,6 +254,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         return new Tensor<T>(grad._shape, new Vector<T>(result));
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _bn1.UpdateParameters(learningRate);
@@ -282,6 +286,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _conv3x3.SetParameters(parameters.SubVector(offset, count));
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _lastInput = null;
