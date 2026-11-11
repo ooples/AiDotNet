@@ -481,6 +481,45 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// One-hot encodes the class of every label as a [samples, NumClasses] matrix (all-zero rows for labels
+    /// that are not known classes).
+    /// </summary>
+    /// <param name="y">The label vector.</param>
+    /// <returns>The one-hot class membership matrix.</returns>
+    protected Tensor<T> ClassMembership(Vector<T> y)
+    {
+        var engine = Engine;
+        if (y.Length == 0 || NumClasses == 0)
+        {
+            return new Tensor<T>(new[] { y.Length, NumClasses });
+        }
+
+        // Unknown labels (-1) are shifted into an extra leading column that is then dropped.
+        var shifted = engine.TensorAddScalar(GetClassIndexTensor(y), 1);
+        var oneHot = engine.TensorOneHot<T>(shifted, NumClasses + 1);
+        return oneHot.Slice(1, 1, NumClasses + 1);
+    }
+
+    /// <summary>
+    /// Inverts a square matrix with the tensor library's LU inverse, falling back to the Moore-Penrose
+    /// pseudo-inverse when the matrix is singular.
+    /// </summary>
+    /// <param name="matrix">The square matrix.</param>
+    /// <returns>The (pseudo-)inverse.</returns>
+    protected static Matrix<T> InvertMatrix(Matrix<T> matrix)
+    {
+        if (matrix.Rows == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        var (inverse, info) = Linalg.InvEx(tensor);
+        bool singular = info.Length > 0 && info.ToArray()[0] != 0;
+        return singular ? Linalg.Pinv(tensor).ToMatrix() : inverse.ToMatrix();
+    }
+
+    /// <summary>
     /// Creates a vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
     /// </summary>
     protected static Vector<T> FilledVector(int length, T value)
