@@ -326,6 +326,13 @@ public readonly struct LayerStateBag
     public TObject CloneObject<TObject>(string key) where TObject : class
     {
         if (!TryRaw(key, out var value)) throw Missing(key, typeof(TObject).Name);
+        if (typeof(Delegate).IsAssignableFrom(typeof(TObject)) && value is string savedDelegate
+            && IsDelegateStateForm(savedDelegate))
+        {
+            return (TObject)(object)typeof(DelegateState).GetMethod(nameof(DelegateState.Load))!
+                .MakeGenericMethod(typeof(TObject))
+                .Invoke(null, [savedDelegate, _layerName, key])!;
+        }
         if (value is string text && text.StartsWith(LayerObjectPrefix, StringComparison.Ordinal))
         {
             object restored = RestoreLayerConstructionObject(
@@ -362,12 +369,32 @@ public readonly struct LayerStateBag
     }
 
     /// <summary>
+    /// Formats a delegate-typed construction value for layer metadata through <see cref="DelegateState"/>: a
+    /// <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c> written in engine ops is traced into a portable tensor program at the
+    /// layer's input shape, a named static method is saved by reference, and anything else keeps the legacy type
+    /// description, which a durable load rejects.
+    /// </summary>
+    public static string FormatDelegate(Delegate? value, int[]? inputShape)
+    {
+        if (value is null) return string.Empty;
+        var saved = DelegateState.Save(value, inputShape);
+        // Nothing describes it (a closure doing work outside the engine): keep the legacy type description, which
+        // the in-memory clone channel ignores and a durable load rejects with the reason.
+        return saved.Length > 0 ? saved : FormatCloneObject(value);
+    }
+
+    private static bool IsDelegateStateForm(string saved) =>
+        saved.StartsWith(DelegateState.ProgramScheme, StringComparison.Ordinal)
+        || saved.StartsWith(DelegateState.MethodScheme, StringComparison.Ordinal)
+        || saved.StartsWith(DelegateState.GraphScheme, StringComparison.Ordinal);
+
+    /// <summary>
     /// Formats an owned construction object for layer metadata.
     /// </summary>
     /// <remarks>
     /// Layer objects use a registry-checked binary payload containing their generated construction
-    /// metadata and complete layer state. Other construction objects retain the legacy type
-    /// description: delegates and arbitrary object graphs are intentionally not activated from a
+    /// metadata and complete layer state. Delegates go through <see cref="FormatDelegate"/> instead. Other
+    /// construction objects retain the legacy type description and are intentionally not activated from a
     /// durable payload. The in-memory object channel still clones all supported shapes directly.
     /// </remarks>
     public static string FormatCloneObject(object? value)

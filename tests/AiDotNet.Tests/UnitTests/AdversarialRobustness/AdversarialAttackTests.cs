@@ -1,5 +1,4 @@
 using AiDotNet.AdversarialRobustness.Attacks;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;

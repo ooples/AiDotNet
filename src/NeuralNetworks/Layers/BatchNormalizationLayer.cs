@@ -871,7 +871,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // when a tape is active so this field doesn't double-root the
         // input activation, and in inference (ShouldCacheForBackward is false
         // in eval mode), where it held every BN input of the last forward.
-        bool tapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>();
         _lastInput = tapeActive || !ShouldCacheForBackward ? null : input;
 
         // Batch statistics are taken over every value a feature has in this batch: the batch

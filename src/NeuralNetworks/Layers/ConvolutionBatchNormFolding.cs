@@ -115,7 +115,7 @@ internal static class ConvolutionBatchNormFolding<T>
            && input.Rank == 4
            && !norm.InTrainingMode
            && (conv is null || !conv.InTrainingMode)
-           && !AiDotNet.Autodiff.GradientRecording.IsRecording<T>()
+           && !AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>()
            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
            && !LayerBase<T>.IsInferringShapes;
 

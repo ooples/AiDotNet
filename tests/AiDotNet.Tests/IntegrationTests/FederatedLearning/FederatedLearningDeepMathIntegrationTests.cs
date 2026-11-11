@@ -1,5 +1,4 @@
 using AiDotNet.Helpers;
-using AiDotNet.Autodiff;
 using AiDotNet.FederatedLearning.Aggregators;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;

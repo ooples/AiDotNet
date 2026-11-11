@@ -27,9 +27,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// don't provide what you need.
 /// </para>
 /// <para>
-/// <b>JIT Compilation Support:</b> To enable JIT compilation, use the constructor that accepts
-/// a traceable expression function (Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;) instead of
-/// an opaque tensor function. The traceable function uses TensorOperations which can be compiled.
+/// <b>Saving and compilation:</b> a forward function written in engine ops (<c>AiDotNetEngine.Current</c>) is
+/// traced into a portable tensor program when the layer is saved, closures and captured weights included, and
+/// compiles with the rest of the model. A function that does work outside the engine can still run, but saves
+/// only as a named static method or through the expression-tree constructor.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -153,17 +154,6 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     private readonly Func<Tensor<T>, Tensor<T>, Tensor<T>>? _backwardFunction;
 
     /// <summary>
-    /// The optional traceable expression function for JIT compilation support.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// When provided, this function defines the forward pass using TensorOperations on ComputationNodes,
-    /// enabling JIT compilation. The function takes a ComputationNode input and returns a ComputationNode output.
-    /// All operations within the function must use TensorOperations methods.
-    /// </para>
-    /// </remarks>
-    private readonly Func<ComputationNode<T>, ComputationNode<T>>? _traceableExpression;
-    /// <summary>
     /// The forward transformation as an expression tree, when the layer was given one.
     /// </summary>
     /// <remarks>
@@ -274,52 +264,6 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="LambdaLayer{T}"/> class with a traceable expression for JIT compilation support.
-    /// </summary>
-    /// <param name="inputShape">The shape of the input tensor.</param>
-    /// <param name="outputShape">The shape of the output tensor.</param>
-    /// <param name="traceableExpression">A function that defines the forward pass using TensorOperations on ComputationNodes.</param>
-    /// <param name="activationFunction">The activation function to apply after the custom transformation. Defaults to ReLU if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a Lambda Layer that supports JIT compilation by accepting a traceable expression.
-    /// The traceable expression must use TensorOperations methods to define the forward pass, which allows
-    /// the computation graph to be captured and compiled.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a custom layer that can be JIT compiled for better performance.
-    ///
-    /// To use JIT compilation:
-    /// - Define your custom operation using TensorOperations methods
-    /// - Pass it as a function that takes and returns ComputationNodes
-    /// - The system can then compile and optimize your operation
-    ///
-    /// Example:
-    /// <code>
-    /// var layer = new LambdaLayer&lt;float&gt;(
-    ///     inputShape: new[] { 10 },
-    ///     outputShape: new[] { 10 },
-    ///     traceableExpression: x => TensorOperations&lt;float&gt;.Square(x)
-    /// );
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public LambdaLayer(int[] inputShape, int[] outputShape,
-                       Func<ComputationNode<T>, ComputationNode<T>> traceableExpression,
-                       IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, outputShape, activationFunction ?? new ReLUActivation<T>())
-    {
-        _traceableExpression = traceableExpression;
-        // Create a forward function from the traceable expression for runtime use
-        _forwardFunction = input =>
-        {
-            var inputNode = TensorOperations<T>.Variable(input, "lambda_input", requiresGradient: false);
-            var outputNode = _traceableExpression(inputNode);
-            return outputNode.Value;
-        };
-        // Backward function is automatically derived from the computation graph
-        _backwardFunction = null;
-    }
-    /// <summary>
     /// Creates a lambda layer from an expression tree, which survives a save.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor.</param>
@@ -333,9 +277,9 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     /// nothing to record but the function's name, and a lambda does not have one.
     /// </para>
     /// <para>
-    /// Prefer the <c>ComputationNode</c> overload where the transformation can be written in tensor
-    /// operations: a traced graph records what the function did, so it survives captured state as
-    /// well, and its replay can only ever call a tensor operation. This overload is for a
+    /// Prefer the plain <c>Func</c> overload where the transformation is written in engine ops: it is
+    /// saved as a traced tensor program, which records what the function did, so it survives captured
+    /// state as well, and its replay can only ever call an engine op. This overload is for a
     /// transformation that has to reach outside those operations and still be saveable.
     /// </para>
     /// </remarks>

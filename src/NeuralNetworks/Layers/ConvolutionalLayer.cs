@@ -1460,7 +1460,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         else
         {
             bool tapeActive =
-                AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
+                AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>();
 
             // Conv2D and Conv2DInto have different platform winners in Tensors 0.129.4.
             // Linux CI makes Conv2D the MiDaS bottleneck, while the Winograd Conv2D path is

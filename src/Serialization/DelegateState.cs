@@ -1,4 +1,5 @@
 using System.Reflection;
+using AiDotNet.Tensors.Engines.Export;
 using System.Runtime.CompilerServices;
 
 namespace AiDotNet.Serialization;
@@ -22,7 +23,8 @@ namespace AiDotNet.Serialization;
 /// keeps the first that fits, rather than marshalling code:
 /// </para>
 /// <list type="number">
-/// <item>the traced computation graph, when the layer was given a traceable expression;</item>
+/// <item>a portable tensor program (AiDotNet.Tensors <c>TensorProgram</c>), for a <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>
+/// written in engine ops -- closures and captured weights included, and replay can only call engine ops;</item>
 /// <item>the expression tree, when the layer was given one rather than a compiled delegate;</item>
 /// <item>a method reference, for a named static method -- pickle's answer, without the pickle.</item>
 /// </list>
@@ -40,42 +42,109 @@ public static class DelegateState
     /// <summary>Marks a saved value as a serialized expression tree.</summary>
     public const string ExpressionScheme = "expr:";
 
-    /// <summary>Marks a saved value as a traced computation graph.</summary>
+    /// <summary>
+    /// Marks a saved value as a legacy traced computation graph (written by AiDotNet versions before the
+    /// legacy autodiff was removed). Still loaded, by translation to engine ops; never written.
+    /// </summary>
     public const string GraphScheme = "graph:";
 
     /// <summary>
+    /// Marks a saved value as a portable tensor program: what a <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>
+    /// computed, recorded as AiDotNet.Tensors engine calls (one program per input rank it was traced at).
+    /// </summary>
+    public const string ProgramScheme = "program:";
+
+    /// <summary>
     /// Describes <paramref name="value"/> well enough to rebuild it, or returns empty when no
-    /// description fits.
+    /// description fits. Without an input shape only a named static method can be described.
     /// </summary>
     /// <param name="value">The delegate the layer was constructed with.</param>
     /// <returns>The saved form, or <see cref="string.Empty"/> when it cannot be saved.</returns>
-    public static string Save(Delegate? value)
-    {
-        if (value is null) return string.Empty;
+    public static string Save(Delegate? value) => Save(value, null);
 
-        // Tiers 1 and 2 are chosen at construction time, not discovered here: an expression tree
-        // and a traceable graph are both lost the moment they are compiled to a Func, so a layer
-        // that has one records it directly. This is the fallback that works on any delegate.
-        return SaveMethodReference(value) ?? string.Empty;
-    }
     /// <summary>
-    /// Describes a traceable expression by running it once and recording what it computed.
+    /// Describes <paramref name="value"/> well enough to rebuild it, or returns empty when no description fits.
     /// </summary>
-    /// <typeparam name="T">The numeric type.</typeparam>
-    /// <param name="value">The traceable expression the layer was built with.</param>
-    /// <param name="inputShape">The layer's input shape, used to make a probe tensor.</param>
+    /// <param name="value">The delegate the layer was constructed with.</param>
+    /// <param name="inputShape">
+    /// The layer's input shape. When given and <paramref name="value"/> is a <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>,
+    /// the function is traced into a portable <see cref="TensorProgram"/>: the only description that survives a
+    /// closure (captured weights included), because it records what the delegate DID rather than what it is called.
+    /// </param>
     /// <returns>The saved form, or <see cref="string.Empty"/> when it cannot be saved.</returns>
     /// <remarks>
-    /// This is the only description that survives a closure, because it records what the delegate
-    /// DID rather than what it is called. When the graph cannot be recorded faithfully it falls
-    /// through to the weaker descriptions rather than saving a partial one.
+    /// The function is traced at the input shape as given and with a leading batch axis, because layers differ on
+    /// whether their input shape includes it; every trace that succeeds is kept and the one matching the input's
+    /// rank replays. A function that does part of its work outside the engine fails its trace's verification and
+    /// falls through to the method-reference description rather than saving a wrong program.
     /// </remarks>
-    public static string SaveTraceable<T>(Func<ComputationNode<T>, ComputationNode<T>>? value, int[]? inputShape)
+    public static string Save(Delegate? value, int[]? inputShape)
     {
         if (value is null) return string.Empty;
+        if (inputShape is not null && TensorFunctionElementType(value.GetType()) is { } element)
+        {
+            var saved = (string?)typeof(DelegateState)
+                .GetMethod(nameof(SaveProgram), BindingFlags.NonPublic | BindingFlags.Static)!
+                .MakeGenericMethod(element)
+                .Invoke(null, [value, inputShape]);
+            if (saved is not null) return saved;
+        }
+        return SaveMethodReference(value) ?? string.Empty;
+    }
 
-        var graph = GraphTrace.Trace(value, inputShape);
-        return graph is not null ? GraphScheme + graph : Save(value);
+    // T when the type is Func<Tensor<T>, Tensor<T>>.
+    private static Type? TensorFunctionElementType(Type delegateType)
+    {
+        if (!delegateType.IsGenericType || delegateType.GetGenericTypeDefinition() != typeof(Func<,>)) return null;
+        var args = delegateType.GetGenericArguments();
+        if (args[0] != args[1] || !args[0].IsGenericType || args[0].GetGenericTypeDefinition() != typeof(Tensor<>)) return null;
+        return args[0].GetGenericArguments()[0];
+    }
+
+    private static string? SaveProgram<T>(Func<Tensor<T>, Tensor<T>> function, int[] inputShape)
+    {
+        var shape = (inputShape.Length == 0 ? [1] : inputShape).Select(d => d > 0 ? d : 1).ToArray();
+        var packages = new List<byte[]>();
+        foreach (var probeShape in new[] { shape, new[] { 1 }.Concat(shape).ToArray() })
+        {
+            try
+            {
+                var program = TensorProgram.Trace(function, ProbeInput<T>(probeShape));
+                using var ms = new MemoryStream();
+                new ProgramPackage(program).Save(ms);
+                packages.Add(ms.ToArray());
+            }
+            catch (Exception ex) when (ex is TraceException or ArgumentException or InvalidOperationException
+                                           or NotSupportedException or IndexOutOfRangeException)
+            {
+                // Not traceable at this rank (the function expects the other one, or does work outside the
+                // engine): try the next description.
+            }
+        }
+        if (packages.Count == 0) return null;
+        using var payload = new MemoryStream();
+        using (var w = new BinaryWriter(payload, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(packages.Count);
+            foreach (var p in packages)
+            {
+                w.Write(p.Length);
+                w.Write(p);
+            }
+        }
+        return ProgramScheme + Convert.ToBase64String(payload.ToArray());
+    }
+
+    // Deterministic, non-degenerate probe values in [-1, 1): zeros would hide data-dependent paths and make the
+    // replay verification vacuous.
+    private static Tensor<T> ProbeInput<T>(int[] shape)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int length = shape.Aggregate(1, (a, b) => checked(a * b));
+        var data = new T[length];
+        var rng = new Random(0x0A1D);
+        for (int i = 0; i < length; i++) data[i] = ops.FromDouble(rng.NextDouble() * 2 - 1);
+        return new Tensor<T>(data, shape);
     }
 
 
@@ -128,50 +197,78 @@ public static class DelegateState
         if (string.IsNullOrEmpty(saved))
             throw Unsaveable(layerName, key,
                 "nothing was recorded for it -- the layer was built with a lambda or a closure, "
-                + "which has no name to refer to. Pass a named static method, an expression tree, "
-                + "or a traceable expression if this layer needs to survive a save.");
+                + "which has no name to refer to and could not be traced into a tensor program (it does "
+                + "work outside the engine). Write it in engine ops, or pass a named static method or an "
+                + "expression tree, if this layer needs to survive a save.");
 
         if ((saved ?? throw new InvalidOperationException("saved is null where it is required.")).StartsWith(MethodScheme, StringComparison.Ordinal))
             return LoadMethodReference<TDelegate>(saved.Substring(MethodScheme.Length), layerName, key);
+        if (saved.StartsWith(ProgramScheme, StringComparison.Ordinal))
+            return LoadTensorFunction<TDelegate>(saved.Substring(ProgramScheme.Length), legacy: false, layerName, key);
         if (saved.StartsWith(GraphScheme, StringComparison.Ordinal))
-            return LoadGraph<TDelegate>(saved.Substring(GraphScheme.Length), layerName, key);
-
+            return LoadTensorFunction<TDelegate>(saved.Substring(GraphScheme.Length), legacy: true, layerName, key);
 
         throw Unsaveable(layerName, key, $"its saved form '{Excerpt(saved)}' is not a form this version understands.");
     }
 
-    /// <summary>
-    /// Replays a traced graph as the delegate the constructor takes.
-    /// </summary>
-    /// <remarks>
-    /// The numeric type is read back off the delegate itself -- a
-    /// <c>Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;</c> carries its own T -- so the
-    /// caller does not have to thread it through the generated factory.
-    /// </remarks>
-    private static TDelegate LoadGraph<TDelegate>(string graph, string layerName, string key)
+    // A program (or legacy graph) only rebuilds a Func<Tensor<T>, Tensor<T>>; T is read off the delegate type so the
+    // generated factory need not thread it through.
+    private static TDelegate LoadTensorFunction<TDelegate>(string body, bool legacy, string layerName, string key)
         where TDelegate : Delegate
     {
-        var argument = typeof(TDelegate).IsGenericType
-            ? typeof(TDelegate).GetGenericArguments().FirstOrDefault()
-            : null;
+        var element = TensorFunctionElementType(typeof(TDelegate))
+            ?? throw Unsaveable(layerName, key,
+                $"it was saved as a tensor program, which only rebuilds a Func<Tensor<T>, Tensor<T>>, not a {typeof(TDelegate).Name}.");
+        var method = typeof(DelegateState).GetMethod(
+            legacy ? nameof(LoadLegacyGraph) : nameof(LoadPrograms), BindingFlags.NonPublic | BindingFlags.Static)!
+            .MakeGenericMethod(element);
+        try
+        {
+            return (TDelegate)method.Invoke(null, [body, layerName, key])!;
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw;
+        }
+    }
 
-        var numeric = argument is not null && argument.IsGenericType
-            && argument.GetGenericTypeDefinition() == typeof(ComputationNode<>)
-                ? argument.GetGenericArguments()[0]
-                : null;
+    private static Func<Tensor<T>, Tensor<T>> LoadLegacyGraph<T>(string graph, string layerName, string key)
+        => LegacyGraphTranslator.Compile<T>(graph, layerName, key);
 
-        if (numeric is null)
-            throw Unsaveable(layerName, key,
-                $"it was saved as a traced graph, which only rebuilds a {typeof(ComputationNode<>).Name} "
-                + $"expression, not a {typeof(TDelegate).Name}.");
+    private static Func<Tensor<T>, Tensor<T>> LoadPrograms<T>(string base64, string layerName, string key)
+    {
+        byte[] payload;
+        try { payload = Convert.FromBase64String(base64); }
+        catch (FormatException) { throw Unsaveable(layerName, key, "its saved tensor program is not valid base64."); }
 
-        var compile = (typeof(GraphTrace)
-            .GetMethod(nameof(GraphTrace.Compile), BindingFlags.Public | BindingFlags.Static) ?? throw new InvalidOperationException("typeof(GraphTrace) .GetMethod(nameof(GraphTrace.Compile), BindingFlags.Public... is null where it is required."))
-            .MakeGenericMethod(numeric);
+        var programs = new List<TensorProgram>();
+        try
+        {
+            using var r = new BinaryReader(new MemoryStream(payload, writable: false));
+            int count = r.ReadInt32();
+            if (count <= 0 || count > 8) throw new ProgramFormatException($"a program count of {count} is invalid.");
+            for (int i = 0; i < count; i++)
+            {
+                int length = r.ReadInt32();
+                if (length <= 0 || length > payload.Length) throw new ProgramFormatException("a program length is corrupt.");
+                programs.Add(ProgramPackage.Load(new MemoryStream(r.ReadBytes(length), writable: false)).Program);
+            }
+        }
+        catch (Exception ex) when (ex is ProgramFormatException or EndOfStreamException)
+        {
+            throw Unsaveable(layerName, key, $"its saved tensor program could not be read: {ex.Message}");
+        }
 
-        return compile.Invoke(null, [graph, layerName, key]) is TDelegate compiled
-            ? compiled
-            : throw Unsaveable(layerName, key, "compiling its saved graph did not produce the delegate.");
+        return input =>
+        {
+            if (input is null) throw new ArgumentNullException(nameof(input));
+            foreach (var program in programs)
+                if (program.InputDimensions[0].Count == input.Rank) return program.Run(input);
+            throw new ArgumentException(
+                $"{layerName}: the saved function was traced for input rank(s) "
+                + $"{string.Join(", ", programs.Select(p => p.InputDimensions[0].Count))}; got rank {input.Rank}.", nameof(input));
+        };
     }
 
     /// <summary>Rebuilds a delegate from a reference to a named static method.</summary>

@@ -1,5 +1,4 @@
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;

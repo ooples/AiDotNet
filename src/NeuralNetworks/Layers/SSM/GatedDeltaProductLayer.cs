@@ -418,7 +418,7 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
             hVecs,
             new[] { batchSize, seqLen, _numHouseholders, _numHeads, _headDimension });
         var initialState = new Tensor<T>(new[] { batchHeads, _headDimension, _headDimension });
-        bool tapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>();
         if (tapeActive)
         {
             // BatchMatMul saves this input for backward, so ownership must outlive Forward.

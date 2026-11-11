@@ -1374,7 +1374,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // the per-instance buffer on the next call to this layer would corrupt it. cacheBwd is false
             // under eval mode regardless of the tape, so it can't gate this — check the tape directly.
             if (ForwardScratchGate.FusedLinear && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-                && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
+                && !AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsTrainingTrace)
             {
                 int outputSize = _weights.Shape[1];
                 if (_fusedLinearScratch == null
