@@ -183,16 +183,17 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Forward substitution with U^T (unit lower), division by D, then back substitution with U
-    /// (unit upper), for every column of <paramref name="rhs"/> at once.
+    /// Solves A X = rhs with the stored factorization A = U D U^T: back substitution with U (unit
+    /// upper), division by D, then forward substitution with U^T (unit lower), for every column of
+    /// <paramref name="rhs"/> at once.
     /// </summary>
     private Matrix<T> SolveFactored(Matrix<T> rhs)
     {
         var u = Tensor<T>.FromMatrix(U);
-        var y = Linalg.SolveTriangular(Engine.TensorTranspose(u), Tensor<T>.FromMatrix(rhs), upper: false, unitDiagonal: true);
+        var y = Linalg.SolveTriangular(u, Tensor<T>.FromMatrix(rhs), upper: true, unitDiagonal: true);
         var d = Engine.TensorBroadcastTo(Tensor<T>.FromVector(D, new[] { D.Length, 1 }), new[] { rhs.Rows, rhs.Columns });
         y = Engine.TensorMultiply(y, Engine.TensorReciprocal(d));
-        return Linalg.SolveTriangular(u, y, upper: true, unitDiagonal: true).ToMatrix();
+        return Linalg.SolveTriangular(Engine.TensorTranspose(u), y, upper: false, unitDiagonal: true).ToMatrix();
     }
 
     /// <summary>
