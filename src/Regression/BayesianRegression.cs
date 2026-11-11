@@ -401,22 +401,22 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         {
             // exp(-gamma * ||a - b||^2)
             KernelType.RBF => engine.TensorExp(engine.TensorMultiplyScalar(
-                engine.ReduceSum(engine.TensorSquare(PairwiseDifferences(left, right)), new[] { 2 }, keepDims: false),
+                engine.ReduceSum(engine.TensorSquare(RegressionEngineOps.PairwiseDifferences(left, right)), new[] { 2 }, keepDims: false),
                 NumOps.Negate(NumOps.FromDouble(_bayesOptions.Gamma)))),
             // (gamma * a.b + coef0)^degree
             KernelType.Polynomial => engine.TensorPower(
                 engine.TensorAddScalar(
-                    engine.TensorMultiplyScalar(CrossDotProducts(left, right), NumOps.FromDouble(_bayesOptions.Gamma)),
+                    engine.TensorMultiplyScalar(RegressionEngineOps.CrossDotProducts(left, right), NumOps.FromDouble(_bayesOptions.Gamma)),
                     NumOps.FromDouble(_bayesOptions.Coef0)),
                 NumOps.FromDouble(_bayesOptions.PolynomialDegree)),
             // tanh(gamma * a.b + coef0)
             KernelType.Sigmoid => engine.TensorTanh(
                 engine.TensorAddScalar(
-                    engine.TensorMultiplyScalar(CrossDotProducts(left, right), NumOps.FromDouble(_bayesOptions.Gamma)),
+                    engine.TensorMultiplyScalar(RegressionEngineOps.CrossDotProducts(left, right), NumOps.FromDouble(_bayesOptions.Gamma)),
                     NumOps.FromDouble(_bayesOptions.Coef0))),
             // exp(-gamma * ||a - b||_1)
             KernelType.Laplacian => engine.TensorExp(engine.TensorMultiplyScalar(
-                engine.ReduceSum(engine.TensorAbs(PairwiseDifferences(left, right)), new[] { 2 }, keepDims: false),
+                engine.ReduceSum(engine.TensorAbs(RegressionEngineOps.PairwiseDifferences(left, right)), new[] { 2 }, keepDims: false),
                 NumOps.Negate(NumOps.FromDouble(_bayesOptions.LaplacianGamma)))),
             _ => throw new ArgumentException(
                 $"Unsupported cross-kernel type: {_bayesOptions.KernelType}"),
@@ -425,22 +425,6 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         return gram.ToMatrix();
     }
 
-    /// <summary>All row differences left[i] - right[j] as a [left.Rows, right.Rows, features] tensor.</summary>
-    private Tensor<T> PairwiseDifferences(Matrix<T> left, Matrix<T> right)
-    {
-        var engine = Engine;
-        int m = left.Rows;
-        int n = right.Rows;
-        int d = left.Columns;
-        var shape = new[] { m, n, d };
-        var l = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(left), new[] { m, 1, d }), shape);
-        var r = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(right), new[] { 1, n, d }), shape);
-        return engine.TensorSubtract(l, r);
-    }
-
-    /// <summary>All row dot products left[i] . right[j] as a [left.Rows, right.Rows] tensor.</summary>
-    private Tensor<T> CrossDotProducts(Matrix<T> left, Matrix<T> right)
-        => Engine.TensorMatMul(Tensor<T>.FromMatrix(left), Tensor<T>.FromMatrix(right.Transpose()));
 
     public override byte[] Serialize()
     {
