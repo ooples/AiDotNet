@@ -208,7 +208,9 @@ public partial class TestScaffoldGenerator
         for (INamedTypeSymbol? walk = options.OriginalDefinition; walk is not null; walk = walk.BaseType?.OriginalDefinition)
         {
             foreach (var property in walk.GetMembers().OfType<IPropertySymbol>().OrderBy(p => p.Name, System.StringComparer.Ordinal)
-                .Where(property => !property.IsStatic && !property.IsIndexer && !property.IsOverride
+                // An override is the most-derived declaration, met first on the walk up, so its [OptionBehaviourExempt]
+                // decides the case; skipping overrides probed the base declaration and lost the exemption.
+                .Where(property => !property.IsStatic && !property.IsIndexer
                     && property.DeclaredAccessibility == Accessibility.Public
                     && property.SetMethod is { DeclaredAccessibility: Accessibility.Public }
                     && seen.Add(property.Name) && HasGenericPerturbation(property.Type)))
