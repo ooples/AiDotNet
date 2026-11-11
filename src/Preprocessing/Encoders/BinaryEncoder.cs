@@ -33,7 +33,7 @@ public class BinaryEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly BinaryEncoderHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, int>>? _categoryMaps;
+    private List<Tensor<T>>? _categories;
     private Dictionary<int, int>? _bitsPerColumn;
     private int _nInputFeatures;
     private int _nOutputFeatures;
@@ -76,7 +76,7 @@ public class BinaryEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nInputFeatures = data.Columns;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
-        _categoryMaps = new Dictionary<int, Dictionary<double, int>>();
+        _categories = new List<Tensor<T>>();
         _bitsPerColumn = new Dictionary<int, int>();
         _featureIndicesStart = new List<int>();
 
@@ -89,31 +89,19 @@ public class BinaryEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             if (!columnsToProcess.Contains(col))
             {
                 // Pass-through column
-                _categoryMaps[col] = new Dictionary<double, int>();
+                _categories.Add(new Tensor<T>(new[] { 0 }));
                 _bitsPerColumn[col] = 0;
                 currentOutputIndex += 1;
                 continue;
             }
 
-            // Collect unique values
-            var uniqueValues = new HashSet<double>();
-            for (int i = 0; i < data.Rows; i++)
-            {
-                uniqueValues.Add(NumOps.ToDouble(data[i, col]));
-            }
-
-            // Sort and create ordinal mapping
-            var sortedValues = uniqueValues.OrderBy(v => v).ToList();
-            var categoryMap = new Dictionary<double, int>();
-            for (int i = 0; i < sortedValues.Count; i++)
-            {
-                categoryMap[sortedValues[i]] = i + 1; // Start from 1 to leave 0 for unknown
-            }
-
-            _categoryMaps[col] = categoryMap;
+            // Sorted unique values; category i gets ordinal i + 1 (0 is left for unknown)
+            var column = PreprocessingTensorOps.Column(data, col);
+            var categories = column.Length == 0 ? new Tensor<T>(new[] { 0 }) : PreprocessingTensorOps.SortedUnique(column);
+            _categories.Add(categories);
 
             // Calculate bits needed: ceil(log2(n + 1)) where +1 is for unknown category
-            int numCategories = sortedValues.Count + 1; // +1 for unknown
+            int numCategories = categories.Length + 1; // +1 for unknown
             int bitsNeeded = Math.Max(1, (int)Math.Ceiling(Math.Log(numCategories + 1, 2)));
             _bitsPerColumn[col] = bitsNeeded;
 
@@ -130,71 +118,41 @@ public class BinaryEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <returns>The binary encoded data.</returns>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
-        if (_categoryMaps is null || _bitsPerColumn is null || _featureIndicesStart is null)
+        if (_categories is null || _bitsPerColumn is null || _featureIndicesStart is null)
         {
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(_nInputFeatures));
+        var blocks = new List<Tensor<T>>(_nInputFeatures);
 
-        // Initialize to zero
-        for (int i = 0; i < numRows; i++)
+        for (int col = 0; col < _nInputFeatures; col++)
         {
-            for (int j = 0; j < _nOutputFeatures; j++)
+            var column = PreprocessingTensorOps.Column(data, col);
+            if (!processSet.Contains(col) || _bitsPerColumn[col] == 0)
             {
-                result[i, j] = NumOps.Zero;
+                // Pass-through: copy value directly
+                blocks.Add(engine.Reshape(column, new[] { numRows, 1 }));
+                continue;
             }
-        }
 
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int col = 0; col < _nInputFeatures; col++)
+            // Known categories get their ordinal's bits; unknown ones stay all zeros (or throw)
+            var ordinals = PreprocessingTensorOps.OrdinalCodes(_categories[col], column, out var found);
+            if (_handleUnknown == BinaryEncoderHandleUnknown.Error)
             {
-                int outputStart = _featureIndicesStart[col];
-
-                if (!processSet.Contains(col) || _bitsPerColumn[col] == 0)
-                {
-                    // Pass-through: copy value directly
-                    result[i, outputStart] = data[i, col];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, col]);
-                int ordinalValue;
-
-                if (_categoryMaps[col].TryGetValue(categoryValue, out ordinalValue))
-                {
-                    // Known category - convert ordinal to binary
-                    WriteBinaryRepresentation(result, i, outputStart, _bitsPerColumn[col], ordinalValue);
-                }
-                else
-                {
-                    // Unknown category
-                    switch (_handleUnknown)
-                    {
-                        case BinaryEncoderHandleUnknown.AllZeros:
-                            // Leave as zeros (already initialized)
-                            break;
-                        case BinaryEncoderHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {col}");
-                    }
-                }
+                var missing = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(found));
+                if (missing.Length > 0)
+                    throw new ArgumentException($"Unknown category value: {column.GetFlat(missing[0])} in column {col}");
             }
+
+            blocks.Add(PreprocessingTensorOps.DigitBlock<T>(ordinals, _bitsPerColumn[col], 2));
         }
 
-        return new Matrix<T>(result);
-    }
-
-    private void WriteBinaryRepresentation(T[,] result, int row, int startCol, int numBits, int value)
-    {
-        for (int bit = 0; bit < numBits; bit++)
-        {
-            int bitValue = (value >> (numBits - 1 - bit)) & 1;
-            result[row, startCol + bit] = bitValue == 1 ? NumOps.One : NumOps.Zero;
-        }
+        if (blocks.Count == 0)
+            return new Matrix<T>(numRows, 0);
+        return engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
     }
 
     /// <summary>
@@ -204,72 +162,41 @@ public class BinaryEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <returns>The original categorical values.</returns>
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
-        if (_categoryMaps is null || _bitsPerColumn is null || _featureIndicesStart is null)
+        if (_categories is null || _bitsPerColumn is null || _featureIndicesStart is null)
         {
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nInputFeatures];
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(_nInputFeatures));
+        var encoded = Tensor<T>.FromMatrix(data);
+        var columns = new List<Tensor<T>>(_nInputFeatures);
 
-        // Create reverse lookup
-        var reverseMaps = new Dictionary<int, Dictionary<int, double>>();
-        foreach (var kvp in _categoryMaps)
+        for (int col = 0; col < _nInputFeatures; col++)
         {
-            var reverseMap = new Dictionary<int, double>();
-            foreach (var catKvp in kvp.Value)
+            int outputStart = _featureIndicesStart[col];
+            int bits = _bitsPerColumn[col];
+            if (!processSet.Contains(col) || bits == 0)
             {
-                reverseMap[catKvp.Value] = catKvp.Key;
+                // Pass-through: copy value back
+                columns.Add(PreprocessingTensorOps.Column(data, outputStart));
+                continue;
             }
-            reverseMaps[kvp.Key] = reverseMap;
+
+            // Ordinal o in 1..K is category o - 1; any other code (unknown) becomes 0
+            var categories = _categories[col];
+            int k = categories.Length;
+            var codes = PreprocessingTensorOps.ReadBinaryCodes(
+                engine.TensorSlice(encoded, new[] { 0, outputStart }, new[] { numRows, bits }));
+            for (int i = 0; i < codes.Length; i++)
+                codes[i] = codes[i] <= k ? codes[i] : 0;
+
+            var table = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), categories }, 0);
+            columns.Add(engine.TensorIndexSelect(table, new Tensor<int>(codes, new[] { numRows }), 0));
         }
 
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int col = 0; col < _nInputFeatures; col++)
-            {
-                int outputStart = _featureIndicesStart[col];
-
-                if (!processSet.Contains(col) || _bitsPerColumn[col] == 0)
-                {
-                    // Pass-through: copy value back
-                    result[i, col] = data[i, outputStart];
-                    continue;
-                }
-
-                // Read binary representation
-                int ordinalValue = ReadBinaryRepresentation(data, i, outputStart, _bitsPerColumn[col]);
-
-                // Look up original category
-                if (reverseMaps[col].TryGetValue(ordinalValue, out double categoryValue))
-                {
-                    result[i, col] = NumOps.FromDouble(categoryValue);
-                }
-                else
-                {
-                    // Unknown - return 0
-                    result[i, col] = NumOps.Zero;
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
-    }
-
-    private int ReadBinaryRepresentation(Matrix<T> data, int row, int startCol, int numBits)
-    {
-        int value = 0;
-        for (int bit = 0; bit < numBits; bit++)
-        {
-            double bitValue = NumOps.ToDouble(data[row, startCol + bit]);
-            if (bitValue > 0.5)
-            {
-                value |= 1 << (numBits - 1 - bit);
-            }
-        }
-        return value;
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>

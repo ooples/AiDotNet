@@ -405,6 +405,58 @@ internal static class PreprocessingTensorOps
         return first.Cast<int>().AsSpan().ToArray();
     }
 
+    /// <summary>
+    /// The 1-based position of each value among <paramref name="sortedCategories"/>, or 0 for values that are
+    /// not categories; <paramref name="found"/> is the 0/1 mask of the values that are categories.
+    /// </summary>
+    public static int[] OrdinalCodes<T>(Tensor<T> sortedCategories, Tensor<T> values, out Tensor<T> found)
+    {
+        var position = LookupSorted(sortedCategories, values, out found).AsSpan().ToArray();
+        var known = found.Cast<int>().AsSpan().ToArray();
+        for (int i = 0; i < position.Length; i++)
+            position[i] = known[i] != 0 ? position[i] + 1 : 0;
+        return position;
+    }
+
+    /// <summary>
+    /// The base-<paramref name="radix"/> digits (most significant first) of each integer code, as a
+    /// <c>[codes, digits]</c> tensor.
+    /// </summary>
+    public static Tensor<T> DigitBlock<T>(int[] codes, int digits, int radix)
+    {
+        var result = new int[codes.Length * digits];
+        for (int i = 0; i < codes.Length; i++)
+        {
+            int value = codes[i];
+            for (int d = digits - 1; d >= 0; d--)
+            {
+                result[i * digits + d] = value % radix;
+                value /= radix;
+            }
+        }
+
+        return new Tensor<int>(result, new[] { codes.Length, digits }).Cast<T>();
+    }
+
+    /// <summary>
+    /// Reads back the binary code of each row of a <c>[rows, bits]</c> block (most significant bit first),
+    /// treating entries above 0.5 as set bits.
+    /// </summary>
+    public static int[] ReadBinaryCodes<T>(Tensor<T> block)
+    {
+        int rows = block.Shape[0];
+        int bits = block.Shape[1];
+        var set = AiDotNetEngine.Current
+            .TensorGreaterThan(block, MathHelper.GetNumericOperations<T>().FromDouble(0.5))
+            .Cast<int>().AsSpan().ToArray();
+        var codes = new int[rows];
+        for (int i = 0; i < rows; i++)
+            for (int b = 0; b < bits; b++)
+                if (set[i * bits + b] != 0)
+                    codes[i] |= 1 << (bits - 1 - b);
+        return codes;
+    }
+
     /// <summary>The values 0, 1, ..., count - 1 as a 1-D tensor.</summary>
     public static Tensor<T> Range<T>(int count) =>
         new Tensor<int>(Enumerable.Range(0, count).ToArray(), new[] { count }).Cast<T>();
