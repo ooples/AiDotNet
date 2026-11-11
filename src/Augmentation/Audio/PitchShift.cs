@@ -164,10 +164,11 @@ public class PitchShift<T> : AudioAugmenterBase<T>
 
             // Overlap-add the frame with Hann window (the loop bounds keep the whole frame in range)
             var frame = engine.TensorMultiply(engine.TensorSlice(input, [currentAnalysisPos], [_frameSize]), hannWindow);
-            output = engine.TensorSetSlice(output,
-                engine.TensorAdd(engine.TensorSlice(output, [synthesisPos], [_frameSize]), frame), [synthesisPos]);
-            windowWeights = engine.TensorSetSlice(windowWeights,
-                engine.TensorAdd(engine.TensorSlice(windowWeights, [synthesisPos], [_frameSize]), hannWindow), [synthesisPos]);
+            // Only the frame's span is written back, so each frame costs O(frameSize), not O(output)
+            engine.TensorAdd(engine.TensorSlice(output, [synthesisPos], [_frameSize]), frame).Contiguous()
+                .CopyTo(output.AsWritableSpan().Slice(synthesisPos, _frameSize));
+            engine.TensorAdd(engine.TensorSlice(windowWeights, [synthesisPos], [_frameSize]), hannWindow).Contiguous()
+                .CopyTo(windowWeights.AsWritableSpan().Slice(synthesisPos, _frameSize));
 
             analysisPos += _hopSize;
             synthesisPos += synthesisHop;

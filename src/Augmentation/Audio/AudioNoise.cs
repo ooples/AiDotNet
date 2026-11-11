@@ -80,13 +80,16 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
         var engine = Engine;
         var signal = engine.TensorSlice(engine.Reshape(waveform, [waveform.Length]), [0], [samples]);
 
-        T signalPower = NumOps.Divide(engine.TensorSum(engine.TensorSquare(signal)), NumOps.FromDouble(samples));
+        // The power is accumulated in double (a Half sum of squares overflows at 65504) and only the
+        // final noise scale is converted to T
+        var signalWide = signal.Cast<double>();
+        double signalPower = engine.TensorSum(engine.TensorSquare(signalWide)) / samples;
 
         // Convert SNR from dB to linear ratio
         // SNR_db = 10 * log10(signal_power / noise_power)
         // noise_power = signal_power / 10^(SNR_db/10)
         double snrLinear = Math.Pow(10, snrDb / 10.0);
-        T noiseStd = NumOps.Sqrt(NumOps.Divide(signalPower, NumOps.FromDouble(snrLinear)));
+        T noiseStd = NumOps.FromDouble(Math.Sqrt(signalPower / snrLinear));
 
         // Noise state starts fresh for each clip, so every generator is a function of this clip's draws
         var noise = NoiseType switch
@@ -159,8 +162,10 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
 
     /// <summary>
     /// Brown noise (leaky random walk) for a whole clip: state = (state + 0.02 * white) * 0.999 per
-    /// sample, starting from 0. Evaluated in blocks: within a block the state is A * white + d * carry
-    /// with A[t, j] = 0.02 * 0.999^(t - j + 1) for j &lt;= t and d[t] = 0.999^(t + 1).
+    /// sample, starting from 0. Evaluated in blocks with linear work: within a block, for carry c,
+    /// state[t] = d^(t+1) * (c + 0.02 * cumsum_j(d^(-j) * white[j])) with d = 0.999 (d^(-255) is about
+    /// 1.29, so the rescaled sum cannot overflow), and the carry into the next block is the block's
+    /// last state.
     /// </summary>
     private static Tensor<T> BrownNoise(IEngine engine, AugmentationContext<T> context, int samples, T stdDev)
     {
@@ -173,31 +178,33 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
             white = engine.TensorConcatenate([white, new Tensor<T>([padded - samples])], 0);
         }
 
-        T logDecay = NumOps.FromDouble(Math.Log(0.999));
-        var t = engine.Reshape(engine.TensorArange<int>(0, Block, 1), [Block, 1]);
-        var j = engine.Reshape(engine.TensorArange<int>(0, Block, 1), [1, Block]);
-        var lag = engine.TensorAddScalar(
-            engine.TensorSubtract(engine.TensorBroadcastTo(t, [Block, Block]), engine.TensorBroadcastTo(j, [Block, Block])), 1);
-        var causal = engine.TensorGreaterThan(lag, 0).Cast<T>();
-        var transfer = engine.TensorMultiply(
-            engine.TensorMultiplyScalar(engine.TensorExp(engine.TensorMultiplyScalar(lag.Cast<T>(), logDecay)), NumOps.FromDouble(0.02)),
-            causal);
-        var carryDecay = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorAddScalar(t, 1).Cast<T>(), logDecay));
+        double logDecay = Math.Log(0.999);
+        int[] gridShape = [blocks, Block];
+        var position = engine.Reshape(engine.TensorArange<int>(0, Block, 1), [1, Block]).Cast<T>();
+        var growth = engine.TensorBroadcastTo(
+            engine.TensorExp(engine.TensorMultiplyScalar(position, NumOps.FromDouble(-logDecay))), gridShape);
+        var decay = engine.TensorBroadcastTo(
+            engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorAddScalar(position, NumOps.One), NumOps.FromDouble(logDecay))),
+            gridShape);
 
-        var columns = engine.TensorTranspose(engine.Reshape(white, [blocks, Block]));
-        var states = new Tensor<T>[blocks];
+        // Zero-carry state of every block at once
+        var grid = engine.Reshape(white, gridShape);
+        var local = engine.TensorMultiplyScalar(
+            engine.TensorMultiply(engine.TensorCumSum(engine.TensorMultiply(grid, growth), 1), decay), NumOps.FromDouble(0.02));
+
+        // Carry entering each block: c[0] = 0, c[b + 1] = d^Block * c[b] + local[b, Block - 1]
+        T blockDecay = NumOps.FromDouble(Math.Exp(Block * logDecay));
+        var lastLocal = engine.TensorNarrow(local, 1, Block - 1, 1);
+        var carries = new Tensor<T>[blocks];
         var carry = new Tensor<T>([1, 1]);
         for (int b = 0; b < blocks; b++)
         {
-            var input = engine.TensorSlice(columns, [0, b], [Block, 1]);
-            var state = engine.TensorAdd(
-                engine.TensorMatMul(transfer, input),
-                engine.TensorMultiply(carryDecay, engine.TensorBroadcastTo(carry, [Block, 1])));
-            states[b] = state;
-            carry = engine.TensorSlice(state, [Block - 1, 0], [1, 1]);
+            carries[b] = carry;
+            carry = engine.TensorAdd(engine.TensorMultiplyScalar(carry, blockDecay), engine.TensorNarrow(lastLocal, 0, b, 1));
         }
 
-        var walk = engine.Reshape(engine.TensorConcatenate(states, 0), [padded]);
+        var carried = engine.TensorBroadcastTo(engine.TensorConcatenate(carries, 0), gridShape);
+        var walk = engine.Reshape(engine.TensorAdd(local, engine.TensorMultiply(decay, carried)), [padded]);
         return engine.TensorSlice(walk, [0], [samples]);
     }
 
