@@ -16945,13 +16945,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // and stays clear at 10, 15 and 20, and the whole 15-step probe still runs in
                     // under a second, so the added steps are free. Fifteen matches the window its
                     // twelve siblings above already use. The DEFAULT 1 % threshold is untouched.
+                    // NaturalSpeech 3's first AdamW update past its one warm-up step rose 13.2129 -> 14.1458 at step 2.
                     // StyleTTS trains at the paper's 1e-4 with beta1 = 0 against a discriminator updated each step; its
                     // reported objective (reconstruction and aligner losses) falls steadily but slowly at this fixture's size,
                     // measured on one smooth sample 2.8274, 2.8216, 2.8156, 2.8073, 2.7976 (step 20), ..., 2.6995 (step 40)
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "MARS5TTS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" or "WhisperSpeech" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "MARS5TTS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" or "WhisperSpeech" or "NaturalSpeech3" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
