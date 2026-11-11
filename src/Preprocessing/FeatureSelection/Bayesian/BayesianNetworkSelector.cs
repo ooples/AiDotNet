@@ -26,13 +26,13 @@ public class BayesianNetworkSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nFeaturesToSelect;
     private readonly int _maxParents;
 
-    private double[]? _connectionStrengths;
+    private Vector<T>? _connectionStrengths;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MaxParents => _maxParents;
-    public double[]? ConnectionStrengths => _connectionStrengths;
+    public Vector<T>? ConnectionStrengths => _connectionStrengths;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
@@ -64,108 +64,43 @@ public class BayesianNetworkSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        int nBins = Math.Max(5, (int)Math.Sqrt(n / 5));
+        var X = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        var xBins = PreprocessingTensorOps.EqualWidthBinOneHot(X, nBins, out var xVarying);
+        var yBins = PreprocessingTensorOps.EqualWidthBinOneHot(y, nBins, out var yVarying);
 
-        _connectionStrengths = new double[p];
+        // Mutual information between each feature and the target ([p])
+        var miWithTarget = engine.TensorMultiply(
+            engine.Reshape(PreprocessingTensorOps.HistogramMutualInformation(xBins, yBins, nBins), new[] { p }),
+            engine.TensorMultiply(xVarying, engine.TensorBroadcastTo(yVarying, new[] { p })));
 
-        // Compute mutual information between each feature and target
-        var miWithTarget = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-            miWithTarget[j] = ComputeMI(col, y, n);
-        }
+        // Pairwise feature mutual information ([p, p]); constant columns carry no information
+        var miPairs = engine.TensorMultiply(
+            PreprocessingTensorOps.HistogramMutualInformation(xBins, xBins, nBins),
+            engine.TensorOuter(xVarying, xVarying));
 
-        // Compute conditional mutual information (Markov blanket approximation)
-        for (int j = 0; j < p; j++)
-        {
-            double directMI = miWithTarget[j];
+        // Conditional mutual information (Markov blanket approximation):
+        // redundancy(j, k) = min(MI(j; y), MI(k; y), MI(j; k)) over k != j
+        var redundancy = engine.TensorMin(
+            engine.TensorMin(
+                engine.TensorBroadcastTo(engine.Reshape(miWithTarget, new[] { p, 1 }), new[] { p, p }),
+                engine.TensorBroadcastTo(engine.Reshape(miWithTarget, new[] { 1, p }), new[] { p, p })),
+            miPairs);
+        var offDiagonal = engine.TensorAddScalar(engine.TensorNegate(engine.TensorEye<T>(p)), NumOps.One);
+        var maxRedundancy = engine.ReduceMax(engine.TensorMultiply(redundancy, offDiagonal), new[] { 1 }, false);
 
-            // Check if feature j's information is redundant given other features
-            double maxRedundancy = 0;
-            for (int k = 0; k < p; k++)
-            {
-                if (k == j) continue;
-
-                var colJ = new double[n];
-                var colK = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    colJ[i] = X[i, j];
-                    colK[i] = X[i, k];
-                }
-
-                double miJK = ComputeMI(colJ, colK, n);
-                double redundancy = Math.Min(directMI, Math.Min(miWithTarget[k], miJK));
-                maxRedundancy = Math.Max(maxRedundancy, redundancy);
-            }
-
-            // Connection strength = direct MI minus redundancy
-            _connectionStrengths[j] = Math.Max(0, directMI - 0.5 * maxRedundancy);
-        }
+        // Connection strength = direct MI minus redundancy
+        var strengths = engine.TensorMax(
+            engine.TensorSubtract(miWithTarget, engine.TensorMultiplyScalar(maxRedundancy, NumOps.FromDouble(0.5))),
+            NumOps.Zero);
+        _connectionStrengths = strengths.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _connectionStrengths[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(strengths, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double ComputeMI(double[] x, double[] y, int n)
-    {
-        int nBins = Math.Max(5, (int)Math.Sqrt(n / 5));
-
-        double xMin = x.Min(), xMax = x.Max();
-        double yMin = y.Min(), yMax = y.Max();
-
-        if (Math.Abs(xMax - xMin) < 1e-10 || Math.Abs(yMax - yMin) < 1e-10)
-            return 0;
-
-        double xBinWidth = (xMax - xMin) / nBins + 1e-10;
-        double yBinWidth = (yMax - yMin) / nBins + 1e-10;
-
-        var jointCounts = new int[nBins, nBins];
-        var xCounts = new int[nBins];
-        var yCounts = new int[nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            int xBin = Math.Min((int)((x[i] - xMin) / xBinWidth), nBins - 1);
-            int yBin = Math.Min((int)((y[i] - yMin) / yBinWidth), nBins - 1);
-
-            jointCounts[xBin, yBin]++;
-            xCounts[xBin]++;
-            yCounts[yBin]++;
-        }
-
-        double mi = 0;
-        for (int xb = 0; xb < nBins; xb++)
-        {
-            for (int yb = 0; yb < nBins; yb++)
-            {
-                if (jointCounts[xb, yb] > 0 && xCounts[xb] > 0 && yCounts[yb] > 0)
-                {
-                    double pxy = (double)jointCounts[xb, yb] / n;
-                    double px = (double)xCounts[xb] / n;
-                    double py = (double)yCounts[yb] / n;
-                    mi += pxy * Math.Log(pxy / (px * py) + 1e-10) / Math.Log(2);
-                }
-            }
-        }
-
-        return Math.Max(0, mi);
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

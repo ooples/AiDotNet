@@ -31,12 +31,12 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _priorInclusionProbability;
     private readonly int _nIterations;
 
-    private double[]? _inclusionProbabilities;
+    private Vector<T>? _inclusionProbabilities;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? InclusionProbabilities => _inclusionProbabilities;
+    public Vector<T>? InclusionProbabilities => _inclusionProbabilities;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
@@ -82,83 +82,48 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        _inclusionProbabilities = new double[p];
-        var gamma = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        T eps = NumOps.FromDouble(1e-10);
+        var prior = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(_priorInclusionProbability));
 
-        // Initialize inclusion indicators
-        for (int j = 0; j < p; j++)
-            gamma[j] = _priorInclusionProbability;
+        // Residual variance estimate
+        T residualVariance = NumOps.Add(
+            NumOps.Divide(engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y))), NumOps.FromDouble(n - 1)),
+            eps);
 
-        // Convert data to arrays for faster access
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        // Marginal likelihood ratio per feature. Every sweep of the sampler sees the same data, so each
+        // iteration yields the same inclusion probabilities and their average over iterations is this value.
+        var xjNorm = engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false);
+        var xjy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(X), engine.Reshape(y, new[] { n, 1 })), new[] { p });
+        var betaHat = engine.TensorDivide(xjy, xjNorm);
+        var fitTerm = engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSquare(betaHat), xjNorm), NumOps.FromDouble(0.5));
+        var varianceRatio = engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { p }, residualVariance), xjNorm);
+        T minusHalf = NumOps.FromDouble(-0.5);
 
-        // Estimate residual variance
-        double yMean = y.Average();
-        double residualVariance = y.Sum(yi => (yi - yMean) * (yi - yMean)) / (n - 1) + 1e-10;
+        // Bayes factor approximation
+        var logBFSlab = engine.TensorAdd(
+            engine.TensorMultiplyScalar(engine.TensorLog(engine.TensorAddScalar(varianceRatio, NumOps.FromDouble(_slabVariance))), minusHalf),
+            engine.TensorDivideScalar(fitTerm, NumOps.Add(residualVariance, eps)));
+        var logBFSpike = engine.TensorAdd(
+            engine.TensorMultiplyScalar(engine.TensorLog(engine.TensorAddScalar(varianceRatio, NumOps.FromDouble(_spikeVariance))), minusHalf),
+            engine.TensorDivideScalar(fitTerm,
+                NumOps.Add(NumOps.Multiply(residualVariance, NumOps.FromDouble(_spikeVariance / _slabVariance)), eps)));
+        var logBF = engine.TensorSubtract(logBFSlab, logBFSpike);
 
-        // Gibbs sampling iterations
-        for (int iter = 0; iter < _nIterations; iter++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                // Compute marginal likelihood ratio
-                double xjNorm = 0;
-                double xjy = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    xjNorm += X[i, j] * X[i, j];
-                    xjy += X[i, j] * y[i];
-                }
+        double priorOdds = _priorInclusionProbability / (1 - _priorInclusionProbability);
+        var posteriorOdds = engine.TensorMultiplyScalar(
+            engine.TensorExp(engine.TensorMin(logBF, NumOps.FromDouble(50.0))), NumOps.FromDouble(priorOdds));
+        var gamma = engine.TensorDivide(posteriorOdds, engine.TensorAddScalar(posteriorOdds, NumOps.One));
 
-                // Guard against division by zero when xjNorm is too small
-                if (xjNorm < 1e-10)
-                {
-                    gamma[j] = _priorInclusionProbability;
-                    continue;
-                }
-
-                // Bayes factor approximation
-                double betaHat = xjy / xjNorm;
-                double logBFSlab = -0.5 * Math.Log(_slabVariance + residualVariance / xjNorm)
-                    + 0.5 * betaHat * betaHat * xjNorm / (residualVariance + 1e-10);
-                double logBFSpike = -0.5 * Math.Log(_spikeVariance + residualVariance / xjNorm)
-                    + 0.5 * betaHat * betaHat * xjNorm / (residualVariance * _spikeVariance / _slabVariance + 1e-10);
-
-                double logBF = logBFSlab - logBFSpike;
-                if (double.IsNaN(logBF) || double.IsInfinity(logBF))
-                {
-                    gamma[j] = _priorInclusionProbability;
-                    continue;
-                }
-
-                double priorOdds = _priorInclusionProbability / (1 - _priorInclusionProbability);
-                double posteriorOdds = priorOdds * Math.Exp(Math.Min(logBF, 50));
-
-                gamma[j] = posteriorOdds / (1 + posteriorOdds);
-            }
-
-            // Accumulate for posterior mean
-            for (int j = 0; j < p; j++)
-                _inclusionProbabilities[j] += gamma[j];
-        }
-
-        // Average over iterations
-        for (int j = 0; j < p; j++)
-            _inclusionProbabilities[j] /= _nIterations;
+        // Degenerate columns (xjNorm < 1e-10) and non-finite Bayes factors keep the prior inclusion probability.
+        gamma = engine.TensorWhere(engine.TensorIsFinite(logBF), gamma, prior);
+        gamma = engine.TensorWhere(engine.TensorLessThan(xjNorm, eps), prior, gamma);
+        _inclusionProbabilities = gamma.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _inclusionProbabilities[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(gamma, numToSelect);
 
         IsFitted = true;
     }

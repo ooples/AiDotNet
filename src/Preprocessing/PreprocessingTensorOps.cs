@@ -79,6 +79,99 @@ internal static class PreprocessingTensorOps
         return selected;
     }
 
+    /// <summary>
+    /// The positions of the (at most <paramref name="k"/>) largest entries that are at least <paramref name="minimum"/>,
+    /// returned in ascending index order.
+    /// </summary>
+    public static int[] TopKAtLeastSorted<T>(Tensor<T> scores, T minimum, int k)
+    {
+        int below = CountNonZero(AiDotNetEngine.Current.TensorLessThan(scores, minimum));
+        return TopKIndicesSorted(scores, Math.Min(k, scores.Length - below));
+    }
+
+    /// <summary>
+    /// Pearson correlation of every column of <paramref name="x"/> ([n, p]) with <paramref name="y"/> ([n]).
+    /// A column (or target) whose centred sum of squares is not above <paramref name="epsilon"/> gets 0.
+    /// </summary>
+    public static Tensor<T> TargetCorrelations<T>(Tensor<T> x, Tensor<T> y, double epsilon = 1e-10)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        T eps = ops.FromDouble(epsilon);
+        var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
+        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { x.Shape[1] });
+        var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
+        T syy = engine.TensorSumOfSquares(yc);
+        var zeros = new Tensor<T>(new[] { x.Shape[1] });
+        if (!ops.GreaterThan(syy, eps))
+            return zeros;
+        var r = engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, syy)));
+        return engine.TensorWhere(engine.TensorGreaterThan(sxx, eps), r, zeros);
+    }
+
+    /// <summary>Column-wise minimum of a 2-D tensor ([n, p] to [p]).</summary>
+    public static Tensor<T> ColumnMin<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(x), new[] { 0 }, false));
+    }
+
+    /// <summary>Column-wise maximum of a 2-D tensor ([n, p] to [p]).</summary>
+    public static Tensor<T> ColumnMax<T>(Tensor<T> x) => AiDotNetEngine.Current.ReduceMax(x, new[] { 0 }, false);
+
+    /// <summary>
+    /// Equal-width histogram bin of every element of <paramref name="x"/> ([n, p]): each column is split into
+    /// <paramref name="bins"/> bins of width <c>(max - min) / bins + 1e-10</c> and the bin index is
+    /// <c>min(floor((x - min) / width), bins - 1)</c>. Returns the bins one-hot as [n, p * bins] (column j owns
+    /// entries j * bins .. j * bins + bins - 1) and, in <paramref name="varying"/>, a [p] 0/1 mask of the columns
+    /// whose range is at least 1e-10.
+    /// </summary>
+    public static Tensor<T> EqualWidthBinOneHot<T>(Tensor<T> x, int bins, out Tensor<T> varying)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var min = ColumnMin(x);
+        var range = engine.TensorSubtract(ColumnMax(x), min);
+        var width = engine.TensorAddScalar(engine.TensorDivideScalar(range, ops.FromDouble(bins)), ops.FromDouble(1e-10));
+        var scaled = engine.TensorDivide(
+            engine.TensorSubtract(x, engine.Reshape(min, new[] { 1, p })), engine.Reshape(width, new[] { 1, p }));
+        var binIndex = engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1)).Cast<int>();
+        varying = engine.TensorAddScalar(
+            engine.TensorNegate(engine.TensorLessThan(range, ops.FromDouble(1e-10))), ops.One);
+        return engine.Reshape(engine.TensorOneHot<T>(binIndex, bins), new[] { n, p * bins });
+    }
+
+    /// <summary>
+    /// Histogram mutual information (in bits) between every column of A and every column of B, from their
+    /// one-hot bins (<see cref="EqualWidthBinOneHot{T}"/>): <c>sum pxy * log2(pxy / (px * py) + 1e-10)</c> over
+    /// the non-empty joint cells, clamped at 0. Returns [pa, pb].
+    /// </summary>
+    public static Tensor<T> HistogramMutualInformation<T>(Tensor<T> oneHotA, Tensor<T> oneHotB, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = oneHotA.Shape[0];
+        int pa = oneHotA.Shape[1] / bins;
+        int pb = oneHotB.Shape[1] / bins;
+        T count = ops.FromDouble(n);
+
+        var joint = engine.TensorMatMul(engine.TensorTranspose(oneHotA), oneHotB);
+        var marginalA = engine.ReduceSum(oneHotA, new[] { 0 }, false);
+        var marginalB = engine.ReduceSum(oneHotB, new[] { 0 }, false);
+        var pxy = engine.TensorDivideScalar(joint, count);
+        var pxpy = engine.TensorDivideScalar(engine.TensorOuter(marginalA, marginalB), ops.Multiply(count, count));
+        var terms = engine.TensorDivideScalar(
+            engine.TensorMultiply(pxy, engine.TensorLog(engine.TensorAddScalar(engine.TensorDivide(pxy, pxpy), ops.FromDouble(1e-10)))),
+            ops.FromDouble(Math.Log(2)));
+        var cells = engine.TensorWhere(engine.TensorGreaterThan(joint, ops.Zero), terms, new Tensor<T>(joint.Shape.ToArray()));
+        var mi = engine.ReduceSum(engine.Reshape(cells, new[] { pa, bins, pb, bins }), new[] { 1, 3 }, false);
+        return engine.TensorMax(mi, ops.Zero);
+    }
+
     /// <summary>The positions where a 0/1 mask tensor is non-zero, in ascending order.</summary>
     public static int[] MaskPositions<T>(Tensor<T> mask)
     {
