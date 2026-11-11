@@ -193,7 +193,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         for (int gen = 0; gen < _maxGenerations; gen++)
         {
             // Evaluate fitness of all individuals (ranked: equal fitness, equal rank)
-            var fitness = DenseRanks(EvaluatePopulation(population, instance, targetValue));
+            var fitness = ExplainerTensorOps<T>.DenseRanks(EvaluatePopulation(population, instance, targetValue));
 
             // Check early stopping: if we have enough valid diverse counterfactuals
             var validCount = CountValidCounterfactuals(population, targetValue);
@@ -221,7 +221,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         }
 
         // Select final diverse counterfactuals
-        var finalFitness = DenseRanks(EvaluatePopulation(population, instance, targetValue));
+        var finalFitness = ExplainerTensorOps<T>.DenseRanks(EvaluatePopulation(population, instance, targetValue));
         var counterfactuals = SelectDiverseCounterfactuals(population, finalFitness, instance, targetValue);
 
         // Create explanations
@@ -329,34 +329,6 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
             .Select(individual => _predictFunction(CreateSingleRowMatrix(individual)).GetSubVector(0, 1))
             .ToList();
         return AiDotNetEngine.Current.TensorSliceAxis(ExplainerTensorOps<T>.Stack(predictions), 1, 0);
-    }
-
-    /// <summary>
-    /// Dense ranks of the values (0 for the smallest, equal values share a rank), so that comparing or
-    /// ordering by rank matches comparing or ordering by value.
-    /// </summary>
-    private static int[] DenseRanks(Tensor<T> values)
-    {
-        int n = values.Length;
-        var ranks = new int[n];
-        if (n <= 1)
-        {
-            return ranks;
-        }
-
-        var engine = AiDotNetEngine.Current;
-        var (sorted, order) = engine.TensorSort(values);
-        var increases = engine.TensorGreaterThan(
-            engine.TensorSlice(sorted, new[] { 1 }, new[] { n - 1 }),
-            engine.TensorSlice(sorted, new[] { 0 }, new[] { n - 1 }));
-        var denseRanks = engine.TensorCumSum(increases, 0).Cast<int>().ToArray();
-        var positions = order.ToArray();
-        for (int k = 1; k < n; k++)
-        {
-            ranks[positions[k]] = denseRanks[k - 1];
-        }
-
-        return ranks;
     }
 
     /// <summary>
@@ -589,7 +561,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         }
 
         // Fill rest with offspring
-        var offspringFitness = DenseRanks(EvaluatePopulation(offspring, original, targetValue));
+        var offspringFitness = ExplainerTensorOps<T>.DenseRanks(EvaluatePopulation(offspring, original, targetValue));
         var offspringIndices = Enumerable.Range(0, offspring.Count)
             .OrderByDescending(i => offspringFitness[i])
             .Take(_populationSize - eliteCount)

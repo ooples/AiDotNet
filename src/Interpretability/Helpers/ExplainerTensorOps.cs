@@ -168,6 +168,34 @@ internal static class ExplainerTensorOps<T>
     }
 
     /// <summary>
+    /// Dense ranks of the values (0 for the smallest, equal values share a rank), so that comparing or
+    /// ordering by rank (a stable LINQ order on an int key) matches comparing or ordering by value.
+    /// </summary>
+    public static int[] DenseRanks(Tensor<T> values)
+    {
+        int n = values.Length;
+        var ranks = new int[n];
+        if (n <= 1)
+        {
+            return ranks;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var (sorted, order) = engine.TensorSort(values);
+        var increases = engine.TensorGreaterThan(
+            engine.TensorSlice(sorted, new[] { 1 }, new[] { n - 1 }),
+            engine.TensorSlice(sorted, new[] { 0 }, new[] { n - 1 }));
+        var denseRanks = engine.TensorCumSum(increases, 0).Cast<int>().ToArray();
+        var positions = order.ToArray();
+        for (int k = 1; k < n; k++)
+        {
+            ranks[positions[k]] = denseRanks[k - 1];
+        }
+
+        return ranks;
+    }
+
+    /// <summary>
     /// The first <paramref name="length"/> entries of <paramref name="values"/>, zero-padded when it is shorter.
     /// </summary>
     public static Vector<T> PadOrTruncate(Vector<T> values, int length)
