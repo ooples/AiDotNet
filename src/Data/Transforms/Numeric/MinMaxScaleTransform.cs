@@ -16,8 +16,8 @@ namespace AiDotNet.Data.Transforms.Numeric;
 public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly double[] _min;
-    private readonly double[] _max;
+    private readonly Tensor<T> _min;
+    private readonly Tensor<T> _max;
     private readonly double _targetMin;
     private readonly double _targetMax;
 
@@ -65,17 +65,17 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
 
         if (featureCount == 0)
         {
-            _min = new double[0];
-            _max = new double[0];
+            _min = new Tensor<T>(new[] { 0 });
+            _max = new Tensor<T>(new[] { 0 });
         }
         else
         {
             // Column-wise min and max (min = -max(-x)) with engine axis reductions
             var engine = AiDotNetEngine.Current;
-            var data = TransformTensors.RowsAsDouble(referenceData, featureCount);
+            var data = TransformTensors.Rows(referenceData, featureCount);
             var axis0 = new[] { 0 };
-            _max = engine.ReduceMax(data, axis0, false).AsSpan().ToArray();
-            _min = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(data), axis0, false)).AsSpan().ToArray();
+            _max = engine.ReduceMax(data, axis0, false);
+            _min = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(data), axis0, false));
         }
     }
 
@@ -110,8 +110,8 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
             throw new ArgumentException("Target min must be less than target max.");
         }
 
-        _min = (double[])min.Clone();
-        _max = (double[])max.Clone();
+        _min = TransformTensors.FromStatistics<T>(min);
+        _max = TransformTensors.FromStatistics<T>(max);
         _targetMin = targetMin;
         _targetMax = targetMax;
     }
@@ -126,23 +126,24 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
 
         int len = Math.Min(input.Length, _min.Length);
         var result = new T[input.Length];
-        double targetRange = _targetMax - _targetMin;
+        T targetRange = NumOps.FromDouble(_targetMax - _targetMin);
+        T targetMin = NumOps.FromDouble(_targetMin);
 
         if (len > 0)
         {
-            // ((x - min) / (max - min)) * targetRange + targetMin in double; constant features map to targetMin
+            // ((x - min) / (max - min)) * targetRange + targetMin; constant features map to targetMin
             var engine = AiDotNetEngine.Current;
             var shape = new[] { len };
-            var min = new Tensor<double>(TransformTensors.Prefix(_min, len), shape);
-            var range = engine.TensorSubtract(new Tensor<double>(TransformTensors.Prefix(_max, len), shape), min);
-            var values = new Tensor<double>(TransformTensors.PrefixAsDouble(input, len), shape);
+            var min = TransformTensors.Prefix(_min, len);
+            var range = engine.TensorSubtract(TransformTensors.Prefix(_max, len), min);
+            var values = TransformTensors.Prefix(input, len);
             var scaled = engine.TensorAddScalar(
                 engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(values, min), range), targetRange),
-                _targetMin);
-            var constant = engine.TensorEqScalar(engine.TensorLessThan(engine.TensorAbs(range), 1e-12), 1.0);
-            var targetMinFill = new Tensor<double>(shape);
-            targetMinFill.Fill(_targetMin);
-            engine.TensorWhere(constant, targetMinFill, scaled).Cast<T>().AsSpan().CopyTo(result.AsSpan(0, len));
+                targetMin);
+            var constant = engine.TensorLessThan(engine.TensorAbs(range), NumOps.FromDouble(1e-12));
+            var targetMinFill = new Tensor<T>(shape);
+            targetMinFill.Fill(targetMin);
+            engine.TensorWhere(constant, targetMinFill, scaled).AsSpan().CopyTo(result.AsSpan(0, len));
         }
 
         // Features beyond the fitted statistics pass through unchanged

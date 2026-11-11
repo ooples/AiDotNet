@@ -1,15 +1,13 @@
 namespace AiDotNet.Data.Transforms.Numeric;
 
 /// <summary>
-/// Bulk buffer conversions shared by the numeric transforms so their statistics and scaling run as
-/// whole-array engine operations in double precision.
+/// Bulk tensor builders shared by the numeric transforms so their statistics and scaling run as
+/// whole-array engine operations in <typeparamref name="T"/>.
 /// </summary>
 internal static class TransformTensors
 {
-    /// <summary>
-    /// Stacks equally sized rows into a <c>[rows, featureCount]</c> double tensor (row copies, one bulk cast).
-    /// </summary>
-    internal static Tensor<double> RowsAsDouble<T>(T[][] rows, int featureCount)
+    /// <summary>Stacks equally sized rows into a <c>[rows, featureCount]</c> tensor (row block copies).</summary>
+    internal static Tensor<T> Rows<T>(T[][] rows, int featureCount)
     {
         var flat = new T[rows.Length * featureCount];
         for (int i = 0; i < rows.Length; i++)
@@ -17,21 +15,29 @@ internal static class TransformTensors
             Array.Copy(rows[i], 0, flat, i * featureCount, featureCount);
         }
 
-        return new Tensor<double>(DoubleStorage.ToDoubles(flat), new[] { rows.Length, featureCount });
+        return new Tensor<T>(flat, new[] { rows.Length, featureCount });
     }
 
-    /// <summary>Returns the first <paramref name="length"/> entries converted to double (one bulk cast).</summary>
-    internal static double[] PrefixAsDouble<T>(T[] values, int length)
+    /// <summary>The first <paramref name="length"/> entries of <paramref name="values"/> as a 1-D tensor copy.</summary>
+    internal static Tensor<T> Prefix<T>(T[] values, int length)
     {
-        return DoubleStorage.ToDoubles(length == values.Length ? values : Prefix(values, length));
-    }
-
-    /// <summary>Returns the first <paramref name="length"/> entries (the array itself when it already fits).</summary>
-    internal static TValue[] Prefix<TValue>(TValue[] values, int length)
-    {
-        if (length == values.Length) return values;
-        var prefix = new TValue[length];
+        var prefix = new T[length];
         Array.Copy(values, prefix, length);
-        return prefix;
+        return new Tensor<T>(prefix, new[] { length });
+    }
+
+    /// <summary>The first <paramref name="length"/> entries of a 1-D tensor.</summary>
+    internal static Tensor<T> Prefix<T>(Tensor<T> values, int length)
+    {
+        return length == values.Length ? values : values.Slice(0, 0, length).Contiguous();
+    }
+
+    /// <summary>
+    /// Converts caller-supplied statistics (the public constructors take them as double) to a
+    /// <typeparamref name="T"/> tensor once, in bulk.
+    /// </summary>
+    internal static Tensor<T> FromStatistics<T>(double[] values)
+    {
+        return new Tensor<double>((double[])values.Clone(), new[] { values.Length }).Cast<T>();
     }
 }

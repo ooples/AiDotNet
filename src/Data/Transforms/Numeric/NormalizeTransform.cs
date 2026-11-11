@@ -94,9 +94,8 @@ public class NormalizeTransform<T> : ITransform<T[], T[]>
         var std = new Tensor<T>(_std, shape);
         var diff = engine.TensorSubtract(new Tensor<T>(input, shape), new Tensor<T>(_mean, shape));
 
-        // Features whose std is (numerically) zero are only centred, not divided; the test runs in double.
-        var stdDouble = new Tensor<double>(DoubleStorage.ToDoubles(_std), shape);
-        var zeroStd = engine.TensorEqScalar(engine.TensorLessThan(engine.TensorAbs(stdDouble), 1e-12), 1.0);
+        // Features whose std is (numerically) zero are only centred, not divided.
+        var zeroStd = engine.TensorLessThan(engine.TensorAbs(std), NumOps.FromDouble(1e-12));
         var result = engine.TensorWhere(zeroStd, diff, engine.TensorDivide(diff, std));
 
         return result.AsSpan().ToArray();
