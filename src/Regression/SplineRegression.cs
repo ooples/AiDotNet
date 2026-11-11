@@ -300,10 +300,12 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
         {
             var featureVector = x.GetColumn(feature);
 
-            // Linear and higher-order terms
-            for (int degree = 1; degree <= _options.Degree; degree++)
+            // Linear and higher-order terms: x, x^2, ..., x^degree
+            if (_options.Degree > 0)
             {
-                columns.Add(Engine.Power(featureVector, NumOps.FromDouble(degree)).AsTensor());
+                var powers = RegressionEngineOps2.PolynomialExpand(
+                    new Tensor<T>(new[] { x.Rows, 1 }, featureVector).ToMatrix(), _options.Degree);
+                columns.Add(Tensor<T>.FromMatrix(powers));
             }
 
             // Knot terms: (x - knot)^degree where x > knot, else 0
@@ -318,7 +320,9 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
-        var basis = Engine.TensorStack(columns.ToArray(), 1).ToMatrix();
+        // Bias and knot terms are rank-1 columns; the polynomial block is already [rows, degree].
+        var basis = Engine.TensorConcatenate(
+            columns.Select(c => c.Rank == 1 ? Engine.Reshape(c, new[] { x.Rows, 1 }) : c).ToArray(), 1).ToMatrix();
 
         return basis;
     }

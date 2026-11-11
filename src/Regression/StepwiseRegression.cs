@@ -331,6 +331,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
         List<int> remainingFeatures = [.. Enumerable.Range(0, x.Columns)];
         _selectedFeatures.Clear();
 
+        T minImprovement = NumOps.FromDouble(_options.MinImprovement);
         while (_selectedFeatures.Count < Math.Min(_options.MaxFeatures, x.Columns))
         {
             var (bestFeaturePosition, bestScore) = EvaluateFeatures(x, y, remainingFeatures, true);
@@ -341,7 +342,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
                 _selectedFeatures.Add(bestFeature);
                 remainingFeatures.RemoveAt(bestFeaturePosition);
 
-                if (NumOps.LessThan(bestScore, NumOps.FromDouble(_options.MinImprovement)))
+                if (NumOps.LessThan(bestScore, minImprovement))
                 {
                     break;
                 }
@@ -382,6 +383,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
     {
         _selectedFeatures = [.. Enumerable.Range(0, x.Columns)];
 
+        T minImprovement = NumOps.FromDouble(_options.MinImprovement);
         while (_selectedFeatures.Count > _options.MinFeatures)
         {
             var (worstFeature, bestScore) = EvaluateFeatures(x, y, _selectedFeatures, false);
@@ -390,7 +392,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
             {
                 _selectedFeatures.RemoveAt(worstFeature);
 
-                if (NumOps.LessThan(bestScore, NumOps.FromDouble(_options.MinImprovement)))
+                if (NumOps.LessThan(bestScore, minImprovement))
                 {
                     break;
                 }

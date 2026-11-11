@@ -295,6 +295,7 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     {
         const int maxIterations = 20;
         const double convergenceThreshold = 1e-5;
+        T threshold = NumOps.FromDouble(convergenceThreshold);
         T previousAutocorrelation = NumOps.Zero;
         T autocorrelation = NumOps.Zero;
 
@@ -308,7 +309,7 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             autocorrelation = CalculateAutocorrelation(residuals);
 
             // Check for convergence
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(autocorrelation, previousAutocorrelation)), NumOps.FromDouble(convergenceThreshold)))
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(autocorrelation, previousAutocorrelation)), threshold))
             {
                 break;
             }

@@ -449,18 +449,15 @@ internal static class RegressionEngineOps2
             return new Matrix<T>(rows, cols);
         }
 
-        // Stack the per-degree powers on a trailing axis ([rows, columns, degree]) and flatten it
-        // into the column axis.
+        // Powers on a trailing axis: bases x broadcast to [rows, columns, degree] against the
+        // exponents 1 .. degree, then the trailing axis is flattened into the column axis.
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var xTensor = Tensor<T>.FromMatrix(x);
-        var powers = new Tensor<T>[degree];
-        for (int d = 0; d < degree; d++)
-        {
-            powers[d] = engine.TensorPower(xTensor, numOps.FromDouble(d + 1));
-        }
-
-        return engine.TensorStack(powers, 2).Reshape(new[] { rows, cols }).ToMatrix();
+        var shape = new[] { rows, x.Columns, degree };
+        var bases = engine.TensorBroadcastTo(
+            engine.Reshape(Tensor<T>.FromMatrix(x), new[] { rows, x.Columns, 1 }), shape);
+        var exponents = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(1, degree + 1, 1), new[] { 1, 1, degree }), shape);
+        return engine.Reshape(engine.TensorPower(bases, exponents), new[] { rows, cols }).ToMatrix();
     }
 
     /// <summary>
@@ -514,7 +511,6 @@ internal static class RegressionEngineOps2
     private static Matrix<T> GaussJordanEliminate<T>(Matrix<T> augmented, int n, T pivotFloor)
     {
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
         int width = augmented.Columns;
 
         for (int col = 0; col < n; col++)
@@ -531,14 +527,15 @@ internal static class RegressionEngineOps2
                 column = augmented.GetColumn(col);
             }
 
+            // Scale the pivot row by its pivot, a pivot below the floor in magnitude becoming the floor.
             var pivotRow = augmented.GetRow(col);
-            T pivot = pivotRow.GetSubVector(col, 1).Sum();
-            if (numOps.LessThan(numOps.Abs(pivot), pivotFloor))
-            {
-                pivot = pivotFloor;
-            }
-
-            var scaledPivotRow = engine.Divide(pivotRow, pivot);
+            var pivot = pivotRow.GetSubVector(col, 1).AsTensor();
+            var safePivot = engine.TensorWhere(
+                engine.TensorLessThan(engine.TensorAbs(pivot), pivotFloor),
+                engine.Fill(1, pivotFloor).AsTensor(),
+                pivot);
+            var scaledPivotRow = engine.TensorDivide(
+                pivotRow.AsTensor(), engine.TensorBroadcastTo(safePivot, new[] { width })).ToVector();
 
             // row -= row[col] * scaledPivotRow for every row != col
             var factors = Vector<T>.Concatenate(
