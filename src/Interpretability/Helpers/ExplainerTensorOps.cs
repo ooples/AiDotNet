@@ -114,8 +114,16 @@ internal static class ExplainerTensorOps<T>
     /// <paramref name="outputIndex"/> for each of the first <paramref name="count"/> features, evaluating the
     /// plus then the minus input for each feature in turn.
     /// </summary>
+    /// <param name="predict">The model's prediction for one input.</param>
+    /// <param name="input">The point to differentiate at.</param>
+    /// <param name="outputIndex">The output to differentiate.</param>
+    /// <param name="epsilon">The finite-difference step.</param>
+    /// <param name="count">How many leading features to differentiate.</param>
+    /// <param name="outOfRangeIsZero">When true, an output index past the prediction yields zero gradients
+    /// instead of throwing.</param>
     public static Vector<T> CentralDifferenceGradient(
-        Func<Vector<T>, Vector<T>> predict, Vector<T> input, int outputIndex, double epsilon, int count)
+        Func<Vector<T>, Vector<T>> predict, Vector<T> input, int outputIndex, double epsilon, int count,
+        bool outOfRangeIsZero = false)
     {
         var engine = AiDotNetEngine.Current;
         T eps = NumOps.FromDouble(epsilon);
@@ -137,6 +145,8 @@ internal static class ExplainerTensorOps<T>
             return new Vector<T>(0);
 
         int outputs = plusOutputs[0].Length;
+        if (outOfRangeIsZero && outputIndex >= outputs)
+            return new Vector<T>(count);
         if (outputIndex < 0 || outputIndex >= outputs)
             throw new ArgumentOutOfRangeException(nameof(outputIndex),
                 $"Output index {outputIndex} is out of bounds for prediction with {outputs} outputs.");
