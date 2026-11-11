@@ -1141,3 +1141,5 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+*REMOVED*AiDotNet.Regression.DeepHit<T>.PredictPMF(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> T[,,]!
+AiDotNet.Regression.DeepHit<T>.PredictPMF(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
