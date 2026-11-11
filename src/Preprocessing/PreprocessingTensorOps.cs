@@ -118,6 +118,22 @@ internal static class PreprocessingTensorOps
         return engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(x), new[] { 0 }, false));
     }
 
+    /// <summary>The <paramref name="k"/>-th smallest value (0-based) of every column of a 2-D tensor ([n, p] to [p]).</summary>
+    public static Tensor<T> ColumnOrderStatistic<T>(Tensor<T> x, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        var (sorted, _) = engine.TensorSort(x, 0, false);
+        return engine.TensorSliceAxis(sorted, 0, k);
+    }
+
+    /// <summary>Element-wise <c>x &gt;= row</c> for an [n, p] tensor against a [p] row, as a 0/1 [n, p] tensor.</summary>
+    public static Tensor<T> AtLeastRow<T>(Tensor<T> x, Tensor<T> row)
+    {
+        var engine = AiDotNetEngine.Current;
+        var broadcast = engine.TensorBroadcastTo(engine.Reshape(row, new[] { 1, row.Length }), x.Shape.ToArray());
+        return Not(engine.TensorLessThan(x, broadcast));
+    }
+
     /// <summary>Column-wise maximum of a 2-D tensor ([n, p] to [p]).</summary>
     public static Tensor<T> ColumnMax<T>(Tensor<T> x) => AiDotNetEngine.Current.ReduceMax(x, new[] { 0 }, false);
 
@@ -139,10 +155,36 @@ internal static class PreprocessingTensorOps
         var width = engine.TensorAddScalar(engine.TensorDivideScalar(range, ops.FromDouble(bins)), ops.FromDouble(1e-10));
         var scaled = engine.TensorDivide(
             engine.TensorSubtract(x, engine.Reshape(min, new[] { 1, p })), engine.Reshape(width, new[] { 1, p }));
-        var binIndex = engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1)).Cast<int>();
+        var binIndex = engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1));
         varying = engine.TensorAddScalar(
             engine.TensorNegate(engine.TensorLessThan(range, ops.FromDouble(1e-10))), ops.One);
-        return engine.Reshape(engine.TensorOneHot<T>(binIndex, bins), new[] { n, p * bins });
+        return OneHotBins(binIndex, bins);
+    }
+
+    /// <summary>
+    /// One-hot of integral bin indices held in T (each element of the [n, p] tensor is in 0..bins-1):
+    /// returns [n, p * bins] where column j owns entries j * bins .. j * bins + bins - 1.
+    /// </summary>
+    public static Tensor<T> OneHotBins<T>(Tensor<T> binIndex, int bins)
+    {
+        int n = binIndex.Shape[0];
+        int p = binIndex.Rank > 1 ? binIndex.Shape[1] : 1;
+        return AiDotNetEngine.Current.Reshape(
+            AiDotNetEngine.Current.TensorOneHot<T>(binIndex.Cast<int>(), bins), new[] { n, p * bins });
+    }
+
+    /// <summary>Element-wise <c>a &gt;= b</c> as a 0/1 tensor.</summary>
+    public static Tensor<T> AtLeast<T>(Tensor<T> a, T b)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAddScalar(engine.TensorNegate(engine.TensorLessThan(a, b)), MathHelper.GetNumericOperations<T>().One);
+    }
+
+    /// <summary>Element-wise logical not of a 0/1 tensor.</summary>
+    public static Tensor<T> Not<T>(Tensor<T> mask)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAddScalar(engine.TensorNegate(mask), MathHelper.GetNumericOperations<T>().One);
     }
 
     /// <summary>

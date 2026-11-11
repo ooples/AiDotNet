@@ -29,12 +29,12 @@ public class AprioriBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _minConfidence;
     private readonly int _nBins;
 
-    private double[]? _associationScores;
+    private Vector<T>? _associationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? AssociationScores => _associationScores;
+    public Vector<T>? AssociationScores => _associationScores;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
@@ -70,80 +70,45 @@ public class AprioriBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            double yVal = NumOps.ToDouble(target[i]);
-            y[i] = yVal > 0.5 ? 1 : 0; // Binarize
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var positive = engine.Reshape(
+            engine.TensorGreaterThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5)), new[] { 1, n }); // Binarize
 
-        // Discretize features
-        var discretized = new int[n, p];
-        for (int j = 0; j < p; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                min = Math.Min(min, X[i, j]);
-                max = Math.Max(max, X[i, j]);
-            }
-            double range = max - min + 1e-10;
-            for (int i = 0; i < n; i++)
-                discretized[i, j] = Math.Min((int)((X[i, j] - min) / range * _nBins), _nBins - 1);
-        }
+        // Discretize features: bin = min(floor((x - min) / (max - min + 1e-10) * nBins), nBins - 1)
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(X), new[] { 1, p });
+        var range = engine.TensorAddScalar(
+            engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(X), new[] { 1, p }), min), NumOps.FromDouble(1e-10));
+        var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(X, min), range), NumOps.FromDouble(_nBins));
+        var bins = engine.TensorMin(engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
+        var oneHot = PreprocessingTensorOps.OneHotBins(bins, _nBins);
 
-        int nPositive = y.Count(yi => yi == 1);
+        T count = NumOps.FromDouble(n);
+        int nPositive = PreprocessingTensorOps.CountNonZero(positive);
         double targetSupport = (double)nPositive / n;
 
-        _associationScores = new double[p];
+        // Per (feature, bin): transactions with the value and those that are also positive
+        var featureCount = engine.ReduceSum(oneHot, new[] { 0 }, false);
+        var jointCount = engine.Reshape(engine.TensorMatMul(positive, oneHot), new[] { p * _nBins });
 
-        for (int j = 0; j < p; j++)
-        {
-            double maxScore = 0;
+        var support = engine.TensorDivideScalar(jointCount, count);
+        var confidence = engine.TensorDivide(jointCount, featureCount);
+        var lift = engine.TensorDivideScalar(confidence, NumOps.FromDouble(targetSupport + 1e-10));
 
-            // Check each bin value
-            for (int b = 0; b < _nBins; b++)
-            {
-                // Count transactions with this feature value
-                int featureCount = 0;
-                int jointCount = 0;
-
-                for (int i = 0; i < n; i++)
-                {
-                    if (discretized[i, j] == b)
-                    {
-                        featureCount++;
-                        if (y[i] == 1)
-                            jointCount++;
-                    }
-                }
-
-                if (featureCount == 0) continue;
-
-                double support = (double)jointCount / n;
-                double confidence = (double)jointCount / featureCount;
-                double lift = confidence / (targetSupport + 1e-10);
-
-                // Score combines support, confidence, and lift
-                if (support >= _minSupport && confidence >= _minConfidence)
-                {
-                    double score = support * confidence * lift;
-                    maxScore = Math.Max(maxScore, score);
-                }
-            }
-
-            _associationScores[j] = maxScore;
-        }
+        // Score combines support, confidence, and lift for the rules that clear both minimums
+        var score = engine.TensorMultiply(engine.TensorMultiply(support, confidence), lift);
+        var qualifies = engine.TensorMultiply(
+            engine.TensorMultiply(
+                engine.TensorGreaterThan(featureCount, NumOps.Zero),
+                PreprocessingTensorOps.AtLeast(support, NumOps.FromDouble(_minSupport))),
+            PreprocessingTensorOps.AtLeast(confidence, NumOps.FromDouble(_minConfidence)));
+        var masked = engine.TensorWhere(qualifies, score, new Tensor<T>(new[] { p * _nBins }));
+        var scores = engine.TensorMax(
+            engine.ReduceMax(engine.Reshape(masked, new[] { p, _nBins }), new[] { 1 }, false), NumOps.Zero);
+        _associationScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _associationScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
