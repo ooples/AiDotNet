@@ -145,7 +145,7 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             new[] { DimensionalityReductionOps.Full(new[] { n, k, 1 }, NumOps.One), tangent, quadratic }, 2);
 
         // Orthonormal factor Q of G (Gram-Schmidt); the columns after [1, y] span the Hessian part
-        var q = DimensionalityReductionOps.OrthonormalizeColumnsEach(estimator);
+        var q = DimensionalityReductionOps.OrthonormalizeColumnsEach(estimator, unitFallback: true);
         int available = Math.Min(k, nCols);
         Tensor<T> h;
         if (available > 1 + d)

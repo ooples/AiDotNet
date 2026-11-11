@@ -447,9 +447,10 @@ internal static class DimensionalityReductionOps
     /// <summary>
     /// Modified Gram-Schmidt on the columns of every [k, c] matrix of an [n, k, c] batch, returning the first
     /// min(k, c) orthonormal columns as [n, k, min(k, c)]. A column whose residual norm is at most
-    /// <paramref name="tolerance"/> is replaced by the unit vector e_j.
+    /// <paramref name="tolerance"/> is replaced by the unit vector e_j when <paramref name="unitFallback"/> is set,
+    /// otherwise its (negligible) residual is kept unnormalized.
     /// </summary>
-    internal static Tensor<T> OrthonormalizeColumnsEach<T>(Tensor<T> a, double tolerance = 1e-10)
+    internal static Tensor<T> OrthonormalizeColumnsEach<T>(Tensor<T> a, bool unitFallback, double tolerance = 1e-10)
     {
         var engine = Engine;
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -471,8 +472,8 @@ internal static class DimensionalityReductionOps
             var keep = engine.TensorGreaterThan(norm, tol);
             var drop = engine.TensorSubtract(engine.TensorOnesLike(keep), keep);
             var unit = engine.TensorDivide(v, engine.TensorAdd(norm, drop));
-            columns[j] = engine.TensorAdd(
-                engine.TensorMultiply(unit, keep), engine.TensorMultiply(engine.TensorNarrow(basis, 2, j, 1), drop));
+            var fallback = unitFallback ? engine.TensorNarrow(basis, 2, j, 1) : v;
+            columns[j] = engine.TensorAdd(engine.TensorMultiply(unit, keep), engine.TensorMultiply(fallback, drop));
         }
 
         return count == 0 ? new Tensor<T>(new[] { a.Shape[0], k, 0 }) : engine.TensorConcatenate(columns, 2);
