@@ -435,8 +435,7 @@ internal static class OptionSensitivityFixtureSetup
             // empty prompt differs per token. Give the probe a token-varying embedding.
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var embedding = streamDiff.PromptEmbeddingLayer().GetParameters();
-            var varying = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(embedding.Length);
-            varying = Shaped(SineRamp<T>(varying.Length, 0.37, 1.0), varying.Shape.ToArray());
+            var varying = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(SineRamp<T>(embedding.Length, 0.37, 1.0).ToArray());
             streamDiff.PromptEmbeddingLayer().SetParameters(varying);
             return observe(network, input);
         }

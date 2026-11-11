@@ -1390,6 +1390,12 @@ public abstract class ReinforcementLearningTestBase<T>
                 // step that is accepted.
                 if (option == "LineSearchBacktrackCoeff" && options is AiDotNet.Models.Options.TRPOOptions<T>)
                     options.GetType().GetProperty("LineSearchAcceptRatio")?.SetValue(options, 0.9);
+
+                // SACAlpha is the fixed temperature (Haarnoja et al. 2018a); with the learned temperature (2018b,
+                // AutoTuneAlpha) it is never read.
+                if (option == "SACAlpha" && options.GetType().GetProperty("AutoTuneAlpha") is { CanWrite: true } autoTune
+                    && autoTune.PropertyType == typeof(bool))
+                    autoTune.SetValue(options, false);
             },
             model => DescribeAgent(model, battery),
             controlGroup: option == "WarmupSteps" ? "rl-warmup"
