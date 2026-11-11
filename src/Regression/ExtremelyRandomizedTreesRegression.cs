@@ -269,16 +269,14 @@ public partial class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRe
             predictions.Add(await Task.Run(() => tree.Predict(input)));
         }
 
-        var result = new T[input.Rows];
-        for (int i = 0; i < input.Rows; i++)
+        var engine = AiDotNetEngine.Current;
+        var sum = engine.FillZero(input.Rows);
+        foreach (var p in predictions)
         {
-            T sum = NumOps.Zero;
-            foreach (var p in predictions)
-                sum = NumOps.Add(sum, p[i]);
-            result[i] = NumOps.Divide(sum, NumOps.FromDouble(_trees.Count));
+            sum = engine.Add(sum, p.Length == input.Rows ? p : p.GetSubVector(0, input.Rows));
         }
 
-        return new Vector<T>(result);
+        return engine.Divide(sum, NumOps.FromDouble(_trees.Count));
     }
 
     /// <summary>
@@ -295,8 +293,9 @@ public partial class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRe
             sampledIndices.Add(_random.Next(0, x.Rows));
         }
 
-        var sampledX = new Matrix<T>(sampledIndices.Select(i => x.GetRow(i)).ToList());
-        var sampledY = new Vector<T>([.. sampledIndices.Select(i => y[i])]);
+        var sampledX = x.GetRows(sampledIndices);
+        var sampledY = AiDotNetEngine.Current.TensorGather(
+            Tensor<T>.FromVector(y), new Tensor<int>(sampledIndices.ToArray(), new[] { sampledIndices.Count })).ToVector();
 
         return (sampledX, sampledY);
     }
@@ -308,17 +307,17 @@ public partial class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRe
     /// <returns>A task representing the asynchronous calculation operation.</returns>
     protected override async Task CalculateFeatureImportancesAsync(int numFeatures)
     {
-        FeatureImportances = new Vector<T>(new T[numFeatures]);
         var importanceTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.FeatureImportances));
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks, _options.MaxDegreeOfParallelism);
 
-        for (int i = 0; i < numFeatures; i++)
+        var engine = AiDotNetEngine.Current;
+        var sum = engine.FillZero(numFeatures);
+        foreach (var imp in allImportances)
         {
-            FeatureImportances[i] = NumOps.Divide(
-                allImportances.Aggregate(NumOps.Zero, (acc, imp) => NumOps.Add(acc, imp[i])),
-                NumOps.FromDouble(_trees.Count)
-            );
+            sum = engine.Add(sum, imp.Length == numFeatures ? imp : imp.GetSubVector(0, numFeatures));
         }
+
+        FeatureImportances = engine.Divide(sum, NumOps.FromDouble(_trees.Count));
     }
 
     /// <summary>

@@ -1050,26 +1050,18 @@ public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBas
 
         int samplesPerParam = Math.Max(1, (sampleGradients.Length + paramCount - 1) / paramCount);
 
-        for (int paramIdx = 0; paramIdx < paramCount; paramIdx++)
-        {
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            // Aggregate gradients for samples mapped to this parameter
-            int startIdx = paramIdx * samplesPerParam;
-            int endIdx = Math.Min((paramIdx + 1) * samplesPerParam, sampleGradients.Length);
-
-            for (int sampleIdx = startIdx; sampleIdx < endIdx; sampleIdx++)
-            {
-                sum = NumOps.Add(sum, sampleGradients[sampleIdx]);
-                count++;
-            }
-
-            // Average the gradients for this parameter bucket
-            gradients[paramIdx] = count > 0
-                ? NumOps.Divide(sum, NumOps.FromDouble(count))
-                : NumOps.Zero;
-        }
+        // Buckets are contiguous runs of samplesPerParam samples; only the last non-empty bucket can be
+        // partial, and buckets past the end of the samples stay zero. Zero-pad to whole buckets, sum each
+        // row of the [buckets, samplesPerParam] view, and divide by the per-bucket sample counts.
+        int sampleCount = sampleGradients.Length;
+        int bucketCount = (sampleCount + samplesPerParam - 1) / samplesPerParam;
+        var padded = new Vector<T>(bucketCount * samplesPerParam);
+        sampleGradients.AsSpan().CopyTo(padded.AsWritableSpan());
+        var bucketSums = Engine.ReduceSum(
+            new Tensor<T>(new[] { bucketCount, samplesPerParam }, padded), new[] { 1 }, keepDims: false).ToVector();
+        var bucketCounts = Engine.Fill(bucketCount, NumOps.FromDouble(samplesPerParam));
+        bucketCounts[bucketCount - 1] = NumOps.FromDouble(sampleCount - (bucketCount - 1) * samplesPerParam);
+        Engine.Divide(bucketSums, bucketCounts).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }

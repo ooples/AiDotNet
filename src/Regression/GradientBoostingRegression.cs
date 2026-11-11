@@ -272,12 +272,11 @@ public partial class GradientBoostingRegression<T> : AsyncDecisionTreeRegression
         var treePredictions = await ParallelProcessingHelper.ProcessTasksInParallel(
             _trees.Select(tree => Task.Run(() => tree.Predict(input))));
 
-        for (int i = 0; i < input.Rows; i++)
+        var engine = AiDotNetEngine.Current;
+        var learningRate = NumOps.FromDouble(_options.LearningRate);
+        foreach (var treePrediction in treePredictions)
         {
-            for (int j = 0; j < _trees.Count; j++)
-            {
-                predictions[i] = NumOps.Add(predictions[i], NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), treePredictions[j][i]));
-            }
+            predictions = engine.Add(predictions, engine.Multiply(treePrediction, learningRate));
         }
 
         return predictions;
@@ -312,17 +311,17 @@ public partial class GradientBoostingRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     protected override async Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new T[featureCount];
+        var engine = AiDotNetEngine.Current;
 
-        // Calculate importances in parallel for each tree
+        // Calculate importances in parallel for each tree, truncated or zero-padded to featureCount
         var importanceTasks = _trees.Select(tree => Task.Run(() =>
         {
-            var treeImportances = new T[featureCount];
             var treeFeatureImportances = tree.FeatureImportances;
             int copyCount = Math.Min(featureCount, treeFeatureImportances.Length);
-            for (int i = 0; i < copyCount; i++)
+            var treeImportances = new Vector<T>(featureCount);
+            if (copyCount > 0)
             {
-                treeImportances[i] = treeFeatureImportances[i];
+                treeFeatureImportances.AsSpan().Slice(0, copyCount).CopyTo(treeImportances.AsWritableSpan());
             }
             return treeImportances;
         }));
@@ -330,19 +329,14 @@ public partial class GradientBoostingRegression<T> : AsyncDecisionTreeRegression
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks);
 
         // Aggregate importances
-        for (int i = 0; i < featureCount; i++)
+        var importances = engine.FillZero(featureCount);
+        foreach (var treeImportance in allImportances)
         {
-            importances[i] = allImportances.Aggregate(NumOps.Zero, (acc, treeImportance) => NumOps.Add(acc, treeImportance[i]));
+            importances = engine.Add(importances, treeImportance);
         }
 
         // Normalize feature importances
-        T sum = importances.Aggregate(NumOps.Zero, NumOps.Add);
-        for (int i = 0; i < featureCount; i++)
-        {
-            importances[i] = NumOps.Divide(importances[i], sum);
-        }
-
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = engine.Divide(importances, engine.Sum(importances));
     }
 
     /// <summary>
