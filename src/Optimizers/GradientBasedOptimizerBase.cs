@@ -1656,23 +1656,35 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> model,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
-        int n = parameters.Length;
-        var epsilon = NumOps.FromDouble(1e-5);
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+        return CentralDifferenceHessian(
+            parameterizable.GetParameters(),
+            NumOps.FromDouble(1e-5),
+            point => CalculateLoss(parameterizable.WithParameters(point), inputData));
+    }
 
+    /// <summary>
+    /// Symmetric Hessian of <paramref name="objective"/> at <paramref name="parameters"/> by central differences:
+    /// ∂²f/∂xi∂xj ≈ [f(x+h·ei+h·ej) - f(x+h·ei-h·ej) - f(x-h·ei+h·ej) + f(x-h·ei-h·ej)] / (4h²).
+    /// </summary>
+    /// <remarks>
+    /// The upper triangle (diagonal included) is evaluated one row at a time, as whole vectors of objective
+    /// values, and mirrored at the end.
+    /// </remarks>
+    private protected Matrix<T> CentralDifferenceHessian(Vector<T> parameters, T epsilon, Func<Vector<T>, T> objective)
+    {
+        int n = parameters.Length;
         var steps = ScaledBasis(n, epsilon);
         var denominator = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(4.0), epsilon), epsilon);
 
-        // Upper triangle (diagonal included), one row at a time. Second partial derivative ∂²f/∂xi∂xj by
-        // central differences: f''(x,y) ≈ [f(x+h,y+h) - f(x+h,y-h) - f(x-h,y+h) + f(x-h,y-h)] / (4h²)
         var upper = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             var step = steps[i];
-            var lossPP = FiniteDifferenceLosses(model, inputData, parameters, i, n, j => Engine.Add(step, steps[j]));
-            var lossPM = FiniteDifferenceLosses(model, inputData, parameters, i, n, j => Engine.Subtract(step, steps[j]));
-            var lossMP = FiniteDifferenceLosses(model, inputData, parameters, i, n, j => Engine.Subtract(steps[j], step));
-            var lossMM = FiniteDifferenceLosses(model, inputData, parameters, i, n, j => Engine.Negate(Engine.Add(step, steps[j])));
+            var lossPP = ObjectiveRow(objective, parameters, i, n, j => Engine.Add(step, steps[j]));
+            var lossPM = ObjectiveRow(objective, parameters, i, n, j => Engine.Subtract(step, steps[j]));
+            var lossMP = ObjectiveRow(objective, parameters, i, n, j => Engine.Subtract(steps[j], step));
+            var lossMM = ObjectiveRow(objective, parameters, i, n, j => Engine.Negate(Engine.Add(step, steps[j])));
 
             var numerator = Engine.Add(Engine.Subtract(lossPP, lossPM), Engine.Subtract(lossMM, lossMP));
             var row = (Vector<T>)Engine.Divide(numerator, denominator);
@@ -1695,20 +1707,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
-    /// Evaluates the loss at parameters + perturbation(j) for j = start .. n-1.
+    /// Evaluates the objective at parameters + perturbation(j) for j = start .. n-1.
     /// </summary>
-    private Vector<T> FiniteDifferenceLosses(
-        IFullModel<T, TInput, TOutput> model,
-        OptimizationInputData<T, TInput, TOutput> inputData,
+    private Vector<T> ObjectiveRow(
+        Func<Vector<T>, T> objective,
         Vector<T> parameters,
         int start,
         int n,
         Func<int, Vector<T>> perturbation)
     {
-        var parameterizable = InterfaceGuard.Parameterizable(model);
         return Vector<T>.FromList(Enumerable.Range(start, n - start)
-            .Select(j => CalculateLoss(
-                parameterizable.WithParameters((Vector<T>)Engine.Add(parameters, perturbation(j))), inputData))
+            .Select(j => objective((Vector<T>)Engine.Add(parameters, perturbation(j))))
             .ToList());
     }
 
