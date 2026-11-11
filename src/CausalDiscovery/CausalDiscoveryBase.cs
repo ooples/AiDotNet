@@ -599,6 +599,55 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     }
 
     /// <summary>
+    /// Solves a small linear system Ax = b with partial pivoting, returning the zero vector
+    /// when any pivot magnitude is at most 1e-15 (the contract of
+    /// <see cref="SolveSmallSystem(double[,], double[], int)"/>), for data held in tensors.
+    /// </summary>
+    /// <param name="A">Coefficient matrix [p x p].</param>
+    /// <param name="b">Right-hand side [p].</param>
+    /// <returns>Solution [p].</returns>
+    private protected Tensor<T> SolveSmallSystem(Tensor<T> A, Tensor<T> b)
+    {
+        int p = b.Length;
+        var (_, _, u) = LinalgDispatch<T>.LU(A);
+        var smallPivots = Engine.TensorLessEqual(Engine.TensorAbs(Engine.TensorDiagonal(u)),
+            Engine.TensorFullLike(Engine.TensorDiagonal(u), NumOps.FromDouble(1e-15)));
+        if (Engine.TensorCountNonzero(smallPivots) > 0)
+            return new Tensor<T>(new[] { p }); // Singular — zero coefficients (caller handles)
+
+        var (solution, _) = LinalgDispatch<T>.SolveEx(A, b.Reshape(new[] { p, 1 }));
+        return solution.Reshape(new[] { p });
+    }
+
+    /// <summary>
+    /// Ordinary least squares of column <paramref name="target"/> on the centered
+    /// <paramref name="predictors"/> columns with a 1e-10 ridge, as the causal discovery
+    /// regressions use: y ≈ mean(y) + (X - mean(X)) β.
+    /// </summary>
+    /// <returns>The coefficients β [p] and the residuals y - prediction [n].</returns>
+    private protected (Tensor<T> Beta, Tensor<T> Residual) FitCenteredRegression(
+        Tensor<T> data, int target, int[] predictors)
+    {
+        int n = data.Shape[0];
+        int p = predictors.Length;
+        var y = Engine.TensorSliceAxis(data, 1, target);
+        T meanY = Engine.TensorMean(y);
+        var centeredX = CenterColumns(SelectColumns(data, predictors));
+        var centeredY = Engine.TensorSubtract(y, Engine.TensorFullLike(y, meanY)).Reshape(new[] { n, 1 });
+
+        // Normal equations X'X β = X'y, symmetric with ridge on the diagonal.
+        var gram = Engine.TensorMatMul(Engine.TensorTranspose(centeredX), centeredX);
+        gram = Engine.TensorAdd(Engine.TensorTriu(gram, 0), Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
+        gram = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(1e-10)));
+        var xty = Engine.TensorMatMul(Engine.TensorTranspose(centeredX), centeredY).Reshape(new[] { p });
+
+        var beta = SolveSmallSystem(gram, xty);
+        var prediction = Engine.TensorAddScalar(
+            Engine.TensorMatMul(centeredX, beta.Reshape(new[] { p, 1 })).Reshape(new[] { n }), meanY);
+        return (beta, Engine.TensorSubtract(y, prediction));
+    }
+
+    /// <summary>
     /// Inverts a small matrix using Gauss-Jordan elimination. Returns null if singular.
     /// </summary>
     private Matrix<T>? InvertSmallMatrix(Matrix<T> matrix)

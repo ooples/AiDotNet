@@ -155,10 +155,7 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
             // The augmented penalty reaches 1e16; float loss/constraint arithmetic loses the
             // precision required by the 1e-8 acyclicity tolerance and destabilizes line search.
             // Keep the public float boundary while solving the small weight matrix in double.
-            var preciseData = new Matrix<double>(data.Rows, data.Columns);
-            for (int row = 0; row < data.Rows; row++)
-                for (int column = 0; column < data.Columns; column++)
-                    preciseData[row, column] = NumOps.ToDouble(data[row, column]);
+            var preciseData = Tensor<T>.FromMatrix(data).Cast<double>().ToMatrix();
             var solver = new NOTEARSLinear<double>(new CausalDiscoveryOptions
             {
                 SparsityPenalty = Lambda1, EdgeThreshold = WThreshold, MaxIterations = MaxIterations,
@@ -168,11 +165,7 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
             _lastIterations = solver._lastIterations;
             _lastH = solver._lastH;
             _lastLoss = solver._lastLoss;
-            var weights = new Matrix<T>(data.Columns, data.Columns);
-            for (int row = 0; row < weights.Rows; row++)
-                for (int column = 0; column < weights.Columns; column++)
-                    weights[row, column] = NumOps.FromDouble(preciseWeights[row, column]);
-            return weights;
+            return Tensor<double>.FromMatrix(preciseWeights).Cast<T>().ToMatrix();
         }
 
         // Standardize data for numerical stability — the NOTEARS acyclicity constraint
@@ -238,11 +231,9 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 
         // Fallback: if optimization produced no edges (can happen with near-degenerate data
         // where the symmetric saddle point isn't fully escaped), use correlation structure.
-        bool hasEdges = false;
-        for (int i = 0; i < d && !hasEdges; i++)
-            for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
-                    hasEdges = true;
+        var offDiagonalMagnitude = Engine.TensorMultiply(
+            Engine.TensorAbs(Tensor<T>.FromMatrix(result)), OffDiagonalMask(d));
+        bool hasEdges = Engine.TensorCountNonzero(Engine.TensorGreaterThan(offDiagonalMagnitude, NumOps.Zero)) > 0;
 
         return hasEdges ? result : FallbackCorrelationGraph(data);
     }
@@ -446,12 +437,10 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
         double objective = loss + alpha * h + 0.5 * rho * h * h;
         T augFactor = NumOps.FromDouble(alpha + rho * h);
 
-        var grad = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                grad[i, j] = NumOps.Add(lossGrad[i, j], NumOps.Multiply(augFactor, hGrad[i, j]));
+        var grad = Engine.TensorAdd(Tensor<T>.FromMatrix(lossGrad),
+            Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(hGrad), augFactor));
 
-        return (grad, objective);
+        return (grad.ToMatrix(), objective);
     }
 
     /// <summary>
@@ -563,20 +552,12 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 
     private double[] FlattenMatrix(Matrix<T> matrix, int d)
     {
-        var result = new double[d * d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i * d + j] = NumOps.ToDouble(matrix[i, j]);
-        return result;
+        return Tensor<T>.FromMatrix(matrix).Reshape(new[] { d * d }).Cast<double>().ToArray();
     }
 
     private Matrix<T> UnflattenMatrix(double[] vector, int d)
     {
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i, j] = NumOps.FromDouble(vector[i * d + j]);
-        return result;
+        return new Tensor<double>((double[])vector.Clone(), new[] { d, d }).Cast<T>().ToMatrix();
     }
 
     private static double ComputeL1NormFromFlat(double[] w, int d)
