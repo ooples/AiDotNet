@@ -43,6 +43,51 @@ internal static class RegressionEngineOps
     }
 
     /// <summary>
+    /// Index of the first largest value (ties keep the earliest index, like a sequential
+    /// strictly-greater scan). The sequence must not be empty.
+    /// </summary>
+    public static int ArgMaxFirst<T>(IEnumerable<T> values)
+    {
+        var tensor = Tensor<T>.FromVector(new Vector<T>(values));
+        return AiDotNetEngine.Current.TensorArgMax(tensor, 0).ToArray()[0];
+    }
+
+    /// <summary>
+    /// Index of the first smallest value (ties keep the earliest index, like a sequential
+    /// strictly-less scan). The sequence must not be empty.
+    /// </summary>
+    public static int ArgMinFirst<T>(IEnumerable<T> values)
+    {
+        var tensor = Tensor<T>.FromVector(new Vector<T>(values));
+        return AiDotNetEngine.Current.TensorArgMin(tensor, 0).ToArray()[0];
+    }
+
+    /// <summary>
+    /// The first largest value among the positions where <paramref name="allowed"/> is true,
+    /// ignoring NaN. Returns index -1 when no allowed, non-NaN value exists.
+    /// </summary>
+    public static (int Index, T Value) MaskedArgMaxFirst<T>(Vector<T> values, bool[] allowed)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        if (values.Length == 0)
+        {
+            return (-1, numOps.MinValue);
+        }
+
+        var tensor = Tensor<T>.FromVector(values);
+        var floor = Tensor<T>.FromVector(engine.Fill(values.Length, numOps.MinValue));
+        var usable = engine.TensorWhere(allowed, engine.TensorWhere(engine.TensorIsNan(tensor), floor, tensor), floor);
+        int index = engine.TensorArgMax(usable, 0).ToArray()[0];
+        if (!allowed[index] || numOps.IsNaN(values[index]))
+        {
+            return (-1, numOps.MinValue);
+        }
+
+        return (index, usable[index]);
+    }
+
+    /// <summary>
     /// Gathers <paramref name="source"/> at <paramref name="indices"/> (in the given order).
     /// </summary>
     public static Vector<T> Gather<T>(Vector<T> source, int[] indices)
