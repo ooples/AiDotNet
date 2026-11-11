@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -293,6 +295,146 @@ internal static class RegressionEngineOps2
         }
 
         return AiDotNetEngine.Current.DotProduct(values, values);
+    }
+
+    /// <summary>
+    /// The kernel matrix K[i, j] = k(left[i], right[j]) for the non-linear regression kernels, with the
+    /// same formulas as <c>NonLinearRegressionBase.KernelFunction</c>.
+    /// </summary>
+    public static Matrix<T> KernelMatrix<T>(Matrix<T> left, Matrix<T> right, NonLinearRegressionOptions options)
+    {
+        if (left.Rows == 0 || right.Rows == 0)
+        {
+            return new Matrix<T>(left.Rows, right.Rows);
+        }
+
+        if (left.Columns != right.Columns)
+        {
+            throw new ArgumentException(
+                $"Vectors must have the same length. Got {right.Columns} and {left.Columns}.", nameof(right));
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        bool distanceKernel = options.KernelType is KernelType.RBF or KernelType.Laplacian;
+        long perRow = Math.Max(1L, (long)right.Rows * Math.Max(1, left.Columns));
+        int blockRows = distanceKernel
+            ? (int)Math.Max(1L, Math.Min(left.Rows, PairwiseBlockElements / perRow))
+            : left.Rows;
+        if (blockRows < left.Rows)
+        {
+            var blocks = new List<Tensor<T>>();
+            for (int start = 0; start < left.Rows; start += blockRows)
+            {
+                int count = Math.Min(blockRows, left.Rows - start);
+                blocks.Add(Tensor<T>.FromMatrix(
+                    KernelMatrix(left.GetSubMatrix(start, 0, count, left.Columns), right, options)));
+            }
+
+            return engine.TensorConcatenate(blocks.ToArray(), 0).ToMatrix();
+        }
+
+        T gamma = numOps.FromDouble(options.Gamma);
+        T negativeGamma = numOps.FromDouble(-options.Gamma);
+        T coef0 = numOps.FromDouble(options.Coef0);
+        Tensor<T> gram;
+        switch (options.KernelType)
+        {
+            case KernelType.Linear:
+                gram = CrossDotProducts(left, right);
+                break;
+
+            case KernelType.RBF:
+                gram = engine.TensorExp(engine.TensorMultiplyScalar(
+                    ReduceLastAxis(engine.TensorSquare(PairwiseDifferences(left, right)), left.Rows, right.Rows),
+                    negativeGamma));
+                break;
+
+            case KernelType.Polynomial:
+                gram = engine.TensorPower(
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(CrossDotProducts(left, right), gamma), coef0),
+                    numOps.FromDouble(options.PolynomialDegree));
+                break;
+
+            case KernelType.Sigmoid:
+                gram = engine.TensorTanh(
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(CrossDotProducts(left, right), gamma), coef0));
+                break;
+
+            case KernelType.Laplacian:
+                gram = engine.TensorExp(engine.TensorMultiplyScalar(
+                    ReduceLastAxis(engine.TensorAbs(PairwiseDifferences(left, right)), left.Rows, right.Rows),
+                    negativeGamma));
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(options.KernelType), options.KernelType, "Unsupported kernel type");
+        }
+
+        return gram.ToMatrix();
+    }
+
+    /// <summary>
+    /// A square kernel matrix that is exactly symmetric: the lower triangle (including the diagonal)
+    /// mirrored onto the upper one, as a scan that fills K[i, j] for j &lt;= i and copies it to K[j, i].
+    /// </summary>
+    public static Matrix<T> SymmetricFromLower<T>(Matrix<T> square)
+    {
+        var engine = AiDotNetEngine.Current;
+        var t = Tensor<T>.FromMatrix(square);
+        var lower = engine.TensorTril(t, 0);
+        var strictlyLower = engine.TensorTril(t, -1);
+        return engine.TensorAdd(lower, engine.TensorTranspose(strictlyLower)).ToMatrix();
+    }
+
+    private static Tensor<T> PairwiseDifferences<T>(Matrix<T> left, Matrix<T> right)
+    {
+        var engine = AiDotNetEngine.Current;
+        int m = left.Rows;
+        int n = right.Rows;
+        int d = left.Columns;
+        var shape = new[] { m, n, d };
+        var l = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(left), new[] { m, 1, d }), shape);
+        var r = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(right), new[] { 1, n, d }), shape);
+        return engine.TensorSubtract(l, r);
+    }
+
+    private static Tensor<T> ReduceLastAxis<T>(Tensor<T> values, int rows, int columns)
+    {
+        if (values.Length == 0)
+        {
+            return new Tensor<T>(new[] { rows, columns });
+        }
+
+        return AiDotNetEngine.Current.ReduceSum(values, new[] { 2 }, keepDims: false);
+    }
+
+    private static Tensor<T> CrossDotProducts<T>(Matrix<T> left, Matrix<T> right)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorMatMul(Tensor<T>.FromMatrix(left), Tensor<T>.FromMatrix(engine.MatrixTranspose(right)));
+    }
+
+    /// <summary>
+    /// The smallest and largest elements (the vector must not be empty).
+    /// </summary>
+    public static (T Min, T Max) MinMax<T>(Vector<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var tensor = values.AsTensor();
+        return (engine.TensorMinValue(tensor), engine.TensorMaxValue(tensor));
+    }
+
+    /// <summary>
+    /// Population standard deviation sqrt(mean((v - mean(v))^2)), two-pass.
+    /// </summary>
+    public static T PopulationStdDev<T>(Vector<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        T mean = engine.Mean(values);
+        T sumSq = SumOfSquares(AddScalar(values, numOps.Negate(mean)));
+        return numOps.Sqrt(numOps.Divide(sumSq, numOps.FromDouble(values.Length)));
     }
 
     /// <summary>
