@@ -156,6 +156,116 @@ public class GPInferenceCorrectnessTests
 
     #endregion
 
+    #region SparseGaussianProcess Reference Tests
+
+    /// <summary>
+    /// With every training point used as an inducing point, the FITC diagonal correction is
+    /// Lambda_i = k(x_i, x_i) - k_i^T Kuu^{-1} k_i. This test rebuilds the FITC posterior mean densely
+    /// (same jitters as the model: 1e-4 on Kuu, 1e-4 on Lambda, 1e-6 * mean diagonal on Ky) and checks
+    /// the model against it. A non-unit output scale makes the check sensitive to the Qff diagonal:
+    /// using ||Kuu^{-1} k_i||^2 instead of k_i^T Kuu^{-1} k_i gives Lambda close to 3 instead of 0 here.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SparseGaussianProcess_AllPointsInducing_MatchesDenseFitcReference()
+    {
+        var kernel = new ScaleKernel<double>(new GaussianKernel<double>(1.0), outputScale: 4.0);
+        int n = 8;
+        var X = new Matrix<double>(n, 1);
+        var y = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            X[i, 0] = 0.5 * i;
+            y[i] = Math.Sin(0.5 * i);
+        }
+
+        var gp = new SparseGaussianProcess<double>(kernel);
+        gp.Fit(X, y);
+
+        var K = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                K[i, j] = kernel.Calculate(X.GetRow(i), X.GetRow(j));
+
+        var kuu = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                kuu[i, j] = K[i, j] + (i == j ? 1e-4 : 0.0);
+
+        var d = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            var column = new double[n];
+            for (int r = 0; r < n; r++) column[r] = K[r, i];
+            var solved = DenseSolve(kuu, column);
+            double qff = 0;
+            for (int r = 0; r < n; r++) qff += column[r] * solved[r];
+            double lambda = Math.Max(K[i, i] - qff, 0.0);
+            d[i] = 1.0 / (lambda + 1e-4);
+        }
+
+        var ky = new double[n, n];
+        double trace = 0;
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                double sum = kuu[i, j];
+                for (int r = 0; r < n; r++) sum += K[i, r] * d[r] * K[j, r];
+                ky[i, j] = sum;
+            }
+            trace += ky[i, i];
+        }
+        double jitter = 1e-6 * trace / n;
+        for (int i = 0; i < n; i++) ky[i, i] += jitter;
+
+        var rhs = new double[n];
+        for (int i = 0; i < n; i++)
+            for (int r = 0; r < n; r++)
+                rhs[i] += K[i, r] * d[r] * y[r];
+        var alpha = DenseSolve(ky, rhs);
+
+        foreach (double xs in new[] { 0.25, 1.3, 2.0, 3.1 })
+        {
+            var point = new Vector<double>(new[] { xs });
+            double expected = 0;
+            for (int j = 0; j < n; j++) expected += kernel.Calculate(X.GetRow(j), point) * alpha[j];
+
+            var (mean, _) = gp.Predict(point);
+            Assert.True(Math.Abs(mean - expected) < 1e-5,
+                $"FITC mean at {xs}: expected {expected}, got {mean}");
+        }
+    }
+
+    private static double[] DenseSolve(double[,] a, double[] b)
+    {
+        int n = b.Length;
+        var m = (double[,])a.Clone();
+        var x = (double[])b.Clone();
+        for (int col = 0; col < n; col++)
+        {
+            int pivot = col;
+            for (int r = col + 1; r < n; r++)
+                if (Math.Abs(m[r, col]) > Math.Abs(m[pivot, col])) pivot = r;
+            for (int c = 0; c < n; c++) (m[col, c], m[pivot, c]) = (m[pivot, c], m[col, c]);
+            (x[col], x[pivot]) = (x[pivot], x[col]);
+            for (int r = col + 1; r < n; r++)
+            {
+                double factor = m[r, col] / m[col, col];
+                for (int c = col; c < n; c++) m[r, c] -= factor * m[col, c];
+                x[r] -= factor * x[col];
+            }
+        }
+        for (int r = n - 1; r >= 0; r--)
+        {
+            double sum = x[r];
+            for (int c = r + 1; c < n; c++) sum -= m[r, c] * x[c];
+            x[r] = sum / m[r, r];
+        }
+        return x;
+    }
+
+    #endregion
+
     #region BetaLikelihood Tests
 
     [Fact(Timeout = 120000)]

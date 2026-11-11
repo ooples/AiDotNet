@@ -164,8 +164,7 @@ public partial class SparseGaussianProcess<T> : GaussianProcessBase<T>
 
         // Add jitter to Kuu for numerical stability
         var jitter = _numOps.FromDouble(1e-4);
-        for (int i = 0; i < Kuu.Rows; i++)
-            Kuu[i, i] = _numOps.Add(Kuu[i, i], jitter);
+        GaussianProcessEngineOps.AddToDiagonalInPlace(Kuu, jitter);
 
         var choleskyKuu = new CholeskyDecomposition<T>(Kuu);
         var L = choleskyKuu.L;
@@ -179,38 +178,29 @@ public partial class SparseGaussianProcess<T> : GaussianProcessBase<T>
             V.SetColumn(i, solvedColumn);
         }
 
-        // Calculate Qff_diag = diag(Kfu * Kuu^{-1} * Kuf)
-        // Each diagonal element is the dot product of column i of V with itself
-        var Qff_diag = new Vector<T>(Kuf.Columns);
-        for (int i = 0; i < Kuf.Columns; i++)
-        {
-            var column = V.GetColumn(i);
-            Qff_diag[i] = column.DotProduct(column);
-        }
-
-        var Lambda = Kff_diag.Subtract(Qff_diag);
+        // Calculate Qff_diag = diag(Kfu * Kuu^{-1} * Kuf).
+        // V = Kuu^{-1} * Kuf, so element i is kuf_i^T * (Kuu^{-1} kuf_i) = sum over rows of (Kuf ⊙ V)
+        // in column i.
+        var engine = Engine;
+        var Qff_diag = engine.ReduceSum(
+            engine.TensorMultiply(Tensor<T>.FromMatrix(Kuf), Tensor<T>.FromMatrix(V)),
+            new[] { 0 },
+            keepDims: false).ToVector();
 
         // Clamp Lambda to be non-negative (numerical errors can make it slightly negative)
         var noise = _numOps.FromDouble(1e-4);
-        for (int i = 0; i < Lambda.Length; i++)
-        {
-            if (_numOps.LessThan(Lambda[i], _numOps.Zero))
-                Lambda[i] = _numOps.Zero;
-        }
-        var D = Lambda.Add(noise).Transform(v => Reciprocal(v));
+        var Lambda = engine.TensorMax(Tensor<T>.FromVector(Kff_diag.Subtract(Qff_diag)), _numOps.Zero);
+        var D = engine.TensorReciprocal(engine.TensorAddScalar(Lambda, noise)).ToVector();
 
         var DKuf = Kuf.Multiply(D.CreateDiagonal());
         var Ky = Kuu.Add(DKuf.Multiply(Kuf.Transpose()));
 
         // Force symmetry - floating point matrix multiplication can produce
         // slight asymmetry that causes Cholesky to reject the matrix
-        for (int i = 0; i < Ky.Rows; i++)
-            for (int j = i + 1; j < Ky.Columns; j++)
-            {
-                var avg = _numOps.Divide(_numOps.Add(Ky[i, j], Ky[j, i]), _numOps.FromDouble(2.0));
-                Ky[i, j] = avg;
-                Ky[j, i] = avg;
-            }
+        var KyTensor = Tensor<T>.FromMatrix(Ky);
+        Ky = engine.TensorDivideScalar(
+            engine.TensorAdd(KyTensor, engine.TensorTranspose(KyTensor)),
+            _numOps.FromDouble(2.0)).ToMatrix();
 
         // Solve Ky·α = DKuf·y. Ky = Kuu + D·Kuf·Kuf^T is only
         // positive-semidefinite in exact arithmetic (rank(D·Kuf·Kuf^T) < m
@@ -224,10 +214,7 @@ public partial class SparseGaussianProcess<T> : GaussianProcessBase<T>
         // alone with jitter <= 10% of trace was not enough on the CI shard,
         // but the SVD path as a fallback (instead of a replacement) avoids
         // the O(n³) SVD cost in the common case.
-        T traceScale = _numOps.Zero;
-        for (int i = 0; i < Ky.Rows; i++)
-            traceScale = _numOps.Add(traceScale, Ky[i, i]);
-        traceScale = _numOps.Divide(traceScale, _numOps.FromDouble(Ky.Rows));
+        T traceScale = _numOps.Divide(engine.TensorTrace(Tensor<T>.FromMatrix(Ky)), _numOps.FromDouble(Ky.Rows));
 
         var rhs = DKuf.Multiply(y);
 
@@ -244,8 +231,7 @@ public partial class SparseGaussianProcess<T> : GaussianProcessBase<T>
         foreach (var scale in jitterSchedule)
         {
             T jitterAmt = _numOps.Multiply(traceScale, _numOps.FromDouble(scale));
-            for (int i = 0; i < Ky.Rows; i++)
-                Ky[i, i] = _numOps.Add(Ky[i, i], jitterAmt);
+            GaussianProcessEngineOps.AddToDiagonalInPlace(Ky, jitterAmt);
             try
             {
                 var choleskyKy = new CholeskyDecomposition<T>(Ky);
@@ -289,27 +275,13 @@ public partial class SparseGaussianProcess<T> : GaussianProcessBase<T>
     /// </summary>
     /// <param name="value">The value to calculate the reciprocal for.</param>
     /// <returns>The reciprocal of the input value.</returns>
-    private T Reciprocal(T value)
-    {
-        return _numOps.Divide(_numOps.One, value);
-    }
-
     /// <summary>
     /// Returns true only if every element of <paramref name="v"/> is a finite
     /// number (no NaN, no infinity). Used to reject a Cholesky solve that
     /// silently produced a non-finite solution from a near-singular system so
     /// the caller can fall back to the robust pseudoinverse path.
     /// </summary>
-    private bool IsAllFinite(Vector<T> v)
-    {
-        for (int i = 0; i < v.Length; i++)
-        {
-            double d = _numOps.ToDouble(v[i]);
-            if (double.IsNaN(d) || double.IsInfinity(d))
-                return false;
-        }
-        return true;
-    }
+    private static bool IsAllFinite(Vector<T> v) => GaussianProcessEngineOps.AllFinite(v);
 
     /// <summary>
     /// Solves A·x = b via the Moore–Penrose pseudoinverse computed from a
@@ -321,12 +293,12 @@ public partial class SparseGaussianProcess<T> : GaussianProcessBase<T>
     {
         var svd = new SvdDecomposition<T>(A);
 
-        T sigmaMax = _numOps.Zero;
-        for (int i = 0; i < svd.S.Length; i++)
-        {
-            if (_numOps.GreaterThan(svd.S[i], sigmaMax))
-                sigmaMax = svd.S[i];
-        }
+        var engine = Engine;
+        int rank = svd.S.Length;
+        var singularValues = Tensor<T>.FromVector(svd.S);
+        T sigmaMax = rank == 0
+            ? _numOps.Zero
+            : MathHelper.Max(_numOps.Zero, engine.TensorMaxValue(singularValues));
 
         // Relative tolerance: max(rows, cols) * ε_machine * σ_max. Same choice
         // as numpy.linalg.pinv / MATLAB pinv default. Scales with matrix size
@@ -338,18 +310,20 @@ public partial class SparseGaussianProcess<T> : GaussianProcessBase<T>
         // x = V · Σ^+ · U^T · b. Σ^+ has 1/σ_i on the diagonal where σ_i >
         // tolerance, and 0 elsewhere — this is the standard truncated
         // pseudoinverse.
-        var x = new Vector<T>(svd.Vt.Columns);
-        for (int i = 0; i < svd.S.Length; i++)
-        {
-            if (!_numOps.GreaterThan(svd.S[i], tolerance))
-                continue;
+        if (rank == 0)
+            return new Vector<T>(svd.Vt.Columns);
 
-            Vector<T> uCol = svd.U.GetColumn(i);
-            T coeff = _numOps.Divide(uCol.DotProduct(b), svd.S[i]);
-            Vector<T> vtRow = svd.Vt.GetRow(i);
-            x = x.Add(vtRow.Multiply(coeff));
-        }
-        return x;
+        var uRank = engine.TensorSlice(Tensor<T>.FromMatrix(svd.U), new[] { 0, 0 }, new[] { svd.U.Rows, rank });
+        var vtRank = engine.TensorSlice(Tensor<T>.FromMatrix(svd.Vt), new[] { 0, 0 }, new[] { rank, svd.Vt.Columns });
+        var projections = engine.TensorMatMul(engine.TensorTranspose(uRank), Tensor<T>.FromVector(b).Reshape(new[] { b.Length, 1 }));
+        var keep = engine.TensorGreaterThan(singularValues, tolerance);
+        var safeSingular = engine.TensorWhere(keep, singularValues, engine.TensorOnesLike(singularValues));
+        var coefficients = engine.TensorWhere(
+            keep,
+            engine.TensorDivide(projections.Reshape(new[] { rank }), safeSingular),
+            engine.TensorZerosLike(singularValues));
+        var x = engine.TensorMatMul(engine.TensorTranspose(vtRank), coefficients.Reshape(new[] { rank, 1 }));
+        return x.Reshape(new[] { svd.Vt.Columns }).ToVector();
     }
 
     /// <summary>
