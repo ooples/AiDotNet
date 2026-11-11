@@ -464,6 +464,109 @@ internal static class RegressionEngineOps2
     }
 
     /// <summary>
+    /// Inverse of a square matrix by Gauss-Jordan elimination with partial pivoting: each column
+    /// takes the first row with the largest |value| at or below the diagonal as pivot, a pivot
+    /// smaller than <paramref name="pivotFloor"/> in magnitude is replaced by
+    /// <paramref name="pivotFloor"/>, and each step eliminates the column from every other row
+    /// with one rank-1 update.
+    /// </summary>
+    public static Matrix<T> GaussJordanInverse<T>(Matrix<T> a, T pivotFloor)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = a.Rows;
+        if (n == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        var augmented = engine.TensorConcatenate(
+            new[] { Tensor<T>.FromMatrix(a), engine.TensorEye<T>(n) }, 1).ToMatrix();
+        int width = augmented.Columns;
+
+        for (int col = 0; col < n; col++)
+        {
+            // Pivot: first row at or below col with the largest |value| in this column.
+            var column = augmented.GetColumn(col);
+            var candidates = engine.Abs(column.GetSubVector(col, n - col));
+            int maxRow = col + engine.TensorArgMax(candidates.AsTensor(), 0)[0];
+            if (maxRow != col)
+            {
+                var pivotCandidate = augmented.GetRow(maxRow);
+                augmented.SetRow(maxRow, augmented.GetRow(col));
+                augmented.SetRow(col, pivotCandidate);
+                column = augmented.GetColumn(col);
+            }
+
+            var pivotRow = augmented.GetRow(col);
+            T pivot = pivotRow.GetSubVector(col, 1).Sum();
+            if (numOps.LessThan(numOps.Abs(pivot), pivotFloor))
+            {
+                pivot = pivotFloor;
+            }
+
+            var scaledPivotRow = engine.Divide(pivotRow, pivot);
+
+            // row -= row[col] * scaledPivotRow for every row != col
+            var factors = Vector<T>.Concatenate(
+                column.GetSubVector(0, col), engine.FillZero<T>(1), column.GetSubVector(col + 1, n - col - 1));
+            var update = engine.MatrixMultiply(
+                new Tensor<T>(new[] { n, 1 }, factors).ToMatrix(),
+                new Tensor<T>(new[] { 1, width }, scaledPivotRow).ToMatrix());
+            augmented = engine.MatrixSubtract(augmented, update);
+            augmented.SetRow(col, scaledPivotRow);
+        }
+
+        return augmented.GetSubMatrix(0, n, n, n);
+    }
+
+    /// <summary>
+    /// The m x m masks whose row j is all ones except a zero at position j.
+    /// </summary>
+    public static Matrix<T> LeaveOneOutMasks<T>(int m)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (m == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        return engine.ScalarMinusTensor(numOps.One, engine.TensorEye<T>(m)).ToMatrix();
+    }
+
+    /// <summary>
+    /// Column-wise standardization statistics: population mean and standard deviation per column
+    /// (two-pass), with standard deviations below <paramref name="floor"/> replaced by one.
+    /// </summary>
+    public static (Vector<T> Means, Vector<T> Stds) ColumnStandardization<T>(Matrix<T> x, T floor)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var xt = Tensor<T>.FromMatrix(x);
+        var means = engine.ReduceMean(xt, new[] { 0 }, keepDims: true);
+        var centered = engine.TensorSubtract(xt, engine.TensorBroadcastTo(means, new[] { x.Rows, x.Columns }));
+        var stds = engine.TensorSqrt(engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, keepDims: false),
+            numOps.FromDouble(x.Rows)));
+        var tiny = engine.TensorLessThan(stds, floor);
+        stds = engine.TensorWhere(tiny, engine.TensorOnesLike(stds), stds);
+        return (engine.Reshape(means, new[] { x.Columns }).ToVector(), stds.ToVector());
+    }
+
+    /// <summary>
+    /// (x - means) / stds per column.
+    /// </summary>
+    public static Matrix<T> Standardize<T>(Matrix<T> x, Vector<T> means, Vector<T> stds)
+    {
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { x.Rows, x.Columns };
+        var m = engine.TensorBroadcastTo(new Tensor<T>(new[] { 1, means.Length }, means), shape);
+        var s = engine.TensorBroadcastTo(new Tensor<T>(new[] { 1, stds.Length }, stds), shape);
+        return engine.TensorDivide(engine.TensorSubtract(Tensor<T>.FromMatrix(x), m), s).ToMatrix();
+    }
+
+    /// <summary>
     /// True when any element of <paramref name="mask"/> is non-zero.
     /// </summary>
     public static bool Any<T>(Tensor<T> mask)
