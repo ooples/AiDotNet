@@ -232,6 +232,36 @@ internal static class RegressionEngineOps
     }
 
     /// <summary>
+    /// Squared Euclidean distances ||left[i] - right[j]||^2 as a [left.Rows, right.Rows] matrix,
+    /// summed in feature order. Left rows are processed in blocks so the intermediate difference
+    /// tensor stays bounded.
+    /// </summary>
+    public static Matrix<T> PairwiseSquaredDistances<T>(Matrix<T> left, Matrix<T> right)
+    {
+        if (left.Rows == 0 || right.Rows == 0)
+        {
+            return new Matrix<T>(left.Rows, right.Rows);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        long perRow = Math.Max(1L, (long)right.Rows * Math.Max(1, left.Columns));
+        int blockRows = (int)Math.Max(1L, Math.Min(left.Rows, PairwiseBlockElements / perRow));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < left.Rows; start += blockRows)
+        {
+            int count = Math.Min(blockRows, left.Rows - start);
+            var block = count == left.Rows ? left : left.GetSubMatrix(start, 0, count, left.Columns);
+            blocks.Add(engine.ReduceSum(
+                engine.TensorSquare(PairwiseDifferences(block, right)), new[] { 2 }, keepDims: false));
+        }
+
+        var result = blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+        return result.ToMatrix();
+    }
+
+    private const long PairwiseBlockElements = 1L << 24;
+
+    /// <summary>
     /// All row dot products left[i] . right[j] as a [left.Rows, right.Rows] tensor.
     /// </summary>
     public static Tensor<T> CrossDotProducts<T>(Matrix<T> left, Matrix<T> right)
