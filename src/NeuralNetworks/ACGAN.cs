@@ -531,6 +531,7 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
@@ -648,6 +649,7 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         return labels;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

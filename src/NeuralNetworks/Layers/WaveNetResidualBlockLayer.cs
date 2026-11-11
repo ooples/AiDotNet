@@ -112,6 +112,7 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>, IShapeContract
         yield return _outConv;
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

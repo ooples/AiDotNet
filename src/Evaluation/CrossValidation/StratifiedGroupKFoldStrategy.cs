@@ -29,8 +29,11 @@ public class StratifiedGroupKFoldStrategy<T> : ICrossValidationStrategy<T>
     private readonly int? _randomSeed;
     private int[]? _groups;
 
+    /// <inheritdoc />
     public string Name => $"Stratified Group {_nFolds}-Fold";
+    /// <inheritdoc />
     public string Description => "K-Fold with both stratification and group constraints.";
+    /// <inheritdoc />
     public int NumSplits => _nFolds;
 
     /// <summary>
@@ -56,6 +59,7 @@ public class StratifiedGroupKFoldStrategy<T> : ICrossValidationStrategy<T>
         _groups = groups;
     }
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (_groups == null)

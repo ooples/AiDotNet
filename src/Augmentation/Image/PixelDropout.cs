@@ -17,6 +17,7 @@ public class PixelDropout<T> : ImageAugmenterBase<T>
         DropoutRate = dropoutRate; FillValue = fillValue; PerChannel = perChannel;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -48,6 +49,7 @@ public class PixelDropout<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

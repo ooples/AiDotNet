@@ -75,6 +75,7 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
     public int ResamplingInterval => _resamplingInterval;
     public int CurrentStep => _currentStep;
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _currentStep++;
@@ -227,6 +228,7 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
         return resultTensor.ToMatrix();
     }
 
+    /// <inheritdoc />
     public override ILayer<T> MergeToOriginalLayer()
     {
         // Support both DenseLayer and FullyConnectedLayer
@@ -272,6 +274,7 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
         return CreateMergedLayerWithClone(mergedParams);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         base.ResetState();

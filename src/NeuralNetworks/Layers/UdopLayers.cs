@@ -26,6 +26,7 @@ public partial class T5FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _wo;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public T5FeedForwardLayer([LayerState] int dim, [LayerState] int ffDim)
@@ -57,6 +58,7 @@ public partial class T5FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         CompleteSeededReinitialization(drawn);
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2
         ? new[]
         {
@@ -65,6 +67,7 @@ public partial class T5FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         }
         : null;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2 || input.Shape[1] != _dim)
@@ -81,6 +84,7 @@ public partial class T5FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ResetState() { }
 }
 
@@ -164,6 +168,7 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
     [SubLayerInput("_dim")] private readonly List<T5FeedForwardLayer<T>> _decoderFeedForward = new();
     [SubLayerInput("_dim")] private readonly RMSNormalizationLayer<T> _decoderFinalNorm;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public UdopTransformerLayer([LayerState] int vocabSize, [LayerState] int dim, [LayerState] int numHeads,
@@ -280,6 +285,7 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Side of the square page image the patch embedding expects.</summary>
     public int ImageSize => _imageSize;
 
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2
         ? new[]
         {
@@ -313,6 +319,7 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         // constructor too, so they drew before the model existed and need the seed as much as the tables do.
         PropagateSeedToSubLayers();
     }
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2 || input.Shape[1] != 5)
@@ -490,6 +497,7 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         foreach (var layer in SubLayers()) layer.ResetState();

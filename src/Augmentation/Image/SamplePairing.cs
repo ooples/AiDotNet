@@ -57,11 +57,13 @@ public class SamplePairing<T> : ImageMixingAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         return data.Clone();
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

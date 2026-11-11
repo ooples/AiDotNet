@@ -330,6 +330,7 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

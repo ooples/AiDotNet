@@ -679,6 +679,7 @@ public partial class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         return activations;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

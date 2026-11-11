@@ -192,6 +192,7 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             options: new NeuralNetworkDefaultOptions { Seed = _options.Seed is int seed ? unchecked(seed + 1) : null });
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         Vector<T> policyOutput;
@@ -742,6 +743,7 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         return NumOps.Divide(totalLoss, NumOps.FromDouble(Math.Max(1, stepCount)));
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -750,6 +752,7 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         // No episode-level state to reset

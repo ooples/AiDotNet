@@ -163,8 +163,10 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private int[]? _originalInputShape;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
+    /// <inheritdoc />
     public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); }
 
     /// <summary>

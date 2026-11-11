@@ -17,6 +17,7 @@ public class Spatter<T> : ImageAugmenterBase<T>
         Intensity = intensity; MinSpotSize = minSpotSize; MaxSpotSize = maxSpotSize; Mode = mode;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -76,6 +77,7 @@ public class Spatter<T> : ImageAugmenterBase<T>
         };
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

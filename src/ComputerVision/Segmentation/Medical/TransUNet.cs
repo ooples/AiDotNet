@@ -169,6 +169,7 @@ public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
         _ => ([64, 128, 256, 768], [3, 4, 9, 3], 256)
     };
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -178,6 +179,7 @@ public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

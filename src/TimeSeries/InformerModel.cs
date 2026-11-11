@@ -379,6 +379,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
             RestoreParameters(allParams, bestSnapshot);
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
@@ -719,6 +720,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         return result;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

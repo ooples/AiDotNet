@@ -242,6 +242,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
     #endregion
 
     #region Forward
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 5;
@@ -436,6 +437,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         return new Tensor<int>(idx, [len]);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
@@ -664,6 +666,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
     #region Abstract Implementation
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "SegMamba" }, { "InChannels", _inChannels }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },

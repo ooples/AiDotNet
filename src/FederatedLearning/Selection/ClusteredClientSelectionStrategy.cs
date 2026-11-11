@@ -34,6 +34,7 @@ public sealed class ClusteredClientSelectionStrategy : ClientSelectionStrategyBa
         _iterations = iterations;
     }
 
+    /// <inheritdoc />
     public override List<int> SelectClients(ClientSelectionRequest request)
     {
         if (request == null)
@@ -126,6 +127,7 @@ public sealed class ClusteredClientSelectionStrategy : ClientSelectionStrategyBa
         return selected;
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "Clustered";
 
     private static List<double[]> InitializeCentroids(List<int> usable, IReadOnlyDictionary<int, double[]> embeddings, int k, Random random)

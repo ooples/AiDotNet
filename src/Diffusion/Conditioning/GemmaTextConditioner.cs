@@ -35,6 +35,7 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
     private readonly int? _numLayersOverride;
     private readonly int? _numHeadsOverride;
 
+    /// <inheritdoc />
     public override bool ProducesPooledOutput => false;
 
     /// <param name="options">The variant and optional transformer dimensions; each unset dimension
@@ -96,6 +97,7 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
         return new GemmaTextConditioner<T>(tokenizer, options: new GemmaTextConditionerOptions { Variant = variant });
     }
 
+    /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
         LayerHelper<T>.CreateDefaultGemmaTextLayers(
             vocabSize: VocabSize,

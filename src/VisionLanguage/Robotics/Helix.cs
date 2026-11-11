@@ -160,17 +160,23 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         }
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
+    /// <inheritdoc />
     public int ActionDimension => _options.ActionDimension;
 
     /// <summary>Default ratio of S1 to S2 invocations (paper §4.1: 200 Hz S1, 7–9 Hz S2 → ~22:1).</summary>
     public int System1ToSystem2Ratio => Math.Max(1, _options.System1ToSystem2Ratio);
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -183,6 +189,7 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         return L2Normalize(hidden);
     }
 
+    /// <inheritdoc />
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
     {
         ThrowIfDisposed();
@@ -418,6 +425,7 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -431,11 +439,14 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
 
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var meta = new ModelMetadata<T>
@@ -468,6 +479,7 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
             throw new ObjectDisposedException(GetType().FullName ?? nameof(Helix<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Ensemble;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _threshold;
@@ -41,11 +41,14 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         BordaCount
     }
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Threshold => _threshold;
     public AggregationMethod Aggregation => _aggregation;
     public double[]? AggregatedScores => _aggregatedScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public EnsembleFS(
@@ -65,12 +68,14 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _aggregation = aggregation;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "EnsembleFS requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -334,12 +339,14 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return bordaScores;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -356,11 +363,13 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("EnsembleFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -373,6 +382,7 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

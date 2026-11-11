@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Similarity;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -28,9 +28,12 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? JaccardScores => _jaccardScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public JaccardSimilaritySelector(
@@ -44,12 +47,14 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _nFeaturesToSelect = nFeaturesToSelect;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "JaccardSimilaritySelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -118,12 +123,14 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
             : sorted[n / 2];
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -140,11 +147,13 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("JaccardSimilaritySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -157,6 +166,7 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

@@ -129,6 +129,7 @@ public partial class GriffinLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 MaxGradientNorm = _options.MaxGradientNorm
             });
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -149,6 +150,7 @@ public partial class GriffinLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     // the count and the distribution from ONE enumeration, so they cannot drift apart. Removed under
     // AIDN082.
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

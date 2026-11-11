@@ -130,6 +130,7 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => _forwardLayer.SupportsTraining || _backwardLayer.SupportsTraining;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

@@ -48,6 +48,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
     {
     }
 
+    /// <inheritdoc />
     public override async Task<IFullModel<T, TInput, TOutput>> SearchAsync(
         TInput inputs,
         TOutput targets,
@@ -124,6 +125,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
         }
     }
 
+    /// <inheritdoc />
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();

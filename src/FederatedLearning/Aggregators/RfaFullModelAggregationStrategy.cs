@@ -51,6 +51,7 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
         _useClientWeights = useClientWeights;
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -138,6 +139,7 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "RFA";
 
     public static RfaFullModelAggregationStrategy<T, TInput, TOutput> FromOptions(RobustAggregationOptions options)

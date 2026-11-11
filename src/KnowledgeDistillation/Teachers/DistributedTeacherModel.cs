@@ -28,6 +28,7 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
     private readonly ITeacherModel<Vector<T>, Vector<T>>[] _workers;
     private readonly AggregationMode _aggregation;
 
+    /// <inheritdoc />
     public override int OutputDimension => _workers[0].OutputDimension;
 
     public DistributedTeacherModel(

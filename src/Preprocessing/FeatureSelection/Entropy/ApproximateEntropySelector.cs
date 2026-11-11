@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Entropy;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _embeddingDimension;
@@ -31,11 +31,14 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int EmbeddingDimension => _embeddingDimension;
     public double Tolerance => _tolerance;
     public double[]? ApEnValues => _apenValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ApproximateEntropySelector(
@@ -57,6 +60,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         _tolerance = tolerance;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -145,6 +149,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -161,11 +166,13 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ApproximateEntropySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -178,6 +185,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

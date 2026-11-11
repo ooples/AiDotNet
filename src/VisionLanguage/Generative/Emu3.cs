@@ -128,12 +128,16 @@ public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
             _options.ImageSize = h;
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -246,6 +250,7 @@ public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -261,11 +266,14 @@ public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
     // This forwarded to a helper the base now calls from its own
     // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -291,6 +299,7 @@ public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
             throw new ObjectDisposedException(GetType().FullName ?? nameof(Emu3<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

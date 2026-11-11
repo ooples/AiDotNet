@@ -262,6 +262,28 @@ public partial class DDPMModel<T> : DiffusionModelBase<T>
     }
 
     /// <summary>
+    /// The U-Net takes one timestep embedding per batch element, so training runs a batch through one forward
+    /// (and on the fused plan) instead of one forward per element. Not with a custom predictor, which takes an int.
+    /// </summary>
+    protected override bool CanPredictFromTimestepTensor =>
+        _customPredictor is null && _unet.SupportsBatchedTimeEmbedding;
+
+    /// <inheritdoc />
+    protected override Tensor<T> PredictTrainingNoise(
+        Tensor<T> noisySample, Tensor<T> timesteps, Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Not an image the U-Net takes: the int path, which PredictNoise answers with zero noise.
+        if (noisySample.Rank != 4 || _unet.InputChannels != noisySample.Shape[1])
+        {
+            var steps = new int[timesteps.Length];
+            for (int b = 0; b < steps.Length; b++) steps[b] = (int)NumOps.ToDouble(timesteps[b]);
+            return PredictTrainingNoise(noisySample, steps, isBatched: true, input, expectedOutput);
+        }
+
+        return _unet.PredictNoiseWithEmbedding(noisySample, _unet.GetTimestepEmbedding(timesteps), null);
+    }
+
+    /// <summary>
     /// Creates a DDPM model with a custom scheduler configuration.
     /// </summary>
     /// <param name="config">The scheduler configuration.</param>

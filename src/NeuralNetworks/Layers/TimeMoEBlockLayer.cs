@@ -176,6 +176,7 @@ public partial class TimeMoEBlockLayer<T> : LayerBase<T>, IShapeContract
 
 
 
+    /// <inheritdoc />
     protected override void EnsureInitialized()
     {
         EnsureSubLayersRegistered();

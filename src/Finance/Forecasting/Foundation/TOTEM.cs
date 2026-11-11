@@ -719,6 +719,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         return quantized;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)
