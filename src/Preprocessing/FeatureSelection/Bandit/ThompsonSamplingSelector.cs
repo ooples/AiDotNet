@@ -243,15 +243,7 @@ public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
                 $"Input data has {data.Columns} columns but selector was fitted on {_nInputFeatures} columns.",
                 nameof(data));
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
