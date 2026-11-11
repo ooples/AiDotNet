@@ -73,13 +73,9 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         _options = options;
         Options = _options;
         _random = Random;
-        _successCounts = new Vector<int>(_options.NumArms);
-        _failureCounts = new Vector<int>(_options.NumArms);
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _successCounts[i] = 1;  // Prior
-            _failureCounts[i] = 1;  // Prior
-        }
+        // Beta(1, 1) prior: one pseudo-success and one pseudo-failure per arm.
+        _successCounts = Vector<int>.CreateDefault(_options.NumArms, 1);
+        _failureCounts = Vector<int>.CreateDefault(_options.NumArms, 1);
     }
 
     /// <inheritdoc />
@@ -179,24 +175,21 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
     public override Dictionary<string, T> GetMetrics()
     {
         var metrics = new Dictionary<string, T>();
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            double mean = (double)_successCounts[i] / (_successCounts[i] + _failureCounts[i]);
-            metrics[$"mean_arm_{i}"] = NumOps.FromDouble(mean);
-            metrics[$"successes_arm_{i}"] = NumOps.FromDouble(_successCounts[i]);
-            metrics[$"failures_arm_{i}"] = NumOps.FromDouble(_failureCounts[i]);
-        }
+        var engine = AiDotNetEngine.Current;
+        var successes = RLTensorOps.CountsAs<T>(_successCounts);
+        var failures = RLTensorOps.CountsAs<T>(_failureCounts);
+        // Posterior mean successes / (successes + failures) per arm.
+        var means = _options.NumArms == 0 ? new Vector<T>(0) : engine.Divide(successes, engine.Add(successes, failures));
+        RLTensorOps.AddIndexedMetrics(metrics, _options.NumArms,
+            ("mean_arm_", means), ("successes_arm_", successes), ("failures_arm_", failures));
         return metrics;
     }
 
     /// <inheritdoc />
     public override void ResetEpisode()
     {
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _successCounts[i] = 1;
-            _failureCounts[i] = 1;
-        }
+        _successCounts.Fill(1);
+        _failureCounts.Fill(1);
     }
 
     /// <inheritdoc />

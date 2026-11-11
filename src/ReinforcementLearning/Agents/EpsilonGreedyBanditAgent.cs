@@ -71,13 +71,8 @@ public partial class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBas
         _options = options;
         Options = _options;
         _random = Random;
-        _qValues = new Vector<T>(_options.NumArms);
+        _qValues = Vector<T>.CreateDefault(_options.NumArms, NumOps.Zero);
         _actionCounts = new Vector<int>(_options.NumArms);
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _qValues[i] = NumOps.Zero;
-            _actionCounts[i] = 0;
-        }
     }
 
     /// <inheritdoc />
@@ -123,22 +118,16 @@ public partial class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBas
     public override Dictionary<string, T> GetMetrics()
     {
         var metrics = new Dictionary<string, T>();
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            metrics[$"q_arm_{i}"] = _qValues[i];
-            metrics[$"count_arm_{i}"] = NumOps.FromDouble(_actionCounts[i]);
-        }
+        RLTensorOps.AddIndexedMetrics(metrics, _options.NumArms,
+            ("q_arm_", _qValues), ("count_arm_", RLTensorOps.CountsAs<T>(_actionCounts)));
         return metrics;
     }
 
     /// <inheritdoc />
     public override void ResetEpisode()
     {
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _qValues[i] = NumOps.Zero;
-            _actionCounts[i] = 0;
-        }
+        _qValues.Fill(NumOps.Zero);
+        _actionCounts.Fill(0);
     }
 
     /// <inheritdoc />

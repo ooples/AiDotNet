@@ -220,6 +220,65 @@ internal static class RLTensorOps
     }
 
     /// <summary>
+    /// Adds per-element metrics named prefix + index (+ suffix), interleaving the series per index
+    /// in the given order, exactly like a per-index loop that writes each series in turn (data
+    /// movement only).
+    /// </summary>
+    internal static void AddIndexedMetrics<T>(Dictionary<string, T> metrics, int count, params (string Prefix, Vector<T> Values)[] series)
+    {
+        if (metrics is null)
+        {
+            throw new ArgumentNullException(nameof(metrics));
+        }
+
+        if (series is null)
+        {
+            throw new ArgumentNullException(nameof(series));
+        }
+
+        var enumerators = new IEnumerator<T>[series.Length];
+        for (int k = 0; k < series.Length; k++)
+        {
+            enumerators[k] = ((IEnumerable<T>)series[k].Values).GetEnumerator();
+        }
+
+        try
+        {
+            for (int index = 0; index < count; index++)
+            {
+                string suffix = index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                for (int k = 0; k < series.Length; k++)
+                {
+                    if (!enumerators[k].MoveNext())
+                    {
+                        throw new ArgumentException($"Metric series '{series[k].Prefix}' has fewer than {count} elements.", nameof(series));
+                    }
+
+                    metrics[series[k].Prefix + suffix] = enumerators[k].Current;
+                }
+            }
+        }
+        finally
+        {
+            foreach (var enumerator in enumerators)
+            {
+                enumerator.Dispose();
+            }
+        }
+    }
+
+    /// <summary>Converts integer counts to T in one bulk pass.</summary>
+    internal static Vector<T> CountsAs<T>(Vector<int> counts)
+    {
+        if (counts is null)
+        {
+            throw new ArgumentNullException(nameof(counts));
+        }
+
+        return counts.Length == 0 ? new Vector<T>(0) : counts.AsTensor().Cast<T>().ToVector();
+    }
+
+    /// <summary>
     /// Writes a vector back into an existing dictionary-backed row, keys 0..Length-1, keeping the
     /// row object (data movement only).
     /// </summary>
