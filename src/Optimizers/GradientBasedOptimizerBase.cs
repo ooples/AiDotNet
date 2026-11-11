@@ -2043,6 +2043,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             var ctx = SynthesizeTapeStepContext(nn, gradient);
             if (ctx is not null)
             {
+                // The vector already carries this optimizer's clip: CalculateGradient clipped it on the configured
+                // side of the regularization. Step must not clip it again - under ClipThenRegularize a second clip
+                // rescaled the L2 term the first had added after it, and the flat path drifted from the model step
+                // (3e-4 after nine Adam steps) once the clip engaged. The legacy UpdateParameters path never clipped.
+                if (ctx.Gradients is Dictionary<Tensor<T>, Tensor<T>> alreadyClipped)
+                    _gradientsClippedAhead = alreadyClipped;
                 Step(ctx);
                 // Step mutates the parameter tensors in place via tape semantics;
                 // since we passed the live parameter-chunk refs, the model is
