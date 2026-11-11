@@ -114,8 +114,9 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
     private class ClassStatistics
     {
         public long Count { get; set; }
-        public Vector<T>? Means { get; set; }
-        public Vector<T>? M2 { get; set; } // For Welford's algorithm
+        // Plain arrays so a saved model keeps master's JSON number arrays
+        public T[]? Means { get; set; }
+        public T[]? M2 { get; set; } // For Welford's algorithm
     }
 
     /// <summary>
@@ -157,8 +158,8 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
         {
             _classStats[classIdx] = new ClassStatistics
             {
-                Means = new Vector<T>(features.Length),
-                M2 = new Vector<T>(features.Length)
+                Means = new T[features.Length],
+                M2 = new T[features.Length]
             };
         }
 
@@ -168,12 +169,13 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
         // Welford's online algorithm for mean and variance:
         // delta = x - mean; mean += delta / n; M2 += delta * (x - mean)
         var engine = Engine;
-        var means = stats.Means ?? throw new InvalidOperationException("Means has not been initialized.");
-        var m2 = stats.M2 ?? throw new InvalidOperationException("M2 has not been initialized.");
+        var means = Vector<T>.Wrap(stats.Means ?? throw new InvalidOperationException("Means has not been initialized."));
+        var m2 = Vector<T>.Wrap(stats.M2 ?? throw new InvalidOperationException("M2 has not been initialized."));
         var delta = engine.Subtract(features, means);
-        stats.Means = engine.Add(means, engine.Divide(delta, NumOps.FromDouble(stats.Count)));
-        var delta2 = engine.Subtract(features, stats.Means);
-        stats.M2 = engine.Add(m2, engine.Multiply(delta, delta2));
+        var updatedMeans = engine.Add(means, engine.Divide(delta, NumOps.FromDouble(stats.Count)));
+        var delta2 = engine.Subtract(features, updatedMeans);
+        stats.Means = updatedMeans.ToArray();
+        stats.M2 = engine.Add(m2, engine.Multiply(delta, delta2)).ToArray();
 
         SamplesSeen++;
     }
@@ -231,7 +233,7 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
 
         var engine = Engine;
         var stats = _classStats[classIdx];
-        var means = stats.Means ?? throw new InvalidOperationException("Means has not been initialized.");
+        var means = Vector<T>.Wrap(stats.Means ?? throw new InvalidOperationException("Means has not been initialized."));
 
         // Log prior: log(P(class))
         T logPrior = NumOps.Log(NumOps.Divide(NumOps.FromDouble(stats.Count), NumOps.FromDouble(SamplesSeen)));
@@ -285,7 +287,7 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
     private Vector<T>? GetVariances(ClassStatistics stats)
     {
         if (stats.M2 is null || stats.Count < 2) return null;
-        return Engine.Divide(stats.M2, NumOps.FromDouble(stats.Count - 1));
+        return Engine.Divide(Vector<T>.Wrap(stats.M2), NumOps.FromDouble(stats.Count - 1));
     }
 
     /// <summary>
@@ -337,7 +339,7 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
             var variances = new Vector<T>(NumFeatures);
             if (_classStats.TryGetValue(c, out var stats))
             {
-                means = stats.Means is null ? means : FitToLength(stats.Means, NumFeatures);
+                means = stats.Means is null ? means : FitToLength(Vector<T>.Wrap(stats.Means), NumFeatures);
                 var classVariances = GetVariances(stats);
                 variances = classVariances is null ? variances : FitToLength(classVariances, NumFeatures);
             }
@@ -366,19 +368,19 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
             {
                 _classStats[c] = new ClassStatistics
                 {
-                    Means = new Vector<T>(NumFeatures),
-                    M2 = new Vector<T>(NumFeatures),
+                    Means = new T[NumFeatures],
+                    M2 = new T[NumFeatures],
                     Count = 2 // Minimum count so Variances is defined (variance = M2 / (Count - 1))
                 };
             }
 
             var stats = _classStats[c];
 
-            stats.Means = parameters.GetSubVector(idx, NumFeatures);
+            stats.Means = parameters.GetSubVector(idx, NumFeatures).ToArray();
             idx += NumFeatures;
 
             // Set M2 based on variance (reverse Welford)
-            stats.M2 = Engine.Multiply(parameters.GetSubVector(idx, NumFeatures), NumOps.FromDouble(stats.Count - 1));
+            stats.M2 = Engine.Multiply(parameters.GetSubVector(idx, NumFeatures), NumOps.FromDouble(stats.Count - 1)).ToArray();
             idx += NumFeatures;
         }
 

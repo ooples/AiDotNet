@@ -207,8 +207,6 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
     /// </summary>
     private int[] _sampleClasses = Array.Empty<int>();
 
-    private Tensor<int> _sampleClassTensor = new Tensor<int>(new[] { 0 });
-
     /// <summary>
     /// Trains the balanced bagging classifier.
     /// </summary>
@@ -227,8 +225,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
 
         NumFeatures = x.Columns;
         ClassLabels = ExtractClassLabels(y);
-        _sampleClassTensor = GetClassIndexTensor(y);
-        _sampleClasses = _sampleClassTensor.ToArray();
+        _sampleClasses = GetClassIndicesFromLabels(y);
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
@@ -325,10 +322,11 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
     {
         // Class distribution, majority class (the first wins ties) and class probabilities
         var engine = Engine;
-        var classCounts = ClassCounts(_sampleClassTensor, sampleIndices);
+        var sampleClasses = new Tensor<int>(_sampleClasses, new[] { _sampleClasses.Length });
+        var classCounts = ClassCounts(sampleClasses, sampleIndices);
         int majorityClass = NumClasses == 0 ? 0 : engine.TensorArgMax(classCounts, 0).ToArray()[0];
         int total = sampleIndices.Length;
-        var classProbs = engine.TensorDivideScalar(classCounts, NumOps.FromDouble(total)).ToArray();
+        var classProbs = engine.TensorDivideScalar(classCounts, NumOps.FromDouble(total)).ToVector();
 
         // Stopping conditions
         bool isPure = engine.TensorCountNonzero(classCounts) <= 1;
@@ -345,7 +343,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
         }
 
         // Find best split
-        var (bestFeature, bestThreshold) = BestGiniSplit(x, _sampleClassTensor, sampleIndices, Enumerable.Range(0, NumFeatures), _minSamplesLeaf);
+        var (bestFeature, bestThreshold) = BestGiniSplit(x, sampleClasses, sampleIndices, Enumerable.Range(0, NumFeatures), _minSamplesLeaf);
 
         // No valid split found
         if (bestFeature < 0)
@@ -516,7 +514,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
             ["FeatureIndex"] = node.FeatureIndex,
             ["Threshold"] = node.Threshold,
             ["PredictedClass"] = node.PredictedClass,
-            ["ClassProbabilities"] = node.ClassProbabilities
+            ["ClassProbabilities"] = node.ClassProbabilities?.ToArray()
         };
 
         if (node.LeftChild is not null)
@@ -536,7 +534,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
                 ? threshold.ToObject<T>() ?? MathHelper.GetNumericOperations<T>().Zero
                 : MathHelper.GetNumericOperations<T>().Zero,
             PredictedClass = jObj["PredictedClass"]?.ToObject<int>() ?? 0,
-            ClassProbabilities = jObj["ClassProbabilities"]?.ToObject<T[]>()
+            ClassProbabilities = jObj["ClassProbabilities"]?.ToObject<T[]>() is T[] probabilities ? Vector<T>.Wrap(probabilities) : null
         };
 
         if (jObj["LeftChild"] is JObject leftObj)
@@ -583,6 +581,6 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
         /// <summary>
         /// Class probabilities for leaf nodes.
         /// </summary>
-        public T[]? ClassProbabilities { get; set; }
+        public Vector<T>? ClassProbabilities { get; set; }
     }
 }
