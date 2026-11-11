@@ -104,33 +104,26 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
                     $"STL-10 label binary {yFile} is truncated: got {labelBytes.Length} bytes, expected {totalImagesInFile}.");
         }
 
-        var featuresData = new T[totalSamples * PixelsPerImage];
+        var engine = AiDotNetEngine.Current;
         var labelsData = new double[totalSamples * NumClasses];
 
         // STL-10 storage: per-image, the bytes are organized as 3 channels of
         // 96×96 each, stored column-major within the channel. We transpose to
         // (h, w, c) row-major HWC for the output tensor.
-        const int Channel = ImageSize * ImageSize;
-        bool normalize = _options.Normalize;
+        // The raw block is [N, c, col, row]; one engine permute gives [N, row, col, c] (HWC).
+        var rawPixels = new double[totalSamples * PixelsPerImage];
+        Array.Copy(xBytes, 0, rawPixels, 0, rawPixels.Length);
+        var features = engine.TensorPermute(
+            new Tensor<double>(rawPixels, new[] { totalSamples, 3, ImageSize, ImageSize }), new[] { 0, 3, 2, 1 })
+            .Contiguous();
+        if (_options.Normalize)
+        {
+            features = engine.TensorDivideScalar(features, 255.0);
+        }
+
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int srcBase = i * PixelsPerImage;
-            int dstBase = i * PixelsPerImage;
-            for (int c = 0; c < 3; c++)
-            {
-                int chSrc = srcBase + c * Channel;
-                for (int col = 0; col < ImageSize; col++)
-                    for (int row = 0; row < ImageSize; row++)
-                    {
-                        int srcIdx = chSrc + col * ImageSize + row;
-                        int dstIdx = dstBase + (row * ImageSize + col) * 3 + c;
-                        byte b = xBytes[srcIdx];
-                        featuresData[dstIdx] = normalize
-                            ? NumOps.FromDouble(b / 255.0)
-                            : NumOps.FromDouble(b);
-                    }
-            }
             if (labelBytes is not null)
             {
                 int label = labelBytes[i] - 1; // STL-10 labels are 1..10
@@ -141,7 +134,7 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             }
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
+        LoadedFeatures = features.Cast<T>();
         LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }

@@ -97,11 +97,21 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
                 // Load annotation mask as single-channel image (class indices per pixel)
                 var annPixels = VisionLoaderHelper.LoadAndResizeImage<T>(annFile, h, w, 1, false);
                 int annToRead = Math.Min(annPixels.Length, labelSize);
-                var numOps = MathHelper.GetNumericOperations<T>();
-                for (int p = 0; p < annToRead; p++)
+                if (annToRead > 0)
                 {
-                    double classVal = numOps.ToDouble(annPixels[p]);
-                    labelsData[lblOff + p] = ((int)classVal) % _options.NumClasses;
+                    // class = trunc(value) % NumClasses with engine ops: trunc(x) = x - fmod(x, 1), and fmod keeps
+                    // the dividend's sign exactly like C#'s integer remainder.
+                    var engine = AiDotNetEngine.Current;
+                    var shape = new[] { annToRead };
+                    var annPrefix = new T[annToRead];
+                    Array.Copy(annPixels, annPrefix, annToRead);
+                    var values = new Tensor<double>(DoubleStorage.ToDoubles(annPrefix), shape);
+                    var ones = new Tensor<double>(shape);
+                    ones.Fill(1.0);
+                    var classCount = new Tensor<double>(shape);
+                    classCount.Fill(_options.NumClasses);
+                    var truncated = engine.TensorSubtract(values, engine.TensorFmod(values, ones));
+                    engine.TensorFmod(truncated, classCount).AsSpan().CopyTo(labelsData.AsSpan(lblOff, annToRead));
                 }
             }
         }

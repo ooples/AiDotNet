@@ -91,10 +91,12 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             int featureOffset = i * 32 * 32 * 3;
             int pixelStart = sampleOffset + 2;
             const int ppi = 32 * 32 * 3;
-            var sampleTensor = new Tensor<T>([3, 32, 32]);
             double scale = _options.Normalize ? 1.0 / 255.0 : 1.0;
-            for (int p = 0; p < ppi; p++)
-                sampleTensor[p] = NumOps.FromDouble(data[pixelStart + p] * scale);
+            var pixelValues = new double[ppi];
+            Array.Copy(data, pixelStart, pixelValues, 0, ppi);
+            var sampleTensor = AiDotNetEngine.Current
+                .TensorMultiplyScalar(new Tensor<double>(pixelValues, new[] { 3, 32, 32 }), scale)
+                .Cast<T>();
 
             if (!nchw)
                 sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);

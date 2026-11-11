@@ -104,10 +104,12 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
             int featureOffset = i * pixelsPerImage;
             // Build CHW tensor from raw bytes, permute to HWC if needed
-            var sampleTensor = new Tensor<T>([3, 32, 32]);
             double scale = _options.Normalize ? 1.0 / 255.0 : 1.0;
-            for (int p = 0; p < pixelsPerImage; p++)
-                sampleTensor[p] = NumOps.FromDouble(sample[1 + p] * scale);
+            var pixelValues = new double[pixelsPerImage];
+            Array.Copy(sample, 1, pixelValues, 0, pixelsPerImage);
+            var sampleTensor = AiDotNetEngine.Current
+                .TensorMultiplyScalar(new Tensor<double>(pixelValues, new[] { 3, 32, 32 }), scale)
+                .Cast<T>();
 
             if (!nchw)
                 sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);

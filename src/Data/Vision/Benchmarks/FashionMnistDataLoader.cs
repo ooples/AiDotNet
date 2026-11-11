@@ -116,22 +116,22 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         _sampleCount = samplesToLoad;
         int pixelsPerImage = rows * cols;
 
-        T[] featuresData;
+        double[] featuresData;
         int[] featureShape;
 
         if (_options.Flatten)
         {
-            featuresData = new T[samplesToLoad * pixelsPerImage];
+            featuresData = new double[samplesToLoad * pixelsPerImage];
             featureShape = new[] { samplesToLoad, pixelsPerImage };
         }
         else if (_options.Layout == ImageTensorLayout.NCHW)
         {
-            featuresData = new T[samplesToLoad * 1 * rows * cols];
+            featuresData = new double[samplesToLoad * 1 * rows * cols];
             featureShape = new[] { samplesToLoad, 1, rows, cols };
         }
         else
         {
-            featuresData = new T[samplesToLoad * rows * cols * 1];
+            featuresData = new double[samplesToLoad * rows * cols * 1];
             featureShape = new[] { samplesToLoad, rows, cols, 1 };
         }
 
@@ -144,12 +144,7 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
             int imageOffset = 16 + i * pixelsPerImage;
             int featureOffset = i * pixelsPerImage;
 
-            for (int p = 0; p < pixelsPerImage; p++)
-            {
-                double value = imageBytes[imageOffset + p];
-                if (_options.Normalize) value /= 255.0;
-                featuresData[featureOffset + p] = NumOps.FromDouble(value);
-            }
+            Array.Copy(imageBytes, imageOffset, featuresData, featureOffset, pixelsPerImage);
 
             int label = labelBytes[8 + i];
             if (label < 0 || label >= 10)
@@ -159,7 +154,14 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
             labelsData[i * 10 + label] = 1.0;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, featureShape);
+        var features = new Tensor<double>(featuresData, featureShape);
+        if (_options.Normalize)
+        {
+            // Raw bytes -> [0, 1] in one engine op
+            features = AiDotNetEngine.Current.TensorDivideScalar(features, 255.0);
+        }
+
+        LoadedFeatures = features.Cast<T>();
         LoadedLabels = new Tensor<double>(labelsData, new[] { samplesToLoad, 10 }).Cast<T>();
         InitializeIndices(samplesToLoad);
     }

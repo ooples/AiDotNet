@@ -85,23 +85,34 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var featuresData = new double[totalSamples * PixelsPerImage];
         var labelsData = new double[totalSamples * NumClasses];
 
+        var engine = AiDotNetEngine.Current;
         int dst = 0;
         foreach (var (X, y) in slabs)
         {
             int n = y.Length;
+            int take = Math.Min(n, totalSamples - dst);
+            if (take > 0)
+            {
+                if (X.GetLength(0) != ImageSize || X.GetLength(1) != ImageSize || X.GetLength(2) != 3 || X.GetLength(3) != n)
+                    throw new InvalidDataException(
+                        $"SVHN image block has shape [{X.GetLength(0)}, {X.GetLength(1)}, {X.GetLength(2)}, {X.GetLength(3)}], " +
+                        $"expected [{ImageSize}, {ImageSize}, 3, {n}].");
+
+                // X is (h, w, c, n) row-major, i.e. [pixel, sample]; one engine transpose gives [sample, pixel]
+                // in (h, w, c) HWC order, and the first `take` samples are copied as one block.
+                var raw = new byte[X.Length];
+                Buffer.BlockCopy(X, 0, raw, 0, X.Length);
+                var values = new double[X.Length];
+                Array.Copy(raw, values, X.Length);
+                var sampleMajor = engine.TensorPermute(new Tensor<double>(values, new[] { PixelsPerImage, n }), new[] { 1, 0 })
+                    .Contiguous();
+                sampleMajor.AsSpan().Slice(0, take * PixelsPerImage)
+                    .CopyTo(featuresData.AsSpan(dst * PixelsPerImage, take * PixelsPerImage));
+            }
+
             for (int i = 0; i < n && dst < totalSamples; i++, dst++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                int dstBase = dst * PixelsPerImage;
-                // X is (h, w, c, n) byte tensor; we transpose to (h, w, c) row-major HWC.
-                for (int h = 0; h < ImageSize; h++)
-                    for (int w = 0; w < ImageSize; w++)
-                        for (int c = 0; c < 3; c++)
-                        {
-                            byte b = X[h, w, c, i];
-                            double v = _options.Normalize ? b / 255.0 : b;
-                            featuresData[dstBase + (h * ImageSize + w) * 3 + c] = v;
-                        }
                 int label1 = y[i];           // 1..10 in source
                 int label = label1 == 10 ? 0 : label1; // map 10 -> 0 (digit 0)
                 if (label >= 0 && label < NumClasses)
@@ -110,7 +121,14 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             if (dst >= totalSamples) break;
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 }).Cast<T>();
+        var features = new Tensor<double>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
+        if (_options.Normalize)
+        {
+            // Raw bytes -> [0, 1] in one engine op (rows never filled stay 0)
+            features = engine.TensorDivideScalar(features, 255.0);
+        }
+
+        LoadedFeatures = features.Cast<T>();
         LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
         await Task.CompletedTask;
