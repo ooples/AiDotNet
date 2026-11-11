@@ -1607,11 +1607,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 inputData.YTrain,
                 LossFunction);
 
+            var steps = ScaledBasis(n, epsilon);
+            var columns = new Matrix<T>(n, n);
+
             for (int i = 0; i < n; i++)
             {
                 // Perturb parameter i
-                var perturbedParams = parameters.Clone();
-                perturbedParams[i] = NumOps.Add(perturbedParams[i], epsilon);
+                var perturbedParams = (Vector<T>)Engine.Add(parameters, steps[i]);
 
                 var perturbedModel = InterfaceGuard.Parameterizable(model).WithParameters(perturbedParams);
 
@@ -1626,13 +1628,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     inputData.YTrain,
                     LossFunction);
 
-                // Hessian column i = (∇f(x + εe_i) - ∇f(x)) / ε
-                for (int j = 0; j < n; j++)
-                {
-                    var diff = NumOps.Subtract(perturbedGradient[j], baseGradient[j]);
-                    hessian[j, i] = NumOps.Divide(diff, epsilon);
-                }
+                // Hessian column i = (∇f(x + εe_i) - ∇f(x)) / ε, stored as row i and transposed below.
+                var column = (Vector<T>)Engine.Divide(Engine.Subtract(perturbedGradient, baseGradient), epsilon);
+                column.AsSpan().Slice(0, n).CopyTo(columns.GetRowSpan(i));
             }
+
+            hessian = Engine.MatrixTranspose(columns);
         }
         else
         {
@@ -1657,55 +1658,58 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         int n = parameters.Length;
-        var hessian = new Matrix<T>(n, n);
         var epsilon = NumOps.FromDouble(1e-5);
 
+        var steps = ScaledBasis(n, epsilon);
+        var denominator = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(4.0), epsilon), epsilon);
+
+        // Upper triangle (diagonal included), one row at a time. Second partial derivative ∂²f/∂xi∂xj by
+        // central differences: f''(x,y) ≈ [f(x+h,y+h) - f(x+h,y-h) - f(x-h,y+h) + f(x-h,y-h)] / (4h²)
+        var upper = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
-            for (int j = i; j < n; j++)  // Symmetric matrix, only compute upper triangle
-            {
-                // Compute second partial derivative ∂²f/∂xi∂xj using finite differences
-                // f''(x,y) ≈ [f(x+h,y+h) - f(x+h,y-h) - f(x-h,y+h) + f(x-h,y-h)] / (4h²)
+            var step = steps[i];
+            var lossPP = FiniteDifferenceLosses(model, inputData, parameters, i, n, j => Engine.Add(step, steps[j]));
+            var lossPM = FiniteDifferenceLosses(model, inputData, parameters, i, n, j => Engine.Subtract(step, steps[j]));
+            var lossMP = FiniteDifferenceLosses(model, inputData, parameters, i, n, j => Engine.Subtract(steps[j], step));
+            var lossMM = FiniteDifferenceLosses(model, inputData, parameters, i, n, j => Engine.Negate(Engine.Add(step, steps[j])));
 
-                var params_pp = parameters.Clone();
-                params_pp[i] = NumOps.Add(params_pp[i], epsilon);
-                params_pp[j] = NumOps.Add(params_pp[j], epsilon);
-                var model_pp = InterfaceGuard.Parameterizable(model).WithParameters(params_pp);
-                var loss_pp = CalculateLoss(model_pp, inputData);
-
-                var params_pm = parameters.Clone();
-                params_pm[i] = NumOps.Add(params_pm[i], epsilon);
-                params_pm[j] = NumOps.Subtract(params_pm[j], epsilon);
-                var model_pm = InterfaceGuard.Parameterizable(model).WithParameters(params_pm);
-                var loss_pm = CalculateLoss(model_pm, inputData);
-
-                var params_mp = parameters.Clone();
-                params_mp[i] = NumOps.Subtract(params_mp[i], epsilon);
-                params_mp[j] = NumOps.Add(params_mp[j], epsilon);
-                var model_mp = InterfaceGuard.Parameterizable(model).WithParameters(params_mp);
-                var loss_mp = CalculateLoss(model_mp, inputData);
-
-                var params_mm = parameters.Clone();
-                params_mm[i] = NumOps.Subtract(params_mm[i], epsilon);
-                params_mm[j] = NumOps.Subtract(params_mm[j], epsilon);
-                var model_mm = InterfaceGuard.Parameterizable(model).WithParameters(params_mm);
-                var loss_mm = CalculateLoss(model_mm, inputData);
-
-                // Compute second derivative
-                var numerator = NumOps.Add(
-                    NumOps.Subtract(loss_pp, loss_pm),
-                    NumOps.Subtract(loss_mm, loss_mp));
-                var denominator = NumOps.Multiply(
-                    NumOps.Multiply(NumOps.FromDouble(4.0), epsilon),
-                    epsilon);
-                var secondDerivative = NumOps.Divide(numerator, denominator);
-
-                hessian[i, j] = secondDerivative;
-                hessian[j, i] = secondDerivative;  // Symmetric
-            }
+            var numerator = Engine.Add(Engine.Subtract(lossPP, lossPM), Engine.Subtract(lossMM, lossMP));
+            var row = (Vector<T>)Engine.Divide(numerator, denominator);
+            row.AsSpan().CopyTo(upper.GetRowSpan(i).Slice(i));
         }
 
-        return hessian;
+        // Mirror the upper triangle: U + U' counts the diagonal twice, so take it off once.
+        return Engine.MatrixSubtract(
+            Engine.MatrixAdd(upper, Engine.MatrixTranspose(upper)),
+            Matrix<T>.CreateDiagonal(upper.Diagonal()));
+    }
+
+    /// <summary>
+    /// Returns epsilon * e_k for every coordinate k: the finite-difference steps along each parameter axis.
+    /// </summary>
+    private Vector<T>[] ScaledBasis(int n, T epsilon)
+    {
+        var scaledIdentity = Engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(n), epsilon);
+        return Enumerable.Range(0, n).Select(k => scaledIdentity.GetRow(k)).ToArray();
+    }
+
+    /// <summary>
+    /// Evaluates the loss at parameters + perturbation(j) for j = start .. n-1.
+    /// </summary>
+    private Vector<T> FiniteDifferenceLosses(
+        IFullModel<T, TInput, TOutput> model,
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        Vector<T> parameters,
+        int start,
+        int n,
+        Func<int, Vector<T>> perturbation)
+    {
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+        return Vector<T>.FromList(Enumerable.Range(start, n - start)
+            .Select(j => CalculateLoss(
+                parameterizable.WithParameters((Vector<T>)Engine.Add(parameters, perturbation(j))), inputData))
+            .ToList());
     }
 
     /// <summary>
@@ -1729,6 +1733,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var xTrain = inputData.XTrain;
         var yTrain = inputData.YTrain;
 
+        var minimumAlpha = NumOps.FromDouble(1e-10);
+
         var initialValue = CalculateLoss(currentSolution, inputData);
         var initialSlope = gradient.DotProduct(direction);
 
@@ -1738,24 +1744,43 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             var newSolution = InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
             var newValue = CalculateLoss(newSolution, inputData);
 
-            if (NumOps.LessThanOrEquals(newValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, alpha), initialSlope))))
+            if (SatisfiesArmijo(newValue, initialValue, c1, alpha, initialSlope))
             {
                 var newGradient = CalculateGradient(newSolution, xTrain, yTrain);
                 var newSlope = newGradient.DotProduct(direction);
 
-                if (NumOps.GreaterThanOrEquals(NumOps.Abs(newSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope))))
+                if (SatisfiesCurvature(newSlope, initialSlope, c2))
                 {
                     return alpha;
                 }
             }
 
-            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(0.5));
-
-            if (NumOps.LessThan(alpha, NumOps.FromDouble(1e-10)))
+            if (!HalveStep(ref alpha, minimumAlpha))
             {
-                return NumOps.FromDouble(1e-10);
+                return minimumAlpha;
             }
         }
+    }
+
+    /// <summary>
+    /// Armijo sufficient decrease: f(x + t·d) ≤ f(x) + c₁·t·slope.
+    /// </summary>
+    private bool SatisfiesArmijo(T trialValue, T initialValue, T c1, T step, T slope)
+        => NumOps.LessThanOrEquals(trialValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, step), slope)));
+
+    /// <summary>
+    /// The (absolute) curvature test used by <see cref="LineSearch"/>: |slope(t)| ≥ c₂·|slope(0)|.
+    /// </summary>
+    private bool SatisfiesCurvature(T trialSlope, T initialSlope, T c2)
+        => NumOps.GreaterThanOrEquals(NumOps.Abs(trialSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope)));
+
+    /// <summary>
+    /// Halves <paramref name="step"/> in place and reports whether it is still at least <paramref name="minimum"/>.
+    /// </summary>
+    private bool HalveStep(ref T step, T minimum)
+    {
+        step = NumOps.Multiply(step, NumOps.FromDouble(0.5));
+        return !NumOps.LessThan(step, minimum);
     }
 
     /// <summary>
@@ -1799,40 +1824,32 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         T originalLoss = context.Loss;
         T c1 = NumOps.FromDouble(1e-4);
 
-        // slope = ∇f(x)ᵀΔ for the FULL step. Armijo scales it by t, so this is computed once.
-        T slope = NumOps.Zero;
-        for (int i = 0; i < gradient.Length && i < proposedParameters.Length; i++)
-        {
-            slope = NumOps.Add(slope, NumOps.Multiply(
-                gradient[i], NumOps.Subtract(proposedParameters[i], originalParameters[i])));
-        }
+        // Δ = proposed - original over the original parameter count, and slope = ∇f(x)ᵀΔ for the FULL step
+        // (over the components both vectors have). Armijo scales it by t, so this is computed once.
+        var proposed = proposedParameters.Length == originalParameters.Length
+            ? proposedParameters
+            : Vector<T>.FromSpan(proposedParameters.AsSpan().Slice(0, originalParameters.Length));
+        var fullStep = (Vector<T>)Engine.Subtract(proposed, originalParameters);
+        int slopeLength = Math.Min(gradient.Length, fullStep.Length);
+        T slope = slopeLength == 0
+            ? NumOps.Zero
+            : Engine.DotProduct(
+                Vector<T>.FromSpan(gradient.AsSpan().Slice(0, slopeLength)),
+                Vector<T>.FromSpan(fullStep.AsSpan().Slice(0, slopeLength)));
 
         T t = NumOps.One;
         T loss = ReevaluateWithGradients(context);
 
-        // One trial vector for the whole search, overwritten per attempt. SetFlatParameters copies the
-        // values out rather than retaining the vector, so reusing it is safe — and at the default bound
-        // that is up to 20 full-length allocations per step avoided, on a path that already pays for a
-        // forward pass per attempt.
-        Vector<T>? trial = null;
-
         for (int attempt = 0; attempt < maxBacktracks; attempt++)
         {
-            T threshold = NumOps.Add(originalLoss, NumOps.Multiply(NumOps.Multiply(c1, t), slope));
-            if (NumOps.LessThanOrEquals(loss, threshold))
+            if (SatisfiesArmijo(loss, originalLoss, c1, t, slope))
             {
                 return true;
             }
 
-            t = NumOps.Divide(t, NumOps.FromDouble(2.0));
-            trial ??= new Vector<T>(originalParameters.Length);
-            for (int i = 0; i < trial.Length; i++)
-            {
-                trial[i] = NumOps.Add(originalParameters[i], NumOps.Multiply(
-                    t, NumOps.Subtract(proposedParameters[i], originalParameters[i])));
-            }
-
-            context.SetFlatParameters(trial);
+            // trial = original + t·Δ. Halving cannot fall below a minimum here, so the bound is zero.
+            HalveStep(ref t, NumOps.Zero);
+            context.SetFlatParameters((Vector<T>)Engine.Add(originalParameters, Engine.Multiply(fullStep, t)));
             loss = ReevaluateWithGradients(context);
         }
 
