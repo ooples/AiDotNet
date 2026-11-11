@@ -30,8 +30,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly Func<Matrix<T>, Matrix<T>>? _func;
     private readonly Func<Matrix<T>, Matrix<T>>? _inverseFunc;
-    private readonly Func<double, double>? _elementFunc;
-    private readonly Func<double, double>? _inverseElementFunc;
+    private readonly Func<T, T>? _elementFunc;
+    private readonly Func<T, T>? _inverseElementFunc;
     private readonly bool _validate;
 
     private int _nInputFeatures;
@@ -73,8 +73,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="validate">If true, validates shapes.</param>
     /// <param name="columnIndices">The column indices to transform, or null for all columns.</param>
     public static FunctionTransformer<T> FromElementFunction(
-        Func<double, double> elementFunc,
-        Func<double, double>? inverseElementFunc = null,
+        Func<T, T> elementFunc,
+        Func<T, T>? inverseElementFunc = null,
         bool validate = true,
         int[]? columnIndices = null)
     {
@@ -83,8 +83,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     // Private constructor for element-wise functions
     private FunctionTransformer(
-        Func<double, double> elementFunc,
-        Func<double, double>? inverseElementFunc,
+        Func<T, T> elementFunc,
+        Func<T, T>? inverseElementFunc,
         bool validate,
         int[]? columnIndices)
         : base(columnIndices)
@@ -176,90 +176,34 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("FunctionTransformer was not configured with an inverse function.");
     }
 
-    private Matrix<T> ApplyElementWise(Matrix<T> data, Func<double, double> func)
+    private Matrix<T> ApplyElementWise(Matrix<T> data, Func<T, T> func)
     {
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    double value = NumOps.ToDouble(data[i, j]);
-                    result[i, j] = NumOps.FromDouble(func(value));
-                }
-                else
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        var engine = Engine;
+        return ApplyToColumns(data, GetColumnsToProcess(data.Columns),
+            subset => engine.TensorMap(Tensor<T>.FromMatrix(subset), func).ToMatrix());
     }
 
     private Matrix<T> ApplyToColumns(Matrix<T> data, int[] columnsToProcess, Func<Matrix<T>, Matrix<T>> func)
     {
-        // Extract columns to process
+        // Extract columns to process and apply the function to the subset
         int numRows = data.Rows;
-        int numColsToProcess = columnsToProcess.Length;
-        var subset = new T[numRows, numColsToProcess];
+        var transformedSubset = func(PreprocessingTensorOps.SelectColumns(data, columnsToProcess));
 
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColsToProcess; j++)
-            {
-                subset[i, j] = data[i, columnsToProcess[j]];
-            }
-        }
-
-        // Apply function to subset
-        var transformedSubset = func(new Matrix<T>(subset));
-
-        // Reconstruct full matrix
-        var result = new T[numRows, data.Columns];
+        // Reconstruct full matrix: processed columns (in ascending column order) take the transformed columns
         var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        var columns = new List<Tensor<T>>(data.Columns);
+        int subsetCol = 0;
+        for (int j = 0; j < data.Columns; j++)
         {
-            int subsetCol = 0;
-            for (int j = 0; j < data.Columns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    result[i, j] = transformedSubset[i, subsetCol++];
-                }
-                else
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
+            columns.Add(processSet.Contains(j)
+                ? PreprocessingTensorOps.Column(transformedSubset, subsetCol++)
+                : PreprocessingTensorOps.Column(data, j));
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
-    private Matrix<T> CopyMatrix(Matrix<T> data)
-    {
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                result[i, j] = data[i, j];
-            }
-        }
-
-        return new Matrix<T>(result);
-    }
+    private static Matrix<T> CopyMatrix(Matrix<T> data) => data.Clone();
 
     /// <summary>
     /// Gets the output feature names after transformation.
