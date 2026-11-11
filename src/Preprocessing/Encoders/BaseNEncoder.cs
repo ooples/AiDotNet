@@ -35,7 +35,7 @@ public class BaseNEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly BaseNHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, int>>? _categoryToIndex;
+    private Dictionary<int, Tensor<T>>? _categoryToIndex;
     private Dictionary<int, int>? _nDigitsPerColumn;
     private int _nInputFeatures;
     private int _nOutputFeatures;
@@ -89,30 +89,18 @@ public class BaseNEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nInputFeatures = data.Columns;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
-        _categoryToIndex = new Dictionary<int, Dictionary<double, int>>();
+        _categoryToIndex = new Dictionary<int, Tensor<T>>();
         _nDigitsPerColumn = new Dictionary<int, int>();
 
         foreach (int col in columnsToProcess)
         {
-            var uniqueValues = new HashSet<double>();
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double value = NumOps.ToDouble(data[i, col]);
-                uniqueValues.Add(value);
-            }
-
-            var sortedValues = uniqueValues.OrderBy(v => v).ToList();
-            var mapping = new Dictionary<double, int>();
-
-            for (int i = 0; i < sortedValues.Count; i++)
-            {
-                mapping[sortedValues[i]] = i;
-            }
-
-            _categoryToIndex[col] = mapping;
+            // Sorted unique values; category i gets index i
+            var column = PreprocessingTensorOps.Column(data, col);
+            var sortedValues = column.Length == 0 ? new Tensor<T>(new[] { 0 }) : PreprocessingTensorOps.SortedUnique(column);
+            _categoryToIndex[col] = sortedValues;
 
             // Calculate number of digits needed
+            int nCategories = sortedValues.Length;
             int nCategories = sortedValues.Count;
             int nDigits = nCategories > 0 ? (int)Math.Ceiling(Math.Log(nCategories + 1) / Math.Log(_base)) : 1;
             nDigits = Math.Max(1, nDigits);
@@ -148,64 +136,36 @@ public class BaseNEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("BaseNEncoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(_nInputFeatures));
+        var blocks = new List<Tensor<T>>(_nInputFeatures);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < _nInputFeatures; j++)
         {
-            int outCol = 0;
-
-            for (int j = 0; j < _nInputFeatures; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (!processSet.Contains(j))
             {
-                if (!processSet.Contains(j))
-                {
-                    result[i, outCol++] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-                int nDigits = _nDigitsPerColumn[j];
-                int index;
-
-                if (_categoryToIndex[j].TryGetValue(categoryValue, out int foundIndex))
-                {
-                    index = foundIndex + 1; // +1 so that 0 can be reserved for unknown
-                }
-                else
-                {
-                    switch (_handleUnknown)
-                    {
-                        case BaseNHandleUnknown.UseZeros:
-                            index = 0;
-                            break;
-                        case BaseNHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            index = 0;
-                            break;
-                    }
-                }
-
-                // Convert to base-N representation
-                var digits = new int[nDigits];
-                int temp = index;
-                for (int d = nDigits - 1; d >= 0; d--)
-                {
-                    digits[d] = temp % _base;
-                    temp /= _base;
-                }
-
-                // Write digits to output
-                for (int d = 0; d < nDigits; d++)
-                {
-                    result[i, outCol++] = NumOps.FromDouble(digits[d]);
-                }
+                blocks.Add(engine.Reshape(column, new[] { numRows, 1 }));
+                continue;
             }
+
+            // index + 1 for known categories so that 0 can be reserved for unknown
+            var index = PreprocessingTensorOps.OrdinalCodes(_categoryToIndex[j], column, out var found);
+            if (_handleUnknown == BaseNHandleUnknown.Error)
+            {
+                var missing = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(found));
+                if (missing.Length > 0)
+                    throw new ArgumentException($"Unknown category value: {column.GetFlat(missing[0])} in column {j}");
+            }
+
+            // Base-N digits, most significant first
+            blocks.Add(PreprocessingTensorOps.DigitBlock<T>(index, _nDigitsPerColumn[j], _base));
         }
 
-        return new Matrix<T>(result);
+        if (blocks.Count == 0)
+            return new Matrix<T>(numRows, 0);
+        return engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
     }
 
     /// <summary>
