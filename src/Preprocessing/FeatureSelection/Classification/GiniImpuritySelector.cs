@@ -26,12 +26,12 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly int _nSplits;
 
-    private double[]? _giniReductions;
+    private Vector<T>? _giniReductions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? GiniReductions => _giniReductions;
+    public Vector<T>? GiniReductions => _giniReductions;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
@@ -63,88 +63,58 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length)); // [k, n]
+        var classTotals = engine.ReduceSum(membership, new[] { 1 }, true);                                       // [k, 1]
+        T count = NumOps.FromDouble(n);
+        T parentGini = NumOps.Subtract(NumOps.One, engine.TensorSumOfSquares(engine.TensorDivideScalar(classTotals, count)));
+
+        // Candidate thresholds min + s * (max - min) / (nSplits + 1) for s = 1..nSplits, one row per split
+        var minVal = PreprocessingTensorOps.ColumnMin(X);
+        var step = engine.TensorDivideScalar(
+            engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), minVal), NumOps.FromDouble(_nSplits + 1));
+        var splitNumbers = new int[_nSplits];
+        for (int s = 0; s < _nSplits; s++)
+            splitNumbers[s] = s + 1;
+        var thresholds = engine.TensorAdd(
+            engine.Reshape(minVal, new[] { 1, p }),
+            engine.TensorOuter(new Tensor<int>(splitNumbers, new[] { _nSplits }).Cast<T>(), step)); // [nSplits, p]
+
+        var parent = PreprocessingTensorOps.Filled(new[] { p }, parentGini);
+        var bestReduction = new Tensor<T>(new[] { p });
+        for (int s = 0; s < _nSplits; s++)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            // Split data: left is x <= threshold
+            var threshold = engine.TensorBroadcastTo(PreprocessingTensorOps.Row(thresholds, s), new[] { n, p });
+            var left = PreprocessingTensorOps.Not(engine.TensorGreaterThan(X, threshold));
+            var leftCounts = engine.TensorMatMul(membership, left);                                  // [k, p]
+            var rightCounts = engine.TensorSubtract(classTotals, leftCounts);
+            var leftN = engine.ReduceSum(leftCounts, new[] { 0 }, false);                           // [p]
+            var rightN = engine.ReduceSum(rightCounts, new[] { 0 }, false);
+
+            // Child Gini values: 1 - sum_c (count_c / size)^2
+            var leftGini = PreprocessingTensorOps.OneMinus(
+                engine.ReduceSum(engine.TensorSquare(engine.TensorDivide(leftCounts, leftN)), new[] { 0 }, false));
+            var rightGini = PreprocessingTensorOps.OneMinus(
+                engine.ReduceSum(engine.TensorSquare(engine.TensorDivide(rightCounts, rightN)), new[] { 0 }, false));
+
+            var weightedChildGini = engine.TensorDivideScalar(
+                engine.TensorAdd(engine.TensorMultiply(leftN, leftGini), engine.TensorMultiply(rightN, rightGini)), count);
+            var reduction = engine.TensorSubtract(parent, weightedChildGini);
+
+            // Splits with an empty side are skipped
+            var valid = engine.TensorMultiply(engine.TensorGreaterThan(leftN, NumOps.Zero), engine.TensorGreaterThan(rightN, NumOps.Zero));
+            bestReduction = engine.TensorMax(bestReduction, engine.TensorWhere(valid, reduction, bestReduction));
         }
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        double parentGini = ComputeGini(y, n, classes);
-
-        _giniReductions = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double bestReduction = 0;
-
-            // Try different split points
-            double minVal = col.Min(), maxVal = col.Max();
-            double step = (maxVal - minVal) / (_nSplits + 1);
-
-            for (int s = 1; s <= _nSplits; s++)
-            {
-                double threshold = minVal + s * step;
-
-                // Split data
-                var leftIndices = new List<int>();
-                var rightIndices = new List<int>();
-
-                for (int i = 0; i < n; i++)
-                {
-                    if (col[i] <= threshold)
-                        leftIndices.Add(i);
-                    else
-                        rightIndices.Add(i);
-                }
-
-                if (leftIndices.Count == 0 || rightIndices.Count == 0) continue;
-
-                // Compute child Gini values
-                var leftY = leftIndices.Select(i => y[i]).ToArray();
-                var rightY = rightIndices.Select(i => y[i]).ToArray();
-
-                double leftGini = ComputeGini(leftY, leftY.Length, classes);
-                double rightGini = ComputeGini(rightY, rightY.Length, classes);
-
-                double weightedChildGini = (leftY.Length * leftGini + rightY.Length * rightGini) / n;
-                double reduction = parentGini - weightedChildGini;
-
-                bestReduction = Math.Max(bestReduction, reduction);
-            }
-
-            _giniReductions[j] = bestReduction;
-        }
+        _giniReductions = bestReduction.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _giniReductions[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bestReduction, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double ComputeGini(int[] labels, int n, List<int> classes)
-    {
-        if (n == 0) return 0;
-
-        double gini = 1.0;
-        foreach (var c in classes)
-        {
-            double p = (double)labels.Count(l => l == c) / n;
-            gini -= p * p;
-        }
-
-        return gini;
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

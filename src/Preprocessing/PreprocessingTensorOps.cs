@@ -200,10 +200,13 @@ internal static class PreprocessingTensorOps
     }
 
     /// <summary>Element-wise logical not of a 0/1 tensor.</summary>
-    public static Tensor<T> Not<T>(Tensor<T> mask)
+    public static Tensor<T> Not<T>(Tensor<T> mask) => OneMinus(mask);
+
+    /// <summary>Element-wise <c>1 - x</c>.</summary>
+    public static Tensor<T> OneMinus<T>(Tensor<T> x)
     {
         var engine = AiDotNetEngine.Current;
-        return engine.TensorAddScalar(engine.TensorNegate(mask), MathHelper.GetNumericOperations<T>().One);
+        return engine.TensorAddScalar(engine.TensorNegate(x), MathHelper.GetNumericOperations<T>().One);
     }
 
     /// <summary>
