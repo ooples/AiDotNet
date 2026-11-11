@@ -16264,9 +16264,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        using var network = CreateNetwork();");
                 sb.AppendLine("        WarmUpForInputSensitivity(network);");
                 sb.AppendLine("        var input = CreateRandomTensor(InputShape, rng);");
+                // Shift each token within the vocabulary the model declares (FastSpeech holds 51 symbols, not 64).
+                sb.AppendLine("        var domain = InputDomainFor(InputShape);");
+                sb.AppendLine("        Xunit.Assert.True(domain.IsIndices, \"A text-to-mel model's input is token indices.\");");
+                sb.AppendLine("        int span = domain.MaxExclusive - domain.MinInclusive;");
+                sb.AppendLine("        int shift = System.Math.Max(1, System.Math.Min(17, span - 1));");
                 sb.AppendLine("        var shiftedInput = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
                 sb.AppendLine("        for (int i = 0; i < input.Length; i++)");
-                sb.AppendLine("            shiftedInput[i] = ((int)input[i] + 17) % 64;");
+                sb.AppendLine("            shiftedInput[i] = domain.MinInclusive + ((int)input[i] - domain.MinInclusive + shift) % span;");
                 sb.AppendLine("        var output1 = network.Predict(input);");
                 sb.AppendLine("        var output2 = network.Predict(shiftedInput);");
                 sb.AppendLine("        double sumSquared = 0;");
