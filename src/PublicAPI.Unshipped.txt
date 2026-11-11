@@ -1159,3 +1159,7 @@ AiDotNet.Interpretability.Explainers.TreeSHAPExplanation<T>.GetSumError() -> T
 AiDotNet.Interpretability.Explainers.DeepSHAPExplanation<T>.GetSumError() -> T
 *REMOVED*AiDotNet.Interpretability.Explainers.ALE2DResult<T>.ALEValues2D.get -> T[,]!
 AiDotNet.Interpretability.Explainers.ALE2DResult<T>.ALEValues2D.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.Interpretability.Explainers.PartialDependence2DResult<T>.PartialDependence2D.get -> T[,]!
+*REMOVED*AiDotNet.Interpretability.Explainers.PartialDependenceResult<T>.IceCurves.get -> System.Collections.Generic.Dictionary<int, T[,]!>?
+AiDotNet.Interpretability.Explainers.PartialDependence2DResult<T>.PartialDependence2D.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Interpretability.Explainers.PartialDependenceResult<T>.IceCurves.get -> System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Matrix<T>!>?

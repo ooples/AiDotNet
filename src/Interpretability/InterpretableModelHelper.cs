@@ -801,10 +801,10 @@ public static class InterpretableModelHelper
             var featureIdx = featureIdxArray[f];
             if (pdpResult.PartialDependence.TryGetValue(featureIdx, out var pdValues))
             {
-                for (int g = 0; g < Math.Min(gridResolution, pdValues.Length); g++)
-                {
-                    pdpMatrix[f, g] = pdValues[g];
-                }
+                // Grid points beyond the explainer's output stay zero
+                var row = new Vector<T>(pdValues.Take(gridResolution)
+                    .Concat(Enumerable.Repeat(MathHelper.GetNumericOperations<T>().Zero, Math.Max(0, gridResolution - pdValues.Length))));
+                AiDotNetEngine.Current.SetRow(pdpMatrix, f, row);
             }
         }
 
@@ -813,19 +813,9 @@ public static class InterpretableModelHelper
         {
             foreach (var featureIdx in featureIdxArray)
             {
-                if (pdpResult.IceCurves.TryGetValue(featureIdx, out var iceArray))
+                if (pdpResult.IceCurves.TryGetValue(featureIdx, out var iceMatrix))
                 {
-                    int numInstances = iceArray.GetLength(0);
-                    int numGridPoints = iceArray.GetLength(1);
-                    var iceMatrix = new Matrix<T>(numInstances, numGridPoints);
-                    for (int i = 0; i < numInstances; i++)
-                    {
-                        for (int g = 0; g < numGridPoints; g++)
-                        {
-                            iceMatrix[i, g] = iceArray[i, g];
-                        }
-                    }
-                    iceCurves.Add(iceMatrix);
+                    iceCurves.Add(iceMatrix.Clone());
                 }
             }
         }
