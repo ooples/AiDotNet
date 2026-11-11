@@ -66,20 +66,20 @@ public class MarginLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T v = predicted[i];
-            T y = actual[i];
+        var v = predicted.AsTensor();
+        var y = actual.AsTensor();
 
-            T term1 = NumOps.Multiply(y, NumOps.Subtract(_mPlus, v));
-            term1 = NumOps.GreaterThan(term1, NumOps.Zero) ? NumOps.Multiply(term1, term1) : NumOps.Zero;
+        // max(0, y * (m+ - v))²
+        var term1 = Engine.TensorMax(Engine.TensorMultiply(y, Engine.ScalarMinusTensor(_mPlus, v)), NumOps.Zero);
+        term1 = Engine.TensorMultiply(term1, term1);
 
-            T term2 = NumOps.Multiply(NumOps.Subtract(NumOps.One, y), NumOps.Subtract(v, _mMinus));
-            term2 = NumOps.GreaterThan(term2, NumOps.Zero) ? NumOps.Multiply(term2, term2) : NumOps.Zero;
+        // max(0, (1 - y) * (v - m-))²
+        var term2 = Engine.TensorMax(
+            Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, y), Engine.TensorSubtractScalar(v, _mMinus)),
+            NumOps.Zero);
+        term2 = Engine.TensorMultiply(term2, term2);
 
-            loss = NumOps.Add(loss, NumOps.Add(term1, NumOps.Multiply(_lambda, term2)));
-        }
+        T loss = Engine.TensorSum(Engine.TensorAdd(term1, Engine.TensorMultiplyScalar(term2, _lambda)));
 
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }
