@@ -62,7 +62,7 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     /// </summary>
     /// <param name="x">The x-coordinates of the data points.</param>
     /// <param name="y">The y-coordinates (values) of the data points.</param>
-    /// <param name="customPeriod">The period of the data. The two-argument constructor uses max(x) - min(x).</param>
+    /// <param name="customPeriod">The period of the data. The two-argument constructor uses (max(x) - min(x)) * N / (N - 1).</param>
     /// <exception cref="ArgumentException">
     /// Thrown when the input vectors have different lengths, when the number of points is even, or when there are
     /// fewer than three points.
@@ -113,7 +113,8 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     }
 
     /// <summary>
-    /// Creates a trigonometric interpolation whose period is the span of the x-values, max(x) - min(x).
+    /// Creates a trigonometric interpolation whose period is N times the sample spacing,
+    /// (max(x) - min(x)) * N / (N - 1), so that for evenly spaced x the interpolant passes through every sample.
     /// </summary>
     /// <param name="x">The x-coordinates of the data points.</param>
     /// <param name="y">The y-coordinates (values) of the data points.</param>
@@ -121,21 +122,31 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     /// Thrown when the input vectors have different lengths, when the number of points is even, or when there are no points.
     /// </exception>
     public TrigonometricInterpolation(Vector<T> x, Vector<T> y)
-        : this(x, y, Span(x))
+        : this(x, y, DefaultPeriod(x))
     {
     }
 
     /// <summary>
-    /// The span of <paramref name="x"/>, max(x) - min(x), used as the default period.
+    /// The default period: N evenly spaced samples cover N spacings of one period, so the period is
+    /// (max(x) - min(x)) * N / (N - 1). The span max(x) - min(x) alone is one spacing short, which breaks the
+    /// discrete orthogonality the coefficients rely on, so the interpolant would miss the samples.
     /// </summary>
-    private static T Span(Vector<T> x)
+    private static T DefaultPeriod(Vector<T> x)
     {
         Guard.NotNull(x);
         if (x.Length == 0)
             throw new ArgumentException("At least one point is required for trigonometric interpolation.", nameof(x));
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        return numOps.Subtract(TensorPrimitivesHelper<T>.Max(x), TensorPrimitivesHelper<T>.Min(x));
+        T span = numOps.Subtract(TensorPrimitivesHelper<T>.Max(x), TensorPrimitivesHelper<T>.Min(x));
+        int count = x.Length;
+        if (count < 2)
+        {
+            // The constructor rejects fewer than three points with its own message.
+            return span;
+        }
+
+        return numOps.Divide(numOps.Multiply(span, numOps.FromDouble(count)), numOps.FromDouble(count - 1));
     }
 
     /// <summary>
@@ -167,18 +178,13 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
             return result;
         }
 
-        // a[0] (already halved to the mean) + sum_{k=1..n} a[k] cos(f_k x) + sum_{k=1..n-1} b[k - 1] sin(f_k x)
+        // a[0] (already halved to the mean) + sum_{k=1..n} (a[k] cos(f_k x) + b[k - 1] sin(f_k x))
         var engine = AiDotNetEngine.Current;
         Tensor<T> angles = engine.TensorMultiplyScalar(engine.TensorSlice(_frequencies, new[] { 1 }, new[] { n }), x);
         Tensor<T> cosineCoefficients = engine.TensorSlice(_a.AsTensor(), new[] { 1 }, new[] { n });
         result = _numOps.Add(result, engine.TensorSum(engine.TensorMultiply(cosineCoefficients, engine.TensorCos(angles))));
 
-        if (n > 1)
-        {
-            Tensor<T> sineCoefficients = engine.TensorSlice(_b.AsTensor(), new[] { 0 }, new[] { n - 1 });
-            Tensor<T> sineAngles = engine.TensorSlice(angles, new[] { 0 }, new[] { n - 1 });
-            result = _numOps.Add(result, engine.TensorSum(engine.TensorMultiply(sineCoefficients, engine.TensorSin(sineAngles))));
-        }
+        result = _numOps.Add(result, engine.TensorSum(engine.TensorMultiply(_b.AsTensor(), engine.TensorSin(angles))));
 
         return result;
     }
@@ -224,16 +230,10 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
         }, 0);
         Vector<T> a = engine.TensorMultiply(cosineProjections, scale).ToVector();
 
-        // b[k - 1] = 2/N * sum_j y[j] sin(f_k x[j]) for k = 1..n-1; the last sine coefficient stays zero
-        if (n <= 1)
-        {
-            return (a, new Vector<T>(n));
-        }
-
-        Tensor<T> sineFrequencies = engine.TensorSlice(_frequencies, new[] { 1 }, new[] { n - 1 });
-        Tensor<T> b = engine.TensorMultiplyScalar(ProjectOnto(engine, sineFrequencies, ys, cosine: false), twoOverN)
-            .Reshape(n - 1);
-        Vector<T> sineCoefficients = engine.TensorConcatenate(new[] { b, Tensor<T>.FromScalar(_numOps.Zero) }, 0).ToVector();
+        // b[k - 1] = 2/N * sum_j y[j] sin(f_k x[j]) for k = 1..n (odd N has no Nyquist term, so every sine is kept)
+        Tensor<T> sineFrequencies = engine.TensorSlice(_frequencies, new[] { 1 }, new[] { n });
+        Vector<T> sineCoefficients = engine.TensorMultiplyScalar(ProjectOnto(engine, sineFrequencies, ys, cosine: false), twoOverN)
+            .Reshape(n).ToVector();
 
         return (a, sineCoefficients);
     }
