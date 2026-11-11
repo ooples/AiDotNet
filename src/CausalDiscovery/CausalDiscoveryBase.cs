@@ -320,6 +320,27 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     }
 
     /// <summary>
+    /// Absolute Pearson correlation of every pair of columns, as
+    /// a per-pair Pearson correlation does: an entry is 0 when either
+    /// column's centered sum of squares is not above 1e-10.
+    /// </summary>
+    /// <returns>A symmetric [d x d] matrix of |corr(i, j)|.</returns>
+    private protected Matrix<T> ComputeAbsoluteCorrelationMatrix(Matrix<T> data)
+    {
+        var centered = CenterColumns(Tensor<T>.FromMatrix(data));
+        var gram = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
+        gram = Engine.TensorAdd(Engine.TensorTriu(gram, 0), Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
+
+        var sumSquares = Engine.TensorDiagonal(gram);
+        var valid = Engine.TensorGreaterThan(sumSquares, NumOps.FromDouble(1e-10));
+        var validPair = Engine.TensorOuter(valid, valid);
+        var denom = Engine.TensorSqrt(Engine.TensorOuter(sumSquares, sumSquares));
+        var safeDenom = Engine.TensorWhere(validPair, denom, Engine.TensorOnesLike(denom));
+        var correlation = Engine.TensorAbs(Engine.TensorDivide(gram, safeDenom));
+        return Engine.TensorWhere(validPair, correlation, Engine.TensorZerosLike(correlation)).ToMatrix();
+    }
+
+    /// <summary>
     /// Gathers the given columns of an [n x d] tensor into an [n x k] tensor.
     /// </summary>
     private protected Tensor<T> SelectColumns(Tensor<T> source, int[] columns)
