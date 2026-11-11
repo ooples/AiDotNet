@@ -68,6 +68,7 @@ public class MarginLoss<T> : LossFunctionBase<T>
 
         var v = predicted.AsTensor();
         var y = actual.AsTensor();
+        ValidateTargets(y, nameof(actual));
 
         // Sabour et al. (2017): y * max(0, m+ - v)² + λ * (1 - y) * max(0, v - m-)². The label weights the squared
         // hinge (it is not squared itself), matching ComputeTapeLoss for fractional labels as well as 0/1 labels.
@@ -82,9 +83,35 @@ public class MarginLoss<T> : LossFunctionBase<T>
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }
 
+    /// <summary>
+    /// Rejects targets outside [0, 1] (including NaN and infinities): the label weights y and 1 - y must be
+    /// nonnegative, or the loss can turn negative and push training the wrong way.
+    /// </summary>
+    private void ValidateTargets(Tensor<T> targets, string paramName)
+    {
+        if (targets.Length == 0)
+        {
+            return;
+        }
+
+        var invalid = Engine.TensorMax(
+            Engine.TensorMax(
+                Engine.TensorLessThan(targets, NumOps.Zero),
+                Engine.TensorGreaterThan(targets, NumOps.One)),
+            Engine.TensorNotEquals(targets, targets));
+        if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
+        {
+            int position = Engine.TensorNonzero(invalid).GetFlat(0);
+            throw new ArgumentOutOfRangeException(paramName,
+                $"Margin loss targets must be finite values in [0, 1]; position {position} is {targets.GetFlat(position)}.");
+        }
+    }
+
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        ValidateTargets(target, nameof(target));
+
         // Margin (capsule): mean(t * max(0, m+ - p)² + λ * (1-t) * max(0, p - m-)²)
         var posDiff = Engine.ScalarMinusTensor(_mPlus, predicted);
         var posHinged = Engine.ReLU(posDiff);

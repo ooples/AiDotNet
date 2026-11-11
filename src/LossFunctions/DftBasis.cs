@@ -25,6 +25,9 @@ internal static class DftBasis<T>
     /// <param name="negateSine">Whether to return -sin, matching the e^(-i 2 pi k n / N) convention.</param>
     internal static (Tensor<T> Cos, Tensor<T> Sin) Build(int frameSize, int bins, bool negateSine)
     {
+        // The bases are constants cached by the callers, so they are always built eagerly: under an ambient graph
+        // trace the intermediates would otherwise be unrealized lazy buffers when they are cast and copied.
+        using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var cos = new Tensor<T>(new[] { frameSize, bins });
