@@ -114,11 +114,12 @@ public class BALD<T> : IActiveLearningStrategy<T>
         {
             var predictions = model.Predict(unlabeledPool);
             // Simulate dropout effect by adding scaled noise
-            mcPredictions.Add(AddDropoutNoise(predictions, _dropoutRate, m));
+            mcPredictions.Add(ActiveLearningEngineOps.AddSimulatedDropout(predictions, _dropoutRate, m));
         }
 
         var numClasses = mcPredictions[0].Length / numSamples;
-        var scores = ComputeBALDScores(mcPredictions, numSamples, numClasses);
+        var mcProbs = ActiveLearningEngineOps.SoftmaxAll(mcPredictions, numSamples, numClasses);
+        var scores = ActiveLearningEngineOps.BaldScores(mcProbs, numSamples).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -133,72 +134,6 @@ public class BALD<T> : IActiveLearningStrategy<T>
             ["MaxScore"] = _lastMaxScore,
             ["MeanScore"] = _lastMeanScore
         };
-    }
-
-    /// <summary>
-    /// Computes BALD scores for all samples: I(y; θ|x) = H(y|x) - E[H(y|x, θ)].
-    /// </summary>
-    private Vector<T> ComputeBALDScores(List<Tensor<T>> mcPredictions, int numSamples, int numClasses)
-    {
-        var engine = AiDotNetEngine.Current;
-        var epsilon = _numOps.FromDouble(1e-10);
-
-        // Step 1: Sum the per-pass probabilities and entropies across MC samples
-        Tensor<T>? probSum = null;
-        Tensor<T>? entropySum = null;
-        foreach (var predictions in mcPredictions)
-        {
-            var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
-            var entropy = ActiveLearningEngineOps.EntropyRows(probs, epsilon);
-            probSum = probSum is null ? probs : engine.TensorAdd(probSum, probs);
-            entropySum = entropySum is null ? entropy : engine.TensorAdd(entropySum, entropy);
-        }
-
-        if (probSum is null || entropySum is null)
-        {
-            return new Vector<T>(numSamples);
-        }
-
-        // Step 2: H(y|x) - entropy of the average prediction
-        var count = _numOps.FromDouble(mcPredictions.Count);
-        var entropyOfAvg = ActiveLearningEngineOps.EntropyRows(engine.TensorDivideScalar(probSum, count), epsilon);
-
-        // Step 3: E[H(y|x, θ)] - average of individual entropies
-        var avgEntropy = engine.TensorDivideScalar(entropySum, count);
-
-        // BALD score = H(y|x) - E[H(y|x, θ)]
-        return engine.TensorSubtract(entropyOfAvg, avgEntropy).ToVector();
-    }
-
-    /// <summary>
-    /// Adds simulated dropout noise to predictions.
-    /// In a full implementation, this would use actual MC Dropout in the model.
-    /// </summary>
-    private Tensor<T> AddDropoutNoise(Tensor<T> predictions, double dropoutRate, int seed)
-    {
-        var random = RandomHelper.CreateSeededRandom(seed);
-        var noisyPredictions = new Tensor<T>(predictions._shape);
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var value = _numOps.ToDouble(predictions[i]);
-
-            // Simulate MC Dropout: randomly zero neurons and scale survivors
-            if (random.NextDouble() < dropoutRate)
-            {
-                // Drop this neuron (set to zero)
-                value = 0.0;
-            }
-            else
-            {
-                // Scale up surviving values to maintain expected value (inverted dropout)
-                value *= 1.0 / (1.0 - dropoutRate);
-            }
-
-            noisyPredictions[i] = _numOps.FromDouble(value);
-        }
-
-        return noisyPredictions;
     }
 
     /// <summary>

@@ -296,6 +296,91 @@ internal static class ActiveLearningEngineOps
     }
 
     /// <summary>
+    /// Softmax probabilities of each prediction tensor, each [numSamples, numClasses].
+    /// </summary>
+    internal static List<Tensor<T>> SoftmaxAll<T>(List<Tensor<T>> predictions, int numSamples, int numClasses)
+    {
+        var probs = new List<Tensor<T>>(predictions.Count);
+        foreach (var prediction in predictions)
+        {
+            probs.Add(SoftmaxRows(prediction, numSamples, numClasses));
+        }
+
+        return probs;
+    }
+
+    /// <summary>
+    /// BALD scores I(y; θ|x) = H(mean_m p_m) - mean_m H(p_m) for every sample, from the per-pass
+    /// [numSamples, numClasses] probabilities of the Monte Carlo forward passes.
+    /// </summary>
+    /// <returns>A [numSamples] tensor.</returns>
+    internal static Tensor<T> BaldScores<T>(List<Tensor<T>> mcProbabilities, int numSamples)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var epsilon = numOps.FromDouble(1e-10);
+
+        // Sum the per-pass probabilities and entropies across MC samples
+        Tensor<T>? probSum = null;
+        Tensor<T>? entropySum = null;
+        foreach (var probs in mcProbabilities)
+        {
+            var entropy = EntropyRows(probs, epsilon);
+            probSum = probSum is null ? probs : engine.TensorAdd(probSum, probs);
+            entropySum = entropySum is null ? entropy : engine.TensorAdd(entropySum, entropy);
+        }
+
+        if (probSum is null || entropySum is null)
+        {
+            return new Tensor<T>(new[] { numSamples });
+        }
+
+        // H(y|x): entropy of the average prediction
+        var count = numOps.FromDouble(mcProbabilities.Count);
+        var entropyOfAvg = EntropyRows(engine.TensorDivideScalar(probSum, count), epsilon);
+
+        // E[H(y|x, θ)]: average of the individual entropies
+        var avgEntropy = engine.TensorDivideScalar(entropySum, count);
+        return engine.TensorSubtract(entropyOfAvg, avgEntropy);
+    }
+
+    /// <summary>
+    /// Simulates MC Dropout on predictions: each value is dropped with probability
+    /// <paramref name="dropoutRate"/> (seeded draw order) and survivors are scaled by 1 / (1 - rate).
+    /// </summary>
+    /// <remarks>
+    /// Kept as a scalar loop until the engine can draw uniforms from a caller-seeded Random in
+    /// row-major order (TensorUniformFromRng in missing-ops); engine RNG ops use a different stream.
+    /// </remarks>
+    internal static Tensor<T> AddSimulatedDropout<T>(Tensor<T> predictions, double dropoutRate, int seed)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var random = RandomHelper.CreateSeededRandom(seed);
+        var noisyPredictions = new Tensor<T>(predictions._shape);
+
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            var value = numOps.ToDouble(predictions[i]);
+
+            // Simulate MC Dropout: randomly zero neurons and scale survivors
+            if (random.NextDouble() < dropoutRate)
+            {
+                // Drop this neuron (set to zero)
+                value = 0.0;
+            }
+            else
+            {
+                // Scale up surviving values to maintain expected value (inverted dropout)
+                value *= 1.0 / (1.0 - dropoutRate);
+            }
+
+            noisyPredictions[i] = numOps.FromDouble(value);
+        }
+
+        return noisyPredictions;
+    }
+
+    /// <summary>
     /// Selects the <paramref name="batchSize"/> highest-scoring indices, ties in index order.
     /// </summary>
     /// <remarks>
