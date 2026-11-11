@@ -259,6 +259,14 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
         return Engine.TensorAdd(afterCross, ffnReshaped);
     }
 
+    /// <summary>
+    /// The block itself keeps nothing between calls; it keeps whatever one of its sublayers keeps. A derived block may
+    /// keep more, so it counts as keeping a result.
+    /// </summary>
+    internal override bool KeepsResultsBetweenCalls =>
+        GetType() != typeof(TransformerDecoderBlock<T>) || new LayerBase<T>?[] { _selfAttention, _norm1, _crossAttention, _norm2, _ffnUp, _ffnDown, _norm3, _selfDropout, _crossDropout, _ffnDropout }
+            .Any(layer => layer is not null && layer.KeepsResultsBetweenCalls);
+
     /// <inheritdoc/>
     public override void SetTrainingMode(bool isTraining)
     {

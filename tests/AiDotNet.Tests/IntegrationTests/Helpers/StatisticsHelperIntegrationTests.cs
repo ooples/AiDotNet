@@ -1107,6 +1107,55 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0);
     }
 
+    [Theory(Timeout = 120000)]
+    [InlineData(0, 0)]
+    [InlineData(0, 4)]
+    [InlineData(4, 0)]
+    [InlineData(1, 1)]
+    [InlineData(7, 13)]
+    [InlineData(40, 25)]
+    public async Task CalculateDynamicTimeWarping_MatchesTheFullMatrixRecurrence(int n, int m)
+    {
+        var rng = new Random(20261109 + n * 31 + m);
+        var a = new Vector<double>(Enumerable.Range(0, n).Select(_ => rng.NextDouble() * 10 - 5).ToArray());
+        var b = new Vector<double>(Enumerable.Range(0, m).Select(_ => rng.NextDouble() * 10 - 5).ToArray());
+
+        // The textbook (n + 1) x (m + 1) recurrence, written out independently.
+        var full = new double[n + 1, m + 1];
+        for (int i = 0; i <= n; i++)
+            for (int j = 0; j <= m; j++)
+                full[i, j] = double.MaxValue;
+        full[0, 0] = 0;
+        for (int i = 1; i <= n; i++)
+            for (int j = 1; j <= m; j++)
+                full[i, j] = Math.Abs(a[i - 1] - b[j - 1]) + Math.Min(full[i - 1, j], Math.Min(full[i, j - 1], full[i - 1, j - 1]));
+
+        Assert.Equal(full[n, m], StatisticsHelper<double>.CalculateDynamicTimeWarping(a, b));
+    }
+
+    [SkippableFact]
+    public void CalculateDynamicTimeWarping_MemoryIsLinearNotQuadratic()
+    {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
+        // PredictionStats runs this over every actual/predicted pair and model serialization forces it, so the old
+        // (n + 1) x (m + 1) matrix made saving a 70,000-row model allocate ~20 GB. 3,000 x 3,000 doubles is 72 MB
+        // under the old allocation; two rows are 48 KB.
+        const int n = 3_000;
+        var a = new Vector<double>(Enumerable.Range(0, n).Select(i => Math.Sin(i * 0.01)).ToArray());
+        var b = new Vector<double>(Enumerable.Range(0, n).Select(i => Math.Cos(i * 0.01)).ToArray());
+
+        StatisticsHelper<double>.CalculateDynamicTimeWarping(a, b); // JIT and statics outside the measurement
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        StatisticsHelper<double>.CalculateDynamicTimeWarping(a, b);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(allocated < 1_000_000, $"DTW allocated {allocated:N0} bytes for {n} x {n}");
+#endif
+    }
+
     #endregion
 
     #region Interval and Confidence Tests

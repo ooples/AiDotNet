@@ -240,5 +240,7 @@ app.Run();
 /// <summary>Restricts MVC controller discovery to just the OpenAI controller.</summary>
 internal sealed class OnlyOpenAiController : ControllerFeatureProvider
 {
-    protected override bool IsController(TypeInfo typeInfo) => typeInfo == typeof(OpenAiController).GetTypeInfo();
+    protected override bool IsController(TypeInfo typeInfo) =>
+        typeInfo == typeof(OpenAiController).GetTypeInfo() ||
+        typeInfo == typeof(AnthropicController).GetTypeInfo();
 }

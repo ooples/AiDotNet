@@ -32,6 +32,9 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 public class FactorVAEObjective<T> : LossFunctionBase<T>
 {
+    /// <summary>It runs the model's KL provider, a callback, which may keep a GPU result between calls; nothing here can check that.</summary>
+    internal override bool KeepsResultsBetweenCalls => true;
+
     private readonly LossFunctionBase<T> _reconstruction;
     private readonly Func<Tensor<T>?> _klProvider;
     private readonly double _klWeight;

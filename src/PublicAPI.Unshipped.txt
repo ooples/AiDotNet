@@ -1131,6 +1131,10 @@ AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossDelaySteps.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.get -> int
 AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.set -> void
 AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+override AiDotNet.NeuralNetworks.NeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.Transformer<T>.ReleasesInferenceIntermediates.get -> bool
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.LayersKeepNoResultsBetweenCalls() -> bool
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.get -> int
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.set -> void
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool

@@ -267,7 +267,7 @@ public sealed class OpenAiController : ControllerBase
             string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
             lastFull = full;
 
-            int stopAt = FindStop(full, stops);
+            int stopAt = StopSequenceMatcher.FindStop(full, stops, out _);
             if (stopAt >= 0)
             {
                 string delta = stopAt > prev.Length ? full.Substring(prev.Length, stopAt - prev.Length) : string.Empty;
@@ -281,7 +281,7 @@ public sealed class OpenAiController : ControllerBase
             // Emit only text that cannot begin a future stop string: hold back the longest suffix of `full`
             // that is a proper prefix of some stop (so "EN" of stop "END" is never streamed before "D"
             // reveals or refutes the match). Streamed content cannot be retracted, hence the buffering.
-            int safeLen = full.Length - PendingStopPrefixLen(full, stops);
+            int safeLen = full.Length - StopSequenceMatcher.PendingPrefixLength(full, stops);
             if (safeLen > prev.Length)
             {
                 string delta = full.Substring(prev.Length, safeLen - prev.Length);
@@ -388,7 +388,7 @@ public sealed class OpenAiController : ControllerBase
             string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
             lastFull = full;
 
-            int stopAt = FindStop(full, stops);
+            int stopAt = StopSequenceMatcher.FindStop(full, stops, out _);
             if (stopAt >= 0)
             {
                 string delta = stopAt > prev.Length ? full.Substring(prev.Length, stopAt - prev.Length) : string.Empty;
@@ -399,9 +399,9 @@ public sealed class OpenAiController : ControllerBase
                 break;
             }
 
-            // Hold back the longest suffix that could still begin a stop string (see PendingStopPrefixLen);
+            // Hold back the longest suffix that could still begin a stop string (see StopSequenceMatcher.PendingPrefixLength);
             // streamed content cannot be retracted, so a partial stop prefix must never be emitted early.
-            int safeLen = full.Length - PendingStopPrefixLen(full, stops);
+            int safeLen = full.Length - StopSequenceMatcher.PendingPrefixLength(full, stops);
             if (safeLen > prev.Length)
             {
                 string delta = full.Substring(prev.Length, safeLen - prev.Length);
@@ -464,7 +464,7 @@ public sealed class OpenAiController : ControllerBase
             return false;
         }
 
-        var info = _modelRepository.GetModelInfo(modelName);
+        var info = CliModelAliasResolver.Resolve(modelName, _modelRepository, _textGeneration, _tokenizers, out modelName);
         if (info == null)
         {
             error = OpenAiError(StatusCodes.Status404NotFound, $"The model '{modelName}' does not exist.", "invalid_request_error", "model_not_found");
@@ -539,7 +539,7 @@ public sealed class OpenAiController : ControllerBase
 
         var genTokens = new List<int>(resp.GeneratedTokens);
         string text = ctx.Tokenizer.Decode(genTokens, skipSpecialTokens: true);
-        int stopAt = FindStop(text, stops);
+        int stopAt = StopSequenceMatcher.FindStop(text, stops, out _);
         bool stopped = stopAt >= 0;
 
         // When a stop string ends generation early, trim the reported token count AND the log-probs to the
@@ -661,7 +661,7 @@ public sealed class OpenAiController : ControllerBase
         {
             ids.Add(tok);
             text = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
-            int stopAt = FindStop(text, stops);
+            int stopAt = StopSequenceMatcher.FindStop(text, stops, out _);
             if (stopAt >= 0)
             {
                 text = text.Substring(0, stopAt);
@@ -682,57 +682,13 @@ public sealed class OpenAiController : ControllerBase
         ServingMetrics.RecordRequest(success: true, promptTokens, genCount, totalSeconds, ttftSeconds, tpot);
     }
 
-    private static int FindStop(string text, IReadOnlyList<string> stops)
-    {
-        if (stops.Count == 0) return -1;
-        int earliest = -1;
-        foreach (var s in stops)
-        {
-            if (string.IsNullOrEmpty(s)) continue;
-            int i = text.IndexOf(s, StringComparison.Ordinal);
-            if (i >= 0 && (earliest < 0 || i < earliest)) earliest = i;
-        }
-        return earliest;
-    }
-
-    // Length of the longest suffix of <paramref name="text"/> that is a PROPER prefix of some stop string —
-    // i.e. text the streamer must hold back because it could still grow into a stop match. Returns 0 when no
-    // trailing partial-stop is pending. A completed stop is handled by <see cref="FindStop"/>, not here.
-    private static int PendingStopPrefixLen(string text, IReadOnlyList<string> stops)
-    {
-        int held = 0;
-        foreach (var s in stops)
-        {
-            if (string.IsNullOrEmpty(s)) continue;
-            int max = Math.Min(s.Length - 1, text.Length);
-            for (int k = max; k > held; k--)
-            {
-                if (string.CompareOrdinal(text, text.Length - k, s, 0, k) == 0)
-                {
-                    held = k;
-                    break;
-                }
-            }
-        }
-        return held;
-    }
-
     private int ResolveEosTokenId(ITokenizer tokenizer)
     {
+        // Check membership first: a lookup of a token the vocabulary lacks returns the unknown-token id,
+        // which would end generation on every unknown token.
         var eos = tokenizer.SpecialTokens?.EosToken;
-        if (string.IsNullOrEmpty(eos)) return -1;
-        try
-        {
-            var ids = tokenizer.ConvertTokensToIds(new List<string> { eos });
-            return ids.Count > 0 ? ids[0] : -1;
-        }
-        catch (Exception ex)
-        {
-            // Log for developer monitoring, then fall back to "no EOS": a tokenizer/config defect must be
-            // visible, not silently swallowed (it changes generation termination behavior).
-            _logger.LogWarning(ex, "Failed to resolve the EOS token id for the tokenizer; generation will rely on max_tokens/stop only.");
-            return -1;
-        }
+        if (string.IsNullOrEmpty(eos) || !tokenizer.Vocabulary.ContainsToken(eos)) return -1;
+        return tokenizer.Vocabulary.GetTokenId(eos);
     }
 
     private static ChatCompletionChunk ContentChunk(string id, long created, string model, string content) => new()

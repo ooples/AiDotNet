@@ -66,6 +66,14 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Each Predict frees its GPU intermediates as it ends, provided no layer keeps a tensor between calls
+    /// (<see cref="NeuralNetworkBase{T}.LayersKeepNoResultsBetweenCalls"/>); otherwise the model keeps the default. A
+    /// derived model may override Predict and keep a result itself, so only this exact type opts in.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates =>
+        GetType() == typeof(FeedForwardNeuralNetwork<T>) && LayersKeepNoResultsBetweenCalls();
+
+    /// <summary>
     /// The optimization algorithm used to update the network's parameters during training.
     /// </summary>
     /// <remarks>
