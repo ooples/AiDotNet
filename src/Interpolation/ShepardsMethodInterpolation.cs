@@ -81,6 +81,8 @@ public partial class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     {
         if (x.Length != y.Length || x.Length != z.Length)
             throw new ArgumentException("Input vectors must have the same length.");
+        if (x.Length == 0)
+            throw new ArgumentException("At least one data point is required for interpolation.", nameof(x));
 
         _x = x;
         _y = y;
@@ -115,11 +117,6 @@ public partial class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// </remarks>
     public T Interpolate(T x, T y)
     {
-        if (_x.Length == 0)
-        {
-            return _numOps.Divide(_numOps.Zero, _numOps.Zero);
-        }
-
         Vector<T> distances = CalculateDistances(x, y);
 
         // Return the exact value if the point coincides with a known point

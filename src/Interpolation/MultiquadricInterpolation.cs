@@ -119,8 +119,8 @@ public partial class MultiquadricInterpolation<T> : I2DInterpolation<T>
 
         // A[i, j] = basis(distance between point i and point j)
         Matrix<T> A = MultiquadricBasis(
-            engine.TensorSubtract(xs.Reshape(n, 1), xs.Reshape(1, n)),
-            engine.TensorSubtract(ys.Reshape(n, 1), ys.Reshape(1, n))).ToMatrix();
+            InterpolationSearch.PairwiseDifferences(xs),
+            InterpolationSearch.PairwiseDifferences(ys)).ToMatrix();
 
         var decomposition = _decomposition ?? new LuDecomposition<T>(A);
         _coefficients = MatrixSolutionHelper.SolveLinearSystem(_z, decomposition);

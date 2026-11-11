@@ -174,8 +174,8 @@ public partial class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
 
         // L = [[K, P], [P^T, 0]] with K[i, j] = phi(|p_i - p_j|) and P = [1, x, y]
         Tensor<T> kernel = DistanceBasis(
-            engine.TensorSubtract(xs.Reshape(n, 1), xs.Reshape(1, n)),
-            engine.TensorSubtract(ys.Reshape(n, 1), ys.Reshape(1, n)));
+            InterpolationSearch.PairwiseDifferences(xs),
+            InterpolationSearch.PairwiseDifferences(ys));
         Tensor<T> polynomial = engine.TensorConcatenate(
             new[] { Tensor<T>.CreateDefault(new[] { n, 1 }, _numOps.One), xs.Reshape(n, 1), ys.Reshape(n, 1) }, 1);
         Tensor<T> top = engine.TensorConcatenate(new[] { kernel, polynomial }, 1);
@@ -242,8 +242,11 @@ public partial class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     private Tensor<T> RadialBasisFunction(Tensor<T> r)
     {
         var engine = AiDotNetEngine.Current;
-        Tensor<T> value = engine.TensorMultiply(engine.TensorMultiply(r, r), engine.TensorLog(r));
+        // Zero distances take log(1) instead of log(0) (a decimal log(0) throws); their basis value is
+        // replaced by 0 below either way
+        Tensor<T> atZero = engine.TensorEquals(r, _numOps.Zero);
+        Tensor<T> value = engine.TensorMultiply(engine.TensorMultiply(r, r), engine.TensorLog(engine.TensorAdd(r, atZero)));
 
-        return engine.TensorWhere(engine.TensorEquals(r, _numOps.Zero), new Tensor<T>(r._shape), value);
+        return engine.TensorWhere(atZero, new Tensor<T>(r._shape), value);
     }
 }

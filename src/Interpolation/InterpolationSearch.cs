@@ -69,10 +69,10 @@ internal static class InterpolationSearch
             return -1;
         }
 
-        var engine = AiDotNetEngine.Current;
-        Tensor<T> matches = engine.TensorEquals(values.AsTensor(), value);
-        int index = engine.TensorArgMax(matches, 0)[0];
-        return MathHelper.GetNumericOperations<T>().Equals(values[index], value) ? index : -1;
+        // Nonzero lists matching positions in ascending order on every engine, so the first match wins
+        Tensor<int> matches = AiDotNetEngine.Current.TensorNonzero(
+            AiDotNetEngine.Current.TensorEquals(values.AsTensor(), value));
+        return matches.Length == 0 ? -1 : matches[0];
     }
 
     /// <summary>
@@ -83,6 +83,21 @@ internal static class InterpolationSearch
         Tensor<int> position = AiDotNetEngine.Current.TensorSearchSorted(
             sortedKnots.AsTensor(), Tensor<T>.FromScalar(value), right);
         return position[0];
+    }
+
+    /// <summary>
+    /// The [n, n] matrix values[i] - values[j], with both operands broadcast explicitly to [n, n] so the
+    /// subtraction is valid under a strict engine shape policy.
+    /// </summary>
+    /// <param name="values">A rank-1 tensor of n values.</param>
+    internal static Tensor<T> PairwiseDifferences<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = values.Length;
+        int[] shape = { n, n };
+        return engine.TensorSubtract(
+            engine.TensorBroadcastTo(values.Reshape(n, 1), shape),
+            engine.TensorBroadcastTo(values.Reshape(1, n), shape));
     }
 
     private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(value, max));

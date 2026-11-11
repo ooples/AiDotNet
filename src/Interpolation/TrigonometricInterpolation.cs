@@ -64,8 +64,10 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     /// <param name="y">The y-coordinates (values) of the data points.</param>
     /// <param name="customPeriod">The period of the data. The two-argument constructor uses max(x) - min(x).</param>
     /// <exception cref="ArgumentException">
-    /// Thrown when the input vectors have different lengths or when the number of points is even.
+    /// Thrown when the input vectors have different lengths, when the number of points is even, or when there are
+    /// fewer than three points.
     /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the period is not positive and finite.</exception>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor takes your data points (x and y coordinates) and prepares the
@@ -91,8 +93,12 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
             throw new ArgumentException("Input vectors must have the same length.");
         if (x.Length % 2 == 0)
             throw new ArgumentException("Number of points must be odd for trigonometric interpolation.");
+        if (x.Length < 3)
+            throw new ArgumentException("At least three points are required for trigonometric interpolation.", nameof(x));
 
         _numOps = MathHelper.GetNumericOperations<T>();
+        if (!_numOps.GreaterThan(customPeriod, _numOps.Zero) || _numOps.IsInfinity(customPeriod))
+            throw new ArgumentOutOfRangeException(nameof(customPeriod), "The period must be positive and finite.");
         _x = x;
         _y = y;
         _period = customPeriod;
@@ -207,8 +213,8 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
         Tensor<T> ys = _y.AsTensor().Reshape(count, 1);
 
         // a[k] = 2/N * sum_j y[j] cos(f_k x[j]) for k = 0..n, one row of angles per frequency
-        Tensor<T> cosines = engine.TensorCos(engine.TensorOuter(_frequencies, _x.AsTensor()));
-        Vector<T> a = engine.TensorMultiplyScalar(engine.TensorMatMul(cosines, ys), twoOverN).Reshape(n + 1).ToVector();
+        Vector<T> a = engine.TensorMultiplyScalar(ProjectOnto(engine, _frequencies, ys, cosine: true), twoOverN)
+            .Reshape(n + 1).ToVector();
 
         // b[k - 1] = 2/N * sum_j y[j] sin(f_k x[j]) for k = 1..n-1; the last sine coefficient stays zero
         if (n <= 1)
@@ -216,12 +222,38 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
             return (a, new Vector<T>(n));
         }
 
-        Tensor<T> sines = engine.TensorSin(engine.TensorOuter(
-            engine.TensorSlice(_frequencies, new[] { 1 }, new[] { n - 1 }),
-            _x.AsTensor()));
-        Tensor<T> b = engine.TensorMultiplyScalar(engine.TensorMatMul(sines, ys), twoOverN).Reshape(n - 1);
+        Tensor<T> sineFrequencies = engine.TensorSlice(_frequencies, new[] { 1 }, new[] { n - 1 });
+        Tensor<T> b = engine.TensorMultiplyScalar(ProjectOnto(engine, sineFrequencies, ys, cosine: false), twoOverN)
+            .Reshape(n - 1);
         Vector<T> sineCoefficients = engine.TensorConcatenate(new[] { b, Tensor<T>.FromScalar(_numOps.Zero) }, 0).ToVector();
 
         return (a, sineCoefficients);
+    }
+
+    /// <summary>
+    /// Upper bound on the elements of one [frequencies, points] angle block in <see cref="ProjectOnto"/>, so the
+    /// coefficient calculation never holds the full [n + 1, N] angle matrix.
+    /// </summary>
+    private const int CoefficientBlockElements = 1 << 20;
+
+    /// <summary>
+    /// sum_j ys[j] * cos(f_k x[j]) (or sin) for every frequency f_k, as a [frequencies, 1] tensor, computed over
+    /// bounded blocks of frequency rows.
+    /// </summary>
+    private Tensor<T> ProjectOnto(IEngine engine, Tensor<T> frequencies, Tensor<T> ys, bool cosine)
+    {
+        int rows = frequencies.Length;
+        int count = _x.Length;
+        int block = Math.Max(1, Math.Min(rows, CoefficientBlockElements / Math.Max(1, count)));
+        var parts = new List<Tensor<T>>();
+        for (int start = 0; start < rows; start += block)
+        {
+            int size = Math.Min(block, rows - start);
+            Tensor<T> angles = engine.TensorOuter(engine.TensorNarrow(frequencies, 0, start, size), _x.AsTensor());
+            Tensor<T> basis = cosine ? engine.TensorCos(angles) : engine.TensorSin(angles);
+            parts.Add(engine.TensorMatMul(basis, ys));
+        }
+
+        return parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
     }
 }
