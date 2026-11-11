@@ -927,8 +927,22 @@ internal static class OptionSensitivityFixtureSetup
             && network is AiDotNet.Interfaces.ISpeechRecognizer<T> convTransformer && option == "MaxTextLength")
         {
             // MaxTextLength bounds the greedy attention decode inside Transcribe; Predict returns encoder logits and
-            // never decodes. An untrained decoder can emit the end token first on a given clip, so the probe decodes four
-            // clips of different tones; any that runs past one token shows the bound.
+            // never decodes. An untrained decoder can emit the end token within a token on every clip (it does at the
+            // fixture seed), which ends the decode before any bound acts, so the probe suppresses the end token's
+            // output bias and decodes four clips of different tones until the bound stops them.
+            var asrNetwork = network switch
+            {
+                AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T> model => model.Network,
+                AiDotNet.SpeechRecognition.ConformerFamily.EBranchformer<T> model => model.Network,
+                AiDotNet.SpeechRecognition.ConformerFamily.Branchformer<T> model => model.Network,
+                _ => null,
+            };
+            if (asrNetwork?.DecoderOutput is AiDotNet.NeuralNetworks.Layers.DenseLayer<T> decoderHead)
+            {
+                var biases = decoderHead.GetBiases();
+                if (asrNetwork.EndToken >= 0 && asrNetwork.EndToken < biases.Length)
+                    biases[asrNetwork.EndToken] = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(-1e4);
+            }
             var transcripts = new[] { 0.13, 0.29, 0.53, 0.87 }.Select(frequency =>
                 convTransformer.Transcribe(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(
                     SineRamp<T>(16000, frequency, 0.4), CosineRamp<T>(16000, 0.37, 0.2)), includeTimestamps: false).Text).ToList();
@@ -1402,16 +1416,6 @@ internal static class OptionSensitivityFixtureSetup
             var target = NearbyTarget(vfiformer.Predict(input), 5.0);
             vfiformer.Train(withFlows, target);
             vfiformer.Train(withFlows, target);
-            return true;
-        }
-        if (network is AiDotNet.Video.Enhancement.PSRT<T> psrtFreeze && option == "FlowFreezeIterations")
-        {
-            // SPyNet joins training after fix_flow iterations; its pyramid needs frames wider than the fixture's 8 x 8
-            // for a flow (and so a flow gradient) to exist. Three 32 x 32 frames of a pattern shifted one pixel a frame.
-            var clip = ShiftedClip<T>(3, 32);
-            var target = NearbyTarget(psrtFreeze.Predict(clip), 5.0);
-            psrtFreeze.Train(clip, target);
-            psrtFreeze.Train(clip, target);
             return true;
         }
         if (network is AiDotNet.Video.FrameInterpolation.XVFI<T> xvfi && option is "LearningRateDecay" or "SmoothnessWeight")
@@ -1979,9 +1983,6 @@ internal static class OptionSensitivityFixtureSetup
             // Over 450,000 iterations the cosine moves the rate by ~1e-11 of itself in the probe's steps; a four-step
             // cosine decays at once and reaches its floor.
             shiftNet.CosineIterations = 4;
-        if (options is AiDotNet.Video.Options.PSRTOptions psrt && option == "FlowFreezeIterations")
-            // SPyNet joins training after 5,000 iterations; from one, the probe's second step trains it.
-            psrt.FlowFreezeIterations = 1;
         if (options is AiDotNet.Video.Options.DualXVSROptions dualX
             && option is "AdversarialLearningRate" or "DiscriminatorLearningRate" or "AdversarialPixelWeight" or "GANWeight")
             // These act in the GAN stage, which follows 650,000 Charbonnier iterations.

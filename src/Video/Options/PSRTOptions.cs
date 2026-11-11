@@ -106,6 +106,10 @@ public class PSRTOptions : NeuralNetworkOptions
     public double SpyNetLearningRateMultiplier { get; set; } = 0.125;
 
     /// <summary>Gets or sets the iterations SPyNet stays frozen at the start of training (5,000).</summary>
+    /// <remarks>The release's recipe (fix_flow). PSRT aligns with flow_warp_avg_patch, which samples nearest-neighbour
+    /// at patch-averaged offsets and so passes no gradient to the flow: SPyNet's weights stay where they start whether
+    /// or not it is frozen, in the release as here.</remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("PSRT's patch alignment samples nearest-neighbour (flow_warp_avg_patch), which passes no gradient to SPyNet, so the release's freeze window cannot change training; kept for recipe fidelity.")]
     public int FlowFreezeIterations { get; set; } = 5000;
 
     /// <summary>Gets or sets the floor of the cosine schedule (1e-7).</summary>
