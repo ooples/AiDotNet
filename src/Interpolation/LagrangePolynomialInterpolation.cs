@@ -81,18 +81,28 @@ public class LagrangePolynomialInterpolation<T> : IInterpolation<T>
         var engine = AiDotNetEngine.Current;
         int n = _x.Length;
         Tensor<T> knots = _x.AsTensor();
-        Tensor<T> diagonal = engine.TensorEye<T>(n);
+        Tensor<T> ys = _y.AsTensor();
+        Tensor<T> offsets = engine.ScalarMinusTensor(x, knots).Reshape(1, n);
 
         // ratios[i, j] = (x - x[j]) / (x[i] - x[j]). The diagonal of x[i] - x[j] is exactly zero, so adding the
         // identity only gives those entries a harmless denominator; they are then set to 1 so the product skips j == i.
-        Tensor<T> differences = InterpolationSearch.PairwiseDifferences(knots);
-        Tensor<T> numerators = engine.TensorBroadcastTo(engine.ScalarMinusTensor(x, knots).Reshape(1, n), new[] { n, n });
-        Tensor<T> ratios = engine.TensorDivide(numerators, engine.TensorAdd(differences, diagonal));
-        ratios = engine.TensorMaskedFill(ratios, engine.TensorEqScalar(diagonal, _numOps.One), _numOps.One);
-
         // term[i] = y[i] * product of ratios[i, j], multiplied left to right as y[i] * r[i, 0] * r[i, 1] * ...
-        Tensor<T> factors = engine.TensorConcatenate(new[] { _y.AsTensor().Reshape(n, 1), ratios }, 1);
-        Tensor<T> terms = engine.TensorSliceAxis(engine.TensorCumProd(factors, 1), 1, n);
+        // Rows are processed in bounded blocks, so no full [n, n] intermediate is held.
+        int blockRows = InterpolationSearch.PairBlockRows(n);
+        var parts = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, n - start);
+            var (differences, diagonal) = InterpolationSearch.DifferenceRows(knots, start, rows);
+            Tensor<T> numerators = engine.TensorBroadcastTo(offsets, new[] { rows, n });
+            Tensor<T> ratios = engine.TensorDivide(numerators, engine.TensorAdd(differences, diagonal));
+            ratios = engine.TensorMaskedFill(ratios, engine.TensorEqScalar(diagonal, _numOps.One), _numOps.One);
+            Tensor<T> yBlock = engine.TensorNarrow(ys, 0, start, rows).Contiguous().Reshape(rows, 1);
+            Tensor<T> factors = engine.TensorConcatenate(new[] { yBlock, ratios }, 1);
+            parts.Add(engine.TensorSliceAxis(engine.TensorCumProd(factors, 1), 1, n));
+        }
+
+        Tensor<T> terms = parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
         return engine.TensorSum(terms);
     }
 }

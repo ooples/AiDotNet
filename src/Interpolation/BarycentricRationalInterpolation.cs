@@ -140,11 +140,17 @@ public partial class BarycentricRationalInterpolation<T> : IInterpolation<T>
 
         // products[i] = product over j != i of (x[i] - x[j]), multiplied in ascending j. The diagonal of the
         // difference matrix is exactly zero, so adding the identity turns it into the multiplicative identity.
-        Tensor<T> differences = engine.TensorAdd(
-            InterpolationSearch.PairwiseDifferences(knots),
-            engine.TensorEye<T>(n));
-        Tensor<T> products = engine.TensorSliceAxis(engine.TensorCumProd(differences, 1), 1, n - 1);
+        // Rows are processed in bounded blocks, so the full [n, n] matrix is never held.
+        int blockRows = InterpolationSearch.PairBlockRows(n);
+        var parts = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, n - start);
+            var (differences, diagonal) = InterpolationSearch.DifferenceRows(knots, start, rows);
+            parts.Add(engine.TensorSliceAxis(engine.TensorCumProd(engine.TensorAdd(differences, diagonal), 1), 1, n - 1));
+        }
 
+        Tensor<T> products = parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
         return engine.TensorReciprocal(products).ToVector();
     }
 }

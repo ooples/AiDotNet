@@ -100,5 +100,35 @@ internal static class InterpolationSearch
             engine.TensorBroadcastTo(values.Reshape(1, n), shape));
     }
 
+    /// <summary>
+    /// Upper bound on the elements of one [rows, n] block from <see cref="DifferenceRows{T}"/>.
+    /// </summary>
+    internal const int PairBlockElements = 1 << 20;
+
+    /// <summary>
+    /// The number of rows per block so a [rows, n] block stays within <see cref="PairBlockElements"/>.
+    /// </summary>
+    internal static int PairBlockRows(int n) => Math.Max(1, Math.Min(n, PairBlockElements / Math.Max(1, n)));
+
+    /// <summary>
+    /// Rows <paramref name="start"/> .. <paramref name="start"/> + <paramref name="rows"/> - 1 of the pairwise
+    /// differences values[i] - values[j], as a [rows, n] block, broadcast explicitly, together with the matching
+    /// block of the identity (1 where j == i) so callers can treat the diagonal without the full [n, n] matrix.
+    /// </summary>
+    internal static (Tensor<T> Differences, Tensor<T> Diagonal) DifferenceRows<T>(Tensor<T> values, int start, int rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = values.Length;
+        int[] shape = { rows, n };
+        Tensor<T> block = engine.TensorNarrow(values, 0, start, rows).Contiguous();
+        Tensor<T> differences = engine.TensorSubtract(
+            engine.TensorBroadcastTo(block.Reshape(rows, 1), shape),
+            engine.TensorBroadcastTo(values.Reshape(1, n), shape));
+        Tensor<T> diagonal = engine.TensorEquals(
+            engine.TensorBroadcastTo(engine.TensorArange<int>(start, start + rows, 1).Reshape(rows, 1), shape),
+            engine.TensorBroadcastTo(engine.TensorArange<int>(0, n, 1).Reshape(1, n), shape)).Cast<T>();
+        return (differences, diagonal);
+    }
+
     private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(value, max));
 }

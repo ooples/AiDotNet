@@ -170,9 +170,10 @@ public partial class BicubicInterpolation<T> : I2DInterpolation<T>
 
         // terms[i * 4 + j] = x^i * y^j, aligned with a[i * 4 + j]
         Tensor<T> powers = CubicPowers();
+        // TensorKron promotes rank-1 inputs to [1, 4] matrices, so the [1, 16] result is reshaped to a's [16]
         Tensor<T> terms = engine.TensorKron(
             engine.TensorPower(engine.Fill(4, x).AsTensor(), powers),
-            engine.TensorPower(engine.Fill(4, y).AsTensor(), powers));
+            engine.TensorPower(engine.Fill(4, y).AsTensor(), powers)).Reshape(16);
 
         return engine.TensorSum(engine.TensorMultiply(a, terms));
     }
