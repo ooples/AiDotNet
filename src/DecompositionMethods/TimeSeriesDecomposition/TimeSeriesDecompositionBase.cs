@@ -190,7 +190,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// symmetric <paramref name="kernel"/>: positions outside the series are dropped and the result is
     /// renormalized by the kernel weight that falls inside the series.
     /// </summary>
-    protected Vector<T> CenteredWindowAverage(Vector<T> data, Tensor<T> kernel)
+    private protected Vector<T> CenteredWindowAverage(Vector<T> data, Tensor<T> kernel)
     {
         int n = data.Length;
         if (n == 0)
@@ -208,7 +208,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     }
 
     /// <summary>Unit weights over the window [-halfWidth, halfWidth] (a plain moving average).</summary>
-    protected Tensor<T> BoxKernel(int halfWidth)
+    private protected Tensor<T> BoxKernel(int halfWidth)
     {
         return Engine.TensorOnesLike(new Tensor<T>(new[] { 2 * halfWidth + 1 }));
     }
@@ -216,7 +216,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// <summary>
     /// Tri-cube weights (1 - |d| / halfWidth)^3 for the offsets d in [-halfWidth, halfWidth].
     /// </summary>
-    protected Tensor<T> TriCubeKernel(int halfWidth)
+    private protected Tensor<T> TriCubeKernel(int halfWidth)
     {
         var offsets = Engine.TensorArange<T>(-halfWidth, halfWidth + 1, 1);
         var scaled = Engine.TensorMultiplyScalar(Engine.TensorAbs(offsets), NumOps.FromDouble(1.0 / halfWidth));
@@ -226,7 +226,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// <summary>
     /// Tri-cube weight function, element-wise: 0 where x &gt; 1, otherwise (1 - x)^3.
     /// </summary>
-    protected Tensor<T> TriCube(Tensor<T> x)
+    private protected Tensor<T> TriCube(Tensor<T> x)
     {
         var oneMinusX = Engine.ScalarMinusTensor(NumOps.One, x);
         var cube = Engine.TensorMultiply(Engine.TensorMultiply(oneMinusX, oneMinusX), oneMinusX);
@@ -237,7 +237,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// Lays the series out row-major in a [ceil(n / period), period] grid (zero padded), so that
     /// column p holds data[p], data[p + period], ...
     /// </summary>
-    protected Tensor<T> ToPhaseGrid(Vector<T> data, int period)
+    private protected Tensor<T> ToPhaseGrid(Vector<T> data, int period)
     {
         int n = data.Length;
         int rows = (n + period - 1) / period;
@@ -246,7 +246,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     }
 
     /// <summary>Mean of data[p], data[p + period], ... for every phase p in [0, period).</summary>
-    protected Vector<T> PhaseMeans(Vector<T> data, int period)
+    private protected Vector<T> PhaseMeans(Vector<T> data, int period)
     {
         int n = data.Length;
         if (n == 0)
@@ -262,7 +262,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     }
 
     /// <summary>Repeats <paramref name="pattern"/> cyclically to length <paramref name="length"/>.</summary>
-    protected Vector<T> RepeatPeriodic(Vector<T> pattern, int length)
+    private protected Vector<T> RepeatPeriodic(Vector<T> pattern, int length)
     {
         int period = pattern.Length;
         if (length == 0 || period == 0)
@@ -279,7 +279,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// Element-wise a / b with IEEE semantics for zero divisors (x / 0 = +-infinity, 0 / 0 = NaN)
     /// instead of the exception TensorDivide raises; shapes must match.
     /// </summary>
-    protected Tensor<T> DivideElementwise(Tensor<T> a, Tensor<T> b)
+    private protected Tensor<T> DivideElementwise(Tensor<T> a, Tensor<T> b)
     {
         var isZero = Engine.TensorEquals(b, NumOps.Zero);
         if (Engine.TensorCountNonzero(isZero) == 0)
@@ -292,13 +292,13 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     }
 
     /// <summary>True when any element of <paramref name="value"/> is below <paramref name="threshold"/>.</summary>
-    protected bool AnyBelow(Tensor<T> value, T threshold)
+    private protected bool AnyBelow(Tensor<T> value, T threshold)
     {
         return Engine.TensorCountNonzero(Engine.TensorLessThan(value, threshold)) > 0;
     }
 
     /// <summary>True when any element of <paramref name="value"/> is above <paramref name="threshold"/>.</summary>
-    protected bool AnyAbove(Tensor<T> value, T threshold)
+    private protected bool AnyAbove(Tensor<T> value, T threshold)
     {
         return Engine.TensorCountNonzero(Engine.TensorGreaterThan(value, threshold)) > 0;
     }
