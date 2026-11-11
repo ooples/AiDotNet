@@ -666,6 +666,40 @@ internal static class CvTensorOps<T>
     public static Tensor<T> FromDoubleArray(double[] values, int[] shape)
         => new Tensor<T>(shape, new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
 
+    /// <summary>Polygon vertices computed in double, as <typeparamref name="T"/> pairs in one bulk conversion.</summary>
+    public static List<(T X, T Y)> PointsFromDoubles(IReadOnlyList<(double X, double Y)> points)
+    {
+        var flat = new double[points.Count * 2];
+        for (int i = 0; i < points.Count; i++)
+        {
+            flat[2 * i] = points[i].X;
+            flat[(2 * i) + 1] = points[i].Y;
+        }
+
+        var converted = Array.ConvertAll(flat, NumOps.FromDouble);
+        var result = new List<(T X, T Y)>(points.Count);
+        for (int i = 0; i < points.Count; i++)
+            result.Add((converted[2 * i], converted[(2 * i) + 1]));
+        return result;
+    }
+
+    /// <summary>Polygon vertices as double pairs, in one bulk conversion.</summary>
+    public static List<(double X, double Y)> PointsToDoubles(IReadOnlyList<(T X, T Y)> points)
+    {
+        var flat = new T[points.Count * 2];
+        for (int i = 0; i < points.Count; i++)
+        {
+            flat[2 * i] = points[i].X;
+            flat[(2 * i) + 1] = points[i].Y;
+        }
+
+        var converted = ToDoubleArray(flat);
+        var result = new List<(double X, double Y)>(points.Count);
+        for (int i = 0; i < points.Count; i++)
+            result.Add((converted[2 * i], converted[(2 * i) + 1]));
+        return result;
+    }
+
     /// <summary>
     /// Overwrites every element of <paramref name="destination"/> (in place, so live parameter tensors keep their
     /// identity) with <paramref name="values"/>, converted in bulk.
