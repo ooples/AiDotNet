@@ -610,6 +610,33 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// 1 where <paramref name="values"/>[i] &gt;= <paramref name="threshold"/>, otherwise 0 (NaN gives 0).
+    /// </summary>
+    /// <param name="values">The values to threshold.</param>
+    /// <param name="threshold">The threshold.</param>
+    /// <returns>The 0/1 indicator vector.</returns>
+    protected Vector<T> AtLeast(Vector<T> values, T threshold)
+    {
+        if (values.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorGreaterEqual(values.AsTensor(), FilledVector(values.Length, threshold).AsTensor()).ToVector();
+    }
+
+    /// <summary>
+    /// The first <paramref name="count"/> columns of <paramref name="x"/> (x itself when it has exactly that many).
+    /// </summary>
+    /// <param name="x">The source matrix.</param>
+    /// <param name="count">The number of leading columns to keep.</param>
+    /// <returns>The leading columns.</returns>
+    protected Matrix<T> LeadingColumns(Matrix<T> x, int count)
+    {
+        return x.Columns == count ? x : SelectColumns(x, Enumerable.Range(0, count).ToArray());
+    }
+
+    /// <summary>
     /// Majority vote: the label with the most votes per row (ties go to the lowest class index).
     /// </summary>
     /// <param name="votes">The [n, NumClasses] vote counts.</param>
