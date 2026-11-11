@@ -97,23 +97,45 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
             blankets[target] = FindMarkovBlanket(X, n, d, target);
         }
 
-        // Build adjacency using Matrix<T>
-        var W = new Matrix<T>(d, d);
+        // Build adjacency: each linked pair carries its mutual information in both directions.
+        var pairs = new List<(int I, int J)>();
+        var mutualInformation = new List<double>();
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
                 if (blankets[i].Contains(j) || blankets[j].Contains(i))
                 {
-                    double mi = ComputeMI(X, i, j, n);
-                    T miT = NumOps.FromDouble(mi);
-                    W[i, j] = miT;
-                    W[j, i] = miT;
+                    pairs.Add((i, j));
+                    mutualInformation.Add(ComputeMI(X, i, j, n));
                 }
             }
         }
 
-        return W;
+        return BuildSymmetricWeights(d, pairs, mutualInformation);
+    }
+
+    /// <summary>
+    /// Scatters one weight per linked pair (i, j) into both [i, j] and [j, i] of a [d x d] matrix.
+    /// </summary>
+    private Matrix<T> BuildSymmetricWeights(int d, List<(int I, int J)> pairs, List<double> weights)
+    {
+        var flat = new Tensor<T>(new[] { d * d });
+        if (pairs.Count == 0)
+            return flat.Reshape(new[] { d, d }).ToMatrix();
+
+        var forward = new int[pairs.Count];
+        var backward = new int[pairs.Count];
+        for (int p = 0; p < pairs.Count; p++)
+        {
+            forward[p] = pairs[p].I * d + pairs[p].J;
+            backward[p] = pairs[p].J * d + pairs[p].I;
+        }
+
+        var values = Vector<double>.FromList(weights).AsTensor().Cast<T>();
+        var scattered = Engine.TensorScatter(flat, new Tensor<int>(forward, new[] { forward.Length }), values, 0);
+        scattered = Engine.TensorScatter(scattered, new Tensor<int>(backward, new[] { backward.Length }), values, 0);
+        return scattered.Reshape(new[] { d, d }).ToMatrix();
     }
 
     private HashSet<int> FindMarkovBlanket(int[,] X, int n, int d, int target)
@@ -157,42 +179,33 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 
     private int[,] DiscretizeData(Matrix<T> data, int n, int d)
     {
+        var x = Tensor<T>.FromMatrix(data);
+        var finite = Engine.TensorIsFinite(x);
+        var shape = new[] { n, d };
+
+        // Column min/max over the finite entries only; NaN/Infinity are skipped.
+        var lowest = Engine.TensorFullLike(x, NumOps.MinValue);
+        var max = Engine.ReduceMax(Engine.TensorWhere(finite, x, lowest), new[] { 0 }, true);
+        var min = Engine.TensorNegate(
+            Engine.ReduceMax(Engine.TensorWhere(finite, Engine.TensorNegate(x), lowest), new[] { 0 }, true));
+        var range = Engine.TensorSubtract(max, min);
+
+        // A column with no finite values (min > max) or a range at most MinDiscretizationRange maps to bin 0.
+        var spread = Engine.TensorGreaterThan(range, NumOps.FromDouble(MinDiscretizationRange));
+        var safeRange = Engine.TensorWhere(spread, range, Engine.TensorOnesLike(range));
+        var scaled = Engine.TensorMultiplyScalar(
+            Engine.TensorDivide(
+                Engine.TensorSubtract(x, Engine.TensorBroadcastTo(min, shape)),
+                Engine.TensorBroadcastTo(safeRange, shape)),
+            NumOps.FromDouble(_nBins - 1));
+        var bins = Engine.TensorMin(Engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
+
+        var zeros = Engine.TensorZerosLike(x);
+        bins = Engine.TensorWhere(finite, bins, zeros);
+        bins = Engine.TensorWhere(Engine.TensorBroadcastTo(spread, shape), bins, zeros);
+
         var result = new int[n, d];
-        for (int j = 0; j < d; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (double.IsNaN(val) || double.IsInfinity(val))
-                    continue;
-                min = Math.Min(min, val);
-                max = Math.Max(max, val);
-            }
-
-            // If all values were NaN/Infinity, assign bin 0
-            if (min > max)
-            {
-                for (int i = 0; i < n; i++)
-                    result[i, j] = 0;
-                continue;
-            }
-
-            double range = max - min;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (double.IsNaN(val) || double.IsInfinity(val))
-                {
-                    result[i, j] = 0;
-                    continue;
-                }
-                result[i, j] = range > MinDiscretizationRange
-                    ? Math.Min((int)((val - min) / range * (_nBins - 1)), _nBins - 1)
-                    : 0;
-            }
-        }
-
+        Buffer.BlockCopy(bins.Cast<int>().ToArray(), 0, result, 0, n * d * sizeof(int));
         return result;
     }
 
