@@ -146,8 +146,8 @@ public class WikiText103DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
             numSequences = _options.MaxSamples.Value;
 
         _sampleCount = numSequences;
-        var featuresData = new T[numSequences * seqLen];
-        var labelsData = new T[numSequences * seqLen];
+        var featuresData = new double[numSequences * seqLen];
+        var labelsData = new double[numSequences * seqLen];
 
         for (int i = 0; i < numSequences; i++)
         {
@@ -164,13 +164,13 @@ public class WikiText103DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                 int inputId = vocabulary.TryGetValue(inputToken, out int iid) ? iid : 1;
                 int targetId = vocabulary.TryGetValue(targetToken, out int tid) ? tid : 1;
 
-                featuresData[featureOffset + j] = NumOps.FromDouble(inputId);
-                labelsData[featureOffset + j] = NumOps.FromDouble(targetId);
+                featuresData[featureOffset + j] = inputId;
+                labelsData[featureOffset + j] = targetId;
             }
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { numSequences, seqLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { numSequences, seqLen });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { numSequences, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { numSequences, seqLen }).Cast<T>();
         InitializeIndices(numSequences);
     }
 

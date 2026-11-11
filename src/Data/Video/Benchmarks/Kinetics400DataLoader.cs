@@ -92,8 +92,8 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
             totalSamples = _options.MaxSamples.Value;
 
         _sampleCount = totalSamples;
-        var featuresData = new T[totalSamples * _featureSize];
-        var labelsData = new T[totalSamples * NumClasses];
+        var featuresData = new double[totalSamples * _featureSize];
+        var labelsData = new double[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -115,15 +115,15 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                 for (int p = 0; p < pixelCount; p++)
                 {
                     double val = _options.Normalize ? imageBytes[p] / 255.0 : imageBytes[p];
-                    featuresData[featureOffset + p] = NumOps.FromDouble(val);
+                    featuresData[featureOffset + p] = val;
                 }
             }
 
-            labelsData[i * NumClasses + classIndex] = NumOps.FromDouble(1.0);
+            labelsData[i * NumClasses + classIndex] = 1.0;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _featureSize });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, _featureSize }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

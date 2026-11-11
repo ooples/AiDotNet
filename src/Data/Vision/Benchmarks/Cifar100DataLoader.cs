@@ -78,7 +78,7 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         _sampleCount = totalSamples;
 
         var featuresData = new T[totalSamples * 32 * 32 * 3];
-        var labelsData = new T[totalSamples * _numClasses];
+        var labelsData = new double[totalSamples * _numClasses];
 
         bool nchw = _options.Layout == ImageTensorLayout.NCHW;
         for (int i = 0; i < totalSamples; i++)
@@ -104,14 +104,14 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             sampleTensor.CopyTo(featuresData.AsSpan(featureOffset, ppi));
 
             if (label >= 0 && label < _numClasses)
-                labelsData[i * _numClasses + label] = NumOps.One;
+                labelsData[i * _numClasses + label] = 1.0;
         }
 
         int[] shape = nchw
             ? new[] { totalSamples, 3, 32, 32 }
             : new[] { totalSamples, 32, 32, 3 };
         LoadedFeatures = new Tensor<T>(featuresData, shape);
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, _numClasses });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, _numClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

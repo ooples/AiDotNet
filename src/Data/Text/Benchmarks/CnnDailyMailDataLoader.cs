@@ -109,8 +109,8 @@ public class CnnDailyMailDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int aLen = _options.MaxArticleLength, sLen = _options.MaxSummaryLength;
-        var featuresData = new T[totalSamples * aLen];
-        var labelsData = new T[totalSamples * sLen];
+        var featuresData = new double[totalSamples * aLen];
+        var labelsData = new double[totalSamples * sLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -118,12 +118,12 @@ public class CnnDailyMailDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
             int[] aTok = TextLoaderHelper.TokenizeAndEncode(articles[i], vocabulary, aLen);
             int[] sTok = TextLoaderHelper.TokenizeAndEncode(summaries[i], vocabulary, sLen);
             int aOff = i * aLen, sOff = i * sLen;
-            for (int j = 0; j < aLen; j++) featuresData[aOff + j] = NumOps.FromDouble(aTok[j]);
-            for (int j = 0; j < sLen; j++) labelsData[sOff + j] = NumOps.FromDouble(sTok[j]);
+            Array.Copy(aTok, 0, featuresData, aOff, aLen);
+            Array.Copy(sTok, 0, labelsData, sOff, sLen);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, aLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, sLen });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, aLen }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, sLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

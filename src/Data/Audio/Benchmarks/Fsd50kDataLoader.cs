@@ -134,7 +134,7 @@ public class Fsd50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
 
         _sampleCount = totalSamples;
         var featuresData = new T[totalSamples * _maxAudioSamples];
-        var labelsData = new T[totalSamples * NumClasses];
+        var labelsData = new double[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -152,12 +152,12 @@ public class Fsd50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             foreach (int idx in labelIndices)
             {
                 if (idx >= 0 && idx < NumClasses)
-                    labelsData[labelOffset + idx] = NumOps.FromDouble(1.0);
+                    labelsData[labelOffset + idx] = 1.0;
             }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _maxAudioSamples });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

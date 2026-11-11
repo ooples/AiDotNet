@@ -190,7 +190,7 @@ public class MnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             featureShape = new[] { samplesToLoad, rows, cols, 1 };
         }
 
-        var labelsData = new T[samplesToLoad * 10];
+        var labelsData = new double[samplesToLoad * 10];
 
         for (int i = 0; i < samplesToLoad; i++)
         {
@@ -220,11 +220,11 @@ public class MnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             }
 
             int labelOffset = i * 10;
-            labelsData[labelOffset + label] = NumOps.One;
+            labelsData[labelOffset + label] = 1.0;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, featureShape);
-        LoadedLabels = new Tensor<T>(labelsData, new[] { samplesToLoad, 10 });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { samplesToLoad, 10 }).Cast<T>();
         InitializeIndices(samplesToLoad);
     }
 

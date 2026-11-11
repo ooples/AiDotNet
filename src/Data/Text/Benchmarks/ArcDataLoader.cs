@@ -138,8 +138,8 @@ public class ArcDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int seqLen = _options.MaxSequenceLength;
-        var featuresData = new T[totalSamples * Choices * seqLen];
-        var labelsData = new T[totalSamples * Choices];
+        var featuresData = new double[totalSamples * Choices * seqLen];
+        var labelsData = new double[totalSamples * Choices];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -148,13 +148,13 @@ public class ArcDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
             {
                 int[] tok = TextLoaderHelper.TokenizeAndEncode(questions[i] + " " + choices[i][c], vocabulary, seqLen);
                 int offset = (i * Choices + c) * seqLen;
-                for (int j = 0; j < seqLen; j++) featuresData[offset + j] = NumOps.FromDouble(tok[j]);
+                Array.Copy(tok, 0, featuresData, offset, seqLen);
             }
-            labelsData[i * Choices + labels[i]] = NumOps.One;
+            labelsData[i * Choices + labels[i]] = 1.0;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, Choices, seqLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, Choices });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, Choices, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, Choices }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

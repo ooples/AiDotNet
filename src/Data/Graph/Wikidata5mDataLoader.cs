@@ -93,8 +93,8 @@ public class Wikidata5mDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         _sampleCount = totalSamples;
         int embDim = _options.EmbeddingDimension;
         int featSize = embDim * 2;
-        var featuresData = new T[totalSamples * featSize];
-        var labelsData = new T[totalSamples];
+        var featuresData = new double[totalSamples * featSize];
+        var labelsData = new double[totalSamples];
         int totalEntities = Math.Max(entityToId.Count, 1);
 
         for (int i = 0; i < totalSamples; i++)
@@ -108,15 +108,15 @@ public class Wikidata5mDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             {
                 double headVal = Math.Sin((head + 1.0) * (d + 1.0) / totalEntities);
                 double tailVal = Math.Sin((tail + 1.0) * (d + 1.0) / totalEntities);
-                featuresData[featOff + d] = NumOps.FromDouble(headVal);
-                featuresData[featOff + embDim + d] = NumOps.FromDouble(tailVal);
+                featuresData[featOff + d] = headVal;
+                featuresData[featOff + embDim + d] = tailVal;
             }
 
-            labelsData[i] = NumOps.FromDouble(relation);
+            labelsData[i] = relation;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featSize });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, featSize }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

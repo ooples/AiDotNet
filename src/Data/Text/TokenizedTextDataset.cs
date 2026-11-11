@@ -118,8 +118,8 @@ public class TokenizedTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     protected override Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         int n = _tokenIds.Length;
-        var featuresData = new T[n * _sequenceLength];
-        var labelsData = new T[n * _numClasses];
+        var featuresData = new double[n * _sequenceLength];
+        var labelsData = new double[n * _numClasses];
 
         for (int i = 0; i < n; i++)
         {
@@ -128,18 +128,18 @@ public class TokenizedTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             int featureOffset = i * _sequenceLength;
             for (int j = 0; j < _sequenceLength; j++)
             {
-                featuresData[featureOffset + j] = NumOps.FromDouble(_tokenIds[i][j]);
+                featuresData[featureOffset + j] = _tokenIds[i][j];
             }
 
             int labelOffset = i * _numClasses;
             if (_labels[i] >= 0 && _labels[i] < _numClasses)
             {
-                labelsData[labelOffset + _labels[i]] = NumOps.One;
+                labelsData[labelOffset + _labels[i]] = 1.0;
             }
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { n, _sequenceLength });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { n, _numClasses });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { n, _sequenceLength }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { n, _numClasses }).Cast<T>();
         InitializeIndices(n);
 
         return Task.CompletedTask;

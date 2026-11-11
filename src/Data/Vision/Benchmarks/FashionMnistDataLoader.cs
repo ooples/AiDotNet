@@ -135,7 +135,7 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
             featureShape = new[] { samplesToLoad, rows, cols, 1 };
         }
 
-        var labelsData = new T[samplesToLoad * 10];
+        var labelsData = new double[samplesToLoad * 10];
 
         for (int i = 0; i < samplesToLoad; i++)
         {
@@ -156,11 +156,11 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
             {
                 throw new InvalidDataException($"Invalid label {label} at sample {i}. Expected 0-9.");
             }
-            labelsData[i * 10 + label] = NumOps.One;
+            labelsData[i * 10 + label] = 1.0;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, featureShape);
-        LoadedLabels = new Tensor<T>(labelsData, new[] { samplesToLoad, 10 });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { samplesToLoad, 10 }).Cast<T>();
         InitializeIndices(samplesToLoad);
     }
 

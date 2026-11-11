@@ -77,7 +77,7 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
         _sampleCount = totalSamples;
         int featDim = _options.FeatureDimension;
-        var featuresData = new T[totalSamples * featDim];
+        var featuresData = new double[totalSamples * featDim];
         var labelsData = new T[totalSamples];
 
         for (int i = 0; i < totalSamples; i++)
@@ -107,7 +107,7 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             if (residueCount > 0)
             {
                 for (int f = 0; f < featDim; f++)
-                    featuresData[featOff + f] = NumOps.FromDouble(aggFeatures[f] / residueCount);
+                    featuresData[featOff + f] = aggFeatures[f] / residueCount;
             }
 
             string proteinId = Path.GetFileNameWithoutExtension(csvFiles[i]);
@@ -116,7 +116,7 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
                 : NumOps.FromDouble(-1); // -1 sentinel: no label found
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featDim });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, featDim }).Cast<T>();
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
         InitializeIndices(totalSamples);
     }

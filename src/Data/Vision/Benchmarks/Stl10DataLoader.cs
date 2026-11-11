@@ -105,7 +105,7 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         }
 
         var featuresData = new T[totalSamples * PixelsPerImage];
-        var labelsData = new T[totalSamples * NumClasses];
+        var labelsData = new double[totalSamples * NumClasses];
 
         // STL-10 storage: per-image, the bytes are organized as 3 channels of
         // 96×96 each, stored column-major within the channel. We transpose to
@@ -137,12 +137,12 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
                 if (label < 0 || label >= NumClasses)
                     throw new InvalidDataException(
                         $"STL-10 {yFile} contains out-of-range label {labelBytes[i]} at index {i}. Expected 1..{NumClasses}.");
-                labelsData[i * NumClasses + label] = NumOps.One;
+                labelsData[i * NumClasses + label] = 1.0;
             }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

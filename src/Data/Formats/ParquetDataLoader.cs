@@ -220,7 +220,7 @@ public class ParquetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             throw new InvalidOperationException("Parquet file contains no rows.");
 
         // Build feature tensor [N, featureCount]
-        var featuresData = new T[_sampleCount * _featureCount];
+        var featuresData = new double[_sampleCount * _featureCount];
 
         for (int i = 0; i < _sampleCount; i++)
         {
@@ -228,23 +228,23 @@ public class ParquetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             for (int c = 0; c < _featureCount; c++)
             {
                 double value = featureColumnData[c][srcRow];
-                featuresData[i * _featureCount + c] = NumOps.FromDouble(value);
+                featuresData[i * _featureCount + c] = value;
             }
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { _sampleCount, _featureCount });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { _sampleCount, _featureCount }).Cast<T>();
 
         // Build label tensor [N, 1] or empty
         if (labelField is not null)
         {
-            var labelsData = new T[_sampleCount];
+            var labelsData = new double[_sampleCount];
             for (int i = 0; i < _sampleCount; i++)
             {
                 int srcRow = selectedIndices[i];
-                labelsData[i] = NumOps.FromDouble(labelColumnData[srcRow]);
+                labelsData[i] = labelColumnData[srcRow];
             }
 
-            LoadedLabels = new Tensor<T>(labelsData, new[] { _sampleCount, 1 });
+            LoadedLabels = new Tensor<double>(labelsData, new[] { _sampleCount, 1 }).Cast<T>();
         }
         else
         {

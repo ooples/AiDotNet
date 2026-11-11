@@ -161,8 +161,8 @@ public class Enwik8DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             numSequences = _options.MaxSamples.Value;
 
         _sampleCount = numSequences;
-        var featuresData = new T[numSequences * seqLen];
-        var labelsData = new T[numSequences * seqLen];
+        var featuresData = new double[numSequences * seqLen];
+        var labelsData = new double[numSequences * seqLen];
 
         // Stream the byte range. We read seqLen+1 bytes per sample (input + 1 for shifted target).
         using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -192,13 +192,13 @@ public class Enwik8DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
                 int t = (srcIdx + 1) < totalRead ? buffer[srcIdx + 1] : 0;
                 if (b >= vocabCap) b = vocabCap - 1;
                 if (t >= vocabCap) t = vocabCap - 1;
-                featuresData[featureOffset + j] = NumOps.FromDouble(b);
-                labelsData[featureOffset + j] = NumOps.FromDouble(t);
+                featuresData[featureOffset + j] = b;
+                labelsData[featureOffset + j] = t;
             }
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { numSequences, seqLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { numSequences, seqLen });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { numSequences, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { numSequences, seqLen }).Cast<T>();
         InitializeIndices(numSequences);
     }
 

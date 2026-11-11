@@ -87,8 +87,8 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
 
         _sampleCount = totalSamples;
         int featureSize = _options.PointsPerSample * _channels;
-        var featuresData = new T[totalSamples * featureSize];
-        var labelsData = new T[totalSamples];
+        var featuresData = new double[totalSamples * featureSize];
+        var labelsData = new double[totalSamples];
 
         // nuScenes typically has 5 floats per point: x, y, z, intensity, ring_index
         int floatsPerPoint = 5;
@@ -140,18 +140,17 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
                     if (byteBase + (c + 1) * bytesPerFloat <= bytes.Length)
                     {
                         float val = BitConverter.ToSingle(bytes, byteBase + c * bytesPerFloat);
-                        featuresData[featureOffset + p * _channels + c] = NumOps.FromDouble(val);
+                        featuresData[featureOffset + p * _channels + c] = val;
                     }
                 }
             }
 
             // Parse label for this frame
-            labelsData[i] = NumOps.FromDouble(
-                ParseNuScenesLabel(labelDir, binFiles[i], useLidarseg));
+            labelsData[i] = ParseNuScenesLabel(labelDir, binFiles[i], useLidarseg);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, featureSize }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

@@ -78,7 +78,7 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         int featureSize = w * h * 3;
         int labelSize = w * h;
         var featuresData = new T[totalSamples * featureSize];
-        var labelsData = new T[totalSamples * labelSize];
+        var labelsData = new double[totalSamples * labelSize];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -101,13 +101,13 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
                 for (int p = 0; p < annToRead; p++)
                 {
                     double classVal = numOps.ToDouble(annPixels[p]);
-                    labelsData[lblOff + p] = numOps.FromDouble(((int)classVal) % _options.NumClasses);
+                    labelsData[lblOff + p] = ((int)classVal) % _options.NumClasses;
                 }
             }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, labelSize });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, labelSize }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

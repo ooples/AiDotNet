@@ -136,7 +136,7 @@ public class PascalVocDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         _sampleCount = totalSamples;
         int pixelsPerImage = _imageSize * _imageSize * 3;
         var featuresData = new T[totalSamples * pixelsPerImage];
-        var labelsData = new T[totalSamples * _maxDetections * 5];
+        var labelsData = new double[totalSamples * _maxDetections * 5];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -186,18 +186,18 @@ public class PascalVocDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
                         double ymax = double.Parse(bndbox.Element("ymax")?.Value ?? "0", System.Globalization.CultureInfo.InvariantCulture) / imgHeight;
 
                         int dOffset = labelOffset + d * 5;
-                        labelsData[dOffset + 0] = NumOps.FromDouble(classIdx);
-                        labelsData[dOffset + 1] = NumOps.FromDouble(xmin);
-                        labelsData[dOffset + 2] = NumOps.FromDouble(ymin);
-                        labelsData[dOffset + 3] = NumOps.FromDouble(xmax - xmin); // width
-                        labelsData[dOffset + 4] = NumOps.FromDouble(ymax - ymin); // height
+                        labelsData[dOffset + 0] = classIdx;
+                        labelsData[dOffset + 1] = xmin;
+                        labelsData[dOffset + 2] = ymin;
+                        labelsData[dOffset + 3] = xmax - xmin; // width
+                        labelsData[dOffset + 4] = ymax - ymin; // height
                     }
                 }
             }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _imageSize, _imageSize, 3 });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, _maxDetections, 5 });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, _maxDetections, 5 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

@@ -103,8 +103,8 @@ public class SemanticKittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
 
         _sampleCount = totalSamples;
         int pps = _options.PointsPerSample;
-        var featuresData = new T[totalSamples * pps * 3];
-        var labelsData = new T[totalSamples * pps];
+        var featuresData = new double[totalSamples * pps * 3];
+        var labelsData = new double[totalSamples * pps];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -126,7 +126,7 @@ public class SemanticKittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
                     if (byteBase + (c + 1) * bytesPerFloat <= bytes.Length)
                     {
                         float val = BitConverter.ToSingle(bytes, byteBase + c * bytesPerFloat);
-                        featuresData[featOff + p * 3 + c] = NumOps.FromDouble(val);
+                        featuresData[featOff + p * 3 + c] = val;
                     }
                 }
             }
@@ -142,13 +142,13 @@ public class SemanticKittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
                 {
                     uint raw = BitConverter.ToUInt32(lblBytes, p * 4);
                     int semanticLabel = (int)(raw & 0xFFFF);
-                    labelsData[lblOff + p] = NumOps.FromDouble(semanticLabel % _options.NumClasses);
+                    labelsData[lblOff + p] = semanticLabel % _options.NumClasses;
                 }
             }
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, pps * 3 });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, pps });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, pps * 3 }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, pps }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

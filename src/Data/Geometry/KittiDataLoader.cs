@@ -73,8 +73,8 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
 
         _sampleCount = totalSamples;
         int featureSize = _options.PointsPerSample * _channels;
-        var featuresData = new T[totalSamples * featureSize];
-        var labelsData = new T[totalSamples];
+        var featuresData = new double[totalSamples * featureSize];
+        var labelsData = new double[totalSamples];
 
         // Find label directory (KITTI uses label_2/ for 3D detection)
         string labelDir = Path.Combine(splitDir, "label_2");
@@ -101,18 +101,18 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
                     if (byteBase + (c + 1) * bytesPerFloat <= bytes.Length)
                     {
                         float val = BitConverter.ToSingle(bytes, byteBase + c * bytesPerFloat);
-                        featuresData[featureOffset + p * _channels + c] = NumOps.FromDouble(val);
+                        featuresData[featureOffset + p * _channels + c] = val;
                     }
                 }
             }
 
             // Parse label file: KITTI format is "type truncated occluded alpha bbox(4) dims(3) loc(3) ry [score]"
             // Extract dominant (most frequent non-DontCare) object class in the frame
-            labelsData[i] = NumOps.FromDouble(ParseKittiLabelFile(labelDir, binFiles[i]));
+            labelsData[i] = ParseKittiLabelFile(labelDir, binFiles[i]);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, featureSize }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

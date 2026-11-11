@@ -113,8 +113,8 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
 
         int totalSamples = interactions.Count;
         _sampleCount = totalSamples;
-        var featuresData = new T[totalSamples * totalFeatDim];
-        var labelsData = new T[totalSamples];
+        var featuresData = new double[totalSamples * totalFeatDim];
+        var labelsData = new double[totalSamples];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -127,36 +127,33 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
             int halfNode = nodeFeatDim / 2;
             if (nodeFeatureMap.TryGetValue(src, out var srcFeats))
             {
-                for (int f = 0; f < Math.Min(halfNode, srcFeats.Length); f++)
-                    featuresData[featOff + f] = NumOps.FromDouble(srcFeats[f]);
+                Array.Copy(srcFeats, 0, featuresData, featOff, Math.Min(halfNode, srcFeats.Length));
             }
             else
             {
                 // Simple hash embedding for unknown nodes
                 for (int f = 0; f < halfNode; f++)
-                    featuresData[featOff + f] = NumOps.FromDouble(Math.Sin((src + 1.0) * (f + 1.0)));
+                    featuresData[featOff + f] = Math.Sin((src + 1.0) * (f + 1.0));
             }
 
             if (nodeFeatureMap.TryGetValue(dst, out var dstFeats))
             {
-                for (int f = 0; f < Math.Min(halfNode, dstFeats.Length); f++)
-                    featuresData[featOff + halfNode + f] = NumOps.FromDouble(dstFeats[f]);
+                Array.Copy(dstFeats, 0, featuresData, featOff + halfNode, Math.Min(halfNode, dstFeats.Length));
             }
             else
             {
                 for (int f = 0; f < halfNode; f++)
-                    featuresData[featOff + halfNode + f] = NumOps.FromDouble(Math.Sin((dst + 1.0) * (f + 1.0)));
+                    featuresData[featOff + halfNode + f] = Math.Sin((dst + 1.0) * (f + 1.0));
             }
 
             // Edge features
-            for (int f = 0; f < edgeFeatDim; f++)
-                featuresData[featOff + nodeFeatDim + f] = NumOps.FromDouble(edgeFeats[f]);
+            Array.Copy(edgeFeats, 0, featuresData, featOff + nodeFeatDim, edgeFeatDim);
 
-            labelsData[i] = NumOps.FromDouble(label);
+            labelsData[i] = label;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, totalFeatDim });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, totalFeatDim }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

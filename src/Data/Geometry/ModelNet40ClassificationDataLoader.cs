@@ -72,7 +72,7 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
 
         int featureDim = _options.IncludeNormals ? 6 : 3;
         var featuresData = new T[samples.Count * _options.PointsPerSample * featureDim];
-        var labelsData = new T[samples.Count * _classNames.Count];
+        var labelsData = new double[samples.Count * _classNames.Count];
 
         var random = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
@@ -89,11 +89,11 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
             FillSampleFeatures(rows, indices, featureDim, sampleIndex, featuresData);
 
             int labelOffset = sampleIndex * _classNames.Count;
-            labelsData[labelOffset + sample.ClassIndex] = NumOps.One;
+            labelsData[labelOffset + sample.ClassIndex] = 1.0;
         }
 
         var features = new Tensor<T>(featuresData, new[] { samples.Count, _options.PointsPerSample, featureDim });
-        var labels = new Tensor<T>(labelsData, new[] { samples.Count, _classNames.Count });
+        var labels = new Tensor<double>(labelsData, new[] { samples.Count, _classNames.Count }).Cast<T>();
         SetLoadedData(features, labels);
     }
 

@@ -146,7 +146,7 @@ public class OpenImagesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         _sampleCount = totalSamples;
         int pixelsPerImage = _imageSize * _imageSize * 3;
         var featuresData = new T[totalSamples * pixelsPerImage];
-        var labelsData = new T[totalSamples * _maxDetections * 5];
+        var labelsData = new double[totalSamples * _maxDetections * 5];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -170,16 +170,16 @@ public class OpenImagesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             {
                 var (classIdx, xmin, ymin, w, h) = detections[d];
                 int dOffset = labelOffset + d * 5;
-                labelsData[dOffset + 0] = NumOps.FromDouble(classIdx);
-                labelsData[dOffset + 1] = NumOps.FromDouble(xmin);
-                labelsData[dOffset + 2] = NumOps.FromDouble(ymin);
-                labelsData[dOffset + 3] = NumOps.FromDouble(w);
-                labelsData[dOffset + 4] = NumOps.FromDouble(h);
+                labelsData[dOffset + 0] = classIdx;
+                labelsData[dOffset + 1] = xmin;
+                labelsData[dOffset + 2] = ymin;
+                labelsData[dOffset + 3] = w;
+                labelsData[dOffset + 4] = h;
             }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _imageSize, _imageSize, 3 });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, _maxDetections, 5 });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, _maxDetections, 5 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

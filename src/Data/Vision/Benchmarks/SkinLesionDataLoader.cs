@@ -114,7 +114,7 @@ public class SkinLesionDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         _sampleCount = totalSamples;
         int pixelsPerImage = _imageSize * _imageSize * 3;
         var featuresData = new T[totalSamples * pixelsPerImage];
-        var labelsData = new T[totalSamples * NumClasses];
+        var labelsData = new double[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -132,14 +132,11 @@ public class SkinLesionDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             }
 
             int labelOffset = i * NumClasses;
-            for (int j = 0; j < NumClasses; j++)
-            {
-                labelsData[labelOffset + j] = NumOps.FromDouble(labels[j]);
-            }
+            Array.Copy(labels, 0, labelsData, labelOffset, NumClasses);
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _imageSize, _imageSize, 3 });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

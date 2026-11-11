@@ -82,8 +82,8 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             totalSamples = _options.MaxSamples.Value;
         _sampleCount = totalSamples;
 
-        var featuresData = new T[totalSamples * PixelsPerImage];
-        var labelsData = new T[totalSamples * NumClasses];
+        var featuresData = new double[totalSamples * PixelsPerImage];
+        var labelsData = new double[totalSamples * NumClasses];
 
         int dst = 0;
         foreach (var (X, y) in slabs)
@@ -100,18 +100,18 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                         {
                             byte b = X[h, w, c, i];
                             double v = _options.Normalize ? b / 255.0 : b;
-                            featuresData[dstBase + (h * ImageSize + w) * 3 + c] = NumOps.FromDouble(v);
+                            featuresData[dstBase + (h * ImageSize + w) * 3 + c] = v;
                         }
                 int label1 = y[i];           // 1..10 in source
                 int label = label1 == 10 ? 0 : label1; // map 10 -> 0 (digit 0)
                 if (label >= 0 && label < NumClasses)
-                    labelsData[dst * NumClasses + label] = NumOps.One;
+                    labelsData[dst * NumClasses + label] = 1.0;
             }
             if (dst >= totalSamples) break;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
         await Task.CompletedTask;
     }

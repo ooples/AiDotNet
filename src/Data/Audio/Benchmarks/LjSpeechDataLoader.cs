@@ -131,7 +131,7 @@ public class LjSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
 
         int textLen = _options.MaxTextLength;
         int audioLen = _options.MaxAudioSamples;
-        var featuresData = new T[totalSamples * textLen];
+        var featuresData = new double[totalSamples * textLen];
         var labelsData = new T[totalSamples * audioLen];
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -141,13 +141,13 @@ public class LjSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             int rowIdx = validRows[i];
             int[] tok = TextLoaderHelper.TokenizeAndEncode(texts[rowIdx], vocabulary, textLen);
             int textOff = i * textLen;
-            for (int j = 0; j < textLen; j++) featuresData[textOff + j] = numOps.FromDouble(tok[j]);
+            Array.Copy(tok, 0, featuresData, textOff, textLen);
             string wavPath = Path.GetFullPath(Path.Combine(wavsDir, ids[rowIdx] + ".wav"));
             byte[] wavBytes = File.ReadAllBytes(wavPath);
             AudioLoaderHelper.LoadAudioSamples(wavBytes, labelsData, i * audioLen, audioLen, numOps);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, textLen });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, textLen }).Cast<T>();
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, audioLen });
         InitializeIndices(totalSamples);
     }

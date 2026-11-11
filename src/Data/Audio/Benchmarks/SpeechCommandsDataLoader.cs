@@ -358,10 +358,10 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         }
 
         // 4) Pre-compute the labels tensor (cheap, small — N * NumClasses).
-        var labelsData = new T[_sampleCount * _numClasses];
+        var labelsData = new double[_sampleCount * _numClasses];
         for (int i = 0; i < _sampleCount; i++)
-            labelsData[i * _numClasses + _samples[i].ClassIndex] = NumOps.FromDouble(1.0);
-        LoadedLabels = new Tensor<T>(labelsData, [_sampleCount, _numClasses]);
+            labelsData[i * _numClasses + _samples[i].ClassIndex] = 1.0;
+        LoadedLabels = new Tensor<double>(labelsData, [_sampleCount, _numClasses]).Cast<T>();
 
         // 5) Features tensor stays null — see the class remarks. Audio is decoded
         // lazily per-batch in ExtractBatch.

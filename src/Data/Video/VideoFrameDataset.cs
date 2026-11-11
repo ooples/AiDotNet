@@ -166,7 +166,7 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         int pixelsPerFrame = h * w * c;
 
         var featuresData = new T[_sampleCount * frames * pixelsPerFrame];
-        var labelsData = new T[_sampleCount * _numClasses];
+        var labelsData = new double[_sampleCount * _numClasses];
 
         for (int i = 0; i < _sampleCount; i++)
         {
@@ -189,11 +189,11 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
                 Array.Copy(framePixels, 0, featuresData, dstOffset, pixelsPerFrame);
             }
 
-            labelsData[i * _numClasses + classIndex] = NumOps.One;
+            labelsData[i * _numClasses + classIndex] = 1.0;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { _sampleCount, frames, h, w, c });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { _sampleCount, _numClasses });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { _sampleCount, _numClasses }).Cast<T>();
         InitializeIndices(_sampleCount);
 
         return Task.CompletedTask;

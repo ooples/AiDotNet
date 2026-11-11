@@ -150,7 +150,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
 
         // Build tensors: features [N, SamplesPerFile], labels [N, NumClasses]
         var featuresData = new T[_sampleCount * _samplesPerFile];
-        var labelsData = new T[_sampleCount * _numClasses];
+        var labelsData = new double[_sampleCount * _numClasses];
 
         for (int i = 0; i < _sampleCount; i++)
         {
@@ -164,11 +164,11 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             Array.Copy(audioSamples, 0, featuresData, featureOffset, copyLen);
 
             int labelOffset = i * _numClasses;
-            labelsData[labelOffset + classIndex] = NumOps.One;
+            labelsData[labelOffset + classIndex] = 1.0;
         }
 
         var features = new Tensor<T>(featuresData, new[] { _sampleCount, _samplesPerFile });
-        var labels = new Tensor<T>(labelsData, new[] { _sampleCount, _numClasses });
+        var labels = new Tensor<double>(labelsData, new[] { _sampleCount, _numClasses }).Cast<T>();
 
         LoadedFeatures = features;
         LoadedLabels = labels;

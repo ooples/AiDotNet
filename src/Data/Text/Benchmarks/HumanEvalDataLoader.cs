@@ -105,8 +105,8 @@ public class HumanEvalDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int pLen = _options.MaxPromptLength, sLen = _options.MaxSolutionLength;
-        var featuresData = new T[totalSamples * pLen];
-        var labelsData = new T[totalSamples * sLen];
+        var featuresData = new double[totalSamples * pLen];
+        var labelsData = new double[totalSamples * sLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -114,12 +114,12 @@ public class HumanEvalDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
             int[] pTok = TextLoaderHelper.TokenizeAndEncode(prompts[i], vocabulary, pLen);
             int[] sTok = TextLoaderHelper.TokenizeAndEncode(solutions[i], vocabulary, sLen);
             int pOff = i * pLen, sOff = i * sLen;
-            for (int j = 0; j < pLen; j++) featuresData[pOff + j] = NumOps.FromDouble(pTok[j]);
-            for (int j = 0; j < sLen; j++) labelsData[sOff + j] = NumOps.FromDouble(sTok[j]);
+            Array.Copy(pTok, 0, featuresData, pOff, pLen);
+            Array.Copy(sTok, 0, labelsData, sOff, sLen);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, pLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, sLen });
+        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, pLen }).Cast<T>();
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, sLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 
