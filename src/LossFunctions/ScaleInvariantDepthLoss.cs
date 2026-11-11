@@ -54,13 +54,11 @@ public class ScaleInvariantDepthLoss<T> : LossFunctionBase<T>
         T sumDiff = Engine.TensorSum(diff);
 
         // Scale-invariant loss: (1/n) * sum(d^2) - (lambda/n^2) * sum(d)^2
-        double nDouble = n;
-        double sumDouble = Convert.ToDouble(sum);
-        double sumDiffDouble = Convert.ToDouble(sumDiff);
+        T count = NumOps.FromDouble(n);
+        T meanSquared = NumOps.Divide(sum, count);
+        T meanDiff = NumOps.Divide(sumDiff, count);
 
-        double loss = (1.0 / nDouble) * sumDouble - (_lambda / (nDouble * nDouble)) * (sumDiffDouble * sumDiffDouble);
-
-        return NumOps.FromDouble(loss);
+        return NumOps.Subtract(meanSquared, NumOps.Multiply(NumOps.FromDouble(_lambda), NumOps.Multiply(meanDiff, meanDiff)));
     }
 
     /// <inheritdoc />

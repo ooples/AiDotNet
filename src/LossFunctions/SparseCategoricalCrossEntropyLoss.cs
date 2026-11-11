@@ -162,8 +162,11 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         // that integer, and the integer must lie in [0, numClasses). NaN is never a valid index.
         var flatTarget = Engine.Reshape(target, new[] { sampleCount });
         var truncated = Engine.TensorTrunc(flatTarget);
-        var notInteger = Engine.TensorGreaterThan(
-            Engine.TensorAbs(Engine.TensorSubtract(flatTarget, truncated)), NumOps.FromDouble(1e-6));
+        // Outside the int range the old (int) cast could not represent the value: not an integer index.
+        var notInteger = Engine.TensorMax(
+            Engine.TensorGreaterThan(
+                Engine.TensorAbs(Engine.TensorSubtract(flatTarget, truncated)), NumOps.FromDouble(1e-6)),
+            Engine.TensorGreaterThan(Engine.TensorAbs(flatTarget), NumOps.FromDouble(int.MaxValue)));
         var outOfRange = Engine.TensorMax(
             Engine.TensorMax(
                 Engine.TensorLessThan(truncated, NumOps.Zero),
@@ -174,12 +177,15 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         {
             // First offending position, reported exactly as the per-element check did.
             int i = Engine.TensorArgMax(invalid, 0).GetFlat(0);
-            double rawIdx = NumOps.ToDouble(flatTarget.GetFlat(i));
-            int classIdx = (int)rawIdx;
-            if (Math.Abs(rawIdx - classIdx) > 1e-6)
+            T rawIdx = flatTarget.GetFlat(i);
+            if (NumOps.GreaterThan(notInteger.GetFlat(i), NumOps.Zero))
                 throw new ArgumentException(
                     $"Target at position {i} is {rawIdx}, expected an integer class index.",
                     nameof(target));
+
+            // NaN is reported as the out-of-range index the old (int) cast produced.
+            T truncatedIdx = truncated.GetFlat(i);
+            int classIdx = NumOps.Equals(truncatedIdx, truncatedIdx) ? NumOps.ToInt32(truncatedIdx) : int.MinValue;
             throw new ArgumentException(
                 $"Target index {classIdx} at position {i} is out of bounds. " +
                 $"Expected a value in [0, {numClasses}).",

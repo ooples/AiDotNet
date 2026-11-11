@@ -153,9 +153,12 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
         }
 
         // Validate every target value at once: it must be an integer class index in [0, numClasses).
-        // (int)rawVal truncates, so "not an integer" is rawVal != trunc(rawVal) (NaN included).
+        // A value is not an integer class index when it has a fractional part (NaN included) or lies
+        // outside the int range, where the old (int) cast could not represent it.
         var flatTarget = Engine.Reshape(target, new[] { target.Length });
-        var notInteger = Engine.TensorNotEquals(flatTarget, Engine.TensorTrunc(flatTarget));
+        var notInteger = Engine.TensorMax(
+            Engine.TensorNotEquals(flatTarget, Engine.TensorTrunc(flatTarget)),
+            Engine.TensorGreaterThan(Engine.TensorAbs(flatTarget), NumOps.FromDouble(int.MaxValue)));
         var outOfRange = Engine.TensorMax(
             Engine.TensorLessThan(flatTarget, NumOps.Zero),
             Engine.TensorGreaterThan(flatTarget, NumOps.FromDouble(numClasses - 1)));
@@ -164,14 +167,15 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
         {
             // First offending position, reported exactly as the per-element check did.
             int i = Engine.TensorArgMax(invalid, 0).GetFlat(0);
-            double rawVal = NumOps.ToDouble(flatTarget.GetFlat(i));
-            int classIdx = (int)rawVal;
-            if (rawVal != classIdx)
+            T rawVal = flatTarget.GetFlat(i);
+            if (NumOps.GreaterThan(notInteger.GetFlat(i), NumOps.Zero))
             {
                 throw new ArgumentException(
                     $"Target value {rawVal} at position {i} is not an integer class index.");
             }
 
+            // An integral value within the int range: the class index is exact.
+            int classIdx = NumOps.ToInt32(rawVal);
             throw new ArgumentOutOfRangeException(nameof(target),
                 $"Class index {classIdx} at position {i} is out of range [0, {numClasses}). " +
                 "Target values must be valid class indices.");

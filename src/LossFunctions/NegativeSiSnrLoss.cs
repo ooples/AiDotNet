@@ -49,10 +49,12 @@ public class NegativeSiSnrLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
         int n = predicted.Length;
+        T epsilon = NumOps.FromDouble(Epsilon);
+        T minusTenOverLn10 = NumOps.FromDouble(-10.0 / Math.Log(10.0));
         if (n == 0)
         {
             // No samples: every energy is zero, so only the epsilons remain.
-            return NumOps.FromDouble(-10.0 * Math.Log10(Epsilon / Epsilon));
+            return NumOps.Multiply(minusTenOverLn10, NumOps.Log(NumOps.Divide(epsilon, epsilon)));
         }
 
         // Zero-mean both signals.
@@ -62,15 +64,18 @@ public class NegativeSiSnrLoss<T> : LossFunctionBase<T>
         var a = Engine.TensorSubtractScalar(reference, Engine.TensorMean(reference));
 
         // Project the estimate onto the reference: target = (<p, a> / (||a||² + eps)) · a.
-        double dot = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(p, a)));
-        double refEnergy = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(a, a)));
-        double scale = dot / (refEnergy + Epsilon);
-        var target = Engine.TensorMultiplyScalar(a, NumOps.FromDouble(scale));
+        T dot = Engine.TensorSum(Engine.TensorMultiply(p, a));
+        T refEnergy = Engine.TensorSum(Engine.TensorMultiply(a, a));
+        T scale = NumOps.Divide(dot, NumOps.Add(refEnergy, epsilon));
+        var target = Engine.TensorMultiplyScalar(a, scale);
         var noise = Engine.TensorSubtract(p, target);
-        double targetEnergy = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(target, target)));
-        double noiseEnergy = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(noise, noise)));
+        T targetEnergy = Engine.TensorSum(Engine.TensorMultiply(target, target));
+        T noiseEnergy = Engine.TensorSum(Engine.TensorMultiply(noise, noise));
 
-        return NumOps.FromDouble(-10.0 * Math.Log10((targetEnergy + Epsilon) / (noiseEnergy + Epsilon)));
+        // -10·log10((target + eps) / (noise + eps)) = (-10 / ln 10)·ln(...)
+        return NumOps.Multiply(
+            minusTenOverLn10,
+            NumOps.Log(NumOps.Divide(NumOps.Add(targetEnergy, epsilon), NumOps.Add(noiseEnergy, epsilon))));
     }
 
     /// <inheritdoc />
