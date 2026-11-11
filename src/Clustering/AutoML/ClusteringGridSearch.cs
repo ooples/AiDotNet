@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.AutoML;
 using AiDotNet.Clustering.Evaluation;
@@ -248,11 +249,11 @@ public class ClusteringGridSearch<T> : UnsupervisedAutoMLBase<T>
 
     private int CountClusters(Vector<T> labels)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         var unique = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < labels.Length; i++)
         {
-            int label = (int)numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 unique.Add(label);
@@ -279,15 +280,7 @@ public class ClusteringGridSearch<T> : UnsupervisedAutoMLBase<T>
 
     private Matrix<T> CreateSubset(Matrix<T> data, List<int> indices, INumericOperations<T> numOps)
     {
-        var subset = new Matrix<T>(indices.Count, data.Columns);
-        for (int i = 0; i < indices.Count; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                subset[i, j] = data[indices[i], j];
-            }
-        }
-        return subset;
+        return ClusteringTensorOps.SelectRows(data, indices.ToArray());
     }
 
     private double ComputeStd(List<double> values)
