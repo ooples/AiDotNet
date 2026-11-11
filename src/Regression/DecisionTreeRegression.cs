@@ -179,6 +179,14 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
+        // Both builders index targets by feature row. A short y would leave the fast builder's copied
+        // target array zero-padded, training silently on invented targets; TrainWithWeights already rejects it.
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException(
+                $"Target count ({y.Length}) must match the number of feature rows ({x.Rows}).", nameof(y));
+        }
+
         // Build the decision tree using the original data
         // Note: Decision tree regularization is handled through tree structure parameters
         // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
