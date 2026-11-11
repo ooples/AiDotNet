@@ -174,58 +174,11 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     /// </remarks>
     protected Matrix<T> ProjectWeightedGraphToDag(Matrix<T> weights)
     {
-        int d = weights.Rows;
-        var candidates = new List<(int From, int To, T Weight, double Strength)>();
-        for (int from = 0; from < d; from++)
-        {
-            for (int to = 0; to < d; to++)
-            {
-                if (from == to) continue;
-                T weight = weights[from, to];
-                double strength = Math.Abs(NumOps.ToDouble(weight));
-                if (strength > 0.0 && !double.IsNaN(strength) && !double.IsInfinity(strength))
-                    candidates.Add((from, to, weight, strength));
-            }
-        }
-
-        candidates.Sort((left, right) =>
-        {
-            int byStrength = right.Strength.CompareTo(left.Strength);
-            if (byStrength != 0) return byStrength;
-            int byFrom = left.From.CompareTo(right.From);
-            return byFrom != 0 ? byFrom : left.To.CompareTo(right.To);
-        });
-
-        var result = new Matrix<T>(d, d);
-        var adjacency = new List<int>[d];
-        for (int i = 0; i < d; i++) adjacency[i] = new List<int>();
-
-        bool CanReach(int start, int target)
-        {
-            var seen = new bool[d];
-            var pending = new Stack<int>();
-            pending.Push(start);
-            while (pending.Count > 0)
-            {
-                int node = pending.Pop();
-                if (node == target) return true;
-                if (seen[node]) continue;
-                seen[node] = true;
-                for (int i = 0; i < adjacency[node].Count; i++)
-                    pending.Push(adjacency[node][i]);
-            }
-            return false;
-        }
-
-        foreach (var candidate in candidates)
-        {
-            // Adding from->to closes a cycle exactly when to already reaches from.
-            if (CanReach(candidate.To, candidate.From)) continue;
-            result[candidate.From, candidate.To] = candidate.Weight;
-            adjacency[candidate.From].Add(candidate.To);
-        }
-
-        return result;
+        // Candidates are the finite, non-zero off-diagonal weights; they are inserted strongest
+        // first (ties in (from, to) order), skipping any edge that would close a directed cycle.
+        var w = Tensor<T>.FromMatrix(weights);
+        var finite = Engine.TensorWhere(Engine.TensorIsFinite(w), w, Engine.TensorZerosLike(w));
+        return ProjectToAcyclic(finite.ToMatrix());
     }
 
     /// <summary>
@@ -260,31 +213,33 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     /// <returns>Weighted adjacency matrix.</returns>
     protected Matrix<T> BuildFinalAdjacency(double[,] learnedP, Matrix<T> cov, int d, double learnedThreshold)
     {
-        var result = new Matrix<T>(d, d);
+        // The learned influences arrive as double; the direction tests run on them unchanged.
+        var flatP = new double[d * d];
+        Buffer.BlockCopy(learnedP, 0, flatP, 0, d * d * sizeof(double));
+        var p = new Tensor<double>(flatP, new[] { d, d });
+        var pT = Engine.TensorTranspose(p);
+        var lowerTriangle = Engine.TensorTranspose(Engine.TensorTriu(Engine.TensorOnesLike(p), 1)); // i > j
 
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
+        // Only add edge if learned influence reaches the threshold.
+        // Direction: edge i→j only if P[i,j] >= P[j,i]; for ties (within 1e-10) only the (i,j)
+        // pair with i < j is kept, to avoid 2-cycles.
+        var notBelowThreshold = Engine.ScalarMinusTensor(1.0, Engine.TensorLessThan(p, learnedThreshold));
+        var notWeaker = Engine.ScalarMinusTensor(1.0, Engine.TensorLessThan(p, pT));
+        var tie = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(p, pT)), 1e-10);
+        var notLowerTie = Engine.ScalarMinusTensor(1.0, Engine.TensorMultiply(tie, lowerTriangle));
+        var directed = Engine.TensorMultiply(Engine.TensorMultiply(notBelowThreshold, notWeaker), notLowerTie).Cast<T>();
 
-                // Only add edge if learned influence exceeds threshold
-                if (learnedP[i, j] < learnedThreshold) continue;
-
-                // Direction: edge i→j only if P[i,j] > P[j,i]
-                // For ties, only process the (i,j) pair where i < j to avoid 2-cycles.
-                if (learnedP[i, j] < learnedP[j, i]) continue;
-                if (Math.Abs(learnedP[i, j] - learnedP[j, i]) < 1e-10 && i > j) continue;
-
-                // Use covariance for edge weight
-                double varI = NumOps.ToDouble(cov[i, i]);
-                if (varI < 1e-10) continue;
-                double covIJ = NumOps.ToDouble(cov[i, j]);
-                double weight = covIJ / varI;
-                if (Math.Abs(weight) < EdgeThreshold) continue;
-
-                result[i, j] = NumOps.FromDouble(weight);
-            }
-        return result;
+        // Use covariance for edge weight cov[i,j] / cov[i,i], skipped when cov[i,i] < 1e-10 or
+        // |weight| < EdgeThreshold.
+        var c = Tensor<T>.FromMatrix(cov);
+        var variance = Engine.TensorBroadcastTo(Engine.TensorDiagonal(c).Reshape(new[] { d, 1 }), new[] { d, d });
+        var smallVariance = Engine.TensorLessThan(variance, NumOps.FromDouble(1e-10));
+        var weight = Engine.TensorDivide(c, Engine.TensorWhere(smallVariance, Engine.TensorOnesLike(c), variance));
+        var keep = Engine.TensorMultiply(Engine.TensorMultiply(directed, OffDiagonalMask(d)),
+            Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, smallVariance),
+                Engine.ScalarMinusTensor(NumOps.One,
+                    Engine.TensorLessThan(Engine.TensorAbs(weight), NumOps.FromDouble(EdgeThreshold)))));
+        return Engine.TensorWhere(keep, weight, Engine.TensorZerosLike(weight)).ToMatrix();
     }
 
 }
