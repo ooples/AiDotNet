@@ -1,5 +1,3 @@
-using AiDotNet.Attributes;
-
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -51,7 +49,7 @@ internal static class FusedReadoutClassIndices
         return true;
     }
 
-    [ScalarKernel("Element types other than float, double and int have no typed span; those take the loops above.")]
+    [AiDotNet.Attributes.ScalarKernel("Element types other than float, double and int have no typed span; those take the loops above.")]
     private static bool TryReadGeneric<T>(T[] values, int[] ids, int vocabularySize)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
