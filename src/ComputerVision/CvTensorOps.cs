@@ -666,6 +666,33 @@ internal static class CvTensorOps<T>
     public static Tensor<T> FromDoubleArray(double[] values, int[] shape)
         => new Tensor<T>(shape, new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
 
+    /// <summary>
+    /// Overwrites every element of <paramref name="destination"/> (in place, so live parameter tensors keep their
+    /// identity) with <paramref name="values"/>, converted in bulk.
+    /// </summary>
+    public static void AssignFromDoubles(Tensor<T> destination, double[] values)
+    {
+        if (values.Length != destination.Length)
+            throw new ArgumentException($"Expected {destination.Length} values but received {values.Length}.", nameof(values));
+        Array.ConvertAll(values, NumOps.FromDouble).AsSpan().CopyTo(destination.AsWritableSpan());
+    }
+
+    /// <summary>Writes every element of <paramref name="tensor"/> as a <see cref="double"/>, in storage order.</summary>
+    public static void WriteDoubles(System.IO.BinaryWriter writer, Tensor<T> tensor)
+    {
+        foreach (double value in ToDoubleArray(tensor))
+            writer.Write(value);
+    }
+
+    /// <summary>Reads <c>tensor.Length</c> doubles and writes them through into <paramref name="tensor"/>.</summary>
+    public static void ReadDoublesInto(System.IO.BinaryReader reader, Tensor<T> tensor)
+    {
+        var wire = new double[tensor.Length];
+        for (int i = 0; i < wire.Length; i++)
+            wire[i] = reader.ReadDouble();
+        AssignFromDoubles(tensor, wire);
+    }
+
     private static int[] Dims(Tensor<T> t)
     {
         var dims = new int[t.Shape.Length];

@@ -28,8 +28,8 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
         Bias = new Tensor<T>(new[] { outFeatures });
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         double bound = 1.0 / Math.Sqrt(inFeatures);
-        for (int i = 0; i < Weight.Length; i++) Weight[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
-        for (int i = 0; i < Bias.Length; i++) Bias[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
+        CvTensorOps<T>.AssignFromDoubles(Weight, Enumerable.Range(0, Weight.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
+        CvTensorOps<T>.AssignFromDoubles(Bias, Enumerable.Range(0, Bias.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
     }
 
     public int InFeatures { get; }
@@ -42,7 +42,7 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
     {
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         double bound = Math.Sqrt(6.0 / (InFeatures + OutFeatures));
-        for (int i = 0; i < Weight.Length; i++) Weight[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
+        CvTensorOps<T>.AssignFromDoubles(Weight, Enumerable.Range(0, Weight.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
         Bias.Fill(_numOps.Zero);
     }
 
@@ -54,7 +54,7 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
     {
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         double bound = Math.Sqrt(6.0 / (InFeatures + OutFeatures));
-        for (int i = 0; i < Weight.Length; i++) Weight[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
+        CvTensorOps<T>.AssignFromDoubles(Weight, Enumerable.Range(0, Weight.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
     }
     /// <summary>Zero weight and bias.</summary>
     public void Zero()
@@ -84,13 +84,13 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
     public void Write(BinaryWriter writer)
     {
         foreach (var tensor in OwnParameterTensors())
-            for (int i = 0; i < tensor.Length; i++) writer.Write(_numOps.ToDouble(tensor[i]));
+            CvTensorOps<T>.WriteDoubles(writer, tensor);
     }
 
     public void Read(BinaryReader reader)
     {
         foreach (var tensor in OwnParameterTensors())
-            for (int i = 0; i < tensor.Length; i++) tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+            CvTensorOps<T>.ReadDoublesInto(reader, tensor);
     }
 
     protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
@@ -161,13 +161,13 @@ internal sealed class DinoGroupNorm<T> : CvParameterModule<T>
     public void Write(BinaryWriter writer)
     {
         foreach (var tensor in OwnParameterTensors())
-            for (int i = 0; i < tensor.Length; i++) writer.Write(_numOps.ToDouble(tensor[i]));
+            CvTensorOps<T>.WriteDoubles(writer, tensor);
     }
 
     public void Read(BinaryReader reader)
     {
         foreach (var tensor in OwnParameterTensors())
-            for (int i = 0; i < tensor.Length; i++) tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+            CvTensorOps<T>.ReadDoublesInto(reader, tensor);
     }
 
     protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();

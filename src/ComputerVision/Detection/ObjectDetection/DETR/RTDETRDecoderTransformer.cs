@@ -255,7 +255,7 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
         writer.Write(_d); writer.Write(_numHeads); writer.Write(_numQueries); writer.Write(_numClasses); writer.Write(_layers.Count);
         foreach (var projection in _inputProjections) projection.Write(writer);
         _encoderOutput.Write(writer); _encoderOutputNorm.WriteParameters(writer); _encoderScore.Write(writer); _encoderBox.Write(writer);
-        for (int i = 0; i < _labelEmbed.Length; i++) writer.Write(_numOps.ToDouble(_labelEmbed[i]));
+        CvTensorOps<T>.WriteDoubles(writer, _labelEmbed);
         foreach (var layer in _layers) layer.Write(writer);
         _queryPosHead.Write(writer);
         foreach (var head in _scoreHeads) head.Write(writer);
@@ -269,7 +269,7 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
             throw new InvalidOperationException("RT-DETR decoder configuration mismatch in the weight file.");
         foreach (var projection in _inputProjections) projection.Read(reader);
         _encoderOutput.Read(reader); _encoderOutputNorm.ReadParameters(reader); _encoderScore.Read(reader); _encoderBox.Read(reader);
-        for (int i = 0; i < _labelEmbed.Length; i++) _labelEmbed[i] = _numOps.FromDouble(reader.ReadDouble());
+        CvTensorOps<T>.ReadDoublesInto(reader, _labelEmbed);
         foreach (var layer in _layers) layer.Read(reader);
         _queryPosHead.Read(reader);
         foreach (var head in _scoreHeads) head.Read(reader);

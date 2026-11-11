@@ -233,7 +233,7 @@ internal sealed class MultiScaleDeformableAttention<T> : CvParameterModule<T>
         writer.Write(_numHeads);
         writer.Write(_numPoints);
         foreach (var tensor in OwnParameterTensors())
-            for (int i = 0; i < tensor.Length; i++) writer.Write(_numOps.ToDouble(tensor[i]));
+            CvTensorOps<T>.WriteDoubles(writer, tensor);
     }
 
     /// <summary>Reads parameters written by <see cref="WriteParameters"/>, rejecting another configuration.</summary>
@@ -246,7 +246,7 @@ internal sealed class MultiScaleDeformableAttention<T> : CvParameterModule<T>
                 $"MultiScaleDeformableAttention configuration mismatch: expected d={_dModel}, levels={_numLevels}, heads={_numHeads}, " +
                 $"points={_numPoints}; read d={dModel}, levels={levels}, heads={heads}, points={points}.");
         foreach (var tensor in OwnParameterTensors())
-            for (int i = 0; i < tensor.Length; i++) tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+            CvTensorOps<T>.ReadDoublesInto(reader, tensor);
     }
 
     /// <inheritdoc/>

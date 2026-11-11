@@ -109,7 +109,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         // tgt_embed is created with normal_ and then re-initialized by _reset_parameters (Xavier), so Xavier.
         _targetEmbed = new Tensor<T>(new[] { _numQueries, _d });
         double bound = Math.Sqrt(6.0 / (_numQueries + _d));
-        for (int i = 0; i < _targetEmbed.Length; i++) _targetEmbed[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
+        CvTensorOps<T>.AssignFromDoubles(_targetEmbed, Enumerable.Range(0, _targetEmbed.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
         // label_enc: nn.Embedding(dn_labelbook_size + 1, d), N(0, 1).
         _labelEmbed = Normal(new[] { numClasses + 1, _d }, random);
 
@@ -397,12 +397,12 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Length; i++) writer.Write(_numOps.ToDouble(tensor[i]));
+        CvTensorOps<T>.WriteDoubles(writer, tensor);
     }
 
     private void ReadTensor(BinaryReader reader, Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Length; i++) tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+        CvTensorOps<T>.ReadDoublesInto(reader, tensor);
     }
 
     protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
