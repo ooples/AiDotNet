@@ -103,13 +103,9 @@ public class VariationRatios<T> : IActiveLearningStrategy<T>
         var predictions = model.Predict(unlabeledPool);
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = predictions.Length / numSamples;
-        var scores = new Vector<T>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            var probs = ExtractProbabilities(predictions, i, numClasses);
-            scores[i] = ComputeVariationRatio(probs);
-        }
+        var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
+        var maxProbs = ActiveLearningEngineOps.MaxRows(probs);
+        var scores = AiDotNetEngine.Current.ScalarMinusTensor(_numOps.One, maxProbs).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -124,57 +120,6 @@ public class VariationRatios<T> : IActiveLearningStrategy<T>
             ["MaxScore"] = _lastMaxScore,
             ["MeanScore"] = _lastMeanScore
         };
-    }
-
-    /// <summary>
-    /// Computes variation ratio: VR = 1 - max(P(y|x)).
-    /// </summary>
-    private T ComputeVariationRatio(Vector<T> probabilities)
-    {
-        var maxProb = _numOps.Zero;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (_numOps.GreaterThan(probabilities[i], maxProb))
-            {
-                maxProb = probabilities[i];
-            }
-        }
-        return _numOps.Subtract(_numOps.One, maxProb);
-    }
-
-    /// <summary>
-    /// Extracts probabilities for a single sample from batch predictions.
-    /// </summary>
-    private Vector<T> ExtractProbabilities(Tensor<T> predictions, int sampleIndex, int numClasses)
-    {
-        var probs = new Vector<T>(numClasses);
-        var startIdx = sampleIndex * numClasses;
-
-        // Apply softmax to get probabilities
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (_numOps.GreaterThan(predictions[startIdx + c], maxLogit))
-            {
-                maxLogit = predictions[startIdx + c];
-            }
-        }
-
-        var expSum = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var shifted = _numOps.Subtract(predictions[startIdx + c], maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            probs[c] = expVal;
-            expSum = _numOps.Add(expSum, expVal);
-        }
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[c] = _numOps.Divide(probs[c], expSum);
-        }
-
-        return probs;
     }
 
     /// <summary>

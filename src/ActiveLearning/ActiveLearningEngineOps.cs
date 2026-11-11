@@ -65,6 +65,45 @@ internal static class ActiveLearningEngineOps
     }
 
     /// <summary>
+    /// Largest value of each row of a [n, c] tensor of non-negative values, floored at zero
+    /// (an empty row gives zero).
+    /// </summary>
+    /// <returns>A [n] tensor.</returns>
+    internal static Tensor<T> MaxRows<T>(Tensor<T> probabilities)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        if (probabilities.Shape[0] == 0 || probabilities.Shape[1] == 0)
+        {
+            return new Tensor<T>(new[] { probabilities.Shape[0] });
+        }
+
+        return engine.TensorMax(engine.ReduceMax(probabilities, new[] { 1 }, keepDims: false), numOps.Zero);
+    }
+
+    /// <summary>
+    /// Largest and second-largest value (counting repeats) of each row of a [n, c] tensor of
+    /// non-negative values, both floored at zero; missing entries give zero.
+    /// </summary>
+    /// <returns>Two [n] tensors.</returns>
+    internal static (Tensor<T> First, Tensor<T> Second) TopTwoRows<T>(Tensor<T> probabilities)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        int n = probabilities.Shape[0];
+        int c = probabilities.Shape[1];
+        if (n == 0 || c < 2)
+        {
+            return (MaxRows(probabilities), new Tensor<T>(new[] { n }));
+        }
+
+        var (values, _) = engine.TopK(probabilities, 2, 1, true);
+        var first = engine.TensorSlice(values, new[] { 0, 0 }, new[] { n, 1 }).Reshape(new[] { n });
+        var second = engine.TensorSlice(values, new[] { 0, 1 }, new[] { n, 1 }).Reshape(new[] { n });
+        return (engine.TensorMax(first, numOps.Zero), engine.TensorMax(second, numOps.Zero));
+    }
+
+    /// <summary>
     /// Euclidean distances from row <paramref name="index"/> of a [n, d] tensor to every row.
     /// </summary>
     /// <returns>A [n] tensor of distances.</returns>

@@ -97,13 +97,11 @@ public class MarginSampling<T> : IActiveLearningStrategy<T>
         var predictions = model.Predict(unlabeledPool);
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = predictions.Length / numSamples;
-        var scores = new Vector<T>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            var probs = ExtractProbabilities(predictions, i, numClasses);
-            scores[i] = ComputeMarginScore(probs);
-        }
+        var engine = AiDotNetEngine.Current;
+        var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
+        var (first, second) = ActiveLearningEngineOps.TopTwoRows(probs);
+        var margin = engine.TensorSubtract(first, second);
+        var scores = engine.ScalarMinusTensor(_numOps.One, margin).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -118,67 +116,6 @@ public class MarginSampling<T> : IActiveLearningStrategy<T>
             ["MaxScore"] = _lastMaxScore,
             ["MeanScore"] = _lastMeanScore
         };
-    }
-
-    /// <summary>
-    /// Computes margin score: 1 - (P(1st) - P(2nd)).
-    /// Higher score = smaller margin = more uncertainty.
-    /// </summary>
-    private T ComputeMarginScore(Vector<T> probabilities)
-    {
-        var first = _numOps.Zero;
-        var second = _numOps.Zero;
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (_numOps.GreaterThan(probabilities[i], first))
-            {
-                second = first;
-                first = probabilities[i];
-            }
-            else if (_numOps.GreaterThan(probabilities[i], second))
-            {
-                second = probabilities[i];
-            }
-        }
-
-        var margin = _numOps.Subtract(first, second);
-        return _numOps.Subtract(_numOps.One, margin);
-    }
-
-    /// <summary>
-    /// Extracts probabilities for a single sample from batch predictions.
-    /// </summary>
-    private Vector<T> ExtractProbabilities(Tensor<T> predictions, int sampleIndex, int numClasses)
-    {
-        var probs = new Vector<T>(numClasses);
-        var startIdx = sampleIndex * numClasses;
-
-        // Apply softmax to get probabilities
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (_numOps.GreaterThan(predictions[startIdx + c], maxLogit))
-            {
-                maxLogit = predictions[startIdx + c];
-            }
-        }
-
-        var expSum = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var shifted = _numOps.Subtract(predictions[startIdx + c], maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            probs[c] = expVal;
-            expSum = _numOps.Add(expSum, expVal);
-        }
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[c] = _numOps.Divide(probs[c], expSum);
-        }
-
-        return probs;
     }
 
     /// <summary>
