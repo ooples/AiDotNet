@@ -30,12 +30,8 @@ internal sealed class OutputContractionLoss<T> : ILossFunction<T>
             throw new ArgumentException("Predicted and weight vectors must have the same length.", nameof(actual));
         }
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(predicted[i], actual[i]));
-        }
-        return sum;
+        // sum_i predicted_i * actual_i
+        return predicted.Length == 0 ? NumOps.Zero : Engine.DotProduct(predicted, actual);
     }
 
     /// <inheritdoc/>

@@ -110,15 +110,8 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
         }
         else
         {
-            // One-hot encoded
-            actionIndex = 0;
-            for (int i = 1; i < action.Length; i++)
-            {
-                if (_numOps.ToDouble(action[i]) > _numOps.ToDouble(action[actionIndex]))
-                {
-                    actionIndex = i;
-                }
-            }
+            // One-hot encoded: first arg-max
+            actionIndex = RLTensorOps.ArgMax(action);
         }
 
         if (actionIndex < 0 || actionIndex >= ActionSpaceSize)
