@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Interpretability.Helpers;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -126,9 +127,9 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
             : RandomHelper.CreateSecureRandom();
 
         // Get the prediction for this instance
-        var instanceMatrix = CreateSingleRowMatrix(instance);
+        var instanceMatrix = ExplainerTensorOps<T>.RowMatrix(instance);
         var originalPred = _predictFunction(instanceMatrix)[0];
-        var originalClass = (int)Math.Round(NumOps.ToDouble(originalPred));
+        var originalClass = NumOps.ToInt32(NumOps.Round(originalPred));
 
         // Initialize beam search with empty anchor
         var beam = new List<(HashSet<int> features, Dictionary<int, (T min, T max)> rules, T precision, T coverage)>
@@ -137,6 +138,7 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
         };
 
         AnchorExplanation<T>? bestAnchor = null;
+        var featureRules = CreateFeatureRules(instance);
 
         for (int size = 1; size <= _maxAnchorSize; size++)
         {
@@ -154,9 +156,7 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
                     var newRules = new Dictionary<int, (T min, T max)>(anchorRules);
 
                     // Create rule for this feature based on instance value
-                    var featureValue = instance[f];
-                    var (min, max) = CreateFeatureRule(f, featureValue, rand);
-                    newRules[f] = (min, max);
+                    newRules[f] = featureRules[f];
 
                     // Estimate precision and coverage
                     var (precision, coverage) = EstimatePrecisionAndCoverage(
@@ -224,24 +224,25 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
     }
 
     /// <summary>
-    /// Creates a feature rule (min, max) based on the instance value.
+    /// Creates the rule (min, max) of every feature based on the instance values.
     /// </summary>
-    private (T min, T max) CreateFeatureRule(int featureIndex, T value, Random rand)
+    private (T min, T max)[] CreateFeatureRules(Vector<T> instance)
     {
-        double val = NumOps.ToDouble(value);
+        var engine = AiDotNetEngine.Current;
 
-        // Use provided bounds or estimate from value
-        double featureMin = _featureMins != null ? NumOps.ToDouble(_featureMins[featureIndex]) : val - Math.Abs(val) * 0.5 - 1;
-        double featureMax = _featureMaxs != null ? NumOps.ToDouble(_featureMaxs[featureIndex]) : val + Math.Abs(val) * 0.5 + 1;
+        // Use provided bounds or estimate from value: value -/+ (|value| * 0.5 + 1)
+        var halfMagnitudePlusOne = engine.Add(engine.Multiply(engine.Abs(instance), NumOps.FromDouble(0.5)),
+            engine.Fill(instance.Length, NumOps.One));
+        var featureMin = _featureMins != null ? new Vector<T>(_featureMins) : engine.Subtract(instance, halfMagnitudePlusOne);
+        var featureMax = _featureMaxs != null ? new Vector<T>(_featureMaxs) : engine.Add(instance, halfMagnitudePlusOne);
 
         // Create a rule that includes the instance value with some margin
-        double range = featureMax - featureMin;
-        double margin = range * 0.1; // 10% margin
+        var margin = engine.Multiply(engine.Subtract(featureMax.GetSubVector(0, instance.Length), featureMin.GetSubVector(0, instance.Length)),
+            NumOps.FromDouble(0.1)); // 10% margin
 
-        double ruleMin = val - margin;
-        double ruleMax = val + margin;
-
-        return (NumOps.FromDouble(ruleMin), NumOps.FromDouble(ruleMax));
+        var ruleMin = engine.Subtract(instance, margin);
+        var ruleMax = engine.Add(instance, margin);
+        return Enumerable.Zip(ruleMin, ruleMax, (min, max) => (min, max)).ToArray();
     }
 
     /// <summary>
@@ -253,44 +254,49 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
         int originalClass,
         Random rand)
     {
-        int covered = 0;
-        int correct = 0;
-
+        // Generate the random samples (in the same draw order as sampling and checking one at a time)
+        var samples = new List<Vector<T>>(_nSamples);
         for (int i = 0; i < _nSamples; i++)
         {
-            // Generate a random sample
-            var sample = GenerateRandomSample(instance, rules, rand);
-
-            // Check if sample is covered by anchor
-            bool isCovered = true;
-            foreach (var (featureIdx, (min, max)) in rules)
-            {
-                double sampleVal = NumOps.ToDouble(sample[featureIdx]);
-                if (sampleVal < NumOps.ToDouble(min) || sampleVal > NumOps.ToDouble(max))
-                {
-                    isCovered = false;
-                    break;
-                }
-            }
-
-            if (isCovered)
-            {
-                covered++;
-
-                // Check if prediction matches original
-                var sampleMatrix = CreateSingleRowMatrix(sample);
-                var pred = _predictFunction(sampleMatrix)[0];
-                int predClass = (int)Math.Round(NumOps.ToDouble(pred));
-
-                if (predClass == originalClass)
-                    correct++;
-            }
+            samples.Add(GenerateRandomSample(instance, rules, rand));
         }
 
-        double precision = covered > 0 ? (double)correct / covered : 0;
-        double coverage = (double)covered / _nSamples;
+        if (_nSamples == 0)
+        {
+            return (NumOps.Zero, NumOps.Zero);
+        }
 
-        return (NumOps.FromDouble(precision), NumOps.FromDouble(coverage));
+        // Check which samples are covered by the anchor: min <= value <= max for every rule
+        var engine = AiDotNetEngine.Current;
+        var sampleMatrix = ExplainerTensorOps<T>.Stack(samples);
+        var coveredMask = engine.TensorFullLike(new Tensor<T>(new[] { _nSamples }), NumOps.One);
+        foreach (var (featureIdx, (min, max)) in rules)
+        {
+            var values = engine.TensorSliceAxis(sampleMatrix, 1, featureIdx);
+            var inRange = engine.TensorMultiply(
+                engine.TensorGreaterEqual(values, engine.TensorFullLike(values, min)),
+                engine.TensorLessEqual(values, engine.TensorFullLike(values, max)));
+            coveredMask = engine.TensorMultiply(coveredMask, inRange);
+        }
+
+        var coveredRows = coveredMask.ToVector().NonZeroIndices().ToList();
+        int covered = coveredRows.Count;
+        T correct = NumOps.Zero;
+        if (covered > 0)
+        {
+            // Check if predictions match the original class
+            var predictions = coveredRows
+                .Select(row => _predictFunction(ExplainerTensorOps<T>.RowMatrix(samples[row])).GetSubVector(0, 1))
+                .ToList();
+            var predictedClasses = engine.TensorRound(ExplainerTensorOps<T>.Stack(predictions));
+            correct = engine.TensorSum(engine.TensorEquals(predictedClasses, NumOps.FromDouble(originalClass)));
+        }
+
+        T coveredCount = NumOps.FromDouble(covered);
+        T precision = covered > 0 ? NumOps.Divide(correct, coveredCount) : NumOps.Zero;
+        T coverage = NumOps.Divide(coveredCount, NumOps.FromDouble(_nSamples));
+
+        return (precision, coverage);
     }
 
     /// <summary>
@@ -347,7 +353,7 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
         {
             var (min, max) = rules[f];
             string featureName = _featureNames?[f] ?? $"Feature {f}";
-            conditions.Add($"{NumOps.ToDouble(min):F2} <= {featureName} <= {NumOps.ToDouble(max):F2}");
+            conditions.Add($"{min:F2} <= {featureName} <= {max:F2}");
         }
 
         explanation.Description = conditions.Count > 0
@@ -357,11 +363,4 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
         return explanation;
     }
 
-    private Matrix<T> CreateSingleRowMatrix(Vector<T> row)
-    {
-        var matrix = new Matrix<T>(1, row.Length);
-        for (int j = 0; j < row.Length; j++)
-            matrix[0, j] = row[j];
-        return matrix;
-    }
 }
