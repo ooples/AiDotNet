@@ -105,6 +105,8 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("ChatTTS derives its text vocabulary from its fixed tokenizer; audio vocabulary is configured separately by CodebookSize.", ModelType = typeof(CodecBased.ChatTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("SPEAR-TTS derives its combined vocabulary from the phoneme alphabet, special tokens and SemanticCodes; this inherited value records that total.", ModelType = typeof(CodecBased.SPEARTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Parler-TTS derives this metadata from PromptVocabulary, the option that configures its transcript embedding table.", ModelType = typeof(DescriptionBased.ParlerTTS<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("The native embedding is sized from the NATSpeech phone symbols and reserves. Native construction accepts their count and the inherited legacy value of 256.", ModelType = typeof(Latest.MegaTTS<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("The native embedding is sized from the NATSpeech phone symbols and reserves. Native construction accepts their count and the inherited legacy value of 256.", ModelType = typeof(Latest.MegaTTS2<>))]
     public int VocabSize { get; set; } = 256;
 
     /// <summary>Gets or sets the maximum input text length.</summary>

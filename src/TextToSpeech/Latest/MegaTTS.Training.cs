@@ -336,12 +336,19 @@ public partial class MegaTTS<T>
                 LearningRateScheduler = scheduler,
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             };
+            if (turn != Turn.Discriminator && o.WeightDecay > 0)
+                options.Regularization = new AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>>(new RegularizationOptions
+                {
+                    Type = AiDotNet.Enums.RegularizationType.L2,
+                    Strength = o.WeightDecay,
+                });
             return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options), component);
         }
+        double scale = o.ScheduleFactor * (o.LearningRate / MegaTTSOptions.DefaultLearningRate);
         return turn switch
         {
-            Turn.Acoustic => _acousticOptimizer ??= Build("acoustic", new NoamSchedule(o.HiddenDim, o.WarmupSteps, o.ScheduleFactor), o.Epsilon),
-            Turn.Prosody => _prosodyOptimizer ??= Build("prosody", new NoamSchedule(o.LmHidden, o.WarmupSteps, o.ScheduleFactor), o.Epsilon),
+            Turn.Acoustic => _acousticOptimizer ??= Build("acoustic", new NoamSchedule(o.HiddenDim, o.WarmupSteps, scale), o.Epsilon),
+            Turn.Prosody => _prosodyOptimizer ??= Build("prosody", new NoamSchedule(o.LmHidden, o.WarmupSteps, scale), o.Epsilon),
             _ => _discriminatorOptimizer ??= Build("discriminator",
                 new StepLRScheduler(o.DiscriminatorLearningRate, o.DiscriminatorDecaySteps, o.DiscriminatorDecay), o.DiscriminatorEpsilon),
         };

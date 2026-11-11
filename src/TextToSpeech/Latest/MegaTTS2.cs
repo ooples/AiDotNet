@@ -211,9 +211,12 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             return;
         }
         var o = _options;
+        if (o.VocabSize != 256 && o.VocabSize != _vocabulary.Length)
+            throw new ArgumentException("VocabSize must match the configured phone set and its reserved symbols.", nameof(o.VocabSize));
         _network = new MegaTts2Network<T>(Engine, _acousticLayers, _lmLayers, _durationLayers, _discriminatorLayers, new MegaTts2Configuration
         {
             PhoneVocabulary = _vocabulary.Length, Hidden = o.HiddenDim, ContentLayers = o.ContentLayers, ContentHeads = o.ContentHeads,
+            ContentDropout = o.DropoutRate,
             ContentFilter = o.ContentFilter, ProsodyHidden = o.ProsodyHidden, ProsodyBlocks = o.ProsodyBlocks, Compression = o.Compression,
             Codes = o.Codes, CodeDimension = o.CodeDimension, Distance = o.CodeDistance, Anchor = o.CodeAnchor,
             CommitmentWeight = o.CommitmentWeight, UsageDecay = o.CodeUsageDecay, TimbreHidden = o.TimbreHidden, TimbreBlocks = o.TimbreBlocks,
@@ -395,7 +398,8 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (1 − γ)·p(·|target prompts) + γ·p(·|prosody prompts) (Eq. 3), the two sharing the sampled codes. The end token is
     /// not drawn (the length follows the durations); top-k sampling of what remains.
     /// </summary>
-    internal int[] SampleProsody(IReadOnlyList<Prompt> target, IReadOnlyList<Prompt>? style, Tensor<T> pooled, Random random)
+    internal int[] SampleProsody(IReadOnlyList<Prompt> target, IReadOnlyList<Prompt>? style, Tensor<T> pooled, Random random,
+        Action<IReadOnlyList<double>>? observeDistribution = null)
     {
         var model = Network.ProsodyModel;
         MegaTts3DurationCache<T> Prefill(IEnumerable<Prompt> prompts)
@@ -435,6 +439,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
                 for (int c = 0; c < v; c++) p[c] = (1 - gamma) * p[c] + gamma * q[c];
             }
             p[0] = 0;
+            observeDistribution?.Invoke(p);
             codes[i] = TopK(p, _options.TopK, random) - 1;
             token = codes[i] + 1;
         }

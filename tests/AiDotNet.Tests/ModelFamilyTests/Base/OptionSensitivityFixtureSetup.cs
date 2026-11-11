@@ -96,6 +96,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
             : network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> && option == "ConfidenceWindow" ? "ctc-segmentation-confidence"
             : network is AiDotNet.TextToSpeech.Latest.MegaTTS3<T> ? "mega-" + option
+            : network is AiDotNet.TextToSpeech.Latest.MegaTTS<T> or AiDotNet.TextToSpeech.Latest.MegaTTS2<T> ? "mega-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> ? "musicgen-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
@@ -324,6 +325,16 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T> nonAttentive
             && NonAttentiveTacotronOptionFixture.UsesTraining(option))
             return NonAttentiveTacotronOptionFixture.Observe(nonAttentive);
+        if (network is AiDotNet.TextToSpeech.TtsModelBase<T> megaSpeech
+            && megaSpeech is AiDotNet.TextToSpeech.Latest.MegaTTS<T> or AiDotNet.TextToSpeech.Latest.MegaTTS2<T>)
+        {
+            if (option == "Language") return MegaTtsOptionFixture.ObserveTokens(megaSpeech);
+            if (MegaTtsOptionFixture.HandlesVocoder(option)) return MegaTtsOptionFixture.ObserveWaveform(megaSpeech);
+            if (option == "ProsodyInterpolation" && megaSpeech is AiDotNet.TextToSpeech.Latest.MegaTTS2<T> styleModel)
+                return MegaTtsOptionFixture.ObserveProsodyInterpolation(styleModel);
+            if (MegaTtsOptionFixture.HandlesAcoustic(option) || MegaTtsOptionFixture.HandlesLanguageModels(option))
+                return MegaTtsOptionFixture.ObserveObjective(megaSpeech, MegaTtsOptionFixture.HandlesLanguageModels(option));
+        }
 
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> segmentation && option == "ConfidenceWindow")
             return AiDotNet.Tests.Audio.CtcSegmentationOptionFixture.Observe(segmentation);
@@ -1197,6 +1208,8 @@ internal static class OptionSensitivityFixtureSetup
     /// the perturbation tests the pair rather than the constructor's rejection of a mismatch.</summary>
     internal static void Reconcile(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Latest.MegaTTSOptions or AiDotNet.TextToSpeech.Latest.MegaTTS2Options)
+            MegaTtsOptionFixture.Reconcile(options, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2Options naturalSpeech2)
             NaturalSpeech2OptionFixture.Reconcile(naturalSpeech2, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.VevoOptions vevoOptions)
@@ -1223,6 +1236,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Latest.MegaTTSOptions or AiDotNet.TextToSpeech.Latest.MegaTTS2Options)
+            MegaTtsOptionFixture.Prepare(options, option);
         if (options is AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions nonAttentive)
             NonAttentiveTacotronOptionFixture.Prepare(nonAttentive, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.VALLEOptions vallE && option == "PromptSeconds")

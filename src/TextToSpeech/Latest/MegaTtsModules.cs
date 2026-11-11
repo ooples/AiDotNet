@@ -162,14 +162,22 @@ internal sealed class MegaTtsContentEncoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
+    private readonly DropoutLayer<T>? _embeddingDropout;
 
     public MegaTtsContentEncoder(IEngine engine, List<LayerBase<T>> layers, int vocabulary, int width, int layerCount, int heads, int kernel,
-        int? filter = null)
+        int? filter = null, double dropout = 0)
     {
         _engine = engine;
         Width = width;
+        if (!(dropout >= 0 && dropout < 1))
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Content dropout must be in [0, 1).");
         Embedding = new TiedEmbeddingLayer<T>(vocabulary, width);
         layers.Add(Embedding);
+        if (dropout > 0)
+        {
+            _embeddingDropout = new DropoutLayer<T>(dropout);
+            layers.Add(_embeddingDropout);
+        }
         for (int i = 0; i < layerCount; i++) Layers.Add(new MegaTtsTransformerLayer<T>(engine, layers, width, heads, kernel, decoder: false, filter));
         FinalNorm = new LayerNormalizationLayer<T>(width, 1e-5);
         layers.Add(FinalNorm);
@@ -196,6 +204,7 @@ internal sealed class MegaTtsContentEncoder<T>
             }
         var x = _engine.TensorMultiplyScalar(_engine.Reshape(Embedding.Forward(ids), new[] { b, l, Width }), NumOps.FromDouble(Math.Sqrt(Width)));
         x = _engine.TensorAdd(x, MegaTtsPositions.Of<T>(padding, Width));
+        if (_embeddingDropout is not null) x = _embeddingDropout.Forward(x);
         var mask = _engine.TensorBroadcastTo(nonPadding, new[] { b, l, Width });
         x = _engine.TensorMultiply(x, mask);
         foreach (var layer in Layers) x = _engine.TensorMultiply(layer.Forward(x, padding, nonPadding), mask);

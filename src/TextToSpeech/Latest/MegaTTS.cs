@@ -190,9 +190,12 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             return;
         }
         var o = _options;
+        if (o.VocabSize != 256 && o.VocabSize != _vocabulary.Length)
+            throw new ArgumentException("VocabSize must match the configured phone set and its reserved symbols.", nameof(o.VocabSize));
         _network = new MegaTtsNetwork<T>(Engine, _acousticLayers, _lmLayers, _discriminatorLayers, new MegaTtsConfiguration
         {
             PhoneVocabulary = _vocabulary.Length, Hidden = o.HiddenDim, ContentLayers = o.ContentLayers, ContentHeads = o.ContentHeads,
+            ContentDropout = o.DropoutRate,
             ProsodyBlocks = o.ConvBlocks, ProsodyBins = o.ProsodyBins, Codes = o.Codes, CodeDimension = o.CodeDimension,
             TimbreBlocks = o.ConvBlocks, TimbreKernel = o.TimbreKernel, DecoderBlocks = o.ConvBlocks, Mels = o.MelChannels,
             DurationLayers = o.DurationLayers, DurationKernel = o.DurationKernel, LmLayers = o.LmLayers, LmHidden = o.LmHidden,

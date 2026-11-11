@@ -31,6 +31,8 @@ public enum MegaTtsStage
 /// </remarks>
 public class MegaTTSOptions : TtsModelOptions
 {
+    internal const double DefaultLearningRate = 1e-4;
+
     /// <summary>Creates an instance with the default settings.</summary>
     public MegaTTSOptions()
     {
@@ -40,8 +42,21 @@ public class MegaTTSOptions : TtsModelOptions
         MelChannels = 80;
         HiddenDim = 320;
         DropoutRate = 0;
+        LearningRate = DefaultLearningRate;
         WeightDecay = 0;
     }
+
+    /// <summary>Gets or sets the FastSpeech content encoder depth.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int NumEncoderLayers { get => ContentLayers; set => ContentLayers = value; }
+
+    /// <summary>Gets or sets the convolutional depth shared by the acoustic decoder and encoders.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int NumDecoderLayers { get => ConvBlocks; set => ConvBlocks = value; }
+
+    /// <summary>Gets or sets the FastSpeech content encoder attention head count.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int NumHeads { get => ContentHeads; set => ContentHeads = value; }
 
     /// <summary>The text front end (English).</summary>
     public MegaTtsLanguage Language { get; set; } = MegaTtsLanguage.English;
@@ -173,6 +188,7 @@ public class MegaTTSOptions : TtsModelOptions
 
     /// <summary>The sentences of one speaker the P-LLM reads as one sequence in training (Table 7's 7 contextual
     /// sentences); see <see cref="MegaTTS{T}.TrainProsodyModel"/>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("This is an input bound enforced by TrainProsodyModel. A native regression tests one valid sentence and an oversized sequence.")]
     public int ContextSentences { get; set; } = 7;
 
     /// <summary>The seed of training's draws (the discriminator windows).</summary>

@@ -22467,3 +22467,15 @@ override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.NumEncoderLay
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.NumEncoderLayers.set -> void
 override AiDotNet.TextToSpeech.MultiModal.StepAudioOptions.NumEncoderLayers.get -> int
 override AiDotNet.TextToSpeech.MultiModal.StepAudioOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTSOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTSOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTSOptions.NumHeads.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTSOptions.NumHeads.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumHeads.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTS2Options.NumHeads.set -> void

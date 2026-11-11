@@ -152,6 +152,7 @@ internal sealed record MegaTtsConfiguration
     public int Hidden { get; init; } = 320;
     public int ContentLayers { get; init; } = 4;
     public int ContentHeads { get; init; } = 2;
+    public double ContentDropout { get; init; }
     public int ContentKernel { get; init; } = 5;
     public int ProsodyBlocks { get; init; } = 5;
     public int ProsodyKernel { get; init; } = 5;
@@ -189,7 +190,8 @@ internal sealed class MegaTtsNetwork<T>
         _engine = engine;
         Configuration = configuration;
         var c = configuration;
-        Content = new MegaTtsContentEncoder<T>(engine, acoustic, c.PhoneVocabulary, c.Hidden, c.ContentLayers, c.ContentHeads, c.ContentKernel);
+        Content = new MegaTtsContentEncoder<T>(engine, acoustic, c.PhoneVocabulary, c.Hidden, c.ContentLayers, c.ContentHeads,
+            c.ContentKernel, dropout: c.ContentDropout);
         ProsodyPrenet = MegaTts3Ops.Linear(acoustic, c.Hidden);
         ProsodyFrames = new MegaTtsConvBlocks<T>(engine, acoustic, c.Hidden, c.Hidden, c.ProsodyKernel, c.ProsodyBlocks);
         ProsodyPhones = new MegaTtsConvBlocks<T>(engine, acoustic, c.Hidden, c.CodeDimension, c.ProsodyKernel, c.ProsodyBlocks);

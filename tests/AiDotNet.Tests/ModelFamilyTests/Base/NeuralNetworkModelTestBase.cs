@@ -7854,6 +7854,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     network.SetTrainingMode(false);
                     return;
                 }
+                if (network is AiDotNet.TextToSpeech.TtsModelBase<T> megaSpeech
+                    && megaSpeech is AiDotNet.TextToSpeech.Latest.MegaTTS<T> or AiDotNet.TextToSpeech.Latest.MegaTTS2<T>
+                    && (AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesAcoustic(option)
+                        || AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesLanguageModels(option)))
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.Train(megaSpeech,
+                        AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesLanguageModels(option), steps);
+                    network.SetTrainingMode(false);
+                    return;
+                }
                 if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
                 {
                     AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Train(network);

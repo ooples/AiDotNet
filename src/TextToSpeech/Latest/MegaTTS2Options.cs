@@ -34,6 +34,18 @@ public class MegaTTS2Options : TtsModelOptions
         WeightDecay = 0;
     }
 
+    /// <summary>Gets or sets the FastSpeech content encoder depth.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int NumEncoderLayers { get => ContentLayers; set => ContentLayers = value; }
+
+    /// <summary>Gets or sets the mel decoder's convolutional block count.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int NumDecoderLayers { get => DecoderBlocks; set => DecoderBlocks = value; }
+
+    /// <summary>Gets or sets the FastSpeech content encoder attention head count.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int NumHeads { get => ContentHeads; set => ContentHeads = value; }
+
     /// <summary>The text front end (English; the paper trains on LibriLight).</summary>
     public MegaTtsLanguage Language { get; set; } = MegaTtsLanguage.English;
 
@@ -198,6 +210,7 @@ public class MegaTTS2Options : TtsModelOptions
     public double DiscriminatorDecay { get; set; } = 0.5;
 
     /// <summary>The most prosody tokens one language-model step reads (the paper's 4000 per GPU).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("This is an input bound enforced by TrainLanguageModels on the constructed prosody sequence. A native regression checks the exact boundary.")]
     public int ProsodyTokenBudget { get; set; } = 4000;
 
     /// <summary>The seed of training's draws (the discriminator windows, the MRTE's frames, CVQ-VAE's anchors).</summary>
