@@ -335,6 +335,48 @@ internal static class RLTensorOps
         return ops.Add(reward, ops.Multiply(discount, next));
     }
 
+    /// <summary>
+    /// The "best = floor; if (v &gt; best) best = v" scan: the first index whose value is the largest
+    /// value strictly above <paramref name="floor"/> (NaN never qualifies), or 0 with
+    /// <paramref name="best"/> = floor when nothing is above it.
+    /// </summary>
+    internal static int ArgMaxAbove<T>(Vector<T> values, T floor, out T best)
+    {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        best = floor;
+        if (values.Length == 0)
+        {
+            return 0;
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var tensor = values.AsTensor();
+        var floorTensor = Engine.TensorFullLike(tensor, floor);
+
+        // NaN entries can never win a strict greater-than test: give them the floor value.
+        var cleaned = Engine.TensorWhere(Engine.TensorIsNan(tensor), floorTensor, tensor);
+        int index = Engine.TensorArgMax(cleaned, 0)[0];
+        T candidate = cleaned[index];
+        if (!ops.GreaterThan(candidate, floor))
+        {
+            return 0;
+        }
+
+        best = candidate;
+        return index;
+    }
+
+    /// <summary>The largest value strictly above <paramref name="floor"/>, or floor (NaN is ignored).</summary>
+    internal static T MaxAbove<T>(Vector<T> values, T floor)
+    {
+        ArgMaxAbove(values, floor, out T best);
+        return best;
+    }
+
     /// <summary>Concatenates vectors end to end.</summary>
     internal static Vector<T> Concat<T>(params Vector<T>[] parts)
     {

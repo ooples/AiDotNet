@@ -151,7 +151,8 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         for (int iter = 0; iter < _options.MaxEvaluationIterations; iter++)
         {
-            T delta = NumOps.Zero;
+            var oldValues = new List<T>();
+            var newValues = new List<T>();
 
             foreach (var stateKey in _valueTable.Keys.ToList())
             {
@@ -168,15 +169,12 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
                 // Compute expected value
                 T newValue = ComputeActionValue(stateKey, action);
                 _valueTable[stateKey] = newValue;
-
-                // Track maximum change
-                T diff = NumOps.Subtract(newValue, oldValue);
-                T absDiff = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? diff : NumOps.Negate(diff);
-                if (NumOps.GreaterThan(absDiff, delta))
-                {
-                    delta = absDiff;
-                }
+                oldValues.Add(oldValue);
+                newValues.Add(newValue);
             }
+
+            // Largest |new - old| of the sweep (zero floor; a NaN change never counts).
+            T delta = SweepChange(oldValues, newValues);
 
             // Check convergence
             if (NumOps.LessThan(delta, NumOps.FromDouble(_options.Theta)))
@@ -184,6 +182,19 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
                 break;
             }
         }
+    }
+
+    /// <summary>max(0, max |new - old|) over a sweep, ignoring NaN changes.</summary>
+    private T SweepChange(List<T> oldValues, List<T> newValues)
+    {
+        if (oldValues.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var change = engine.Abs(engine.Subtract(Vector<T>.FromEnumerable(newValues), Vector<T>.FromEnumerable(oldValues)));
+        return RLTensorOps.MaxAbove(change, NumOps.Zero);
     }
 
     private bool PolicyImprovement()
@@ -195,19 +206,7 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             int oldAction = _policy[stateKey];
 
             // Find best action
-            int bestAction = 0;
-            T bestValue = NumOps.MinValue;
-
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                T actionValue = ComputeActionValue(stateKey, a);
-
-                if (NumOps.GreaterThan(actionValue, bestValue))
-                {
-                    bestValue = actionValue;
-                    bestAction = a;
-                }
-            }
+            int bestAction = RLTensorOps.ArgMaxAbove(ActionValues(stateKey), NumOps.MinValue, out _);
 
             _policy[stateKey] = bestAction;
 
@@ -220,6 +219,12 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         return policyStable;
     }
 
+    /// <summary>The one-step look-ahead value of every action in a state, as a vector.</summary>
+    private Vector<T> ActionValues(string stateKey)
+    {
+        return Vector<T>.FromEnumerable(Enumerable.Range(0, _options.ActionSize).Select(a => ComputeActionValue(stateKey, a)));
+    }
+
     private T ComputeActionValue(string stateKey, int action)
     {
         if (!_model.ContainsKey(stateKey) || !_model[stateKey].ContainsKey(action))
@@ -227,21 +232,21 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
-        T expectedValue = NumOps.Zero;
-
-        foreach (var (nextStateKey, reward, probability) in _model[stateKey][action])
+        var transitions = _model[stateKey][action];
+        if (transitions.Count == 0)
         {
-            T nextValue = NumOps.Zero;
-            if (_valueTable.ContainsKey(nextStateKey))
-            {
-                nextValue = _valueTable[nextStateKey];
-            }
-
-            T transitionValue = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, nextValue));
-            expectedValue = NumOps.Add(expectedValue, NumOps.Multiply(probability, transitionValue));
+            return NumOps.Zero;
         }
 
-        return expectedValue;
+        // Expected value sum_s' p(s') * (r + gamma * V(s')), with V = 0 for unseen states.
+        var engine = AiDotNetEngine.Current;
+        var zero = NumOps.Zero;
+        var rewards = Vector<T>.FromEnumerable(transitions.Select(transition => transition.Item2));
+        var probabilities = Vector<T>.FromEnumerable(transitions.Select(transition => transition.Item3));
+        var nextValues = Vector<T>.FromEnumerable(transitions.Select(
+            transition => _valueTable.TryGetValue(transition.Item1, out var value) ? value : zero));
+        var transitionValues = engine.Add(rewards, engine.Multiply(nextValues, DiscountFactor));
+        return engine.DotProduct(probabilities, transitionValues);
     }
 
     private string GetStateKey(Vector<T> state)
