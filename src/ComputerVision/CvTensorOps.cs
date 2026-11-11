@@ -257,6 +257,24 @@ internal static class CvTensorOps<T>
     }
 
     /// <summary>
+    /// Pads a <c>[rows, width]</c> tensor with zero rows to exactly <paramref name="count"/> rows.
+    /// </summary>
+    /// <remarks>
+    /// A two-stage detector's per-RoI heads have one row per proposal, and how many proposals survive NMS depends on
+    /// the scores. Padding them to the proposal cap gives the raw prediction a layout fixed by the input size alone.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="rows"/> already has more rows.</exception>
+    public static Tensor<T> PadRows(Tensor<T> rows, int count)
+    {
+        int present = rows.Shape[0];
+        if (present > count)
+            throw new InvalidOperationException($"{present} rows exceed the fixed count of {count}.");
+        return present == count
+            ? rows
+            : Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { count - present, rows.Shape[1] }) }, 0);
+    }
+
+    /// <summary>
     /// Concatenates every head's raw output into one tensor. When all outputs share a leading
     /// (per-image) dimension N, each is flattened to <c>[N, -1]</c> and the result is
     /// <c>[N, total]</c>; when they do not - a two-stage detector's per-RoI heads beside its per-image

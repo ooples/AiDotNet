@@ -219,11 +219,12 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
                 tensor[0, 0] = ToT(1);
             else if (HasMatrixShape(tensor, headInput, 3))
             {
-                // The feature unit spans about 10-51 across the proposals, too wide a ratio for one weight to keep every
-                // logit in [3, 5]. Unit 1 of the fc layer has zero weights and a unit bias, so it is exactly 1 after its
-                // ReLU: it carries a constant 3.5, and the feature adds a proposal-dependent 0.2-1.0 that orders them.
+                // Inference normalizes with the running statistics (zero mean, unit variance at construction), so
+                // every backbone batch norm adds its unit shift and the feature unit reaches about 3.4e5-4.1e5 across
+                // the proposals. Unit 1 of the fc layer has zero weights and a unit bias, so it is exactly 1 after its
+                // ReLU: it carries a constant 3.5, and the feature adds a proposal-dependent 0.67-0.82 that orders them.
                 tensor[1, 1] = ToT(3.5);
-                tensor[0, 1] = ToT(0.02);
+                tensor[0, 1] = ToT(2e-6);
             }
             else if (tensor.Rank == 1 && tensor.Length == 3)
                 tensor[2] = ToT(-20); // R-CNN background is the first class, unlike DETR.
@@ -472,12 +473,14 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         // Zero RPN logits/deltas and per-level NMS leave 275 fixed proposals. Public Predict
         // concatenates final [N,3] logits, the deltas ([N,12] per class for Faster R-CNN, class-agnostic
         // [N,4] for Cascade R-CNN's stages), [N,4] proposals, optional earlier cascade heads, then
-        // 1023*2 objectness and 1023*4 RPN regression values.
+        // 1023*2 objectness and 1023*4 RPN regression values. N is the fixed proposal cap: the 275 real
+        // rows come first and the rest are all-zero padding, so the layout never depends on the scores.
         const int proposals = 275;
+        int rows = FasterRCNN<T>.PostNmsTopK;
         int stageCount = profile == HeadProfile.CascadeRcnn ? 3 : 1;
         int deltaWidth = profile == HeadProfile.CascadeRcnn ? 4 : 12;
         int stageWidth = 3 + deltaWidth;
-        Assert.Equal(new[] { 1, proposals * (4 + stageCount * stageWidth) + 1023 * 6 }, raw.Shape.ToArray());
+        Assert.Equal(new[] { 1, rows * (4 + stageCount * stageWidth) + 1023 * 6 }, raw.Shape.ToArray());
         var expected = new List<ExpectedDetection>();
         var foregroundLogits = Enumerable.Range(0, proposals).Select(proposal => ToD(raw[0, proposal * 3 + 1])).ToArray();
         Assert.True(foregroundLogits.Min() >= 3 && foregroundLogits.Max() <= 5,
@@ -488,21 +491,24 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             double foregroundLogit = foregroundLogits[proposal];
             AssertClose(-20, ToD(raw[0, proposal * 3 + 2]));
             double score = 1 / (1 + Math.Exp(-foregroundLogit) + Math.Exp(-20 - foregroundLogit));
-            int box = proposals * stageWidth + proposal * 4;
+            int box = rows * stageWidth + proposal * 4;
             expected.Add(new ExpectedDetection(score, ToD(raw[0, box]), ToD(raw[0, box + 1]),
                 ToD(raw[0, box + 2]), ToD(raw[0, box + 3])));
         }
-        for (int index = proposals * 3; index < proposals * stageWidth; index++) AssertClose(0, ToD(raw[0, index]));
+        // Padding logits, every delta, and the padding proposals are zero.
+        for (int index = proposals * 3; index < rows * stageWidth; index++) AssertClose(0, ToD(raw[0, index]));
+        for (int index = rows * stageWidth + proposals * 4; index < rows * (stageWidth + 4); index++)
+            AssertClose(0, ToD(raw[0, index]));
         for (int stage = 0; stage < stageCount - 1; stage++)
         {
-            int offset = proposals * (stageWidth + 4 + stage * stageWidth);
+            int offset = rows * (stageWidth + 4 + stage * stageWidth);
             for (int proposal = 0; proposal < proposals; proposal++)
             {
                 AssertClose(0, ToD(raw[0, offset + proposal * 3]));
                 Assert.InRange(ToD(raw[0, offset + proposal * 3 + 1]), 3, 5);
                 AssertClose(-20, ToD(raw[0, offset + proposal * 3 + 2]));
             }
-            for (int index = offset + proposals * 3; index < offset + proposals * stageWidth; index++)
+            for (int index = offset + proposals * 3; index < offset + rows * stageWidth; index++)
                 AssertClose(0, ToD(raw[0, index]));
         }
         for (int index = raw.Length - 1023 * 6; index < raw.Length; index++) AssertClose(0, ToD(raw[0, index]));

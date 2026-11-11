@@ -154,31 +154,32 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         var stages = ForwardStages(input, null, out _, out var objectness, out var bboxDeltas);
-        if (stages is null)
-        {
-            return new List<Tensor<T>>
-            {
-                new Tensor<T>(new[] { 0, Options.NumClasses + 1 }),
-                new Tensor<T>(new[] { 0, 4 }),
-                new Tensor<T>(new[] { 0, 4 }),
-                objectness,
-                bboxDeltas
-            };
-        }
 
         // PostProcess reads the first three entries: the last stage's logits, deltas and the boxes that stage
         // received. The earlier stages' outputs and the RPN's follow, so every head reaches a training objective.
-        var last = stages[stages.Count - 1];
-        var outputs = new List<Tensor<T>> { last.ClassLogits, last.BoxDeltas, last.Boxes };
-        for (int stage = 0; stage < stages.Count - 1; stage++)
+        // Every per-RoI head is padded to the proposal cap, as FasterRCNN's Forward explains, so the layout is the
+        // same whether NMS keeps 1000 proposals, fewer, or none.
+        int classColumns = Options.NumClasses + 1;
+        var last = stages is null ? null : stages[stages.Count - 1];
+        var outputs = new List<Tensor<T>>
         {
-            outputs.Add(stages[stage].ClassLogits);
-            outputs.Add(stages[stage].BoxDeltas);
+            PadRoiRows(last?.ClassLogits, classColumns),
+            PadRoiRows(last?.BoxDeltas, 4),
+            PadRoiRows(last?.Boxes, 4)
+        };
+        for (int stage = 0; stage < _numStages - 1; stage++)
+        {
+            outputs.Add(PadRoiRows(stages?[stage].ClassLogits, classColumns));
+            outputs.Add(PadRoiRows(stages?[stage].BoxDeltas, 4));
         }
         outputs.Add(objectness);
         outputs.Add(bboxDeltas);
         return outputs;
     }
+
+    /// <summary>Pads a per-RoI head to the proposal cap; a missing head (no proposals) becomes all padding.</summary>
+    private static Tensor<T> PadRoiRows(Tensor<T>? rows, int width)
+        => CvTensorOps<T>.PadRows(rows ?? new Tensor<T>(new[] { 0, width }), FasterRCNN<T>.PostNmsTopK);
 
     /// <summary>Trains the proposal network and every cascade stage with their published objectives.</summary>
     /// <remarks>
@@ -274,7 +275,7 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
             rpnObjectness, rpnDeltas, levelAnchors,
             imageHeight, imageWidth,
             preNmsTopK: 1000,
-            postNmsTopK: 1000,
+            postNmsTopK: FasterRCNN<T>.PostNmsTopK,
             nmsThreshold: 0.7,
             levelAnchorCounts: levelAnchorCounts);
 

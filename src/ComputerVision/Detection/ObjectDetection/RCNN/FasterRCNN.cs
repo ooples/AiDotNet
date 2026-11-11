@@ -151,8 +151,24 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         };
     }
 
+    /// <summary>Proposals kept after the RPN's NMS (Ren et al. 2015 with FPN; torchvision's post_nms_top_n).</summary>
+    internal const int PostNmsTopK = 1000;
+
     /// <inheritdoc/>
-    protected override List<Tensor<T>> Forward(Tensor<T> input) => ForwardDetection(input, null, out _);
+    /// <remarks>
+    /// The per-RoI heads (logits, deltas and proposals) are padded with zero rows to <see cref="PostNmsTopK"/>, so
+    /// the raw prediction's layout depends on the input size alone. How many proposals NMS keeps depends on the
+    /// scores, which batch statistics change in training mode: without the padding a training forward and
+    /// <c>Predict</c> on the same image disagreed on the output's length. A padding row's proposal is empty, so it
+    /// decodes to an empty box that <see cref="PostProcess"/> drops.
+    /// </remarks>
+    protected override List<Tensor<T>> Forward(Tensor<T> input)
+    {
+        var outputs = ForwardDetection(input, null, out _);
+        for (int head = 0; head < 3; head++)
+            outputs[head] = CvTensorOps<T>.PadRows(outputs[head], PostNmsTopK);
+        return outputs;
+    }
 
     /// <summary>Trains the proposal network and the detection head with the Faster R-CNN objectives.</summary>
     /// <remarks>
@@ -226,7 +242,7 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
             objectness, bboxDeltas, levelAnchors,
             imageHeight, imageWidth,
             preNmsTopK: 1000,
-            postNmsTopK: 1000,
+            postNmsTopK: PostNmsTopK,
             nmsThreshold: 0.7,
             levelAnchorCounts: levelAnchorCounts);
 
