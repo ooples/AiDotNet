@@ -97,7 +97,7 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         // A zero factor gives 0; a negative product has no real root (NaN, as Power gives);
         // otherwise exp(mean log|x|).
-        var geometricMean = Engine.TensorExp(Engine.TensorMultiply(logSum, Engine.TensorReciprocal(count)));
+        var geometricMean = Engine.TensorExp(DivideElementwise(logSum, count));
         var oddNegatives = Engine.TensorRemainder(negativeCount, Engine.TensorFullLike(negativeCount, NumOps.FromDouble(2)));
         var trendTensor = Engine.TensorWhere(
             Engine.TensorGreaterThan(oddNegatives, NumOps.FromDouble(0.5)),
@@ -108,17 +108,16 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
         Vector<T> trend = trendTensor.ToVector();
 
         // Calculate seasonal component
-        var seasonalTensor = Engine.TensorMultiply(x, Engine.TensorReciprocal(trendTensor));
+        var seasonalTensor = DivideElementwise(x, trendTensor);
 
         // Normalize seasonal component by the mean of its phase
         Vector<T> averageSeasonal = PhaseMeans(seasonalTensor.ToVector(), _seasonalPeriod);
         var phaseAverage = Tensor<T>.FromVector(RepeatPeriodic(averageSeasonal, n));
-        seasonalTensor = Engine.TensorMultiply(seasonalTensor, Engine.TensorReciprocal(phaseAverage));
+        seasonalTensor = DivideElementwise(seasonalTensor, phaseAverage);
         Vector<T> seasonal = seasonalTensor.ToVector();
 
         // Calculate residual
-        Vector<T> residual = Engine.TensorMultiply(
-            x, Engine.TensorReciprocal(Engine.TensorMultiply(trendTensor, seasonalTensor))).ToVector();
+        Vector<T> residual = DivideElementwise(x, Engine.TensorMultiply(trendTensor, seasonalTensor)).ToVector();
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Seasonal, seasonal);

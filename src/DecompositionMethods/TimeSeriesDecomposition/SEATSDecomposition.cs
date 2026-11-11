@@ -460,7 +460,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         var arSquared = Engine.TensorMultiplyScalar(Engine.TensorMultiply(arTerm, arTerm), NumOps.FromDouble(2));
         var maSquared = Engine.TensorMultiplyScalar(Engine.TensorMultiply(maTerm, maTerm), NumOps.FromDouble(2));
-        return Engine.TensorMultiply(maSquared, Engine.TensorReciprocal(arSquared)).Reshape(new[] { count });
+        return DivideElementwise(maSquared, arSquared).Reshape(new[] { count });
     }
 
     /// <summary>sum_i c_i cos(m_i f) and sum_i c_i sin(m_i f) for every frequency f.</summary>
@@ -513,7 +513,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         // Normalize the filter by the sum of absolute coefficients
         T _sum = Engine.TensorSum(Engine.TensorAbs(coefficients));
-        return Engine.TensorMultiply(coefficients, Engine.TensorReciprocal(Engine.TensorFullLike(coefficients, _sum))).ToVector();
+        return DivideElementwise(coefficients, Engine.TensorFullLike(coefficients, _sum)).ToVector();
     }
 
     /// <summary>

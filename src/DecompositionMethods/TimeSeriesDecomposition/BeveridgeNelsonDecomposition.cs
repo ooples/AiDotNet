@@ -247,7 +247,7 @@ public partial class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBa
         var correlation = Engine.Conv1D(signal, signal, 1, m - 1).Reshape(new[] { 2 * m - 1 });
         var lagSums = Engine.TensorFlip(Engine.TensorSlice(correlation, new[] { 0 }, new[] { m }), new[] { 0 });
         var pairCounts = Engine.ScalarMinusTensor(NumOps.FromDouble(m), Engine.TensorArange<T>(0, m, 1));
-        var autocovariance = Engine.TensorMultiply(lagSums, Engine.TensorReciprocal(pairCounts));
+        var autocovariance = DivideElementwise(lagSums, pairCounts);
 
         // Long-run variance = gamma_0 + 2 * sum_{k >= 1} gamma_k
         T gamma0 = Engine.TensorSum(Engine.TensorSlice(autocovariance, new[] { 0 }, new[] { 1 }));

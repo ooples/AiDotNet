@@ -204,7 +204,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
         var x = Tensor<T>.FromVector(data, new[] { 1, 1, n });
         var sums = Engine.Conv1D(x, k, 1, half);
         var weights = Engine.Conv1D(Engine.TensorOnesLike(x), k, 1, half);
-        return Engine.TensorMultiply(sums, Engine.TensorReciprocal(weights)).Reshape(new[] { n }).ToVector();
+        return DivideElementwise(sums, weights).Reshape(new[] { n }).ToVector();
     }
 
     /// <summary>Unit weights over the window [-halfWidth, halfWidth] (a plain moving average).</summary>
@@ -258,7 +258,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
         var counts = ToPhaseGrid(Engine.TensorOnesLike(Tensor<T>.FromVector(data)).ToVector(), period);
         var sums = Engine.ReduceSum(grid, new[] { 0 }, false);
         var totals = Engine.ReduceSum(counts, new[] { 0 }, false);
-        return Engine.TensorMultiply(sums, Engine.TensorReciprocal(totals)).ToVector();
+        return DivideElementwise(sums, totals).ToVector();
     }
 
     /// <summary>Repeats <paramref name="pattern"/> cyclically to length <paramref name="length"/>.</summary>
@@ -273,6 +273,22 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
         int repeats = (length + period - 1) / period;
         var tiled = Engine.TensorTile(Tensor<T>.FromVector(pattern), new[] { repeats });
         return Engine.TensorSlice(tiled, new[] { 0 }, new[] { length }).ToVector();
+    }
+
+    /// <summary>
+    /// Element-wise a / b with IEEE semantics for zero divisors (x / 0 = +-infinity, 0 / 0 = NaN)
+    /// instead of the exception TensorDivide raises; shapes must match.
+    /// </summary>
+    protected Tensor<T> DivideElementwise(Tensor<T> a, Tensor<T> b)
+    {
+        var isZero = Engine.TensorEquals(b, NumOps.Zero);
+        if (Engine.TensorCountNonzero(isZero) == 0)
+        {
+            return Engine.TensorDivide(a, b);
+        }
+
+        var safeDivisor = Engine.TensorWhere(isZero, Engine.TensorOnesLike(b), b);
+        return Engine.TensorWhere(isZero, Engine.TensorMultiply(a, Engine.TensorReciprocal(b)), Engine.TensorDivide(a, safeDivisor));
     }
 
     /// <summary>True when any element of <paramref name="value"/> is below <paramref name="threshold"/>.</summary>
