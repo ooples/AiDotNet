@@ -390,7 +390,7 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
         }
 
         // First maximum wins, as in a left-to-right scan
-        return AiDotNetEngine.Current.TensorArgMax(Tensor<T>.FromVector(vec), 0).GetFlat(0);
+        return AiDotNetEngine.Current.TensorArgMax(Tensor<T>.FromVector(vec).Reshape(new[] { 1, vec.Length }), 1).GetFlat(0);
     }
 
     private Vector<T> CreateOneHot(int index, int length)
