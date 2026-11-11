@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -92,11 +93,7 @@ internal class TreeSpeculativeDecoder<T>
         int? eosToken = null,
         CancellationToken cancellationToken = default)
     {
-        var tokens = new List<int>();
-        for (int i = 0; i < inputTokens.Length; i++)
-        {
-            tokens.Add(inputTokens[i]);
-        }
+        var tokens = new List<int>(inputTokens.ToArray());
 
         int generated = 0;
         var stepStats = new List<TreeStepStatistics>();
@@ -117,16 +114,10 @@ internal class TreeSpeculativeDecoder<T>
             var batchSequences = new List<Vector<int>>();
             foreach (var path in paths)
             {
-                var seq = new Vector<int>(tokens.Count + path.Length);
-                for (int i = 0; i < tokens.Count; i++)
-                {
-                    seq[i] = tokens[i];
-                }
-                for (int i = 0; i < path.Length; i++)
-                {
-                    seq[tokens.Count + i] = path[i];
-                }
-                batchSequences.Add(seq);
+                var seq = new int[tokens.Count + path.Length];
+                tokens.CopyTo(seq);
+                Array.Copy(path.ToArray(), 0, seq, tokens.Count, path.Length);
+                batchSequences.Add(Vector<int>.Wrap(seq));
             }
 
             // Verify all paths in parallel
@@ -142,7 +133,7 @@ internal class TreeSpeculativeDecoder<T>
                 var targetProbs = allTargetProbs[pathIdx];
                 var draftProbs = tree.GetPathProbabilities(pathIdx);
 
-                int accepted = VerifyPath(path, draftProbs, targetProbs, tokens.Count, temperature);
+                int accepted = VerifyPath(path, draftProbs, targetProbs, tokens.Count, temperature, eosToken);
 
                 if (accepted > bestAcceptedLength)
                 {
@@ -157,14 +148,18 @@ internal class TreeSpeculativeDecoder<T>
             if (bestPathIdx >= 0 && bestAcceptedLength > 0)
             {
                 var bestPath = paths[bestPathIdx];
-                for (int i = 0; i < bestAcceptedLength; i++)
+                int[] bestTokens = bestPath.ToArray();
+                int kept = bestAcceptedLength;
+                if (eosToken.HasValue)
                 {
-                    tokens.Add(bestPath[i]);
-                    generated++;
-
-                    if (eosToken.HasValue && bestPath[i] == eosToken.Value)
-                        goto done;
+                    int eosAt = Array.IndexOf(bestTokens, eosToken.Value, 0, bestAcceptedLength);
+                    if (eosAt >= 0) kept = eosAt + 1;
                 }
+
+                tokens.AddRange(new ArraySegment<int>(bestTokens, 0, kept));
+                generated += kept;
+                if (kept < bestAcceptedLength || (eosToken.HasValue && bestTokens[kept - 1] == eosToken.Value))
+                    goto done;
 
                 // If all accepted, add bonus token
                 if (bestAcceptedLength == bestPath.Length && generated < maxNewTokens)
@@ -218,11 +213,7 @@ internal class TreeSpeculativeDecoder<T>
         _totalTokensGenerated += generated;
 
         var resultTokens = new Vector<int>(tokens.ToArray());
-        var newTokens = new Vector<int>(generated);
-        for (int i = 0; i < generated; i++)
-        {
-            newTokens[i] = tokens[inputTokens.Length + i];
-        }
+        var newTokens = Vector<int>.Wrap(tokens.GetRange(inputTokens.Length, generated).ToArray());
 
         return new TreeSpeculativeResult
         {
@@ -291,8 +282,8 @@ internal class TreeSpeculativeDecoder<T>
 
                 var child = new TreeNode<T>
                 {
-                    Token = draft.Tokens[0],
-                    Probability = draft.TokenProbabilities[0],
+                    Token = draft.Tokens.AsSpan()[0],
+                    Probability = draft.TokenProbabilities.AsSpan()[0],
                     Depth = node.Depth + 1,
                     Parent = node
                 };
@@ -320,17 +311,10 @@ internal class TreeSpeculativeDecoder<T>
             current = current.Parent;
         }
 
-        var fullContext = new Vector<int>(baseContext.Length + pathTokens.Count);
-        for (int i = 0; i < baseContext.Length; i++)
-        {
-            fullContext[i] = baseContext[i];
-        }
-        for (int i = 0; i < pathTokens.Count; i++)
-        {
-            fullContext[baseContext.Length + i] = pathTokens[i];
-        }
-
-        return fullContext;
+        var fullContext = new int[baseContext.Length + pathTokens.Count];
+        baseContext.AsSpan().CopyTo(fullContext);
+        pathTokens.CopyTo(fullContext, baseContext.Length);
+        return Vector<int>.Wrap(fullContext);
     }
 
     private int VerifyPath(
@@ -338,41 +322,30 @@ internal class TreeSpeculativeDecoder<T>
         Vector<T> draftProbs,
         Matrix<T> targetProbs,
         int contextLength,
-        T temperature)
+        T temperature,
+        int? stopToken)
     {
-        int accepted = 0;
+        // Path token i is checked against target row contextLength + i - 1; only rows the target produced count.
+        int firstRow = contextLength - 1;
+        int verifiable = firstRow < 0 ? 0 : Math.Max(0, Math.Min(path.Length, targetProbs.Rows - firstRow));
+        var tokens = path.AsSpan();
 
-        for (int i = 0; i < path.Length; i++)
+        // Compare against the target under the same temperature as the draft (one-hot when greedy).
+        var pTarget = new T[verifiable];
+        for (int i = 0; i < verifiable; i++)
         {
-            int token = path[i];
-            int targetPos = contextLength + i - 1;
-
-            if (targetPos < 0 || targetPos >= targetProbs.Rows)
-                break;
-
-            // Compare against the target under the same temperature as the draft (one-hot when greedy).
-            T pTarget = TemperatureSampling<T>.Apply(targetProbs.GetRow(targetPos), temperature)[token];
-            T pDraft = i < draftProbs.Length ? draftProbs[i] : NumOps.FromDouble(0.01);
-
-            if (NumOps.LessThanOrEquals(pDraft, NumOps.Zero))
-            {
-                if (NumOps.GreaterThan(pTarget, NumOps.Zero))
-                    accepted++;
-                else
-                    break;
-            }
-            else
-            {
-                T ratio = NumOps.Divide(pTarget, pDraft);
-                T acceptProb = NumOps.LessThan(ratio, NumOps.One) ? ratio : NumOps.One;
-                if (_random.NextDouble() < NumOps.ToDouble(acceptProb))
-                    accepted++;
-                else
-                    break;
-            }
+            pTarget[i] = TemperatureSampling<T>.Apply(targetProbs.GetRow(firstRow + i), temperature).AsSpan()[tokens[i]];
         }
 
-        return accepted;
+        // A path longer than its recorded draft probabilities uses the tree's missing-path probability for the rest.
+        var pDraft = new T[verifiable];
+        int recorded = Math.Min(verifiable, draftProbs.Length);
+        draftProbs.AsSpan().Slice(0, recorded).CopyTo(pDraft);
+        pDraft.AsSpan(recorded).Fill(NumOps.FromDouble(SpeculationTree<T>.MissingPathProbability));
+
+        // Acceptance ends at an accepted EOS, so a path ranks by the prefix it would actually emit.
+        return TemperatureSampling<T>.CountAccepted(
+            Vector<T>.Wrap(pTarget), Vector<T>.Wrap(pDraft), _random, path.ToArray(), stopToken);
     }
 
     /// <summary>
@@ -380,31 +353,12 @@ internal class TreeSpeculativeDecoder<T>
     /// </summary>
     private static Vector<T> ComputeAdjustedDistribution(Vector<T> targetDist, Vector<T> draftDist)
     {
-        var adjusted = new Vector<T>(targetDist.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < targetDist.Length; i++)
-        {
-            T diff = NumOps.Subtract(targetDist[i], draftDist[i]);
-            adjusted[i] = NumOps.GreaterThan(diff, NumOps.Zero) ? diff : NumOps.Zero;
-            sum = NumOps.Add(sum, adjusted[i]);
-        }
-
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < adjusted.Length; i++)
-            {
-                adjusted[i] = NumOps.Divide(adjusted[i], sum);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < adjusted.Length; i++)
-            {
-                adjusted[i] = targetDist[i];
-            }
-        }
-
-        return adjusted;
+        // max(0, p_target - p_draft), normalized; falls back to the target distribution when nothing is left
+        var engine = AiDotNetEngine.Current;
+        var adjusted = (Vector<T>)engine.ReLU(engine.Subtract(targetDist, draftDist));
+        T sum = engine.Sum(adjusted);
+        return NumOps.GreaterThan(sum, NumOps.Zero)
+            ? (Vector<T>)engine.Divide(adjusted, sum)
+            : (Vector<T>)targetDist.Clone();
     }
 }
