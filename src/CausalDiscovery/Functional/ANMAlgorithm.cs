@@ -56,7 +56,7 @@ public class ANMAlgorithm<T> : FunctionalBase<T>
         int d = data.Columns;
         var standardized = StandardizeData(data);
 
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, double>();
 
         // Pairwise ANM test for all variable pairs
         for (int i = 0; i < d; i++)
@@ -86,20 +86,20 @@ public class ANMAlgorithm<T> : FunctionalBase<T>
                 {
                     // Clear asymmetry detected — ANM can determine direction
                     if (asymmetry > 0)
-                        W[i, j] = NumOps.FromDouble(weight);
+                        weights[i * d + j] = weight;
                     else
-                        W[j, i] = NumOps.FromDouble(weight);
+                        weights[j * d + i] = weight;
                 }
                 else
                 {
                     // No clear direction (deterministic or near-deterministic relationship).
                     // Variables are strongly correlated but ANM can't orient the edge.
                     // Record the relationship as i → j (lower index convention).
-                    W[i, j] = NumOps.FromDouble(weight);
+                    weights[i * d + j] = weight;
                 }
             }
         }
 
-        return W;
+        return CausalWeightScatter.FromStatistics<T>(d, d, weights);
     }
 }
