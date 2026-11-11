@@ -554,6 +554,77 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Selects the columns of <paramref name="x"/> at <paramref name="columns"/> (in the given order).
+    /// </summary>
+    /// <param name="x">The source matrix.</param>
+    /// <param name="columns">The column indices to take.</param>
+    /// <returns>The [x.Rows, columns.Length] matrix of selected columns.</returns>
+    protected Matrix<T> SelectColumns(Matrix<T> x, int[] columns)
+    {
+        if (x.Rows == 0 || columns.Length == 0)
+        {
+            return new Matrix<T>(x.Rows, columns.Length);
+        }
+
+        return Engine.TensorIndexSelect(Tensor<T>.FromMatrix(x),
+            new Tensor<int>(columns, new[] { columns.Length }), 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// Re-orders the probability columns of an estimator (whose columns follow
+    /// <paramref name="sourceLabels"/>) into this model's <see cref="ClassLabels"/> order.
+    /// Classes the estimator does not know get probability zero.
+    /// </summary>
+    /// <param name="probabilities">The estimator's [n, k] probabilities.</param>
+    /// <param name="sourceLabels">The estimator's class labels (column order of <paramref name="probabilities"/>).</param>
+    /// <returns>The [n, NumClasses] aligned probabilities.</returns>
+    protected Matrix<T> AlignProbabilities(Matrix<T> probabilities, Vector<T>? sourceLabels)
+    {
+        var aligned = new Tensor<T>(new[] { probabilities.Rows, NumClasses });
+        int usable = sourceLabels is null ? 0 : Math.Min(sourceLabels.Length, probabilities.Columns);
+        if (sourceLabels is null || usable == 0 || probabilities.Rows == 0 || NumClasses == 0)
+        {
+            return aligned.ToMatrix();
+        }
+
+        var targets = GetClassIndicesFromLabels(FitToLength(sourceLabels, usable));
+        var sourceColumns = new List<int>(usable);
+        var targetColumns = new List<int>(usable);
+        for (int k = 0; k < targets.Length; k++)
+        {
+            if (targets[k] >= 0)
+            {
+                sourceColumns.Add(k);
+                targetColumns.Add(targets[k]);
+            }
+        }
+
+        if (sourceColumns.Count == 0)
+        {
+            return aligned.ToMatrix();
+        }
+
+        var picked = SelectColumns(probabilities, sourceColumns.ToArray());
+        var targetIndex = new Tensor<int>(targetColumns.ToArray(), new[] { targetColumns.Count });
+        return Engine.TensorScatterAdd(aligned, targetIndex, Tensor<T>.FromMatrix(picked), 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// Majority vote: the label with the most votes per row (ties go to the lowest class index).
+    /// </summary>
+    /// <param name="votes">The [n, NumClasses] vote counts.</param>
+    /// <returns>The winning class label per row.</returns>
+    protected Vector<T> MajorityVoteLabels(Tensor<T> votes)
+    {
+        if (votes.Shape[0] == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return ClassIndicesToLabels(ArgMaxRows(votes.ToMatrix()));
+    }
+
+    /// <summary>
     /// Creates a vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
     /// </summary>
     protected static Vector<T> FilledVector(int length, T value)
