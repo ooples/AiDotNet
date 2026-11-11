@@ -444,4 +444,35 @@ internal static class ClusteringTensorOps
     /// <summary>A [rows, d] tensor whose every row is <paramref name="row"/>.</summary>
     internal static Tensor<T> TileRow<T>(Vector<T> row, int rows)
         => Engine.TensorTile(Tensor<T>.FromVector(row, new[] { 1, row.Length }), new[] { rows, 1 });
+
+    /// <summary>
+    /// Dense rank of every entry (equal values share a rank, ranks ascend with the values), so integer comparisons
+    /// of ranks order the entries exactly like comparisons of the values.
+    /// </summary>
+    internal static int[] DenseRanks<T>(Vector<T> values)
+    {
+        int n = values.Length;
+        if (n == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var (sorted, order) = engine.TensorSort(values.AsTensor(), 0, false);
+
+        // 1 where a sorted entry differs from its predecessor; the running sum is the dense rank
+        var first = Tensor<T>.CreateZeros(new[] { 1 });
+        var changes = n == 1
+            ? first
+            : engine.TensorConcatenate(new[]
+            {
+                first,
+                engine.ScalarMinusTensor(numOps.One, engine.TensorEquals(
+                    engine.TensorSlice(sorted, new[] { 1 }, new[] { n - 1 }),
+                    engine.TensorSlice(sorted, new[] { 0 }, new[] { n - 1 })))
+            }, 0);
+        var sortedRanks = engine.TensorCumSum(changes, 0);
+        return ToIntArray(engine.Scatter(Tensor<T>.CreateZeros(new[] { n }), order, sortedRanks, 0).ToVector());
+    }
 }
