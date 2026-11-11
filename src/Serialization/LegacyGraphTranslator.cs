@@ -63,7 +63,7 @@ internal static class LegacyGraphTranslator
 
         try
         {
-            return TensorProgram.Trace<T>(xs => new[] { replay(xs[0]) }, new[] { probe }, new TraceOptions { Verify = verify });
+            return TensorProgram.Trace<T>(xs => new[] { replay(xs[0]) }, new[] { probe }, new AiDotNet.Tensors.Engines.Export.TraceOptions { Verify = verify });
         }
         catch (Exception ex) when (!IsOwn(ex))
         {
