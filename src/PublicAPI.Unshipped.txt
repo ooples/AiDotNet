@@ -185,21 +185,7 @@ override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.NumEncoderLayers.
 override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.NumEncoderLayers.set -> void
 override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.NumHeads.get -> int
 override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.NumHeads.set -> void
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.get -> double
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.set -> void
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.HopSize.get -> int
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.HopSize.set -> void
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumEncoderLayers.get -> int
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumEncoderLayers.set -> void
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumDecoderLayers.get -> int
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumDecoderLayers.set -> void
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumHeads.get -> int
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumHeads.set -> void
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.VocabSize.get -> int
-AiDotNet.TextToSpeech.Latest.MegaTTS3Options.VocabSize.set -> void
 AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.TrainWithSummedCustomObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected, System.Collections.Generic.IReadOnlyList<System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>! objectives, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> T
-AiDotNet.TextToSpeech.MultiModal.SpeechT5Options.HopSize.get -> int
-AiDotNet.TextToSpeech.MultiModal.SpeechT5Options.HopSize.set -> void
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.TextEncoderDim.get -> int
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.TextEncoderDim.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.HiddenDim.get -> int
@@ -329,8 +315,6 @@ AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.VocabSize.get -> int
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.VocabSize.set -> void
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.WeightDecay.get -> double
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.WeightDecay.set -> void
-AiDotNet.Audio.Effects.DACOptions.Channels.get -> int
-AiDotNet.Audio.Effects.DACOptions.Channels.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.set -> void
 *REMOVED*AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.get -> int
@@ -2242,8 +2226,6 @@ AiDotNet.Audio.Classification.CLAP<T>.SetTextPrompts(string![]! prompts, System.
 override AiDotNet.Audio.Classification.CLAP<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.SampleRate.get -> int
 AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.SampleRate.set -> void
-AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.Channels.get -> int
-AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.Channels.set -> void
 AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.NumQuantizers.get -> int
 AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.NumQuantizers.set -> void
 AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.CodebookSize.get -> int
@@ -5897,16 +5879,10 @@ AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.ResBlockKernels.get -
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.ResBlockKernels.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.ResBlockDilations.get -> int[]![]!
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.ResBlockDilations.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleRates.get -> int[]!
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleRates.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleKernels.get -> int[]!
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleKernels.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleInitialChannels.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleInitialChannels.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.IstftFftSize.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.IstftFftSize.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.IstftHopSize.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.IstftHopSize.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.BertHidden.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.BertLayers.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.BertHidden.set -> void
@@ -5958,9 +5934,7 @@ AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.WindowLength.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MelMean.get -> double
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MelMean.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MelStd.get -> double
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.StyleDim.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MelStd.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.StyleDim.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.ResidualDim.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.ResidualDim.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.AlignerHidden.get -> int
@@ -7421,10 +7395,6 @@ AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.WarmupSteps.get -> int
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.WarmupSteps.set -> void
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TrainingSteps.set -> void
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TrainingSteps.get -> int
-AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Temperature.get -> double
-AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Temperature.set -> void
-AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TopK.set -> void
-AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TopK.get -> int
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.MaxCodesPerTextToken.get -> int
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Codec.get -> AiDotNet.Audio.Generation.EnCodecOptions!
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.MaxCodesPerTextToken.set -> void
@@ -19774,10 +19744,6 @@ AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.UseReleasedTextFrontend.set -> 
 AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
 AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent.LanguageModel = 0 -> AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
 AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent.UniversalCodec = 1 -> AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
-AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.PrependBos.get -> bool
-AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.PrependBos.set -> void
-AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.StopOnMostLikelyEndToken.get -> bool
-AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.StopOnMostLikelyEndToken.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.LanguageCount.get -> int
 AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.LanguageCount.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.SynthesisLanguage.get -> AiDotNet.TextToSpeech.CodecBased.VallEXLanguage?
@@ -19945,8 +19911,6 @@ AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelStandardDeviation.get -> dou
 AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelStandardDeviation.set -> void
 AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumCodebooks.get -> int
 AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumCodebooks.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumHeads.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumHeads.set -> void
 AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumLLMLayers.get -> int
 AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumLLMLayers.set -> void
 AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.OdeSteps.get -> int
@@ -22094,14 +22058,8 @@ AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.VocabSize.get -> int
 AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.VocabSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.CodebookSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.CodebookSize.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.NumCodebooks.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.NumCodebooks.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerState.get -> int
-AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerState.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerHeads.get -> int
-AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerHeads.set -> void
 AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions.DropoutRate.get -> double
 AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions.DropoutRate.set -> void
 AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions.HiddenDim.get -> int
@@ -22250,14 +22208,6 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.RepetitionWindow.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.RepetitionWindow.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.DiscriminatorWidthDivisor.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.DiscriminatorWidthDivisor.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.HopSize.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.HopSize.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleRates.get -> int[]!
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleRates.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleKernels.get -> int[]!
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleKernels.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.IstftHopSize.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.IstftHopSize.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.VocabSize.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.VocabSize.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.ModelPath.get -> string?
@@ -22276,8 +22226,6 @@ AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.LearningRate.get -> doubl
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.LearningRate.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MaxTextLength.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MaxTextLength.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.HopSize.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.HopSize.set -> void
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.HopSize.get -> int
@@ -22288,94 +22236,6 @@ AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.ModelPath.get -> string?
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.ModelPath.set -> void
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.OnnxOptions.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.HopSize.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.HopSize.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleRates.get -> int[]!
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleRates.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleKernels.get -> int[]!
-AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleKernels.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLE2Options.Temperature.get -> double
-AiDotNet.TextToSpeech.CodecBased.VALLE2Options.Temperature.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLE2Options.TopK.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLE2Options.TopK.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLE2Options.PrependBos.get -> bool
-AiDotNet.TextToSpeech.CodecBased.VALLE2Options.PrependBos.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLE2Options.StopOnMostLikelyEndToken.get -> bool
-AiDotNet.TextToSpeech.CodecBased.VALLE2Options.StopOnMostLikelyEndToken.set -> void
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumDecoderLayers.get -> int
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumDecoderLayers.set -> void
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumEncoderLayers.get -> int
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumEncoderLayers.set -> void
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.SampleRate.get -> int
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.SampleRate.set -> void
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.HopSize.get -> int
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.HopSize.set -> void
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.MelChannels.get -> int
-AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.MelChannels.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.HiddenDim.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.HiddenDim.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumEncoderLayers.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumEncoderLayers.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumDecoderLayers.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumDecoderLayers.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.VocabSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.VocabSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.DropoutRate.get -> double
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.DropoutRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SampleRate.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SampleRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.HopSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.HopSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodecFrameRate.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodecFrameRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumCodebooks.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumCodebooks.set -> void
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodebookSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodebookSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.HopSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.HopSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.MelChannels.get -> int
-AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.MelChannels.set -> void
-AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumEncoderLayers.get -> int
-AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumEncoderLayers.set -> void
-AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumCodebooks.get -> int
-AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumCodebooks.set -> void
-AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SampleRate.get -> int
-AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SampleRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecFrameRate.get -> int
-AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecFrameRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.NumEncoderLayers.get -> int
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.NumEncoderLayers.set -> void
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.DropoutRate.get -> double
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.DropoutRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.VocabSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.VocabSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.get -> int
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.set -> void
-AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.VocabSize.get -> int
-AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.VocabSize.set -> void
-AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.get -> int
-AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.set -> void
-AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.CodebookSize.get -> int
-AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.CodebookSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.SampleRate.get -> int
-AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.SampleRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.HopSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.HopSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.VocabSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.VocabSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.SampleRate.get -> int
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.SampleRate.set -> void
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.HopSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.HopSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.VocabSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.VocabSize.set -> void
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.MelChannels.get -> int
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.MelChannels.set -> void
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.FftSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.PhemeOptions.FftSize.set -> void
 override AiDotNet.Audio.SpeechRecognition.Wav2Vec2Model<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 override AiDotNet.SpeechRecognition.Foundation.HuBERTASR<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 override AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
@@ -22471,3 +22331,163 @@ virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokeniz
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerState.set -> void
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.CodebookSize.get -> int
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.CodebookSize.set -> void
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodebookSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodebookSize.set -> void
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.NumCodebooks.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.NumCodebooks.set -> void
+*REMOVED*AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.StyleDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.StyleDim.set -> void
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.FftSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.FftSize.set -> void
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.VocabSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.VocabSize.set -> void
+override AiDotNet.Audio.Effects.DACOptions.Channels.get -> int
+override AiDotNet.Audio.Effects.DACOptions.Channels.set -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.CodebookSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.CodebookSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerHeads.get -> int
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerHeads.set -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerState.get -> int
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerState.set -> void
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.DropoutRate.get -> double
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.DropoutRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.VocabSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.VocabSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.HopSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.MelChannels.get -> int
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.MelChannels.set -> void
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.FftSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.FftSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.MelChannels.get -> int
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.MelChannels.set -> void
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.SampleRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.VocabSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.PhemeOptions.VocabSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecFrameRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecFrameRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumCodebooks.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumCodebooks.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SampleRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.SampleRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.VocabSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.VocabSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VALLE2Options.PrependBos.get -> bool
+override AiDotNet.TextToSpeech.CodecBased.VALLE2Options.PrependBos.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VALLE2Options.StopOnMostLikelyEndToken.get -> bool
+override AiDotNet.TextToSpeech.CodecBased.VALLE2Options.StopOnMostLikelyEndToken.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VALLE2Options.Temperature.get -> double
+override AiDotNet.TextToSpeech.CodecBased.VALLE2Options.Temperature.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VALLE2Options.TopK.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VALLE2Options.TopK.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodebookSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodebookSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodecFrameRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodecFrameRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.DropoutRate.get -> double
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.DropoutRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.HiddenDim.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.HiddenDim.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumCodebooks.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumCodebooks.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SampleRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.VocabSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.VocabSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumHeads.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumHeads.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.get -> double
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.HopSize.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.HopSize.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumHeads.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumHeads.set -> void
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.VocabSize.get -> int
+override AiDotNet.TextToSpeech.Latest.MegaTTS3Options.VocabSize.set -> void
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.MelChannels.get -> int
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.MelChannels.set -> void
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.SampleRate.get -> int
+override AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.MultiModal.SpeechT5Options.HopSize.get -> int
+override AiDotNet.TextToSpeech.MultiModal.SpeechT5Options.HopSize.set -> void
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.HopSize.get -> int
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.HopSize.set -> void
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.IstftHopSize.get -> int
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.IstftHopSize.set -> void
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleKernels.get -> int[]!
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleKernels.set -> void
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleRates.get -> int[]!
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleRates.set -> void
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.StyleDim.get -> int
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.StyleDim.set -> void
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleKernels.get -> int[]!
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleKernels.set -> void
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleRates.get -> int[]!
+override AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleRates.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.CodebookSize.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.CodebookSize.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.VocabSize.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.VocabSize.set -> void
+virtual AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.Channels.get -> int
+virtual AiDotNet.Audio.Codecs.NeuralAudioCodecOptions.Channels.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodebookSize.get -> int
+virtual AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodebookSize.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.NumCodebooks.get -> int
+virtual AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.NumCodebooks.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.PrependBos.get -> bool
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.PrependBos.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.StopOnMostLikelyEndToken.get -> bool
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.StopOnMostLikelyEndToken.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Temperature.get -> double
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Temperature.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TopK.get -> int
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TopK.set -> void
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.HopSize.get -> int
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.HopSize.set -> void
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.StyleDim.get -> int
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.StyleDim.set -> void
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.IstftHopSize.get -> int
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.IstftHopSize.set -> void
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleKernels.get -> int[]!
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleKernels.set -> void
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleRates.get -> int[]!
+virtual AiDotNet.TextToSpeech.StyleEmotion.StyleTtsWaveformOptions.UpsampleRates.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.FftSize.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.FftSize.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.VocabSize.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.VocabSize.set -> void
