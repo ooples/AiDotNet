@@ -164,12 +164,12 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         int rows = queries.Shape[0];
         int n = xTrain.Rows;
 
-        // Distances to all training samples, then the k nearest (stable: equal distances keep the lower index)
+        // Distances to all training samples, then the k nearest
         var distances = ComputeDistances(queries, Tensor<T>.FromMatrix(xTrain));
         int k = Math.Min(Options.NNeighbors, n);
-        var (sortedDistances, sortedIndices) = engine.TensorSort(distances, 1);
-        var nearestDistances = sortedDistances.Slice(1, 0, k);
-        var nearest = sortedIndices.Slice(1, 0, k).Reshape(rows * k);
+        var nearestIndices = SelectNearest(distances, k);
+        var nearestDistances = engine.TensorTakeAlongDim(distances, nearestIndices, 1);
+        var nearest = nearestIndices.Reshape(rows * k);
 
         // Compute weighted votes: sum of weights of the neighbors of each class
         var neighborClasses = engine.TensorGather(GetClassIndexTensor(yTrain), nearest, 0);
@@ -185,6 +185,44 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         var normalized = engine.TensorDivide(classVotes, totalWeight);
         var condition = engine.TensorAdd(new Tensor<T>(new[] { rows, NumClasses }), hasWeight);
         return engine.TensorWhere(condition, normalized, uniform);
+    }
+
+    /// <summary>
+    /// The [rows, k] indices of the k nearest training samples per row, in the order of a partial selection
+    /// sort: at step i the first strictly smallest remaining distance (in the current arrangement) is swapped
+    /// into position i. Ties are therefore resolved exactly as the per-sample selection loop resolved them.
+    /// </summary>
+    private Tensor<int> SelectNearest(Tensor<T> distances, int k)
+    {
+        var engine = Engine;
+        int rows = distances.Shape[0];
+        int n = distances.Shape[1];
+        var arrangement = new int[rows * n];
+        for (int r = 0; r < rows; r++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                arrangement[r * n + j] = j;
+            }
+        }
+
+        for (int i = 0; i < k; i++)
+        {
+            // Distances in the current arrangement from position i on; argmin returns the first minimum
+            var order = new Tensor<int>(arrangement, new[] { rows, n }).Slice(1, i, n);
+            var remaining = engine.TensorTakeAlongDim(distances, order, 1);
+            var minPositions = engine.TensorArgMin(remaining, 1).ToArray();
+            for (int r = 0; r < rows; r++)
+            {
+                int minIdx = i + minPositions[r];
+                if (minIdx != i)
+                {
+                    (arrangement[r * n + i], arrangement[r * n + minIdx]) = (arrangement[r * n + minIdx], arrangement[r * n + i]);
+                }
+            }
+        }
+
+        return new Tensor<int>(arrangement, new[] { rows, n }).Slice(1, 0, k);
     }
 
     /// <summary>

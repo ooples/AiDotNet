@@ -644,5 +644,34 @@ public class KNeighborsIntegrationTests
         Assert.True(probs[0, 0] > 0.99, "Exact match should have very high probability");
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task KNN_TiedDistancesAtTheKBoundary_SelectInPartialSelectionSortOrder()
+    {
+        // Arrange: distances from the query at 0 are [3, 1, 3, 2] for samples 0..3, so samples 0 and 2 tie
+        // for the third neighbor. The partial selection sort (swap the first strict minimum into place)
+        // takes sample 1, then sample 3 (swapping sample 0 to position 3), then sample 2, which now sits
+        // before sample 0. A stable sort would take sample 0 instead.
+        var x = new Matrix<double>(4, 1);
+        var y = new Vector<double>(4);
+        x[0, 0] = 3; y[0] = 0;
+        x[1, 0] = 1; y[1] = 1;
+        x[2, 0] = -3; y[2] = 2;
+        x[3, 0] = 2; y[3] = 1;
+
+        var knn = new KNeighborsClassifier<double>(new KNeighborsOptions<double> { NNeighbors = 3 });
+        knn.Train(x, y);
+
+        var test = new Matrix<double>(1, 1);
+        test[0, 0] = 0;
+
+        // Act
+        var probs = knn.PredictProbabilities(test);
+
+        // Assert: neighbors are samples 1, 3 and 2 -> classes {1, 1, 2}
+        Assert.Equal(0.0, probs[0, 0], Tolerance);
+        Assert.Equal(2.0 / 3.0, probs[0, 1], Tolerance);
+        Assert.Equal(1.0 / 3.0, probs[0, 2], Tolerance);
+    }
+
     #endregion
 }
