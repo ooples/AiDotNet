@@ -240,11 +240,77 @@ internal static class OptionSensitivityFixtureSetup
     }
 
     /// <summary>A deterministic waveform of shape [samples].</summary>
+    // offset + amplitude * sin(frequency * i) over i = 0 .. length - 1, built with engine ops.
+    // [1, channels, frames] mel frames 0.2 sin(0.3 c + 0.2 f); sin(a + b) = sin a cos b + cos a sin b.
+    private static Tensor<T> MelFrames<T>(int channels, int frames)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var grid = engine.TensorAdd(engine.TensorOuter(SineRamp<T>(channels, 0.3, 0.2), CosineRamp<T>(frames, 0.2, 1.0)),
+            engine.TensorOuter(CosineRamp<T>(channels, 0.3, 0.2), SineRamp<T>(frames, 0.2, 1.0)));
+        return Shaped(grid, new[] { 1, channels, frames });
+    }
+
+    private static Tensor<T> SineRamp<T>(int length, double frequency, double amplitude, double offset = 0.0, double phase = 0.0)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var angle = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, length, 1), ops.FromDouble(frequency)), ops.FromDouble(phase));
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorSin(angle), ops.FromDouble(amplitude)), ops.FromDouble(offset));
+    }
+
+    // amplitude * cos(frequency * i) over i = 0 .. length - 1.
+    private static Tensor<T> CosineRamp<T>(int length, double frequency, double amplitude)
+        => SineRamp<T>(length, frequency, amplitude, 0.0, Math.PI / 2);
+
+    // A tensor of the given shape holding the ramp's values in row-major order.
+    private static Tensor<T> Shaped<T>(Tensor<T> ramp, int[] shape) => AiDotNet.Tensors.Engines.AiDotNetEngine.Current.Reshape(ramp, shape);
+
+    // (start + i) mod modulus over i = 0 .. length - 1 (no modulus when it is zero).
+    private static Tensor<T> IndexRamp<T>(int length, int start = 0, int modulus = 0)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var ramp = engine.TensorArange<T>(start, start + length, 1);
+        return modulus > 0 ? engine.TensorRemainder(ramp, engine.TensorLinspace(ops.FromDouble(modulus), ops.FromDouble(modulus), length)) : ramp;
+    }
+
+    // A training target near the model's own prediction: 0.9 * prediction + amplitude * sin(i).
+    private static Tensor<T> NearbyTarget<T>(Tensor<T> prediction, double amplitude)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var ripple = engine.Reshape(SineRamp<T>(prediction.Length, 1.0, amplitude), prediction.Shape.ToArray());
+        return engine.TensorAdd(engine.TensorMultiplyScalar(prediction, ops.FromDouble(0.9)), ripple);
+    }
+
+    // frames x 3 x side x side pixels in [0, 255] of 127.5 + 100 sin(0.4 (x + f) + c) cos(0.3 y): one pattern shifted a
+    // pixel a frame, so a flow estimator sees motion. sin(a + b) = sin a cos b + cos a sin b keeps it to outer products.
+    private static Tensor<T> ShiftedClip<T>(int frames, int side)
+    {
+        const int channels = 3;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var columns = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, side, 1), ops.FromDouble(0.4));
+        var rows = engine.TensorCos(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, side, 1), ops.FromDouble(0.3)));
+        // The phase offset 0.4 f + c of each (frame, channel), flattened to frames * channels.
+        var frameOffsets = engine.TensorOuter(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, frames, 1), ops.FromDouble(0.4)),
+            engine.TensorLinspace(ops.One, ops.One, channels));
+        var channelOffsets = engine.TensorOuter(engine.TensorLinspace(ops.One, ops.One, frames), engine.TensorArange<T>(0, channels, 1));
+        var offsets = engine.Reshape(engine.TensorAdd(frameOffsets, channelOffsets), new[] { frames * channels });
+        var sines = engine.TensorAdd(engine.TensorOuter(engine.TensorCos(offsets), engine.TensorSin(columns)),
+            engine.TensorOuter(engine.TensorSin(offsets), engine.TensorCos(columns)));
+        // [k, x] times rows[y] gives [k, x, y]; permute to [k, y, x].
+        var pattern = engine.TensorPermute(engine.Reshape(engine.TensorOuter(engine.Reshape(sines, new[] { frames * channels * side }), rows),
+            new[] { frames * channels, side, side }), new[] { 0, 2, 1 });
+        return engine.Reshape(engine.TensorAddScalar(engine.TensorMultiplyScalar(pattern, ops.FromDouble(100)), ops.FromDouble(127.5)),
+            new[] { frames, channels, side, side });
+    }
+
     private static Tensor<T> Waveform<T>(int samples)
     {
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var waveform = new Tensor<T>(new[] { samples });
-        for (int i = 0; i < waveform.Length; i++) waveform[i] = ops.FromDouble(0.4 * Math.Sin(i * .13) + 0.2 * Math.Cos(i * .37));
+        waveform = Shaped(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(waveform.Length, 0.13, 0.4), CosineRamp<T>(waveform.Length, 0.37, 0.2)), waveform.Shape.ToArray());
         return waveform;
     }
 
@@ -351,7 +417,7 @@ internal static class OptionSensitivityFixtureSetup
             // at every stride. Seven 16 x 16 frames place them at 0, 3, 6 against 0, 2, 4, 6 or 0, 4.
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var clip = new Tensor<T>(new[] { 7, 3, 16, 16 });
-            for (int i = 0; i < clip.Length; i++) clip[i] = ops.FromDouble(127.5 + 100 * Math.Sin(i * .07));
+            clip = Shaped(SineRamp<T>(clip.Length, 0.07, 100.0, 127.5), clip.Shape.ToArray());
             return observe(network, clip);
         }
         if (network is AiDotNet.Video.Enhancement.MGLDVSR<T> && option is "GuidanceScale" or "FlowIterations")
@@ -359,14 +425,7 @@ internal static class OptionSensitivityFixtureSetup
             // Motion guidance steps the latents along the warping-error gradient of RAFT flows computed on the LQ clip at
             // a quarter of its size. The fixture's 8 x 8 frames give 2 x 2 flows, at which every pixel is occluded and the
             // gradient vanishes. Two 32 x 32 frames of a pattern shifted one pixel give RAFT a visible motion.
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var clip = new Tensor<T>(new[] { 2, 3, 32, 32 });
-            for (int f = 0; f < 2; f++)
-                for (int c = 0; c < 3; c++)
-                    for (int y = 0; y < 32; y++)
-                        for (int x = 0; x < 32; x++)
-                            clip[((f * 3 + c) * 32 + y) * 32 + x] = ops.FromDouble(127.5 + 100 * Math.Sin((x + f) * .4 + c) * Math.Cos(y * .3));
-            return observe(network, clip);
+            return observe(network, ShiftedClip<T>(2, 32));
         }
         if (network is AiDotNet.Video.Enhancement.StreamDiffVSR<T> streamDiff && option == "AttentionHeads")
         {
@@ -376,7 +435,7 @@ internal static class OptionSensitivityFixtureSetup
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var embedding = streamDiff.PromptEmbeddingLayer().GetParameters();
             var varying = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(embedding.Length);
-            for (int i = 0; i < varying.Length; i++) varying[i] = ops.FromDouble(Math.Sin(i * .37));
+            varying = Shaped(SineRamp<T>(varying.Length, 0.37, 1.0), varying.Shape.ToArray());
             streamDiff.PromptEmbeddingLayer().SetParameters(varying);
             return observe(network, input);
         }
@@ -387,7 +446,7 @@ internal static class OptionSensitivityFixtureSetup
             // resizes to 60 x 60, which three windows per axis cut into 20-token windows.
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var latents = new Tensor<T>(new[] { 1, seedVr.LatentChannelCount, 1, 60, 60 });
-            for (int i = 0; i < latents.Length; i++) latents[i] = ops.FromDouble(Math.Sin(i * .07));
+            latents = Shaped(SineRamp<T>(latents.Length, 0.07, 1.0), latents.Shape.ToArray());
             return OptionSensitivityHarness.Fingerprint(seedVr.LatentVelocity(latents, 500).Select(ops.ToDouble));
         }
         if (option == "HubertHeads" && network switch
@@ -411,8 +470,7 @@ internal static class OptionSensitivityFixtureSetup
             var images = new List<Tensor<T>>();
             for (int k = 0; k < 8; k++)
             {
-                var image = new Tensor<T>(new[] { 3, 64, 64 });
-                for (int i = 0; i < image.Length; i++) image[i] = ops.FromDouble(0.5 + 0.4 * Math.Sin(i * (0.011 + 0.003 * k) + k));
+                var image = Shaped(SineRamp<T>(3 * 64 * 64, 0.011 + 0.003 * k, 0.4, 0.5, k), new[] { 3, 64, 64 });
                 images.Add(image);
             }
             var masks = medicalSam.SegmentImageSet(images, 0, new float[,] { { 32f, 32f } }, new[] { 1 });
@@ -470,6 +528,11 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Fingerprint(response.Text.Select(character => (double)character)
                 .Concat(response.Units.Select(unit => (double)unit)).Concat(response.Audio.Select(ops.ToDouble)));
         }
+        if (network is AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASR<T> or AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmall<T>
+            && option == "WindowChunks")
+            // The encoder attends within windows of WindowChunks one-second chunks; three seconds of audio span several
+            // windows once the window is shorter than the clip.
+            return observe(network, Waveform<T>(48000));
         if (network is AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T> seacoFilter && option == "AttentionFilterTopK")
         {
             // The filter keeps the top-k hotwords by decoder attention only when the list is longer than k (section 2.3);
@@ -551,9 +614,8 @@ internal static class OptionSensitivityFixtureSetup
                 var settings = (AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions)voicebox.GetOptions();
                 var numeric = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
                 var mel = new Tensor<T>(new[] { 16, settings.MelChannels });
-                for (int i = 0; i < mel.Length; i++) mel[i] = numeric.FromDouble(-5 + 0.2 * Math.Sin(i * 0.13));
-                var tokens = new Tensor<T>(new[] { 4 });
-                for (int i = 0; i < tokens.Length; i++) tokens[i] = numeric.FromDouble(i + 1);
+                mel = Shaped(SineRamp<T>(mel.Length, 0.13, 0.2, -5.0), mel.Shape.ToArray());
+                var tokens = IndexRamp<T>(4, start: 1);
                 var objective = voicebox.EvaluateTrainingObjective(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
                 {
                     Tokens = tokens, Mel = mel, Durations = new[] { 4, 4, 4, 4 },
@@ -676,9 +738,8 @@ internal static class OptionSensitivityFixtureSetup
             // Pre-tokenized SNAC frames are a supported training input. Include a repeated coarse
             // code so the release's deduplication path changes the actual language-model sequence.
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var codes = new Tensor<T>(new[] { 3, 7 });
-            for (int frame = 0; frame < 3; frame++)
-                for (int slot = 0; slot < 7; slot++) codes[frame, slot] = ops.FromDouble(slot + (frame < 2 ? 1 : 2));
+            var slots = Shaped(IndexRamp<T>(7, start: 1), new[] { 1, 7 });
+            var codes = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorConcatenate(new[] { slots, slots, AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAddScalar(slots, ops.One) }, 0);
             var ids = orpheus.TrainingIds(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
             {
                 Tokens = input, Text = "A repeated codec frame.", CodecTokens = codes,
@@ -826,21 +887,20 @@ internal static class OptionSensitivityFixtureSetup
             && network is AiDotNet.Interfaces.ISpeechRecognizer<T> convTransformer && option == "MaxTextLength")
         {
             // MaxTextLength bounds the greedy attention decode inside Transcribe; Predict returns encoder logits and
-            // never decodes. An untrained decoder rarely emits the end token, so the transcript runs to the bound.
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var waveform = new Tensor<T>(new[] { 16000 });
-            for (int i = 0; i < waveform.Length; i++) waveform[i] = ops.FromDouble(0.4 * Math.Sin(i * .13) + 0.2 * Math.Cos(i * .37));
-            string text = convTransformer.Transcribe(waveform, includeTimestamps: false).Text;
-            return OptionSensitivityHarness.Combine(fingerprint,
-                OptionSensitivityHarness.Fingerprint(text.Select(character => (double)character).Append(text.Length)));
+            // never decodes. An untrained decoder can emit the end token first on a given clip, so the probe decodes four
+            // clips of different tones; any that runs past one token shows the bound.
+            var transcripts = new[] { 0.13, 0.29, 0.53, 0.87 }.Select(frequency =>
+                convTransformer.Transcribe(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(
+                    SineRamp<T>(16000, frequency, 0.4), CosineRamp<T>(16000, 0.37, 0.2)), includeTimestamps: false).Text).ToList();
+            return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(
+                transcripts.SelectMany(text => text.Select(character => (double)character).Append(-text.Length - 1.0))));
         }
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T> cif && option == "TailThreshold")
         {
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             foreach (int samples in new[] { 1600, 3200, 6400, 16000 })
             {
-                var waveform = new Tensor<T>(new[] { samples });
-                for (int i = 0; i < samples; i++) waveform[i] = ops.FromDouble(0.4 * Math.Sin(i * .13) + 0.2 * Math.Cos(i * .37));
+                var waveform = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(samples, 0.13, 0.4), CosineRamp<T>(samples, 0.37, 0.2));
                 string text = cif.Transcribe(waveform, includeTimestamps: false).Text;
                 fingerprint = OptionSensitivityHarness.Combine(fingerprint,
                     OptionSensitivityHarness.Fingerprint(text.Select(character => (double)character)));
@@ -857,11 +917,15 @@ internal static class OptionSensitivityFixtureSetup
                 _ => AiDotNet.Audio.Generation.AudioLMStage.CoarseAcoustic,
             };
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var semantic = new Tensor<T>(new[] { 8 });
-            var codes = new Tensor<T>(new[] { 16, settings.NumCodebooks });
-            for (int i = 0; i < semantic.Length; i++) semantic[i] = ops.FromDouble(i % settings.SemanticCodes);
-            for (int frame = 0; frame < 16; frame++)
-                for (int q = 0; q < settings.NumCodebooks; q++) codes[frame, q] = ops.FromDouble((frame + q) % settings.CodebookSize);
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var semantic = IndexRamp<T>(8, modulus: settings.SemanticCodes);
+            // codes[frame, q] = (frame + q) mod CodebookSize: the outer sum of the two index ramps.
+            int books = settings.NumCodebooks;
+            var frameIndex = engine.TensorOuter(IndexRamp<T>(16), engine.TensorLinspace(ops.One, ops.One, books));
+            var bookIndex = engine.TensorOuter(engine.TensorLinspace(ops.One, ops.One, 16), IndexRamp<T>(books));
+            var codebookSize = ops.FromDouble(settings.CodebookSize);
+            var codes = engine.TensorRemainder(engine.TensorAdd(frameIndex, bookIndex),
+                Shaped(engine.TensorLinspace(codebookSize, codebookSize, 16 * books), new[] { 16, books }));
             double cropLoss = ops.ToDouble(audioLm.EvaluateTrainingObjective(semantic, codes));
             return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { cropLoss }));
         }
@@ -891,8 +955,10 @@ internal static class OptionSensitivityFixtureSetup
             // These drive the style encoder's own stage (TrainStyle), which the generic step does not run.
             var settings = (AiDotNet.TextToSpeech.DescriptionBased.PromptTTSOptions)prompted.GetOptions();
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var promptIds = new Tensor<T>(new[] { 5 });
-            for (int i = 0; i < 5; i++) promptIds[i] = ops.FromDouble(2 + (7 * i) % Math.Max(1, settings.StyleVocabularySize - 2));
+            // 2 + (7 i) mod (StyleVocabularySize - 2), past the two special ids.
+            var styleRange = ops.FromDouble(Math.Max(1, settings.StyleVocabularySize - 2));
+            var promptIds = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAddScalar(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorRemainder(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorMultiplyScalar(IndexRamp<T>(5), ops.FromDouble(7)),
+                AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorLinspace(styleRange, styleRange, 5)), ops.FromDouble(2));
             var labels = settings.StyleFactorClasses.Select((classes, i) => i % classes).ToArray();
             var losses = new List<double>();
             for (int step = 0; step < 3; step++) losses.Add(ops.ToDouble(prompted.TrainStyle(promptIds, labels)));
@@ -905,10 +971,7 @@ internal static class OptionSensitivityFixtureSetup
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             Tensor<T> Voice(double hz)
             {
-                var x = new Tensor<T>(new[] { 8000 });
-                for (int i = 0; i < x.Length; i++)
-                    x[i] = ops.FromDouble(0.5 * Math.Sin(2 * Math.PI * hz * i / 16000) + 0.2 * Math.Sin(2 * Math.PI * 3.1 * hz * i / 16000));
-                return x;
+                return AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(8000, 2 * Math.PI * hz / 16000, 0.5), SineRamp<T>(8000, 2 * Math.PI * 3.1 * hz / 16000, 0.2));
             }
             var recordings = new[] { Voice(120), Voice(220), Voice(320) };
             w2v.FitSemanticTokenizer(recordings);
@@ -927,7 +990,7 @@ internal static class OptionSensitivityFixtureSetup
             var settings = (AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions)topK.GetOptions();
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var speaker = new Tensor<T>(new[] { settings.T3SpeakerEmbeddingDim });
-            for (int i = 0; i < speaker.Length; i++) speaker[i] = ops.FromDouble(Math.Cos(0.5 * i));
+            speaker = Shaped(CosineRamp<T>(speaker.Length, 0.5, 1.0), speaker.Shape.ToArray());
             var condition = new AiDotNet.TextToSpeech.VoiceCloning.ChatterboxT3Condition<T>(speaker, new[] { 2, 4, 6 }, 0.5);
             var tokens = new List<double>();
             for (int seed = 0; seed < 4; seed++)
@@ -941,9 +1004,9 @@ internal static class OptionSensitivityFixtureSetup
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var speech = Enumerable.Range(0, 6).Select(i => (i * 37) % 50).ToArray();
             var mel = new Tensor<T>(new[] { 1, flow.Configuration.OutputSize, flow.MelFrames(speech.Length) });
-            for (int i = 0; i < mel.Length; i++) mel[i] = ops.FromDouble(Math.Sin(0.37 * i));
+            mel = Shaped(SineRamp<T>(mel.Length, 0.37, 1.0), mel.Shape.ToArray());
             var xvector = new Tensor<T>(new[] { flow.Configuration.SpeakerDim });
-            for (int i = 0; i < xvector.Length; i++) xvector[i] = ops.FromDouble(Math.Cos(0.5 * i));
+            xvector = Shaped(CosineRamp<T>(xvector.Length, 0.5, 1.0), xvector.Shape.ToArray());
             var settings = (AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions)distilled.GetOptions();
             return OptionSensitivityHarness.Fingerprint(flow.DistillationLoss(distilled.TeacherFlow, speech, mel, xvector, false,
                 new Random(1337), settings.DistillationTeacherSteps).Select(ops.ToDouble));
@@ -969,7 +1032,7 @@ internal static class OptionSensitivityFixtureSetup
             var settings = (AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options)dit.GetOptions();
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 6 });
-            for (int i = 0; i < mel.Length; i++) mel[i] = ops.FromDouble(0.2 * Math.Sin(i * 0.17));
+            mel = Shaped(SineRamp<T>(mel.Length, 0.17, 0.2), mel.Shape.ToArray());
             var speaker = new Tensor<T>(new[] { settings.SpeakerEmbeddingDim }); speaker[0] = ops.One;
             var ditLoss = dit.DiTFlowModel!.TrainingLoss(new[] { 1, 2, 3 }, mel, speaker, false, new Random(1337));
             return OptionSensitivityHarness.Fingerprint(ditLoss.Select(ops.ToDouble));
@@ -1021,9 +1084,9 @@ internal static class OptionSensitivityFixtureSetup
         }
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> e3 && option is "SilenceBlockSize" or "SilenceMagnitudeThreshold")
         {
-            var waveform = new Tensor<T>(new[] { 16 });
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < 9; i++) waveform[i] = ops.FromDouble(0.075);
+            var loud = ops.FromDouble(0.075);
+            var waveform = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorConcatenate(new[] { AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorLinspace(loud, loud, 9), new Tensor<T>(new[] { 7 }) }, 0);
             var trimmed = (Tensor<T>)typeof(AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>).GetMethod("TrimTrailingSilence",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(e3, new object[] { waveform })!;
             return OptionSensitivityHarness.Combine(fingerprint,
@@ -1077,39 +1140,24 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> vocos && !IsVocoderFrontendOption(option))
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.VocosOptions)vocos.GetOptions();
-            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 3 });
-            var vocosOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int c = 0; c < settings.MelChannels; c++) for (int f = 0; f < 3; f++)
-                mel[0, c, f] = vocosOps.FromDouble(.2 * Math.Sin(.3 * c + .2 * f));
-            return mel;
+            return MelFrames<T>(settings.MelChannels, 3);
         }
         if (network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> waveNet && !IsVocoderFrontendOption(option))
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.WaveNetOptions)waveNet.GetOptions();
-            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 1 });
-            var waveNetOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int c = 0; c < settings.MelChannels; c++)
-                mel[0, c, 0] = waveNetOps.FromDouble(.2 * Math.Sin(.3 * c));
-            return mel;
+            return MelFrames<T>(settings.MelChannels, 1);
         }
         if (network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> waveRnn && !IsVocoderFrontendOption(option))
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions)waveRnn.GetOptions();
-            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 2 });
-            var waveRnnOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int c = 0; c < settings.MelChannels; c++) for (int f = 0; f < 2; f++)
-                mel[0, c, f] = waveRnnOps.FromDouble(.2 * Math.Sin(.3 * c + .2 * f));
-            return mel;
+            return MelFrames<T>(settings.MelChannels, 2);
         }
         if (network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples")
             return new Tensor<T>(new[] { 1 }); // Label zero, or the ignored unconditional input.
         if (network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> cam && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds")
         {
             var settings = (AiDotNet.Audio.Speaker.CAMPlusPlusOptions)cam.GetOptions();
-            var camWaveform = new Tensor<T>(new[] { settings.SampleRate });
-            var frontendOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < camWaveform.Length; i++)
-                camWaveform[i] = frontendOps.FromDouble(0.4 * Math.Sin(i * 0.13) + 0.2 * Math.Cos(i * 0.37));
+            var camWaveform = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(settings.SampleRate, 0.13, 0.4), CosineRamp<T>(settings.SampleRate, 0.37, 0.2));
             return (Tensor<T>)typeof(AiDotNet.Audio.Speaker.CAMPlusPlus<T>).GetMethod("PreprocessAudio",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(cam, new object[] { camWaveform })!;
         }
@@ -1146,10 +1194,12 @@ internal static class OptionSensitivityFixtureSetup
         if (preprocess is null) return input;
         // Exercise the same clipping front end as Transcribe, beyond the one-second control limit.
         network.SetTrainingMode(false);
-        var waveform = new Tensor<T>(new[] { checked(2 * sampleRate) });
-        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < waveform.Length; i++)
-            waveform[i] = i < sampleRate ? input[i % input.Length] : ops.Negate(input[i % input.Length]);
+        // One second of the input repeated, then the same second negated.
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var flat = engine.Reshape(input, new[] { input.Length });
+        var tiled = engine.TensorTile(flat, new[] { (sampleRate + input.Length - 1) / input.Length });
+        var second = engine.TensorSlice(tiled, new[] { 0 }, new[] { sampleRate });
+        var waveform = engine.TensorConcatenate(new[] { second, engine.TensorNegate(second) }, 0);
         return (Tensor<T>)(preprocess.Invoke(network, new object[] { waveform })
             ?? throw new InvalidOperationException("The audio front end returned no input."));
     }
@@ -1185,11 +1235,8 @@ internal static class OptionSensitivityFixtureSetup
 
     private static Tensor<T> VocoderRecording<T>(AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
     {
-        var recording = new Tensor<T>(new[] { Math.Max(2 * options.FftSize, 8 * options.HopSize) });
-        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < recording.Length; i++)
-            recording[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.13) + 0.2 * Math.Cos(i * 0.37));
-        return recording;
+        int length = Math.Max(2 * options.FftSize, 8 * options.HopSize);
+        return AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(length, 0.13, 0.4), CosineRamp<T>(length, 0.37, 0.2));
     }
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
@@ -1253,11 +1300,8 @@ internal static class OptionSensitivityFixtureSetup
         // Joint training has a documented warm-up prerequisite: cluster posterior frames into the bank.
         int frames = option == "MemoryKMeansIterations" ? Math.Max(8 * options.MemorySize, 128) : Math.Max(options.MemorySize, 32);
         int samples = checked(frames * options.HopSize);
-        var recording = new Tensor<T>(new[] { samples });
-        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < samples; i++)
-            recording[i] = ops.FromDouble(0.4 * Math.Sin(2 * Math.PI * 180 * i / options.SampleRate)
-                + 0.2 * Math.Sin(2 * Math.PI * 470 * i / options.SampleRate));
+        var recording = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(samples, 2 * Math.PI * 180 / options.SampleRate, 0.4),
+            SineRamp<T>(samples, 2 * Math.PI * 470 / options.SampleRate, 0.2));
         natural.InitializeMemoryBank(new[] { recording });
     }
 
@@ -1269,17 +1313,16 @@ internal static class OptionSensitivityFixtureSetup
             // recipe samples from a long series; a supervised step on a ready-made window has none of them.
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var series = new Tensor<T>(new[] { 240 });
-            for (int i = 0; i < series.Length; i++) series[i] = ops.FromDouble(10 + Math.Sin(i * .21) + .3 * Math.Cos(i * .05));
+            series = Shaped(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(series.Length, 0.21, 1.0, 10.0), CosineRamp<T>(series.Length, 0.05, 0.3)), series.Shape.ToArray());
             chronos.TrainOnSeries(series);
             return true;
         }
         if (network is AiDotNet.SpeechRecognition.Robust.RobustConformer<T> robust && option is "DiversityWeight" or "ReconstructionWeight")
         {
             // λ1 and λ2 weight the continual pre-training loss (Equation 4), which supervised fine-tuning does not use.
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var clean = Waveform<T>(32000);
-            var noisy = new Tensor<T>(clean.Shape.ToArray());
-            for (int i = 0; i < noisy.Length; i++) noisy[i] = ops.FromDouble(ops.ToDouble(clean[i]) + 0.05 * Math.Sin(i * 1.7));
+            var noisy = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(clean,
+                AiDotNet.Tensors.Engines.AiDotNetEngine.Current.Reshape(SineRamp<T>(clean.Length, 1.7, 0.05), clean.Shape.ToArray()));
             robust.ContinualPretrain(noisy, clean);
             robust.ContinualPretrain(noisy, clean);
             return true;
@@ -1291,11 +1334,9 @@ internal static class OptionSensitivityFixtureSetup
         {
             // The masks, modality dropout, cluster logits and feature penalty act in masked multimodal cluster
             // prediction (section 3), on half a second of audio and its 12 mouth crops of LipSize at 25 Hz.
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var audio = Waveform<T>(8000);
             int side = avOptions.LipSize;
-            var lips = new Tensor<T>(new[] { 12, side, side });
-            for (int i = 0; i < lips.Length; i++) lips[i] = ops.FromDouble(0.5 + 0.4 * Math.Sin(i * 0.37));
+            var lips = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.Reshape(SineRamp<T>(12 * side * side, 0.37, 0.4, 0.5), new[] { 12, side, side });
             var targets = Enumerable.Range(0, 12).Select(t => (t / 2) % avOptions.NumClusters).ToArray();
             avHubert.Pretrain(audio, lips, targets);
             avHubert.Pretrain(audio, lips, targets);
@@ -1304,26 +1345,30 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.Video.FrameInterpolation.VFIformer<T> vfiformer && option == "FlowWeight" && input.Rank == 3 && input.Shape[0] == 6)
         {
             // The flow distillation term needs the midpoint's flows to both frames, four channels after the frame pair.
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
             int h = input.Shape[1], w = input.Shape[2];
-            var withFlows = new Tensor<T>(new[] { 10, h, w });
-            for (int i = 0; i < input.Length; i++) withFlows[i] = input[i];
-            for (int i = input.Length; i < withFlows.Length; i++) withFlows[i] = ops.FromDouble(1.5 * Math.Sin(i * 0.11));
-            var prediction = vfiformer.Predict(input);
-            var target = new Tensor<T>(prediction.Shape.ToArray());
-            for (int i = 0; i < target.Length; i++) target[i] = ops.FromDouble(0.9 * ops.ToDouble(prediction[i]) + 5 * Math.Sin(i));
+            var flows = engine.Reshape(SineRamp<T>(4 * h * w, 0.11, 1.5), new[] { 4, h, w });
+            var withFlows = engine.TensorConcatenate(new[] { input, flows }, 0);
+            var target = NearbyTarget(vfiformer.Predict(input), 5.0);
             vfiformer.Train(withFlows, target);
             vfiformer.Train(withFlows, target);
+            return true;
+        }
+        if (network is AiDotNet.Video.Enhancement.PSRT<T> psrtFreeze && option == "FlowFreezeIterations")
+        {
+            // SPyNet joins training after fix_flow iterations; its pyramid needs frames wider than the fixture's 8 x 8
+            // for a flow (and so a flow gradient) to exist. Three 32 x 32 frames of a pattern shifted one pixel a frame.
+            var clip = ShiftedClip<T>(3, 32);
+            var target = NearbyTarget(psrtFreeze.Predict(clip), 5.0);
+            psrtFreeze.Train(clip, target);
+            psrtFreeze.Train(clip, target);
             return true;
         }
         if (network is AiDotNet.Video.FrameInterpolation.XVFI<T> xvfi && option is "LearningRateDecay" or "SmoothnessWeight")
         {
             // MultiStepLR steps per epoch, so the decay applies from the step after the first epoch ends. The refined
             // flow starts at zero, where the smoothness term has no gradient, so the weight shows once a step has moved it.
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var prediction = xvfi.Predict(input);
-            var target = new Tensor<T>(prediction.Shape.ToArray());
-            for (int i = 0; i < target.Length; i++) target[i] = ops.FromDouble(0.9 * ops.ToDouble(prediction[i]) + 0.05 * Math.Sin(i));
+            var target = NearbyTarget(xvfi.Predict(input), 0.05);
             for (int epoch = 0; epoch < 3; epoch++)
             {
                 xvfi.Train(input, target);
@@ -1335,10 +1380,7 @@ internal static class OptionSensitivityFixtureSetup
         {
             // ReduceLROnPlateau steps once per epoch on the validation loss. Eight epochs of a plateaued loss cross every
             // patience the probe tries, with a training step after the drop.
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var prediction = flavr.Predict(input);
-            var target = new Tensor<T>(prediction.Shape.ToArray());
-            for (int i = 0; i < target.Length; i++) target[i] = ops.FromDouble(0.9 * ops.ToDouble(prediction[i]) + 0.05 * Math.Sin(i));
+            var target = NearbyTarget(flavr.Predict(input), 0.05);
             for (int epoch = 0; epoch < 8; epoch++)
             {
                 flavr.Train(input, target);
@@ -1350,7 +1392,7 @@ internal static class OptionSensitivityFixtureSetup
         {
             var audio = new Tensor<T>(new[] { 4096 });
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < audio.Length; i++) audio[i] = ops.FromDouble(.3 * Math.Sin(.17 * i) + .1 * Math.Cos(.31 * i));
+            audio = Shaped(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(audio.Length, 0.17, 0.3), CosineRamp<T>(audio.Length, 0.31, 0.1)), audio.Shape.ToArray());
             waveRnn.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = new Tensor<T>(new[] { 1 }), Audio = audio });
             return true;
         }
@@ -1359,7 +1401,7 @@ internal static class OptionSensitivityFixtureSetup
             var settings = (AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions)diffWave.GetOptions();
             var audio = new Tensor<T>(new[] { 128 });
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < audio.Length; i++) audio[i] = ops.FromDouble(.3 * Math.Sin(.17 * i) + .1 * Math.Cos(.31 * i));
+            audio = Shaped(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(audio.Length, 0.17, 0.3), CosineRamp<T>(audio.Length, 0.31, 0.1)), audio.Shape.ToArray());
             diffWave.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
             {
                 Tokens = new Tensor<T>(new[] { 1 }), Audio = audio,
@@ -1403,7 +1445,7 @@ internal static class OptionSensitivityFixtureSetup
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             // A real partially observed mel span: the minimum recording may leave no audio condition to drop.
             var mel = new Tensor<T>(new[] { 16, infillingOptions.MelChannels });
-            for (int i = 0; i < mel.Length; i++) mel[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.17) + 0.2 * Math.Cos(i * 0.31));
+            mel = Shaped(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(mel.Length, 0.17, 0.4), CosineRamp<T>(mel.Length, 0.31, 0.2)), mel.Shape.ToArray());
             flow.Train(input, mel);
             return true;
         }
@@ -1413,11 +1455,10 @@ internal static class OptionSensitivityFixtureSetup
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             // The generic minimum-length recording can give each token exactly one frame:
             // MAS then has only one valid path, regardless of the actual noise schedule.
-            var tokens = new Tensor<T>(new[] { 4 });
-            for (int i = 0; i < tokens.Length; i++) tokens[i] = ops.FromDouble((i + 1) % settings.VocabSize);
+            var tokens = IndexRamp<T>(4, start: 1, modulus: settings.VocabSize);
             int hop = settings.UpsampleRates.Aggregate(1, (a, b) => a * b);
             var audio = new Tensor<T>(new[] { hop * 4 * tokens.Length });
-            for (int i = 0; i < audio.Length; i++) audio[i] = ops.FromDouble(0.3 * Math.Sin(i * 0.17) + 0.1 * Math.Sin(i * 0.31));
+            audio = Shaped(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(audio.Length, 0.17, 0.3), SineRamp<T>(audio.Length, 0.31, 0.1)), audio.Shape.ToArray());
             alignment.Train(tokens, audio);
             return true;
         }
@@ -1503,11 +1544,10 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fishPreference && option is "DpoBeta" or "ReferenceFreeDpoBeta")
         {
             // Preference tuning (the standard DPO and the release's reference-free objective) on a pair of recordings of
-            // the same text; the probe's supervised step never reads either beta.
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var rejectedAudio = new Tensor<T>(new[] { 8192 });
-            for (int i = 0; i < rejectedAudio.Length; i++) rejectedAudio[i] = ops.FromDouble(0.3 * Math.Sin(i * .05));
-            var chosen = new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Audio = Waveform<T>(8192) };
+            // the same text; the probe's supervised step never reads either beta. The fixture's 1,024-sample recordings
+            // (16 code frames) keep the packed pair inside its 160-token context, which 1.5's system turn shares.
+            var rejectedAudio = SineRamp<T>(1024, 0.05, 0.3);
+            var chosen = new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Audio = Waveform<T>(1024) };
             var rejected = new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Audio = rejectedAudio };
             if (option == "DpoBeta") fishPreference.TrainPreference(chosen, rejected);
             else fishPreference.TrainPreferenceReferenceFree(chosen, rejected);
@@ -1531,8 +1571,7 @@ internal static class OptionSensitivityFixtureSetup
             {
                 int width = ((AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions)spirit.GetOptions()).SonarWidth;
                 var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-                var semantic = new Tensor<T>(new[] { width });
-                for (int i = 0; i < width; i++) semantic[i] = ops.FromDouble(Math.Sin(i * 0.37));
+                var semantic = SineRamp<T>(width, 0.37, 1.0);
                 spirit.TrainSonarExpressive(SpiritLmFixture.Tones<T>(0.25), semantic, true);
                 return true;
             }
@@ -1547,7 +1586,7 @@ internal static class OptionSensitivityFixtureSetup
         {
             var recording = new Tensor<T>(new[] { Math.Max(1, e3Options.TrainingWaveformSamples / 2) });
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < recording.Length; i++) recording[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.13));
+            recording = Shaped(SineRamp<T>(recording.Length, 0.13, 0.4), recording.Shape.ToArray());
             e3.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Text = "test", Audio = recording });
             return true;
         }
@@ -1962,9 +2001,10 @@ internal static class OptionSensitivityFixtureSetup
                 if (options is AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options sam21Side) sam21Side.ImageSize = 64;
             }
             // SAM 2's 32-pixel fixture gives Hiera stage maps of 8, 4, 2 and 1 tokens, each inside its {8, 4, 2, 1}
-            // window, so a global block attends exactly as a windowed one. Halve the windows so they cut the maps.
+            // window, so a global block attends exactly as a windowed one. Halve the first two windows so they cut the
+            // 8- and 4-token maps; the third stays 2, since the last stage pools its queries 2x2 inside it.
             if (option == "HieraGlobalAttentionBlockIndexes" && options is AiDotNet.Video.Options.SAM2Options sam2Windows)
-                sam2Windows.HieraWindowSizes = new[] { 4, 2, 1, 1 };
+                sam2Windows.HieraWindowSizes = new[] { 4, 2, 2, 1 };
             // The fixture's explicit depths and global blocks override the size preset; leave them to the preset.
             if (option == "ModelSize" && options is AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2Options medicalSize)
             {
@@ -2438,7 +2478,8 @@ internal static class OptionSensitivityFixtureSetup
             and not AiDotNet.SpeechRecognition.LLMIntegrated.SALM<T>
             and not AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>
             and not AiDotNet.Finance.Forecasting.Foundation.Chronos<T>
-            and not AiDotNet.Video.Denoising.ShiftNet<T>) return;
+            and not AiDotNet.Video.Denoising.ShiftNet<T>
+            and not AiDotNet.Audio.Foundations.HuBERT<T>) return;
         // The generated fixtures inject constant-rate optimizers for convergence invariants, and a rebuilt probe
         // inherits the shell's optimizer, whose schedule was built from the shell's options (an ASR model's
         // WarmupSteps). Reconstruct option probes without that override so the paper optimizer reads its settings.

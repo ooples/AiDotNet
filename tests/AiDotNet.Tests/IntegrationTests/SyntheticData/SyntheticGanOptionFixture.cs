@@ -103,9 +103,11 @@ internal static class SyntheticGanOptionFixture
         }
         var options = ((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)model).GetOptions();
         int width = (int)options.GetType().GetProperty("EmbeddingDimension")!.GetValue(options)!;
-        if (model is not CausalGANGenerator<T> and not PATEGANGenerator<T>) width += model.GetArchitecture().CalculatedInputSize;
-        var input = new Tensor<T>(new[] { 1, width });
-        for (int i = 0; i < input.Length; i++) input[i] = ops.FromDouble(.1 * (i + 1));
+        // OCT-GAN's generator reads EmbeddingDimension noise and appends its (unfitted, empty) condition itself.
+        if (model is not CausalGANGenerator<T> and not PATEGANGenerator<T> and not OCTGANGenerator<T>)
+            width += model.GetArchitecture().CalculatedInputSize;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var input = engine.Reshape(engine.TensorMultiplyScalar(engine.TensorArange<T>(1, width + 1, 1), ops.FromDouble(.1)), new[] { 1, width });
         return TtsPaperNumerics.Fingerprint(model.Predict(input).Select(ops.ToDouble));
     }
 }
