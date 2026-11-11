@@ -214,6 +214,56 @@ internal static class PreprocessingTensorOps
         return engine.TensorMax(mi, ops.Zero);
     }
 
+    /// <summary>
+    /// Integer class labels of a target (each value rounded to the nearest integer, ties to even, like
+    /// <c>(int)Math.Round(value)</c>): the sorted distinct classes and, per row, the position of its class.
+    /// </summary>
+    public static int[] ClassLabels<T>(Vector<T> target, out int[] classes, out int[] classIndex)
+    {
+        var labels = AiDotNetEngine.Current.TensorRound(Tensor<T>.FromVector(target)).Cast<int>().AsSpan().ToArray();
+        classes = labels.Distinct().OrderBy(c => c).ToArray();
+        classIndex = new int[labels.Length];
+        for (int i = 0; i < labels.Length; i++)
+            classIndex[i] = Array.BinarySearch(classes, labels[i]);
+        return labels;
+    }
+
+    /// <summary>One-hot class membership [n, classCount] (0/1 in T) from per-row class positions.</summary>
+    public static Tensor<T> ClassOneHot<T>(int[] classIndex, int classCount)
+    {
+        if (classIndex.Length == 0)
+            return new Tensor<T>(new[] { 0, classCount });
+        return AiDotNetEngine.Current.TensorOneHot<T>(
+            new Tensor<int>((int[])classIndex.Clone(), new[] { classIndex.Length }), classCount);
+    }
+
+    /// <summary>Row <paramref name="row"/> of a 2-D tensor as a [1, columns] tensor.</summary>
+    public static Tensor<T> Row<T>(Tensor<T> x, int row) =>
+        AiDotNetEngine.Current.TensorSlice(x, new[] { row, 0 }, new[] { 1, x.Shape[1] });
+
+    /// <summary>Row <paramref name="row"/> of a 2-D tensor as a [columns] tensor.</summary>
+    public static Tensor<T> RowVector<T>(Tensor<T> x, int row) =>
+        AiDotNetEngine.Current.Reshape(Row(x, row), new[] { x.Shape[1] });
+
+    /// <summary>Column <paramref name="column"/> of a 2-D tensor as an [n] tensor.</summary>
+    public static Tensor<T> ColumnVector<T>(Tensor<T> x, int column) =>
+        AiDotNetEngine.Current.Reshape(
+            AiDotNetEngine.Current.TensorSlice(x, new[] { 0, column }, new[] { x.Shape[0], 1 }), new[] { x.Shape[0] });
+
+    /// <summary>
+    /// Column-wise minimum and maximum of the rows of <paramref name="x"/> ([n, p]) selected by a 0/1 row mask
+    /// ([n]); the selection must be non-empty.
+    /// </summary>
+    public static (Tensor<T> Min, Tensor<T> Max) MaskedColumnRange<T>(Tensor<T> x, Tensor<T> rowMask)
+    {
+        var engine = AiDotNetEngine.Current;
+        var shape = x.Shape.ToArray();
+        var mask = engine.TensorBroadcastTo(engine.Reshape(rowMask, new[] { shape[0], 1 }), shape);
+        var high = engine.TensorBroadcastTo(engine.Reshape(ColumnMax(x), new[] { 1, shape[1] }), shape);
+        var low = engine.TensorBroadcastTo(engine.Reshape(ColumnMin(x), new[] { 1, shape[1] }), shape);
+        return (ColumnMin(engine.TensorWhere(mask, x, high)), ColumnMax(engine.TensorWhere(mask, x, low)));
+    }
+
     /// <summary>The positions where a 0/1 mask tensor is non-zero, in ascending order.</summary>
     public static int[] MaskPositions<T>(Tensor<T> mask)
     {
