@@ -520,6 +520,40 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Selects the rows of <paramref name="x"/> and elements of <paramref name="y"/> at <paramref name="indices"/>
+    /// (repeats allowed, in the given order).
+    /// </summary>
+    /// <param name="x">The feature matrix.</param>
+    /// <param name="y">The label vector.</param>
+    /// <param name="indices">The sample indices to take.</param>
+    /// <returns>The selected rows and labels.</returns>
+    protected (Matrix<T> X, Vector<T> Y) SelectSamples(Matrix<T> x, Vector<T> y, int[] indices)
+    {
+        if (indices.Length == 0)
+        {
+            return (new Matrix<T>(0, x.Columns), new Vector<T>(0));
+        }
+
+        return (x.GetRows(indices), SelectElements(y, indices));
+    }
+
+    /// <summary>
+    /// Selects the elements of <paramref name="values"/> at <paramref name="indices"/>.
+    /// </summary>
+    /// <param name="values">The source vector.</param>
+    /// <param name="indices">The indices to take (repeats allowed).</param>
+    /// <returns>The gathered elements.</returns>
+    protected Vector<T> SelectElements(Vector<T> values, int[] indices)
+    {
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorGather(values.AsTensor(), new Tensor<int>(indices, new[] { indices.Length }), 0).ToVector();
+    }
+
+    /// <summary>
     /// Creates a vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
     /// </summary>
     protected static Vector<T> FilledVector(int length, T value)
