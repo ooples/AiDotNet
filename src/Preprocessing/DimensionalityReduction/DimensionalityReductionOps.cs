@@ -154,18 +154,19 @@ internal static class DimensionalityReductionOps
         Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(random, rows, columns));
 
     /// <summary>
-    /// Row-major [rows, columns] standard normal draws by Box-Muller, consuming two NextDouble values per entry
-    /// (u1 then u2, z = sqrt(-2 ln u1) cos(2 pi u2)).
+    /// Row-major [rows, columns] standard normal draws consuming <paramref name="random"/> exactly like a nested
+    /// loop of <c>RandomExtensions.NextGaussian</c>: two NextDouble values per entry (u1 then u2),
+    /// z = sqrt(-2 ln max(u1, double.Epsilon)) sin(2 pi u2).
     /// </summary>
     internal static Tensor<T> StandardNormal<T>(Random random, int rows, int columns)
     {
         var engine = Engine;
         var numOps = MathHelper.GetNumericOperations<T>();
         var draws = engine.Reshape(Uniform<T>(random, rows * columns, 2), new[] { rows * columns, 2 });
-        var u1 = engine.TensorSliceAxis(draws, 1, 0);
+        var u1 = engine.TensorClampMin(engine.TensorSliceAxis(draws, 1, 0), numOps.FromDouble(double.Epsilon));
         var u2 = engine.TensorSliceAxis(draws, 1, 1);
         var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(engine.TensorLog(u1), numOps.FromDouble(-2.0)));
-        var angle = engine.TensorCos(engine.TensorMultiplyScalar(u2, numOps.FromDouble(2.0 * Math.PI)));
+        var angle = engine.TensorSin(engine.TensorMultiplyScalar(u2, numOps.FromDouble(2.0 * Math.PI)));
         return engine.Reshape(engine.TensorMultiply(radius, angle), new[] { rows, columns });
     }
 
