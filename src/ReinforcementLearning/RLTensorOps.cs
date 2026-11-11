@@ -337,6 +337,93 @@ internal static class RLTensorOps
         return output.ToVector()[0];
     }
 
+    /// <summary>Stacks the first <paramref name="width"/> elements of each vector as a [count, width] batch.</summary>
+    internal static Tensor<T> Batch<T>(IEnumerable<Vector<T>> rows, int width)
+    {
+        if (rows is null)
+        {
+            throw new ArgumentNullException(nameof(rows));
+        }
+
+        return StackRows(rows.Select(row => Head(row, width)).ToList());
+    }
+
+    /// <summary>The <paramref name="count"/> equal-width rows of a batched output, in order.</summary>
+    internal static List<Vector<T>> Rows<T>(Tensor<T> batch, int count)
+    {
+        if (batch is null)
+        {
+            throw new ArgumentNullException(nameof(batch));
+        }
+
+        var flat = batch.ToVector();
+        int width = count == 0 ? 0 : flat.Length / count;
+        return Enumerable.Range(0, count).Select(row => flat.GetSubVector(row * width, width)).ToList();
+    }
+
+    /// <summary>
+    /// Picks one entry per row of a [count, width] batch: element (row, columns[row]).
+    /// </summary>
+    internal static Vector<T> PickPerRow<T>(Tensor<T> batch, int count, int width, IReadOnlyList<int> columns)
+    {
+        if (batch is null)
+        {
+            throw new ArgumentNullException(nameof(batch));
+        }
+
+        if (count == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var flatIndices = Enumerable.Range(0, count).Select(row => row * width + columns[row]).ToArray();
+        var flat = Engine.Reshape(batch, [count * width]);
+        return Engine.TensorGather(flat, new Tensor<int>(flatIndices, new[] { count }), 0).ToVector();
+    }
+
+    /// <summary>
+    /// One-step TD targets: r for a terminal transition, r + gamma * bootstrap otherwise (a terminal row's
+    /// bootstrap value is never used).
+    /// </summary>
+    internal static Vector<T> TdTargets<T>(Vector<T> rewards, Vector<T> bootstrap, bool[] done, T gamma)
+    {
+        if (rewards is null)
+        {
+            throw new ArgumentNullException(nameof(rewards));
+        }
+
+        if (rewards.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var bootstrapped = Engine.Add(rewards, Engine.Multiply(bootstrap, gamma));
+        return Engine.TensorWhere(done, rewards.AsTensor(), bootstrapped.AsTensor()).ToVector();
+    }
+
+    /// <summary>
+    /// Q-regression targets: the current [count, actions] Q-values with each row's taken action replaced by its TD
+    /// target (the other actions regress onto themselves).
+    /// </summary>
+    internal static Tensor<T> ReplaceTakenActionValues<T>(Tensor<T> currentQ, int count, int actions,
+        IReadOnlyList<int> takenActions, Vector<T> tdTargets)
+    {
+        if (currentQ is null)
+        {
+            throw new ArgumentNullException(nameof(currentQ));
+        }
+
+        if (count == 0)
+        {
+            return new Tensor<T>([0, actions]);
+        }
+
+        var current = new Tensor<T>([count, actions], currentQ.ToVector().GetSubVector(0, count * actions));
+        var taken = StackRows(takenActions.Select(action => OneHot<T>(actions, action)).ToList());
+        var targets = Engine.TensorTile(Engine.Reshape(tdTargets.AsTensor(), [count, 1]), [1, actions]);
+        return Engine.TensorWhere(taken, targets, current);
+    }
+
     /// <summary>A one-hot vector of the given length with a one at <paramref name="index"/>.</summary>
     internal static Vector<T> OneHot<T>(int length, int index)
     {
