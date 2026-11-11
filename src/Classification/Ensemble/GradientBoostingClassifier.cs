@@ -148,33 +148,20 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
 
         int n = x.Rows;
 
+        var engine = Engine;
+
         // Convert labels to 0/1 for binary classification
-        var yBinary = new Vector<T>(n);
         T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        for (int i = 0; i < n; i++)
-        {
-            yBinary[i] = NumOps.Compare(y[i], positiveClass) == 0 ? NumOps.One : NumOps.Zero;
-        }
+        var yBinary = engine.TensorEquals(y.AsTensor(), positiveClass).ToVector();
 
         // Initialize F0 = log(p / (1 - p)) where p is the prior probability
-        int posCount = 0;
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.Compare(yBinary[i], NumOps.One) == 0)
-            {
-                posCount++;
-            }
-        }
+        int posCount = engine.TensorCountNonzero(yBinary.AsTensor());
         double p = (double)posCount / n;
         p = Math.Max(1e-10, Math.Min(1 - 1e-10, p)); // Clip for numerical stability
         _initPrediction = NumOps.FromDouble(Math.Log(p / (1 - p)));
 
         // Current predictions (in log-odds space)
-        var fValues = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            fValues[i] = _initPrediction;
-        }
+        var fValues = FilledVector(n, _initPrediction);
 
         // Learning rate
         T lr = NumOps.FromDouble(Options.LearningRate);
@@ -183,18 +170,10 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
         for (int m = 0; m < Options.NEstimators; m++)
         {
             // Compute probabilities from current predictions
-            var probs = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                probs[i] = Sigmoid(fValues[i]);
-            }
+            var probs = engine.Sigmoid(fValues);
 
             // Compute negative gradient (residuals for log loss): y - p
-            var residuals = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                residuals[i] = NumOps.Subtract(yBinary[i], probs[i]);
-            }
+            var residuals = engine.Subtract(yBinary, probs);
 
             // Subsample if needed
             Matrix<T> xSample;
@@ -224,14 +203,9 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
                 MinImpurityDecrease = Options.MinImpurityDecrease
             };
 
-            // Fit to residual signs to determine tree structure
-            var residualClasses = new Vector<T>(residualsSample.Length);
-            for (int i = 0; i < residualsSample.Length; i++)
-            {
-                residualClasses[i] = NumOps.Compare(residualsSample[i], NumOps.Zero) >= 0
-                    ? NumOps.One
-                    : NumOps.Zero;
-            }
+            // Fit to residual signs to determine tree structure (1 where residual >= 0)
+            var residualClasses = engine.ScalarMinusTensor(NumOps.One,
+                engine.TensorLessThan(residualsSample.AsTensor(), NumOps.Zero)).ToVector();
 
             var tree = new DecisionTreeClassifier<T>(treeOptions);
             tree.Train(xSample, residualClasses);
@@ -241,52 +215,24 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
             // For log loss: leaf_value = sum(residuals) / sum(p * (1 - p))
             // where residuals = y - p (negative gradient) and p*(1-p) is the Hessian
             var samplePreds = tree.Predict(xSample);
-            T sumResid0 = NumOps.Zero, sumResid1 = NumOps.Zero;
-            T sumHessian0 = NumOps.Zero, sumHessian1 = NumOps.Zero;
 
-            for (int i = 0; i < residualsSample.Length; i++)
-            {
-                // Get the probability for this sample to compute Hessian
-                int origIdx = sampleIndices[i];
-                T prob = Sigmoid(fValues[origIdx]);
-                T hessian = NumOps.Multiply(prob, NumOps.Subtract(NumOps.One, prob));
-                // Clamp hessian for numerical stability
-                if (NumOps.Compare(hessian, NumOps.FromDouble(1e-10)) < 0)
-                {
-                    hessian = NumOps.FromDouble(1e-10);
-                }
+            // Hessian p(1 - p) of each sampled point (clamped for numerical stability)
+            var sampleProbs = SelectElements(probs, sampleIndices).AsTensor();
+            var hessian = engine.TensorClampMin(
+                engine.TensorMultiply(sampleProbs, engine.ScalarMinusTensor(NumOps.One, sampleProbs)), NumOps.FromDouble(1e-10));
 
-                if (NumOps.Compare(samplePreds[i], NumOps.One) == 0)
-                {
-                    sumResid1 = NumOps.Add(sumResid1, residualsSample[i]);
-                    sumHessian1 = NumOps.Add(sumHessian1, hessian);
-                }
-                else
-                {
-                    sumResid0 = NumOps.Add(sumResid0, residualsSample[i]);
-                    sumHessian0 = NumOps.Add(sumHessian0, hessian);
-                }
-            }
-
-            // Newton step: sum(gradient) / sum(hessian) per leaf region
-            T leafVal0 = NumOps.Compare(sumHessian0, NumOps.FromDouble(1e-10)) > 0
-                ? NumOps.Divide(sumResid0, sumHessian0)
-                : NumOps.Zero;
-            T leafVal1 = NumOps.Compare(sumHessian1, NumOps.FromDouble(1e-10)) > 0
-                ? NumOps.Divide(sumResid1, sumHessian1)
-                : NumOps.Zero;
+            // Sums of residuals and hessians in each leaf region (tree output 1 vs anything else)
+            var inLeafOne = engine.TensorEquals(samplePreds.AsTensor(), NumOps.One);
+            var inLeafZero = engine.ScalarMinusTensor(NumOps.One, inLeafOne);
+            var r = residualsSample.AsTensor();
+            var (leafVal0, leafVal1) = NewtonLeafValues(
+                engine.TensorSum(engine.TensorMultiply(r, inLeafZero)), engine.TensorSum(engine.TensorMultiply(hessian, inLeafZero)),
+                engine.TensorSum(engine.TensorMultiply(r, inLeafOne)), engine.TensorSum(engine.TensorMultiply(hessian, inLeafOne)));
 
             _leafResidualMeans.Add(new[] { leafVal0, leafVal1 });
 
             // Update predictions using Newton-step leaf values
-            var treePreds = tree.Predict(x);
-            for (int i = 0; i < n; i++)
-            {
-                T treeOutput = NumOps.Compare(treePreds[i], NumOps.One) == 0
-                    ? leafVal1
-                    : leafVal0;
-                fValues[i] = NumOps.Add(fValues[i], NumOps.Multiply(lr, treeOutput));
-            }
+            fValues = engine.Add(fValues, engine.Multiply(TreeOutput(tree.Predict(x), leafVal0, leafVal1), lr));
         }
 
         // Aggregate feature importances
@@ -294,14 +240,43 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
     }
 
     /// <summary>
-    /// Computes the sigmoid function.
+    /// Newton-step leaf values sum(residual) / sum(hessian) for the two leaf regions (zero when the hessian is tiny).
     /// </summary>
-    private T Sigmoid(T x)
+    private (T LeafZero, T LeafOne) NewtonLeafValues(T sumResid0, T sumHessian0, T sumResid1, T sumHessian1)
     {
-        // sigmoid(x) = 1 / (1 + exp(-x))
-        T negX = NumOps.Negate(x);
-        T expNegX = NumOps.Exp(negX);
-        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
+        // Newton step: sum(gradient) / sum(hessian) per leaf region
+        T minHessian = NumOps.FromDouble(1e-10);
+        T leafVal0 = NumOps.Compare(sumHessian0, minHessian) > 0 ? NumOps.Divide(sumResid0, sumHessian0) : NumOps.Zero;
+        T leafVal1 = NumOps.Compare(sumHessian1, minHessian) > 0 ? NumOps.Divide(sumResid1, sumHessian1) : NumOps.Zero;
+        return (leafVal0, leafVal1);
+    }
+
+    /// <summary>
+    /// Log-odds of every sample: init + lr * sum over trees of the leaf value selected by the tree's 0/1 output.
+    /// </summary>
+    private Vector<T> ComputeLogOdds(Matrix<T> input)
+    {
+        var engine = Engine;
+        int n = input.Rows;
+        T lr = NumOps.FromDouble(Options.LearningRate);
+        var fValues = FilledVector(n, _initPrediction);
+        for (int m = 0; m < Estimators.Count; m++)
+        {
+            fValues = engine.Add(fValues, engine.Multiply(TreeOutput(Estimators[m].Predict(input), _leafResidualMeans[m][0],
+                _leafResidualMeans[m][1]), lr));
+        }
+
+        return fValues;
+    }
+
+    /// <summary>
+    /// leafOne where the tree predicts class 1, leafZero elsewhere.
+    /// </summary>
+    private Vector<T> TreeOutput(Vector<T> treePredictions, T leafZero, T leafOne)
+    {
+        int n = treePredictions.Length;
+        var isOne = Engine.TensorEquals(treePredictions.AsTensor(), NumOps.One);
+        return Engine.TensorWhere(isOne, FilledVector(n, leafOne).AsTensor(), FilledVector(n, leafZero).AsTensor()).ToVector();
     }
 
     /// <summary>
@@ -324,19 +299,7 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
             indices[i] = _random.Next(n);
         }
 
-        var xSample = new Matrix<T>(sampleSize, x.Columns);
-        var ySample = new Vector<T>(sampleSize);
-
-        for (int i = 0; i < sampleSize; i++)
-        {
-            int idx = indices[i];
-            for (int j = 0; j < x.Columns; j++)
-            {
-                xSample[i, j] = x[idx, j];
-            }
-            ySample[i] = y[idx];
-        }
-
+        var (xSample, ySample) = SelectSamples(x, y, indices);
         return (xSample, ySample, indices);
     }
 
@@ -348,39 +311,13 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-        T lr = NumOps.FromDouble(Options.LearningRate);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // Start with initial prediction
-            T fValue = _initPrediction;
-
-            // Add contributions from all trees
-            var sample = new Matrix<T>(1, input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                sample[0, j] = input[i, j];
-            }
-
-            for (int m = 0; m < Estimators.Count; m++)
-            {
-                var treePred = Estimators[m].Predict(sample);
-                // Use stored mean residuals for this tree
-                T treeOutput = NumOps.Compare(treePred[0], NumOps.One) == 0
-                    ? _leafResidualMeans[m][1]
-                    : _leafResidualMeans[m][0];
-                fValue = NumOps.Add(fValue, NumOps.Multiply(lr, treeOutput));
-            }
-
-            // Convert to probability and threshold
-            T prob = Sigmoid(fValue);
-            predictions[i] = NumOps.Compare(prob, NumOps.FromDouble(0.5)) >= 0
-                ? ClassLabels[ClassLabels.Length - 1]
-                : ClassLabels[0];
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Convert to probability and threshold at 0.5
+        return PredictBinaryLabels(BinaryProbabilitiesFromLogOdds(ComputeLogOdds(input)));
     }
 
     /// <inheritdoc/>
@@ -391,38 +328,27 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var probabilities = new Matrix<T>(input.Rows, NumClasses);
-        T lr = NumOps.FromDouble(Options.LearningRate);
-
-        for (int i = 0; i < input.Rows; i++)
+        int n = input.Rows;
+        if (n == 0)
         {
-            T fValue = _initPrediction;
-
-            var sample = new Matrix<T>(1, input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                sample[0, j] = input[i, j];
-            }
-
-            for (int m = 0; m < Estimators.Count; m++)
-            {
-                var treePred = Estimators[m].Predict(sample);
-                // Use stored mean residuals for this tree
-                T treeOutput = NumOps.Compare(treePred[0], NumOps.One) == 0
-                    ? _leafResidualMeans[m][1]
-                    : _leafResidualMeans[m][0];
-                fValue = NumOps.Add(fValue, NumOps.Multiply(lr, treeOutput));
-            }
-
-            T prob = Sigmoid(fValue);
-            probabilities[i, 0] = NumOps.Subtract(NumOps.One, prob); // Negative class
-            if (NumClasses > 1)
-            {
-                probabilities[i, 1] = prob; // Positive class
-            }
+            return new Matrix<T>(0, NumClasses);
         }
 
-        return probabilities;
+        // Column 0 = negative class, column 1 = positive class, any further columns stay zero
+        var engine = Engine;
+        var prob = engine.Sigmoid(ComputeLogOdds(input));
+        var columns = new List<Vector<T>> { engine.ScalarMinusTensor(NumOps.One, prob.AsTensor()).ToVector() };
+        if (NumClasses > 1)
+        {
+            columns.Add(prob);
+        }
+
+        for (int c = 2; c < NumClasses; c++)
+        {
+            columns.Add(new Vector<T>(n));
+        }
+
+        return StackColumns(columns);
     }
 
     /// <summary>
