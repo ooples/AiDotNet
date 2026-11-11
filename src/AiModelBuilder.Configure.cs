@@ -840,23 +840,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // model: pack tokens into a [1, sequenceLength] tensor, run Predict, and read the LAST position's logit row.
         Func<Vector<int>, Vector<T>> forward = tokenIds =>
         {
-            var input = new Tensor<T>(new[] { 1, tokenIds.Length });
-            for (int i = 0; i < tokenIds.Length; i++)
-            {
-                input[0, i] = numOps.FromDouble(tokenIds[i]);
-            }
+            var input = tokenIds.Transform(id => numOps.FromDouble(id)).AsTensor().Reshape(new[] { 1, tokenIds.Length });
 
             var output = tensorDraft.Predict(input);
             int rank = output.Shape.Length;
             int runtimeVocab = rank >= 1 ? output.Shape[rank - 1] : 0;
             int lastPos = rank > 2 ? output.Shape[rank - 2] - 1 : 0;
 
+            // Row-major, batch 0: the last position's row starts at lastPos * runtimeVocab ([1, seq, vocab]) or 0 ([1, vocab]).
             var logits = new Vector<T>(vocabSize);
             int copy = Math.Min(vocabSize, runtimeVocab);
-            for (int v = 0; v < copy; v++)
-            {
-                logits[v] = rank > 2 ? output[new[] { 0, lastPos, v }] : output[new[] { 0, v }];
-            }
+            int offset = rank > 2 ? lastPos * runtimeVocab : 0;
+            var source = output.IsContiguous ? output.AsSpan() : output.ToVector().AsSpan();
+            source.Slice(offset, copy).CopyTo(logits.AsWritableSpan());
             return logits;
         };
 
