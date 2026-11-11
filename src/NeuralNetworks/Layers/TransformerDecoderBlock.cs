@@ -316,7 +316,8 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
         metadata["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
         // The FFN activation is a constructor argument, so it is persisted as TransformerEncoderBlock persists its own.
         var ffnActivationType = _ffnActivation.GetType();
-        metadata["FfnActivationType"] = ffnActivationType.AssemblyQualifiedName ?? ffnActivationType.FullName ?? string.Empty;
+        string? qualifiedName = ffnActivationType.AssemblyQualifiedName;
+        metadata["FfnActivationType"] = qualifiedName ?? ffnActivationType.FullName ?? string.Empty;
         // Both attentions' causal mask, attention dropout and positional encoding are configured AFTER construction
         // (an autoregressive decoder sets UseCausalMask on SelfAttentionLayer), so the constructor arguments above
         // cannot rebuild them. A replaced self-attention (LoRA / quantized wrapper) is not rebuilt by the deserializer
