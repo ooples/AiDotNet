@@ -277,6 +277,7 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         _classificationHeadLayers.Add(output);
     }
 
+    /// <inheritdoc />
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != _inputFeatureDim)
@@ -302,6 +303,7 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         return x;
     }
 
+    /// <inheritdoc />
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
     {
         bool originalMode = IsTrainingMode;
@@ -324,6 +326,7 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         }
     }
 
+    /// <inheritdoc />
     public Tensor<T> ExtractPointFeatures(Tensor<T> pointCloud)
     {
         if (pointCloud.Shape.Length != 2 || pointCloud.Shape[1] != _inputFeatureDim)
@@ -348,6 +351,7 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         return x;
     }
 
+    /// <inheritdoc />
     public Vector<T> ClassifyPointCloud(Tensor<T> pointCloud)
     {
         var output = Predict(pointCloud);
@@ -356,6 +360,7 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         return new Vector<T>(output.Data.ToArray());
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -363,10 +368,12 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         return output;
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

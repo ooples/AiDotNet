@@ -124,9 +124,12 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
 
     #region IMusicSourceSeparator
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedSources => _options.Sources;
+    /// <inheritdoc />
     public int NumStems => _options.NumStems;
 
+    /// <inheritdoc />
     public SourceSeparationResult<T> Separate(Tensor<T> audio)
     {
         ThrowIfDisposed(); var stft = ComputeSTFT(audio);
@@ -134,9 +137,12 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         return BuildResult(audio, stft, masks);
     }
 
+    /// <inheritdoc />
     public Task<SourceSeparationResult<T>> SeparateAsync(Tensor<T> audio, CancellationToken ct = default) => Task.Run(() => Separate(audio), ct);
+    /// <inheritdoc />
     public Tensor<T> ExtractSource(Tensor<T> audio, string source) => Separate(audio).GetSource(source);
 
+    /// <inheritdoc />
     public Tensor<T> RemoveSource(Tensor<T> audio, string source)
     {
         var r = Separate(audio); var o = new Tensor<T>([audio.Length]);
@@ -145,6 +151,7 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         return o;
     }
 
+    /// <inheritdoc />
     public Tensor<T> GetSourceMask(Tensor<T> audio, string source)
     {
         var stft = ComputeSTFT(audio);
@@ -156,6 +163,7 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         return mask;
     }
 
+    /// <inheritdoc />
     public Tensor<T> Remix(SourceSeparationResult<T> sep, IReadOnlyDictionary<string, double> vols)
     {
         int len = 0; foreach (var s in sep.Sources.Values) if (s.Length > len) len = s.Length;
@@ -192,6 +200,7 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
             numStems: _options.NumStems, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
 
     /// <inheritdoc />
@@ -199,9 +208,12 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = _useNativeMode ? "HTDemucs-Native" : "HTDemucs-ONNX", Description = "HTDemucs Hybrid Transformer Demucs (Rouard et al., ICASSP 2023)", FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
@@ -263,6 +275,7 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
     #region Disposal
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(HTDemucs<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

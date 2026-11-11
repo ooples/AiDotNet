@@ -19,6 +19,7 @@ public class SpikeArtifact<T> : ImageAugmenterBase<T>
         MinIntensity = minIntensity; MaxIntensity = maxIntensity;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -50,6 +51,7 @@ public class SpikeArtifact<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

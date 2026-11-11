@@ -122,14 +122,20 @@ public partial class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVL
         InitializeLayers();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
+    /// <inheritdoc />
     public string SupportedBands => _options.SupportedBands;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -183,6 +189,7 @@ public partial class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVL
         return output;
     }
 
+    /// <inheritdoc />
     public Tensor<T> AnswerRemoteSensingQuestion(Tensor<T> image, string question) =>
         GenerateFromImage(image, question);
 
@@ -230,6 +237,7 @@ public partial class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVL
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -246,11 +254,14 @@ public partial class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVL
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -277,6 +288,7 @@ public partial class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVL
             throw new ObjectDisposedException(GetType().FullName ?? nameof(SkyEyeGPT<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

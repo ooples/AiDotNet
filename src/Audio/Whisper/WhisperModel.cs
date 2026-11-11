@@ -1210,7 +1210,12 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         for (int i = _decoderStartIndex; i < Layers.Count; i++)
         {
             var layer = Layers[i];
-            if (layer is TransformerDecoderLayer<T> decoderLayer)
+            if (layer is TransformerDecoderBlock<T> decoderBlock)
+            {
+                // Cross-attention reads the encoder output.
+                current = decoderBlock.Forward(current, encoderOutput);
+            }
+            else if (layer is TransformerDecoderLayer<T> decoderLayer)
             {
                 // Pass encoder output as context
                 current = decoderLayer.Forward(current, encoderOutput);

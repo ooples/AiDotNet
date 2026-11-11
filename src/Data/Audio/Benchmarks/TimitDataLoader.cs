@@ -28,10 +28,15 @@ public class TimitDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "TIMIT";
+    /// <inheritdoc />
     public override string Description => "TIMIT acoustic-phonetic continuous speech corpus (LDC93S1)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.MaxTextLength;
+    /// <inheritdoc />
     public override int OutputDimension => _options.MaxAudioSamples;
 
     public TimitDataLoader(TimitDataLoaderOptions? options = null)

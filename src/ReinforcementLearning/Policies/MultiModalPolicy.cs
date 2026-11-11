@@ -203,6 +203,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return max + Math.Log(sum);
         }
 
+        /// <inheritdoc />
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             ValidateState(state, nameof(state));
@@ -288,6 +289,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return _explorationStrategy.GetExplorationAction(state, action, _actionSize, _random);
         }
 
+        /// <inheritdoc />
         public override T ComputeLogProb(Vector<T> state, Vector<T> action)
         {
             ValidateState(state, nameof(state));
@@ -352,11 +354,13 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return NumOps.FromDouble(Math.Log(totalProb + 1e-8));
         }
 
+        /// <inheritdoc />
         public override IReadOnlyList<INeuralNetwork<T>> GetNetworks()
         {
             return new List<INeuralNetwork<T>> { _policyNetwork };
         }
 
+        /// <inheritdoc />
         public override void Reset()
         {
             _explorationStrategy.Reset();

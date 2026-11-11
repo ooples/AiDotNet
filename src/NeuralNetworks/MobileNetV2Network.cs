@@ -319,6 +319,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         return output;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
         // Mirror Forward's 3D → 4D expansion so the channel-broadcasted

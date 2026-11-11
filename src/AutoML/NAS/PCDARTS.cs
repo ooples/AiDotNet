@@ -63,8 +63,11 @@ namespace AiDotNet.AutoML.NAS
         private readonly double _channelSamplingRatio;
         private readonly bool _useEdgeNormalization;
 
+        /// <inheritdoc />
         protected override INumericOperations<T> NumOps => _ops;
+        /// <inheritdoc />
         protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        /// <inheritdoc />
         protected override int NasNumNodes => _numNodes;
 
         public PCDARTS(SearchSpaceBase<T> searchSpace, int numNodes = 4,
@@ -228,6 +231,7 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         public double GetChannelSamplingRatio() => _channelSamplingRatio;
 
+        /// <inheritdoc />
         protected override Architecture<T> SearchArchitecture(
             Tensor<T> inputs,
             Tensor<T> targets,

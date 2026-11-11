@@ -144,14 +144,20 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         }
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
+    /// <inheritdoc />
     public int ActionDimension => _options.ActionDimension;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -351,6 +357,7 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -468,11 +475,14 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
 
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -497,6 +507,7 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
             throw new ObjectDisposedException(GetType().FullName ?? nameof(PaLME<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

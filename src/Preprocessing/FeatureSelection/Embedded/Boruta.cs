@@ -36,7 +36,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _maxIterations;
     private readonly double _alpha;

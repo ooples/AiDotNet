@@ -41,10 +41,14 @@ public class StratifiedKFoldStrategy<T> : ICrossValidationStrategy<T>
         _randomSeed = randomSeed;
     }
 
+    /// <inheritdoc />
     public string Name => $"Stratified {_k}-Fold";
+    /// <inheritdoc />
     public int NumSplits => _k;
+    /// <inheritdoc />
     public string Description => $"Stratified {_k}-fold cross-validation preserving class distribution.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         // Convert span to array before yield operations (spans can't be captured across yield boundaries)

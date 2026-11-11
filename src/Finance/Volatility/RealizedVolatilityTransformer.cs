@@ -455,6 +455,7 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     [ThreadStatic]
     private static bool _inGetVolatilityMetrics;
 
+    /// <inheritdoc />
     public Dictionary<string, T> GetVolatilityMetrics()
     {
         // Guard against infinite recursion - return empty metrics if already in this method

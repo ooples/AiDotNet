@@ -30,6 +30,7 @@ public sealed class KrumFullModelAggregationStrategy<T, TInput, TOutput> :
         _byzantineClientCount = byzantineClientCount;
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -86,6 +87,7 @@ public sealed class KrumFullModelAggregationStrategy<T, TInput, TOutput> :
         return InterfaceGuard.Parameterizable(reference).WithParameters(selectedParameters);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "Krum";
 }
 

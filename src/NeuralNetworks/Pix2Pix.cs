@@ -443,6 +443,7 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 

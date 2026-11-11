@@ -173,11 +173,15 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             _options.ImageSize = h;
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.ProjectionDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxSequenceLength => _options.MaxSequenceLength;
+    /// <inheritdoc />
     public int TextEmbeddingDimension => _options.TextEmbeddingDim;
+    /// <inheritdoc />
     public int ProjectionDimension => _options.ProjectionDim;
     /// <summary>Gets the number of ResNet-50 bottleneck blocks.</summary>
     public int VisionBottleneckBlockCount => Layers.Count(layer => layer is BottleneckBlock<T>);
@@ -194,6 +198,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     /// <summary>Gets the current learned temperature (the reciprocal of the clamped logit scale).</summary>
     public T Temperature => NumOps.Divide(NumOps.One, _logitScale.Scale);
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -206,6 +211,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return L2Normalize(c);
     }
 
+    /// <inheritdoc />
     public Tensor<T> EncodeText(string text)
     {
         ThrowIfDisposed();
@@ -243,6 +249,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return L2Normalize(TextEncoderLayers[^1].Forward(pooled));
     }
 
+    /// <inheritdoc />
     public Tensor<T>[] EncodeTexts(string[] texts)
     {
         var e = new Tensor<T>[texts.Length];
@@ -251,6 +258,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return e;
     }
 
+    /// <inheritdoc />
     public T ComputeSimilarity(Tensor<T> image, string text) =>
         CosineSimilarity(EncodeImage(image), EncodeText(text));
 
@@ -309,6 +317,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return Engine.TensorNegate(Engine.ReduceMean(perRow, [0], keepDims: false));
     }
 
+    /// <inheritdoc />
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, string[] labels)
     {
         var ie = EncodeImage(image);
@@ -386,6 +395,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             _options.TextEmbeddingDim, _options.ProjectionDim));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -404,6 +414,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         yield return _logitScale;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image)
     {
         var normalized = NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -418,8 +429,10 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             [1, normalized.Shape[0], normalized.Shape[1], normalized.Shape[2]]);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -491,6 +504,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             throw new ObjectDisposedException(GetType().FullName ?? nameof(MedCLIP<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

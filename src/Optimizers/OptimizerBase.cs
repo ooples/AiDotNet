@@ -2843,6 +2843,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();

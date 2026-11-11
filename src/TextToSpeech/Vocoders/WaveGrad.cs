@@ -142,6 +142,7 @@ public partial class WaveGrad<T> : VocoderBase<T>
         return waveform;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         var t = new Tensor<T>([1]);
@@ -149,6 +150,7 @@ public partial class WaveGrad<T> : VocoderBase<T>
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -169,6 +171,7 @@ public partial class WaveGrad<T> : VocoderBase<T>
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -207,6 +210,7 @@ public partial class WaveGrad<T> : VocoderBase<T>
     /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
     /// the write on every parameter surface, so the guard is stated once, here.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -234,6 +238,7 @@ public partial class WaveGrad<T> : VocoderBase<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(WaveGrad<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

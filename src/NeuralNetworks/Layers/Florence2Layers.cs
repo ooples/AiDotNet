@@ -63,6 +63,7 @@ public partial class DaViTLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<DenseLayer<T>> _fc1 = new();
     private readonly List<DenseLayer<T>> _fc2 = new();
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public DaViTLayer([LayerState] int imageSize, [LayerState] int baseDim, [LayerState] int baseHeads,
@@ -127,6 +128,7 @@ public partial class DaViTLayer<T> : LayerBase<T>, IShapeContract
         foreach (var layer in _fc2) yield return layer;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank is 3 or 4
         ? new[]
         {
@@ -136,6 +138,7 @@ public partial class DaViTLayer<T> : LayerBase<T>, IShapeContract
         }
         : null;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var x = input.Rank == 3 ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] }) : input;
@@ -243,6 +246,7 @@ public partial class DaViTLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ResetState() { foreach (var layer in SubLayers()) layer.ResetState(); }
 }
 
@@ -280,6 +284,7 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
     private readonly EmbeddingLayer<T> _rows;
     [SubLayerInput("_projectionDim")] private readonly LayerNormalizationLayer<T> _norm;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public Florence2ProjectorLayer([LayerState] int visionDim, [LayerState] int projectionDim, [LayerState] int grid,
@@ -331,6 +336,7 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Number of image tokens produced: the mean token plus one per position.</summary>
     public int TokenCount => 1 + (_grid * _grid);
 
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank is 3 or 4
         ? new[]
         {
@@ -339,6 +345,7 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         }
         : null;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var map = input.Rank == 4 && input.Shape[0] == 1
@@ -387,6 +394,7 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _columns.ResetState();
@@ -451,6 +459,7 @@ public partial class BartEncoderDecoderLayer<T> : LayerBase<T>, IShapeContract
     [SubLayerInput("_ffnDim")] private readonly List<DenseLayer<T>> _fc2 = new();
     private readonly DropoutLayer<T> _dropout;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public BartEncoderDecoderLayer([LayerState] int vocabSize, [LayerState] int dim, [LayerState] int numHeads,
@@ -529,6 +538,7 @@ public partial class BartEncoderDecoderLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Longest encoder or decoder sequence the learned positions cover.</summary>
     public int MaxPositions => _maxPositions;
 
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2
         ? new[]
         {
@@ -537,6 +547,7 @@ public partial class BartEncoderDecoderLayer<T> : LayerBase<T>, IShapeContract
         }
         : null;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2 || input.Shape[1] != _dim)
@@ -608,5 +619,6 @@ public partial class BartEncoderDecoderLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ResetState() { foreach (var layer in SubLayers()) layer.ResetState(); }
 }

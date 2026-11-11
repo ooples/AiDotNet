@@ -36,10 +36,15 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "SVHN";
+    /// <inheritdoc />
     public override string Description => "Street View House Numbers Format-2 (32x32 RGB digit classification)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => PixelsPerImage;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public SvhnDataLoader(SvhnDataLoaderOptions? options = null)

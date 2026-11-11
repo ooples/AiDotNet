@@ -47,10 +47,14 @@ public class RepeatedKFoldStrategy<T> : ICrossValidationStrategy<T>
         _randomSeed = randomSeed;
     }
 
+    /// <inheritdoc />
     public string Name => $"Repeated {_k}-Fold (×{_repetitions})";
+    /// <inheritdoc />
     public int NumSplits => _k * _repetitions;
+    /// <inheritdoc />
     public string Description => $"{_k}-fold cross-validation repeated {_repetitions} times.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         // Convert span to array before yield operations (spans can't be captured across yield boundaries)

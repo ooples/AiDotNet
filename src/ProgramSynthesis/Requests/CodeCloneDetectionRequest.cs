@@ -8,6 +8,7 @@ namespace AiDotNet.ProgramSynthesis.Requests;
 /// </summary>
 public sealed class CodeCloneDetectionRequest : CodeTaskRequestBase
 {
+    /// <inheritdoc />
     public override CodeTask Task => CodeTask.CloneDetection;
 
     public CodeCorpusReference Corpus { get; set; } = new();

@@ -19,7 +19,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     {
         private readonly ONNXSentenceTransformer<T> _onnxTransformer;
 
+        /// <inheritdoc />
         public override int EmbeddingDimension => _onnxTransformer.EmbeddingDimension;
+        /// <inheritdoc />
         public override int MaxTokens => _onnxTransformer.MaxTokens;
 
         public LocalTransformerEmbedding(string modelPath, int dimension = 384, int maxTokens = 512)
@@ -27,6 +29,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             _onnxTransformer = new ONNXSentenceTransformer<T>(modelPath, dimension, maxTokens);
         }
 
+        /// <inheritdoc />
         protected override Vector<T> EmbedCore(string text)
         {
             return _onnxTransformer.Embed(text);
@@ -34,6 +37,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
         private bool _disposed;
 
+        /// <inheritdoc />
         protected override void Dispose(bool disposing)
         {
             if (!_disposed)

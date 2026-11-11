@@ -173,6 +173,7 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     // resolves it from input.Shape[^1]. Eager ctor sets it at construction.
     private int _inputSize;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -471,6 +472,7 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         _widthsGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

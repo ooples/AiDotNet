@@ -167,6 +167,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     private double SecondMomentCorrection(int step)
         => _options.BiasCorrection == AMSGradBiasCorrection.PyTorch ? 1 - Math.Pow(_options.Beta2, step) : 1.0;
 
+    /// <inheritdoc />
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -503,6 +504,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 
+    /// <inheritdoc />
     public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
     {
         var zeros = new float[parameterCount];

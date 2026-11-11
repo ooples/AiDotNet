@@ -235,6 +235,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         var stateTensor = Tensor<T>.FromVector(state);
@@ -277,6 +278,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         return action;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // CQL is offline - data is loaded beforehand
@@ -285,6 +287,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _offlineBuffer.Add(experience);
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         if (_offlineBuffer.Count < _options.BatchSize)
@@ -616,6 +619,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         return _numOps.FromDouble(result);
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -626,11 +630,13 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         // CQL is offline - no episode reset needed
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         return SelectAction(input, training: false);

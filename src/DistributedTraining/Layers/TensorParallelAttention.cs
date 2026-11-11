@@ -103,6 +103,7 @@ public sealed partial class TensorParallelAttention<T> : LayerBase<T>, IShapeCon
         _o = new RowParallelLinear<T>(backend, embedDim, embedDim);
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     /// <summary>Seeds all four projections from full (un-sharded) weights, slicing each rank's shard. Used to
@@ -201,8 +202,10 @@ public sealed partial class TensorParallelAttention<T> : LayerBase<T>, IShapeCon
         return outFlat.Reshape(batch, seq, _embedDim);
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
         => throw new InvalidOperationException("TensorParallelAttention is an inference-only serving block.");
 
+    /// <inheritdoc />
     public override void ResetState() { }
 }

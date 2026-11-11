@@ -25,6 +25,7 @@ public partial class LogitSoftcapLayer<T> : LayerBase<T>, IShapeContract
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
     private readonly double _cap;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     /// <summary>The soft-cap magnitude; outputs lie in (-cap, cap).</summary>

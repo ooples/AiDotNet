@@ -26,6 +26,7 @@ public class DistributedBucketSampler : DataSamplerBase, IBatchSampler
     /// <inheritdoc/>
     private int _batchSize;
 
+    /// <inheritdoc />
     public int BatchSize
     {
         get => _batchSize;

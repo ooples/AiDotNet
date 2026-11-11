@@ -266,6 +266,7 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         }
     }
 
+    /// <inheritdoc />
     public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
     {
         if (updatedParameters == null)
