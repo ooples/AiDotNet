@@ -565,11 +565,7 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
                     nameof(parameters));
             }
 
-            var newParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                newParams[i] = parameters[offset + i];
-            }
+            var newParams = new Vector<T>(parameters.AsSpan().Slice(offset, layerParamCount).ToArray());
             layer.UpdateParameters(newParams);
             offset += layerParamCount;
         }
