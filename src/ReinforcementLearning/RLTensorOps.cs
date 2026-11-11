@@ -269,6 +269,20 @@ internal static class RLTensorOps
         return draws.AsTensor().Cast<T>().ToVector();
     }
 
+    /// <summary>
+    /// A diagonal-Gaussian sample mean + exp(log_std) * N(0, 1), one standard-normal draw per dimension in index order.
+    /// </summary>
+    internal static Vector<T> SampleGaussian<T>(Vector<T> mean, Vector<T> logStd, Random random)
+    {
+        if (mean is null)
+        {
+            throw new ArgumentNullException(nameof(mean));
+        }
+
+        var noise = StandardNormal<T>(random, mean.Length);
+        return Engine.Add(mean, Engine.Multiply(Engine.Exp(logStd), noise));
+    }
+
     /// <summary>A one-hot vector of the given length with a one at <paramref name="index"/>.</summary>
     internal static Vector<T> OneHot<T>(int length, int index)
     {

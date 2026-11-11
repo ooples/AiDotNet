@@ -230,7 +230,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var logStds = Enumerable.Range(0, _numComponents)
                 .Select(component => output.GetSubVector(logStdOffset + component * _actionSize, _actionSize)).ToList();
 
-            var action = new Vector<T>(_actionSize);
             if (!training)
             {
                 // Inference takes the mixture's mode: the highest-density point of the whole weighted mixture, which
@@ -245,13 +244,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
             // Training samples a component, then its Gaussian.
             int selectedComponent = SampleCategoricalIndex(mixingCoefficients);
-            for (int i = 0; i < _actionSize; i++)
-            {
-                double meanValue = NumOps.ToDouble(means[selectedComponent][i]);
-                double stdValue = Math.Exp(NumOps.ToDouble(logStds[selectedComponent][i]));
-
-                action[i] = NumOps.FromDouble(meanValue + stdValue * _random.NextGaussian());
-            }
+            var action = RLTensorOps.SampleGaussian(means[selectedComponent], logStds[selectedComponent], _random);
 
             return _explorationStrategy.GetExplorationAction(state, action, _actionSize, _random);
         }

@@ -190,17 +190,11 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
             // Get continuous action (Gaussian)
 
-            var continuousAction = new Vector<T>(_continuousActionSize);
-            for (int i = 0; i < _continuousActionSize; i++)
-            {
-                double meanValue = NumOps.ToDouble(continuousOutput[i]);
-                double logStdValue = NumOps.ToDouble(continuousOutput[_continuousActionSize + i]);
-                double stdValue = Math.Exp(logStdValue);
-
-                double sampledValue = training ? meanValue + stdValue * _random.NextGaussian() : meanValue;
-
-                continuousAction[i] = NumOps.FromDouble(sampledValue);
-            }
+            // Training samples mean + sigma * N(0, 1); inference takes the mean.
+            var continuousMean = continuousOutput.GetSubVector(0, _continuousActionSize);
+            var continuousAction = training
+                ? RLTensorOps.SampleGaussian(continuousMean, continuousOutput.GetSubVector(_continuousActionSize, _continuousActionSize), _random)
+                : continuousMean;
 
             if (training)
             {

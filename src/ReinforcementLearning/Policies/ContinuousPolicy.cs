@@ -117,23 +117,13 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var mean = output.GetSubVector(0, _actionSize);
             var logStd = output.GetSubVector(_actionSize, _actionSize);
 
-            // Sample from Gaussian distribution
-            var action = new Vector<T>(_actionSize);
-            for (int i = 0; i < _actionSize; i++)
+            // Inference takes the distribution's mode (its mean), as DiscretePolicy takes the argmax and
+            // Stable-Baselines3 evaluates with deterministic=True; training samples mean + sigma * N(0, 1).
+            var action = training ? RLTensorOps.SampleGaussian(mean, logStd, _random) : mean;
+
+            if (_useTanhSquashing)
             {
-                double meanValue = NumOps.ToDouble(mean[i]);
-                double stdValue = Math.Exp(NumOps.ToDouble(logStd[i]));
-
-                // Inference takes the distribution's mode (its mean), as DiscretePolicy takes the argmax and
-                // Stable-Baselines3 evaluates with deterministic=True; training samples.
-                double sampledValue = training ? meanValue + stdValue * _random.NextGaussian() : meanValue;
-
-                if (_useTanhSquashing)
-                {
-                    sampledValue = Math.Tanh(sampledValue);
-                }
-
-                action[i] = NumOps.FromDouble(sampledValue);
+                action = AiDotNetEngine.Current.Tanh(action);
             }
 
             if (training)
