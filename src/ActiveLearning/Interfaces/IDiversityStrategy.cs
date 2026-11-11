@@ -99,24 +99,69 @@ public abstract class DiversityStrategyBase<T, TInput, TOutput> : IDiversityStra
         IDataset<T, TInput, TOutput>? labeledData);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Features are extracted once per sample. When every sample has the same feature length the
+    /// Euclidean distances are computed blockwise with engine ops (exact differences, no Gram-matrix
+    /// shortcut); otherwise each pair falls back to <see cref="ComputeDistance"/>, which compares the
+    /// shared prefix.
+    /// </remarks>
     public virtual Matrix<T> ComputeDistanceMatrix(IDataset<T, TInput, TOutput> dataset)
     {
         int n = dataset.Count;
-        var distances = new Matrix<T>(n, n);
+        var features = new List<Vector<T>>(n);
+        for (int i = 0; i < n; i++)
+        {
+            features.Add(GetFeatureRepresentation(dataset.GetInput(i)));
+        }
 
+        if (n == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        int d = features[0].Length;
+        if (features.TrueForAll(f => f.Length == d))
+        {
+            return ComputeUniformDistanceMatrix(features, d);
+        }
+
+        var distances = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = i + 1; j < n; j++)
             {
-                var fi = GetFeatureRepresentation(dataset.GetInput(i));
-                var fj = GetFeatureRepresentation(dataset.GetInput(j));
-                var dist = ComputeDistance(fi, fj);
+                var dist = ComputeDistance(features[i], features[j]);
                 distances[i, j] = dist;
                 distances[j, i] = dist;
             }
         }
 
         return distances;
+    }
+
+    /// <summary>
+    /// Pairwise Euclidean distances between equal-length feature vectors, computed blockwise.
+    /// </summary>
+    private Matrix<T> ComputeUniformDistanceMatrix(List<Vector<T>> features, int featureSize)
+    {
+        int n = features.Count;
+        var rows = new Tensor<T>[n];
+        for (int i = 0; i < n; i++)
+        {
+            rows[i] = Tensor<T>.FromVector(features[i]);
+        }
+
+        var stacked = Engine.TensorStack(rows, 0);
+        var blockRows = AiDotNet.ActiveLearning.ActiveLearningEngineOps.PairwiseBlockRows(n, featureSize);
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += blockRows)
+        {
+            int count = Math.Min(blockRows, n - start);
+            blocks.Add(ActiveLearning.ActiveLearningEngineOps.DistanceBlock(stacked, start, count));
+        }
+
+        var all = Engine.TensorConcatenate(blocks.ToArray(), 0);
+        return Matrix<T>.FromMemory(all.ToArray(), n, n);
     }
 
     /// <inheritdoc />
@@ -127,15 +172,13 @@ public abstract class DiversityStrategyBase<T, TInput, TOutput> : IDiversityStra
     /// </summary>
     protected virtual T ComputeDistance(Vector<T> a, Vector<T> b)
     {
-        T sum = NumOps.Zero;
         int minLen = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < minLen; i++)
+        if (minLen == 0)
         {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
+            return NumOps.Zero;
         }
 
-        return NumOps.Sqrt(sum);
+        var diff = Engine.Subtract(a.GetSubVector(0, minLen), b.GetSubVector(0, minLen));
+        return NumOps.Sqrt(Engine.DotProduct(diff, diff));
     }
 }
