@@ -329,7 +329,7 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Create distributions
         if (n > 0)
         {
-            distributions = StackParameters(currentParams).GetRows().Select(CreateDistributionWithParams).ToArray();
+            distributions = StackParameters(currentParams, n).GetRows().Select(CreateDistributionWithParams).ToArray();
         }
 
         return distributions;
@@ -421,9 +421,10 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Stacks the per-parameter vectors as the columns of a [samples, numParameters] matrix.
     /// </summary>
-    private Matrix<T> StackParameters(Vector<T>[] currentParams)
+    private Matrix<T> StackParameters(Vector<T>[] currentParams, int rowsWhenEmpty = 0)
     {
-        int rows = currentParams.Length == 0 ? 0 : currentParams[0].Length;
+        // With no parameters (an untrained model) keep one empty row per sample, as before.
+        int rows = currentParams.Length == 0 ? rowsWhenEmpty : currentParams[0].Length;
         if (currentParams.Length == 0)
         {
             return new Matrix<T>(rows, 0);

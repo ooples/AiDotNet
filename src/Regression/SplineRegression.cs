@@ -228,8 +228,11 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
 
         // Symmetrize X'X to handle floating-point rounding in matrix multiplication
         // (X'X is mathematically symmetric but may have tiny asymmetries)
-        // (A + A^T) / 2: halving by a power of two is exact, and the diagonal is unchanged.
-        xTx = Engine.MatrixMultiplyScalar(Engine.MatrixAdd(xTx, Engine.MatrixTranspose(xTx)), NumOps.FromDouble(0.5));
+        // A / 2 + A^T / 2: halving by a power of two is exact, so the diagonal is unchanged, and halving
+        // before the addition keeps entries near the type's maximum from overflowing.
+        T half = NumOps.FromDouble(0.5);
+        xTx = Engine.MatrixAdd(
+            Engine.MatrixMultiplyScalar(xTx, half), Engine.MatrixMultiplyScalar(Engine.MatrixTranspose(xTx), half));
 
         // Always add minimum ridge regularization for numerical stability (prevents
         // Cholesky failure on collinear/degenerate data).
