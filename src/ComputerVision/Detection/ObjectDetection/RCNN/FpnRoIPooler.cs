@@ -35,17 +35,26 @@ internal static class FpnRoIPooler<T>
     {
         ValidateStrides(strides);
         var ops = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         int minLevel = Log2(strides[0]);
         int maxLevel = Log2(strides[strides.Count - 1]);
-        var assignment = new int[boxes.Shape[0]];
-        for (int i = 0; i < assignment.Length; i++)
-        {
-            double w = ops.ToDouble(boxes[i, 2]) - ops.ToDouble(boxes[i, 0]);
-            double h = ops.ToDouble(boxes[i, 3]) - ops.ToDouble(boxes[i, 1]);
-            double size = Math.Sqrt(Math.Max(w, 0) * Math.Max(h, 0));
+        int count = boxes.Shape[0];
+        var assignment = new int[count];
+        if (count == 0) return assignment;
 
-            // + 1e-8 as in detectron2, so a degenerate box maps to the finest level rather than -inf.
-            int level = (int)Math.Floor(CanonicalLevel + Math.Log(size / CanonicalBoxSize + 1e-8, 2));
+        Tensor<T> Column(int index) => engine.Reshape(engine.TensorSlice(boxes, new[] { 0, index }, new[] { count, 1 }), new[] { count });
+        var w = engine.TensorMax(engine.TensorSubtract(Column(2), Column(0)), ops.Zero);
+        var h = engine.TensorMax(engine.TensorSubtract(Column(3), Column(1)), ops.Zero);
+        var size = engine.TensorSqrt(engine.TensorMultiply(w, h));
+
+        // k0 + log2(size / 224 + 1e-8): + 1e-8 as in detectron2, so a degenerate box maps to the finest
+        // level rather than -inf. The log is ln(x) / ln(2), as Math.Log(x, 2) evaluates it.
+        var ratio = engine.TensorAddScalar(engine.TensorDivideScalar(size, ops.FromDouble(CanonicalBoxSize)), ops.FromDouble(1e-8));
+        var levels = CvTensorOps<T>.ToDoubleArray(engine.TensorFloor(engine.TensorAddScalar(
+            engine.TensorDivideScalar(engine.TensorLog(ratio), ops.FromDouble(Math.Log(2))), ops.FromDouble(CanonicalLevel))));
+        for (int i = 0; i < count; i++)
+        {
+            int level = (int)levels[i];
             assignment[i] = Math.Min(Math.Max(level, minLevel), maxLevel) - minLevel;
         }
 
@@ -70,7 +79,6 @@ internal static class FpnRoIPooler<T>
                 nameof(strides));
         }
 
-        var ops = MathHelper.GetNumericOperations<T>();
         var assignment = AssignLevels(boxes, strides);
 
         var parts = new List<Tensor<T>>();
@@ -91,14 +99,7 @@ internal static class FpnRoIPooler<T>
                 continue;
             }
 
-            var subset = new Tensor<T>(new[] { members.Count, 4 });
-            for (int m = 0; m < members.Count; m++)
-            {
-                for (int c = 0; c < 4; c++)
-                {
-                    subset[m, c] = ops.FromDouble(ops.ToDouble(boxes[members[m], c]));
-                }
-            }
+            var subset = CvTensorOps<T>.Select(boxes, members.ToArray(), 0);
 
             parts.Add(align.Forward(levels[level], subset, 1.0 / strides[level]));
             order.AddRange(members);

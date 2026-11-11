@@ -610,6 +610,42 @@ internal static class CvTensorOps<T>
         return sorted.Select(i => items[i]).ToList();
     }
 
+    /// <summary>
+    /// Greedy NMS over XYXY <paramref name="boxes"/> <c>[N, 4]</c> already in priority order: each box in turn is
+    /// kept unless an earlier kept box overlaps it with IoU strictly above <paramref name="iouThreshold"/>, until
+    /// <paramref name="maxKeep"/> are kept. Returns the kept rows in order. The pairwise IoU is one engine op.
+    /// </summary>
+    public static List<int> GreedyNms(Tensor<T> boxes, double iouThreshold, int maxKeep)
+    {
+        int n = boxes.Shape[0];
+        var selected = new List<int>();
+        if (n == 0) return selected;
+
+        var iou = ToDoubleArray(Engine.BoxIou(boxes, boxes));
+        var used = new bool[n];
+        for (int i = 0; i < n && selected.Count < maxKeep; i++)
+        {
+            if (used[i]) continue;
+            selected.Add(i);
+            used[i] = true;
+            for (int j = i + 1; j < n; j++)
+            {
+                if (!used[j] && iou[i * n + j] > iouThreshold) used[j] = true;
+            }
+        }
+
+        return selected;
+    }
+
+    /// <summary>Stacks equal-length <c>[N]</c> columns into an <c>[N, columns.Length]</c> tensor.</summary>
+    public static Tensor<T> StackColumns(params Tensor<T>[] columns)
+    {
+        var reshaped = new Tensor<T>[columns.Length];
+        for (int k = 0; k < columns.Length; k++)
+            reshaped[k] = Engine.Reshape(columns[k], new[] { columns[k].Length, 1 });
+        return Engine.Concat(reshaped, 1);
+    }
+
     /// <summary>A rank-2 <c>[rows.Count, columns]</c> tensor from per-row value arrays (no arithmetic).</summary>
     public static Tensor<T> FromRows(IReadOnlyList<T[]> rows, int columns)
         => new Tensor<T>(new[] { rows.Count, columns }, new Vector<T>(rows.SelectMany(r => r).ToArray()));

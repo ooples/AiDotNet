@@ -228,19 +228,21 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
         int numAnchors = objectnessAnchors;
 
         var proposals = new List<(Tensor<T> boxes, Tensor<T> scores)>();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var anchorBoxes = numAnchors == 0
+            ? new Tensor<T>(new[] { 0, 4 })
+            : CvTensorOps<T>.FromRows(anchors.Select(anchor => new[] { anchor.X1, anchor.Y1, anchor.X2, anchor.Y2 }).ToArray(), 4);
+        var unitWeights = new[] { 1.0, 1.0, 1.0, 1.0 };
 
         for (int b = 0; b < batch; b++)
         {
-            // Apply softmax to get objectness scores
-            var scores = new double[numAnchors];
-            for (int i = 0; i < numAnchors; i++)
-            {
-                double notObj = _numOps.ToDouble(objectness[b, i, 0]);
-                double obj = _numOps.ToDouble(objectness[b, i, 1]);
-                double maxVal = Math.Max(notObj, obj);
-                double sumExp = Math.Exp(notObj - maxVal) + Math.Exp(obj - maxVal);
-                scores[i] = Math.Exp(obj - maxVal) / sumExp;
-            }
+            // Objectness probability: the softmax of each anchor's (not object, object) logits, column 1.
+            var imageLogits = engine.Reshape(engine.TensorSlice(objectness, new[] { b, 0, 0 }, new[] { 1, numAnchors, 2 }), new[] { numAnchors, 2 });
+            var objectProbability = engine.Reshape(
+                engine.TensorSlice(engine.Softmax(imageLogits, 1), new[] { 0, 1 }, new[] { numAnchors, 1 }), new[] { numAnchors });
+            var scores = CvTensorOps<T>.ToDoubleArray(objectProbability);
+            var scoreItems = objectProbability.ToArray();
+            var imageDeltas = engine.Reshape(engine.TensorSlice(bboxDeltas, new[] { b, 0, 0 }, new[] { 1, numAnchors, 4 }), new[] { numAnchors, 4 });
 
             var groups = levelAnchorCounts ?? new[] { numAnchors };
             if (groups.Sum() != numAnchors)
@@ -250,7 +252,7 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
                     nameof(levelAnchorCounts));
             }
 
-            var kept = new List<(double x1, double y1, double x2, double y2, double score)>();
+            var kept = new List<(T[] box, T score, double scoreValue)>();
             int groupStart = 0;
             foreach (int groupSize in groups)
             {
@@ -261,68 +263,44 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
                 var indices = Enumerable.Range(start, groupSize)
                     .OrderByDescending(i => scores[i])
                     .Take(preNmsTopK)
-                    .ToList();
+                    .ToArray();
+                if (indices.Length == 0) continue;
 
-                // Decode boxes
-                var decodedBoxes = new List<(double x1, double y1, double x2, double y2, double score, int idx)>();
-                foreach (int i in indices)
+                // Decode every selected anchor at once (standard bbox encoding, dw/dh clipped at 4).
+                var decoded = TwoStageBoxDecoding<T>.Decode(CvTensorOps<T>.Select(anchorBoxes, indices, 0),
+                    CvTensorOps<T>.Select(imageDeltas, indices, 0), unitWeights, 4.0, 1.0, 1.0, imageWidth, imageHeight);
+                var x1d = CvTensorOps<T>.ToDoubleArray(decoded.X1); var y1d = CvTensorOps<T>.ToDoubleArray(decoded.Y1);
+                var x2d = CvTensorOps<T>.ToDoubleArray(decoded.X2); var y2d = CvTensorOps<T>.ToDoubleArray(decoded.Y2);
+                var valid = new List<int>();
+                for (int k = 0; k < indices.Length; k++)
                 {
-                    // Get anchor - BoundingBox stores (x1, y1, x2, y2) in XYXY format
-                    var anchor = anchors[i];
-                    double ax1 = _numOps.ToDouble(anchor.X1);
-                    double ay1 = _numOps.ToDouble(anchor.Y1);
-                    double ax2 = _numOps.ToDouble(anchor.X2);
-                    double ay2 = _numOps.ToDouble(anchor.Y2);
-                    double aw = ax2 - ax1;
-                    double ah = ay2 - ay1;
-
-                    // Get deltas
-                    double dx = _numOps.ToDouble(bboxDeltas[b, i, 0]);
-                    double dy = _numOps.ToDouble(bboxDeltas[b, i, 1]);
-                    double dw = _numOps.ToDouble(bboxDeltas[b, i, 2]);
-                    double dh = _numOps.ToDouble(bboxDeltas[b, i, 3]);
-
-                    // Anchor center
-                    double cx = ax1 + aw / 2;
-                    double cy = ay1 + ah / 2;
-
-                    // Apply deltas (standard bbox encoding)
-                    double predCx = cx + dx * aw;
-                    double predCy = cy + dy * ah;
-                    double predW = aw * Math.Exp(Math.Min(dw, 4.0)); // Clip to prevent explosion
-                    double predH = ah * Math.Exp(Math.Min(dh, 4.0));
-
-                    // Convert to (x1, y1, x2, y2)
-                    double x1 = Math.Max(0, predCx - predW / 2);
-                    double y1 = Math.Max(0, predCy - predH / 2);
-                    double x2 = Math.Min(imageWidth, predCx + predW / 2);
-                    double y2 = Math.Min(imageHeight, predCy + predH / 2);
-
-                    if (x2 > x1 && y2 > y1)
-                    {
-                        decodedBoxes.Add((x1, y1, x2, y2, scores[i], i));
-                    }
+                    if (x2d[k] > x1d[k] && y2d[k] > y1d[k]) valid.Add(k);
                 }
 
-                // Apply NMS
-                kept.AddRange(ApplyNMS(decodedBoxes, nmsThreshold, postNmsTopK));
+                if (valid.Count == 0) continue;
+
+                // Greedy NMS in score order (the selection is already sorted by score).
+                var validRows = valid.ToArray();
+                var validBoxes = CvTensorOps<T>.Select(
+                    CvTensorOps<T>.StackColumns(decoded.X1, decoded.Y1, decoded.X2, decoded.Y2), validRows, 0);
+                var boxItems = validBoxes.ToArray();
+                foreach (int row in CvTensorOps<T>.GreedyNms(validBoxes, nmsThreshold, postNmsTopK))
+                {
+                    int anchorIndex = indices[validRows[row]];
+                    var box = new T[4];
+                    Array.Copy(boxItems, row * 4, box, 0, 4);
+                    kept.Add((box, scoreItems[anchorIndex], scores[anchorIndex]));
+                }
             }
 
-            var nmsBoxes = kept.OrderByDescending(box => box.score).Take(postNmsTopK).ToList();
+            var nmsBoxes = kept.OrderByDescending(box => box.scoreValue).Take(postNmsTopK).ToList();
 
             // Convert to tensors
             int numProposals = nmsBoxes.Count;
-            var boxTensor = new Tensor<T>(new[] { numProposals, 4 });
-            var scoreTensor = new Tensor<T>(new[] { numProposals });
-
-            for (int i = 0; i < numProposals; i++)
-            {
-                boxTensor[i, 0] = _numOps.FromDouble(nmsBoxes[i].x1);
-                boxTensor[i, 1] = _numOps.FromDouble(nmsBoxes[i].y1);
-                boxTensor[i, 2] = _numOps.FromDouble(nmsBoxes[i].x2);
-                boxTensor[i, 3] = _numOps.FromDouble(nmsBoxes[i].y2);
-                scoreTensor[i] = _numOps.FromDouble(nmsBoxes[i].score);
-            }
+            var boxTensor = numProposals == 0
+                ? new Tensor<T>(new[] { 0, 4 })
+                : CvTensorOps<T>.FromRows(nmsBoxes.Select(box => box.box).ToArray(), 4);
+            var scoreTensor = new Tensor<T>(new[] { numProposals }, new Vector<T>(nmsBoxes.Select(box => box.score).ToArray()));
 
             proposals.Add((boxTensor, scoreTensor));
         }
@@ -407,59 +385,6 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
     /// </remarks>
     private Tensor<T> ApplyReLU(Tensor<T> x) => AiDotNetEngine.Current.ReLU(x);
 
-    private List<(double x1, double y1, double x2, double y2, double score)> ApplyNMS(
-        List<(double x1, double y1, double x2, double y2, double score, int idx)> boxes,
-        double iouThreshold,
-        int maxBoxes)
-    {
-        var sorted = boxes.OrderByDescending(b => b.score).ToList();
-        var selected = new List<(double x1, double y1, double x2, double y2, double score)>();
-        var used = new bool[sorted.Count];
-
-        for (int i = 0; i < sorted.Count && selected.Count < maxBoxes; i++)
-        {
-            if (used[i]) continue;
-
-            var current = sorted[i];
-            selected.Add((current.x1, current.y1, current.x2, current.y2, current.score));
-            used[i] = true;
-
-            // Suppress overlapping boxes
-            for (int j = i + 1; j < sorted.Count; j++)
-            {
-                if (used[j]) continue;
-
-                double iou = ComputeIoU(current, sorted[j]);
-                if (iou > iouThreshold)
-                {
-                    used[j] = true;
-                }
-            }
-        }
-
-        return selected;
-    }
-
-    private double ComputeIoU(
-        (double x1, double y1, double x2, double y2, double score, int idx) a,
-        (double x1, double y1, double x2, double y2, double score, int idx) b)
-    {
-        double intersectX1 = Math.Max(a.x1, b.x1);
-        double intersectY1 = Math.Max(a.y1, b.y1);
-        double intersectX2 = Math.Min(a.x2, b.x2);
-        double intersectY2 = Math.Min(a.y2, b.y2);
-
-        double intersectW = Math.Max(0, intersectX2 - intersectX1);
-        double intersectH = Math.Max(0, intersectY2 - intersectY1);
-        double intersect = intersectW * intersectH;
-
-        double areaA = (a.x2 - a.x1) * (a.y2 - a.y1);
-        double areaB = (b.x2 - b.x1) * (b.y2 - b.y1);
-        double union = areaA + areaB - intersect;
-
-        return union > 0 ? intersect / union : 0;
-    }
-
     // The shared convolution and both heads, registered as live chunks. RPN is public, so it forwards
     // the parameter interfaces to an internal module instead of deriving from one. Before this the
     // generator could not see anything inside the RPN at all.
@@ -527,13 +452,9 @@ internal class RoIAlign<T>
         int batchSize = features.Shape[0];
         int numRois = rois.Shape[0];
 
-        // The boxes are constants to the gradient (as in standard RoIAlign), so they are read out once;
-        // the pooling itself is a tape-visible gather over the feature map.
-        var boxes = new double[numRois * 4];
-        for (int i = 0; i < boxes.Length; i++)
-        {
-            boxes[i] = _numOps.ToDouble(rois[i]);
-        }
+        // The boxes are constants to the gradient (as in standard RoIAlign); the pooling itself is a
+        // tape-visible gather over the feature map.
+        var boxes = rois;
 
         // A supplied batch index is clamped at BOTH ends: an index below zero reached RoIAlign unchanged
         // and read before the first image, while only the upper bound was ever guarded.
