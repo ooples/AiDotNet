@@ -154,9 +154,11 @@ public class RidgeRegression<T> : RegressionBase<T>
         // Note: If using intercept, we typically don't regularize the intercept term
         T alpha = NumOps.FromDouble(Options.Alpha);
         int startIdx = Options.UseIntercept ? 1 : 0;
-        for (int i = startIdx; i < numFeatures; i++)
+        if (numFeatures > startIdx)
         {
-            xTx[i, i] = NumOps.Add(xTx[i, i], alpha);
+            var ridgeDiagonal = Vector<T>.Concatenate(
+                Engine.FillZero<T>(startIdx), Engine.Fill(numFeatures - startIdx, alpha));
+            xTx = RegressionEngineOps2.AddDiagonal(xTx, ridgeDiagonal);
         }
 
         // Apply additional regularization if provided
@@ -172,11 +174,7 @@ public class RidgeRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
         {
             Intercept = solution[0];
-            Coefficients = new Vector<T>(numFeatures - 1);
-            for (int i = 1; i < numFeatures; i++)
-            {
-                Coefficients[i - 1] = solution[i];
-            }
+            Coefficients = solution.GetSubVector(1, numFeatures - 1);
         }
         else
         {
