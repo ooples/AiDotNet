@@ -60,12 +60,12 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
     /// Standard GP practice: centering targets makes the zero-mean prior assumption
     /// valid regardless of target scale, ensuring scaling/translation equivariance.
     /// </summary>
-    private double _yMean;
+    private T _yMean;
 
     /// <summary>
     /// Standard deviation of the original training targets for output variance scaling.
     /// </summary>
-    private double _yStd = 1.0;
+    private T _yStd;
 
     /// <summary>
     /// MCMC samples of hyperparameters [lengthscale, outputVariance, noiseVariance].
@@ -117,18 +117,9 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
     /// change MUST rebuild (or null) these caches.
     /// </para>
     /// </summary>
-    private double[,]? _baseKernelDouble;
-    private double[]? _centeredYDouble;
-
-    /// <summary>
-    /// Reusable per-instance work buffers for the <see cref="ComputeLogPosterior"/> Cholesky + solves,
-    /// sized once in <see cref="Fit"/>. Since that method is evaluated ~10^6 times by slice sampling,
-    /// reusing these avoids allocating a fresh Cholesky factor + two solve vectors on every call (they
-    /// are fully overwritten each evaluation; MCMC runs single-threaded per instance inside Fit).
-    /// </summary>
-    private double[,]? _choleskyWork;
-    private double[]? _alphaWork;
-    private double[]? _betaWork;
+    private Tensor<T>? _baseKernel;
+    private Tensor<T>? _centeredTargets;
+    private Tensor<T>? _identity;
 
     /// <summary>
     /// Prior mean for log-lengthscale.
@@ -219,6 +210,8 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
             : RandomHelper.CreateSecureRandom();
 
         _numOps = MathHelper.GetNumericOperations<T>();
+        _yMean = _numOps.Zero;
+        _yStd = _numOps.One;
         _isTrained = false;
     }
 
@@ -264,7 +257,8 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
         // it scales with the input X, not the target y. Without this rescale, callers of
         // GetSamples() would see variances under-reported by a factor of _yStd^2 — exactly
         // the discrepancy flagged in PR review.
-        double scale = _yStd * _yStd;
+        // The hyperparameter samples are reported as doubles; the target scale crosses that boundary once.
+        double scale = _numOps.ToDouble(_numOps.Multiply(_yStd, _yStd));
         return _samples
             .Select(s => new[] { s[0], s[1] * scale, s[2] * scale })
             .ToList();
@@ -313,39 +307,19 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
             _numOps.Sqrt(_numOps.Divide(engine.TensorSumOfSquares(deviations), _numOps.FromDouble(Math.Max(n - 1, 1)))),
             _numOps.FromDouble(1e-10));
 
-        // The slice sampler below works on scalar double hyperparameters; keep the moments it reads.
-        _yMean = _numOps.ToDouble(yMean);
-        _yStd = _numOps.ToDouble(yStd);
+        _yMean = yMean;
+        _yStd = yStd;
 
         // Store centered targets
         _y = engine.TensorDivideScalar(deviations, yStd).ToVector();
 
-        // Precompute the invariant base kernel structure + centered targets in double for the MCMC
-        // hot loop. k(xi, xj) does not depend on the sampled outputVar/noiseVar (PrecomputeForSamples
-        // scales by outputVar and adds noiseVar to the diagonal), so it is constant across every
-        // ComputeLogPosterior evaluation — computing it once here removes ~n^2/2 generic kernel calls
-        // and all per-element boxing from each of the ~10^6 slice-sampling evaluations.
-        _centeredYDouble = new double[n];
-        for (int i = 0; i < n; i++)
-            _centeredYDouble[i] = _numOps.ToDouble(_y[i]);
-
-        _baseKernelDouble = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            var xi = GetRow(FittedX, i);
-            for (int j = i; j < n; j++)
-            {
-                double kval = _numOps.ToDouble(_kernel.Calculate(xi, GetRow(FittedX, j)));
-                _baseKernelDouble[i, j] = kval;
-                _baseKernelDouble[j, i] = kval;
-            }
-        }
-
-        // Size the ComputeLogPosterior work buffers once so the ~10^6 slice-sampling evaluations reuse
-        // them instead of allocating a Cholesky factor + two solve vectors on every call.
-        _choleskyWork = new double[n, n];
-        _alphaWork = new double[n];
-        _betaWork = new double[n];
+        // Precompute the invariant base kernel structure + centered targets for the MCMC hot loop.
+        // k(xi, xj) does not depend on the sampled outputVar/noiseVar (ComputeLogPosterior scales by
+        // outputVar and adds noiseVar to the diagonal), so it is constant across every evaluation —
+        // computing it once here removes ~n^2/2 generic kernel calls from each slice-sampling evaluation.
+        _centeredTargets = Tensor<T>.FromVector(_y).Reshape(new[] { n, 1 });
+        _baseKernel = Tensor<T>.FromMatrix(BuildBaseKernelMatrix());
+        _identity = engine.TensorEye<T>(n);
 
         // Initialize hyperparameters in log-space
         double[] logParams = new double[3];
@@ -449,8 +423,8 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
         T totalVariance = _numOps.Add(meanOfVariances, varianceOfMeans);
 
         // De-center: transform from standardized space back to original scale
-        T yStd = _numOps.FromDouble(_yStd);
-        T deCenteredMean = _numOps.Add(_numOps.Multiply(meanOfMeans, yStd), _numOps.FromDouble(_yMean));
+        T yStd = _yStd;
+        T deCenteredMean = _numOps.Add(_numOps.Multiply(meanOfMeans, yStd), _yMean);
         T deCenteredVariance = _numOps.Multiply(totalVariance, _numOps.Multiply(yStd, yStd));
 
         return (deCenteredMean, deCenteredVariance);
@@ -520,7 +494,8 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
 
         // Rescale variance components back to the original target scale (see GetSamples()
         // for the full explanation — _samples are stored in standardized units).
-        double scale = _yStd * _yStd;
+        // The hyperparameter samples are reported as doubles; the target scale crosses that boundary once.
+        double scale = _numOps.ToDouble(_numOps.Multiply(_yStd, _yStd));
         var lengthscales = _samples.Select(s => s[0]).ToArray();
         var outputVars = _samples.Select(s => s[1] * scale).ToArray();
         var noiseVars = _samples.Select(s => s[2] * scale).ToArray();
@@ -540,89 +515,29 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private double ComputeLogPosterior(double[] logParams)
     {
-        if (_baseKernelDouble is null || _centeredYDouble is null
-            || _choleskyWork is null || _alphaWork is null || _betaWork is null)
+        if (_baseKernel is null || _centeredTargets is null || _identity is null)
             return double.NegativeInfinity;
 
-        // logParams[0] (lengthscale) is intentionally not applied to the kernel matrix here, and this is
-        // NOT a regression from the cached-kernel optimization: on master BOTH BuildKernelMatrix(lengthscale,
-        // …) and ComputeCrossCovariance(x, lengthscale, …) accepted a lengthscale argument but never used it
-        // — each called the generic _kernel.Calculate(…), whose lengthscale is fixed at kernel construction.
-        // So the sampled lengthscale has always been vestigial for a generic IKernelFunction: it feeds only
-        // the prior below (and is reported by GetPosteriorStatistics), never the training kernel or the
-        // predictive cross-covariance. Caching _baseKernelDouble therefore reproduces the previous posterior
-        // bit-for-bit. Making lengthscale a LIVE kernel hyperparameter would require a re-parameterizable
-        // kernel (one that recomputes k(·,·) per sampled lengthscale) — which for a generic kernel means
-        // rebuilding the matrix every evaluation, defeating this timeout fix — so it is a separate modeling
-        // change, deliberately not bundled into this perf PR. It is still used by the prior below.
-        double outputVar = Math.Exp(logParams[1]);
-        double noiseVar = Math.Exp(logParams[2]);
-        int n = _centeredYDouble.Length;
+        // logParams[0] (lengthscale) is intentionally not applied to the kernel matrix here: the generic
+        // _kernel.Calculate(…) has its lengthscale fixed at kernel construction, so the sampled lengthscale
+        // has always been vestigial for a generic IKernelFunction — it feeds only the prior below (and is
+        // reported by GetPosteriorStatistics), never the training kernel or the predictive cross-covariance.
+        // Making it a live kernel hyperparameter needs a re-parameterizable kernel and is a separate change.
+        var engine = Engine;
+        T outputVar = _numOps.FromDouble(Math.Exp(logParams[1]));
+        T noiseVar = _numOps.FromDouble(Math.Exp(logParams[2]));
 
-        // Reuse the per-instance work buffers (sized in Fit). L's upper triangle is never read and
-        // alpha/beta are fully overwritten below, so reusing them is bit-identical to fresh allocations.
-        double[,] L = _choleskyWork;
-        double[] alpha = _alphaWork;
-        double[] beta = _betaWork;
+        // Cholesky of K = base·outputVar + noiseVar·I; a matrix that is not positive definite makes the
+        // parameters invalid.
+        var K = engine.TensorAdd(
+            engine.TensorMultiplyScalar(_baseKernel, outputVar), engine.TensorMultiplyScalar(_identity, noiseVar));
+        var lower = GaussianProcessEvidence.Cholesky(K);
+        if (lower is null)
+            return double.NegativeInfinity;
 
-        // Cholesky of K = base·outputVar + noiseVar·I, computed directly in double. Same triple loop
-        // and accumulation order as CholeskyDecomposition, so the result is bit-identical to the
-        // generic path (which already did all arithmetic in double via ToDouble) — the MCMC sample
-        // sequence is unchanged, only the per-eval boxing/allocation is removed.
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                double aij = _baseKernelDouble[i, j] * outputVar;
-                if (i == j) aij += noiseVar;
-
-                double sum = 0;
-                for (int k = 0; k < j; k++)
-                    sum += L[i, k] * L[j, k];
-
-                if (i == j)
-                {
-                    double diag = aij - sum;
-                    if (diag <= 0)
-                        return double.NegativeInfinity; // not positive definite → invalid parameters
-                    L[i, j] = Math.Sqrt(diag);
-                }
-                else
-                {
-                    L[i, j] = (aij - sum) / L[j, j];
-                }
-            }
-        }
-
-        // Solve L·alpha = y (forward) then Lᵀ·beta = alpha (backward), matching SolveLowerTriangular /
-        // SolveUpperTriangular's accumulate-then-subtract order exactly.
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < i; j++)
-                sum += L[i, j] * alpha[j];
-            alpha[i] = (_centeredYDouble[i] - sum) / L[i, i];
-        }
-
-        for (int i = n - 1; i >= 0; i--)
-        {
-            double sum = 0;
-            for (int j = i + 1; j < n; j++)
-                sum += L[j, i] * beta[j];
-            beta[i] = (alpha[i] - sum) / L[i, i];
-        }
-
-        // Log likelihood: -0.5 · (y' · K^-1 · y + log|K| + n·log(2π))
-        double yKinvY = 0;
-        for (int i = 0; i < n; i++)
-            yKinvY += _centeredYDouble[i] * beta[i];
-
-        double logDetK = 0;
-        for (int i = 0; i < n; i++)
-            logDetK += Math.Log(L[i, i]);
-        logDetK *= 2; // log|K| = 2·sum(log(diag(L)))
-
-        double logLik = -0.5 * (yKinvY + logDetK + n * Math.Log(2 * Math.PI));
+        // Log likelihood: -0.5 · (y' · K^-1 · y + log|K| + n·log(2π)). The slice sampler compares log
+        // densities of its scalar log-space hyperparameters, so the evidence is read as one scalar here.
+        double logLik = _numOps.ToDouble(GaussianProcessEvidence.LogMarginalLikelihood(lower, _centeredTargets));
 
         // Log prior (normal priors on log-parameters)
         double logPrior = 0;
