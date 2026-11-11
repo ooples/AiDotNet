@@ -87,6 +87,66 @@ internal static class RegressionEngineOps2
     }
 
     /// <summary>
+    /// <paramref name="matrix"/> + diag(<paramref name="diagonal"/>) for a square matrix.
+    /// </summary>
+    public static Matrix<T> AddDiagonal<T>(Matrix<T> matrix, Vector<T> diagonal)
+    {
+        return AiDotNetEngine.Current.MatrixAdd(matrix, Matrix<T>.CreateDiagonal(diagonal));
+    }
+
+    /// <summary>
+    /// <paramref name="matrix"/> + <paramref name="value"/> * I for a square matrix.
+    /// </summary>
+    public static Matrix<T> AddDiagonal<T>(Matrix<T> matrix, T value)
+    {
+        return AddDiagonal(matrix, AiDotNetEngine.Current.Fill(matrix.Rows, value));
+    }
+
+    /// <summary>
+    /// Scale-adaptive ridge jitter: adds max(|d_i| * <paramref name="relative"/>, <paramref name="floor"/>)
+    /// to each diagonal entry d_i of a square matrix.
+    /// </summary>
+    public static Matrix<T> AddRelativeDiagonalJitter<T>(Matrix<T> matrix, T relative, T floor)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diagonal = matrix.Diagonal();
+        var jitter = engine.Max(
+            engine.Multiply(engine.Abs(diagonal), relative),
+            engine.Fill(diagonal.Length, floor));
+        return AddDiagonal(matrix, jitter);
+    }
+
+    /// <summary>
+    /// intercept + X[:, :k] * coefficients[:k] with k = min(columns, coefficient count).
+    /// </summary>
+    public static Vector<T> LinearPredict<T>(Matrix<T> x, Vector<T> coefficients, T intercept)
+    {
+        var engine = AiDotNetEngine.Current;
+        int k = Math.Min(x.Columns, coefficients.Length);
+        var xUsed = k == x.Columns ? x : x.GetSubMatrix(0, 0, x.Rows, k);
+        var cUsed = k == coefficients.Length ? coefficients : coefficients.GetSubVector(0, k);
+        var linear = k == 0 ? engine.FillZero<T>(x.Rows) : engine.MatrixVectorMultiply(xUsed, cUsed);
+        return engine.Add(engine.Fill(x.Rows, intercept), linear);
+    }
+
+    /// <summary>
+    /// intercept + x[:k] . coefficients[:k] with k = min(lengths).
+    /// </summary>
+    public static T LinearPredictSingle<T>(Vector<T> x, Vector<T> coefficients, T intercept)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int k = Math.Min(x.Length, coefficients.Length);
+        if (k == 0)
+        {
+            return intercept;
+        }
+
+        var xUsed = k == x.Length ? x : x.GetSubVector(0, k);
+        var cUsed = k == coefficients.Length ? coefficients : coefficients.GetSubVector(0, k);
+        return numOps.Add(intercept, AiDotNetEngine.Current.DotProduct(xUsed, cUsed));
+    }
+
+    /// <summary>
     /// True when any element of <paramref name="mask"/> is non-zero.
     /// </summary>
     public static bool Any<T>(Tensor<T> mask)
