@@ -54,22 +54,21 @@ public static class BezierAlign
     /// </remarks>
     public static Tensor<T> ControlPointTensor<T>(CubicBezierCurve<T> topCurve, CubicBezierCurve<T> bottomCurve)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var t = new Tensor<T>(new[] { ControlPointCount, 2 });
+        var t = new double[ControlPointCount * 2];
 
         for (int k = 0; k < CubicBezierCurve<T>.ControlPointCount; k++)
         {
             var (tx, ty) = topCurve.ControlPoint(k);
-            t[(k * 2) + 0] = numOps.FromDouble(tx);
-            t[(k * 2) + 1] = numOps.FromDouble(ty);
+            t[(k * 2) + 0] = tx;
+            t[(k * 2) + 1] = ty;
 
             var (bx, by) = bottomCurve.ControlPoint(k);
             int row = CubicBezierCurve<T>.ControlPointCount + k;
-            t[(row * 2) + 0] = numOps.FromDouble(bx);
-            t[(row * 2) + 1] = numOps.FromDouble(by);
+            t[(row * 2) + 0] = bx;
+            t[(row * 2) + 1] = by;
         }
 
-        return t;
+        return AiDotNet.ComputerVision.CvTensorOps<T>.FromDoubleArray(t, new[] { ControlPointCount, 2 });
     }
 
     /// <summary>
@@ -89,8 +88,7 @@ public static class BezierAlign
         if (outputWidth <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputWidth), outputWidth, "outputWidth must be positive.");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var coeff = new Tensor<T>(new[] { outputHeight * outputWidth, ControlPointCount });
+        var coeff = new double[outputHeight * outputWidth * ControlPointCount];
 
         for (int i = 0; i < outputHeight; i++)
         {
@@ -104,13 +102,13 @@ public static class BezierAlign
                 int off = row * ControlPointCount;
                 for (int k = 0; k < 4; k++)
                 {
-                    coeff[off + k] = numOps.FromDouble((1.0 - s) * basis[k]);
-                    coeff[off + 4 + k] = numOps.FromDouble(s * basis[k]);
+                    coeff[off + k] = (1.0 - s) * basis[k];
+                    coeff[off + 4 + k] = s * basis[k];
                 }
             }
         }
 
-        return coeff;
+        return AiDotNet.ComputerVision.CvTensorOps<T>.FromDoubleArray(coeff, new[] { outputHeight * outputWidth, ControlPointCount });
     }
 
     /// <summary>

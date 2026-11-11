@@ -555,20 +555,22 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
 
         var found = new List<TextInstance>();
         double stride = _options.FeatureStride;
+        // Score and coordinate planes in double, from one bulk conversion.
+        var values = CvTensorOps<T>.ToDoubleArray(detection);
 
         for (int y = 0; y < h; y++)
         {
             for (int x = 0; x < w; x++)
             {
-                double score = Convert.ToDouble(detection[(y * w) + x]);
+                double score = values[(y * w) + x];
                 if (score < _options.ConfidenceThreshold) continue;
 
                 var control = new (double X, double Y)[BezierAlign.ControlPointCount];
                 for (int k = 0; k < BezierAlign.ControlPointCount; k++)
                 {
                     // Channel 0 is the score, so coordinate channels start at 1.
-                    double dx = Convert.ToDouble(detection[((1 + (2 * k)) * plane) + (y * w) + x]);
-                    double dy = Convert.ToDouble(detection[((1 + (2 * k) + 1) * plane) + (y * w) + x]);
+                    double dx = values[((1 + (2 * k)) * plane) + (y * w) + x];
+                    double dy = values[((1 + (2 * k) + 1) * plane) + (y * w) + x];
                     control[k] = ((x + dx) * stride, (y + dy) * stride);
                 }
 
@@ -662,12 +664,13 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
 
         // Offsets are relative to the sampling position, so add it back. A constant addend, so it
         // contributes no gradient of its own while leaving the offsets fully differentiable.
-        var origin = new Tensor<T>(new[] { BezierAlign.ControlPointCount, 2 });
+        var originValues = new double[BezierAlign.ControlPointCount * 2];
         for (int k = 0; k < BezierAlign.ControlPointCount; k++)
         {
-            origin[(k * 2) + 0] = NumOps.FromDouble(px);
-            origin[(k * 2) + 1] = NumOps.FromDouble(py);
+            originValues[(k * 2) + 0] = px;
+            originValues[(k * 2) + 1] = py;
         }
+        var origin = CvTensorOps<T>.FromDoubleArray(originValues, new[] { BezierAlign.ControlPointCount, 2 });
 
         return Engine.TensorAdd(offsets, origin);
     }
@@ -718,14 +721,13 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
 
     private static Tensor<T> ControlPointTensor(IReadOnlyList<(double X, double Y)> points)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var t = new Tensor<T>(new[] { BezierAlign.ControlPointCount, 2 });
+        var t = new double[BezierAlign.ControlPointCount * 2];
         for (int k = 0; k < BezierAlign.ControlPointCount; k++)
         {
-            t[(k * 2) + 0] = numOps.FromDouble(points[k].X);
-            t[(k * 2) + 1] = numOps.FromDouble(points[k].Y);
+            t[(k * 2) + 0] = points[k].X;
+            t[(k * 2) + 1] = points[k].Y;
         }
-        return t;
+        return CvTensorOps<T>.FromDoubleArray(t, new[] { BezierAlign.ControlPointCount, 2 });
     }
 
     /// <summary>
@@ -788,6 +790,7 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
 
         var decoded = new List<int>(columns);
         int previous = -1;
+        var values = CvTensorOps<T>.ToDoubleArray(logits);
 
         for (int c = 0; c < columns; c++)
         {
@@ -795,7 +798,7 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
             double bestValue = double.NegativeInfinity;
             for (int k = 0; k < classes; k++)
             {
-                double v = Convert.ToDouble(logits[(c * classes) + k]);
+                double v = values[(c * classes) + k];
                 if (v > bestValue) { bestValue = v; best = k; }
             }
 
