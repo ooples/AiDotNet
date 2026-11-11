@@ -221,9 +221,43 @@ internal static class OptionSensitivityFixtureSetup
             OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, parameters.Length).Select(i => ops.ToDouble(parameters[i]))));
     }
 
+    /// <summary>A deterministic 10-second, 16 kHz waveform of shape [1, 160000].</summary>
+    private static Tensor<T> LongWaveform<T>()
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var waveform = new Tensor<T>(new[] { 1, 160000 });
+        for (int i = 0; i < waveform.Length; i++) waveform[i] = ops.FromDouble(0.4 * Math.Sin(i * .13) + 0.2 * Math.Cos(i * .37));
+        return waveform;
+    }
+
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.Audio.Foundations.Wav2Vec2<T> wav2Vec2 && option == "MaskProbability")
+        {
+            // transformers' _compute_mask_indices draws max(floor(p*L/M + U), mask_time_min_masks = 2) spans, so on
+            // the 2048-sample fixture (6 frames) every probability masks the same frames. A 10-second waveform has
+            // ~500 frames, where the default and the doubled probability draw different span counts. The fixed-seed
+            // pre-training objective is the path the probability feeds.
+            var objective = (AiDotNet.Interfaces.ITrainingObjectiveProvider<T>)wav2Vec2;
+            var waveform = LongWaveform<T>();
+            return OptionSensitivityHarness.Fingerprint(new[]
+            {
+                AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble(
+                    objective.EvaluateTrainingObjective(waveform, waveform)),
+            });
+        }
+        if (network is AiDotNet.Audio.Foundations.WavLM<T> wavLm && option == "MaskTimeProbability")
+        {
+            // Same min-masks clamp as Wav2Vec2 above; the time mask applies on the training forward.
+            using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            return OptionSensitivityHarness.Fingerprint(wavLm.ForwardForTraining(LongWaveform<T>())
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        }
+        if (network is AiDotNet.Audio.Classification.SceneClassifier<T> scene && option == "ContextFrames")
+            // The fixture feeds ready-made context vectors; the option sizes the vectors a recording becomes.
+            return OptionSensitivityHarness.Fingerprint(scene.ContextFeatures(LongWaveform<T>())
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
         if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi)
             return MoshiOptionFixture.Observe(moshi, option);
         if (network is AiDotNet.TextToSpeech.Classic.PortaSpeech<T> porta && option is "PostNetLearningRate" or "PostNetTemperature")
@@ -1390,6 +1424,13 @@ internal static class OptionSensitivityFixtureSetup
         if (options is AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions orpheus && option == "MaxGradNorm")
             // Bind the actual optimizer clip in the compact LM; the release threshold can exceed every test gradient.
             orpheus.MaxGradNorm = 1e-12;
+        if (options is AiDotNet.ComputerVision.Detection.Backbones.VGG16BackboneOptions vgg && option == "MaxGradNorm")
+            // The fixture's gradient norm is below every perturbation of 1.0 (even 0.5), so the clip never binds.
+            vgg.MaxGradNorm = 1e-6;
+        if (options is AiDotNet.Video.Options.RealBasicVSROptions realBasic && option == "InferenceCleaningThreshold")
+            // The compact cleaning module's mean |residue| is below every perturbation of 1.5/255, so each threshold
+            // stops after the first pass. From 0 (run every pass) the +0.1 perturbation stops after one.
+            realBasic.InferenceCleaningThreshold = 0;
 
         // The single-speaker, monolingual graph has no conditioning tables to resize.
         // Enable the native conditioning path in both builds before perturbing its width.
