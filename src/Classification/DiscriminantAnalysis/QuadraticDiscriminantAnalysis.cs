@@ -272,11 +272,10 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
             return NumOps.Zero;
         }
 
-        // log|det| = sum of log|pivot| of the partially pivoted LU factorization (pivots floored at 1e-12)
-        var engine = Engine;
-        var (lu, _) = Linalg.LuFactor(Tensor<T>.FromMatrix(matrix));
-        var pivots = engine.TensorClampMin(engine.TensorAbs(engine.TensorDiagonal(lu)), NumOps.FromDouble(1e-12));
-        return engine.TensorSum(engine.TensorLog(pivots));
+        // log|det| = sum of log|pivot| of partially pivoted elimination; a pivot below 1e-12 in magnitude
+        // is replaced by 1e-12 and elimination continues with it
+        ForwardEliminate(Tensor<T>.FromMatrix(matrix), matrix.Rows, SmallPivotHandling.FloorMagnitude, out var pivots);
+        return Engine.TensorSum(Engine.TensorLog(Engine.TensorAbs(Vector<T>.Wrap(pivots).AsTensor())));
     }
 
     /// <inheritdoc/>

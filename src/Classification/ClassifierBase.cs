@@ -501,22 +501,212 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
-    /// Inverts a square matrix with the tensor library's LU inverse, falling back to the Moore-Penrose
-    /// pseudo-inverse when the matrix is singular.
+    /// Inverts a square matrix by Gauss-Jordan elimination with partial pivoting. A pivot smaller than
+    /// 1e-12 in magnitude is replaced by +/-1e-12 (keeping its sign, + for zero), so a singular matrix
+    /// yields a large but finite result instead of an exception.
     /// </summary>
     /// <param name="matrix">The square matrix.</param>
-    /// <returns>The (pseudo-)inverse.</returns>
-    private protected static Matrix<T> InvertMatrix(Matrix<T> matrix)
+    /// <returns>The inverse.</returns>
+    private protected Matrix<T> InvertMatrix(Matrix<T> matrix)
     {
-        if (matrix.Rows == 0)
+        var engine = Engine;
+        int n = matrix.Rows;
+        if (n == 0)
         {
             return new Matrix<T>(0, 0);
         }
 
-        var tensor = Tensor<T>.FromMatrix(matrix);
-        var (inverse, info) = Linalg.InvEx(tensor);
-        bool singular = info.Length > 0 && info.ToArray()[0] != 0;
-        return singular ? Linalg.Pinv(tensor).ToMatrix() : inverse.ToMatrix();
+        // Augmented matrix [A | I]
+        var augmented = engine.TensorConcatenate(new[] { Tensor<T>.FromMatrix(matrix), engine.TensorEye<T>(n) }, 1);
+        for (int col = 0; col < n; col++)
+        {
+            augmented = SwapInPivotRow(augmented, col, n);
+            T pivot = ClampPivot(augmented[col, col], NumOps.FromDouble(1e-12));
+
+            // Scale the pivot row, then eliminate the column from every other row
+            var pivotRow = engine.TensorDivideScalar(augmented.Slice(0, col, col + 1), pivot);
+            var factors = augmented.Slice(1, col, col + 1).Clone();
+            factors[col, 0] = NumOps.Zero;
+            var eliminated = engine.TensorSubtract(augmented, engine.TensorMultiply(factors, pivotRow));
+            augmented = ReplaceRow(eliminated, col, pivotRow);
+        }
+
+        return augmented.Slice(1, n, 2 * n).ToMatrix();
+    }
+
+    /// <summary>
+    /// Solves a x = b by Gaussian elimination with partial pivoting and back substitution.
+    /// </summary>
+    /// <param name="a">The [n, n] coefficient matrix.</param>
+    /// <param name="b">The length-n right-hand side.</param>
+    /// <param name="handling">How pivots and diagonal entries near zero are treated.</param>
+    /// <returns>The solution x.</returns>
+    private protected Vector<T> SolveByElimination(Tensor<T> a, Vector<T> b, SmallPivotHandling handling)
+    {
+        var engine = Engine;
+        int n = a.Shape[0];
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        T clampThreshold = NumOps.FromDouble(1e-12);
+        T skipThreshold = NumOps.FromDouble(1e-10);
+        var augmented = ForwardEliminate(
+            engine.TensorConcatenate(new[] { a, b.AsTensor().Reshape(n, 1) }, 1), n, handling, out _);
+
+        // Back substitution
+        var solution = new T[n];
+        for (int i = n - 1; i >= 0; i--)
+        {
+            T sum = augmented[i, n];
+            if (i < n - 1)
+            {
+                var upper = augmented.Slice(0, i, i + 1).Slice(1, i + 1, n).Reshape(n - i - 1).ToVector();
+                var known = Vector<T>.Wrap(solution).GetSubVector(i + 1, n - i - 1);
+                sum = NumOps.Subtract(sum, engine.DotProduct(upper, known));
+            }
+
+            T diag = augmented[i, i];
+            if (handling == SmallPivotHandling.ClampToMinimum)
+            {
+                solution[i] = NumOps.Divide(sum, NumOps.Compare(NumOps.Abs(diag), clampThreshold) < 0 ? clampThreshold : diag);
+            }
+            else
+            {
+                solution[i] = NumOps.Compare(NumOps.Abs(diag), skipThreshold) > 0 ? NumOps.Divide(sum, diag) : NumOps.Zero;
+            }
+        }
+
+        return Vector<T>.Wrap(solution);
+    }
+
+    /// <summary>
+    /// Forward Gaussian elimination with partial pivoting on the first <paramref name="n"/> columns of
+    /// <paramref name="augmented"/> ([n, m], m &gt;= n): for each column the row with the largest |value| at or
+    /// below the diagonal is swapped in, then (row[col] / pivot) * pivotRow is subtracted from every row below.
+    /// Entries left of the diagonal in those rows are not meaningful afterwards.
+    /// </summary>
+    /// <param name="augmented">The [n, m] matrix to reduce.</param>
+    /// <param name="n">The number of rows (and eliminated columns).</param>
+    /// <param name="handling">How pivots near zero are treated.</param>
+    /// <param name="pivots">The pivot used for each column (after any adjustment).</param>
+    /// <returns>The reduced matrix.</returns>
+    private protected Tensor<T> ForwardEliminate(Tensor<T> augmented, int n, SmallPivotHandling handling, out T[] pivots)
+    {
+        var engine = Engine;
+        T minimum = NumOps.FromDouble(handling == SmallPivotHandling.SkipColumn ? 1e-10 : 1e-12);
+        pivots = new T[n];
+        for (int col = 0; col < n; col++)
+        {
+            augmented = SwapInPivotRow(augmented, col, n);
+            T pivot = augmented[col, col];
+            bool eliminate = true;
+            switch (handling)
+            {
+                case SmallPivotHandling.ClampToMinimum:
+                    pivot = ClampPivot(pivot, minimum);
+                    break;
+                case SmallPivotHandling.FloorMagnitude:
+                    pivot = NumOps.Compare(NumOps.Abs(pivot), minimum) < 0 ? minimum : pivot;
+                    break;
+                default:
+                    eliminate = NumOps.Compare(NumOps.Abs(pivot), minimum) > 0;
+                    break;
+            }
+
+            pivots[col] = pivot;
+            if (!eliminate || col == n - 1)
+            {
+                continue;
+            }
+
+            // row -= (row[col] / pivot) * pivotRow for every row below the pivot
+            var pivotRow = augmented.Slice(0, col, col + 1);
+            var below = augmented.Slice(0, col + 1, n);
+            var factors = engine.TensorDivideScalar(below.Slice(1, col, col + 1), pivot);
+            var reduced = engine.TensorSubtract(below, engine.TensorMultiply(factors, pivotRow));
+            augmented = engine.TensorConcatenate(new[] { augmented.Slice(0, 0, col + 1), reduced }, 0);
+        }
+
+        return augmented;
+    }
+
+    /// <summary>
+    /// How <see cref="SolveByElimination"/> and <see cref="ForwardEliminate"/> treat pivots and diagonal entries near zero.
+    /// </summary>
+    private protected enum SmallPivotHandling
+    {
+        /// <summary>
+        /// Pivots below 1e-12 in magnitude become +/-1e-12 (sign kept, + for zero); diagonal entries
+        /// below 1e-12 in magnitude become +1e-12 in back substitution.
+        /// </summary>
+        ClampToMinimum,
+
+        /// <summary>
+        /// Columns whose pivot is at most 1e-10 in magnitude are not eliminated, and their solution
+        /// component is 0.
+        /// </summary>
+        SkipColumn,
+
+        /// <summary>
+        /// Pivots below 1e-12 in magnitude become +1e-12 (the sign is dropped).
+        /// </summary>
+        FloorMagnitude
+    }
+
+    /// <summary>
+    /// Swaps row <paramref name="col"/> with the row at or below it holding the largest |value| in
+    /// column <paramref name="col"/> (the first such row on ties).
+    /// </summary>
+    private Tensor<T> SwapInPivotRow(Tensor<T> augmented, int col, int n)
+    {
+        var engine = Engine;
+        var candidates = engine.TensorAbs(augmented.Slice(0, col, n).Slice(1, col, col + 1).Reshape(n - col));
+        int maxRow = col + engine.TensorArgMax(candidates, 0).ToArray()[0];
+        if (maxRow == col)
+        {
+            return augmented;
+        }
+
+        var order = Enumerable.Range(0, n).ToArray();
+        order[col] = maxRow;
+        order[maxRow] = col;
+        return engine.TensorGather(augmented, new Tensor<int>(order, new[] { n }), 0);
+    }
+
+    /// <summary>
+    /// Replaces a pivot smaller than <paramref name="minimum"/> in magnitude by +/-minimum (sign kept, + for zero).
+    /// </summary>
+    private T ClampPivot(T pivot, T minimum)
+    {
+        if (NumOps.Compare(NumOps.Abs(pivot), minimum) >= 0)
+        {
+            return pivot;
+        }
+
+        return NumOps.Compare(pivot, NumOps.Zero) < 0 ? NumOps.Negate(minimum) : minimum;
+    }
+
+    /// <summary>
+    /// Returns <paramref name="tensor"/> with row <paramref name="row"/> replaced by the [1, columns] <paramref name="newRow"/>.
+    /// </summary>
+    private Tensor<T> ReplaceRow(Tensor<T> tensor, int row, Tensor<T> newRow)
+    {
+        int rows = tensor.Shape[0];
+        var parts = new List<Tensor<T>>();
+        if (row > 0)
+        {
+            parts.Add(tensor.Slice(0, 0, row));
+        }
+
+        parts.Add(newRow);
+        if (row + 1 < rows)
+        {
+            parts.Add(tensor.Slice(0, row + 1, rows));
+        }
+
+        return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
     }
 
     /// <summary>

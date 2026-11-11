@@ -201,12 +201,7 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
             return new Vector<T>(0);
         }
 
-        // LU solve with partial pivoting; a singular system falls back to the pseudo-inverse solution
-        var aTensor = Tensor<T>.FromMatrix(a);
-        var bColumn = b.AsTensor().Reshape(n, 1);
-        var (solution, info) = Linalg.SolveEx(aTensor, bColumn);
-        bool singular = info.Length > 0 && info.ToArray()[0] != 0;
-        var result = singular ? Engine.TensorMatMul(Linalg.Pinv(aTensor), bColumn) : solution;
-        return result.Reshape(n).ToVector();
+        // Tiny pivots are clamped to +/-1e-12 so a singular system still returns a finite solution
+        return SolveByElimination(Tensor<T>.FromMatrix(a), b, SmallPivotHandling.ClampToMinimum);
     }
 }

@@ -225,7 +225,7 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
         var xtx = engine.TensorAdd(engine.TensorMatMul(xT, features),
             engine.TensorMultiplyScalar(engine.TensorEye<T>(p), NumOps.FromDouble(_alpha)));
         var xty = engine.TensorMatMul(xT, targets.Reshape(n, 1));
-        _coefficients = p == 0 ? new Vector<T>(0) : SolveSymmetric(xtx, xty).Reshape(p).ToVector();
+        _coefficients = p == 0 ? new Vector<T>(0) : SolveSymmetric(xtx, xty);
 
         // Compute intercept
         _bias = _fitIntercept
@@ -248,13 +248,12 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     }
 
     /// <summary>
-    /// Solves a x = b with LU and partial pivoting, falling back to the pseudo-inverse for singular systems.
+    /// Solves a x = b by Gaussian elimination with partial pivoting; columns with a pivot of at most
+    /// 1e-10 in magnitude are skipped and get a 0 coefficient.
     /// </summary>
-    private Tensor<T> SolveSymmetric(Tensor<T> a, Tensor<T> b)
+    private Vector<T> SolveSymmetric(Tensor<T> a, Tensor<T> b)
     {
-        var (solution, info) = Linalg.SolveEx(a, b);
-        bool singular = info.Length > 0 && info.ToArray()[0] != 0;
-        return singular ? Engine.TensorMatMul(Linalg.Pinv(a), b) : solution;
+        return SolveByElimination(a, b.Reshape(b.Length).ToVector(), SmallPivotHandling.SkipColumn);
     }
 
     /// <summary>
