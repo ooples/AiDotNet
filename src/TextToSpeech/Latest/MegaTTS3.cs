@@ -85,14 +85,12 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
     private readonly List<LayerBase<T>> _vaeEncoderLayers = new();
     private readonly List<LayerBase<T>> _vaeDecoderLayers = new();
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed MegaTTS 3 for inference.</summary>
     public MegaTTS3(NeuralNetworkArchitecture<T> architecture, string modelPath, MegaTTS3Options? options = null)
         : base(architecture)
     {
         _options = options ?? new MegaTTS3Options();
+        Options = _options;
         _useNativeMode = false;
         ConfigureBase();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -107,6 +105,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new MegaTTS3Options();
+        Options = _options;
         _useNativeMode = true;
         ConfigureBase();
         InitializeLayers();
