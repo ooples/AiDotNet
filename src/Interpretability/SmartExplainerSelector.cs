@@ -37,8 +37,6 @@ namespace AiDotNet.Interpretability;
 /// </remarks>
 public class SmartExplainerSelector<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly Func<Matrix<T>, Vector<T>> _predictFunction;
     private readonly ExplainableModelType _detectedType;
     private readonly int _numFeatures;
@@ -345,9 +343,9 @@ public class SmartExplainerSelector<T>
         unchecked
         {
             int hash = 17;
-            for (int i = 0; i < instance.Length; i++)
+            foreach (T value in instance)
             {
-                hash = hash * 31 + NumOps.ToDouble(instance[i]).GetHashCode();
+                hash = hash * 31 + (value is null ? 0 : value.GetHashCode());
             }
             if (targetClass.HasValue)
             {
@@ -520,7 +518,7 @@ public class FeatureAttribution<T>
 
         foreach (var (name, value, attr) in top)
         {
-            lines.Add($"  {name}: value={NumOps.ToDouble(value):F4}, attr={NumOps.ToDouble(attr):F4}");
+            lines.Add($"  {name}: value={value:F4}, attr={attr:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);
