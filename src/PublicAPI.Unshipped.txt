@@ -9401,13 +9401,9 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.RepetitionRatio.
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionRatio.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.RepetitionRatio.set -> void
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerState.get -> int
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerState.get -> int
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerState.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerState.set -> void
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerHeads.get -> int
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerHeads.get -> int
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerHeads.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerHeads.set -> void
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerLayers.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerLayers.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeakerEncoderChannels.get -> int
@@ -9973,7 +9969,6 @@ AiDotNet.TextToSpeech.Latest.MegaTTS3Options.TrainingSeed.set -> void
 override AiDotNet.TextToSpeech.Latest.OuteTTS<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 AiDotNet.TextToSpeech.CodecBased.ChatTTS<T>.EncodeCodes(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> int[]![]!
 override AiDotNet.TextToSpeech.Latest.OuteTTS<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
-override AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.GetOptions() -> AiDotNet.Models.Options.ModelOptions!
 AiDotNet.TextToSpeech.Latest.MegaTTS2Options.Language.get -> AiDotNet.TextToSpeech.Latest.MegaTtsLanguage
 AiDotNet.TextToSpeech.Latest.MegaTTS2Options.PhoneSet.get -> string![]?
 AiDotNet.TextToSpeech.Latest.MegaTTS2Options.Language.set -> void
@@ -10012,8 +10007,6 @@ AiDotNet.TextToSpeech.Latest.MegaTTS2Options.CodeUsageDecay.set -> void
 AiDotNet.TextToSpeech.Latest.MegaTTS2Options.TimbreHidden.set -> void
 AiDotNet.TextToSpeech.Latest.MegaTTS2Options.TimbreBlocks.get -> int
 AiDotNet.TextToSpeech.Latest.MegaTTS2Options.TimbreBlocks.set -> void
-override AiDotNet.TextToSpeech.Latest.MegaTTS2<T>.GetOptions() -> AiDotNet.Models.Options.ModelOptions!
-override AiDotNet.TextToSpeech.Latest.MegaTTS<T>.GetOptions() -> AiDotNet.Models.Options.ModelOptions!
 override AiDotNet.TextToSpeech.Latest.OuteTTS<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.MegaTTS3(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.Latest.MegaTTS3Options? options) -> void
 AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.MegaTTS3(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> void
@@ -22194,12 +22187,6 @@ override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.CreateComponentOptimiz
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.CosyVoiceAutoregressiveOptions() -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.CosyVoiceAutoregressiveOptions(AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions! other) -> void
-AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.CodebookSize.get -> int
-AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.CodebookSize.set -> void
-AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerState.get -> int
-AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerState.set -> void
-AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerHeads.get -> int
-AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerHeads.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Watermark.get -> bool
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Watermark.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.WatermarkModelPath.get -> string?
@@ -22230,8 +22217,6 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeakerEmbeddingDim.get 
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeakerEmbeddingDim.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.NumHeads.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.NumHeads.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.CodebookSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.CodebookSize.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.VocabSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.VocabSize.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceOptions.TextEncoderDim.get -> int
@@ -22369,8 +22354,6 @@ AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.set -> void
-AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumEncoderLayers.get -> int
-AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumEncoderLayers.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.VocabSize.get -> int
 AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.VocabSize.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.get -> int
@@ -22474,3 +22457,17 @@ AiDotNet.Video.FrameInterpolation.FLAVR<T>.EndEpoch(double validationLoss) -> vo
 AiDotNet.Video.FrameInterpolation.XVFI<T>.EndEpoch() -> void
 *REMOVED*AiDotNet.Document.Options.SVTROptions.OutputCharacterPositions.set -> void
 AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.TrainOnSeries(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! series) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.CodebookSize.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.CodebookSize.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerHeads.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerHeads.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerState.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerState.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumEncoderLayers.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerHeads.get -> int
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerHeads.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerState.get -> int
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions.SpeechTokenizerState.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.CodebookSize.get -> int
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.CodebookSize.set -> void

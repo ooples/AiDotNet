@@ -105,8 +105,8 @@ internal static class SyntheticGanOptionFixture
         int width = options.GetType().GetProperty("EmbeddingDimension")?.GetValue(options) is int embedding ? embedding : 0;
         // OCT-GAN's unfitted generator reads the width it was built for (the architecture's input size);
         // CTAB-GAN+ and CopulaGAN read noise followed by that input.
-        if (model is OCTGANGenerator<T> oct)
-            width = oct.GeneratorInputWidth;
+        if (model is OCTGANGenerator<T> octGenerator)
+            width = octGenerator.GeneratorInputWidth;
         else if (model is not CausalGANGenerator<T> and not PATEGANGenerator<T>)
             width += model.GetArchitecture().CalculatedInputSize;
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
