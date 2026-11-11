@@ -147,22 +147,16 @@ public class PerformancePlateauCriterion<T> : IStoppingCriterion<T>
 
     private T ComputeWindowAverage(List<T> history, int start, int length)
     {
-        T sum = NumOps.Zero;
-        int count = 0;
-
-        for (int i = start; i < start + length && i < history.Count; i++)
-        {
-            if (i >= 0)
-            {
-                sum = NumOps.Add(sum, history[i]);
-                count++;
-            }
-        }
+        int first = Math.Max(start, 0);
+        int end = Math.Min(start + length, history.Count);
+        int count = Math.Max(0, end - first);
 
         if (count == 0)
         {
             return NumOps.Zero;
         }
+
+        T sum = AiDotNetEngine.Current.Sum(Vector<T>.FromList(history.GetRange(first, count)));
 
         return NumOps.Divide(sum, NumOps.FromDouble(count));
     }
