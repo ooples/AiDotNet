@@ -120,6 +120,19 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     }
 
     /// <summary>
+    /// Converts a tensor of exact 0/1 values to the matching integer indicators (same shape).
+    /// </summary>
+    /// <param name="zeroOne">Values that are exactly 0 or 1.</param>
+    /// <returns>The 0/1 integers.</returns>
+    protected Tensor<int> ZeroOneToInt(Tensor<T> zeroOne)
+    {
+        // argmax over [1 - b, b] picks index b
+        int axis = zeroOne.Shape.Length;
+        var absent = Engine.ScalarMinusTensor(NumOps.One, zeroOne);
+        return Engine.TensorArgMax(Engine.TensorStack(new[] { absent, zeroOne }, axis), axis);
+    }
+
+    /// <summary>
     /// <paramref name="values"/> truncated or zero-padded to <paramref name="length"/> elements.
     /// </summary>
     protected static Vector<T> FitToLength(Vector<T> values, int length)

@@ -296,9 +296,7 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
             present = engine.TensorGreaterEqual(values, half);
         }
 
-        // argmax over [1 - b, b] turns the exact 0/1 values into integer indicators
-        var absent = engine.ScalarMinusTensor(NumOps.One, present);
-        return engine.TensorArgMax(engine.TensorStack(new[] { absent, present }, 2), 2).ToArray();
+        return ZeroOneToInt(present).ToArray();
     }
 
     /// <summary>
