@@ -116,19 +116,10 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _trees = [];
         _treeWeights = [];
 
-        // Current predictions (starts as mean)
-        T meanY = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            meanY = NumOps.Add(meanY, y[i]);
-        }
-        meanY = NumOps.Divide(meanY, NumOps.FromDouble(n));
+        var engine = AiDotNetEngine.Current;
 
-        var predictions = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            predictions[i] = meanY;
-        }
+        // Current predictions (starts as mean)
+        T meanY = NumOps.Divide(engine.Sum(y), NumOps.FromDouble(n));
 
         // Add base prediction as first "tree"
         _trees.Add(new DARTTree(NumOps.Zero) { IsConstant = true, ConstantValue = meanY });
@@ -143,11 +134,7 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
             var droppedPredictions = ComputePartialPredictions(x, keptIndices);
 
             // Compute residuals (negative gradient for MSE)
-            var residuals = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                residuals[i] = NumOps.Subtract(y[i], droppedPredictions[i]);
-            }
+            var residuals = engine.Subtract(y, droppedPredictions);
 
             // Sample features and data points
             var featureIndices = SampleFeatures();
@@ -164,10 +151,7 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
             if (_options.Normalization == DARTNormalization.Tree)
             {
                 // Scale dropped trees
-                foreach (int idx in droppedIndices)
-                {
-                    _treeWeights[idx] = NumOps.Multiply(_treeWeights[idx], normFactor);
-                }
+                ScaleTreeWeights(droppedIndices, normFactor);
                 // New tree gets weight based on learning rate and norm factor
                 T newWeight = NumOps.Multiply(lr, normFactor);
                 _trees.Add(newTree);
@@ -175,19 +159,14 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
             else // Forest normalization
             {
-                T droppedSum = NumOps.Zero;
-                foreach (int idx in droppedIndices)
-                {
-                    droppedSum = NumOps.Add(droppedSum, _treeWeights[idx]);
-                }
+                T droppedSum = droppedIndices.Length == 0
+                    ? NumOps.Zero
+                    : engine.Sum(RegressionEngineOps.Gather(new Vector<T>(_treeWeights), droppedIndices));
                 T forestNorm = NumOps.GreaterThan(droppedSum, NumOps.Zero)
                     ? NumOps.Divide(droppedSum, NumOps.Add(droppedSum, lr))
                     : NumOps.One;
 
-                foreach (int idx in droppedIndices)
-                {
-                    _treeWeights[idx] = NumOps.Multiply(_treeWeights[idx], forestNorm);
-                }
+                ScaleTreeWeights(droppedIndices, forestNorm);
 
                 T newWeight = lr;
                 if (NumOps.GreaterThan(droppedSum, NumOps.Zero))
@@ -203,6 +182,25 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         await CalculateFeatureImportancesAsync(x.Columns);
+    }
+
+    /// <summary>
+    /// Multiplies the weights of the given trees by <paramref name="factor"/>, all at once.
+    /// </summary>
+    private void ScaleTreeWeights(int[] treeIndices, T factor)
+    {
+        if (treeIndices.Length == 0)
+        {
+            return;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var multipliers = engine.TensorScatter(
+            Tensor<T>.FromVector(engine.Fill(_treeWeights.Count, NumOps.One)),
+            new Tensor<int>(treeIndices, new[] { treeIndices.Length }),
+            Tensor<T>.FromVector(engine.Fill(treeIndices.Length, factor)),
+            0).ToVector();
+        _treeWeights = new List<T>(engine.Multiply(new Vector<T>(_treeWeights), multipliers));
     }
 
     /// <inheritdoc/>
@@ -230,14 +228,8 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <returns>Array of weighted tree predictions.</returns>
     public Vector<T> GetTreePredictions(Vector<T> input)
     {
-        var treePreds = new Vector<T>(_trees.Count);
-
-        for (int t = 0; t < _trees.Count; t++)
-        {
-            treePreds[t] = NumOps.Multiply(PredictTree(_trees[t], input), _treeWeights[t]);
-        }
-
-        return treePreds;
+        var rawPredictions = new Vector<T>(_trees.Select(tree => PredictTree(tree, input)));
+        return AiDotNetEngine.Current.Multiply(rawPredictions, new Vector<T>(_treeWeights));
     }
 
     /// <summary>
@@ -296,12 +288,7 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         if (_options.DropoutMode == DARTDropoutMode.Weighted)
         {
-            T maxWeight = _treeWeights[0];
-            for (int i = 1; i < _treeWeights.Count; i++)
-            {
-                if (NumOps.GreaterThan(_treeWeights[i], maxWeight))
-                    maxWeight = _treeWeights[i];
-            }
+            T maxWeight = AiDotNetEngine.Current.TensorMaxValue(Tensor<T>.FromVector(new Vector<T>(_treeWeights)));
             double maxW = NumOps.ToDouble(maxWeight);
             return maxW > 0 ? _options.DropoutRate * NumOps.ToDouble(_treeWeights[treeIndex]) / maxW : _options.DropoutRate;
         }
@@ -335,16 +322,15 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private Vector<T> ComputePartialPredictions(Matrix<T> xData, int[] treeIndices)
     {
         int n = xData.Rows;
-        var predictions = new Vector<T>(n);
+        var engine = AiDotNetEngine.Current;
+        var predictions = engine.FillZero(n);
 
         foreach (int t in treeIndices)
         {
             T weight = _treeWeights[t];
-            for (int i = 0; i < n; i++)
-            {
-                predictions[i] = NumOps.Add(predictions[i],
-                    NumOps.Multiply(PredictTree(_trees[t], xData, i), weight));
-            }
+            var tree = _trees[t];
+            var treePredictions = new Vector<T>(Enumerable.Range(0, n).Select(i => PredictTree(tree, xData, i)));
+            predictions = engine.Add(predictions, engine.Multiply(treePredictions, weight));
         }
 
         return predictions;
@@ -431,11 +417,9 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private DARTTree CreateLeaf(Vector<T> y, int[] indices)
     {
-        T sum = NumOps.Zero;
-        foreach (int idx in indices)
-        {
-            sum = NumOps.Add(sum, y[idx]);
-        }
+        T sum = indices.Length == 0
+            ? NumOps.Zero
+            : AiDotNetEngine.Current.Sum(RegressionEngineOps.Gather(y, indices));
 
         T mean;
         // Apply L2 regularization
@@ -461,75 +445,75 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private (int feature, T threshold, T gain) FindBestSplit(
         Matrix<T> xData, Vector<T> y, int[] indices, int[] featureIndices)
     {
-        int bestFeature = -1;
-        T bestThreshold = NumOps.Zero;
-        T bestGain = NumOps.MinValue;
+        var engine = AiDotNetEngine.Current;
+        int count = indices.Length;
+        if (count < 2)
+        {
+            return (-1, NumOps.Zero, NumOps.MinValue);
+        }
+
         T epsilon = NumOps.FromDouble(1e-10);
-        T two = NumOps.FromDouble(2);
 
         // Compute current node's MSE
-        T totalSum = NumOps.Zero;
-        T totalSumSq = NumOps.Zero;
-        foreach (int idx in indices)
-        {
-            totalSum = NumOps.Add(totalSum, y[idx]);
-            totalSumSq = NumOps.Add(totalSumSq, NumOps.Multiply(y[idx], y[idx]));
-        }
-        T nT = NumOps.FromDouble(indices.Length);
+        var nodeY = RegressionEngineOps.Gather(y, indices);
+        T totalSum = engine.Sum(nodeY);
+        T totalSumSq = engine.DotProduct(nodeY, nodeY);
+        T nT = NumOps.FromDouble(count);
         T totalMse = NumOps.Subtract(totalSumSq, NumOps.Divide(NumOps.Multiply(totalSum, totalSum), nT));
 
+        // Split position s (1..count-1) puts the first s sorted samples left.
+        int splits = count - 1;
+        var allowed = new bool[splits];
+        for (int s = 1; s <= splits; s++)
+        {
+            // Skip if below minimum samples
+            allowed[s - 1] = s >= _options.MinSamplesLeaf && count - s >= _options.MinSamplesLeaf;
+        }
+
+        var leftN = engine.TensorCumSum(Tensor<T>.FromVector(engine.Fill(splits, NumOps.One)), 0).ToVector();
+        var rightN = engine.Subtract(engine.Fill(splits, nT), leftN);
+
+        var candidateFeatures = new List<int>();
+        var candidateGains = new List<T>();
+        var candidateThresholds = new List<T>();
         foreach (int f in featureIndices)
         {
             // Sort indices by feature value
-            var sortedIndices = indices.OrderBy(i => NumOps.ToDouble(xData[i, f])).ToArray();
+            var nodeFeature = RegressionEngineOps.Gather(engine.GetColumn(xData, f), indices);
+            var order = RegressionEngineOps.StableAscendingOrder(nodeFeature);
+            var sortedFeature = RegressionEngineOps.Gather(nodeFeature, order);
+            var sortedY = RegressionEngineOps.Gather(nodeY, order);
 
-            T leftSum = NumOps.Zero;
-            T leftSumSq = NumOps.Zero;
-            int leftCount = 0;
+            var leftSum = RegressionEngineOps.SplitPrefixSums(sortedY);
+            var leftSumSq = RegressionEngineOps.SplitPrefixSums(engine.Multiply(sortedY, sortedY));
+            var rightSum = engine.Subtract(engine.Fill(splits, totalSum), leftSum);
+            var rightSumSq = engine.Subtract(engine.Fill(splits, totalSumSq), leftSumSq);
 
-            for (int i = 0; i < sortedIndices.Length - 1; i++)
+            var leftMse = engine.Subtract(leftSumSq, engine.Divide(engine.Multiply(leftSum, leftSum), leftN));
+            var rightMse = engine.Subtract(rightSumSq, engine.Divide(engine.Multiply(rightSum, rightSum), rightN));
+            var gains = engine.Subtract(engine.Fill(splits, totalMse), engine.Add(leftMse, rightMse));
+
+            // Skip if same feature value as next point (|x[s] - x[s-1]| < epsilon)
+            var gaps = engine.Abs(engine.Subtract(sortedFeature.GetSubVector(1, splits), sortedFeature.GetSubVector(0, splits)));
+            var distinct = engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(Tensor<T>.FromVector(gaps), epsilon));
+
+            var (index, gain, threshold) = RegressionEngineOps.BestSortedSplit(gains, distinct, allowed, sortedFeature);
+            if (index >= 0)
             {
-                int idx = sortedIndices[i];
-                leftSum = NumOps.Add(leftSum, y[idx]);
-                leftSumSq = NumOps.Add(leftSumSq, NumOps.Multiply(y[idx], y[idx]));
-                leftCount++;
-
-                int rightCount = indices.Length - leftCount;
-
-                // Skip if below minimum samples
-                if (leftCount < _options.MinSamplesLeaf || rightCount < _options.MinSamplesLeaf)
-                {
-                    continue;
-                }
-
-                // Skip if same feature value as next point
-                T diff = NumOps.Abs(NumOps.Subtract(xData[sortedIndices[i], f], xData[sortedIndices[i + 1], f]));
-                if (NumOps.LessThan(diff, epsilon))
-                {
-                    continue;
-                }
-
-                T rightSum = NumOps.Subtract(totalSum, leftSum);
-                T rightSumSq = NumOps.Subtract(totalSumSq, leftSumSq);
-                T leftN = NumOps.FromDouble(leftCount);
-                T rightN = NumOps.FromDouble(rightCount);
-
-                T leftMse = NumOps.Subtract(leftSumSq, NumOps.Divide(NumOps.Multiply(leftSum, leftSum), leftN));
-                T rightMse = NumOps.Subtract(rightSumSq, NumOps.Divide(NumOps.Multiply(rightSum, rightSum), rightN));
-
-                T gain = NumOps.Subtract(totalMse, NumOps.Add(leftMse, rightMse));
-
-                if (NumOps.GreaterThan(gain, bestGain))
-                {
-                    bestGain = gain;
-                    bestFeature = f;
-                    bestThreshold = NumOps.Divide(
-                        NumOps.Add(xData[sortedIndices[i], f], xData[sortedIndices[i + 1], f]), two);
-                }
+                candidateFeatures.Add(f);
+                candidateGains.Add(gain);
+                candidateThresholds.Add(threshold);
             }
         }
 
-        return (bestFeature, bestThreshold, bestGain);
+        if (candidateFeatures.Count == 0)
+        {
+            return (-1, NumOps.Zero, NumOps.MinValue);
+        }
+
+        // The first feature with the largest gain wins (strictly-greater sweep order).
+        int best = RegressionEngineOps.ArgMaxFirst(candidateGains);
+        return (candidateFeatures[best], candidateThresholds[best], candidateGains[best]);
     }
 
     /// <summary>
@@ -537,22 +521,20 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private (int[] left, int[] right) SplitData(Matrix<T> xData, int[] indices, int feature, T threshold)
     {
-        var left = new List<int>();
-        var right = new List<int>();
-
-        foreach (int idx in indices)
+        if (indices.Length == 0)
         {
-            if (!NumOps.GreaterThan(xData[idx, feature], threshold))
-            {
-                left.Add(idx);
-            }
-            else
-            {
-                right.Add(idx);
-            }
+            return ([], []);
         }
 
-        return ([.. left], [.. right]);
+        // Left keeps everything that is not greater than the threshold (NaN included).
+        var engine = AiDotNetEngine.Current;
+        var values = RegressionEngineOps.Gather(engine.GetColumn(xData, feature), indices);
+        var rightMask = engine.TensorGreaterThan(Tensor<T>.FromVector(values), threshold);
+        var leftMask = engine.ScalarMinusTensor(NumOps.One, rightMask);
+        var left = RegressionEngineOps.NonzeroIndices(leftMask);
+        var right = RegressionEngineOps.NonzeroIndices(rightMask);
+
+        return (left.Select(position => indices[position]).ToArray(), right.Select(position => indices[position]).ToArray());
     }
 
     /// <summary>
@@ -621,17 +603,11 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Normalize
-        T sum = NumOps.Zero;
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            sum = NumOps.Add(sum, importances[f]);
-        }
+        var engine = AiDotNetEngine.Current;
+        T sum = engine.Sum(importances);
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                importances[f] = NumOps.Divide(importances[f], sum);
-            }
+            importances = engine.Divide(importances, sum);
         }
 
         FeatureImportances = importances;
