@@ -206,9 +206,7 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
             bool driftTriggered = false;
             if (member.Tree.IsWarm)
             {
-                var selectedFeaturesForPred = ExtractSelectedFeatures(features, member.SelectedFeatures);
-                var prediction = member.Tree.Predict(ConvertToMatrix(selectedFeaturesForPred));
-                bool isCorrect = NumOps.Compare(prediction[0], label) == 0;
+                bool isCorrect = PredictsLabel(member.Tree, features, member.SelectedFeatures, label);
 
                 // Update accuracy estimate with exponential moving average (alpha = 0.01)
                 // This decays old observations so recent performance dominates after drift
@@ -285,14 +283,10 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
     /// </summary>
     public void PartialFit(Matrix<T> features, Vector<T> labels)
     {
+        var labelValues = labels.ToArray();
         for (int i = 0; i < features.Rows; i++)
         {
-            var sample = new Vector<T>(features.Columns);
-            for (int j = 0; j < features.Columns; j++)
-            {
-                sample[j] = features[i, j];
-            }
-            PartialFit(sample, labels[i]);
+            PartialFit(features.GetRow(i), labelValues[i]);
         }
     }
 
@@ -321,19 +315,14 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
                 nameof(input));
         }
 
-        var predictions = new Vector<T>(input.Rows);
+        var predictions = new T[input.Rows];
 
         for (int i = 0; i < input.Rows; i++)
         {
-            var features = new Vector<T>(input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                features[j] = input[i, j];
-            }
-            predictions[i] = PredictSingle(features);
+            predictions[i] = PredictSingle(input.GetRow(i));
         }
 
-        return predictions;
+        return Vector<T>.Wrap(predictions);
     }
 
     private T PredictSingle(Vector<T> features)
@@ -357,10 +346,7 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
             if (!memberTree.IsWarm)
                 continue;
 
-            var selectedFeatures = ExtractSelectedFeatures(features, memberFeatures);
-            var treePrediction = memberTree.Predict(ConvertToMatrix(selectedFeatures));
-
-            int classIdx = GetClassIndex(treePrediction[0]);
+            int classIdx = PredictClassIndex(memberTree, features, memberFeatures);
             if (classIdx >= 0)
             {
                 double weight = member.AccuracyEstimate;
@@ -441,22 +427,37 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
 
     private Vector<T> ExtractSelectedFeatures(Vector<T> allFeatures, int[] selectedIndices)
     {
-        var result = new Vector<T>(selectedIndices.Length);
-        for (int i = 0; i < selectedIndices.Length; i++)
-        {
-            result[i] = allFeatures[selectedIndices[i]];
-        }
-        return result;
+        return SelectElements(allFeatures, selectedIndices);
     }
 
-    private Matrix<T> ConvertToMatrix(Vector<T> vector)
+    private static Matrix<T> ConvertToMatrix(Vector<T> vector)
     {
-        var matrix = new Matrix<T>(1, vector.Length);
-        for (int j = 0; j < vector.Length; j++)
-        {
-            matrix[0, j] = vector[j];
-        }
-        return matrix;
+        return vector.AsTensor().Reshape(1, vector.Length).ToMatrix();
+    }
+
+    /// <summary>
+    /// The tree's prediction for one sample restricted to <paramref name="selectedFeatures"/>.
+    /// </summary>
+    private T PredictOne(HoeffdingTreeClassifier<T> tree, Vector<T> features, int[] selectedFeatures)
+    {
+        var prediction = tree.Predict(ConvertToMatrix(ExtractSelectedFeatures(features, selectedFeatures)));
+        return prediction.ToArray()[0];
+    }
+
+    /// <summary>
+    /// Whether the tree predicts <paramref name="label"/> for the sample.
+    /// </summary>
+    private bool PredictsLabel(HoeffdingTreeClassifier<T> tree, Vector<T> features, int[] selectedFeatures, T label)
+    {
+        return NumOps.Compare(PredictOne(tree, features, selectedFeatures), label) == 0;
+    }
+
+    /// <summary>
+    /// The known-class index of the tree's prediction for the sample (-1 when unknown).
+    /// </summary>
+    private int PredictClassIndex(HoeffdingTreeClassifier<T> tree, Vector<T> features, int[] selectedFeatures)
+    {
+        return GetClassIndex(PredictOne(tree, features, selectedFeatures));
     }
 
     private int PoissonSample(double lambda)
@@ -486,12 +487,10 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
 
     private int GetOrCreateClassIndex(T label)
     {
-        for (int i = 0; i < _knownClasses.Count; i++)
+        int existing = GetClassIndex(label);
+        if (existing >= 0)
         {
-            if (NumOps.Compare(_knownClasses[i], label) == 0)
-            {
-                return i;
-            }
+            return existing;
         }
 
         _knownClasses.Add(label);
@@ -502,14 +501,20 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
 
     private int GetClassIndex(T label)
     {
-        for (int i = 0; i < _knownClasses.Count; i++)
+        if (_knownClasses.Count == 0)
         {
-            if (NumOps.Compare(_knownClasses[i], label) == 0)
-            {
-                return i;
-            }
+            return -1;
         }
-        return -1;
+
+        // Known classes are stored in first-seen order; equality test against all of them at once
+        var known = Vector<T>.Wrap(_knownClasses.ToArray());
+        var matches = Engine.TensorEquals(known.AsTensor(), label);
+        if (NumOps.Compare(Engine.TensorSum(matches), NumOps.Zero) == 0)
+        {
+            return -1;
+        }
+
+        return Engine.TensorArgMax(matches.Reshape(1, known.Length), 1).ToArray()[0];
     }
 
     /// <summary>
