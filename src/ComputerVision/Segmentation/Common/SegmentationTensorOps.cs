@@ -513,4 +513,100 @@ public static class SegmentationTensorOps
         for (int x = 0; x < lrW; x++) colIndex[x] = Math.Min(x * factor, w - 1);
         return CvTensorOps<T>.Select(CvTensorOps<T>.Select(map, rowIndex, 0), colIndex, 1);
     }
+
+    /// <summary>
+    /// Panoptic labelling of per-pixel class logits <c>[C, H, W]</c>: classes below
+    /// <paramref name="numStuff"/> become one stuff segment each, and every 4-connected component of a thing
+    /// class becomes an instance with a running id starting at 1. Panoptic labels are <c>class * 1000</c> for
+    /// stuff and <c>class * 1000 + instance id</c> for things; each segment's confidence is its mean class
+    /// probability.
+    /// </summary>
+    /// <param name="logits">Class logits <c>[C, H, W]</c>.</param>
+    /// <param name="numStuff">Number of stuff classes (ids <c>0 .. numStuff-1</c>).</param>
+    /// <param name="numClasses">Total number of classes considered.</param>
+    /// <param name="segmentIdIsPanopticLabel">When true a segment's id is its panoptic label; otherwise
+    /// it is the class id for stuff and the instance id for things.</param>
+    internal static PanopticSegmentationResult<T> PanopticFromLogits<T>(
+        Tensor<T> logits, int numStuff, int numClasses, bool segmentIdIsPanopticLabel)
+    {
+        const int PanopticLabelDivisor = 1000;
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var probMap = SoftmaxAlongClassDim(logits);
+        var semanticMap = ArgmaxAlongClassDim(logits);
+        int numC = logits.Shape[0], h = semanticMap.Shape[0], w = semanticMap.Shape[1];
+        var instanceMap = new Tensor<T>([h, w]);
+        var panopticMap = new Tensor<T>([h, w]);
+        var segments = new List<PanopticSegment<T>>();
+
+        // Stuff classes: one mask per class id (classes past the logits' channels never occur).
+        int stuffCount = Math.Min(numStuff, numC);
+        if (stuffCount > 0)
+        {
+            var stuffIds = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, stuffCount, 1), [stuffCount, 1, 1]), [stuffCount, h, w]);
+            var stuffMasks = engine.TensorEquals(engine.TensorBroadcastTo(engine.Reshape(semanticMap, [1, h, w]), [stuffCount, h, w]), stuffIds);
+            var stuffLabels = engine.TensorMultiplyScalar(stuffIds, numOps.FromDouble(PanopticLabelDivisor));
+            panopticMap = engine.ReduceSum(engine.TensorMultiply(stuffMasks, stuffLabels), [0], keepDims: false);
+            var stuffProbs = engine.TensorSlice(probMap, [0, 0, 0], [stuffCount, h, w]);
+            var areas = ToDoubleArray(engine.ReduceSum(stuffMasks, [1, 2], keepDims: false));
+            var confSums = ToDoubleArray(engine.ReduceSum(engine.TensorMultiply(stuffMasks, stuffProbs), [1, 2], keepDims: false));
+            for (int cls = 0; cls < stuffCount; cls++)
+            {
+                int area = (int)areas[cls];
+                if (area > 0)
+                {
+                    segments.Add(new PanopticSegment<T>
+                    {
+                        SegmentId = segmentIdIsPanopticLabel ? cls * PanopticLabelDivisor : cls,
+                        ClassId = cls,
+                        IsThing = false,
+                        Confidence = confSums[cls] / area,
+                        Area = area
+                    });
+                }
+            }
+        }
+
+        // Thing classes: one instance per connected component, numbered in raster order of discovery.
+        int nextInstId = 1;
+        for (int cls = numStuff; cls < numClasses && cls < numC; cls++)
+        {
+            var (labelMap, count) = LabelConnectedComponents(semanticMap, cls);
+            if (count == 0) continue;
+
+            // Component k (1-based) becomes instance nextInstId + k - 1.
+            var inComponent = engine.TensorGreaterThan(labelMap, numOps.Zero);
+            var instanceIds = engine.TensorMultiply(inComponent, engine.TensorAddScalar(labelMap, numOps.FromDouble(nextInstId - 1)));
+            instanceMap = engine.TensorAdd(instanceMap, instanceIds);
+            panopticMap = engine.TensorAdd(panopticMap, engine.TensorAdd(
+                instanceIds, engine.TensorMultiplyScalar(inComponent, numOps.FromDouble(cls * PanopticLabelDivisor))));
+
+            var componentIds = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(1, count + 1, 1), [count, 1, 1]), [count, h, w]);
+            var componentMasks = engine.TensorEquals(engine.TensorBroadcastTo(engine.Reshape(labelMap, [1, h, w]), [count, h, w]), componentIds);
+            var classProb = engine.TensorBroadcastTo(engine.TensorSlice(probMap, [cls, 0, 0], [1, h, w]), [count, h, w]);
+            var areas = ToDoubleArray(engine.ReduceSum(componentMasks, [1, 2], keepDims: false));
+            var confSums = ToDoubleArray(engine.ReduceSum(engine.TensorMultiply(componentMasks, classProb), [1, 2], keepDims: false));
+            for (int comp = 0; comp < count; comp++)
+            {
+                int instId = nextInstId++;
+                int area = (int)areas[comp];
+                if (area > 0)
+                {
+                    segments.Add(new PanopticSegment<T>
+                    {
+                        SegmentId = segmentIdIsPanopticLabel ? cls * PanopticLabelDivisor + instId : instId,
+                        ClassId = cls,
+                        IsThing = true,
+                        Confidence = confSums[comp] / area,
+                        Area = area,
+                        Mask = engine.Reshape(engine.TensorSlice(componentMasks, [comp, 0, 0], [1, h, w]), [h, w])
+                    });
+                }
+            }
+        }
+
+        return new PanopticSegmentationResult<T> { SemanticMap = semanticMap, InstanceMap = instanceMap, PanopticMap = panopticMap, Segments = segments };
+    }
+
+    private static double[] ToDoubleArray<T>(Tensor<T> values) => CvTensorOps<T>.ToDoubleArray(values);
 }
