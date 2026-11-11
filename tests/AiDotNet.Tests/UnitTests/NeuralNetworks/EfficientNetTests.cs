@@ -315,13 +315,18 @@ public class EfficientNetTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SwishActivation_SupportsJitCompilation()
+    public async Task SwishActivation_TracedProgramMatchesEager()
     {
-        // Arrange
+        // Swish is exportable: TensorProgram.Trace records it and the replay matches eager evaluation
+        // on an input it was not traced on.
         var swish = new SwishActivation<float>();
-
-        // Assert
-        Assert.True(swish.SupportsJitCompilation);
+        var example = new Tensor<float>(new[] { 4 }, new Vector<float>(new[] { 0f, 1f, -1f, 2f }));
+        var program = AiDotNet.Tensors.Engines.Export.TensorProgram.Trace<float>(swish.Activate, example);
+        var probe = new Tensor<float>(new[] { 4 }, new Vector<float>(new[] { -3f, 0.5f, 4f, -0.25f }));
+        var expected = swish.Activate(probe);
+        var replayed = program.Run(probe);
+        for (int i = 0; i < probe.Length; i++)
+            Assert.Equal(expected[i], replayed[i], 5);
     }
 
     #endregion

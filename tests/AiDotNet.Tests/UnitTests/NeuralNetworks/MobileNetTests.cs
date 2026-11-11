@@ -432,13 +432,22 @@ public class MobileNetTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ReLU6Activation_SupportsJitCompilation()
+    public async Task ReLU6Activation_TracedProgramMatchesEager()
     {
-        // Arrange
-        var activation = new ReLU6Activation<double>();
+        AssertTraceMatchesEager(new ReLU6Activation<double>());
+    }
 
-        // Assert
-        Assert.False(activation.SupportsJitCompilation); // TensorOperations.Minimum not yet implemented
+    // An activation is exportable when TensorProgram.Trace records its tensor path and the replay
+    // matches eager evaluation on an input it was not traced on (covering every piecewise region).
+    private static void AssertTraceMatchesEager(AiDotNet.Interfaces.IActivationFunction<double> activation)
+    {
+        var example = new Tensor<double>(new[] { 8 }, new Vector<double>(new[] { -4.0, -3.0, -1.0, 0.0, 0.5, 2.0, 3.0, 7.0 }));
+        var program = AiDotNet.Tensors.Engines.Export.TensorProgram.Trace<double>(activation.Activate, example);
+        var probe = new Tensor<double>(new[] { 8 }, new Vector<double>(new[] { 6.5, -5.0, 2.5, -2.0, 1.0, -0.25, 4.0, 6.0 }));
+        var expected = activation.Activate(probe);
+        var replayed = program.Run(probe);
+        for (int i = 0; i < probe.Length; i++)
+            Assert.Equal(expected[i], replayed[i], 12);
     }
 
     #endregion
@@ -490,13 +499,9 @@ public class MobileNetTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task HardSwishActivation_SupportsJitCompilation()
+    public async Task HardSwishActivation_TracedProgramMatchesEager()
     {
-        // Arrange
-        var activation = new HardSwishActivation<double>();
-
-        // Assert
-        Assert.False(activation.SupportsJitCompilation); // TensorOperations.Minimum not yet implemented
+        AssertTraceMatchesEager(new HardSwishActivation<double>());
     }
 
     #endregion
