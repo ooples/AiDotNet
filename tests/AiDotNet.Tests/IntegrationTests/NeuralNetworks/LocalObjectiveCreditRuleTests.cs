@@ -566,6 +566,26 @@ public partial class LocalObjectiveCreditRuleTests
         }
     }
 
+    [Fact]
+    public void SampledCandidates_SameSeed_ProducesSameIds()
+    {
+        var targets = new Tensor<int>(new[] { 1, 2, 1 }, new[] { 3 });
+        LocalObjectiveGradientComputer<float>.BuildSampledCandidates(
+            targets, vocabSize: 64, maxCandidates: 16, stepSeed: unchecked(42 + 7919),
+            out var candidateIds, out var remappedIds);
+        LocalObjectiveGradientComputer<float>.BuildSampledCandidates(
+            targets, vocabSize: 64, maxCandidates: 16, stepSeed: unchecked(42 + 7919),
+            out var repeatedCandidates, out var repeatedRemappedIds);
+
+        Assert.Equal(16, candidateIds.Length);
+        Assert.Equal(
+            Enumerable.Range(0, candidateIds.Length).Select(i => candidateIds.GetFlat(i)),
+            Enumerable.Range(0, repeatedCandidates.Length).Select(i => repeatedCandidates.GetFlat(i)));
+        Assert.Equal(
+            Enumerable.Range(0, remappedIds.Length).Select(i => remappedIds.GetFlat(i)),
+            Enumerable.Range(0, repeatedRemappedIds.Length).Select(i => repeatedRemappedIds.GetFlat(i)));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

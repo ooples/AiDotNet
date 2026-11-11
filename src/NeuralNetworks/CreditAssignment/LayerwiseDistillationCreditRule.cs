@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.CreditAssignment;
 /// </remarks>
 public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRule<T>, IOutputPredictionOptionalRule
 {
-    bool IOutputPredictionOptionalRule.UsesOutputPrediction => _kdAlpha != 0 && _teacherLogits is not null;
+    bool IOutputPredictionOptionalRule.UsesOutputPrediction => _kdAlpha > 0 && _teacherLogits is not null;
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
     private readonly Func<Tensor<T>, IReadOnlyList<Tensor<T>>> _teacherHidden;
     private readonly Func<Tensor<T>, Tensor<T>>? _teacherLogits;

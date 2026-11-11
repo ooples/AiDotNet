@@ -270,7 +270,7 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
     private bool IsEligibleForFusedReadout(out Tensor<T> table)
     {
         if (GetType() != typeof(TiedEmbeddingHeadLayer<T>) || _embedding is null || !_embedding.IsInitialized
-            || _logitScale != 1.0 || LowPrecisionResident)
+            || BitConverter.DoubleToInt64Bits(_logitScale) != BitConverter.DoubleToInt64Bits(1.0) || LowPrecisionResident)
         {
             table = new Tensor<T>(new[] { 0 });
             return false;
@@ -287,7 +287,7 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
     /// <param name="input">Pre-head hidden states of shape <c>[..., embeddingDimension]</c>.</param>
     /// <param name="target">Integer class-index targets matching the leading dimensions of <paramref name="input"/>.</param>
     /// <param name="loss">The loss function applied to the head output.</param>
-    /// <returns>The scalar fused loss, or <c>null</c> when the decomposed path is required.</returns>
+    /// <returns>The fused scalar loss, or <c>null</c> when the decomposed path is required.</returns>
     public Tensor<T>? TryComputeFusedLoss(Tensor<T> input, Tensor<T> target, ILossFunction<T> loss)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
@@ -298,9 +298,9 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
             target, loss, input.Rank, input.Shape.ToArray(), out _);
         if (ids is null) return null;
 
-        Tensor<T>? unusedTracedW = null, unusedDetachedW = null, unusedDetachedB = null;
+        FusedReadoutPreparedState<T> unusedState = default;
         return ((IDetachableFusedReadoutLossLayer<T>)this).TryComputeFusedLossPrepared(
-            input, ids, detachParameters: false, ref unusedTracedW, ref unusedDetachedW, ref unusedDetachedB);
+            input, ids, detachParameters: false, ref unusedState);
     }
 
     Tensor<int>? IDetachableFusedReadoutLossLayer<T>.TryPrepareClassIndexTarget(
@@ -335,9 +335,7 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
         Tensor<T> input,
         Tensor<int> ids,
         bool detachParameters,
-        ref Tensor<T>? tracedWeight,
-        ref Tensor<T>? detachedWeight,
-        ref Tensor<T>? detachedBias)
+        ref FusedReadoutPreparedState<T> preparedState)
     {
         if (!IsEligibleForFusedReadout(out var table)) return null;
         int rows = ids.Length;
@@ -353,26 +351,26 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
         Tensor<T> biasToUse;
         if (detachParameters)
         {
-            if (detachedWeight is null)
+            if (preparedState.DetachedWeight is null)
             {
-                if (tracedWeight is not null)
+                if (preparedState.TracedWeight is not null)
                 {
-                    detachedWeight = Engine.StopGradient(tracedWeight);
+                    preparedState.DetachedWeight = Engine.StopGradient(preparedState.TracedWeight);
                 }
                 else
                 {
                     using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-                        detachedWeight = Engine.StopGradient(Engine.TensorTranspose(table));
+                        preparedState.DetachedWeight = Engine.StopGradient(Engine.TensorTranspose(table));
                 }
             }
-            detachedBias ??= GetZeroBias(_vocabularySize);
-            weightToUse = detachedWeight;
-            biasToUse = detachedBias;
+            preparedState.DetachedBias ??= GetZeroBias(_vocabularySize);
+            weightToUse = preparedState.DetachedWeight;
+            biasToUse = preparedState.DetachedBias;
         }
         else
         {
-            tracedWeight ??= Engine.TensorTranspose(table);
-            weightToUse = tracedWeight;
+            preparedState.TracedWeight ??= Engine.TensorTranspose(table);
+            weightToUse = preparedState.TracedWeight;
             biasToUse = GetZeroBias(_vocabularySize);
         }
 

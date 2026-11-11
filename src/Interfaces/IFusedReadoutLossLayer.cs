@@ -38,6 +38,17 @@ internal interface IDetachablePreHeadLayer<T>
 }
 
 /// <summary>
+/// Per-step cached weight and bias tensors shared across repeated prepared fused-readout evaluations.
+/// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
+internal struct FusedReadoutPreparedState<T>
+{
+    public Tensor<T>? TracedWeight;
+    public Tensor<T>? DetachedWeight;
+    public Tensor<T>? DetachedBias;
+}
+
+/// <summary>
 /// Internal extension of <see cref="IFusedReadoutLossLayer{T}"/> that prepares integer class-index targets once per
 /// step, supports parameter-detached evaluation across intermediate hidden layers, and exposes vocabulary rows for
 /// sampled readout local credit without materializing full <c>[rows, vocabulary]</c> logits.
@@ -50,9 +61,7 @@ internal interface IDetachableFusedReadoutLossLayer<T> : IFusedReadoutLossLayer<
         Tensor<T> input,
         Tensor<int> ids,
         bool detachParameters,
-        ref Tensor<T>? tracedWeight,
-        ref Tensor<T>? detachedWeight,
-        ref Tensor<T>? detachedBias);
+        ref FusedReadoutPreparedState<T> preparedState);
 
     bool TryGetVocabularyRowsForSampling(out Tensor<T> vocabRows, out Tensor<T>? bias, out bool vocabRowsAreInputMajor);
 }
