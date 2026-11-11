@@ -365,7 +365,7 @@ public class VariationalStrategies<T>
 
         // Cholesky decomposition of Kuu; a factor that does not exist or has a pivot below 1e-10
         // makes the triangular solves below undefined.
-        var (luu, info) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(Kuu), upper: false);
+        var (luu, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(Kuu), upper: false);
         if (engine.TensorCountNonzero(info) > 0 || !GaussianProcessEngineOps.AllFinite(luu))
         {
             return negativeInfinity;
@@ -379,10 +379,10 @@ public class VariationalStrategies<T>
 
         // alpha = Luu \ Kuf (whitened cross-covariance), Kuu^{-1} m and A = Kuu^{-1} Kuf
         var kuf = Tensor<T>.FromMatrix(Kuf);
-        var alpha = Linalg.SolveTriangular(luu, kuf, upper: false);
+        var alpha = LinalgDispatch<T>.SolveTriangular(luu, kuf, upper: false);
         var mean = Tensor<T>.FromVector(variationalMean).Reshape(new[] { m, 1 });
-        var KuuInvM = Linalg.CholeskySolve(mean, luu, upper: false);
-        var KuuInvKuf = Linalg.CholeskySolve(kuf, luu, upper: false);
+        var KuuInvM = LinalgDispatch<T>.CholeskySolve(mean, luu, upper: false);
+        var KuuInvKuf = LinalgDispatch<T>.CholeskySolve(kuf, luu, upper: false);
 
         // Expected log likelihood term (Hensman et al. 2013):
         // Σ_i log N(y_i | k_iᵀ Kuu⁻¹ m, σ²) - β/2 Σ_i (k_ii - q_ii) - β/2 Σ_i k_iᵀ Kuu⁻¹ S Kuu⁻¹ k_i
@@ -415,7 +415,7 @@ public class VariationalStrategies<T>
         T mKuuInvM = engine.TensorVecDot(mean.Reshape(new[] { m }), KuuInvM.Reshape(new[] { m }));
 
         // tr(Kuu^{-1} S) = ||Luu^{-1} @ S_chol||_F^2 where S = S_chol @ S_chol^T and Kuu = Luu @ Luu^T
-        T traceKuuInvS = engine.TensorSumOfSquares(Linalg.SolveTriangular(luu, covChol, upper: false));
+        T traceKuuInvS = engine.TensorSumOfSquares(LinalgDispatch<T>.SolveTriangular(luu, covChol, upper: false));
 
         T klTerm = _numOps.Multiply(
             _numOps.FromDouble(0.5),

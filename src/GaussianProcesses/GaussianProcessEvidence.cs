@@ -17,7 +17,7 @@ internal static class GaussianProcessEvidence
     /// </summary>
     internal static Tensor<T>? Cholesky<T>(Tensor<T> matrix)
     {
-        var (lower, info) = Linalg.CholeskyEx(matrix, upper: false);
+        var (lower, info) = LinalgDispatch<T>.CholeskyEx(matrix, upper: false);
         if (AiDotNetEngine.Current.TensorCountNonzero(info) > 0 || !GaussianProcessEngineOps.AllFinite(lower))
             return null;
 
@@ -29,7 +29,7 @@ internal static class GaussianProcessEvidence
     /// </summary>
     internal static Tensor<T> Solve<T>(Tensor<T> lower, Tensor<T> rhs)
     {
-        return Linalg.CholeskySolve(rhs, lower, upper: false);
+        return LinalgDispatch<T>.CholeskySolve(rhs, lower, upper: false);
     }
 
     /// <summary>
@@ -37,7 +37,7 @@ internal static class GaussianProcessEvidence
     /// </summary>
     internal static Tensor<T> Inverse<T>(Tensor<T> lower)
     {
-        return Linalg.CholeskyInverse(lower, upper: false);
+        return LinalgDispatch<T>.CholeskyInverse(lower, upper: false);
     }
 
     /// <summary>

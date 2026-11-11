@@ -615,7 +615,7 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         T sqrtPrecision = _numOps.Sqrt(MathHelper.Max(noisePrecision, _numOps.Zero));
 
         // A = sqrt(precision) * L_uu^{-1} Kuf, one triangular solve for all columns
-        var whitened = Linalg.SolveTriangular(Tensor<T>.FromMatrix(_LKuu), Tensor<T>.FromMatrix(Kuf), upper: false);
+        var whitened = LinalgDispatch<T>.SolveTriangular(Tensor<T>.FromMatrix(_LKuu), Tensor<T>.FromMatrix(Kuf), upper: false);
         var A = engine.TensorMultiplyScalar(whitened, sqrtPrecision).ToMatrix();
 
         // Compute B = I + A A^T (m×m, well-conditioned)

@@ -235,7 +235,7 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
 
         // Solve K alpha = (Y - mean) for every output at once with the Cholesky factor.
         // The deviations from each output's mean are what the zero-mean prior describes.
-        _alpha = Linalg.CholeskySolve(centered, Tensor<T>.FromMatrix(_L), upper: false).ToMatrix();
+        _alpha = LinalgDispatch<T>.CholeskySolve(centered, Tensor<T>.FromMatrix(_L), upper: false).ToMatrix();
     }
 
     /// <summary>

@@ -468,7 +468,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         // The B = I + S̃^½ K S̃^½ form never inverts a site precision, so sites near zero are safe.
         var engine = Engine;
         var (prior, lower, sqrtTau) = EpFactor();
-        var V = Linalg.SolveTriangular(
+        var V = LinalgDispatch<T>.SolveTriangular(
             lower, engine.TensorMultiply(engine.TensorBroadcastTo(sqrtTau, new[] { n, n }), prior), upper: false);
         var posteriorCov = engine.TensorSubtract(prior, engine.TensorMatMul(engine.TensorTranspose(V), V));
         _posteriorCov = posteriorCov.ToMatrix();
@@ -593,7 +593,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         var (prior, lower, sqrtTau) = EpFactor();
         var naturalMeans = Tensor<T>.FromVector(_siteNaturalMeans).Reshape(new[] { n, 1 });
         var scaledPriorMean = engine.TensorMultiply(sqrtTau, engine.TensorMatMul(prior, naturalMeans));
-        var z = engine.TensorMultiply(sqrtTau, Linalg.CholeskySolve(scaledPriorMean, lower, upper: false));
+        var z = engine.TensorMultiply(sqrtTau, LinalgDispatch<T>.CholeskySolve(scaledPriorMean, lower, upper: false));
         var weights = engine.TensorSubtract(naturalMeans, z);
 
         var kStar = Tensor<T>.FromMatrix(ComputeKernelMatrix(XNew, _X));
@@ -602,7 +602,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         // Variance prediction: k** - ||L⁻¹ S̃^½ k*||² + scale², floored at 1e-10
         var scaledCross = engine.TensorMultiply(
             engine.TensorBroadcastTo(sqrtTau, new[] { n, nNew }), engine.TensorTranspose(kStar));
-        var v = Linalg.SolveTriangular(lower, scaledCross, upper: false);
+        var v = LinalgDispatch<T>.SolveTriangular(lower, scaledCross, upper: false);
         var vTv = engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, keepDims: false);
         var kStarStar = Tensor<T>.FromVector(KernelDiagonal(XNew));
         var variance = engine.TensorMax(

@@ -170,7 +170,7 @@ internal static class GaussianProcessEngineOps
         if (n == 0)
             return new Tensor<T>(new[] { 0, 0 });
 
-        var (factor, info) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(A), upper: false);
+        var (factor, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(A), upper: false);
         if (engine.TensorCountNonzero(info) == 0 && AllFinite(factor)
             && !numOps.LessThan(engine.TensorMinValue(engine.TensorSquare(engine.TensorDiagonal(factor))), floor))
         {

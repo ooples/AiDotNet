@@ -649,7 +649,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         try
         {
             // Solve L_K * Y = L_S for Y (one triangular solve for all columns), then trace = ||Y||_F^2
-            var solved = Linalg.SolveTriangular(
+            var solved = LinalgDispatch<T>.SolveTriangular(
                 Tensor<T>.FromMatrix(_LK), Tensor<T>.FromMatrix(_variationalCovCholesky), upper: false);
             trace = engine.TensorSumOfSquares(solved);
         }

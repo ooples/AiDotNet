@@ -371,7 +371,7 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         var rawNoiseKernel = KernelMatrix(_noiseKernel, _X, _X);
         var L_noise = Factor(GaussianProcessEngineOps.AddToDiagonal(
             rawNoiseKernel, _numOps.FromDouble(_noisePriorVariance + _jitter)));
-        var alpha_noise = Linalg.CholeskySolve(logResidualsSq.Reshape(new[] { n, 1 }), L_noise, upper: false);
+        var alpha_noise = LinalgDispatch<T>.CholeskySolve(logResidualsSq.Reshape(new[] { n, 1 }), L_noise, upper: false);
 
         // Update noise latent values.
         // Clamp to prevent extreme values but don't blend with prior
@@ -442,7 +442,7 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         // For noise GP prediction
         var L_noise = Factor(GaussianProcessEngineOps.AddToDiagonal(
             KernelMatrix(_noiseKernel, _X, _X), _numOps.FromDouble(_noisePriorVariance + _jitter)));
-        var alpha_noise = Linalg.CholeskySolve(
+        var alpha_noise = LinalgDispatch<T>.CholeskySolve(
             Tensor<T>.FromVector(_noiseLatentValues).Reshape(new[] { n, 1 }), L_noise, upper: false);
 
         // k_* rows: covariance between each new point and the training points, [nNew, n]
@@ -454,7 +454,7 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         var mean = engine.TensorAddScalar(engine.TensorMatMul(kStar, alpha).Reshape(new[] { nNew }), _yMean);
 
         // Predictive variance: k_** - k_*^T * K^{-1} * k_* = k_** - ||L^{-1} k_*||^2
-        var v = Linalg.SolveTriangular(Tensor<T>.FromMatrix(_L), engine.TensorTranspose(kStar), upper: false);
+        var v = LinalgDispatch<T>.SolveTriangular(Tensor<T>.FromMatrix(_L), engine.TensorTranspose(kStar), upper: false);
         var vTv = engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, keepDims: false);
         var kStarStar = Tensor<T>.FromVector(KernelDiagonal(_meanKernel, XNew));
         var predictiveVar = engine.TensorMax(engine.TensorSubtract(kStarStar, vTv), _numOps.FromDouble(1e-10));

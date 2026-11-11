@@ -410,7 +410,7 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
 
         // Variance: k(x,x) - k*' · L^{-1} · L^{-T} · k*, with L_s · v_s = k*_s solved for every sample
         var factors = engine.TensorStack(_choleskyFactors.Select(factor => Tensor<T>.FromMatrix(factor)).ToArray(), 0);
-        var v = Linalg.SolveTriangular(factors, kstars.Reshape(new[] { numSamples, n, 1 }), upper: false);
+        var v = LinalgDispatch<T>.SolveTriangular(factors, kstars.Reshape(new[] { numSamples, n, 1 }), upper: false);
         var dotV = engine.ReduceSum(engine.TensorSquare(v), new[] { 1, 2 }, keepDims: false);
         var variances = engine.TensorMax(
             engine.TensorSubtract(engine.TensorAdd(outputVars, noiseVars), dotV),
@@ -645,13 +645,13 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
                 engine.TensorBroadcastTo(identity, batchShape),
                 engine.TensorBroadcastTo(noiseVars.Reshape(new[] { numSamples, 1, 1 }), batchShape)));
 
-        var (factors, info) = Linalg.CholeskyEx(kernels, upper: false);
+        var (factors, info) = LinalgDispatch<T>.CholeskyEx(kernels, upper: false);
         if (engine.TensorCountNonzero(info) > 0)
             throw new InvalidOperationException("Matrix is not positive definite.");
 
         var targets = engine.TensorBroadcastTo(
             Tensor<T>.FromVector(_y).Reshape(new[] { 1, n, 1 }), new[] { numSamples, n, 1 });
-        var alphas = Linalg.CholeskySolve(targets, factors, upper: false);
+        var alphas = LinalgDispatch<T>.CholeskySolve(targets, factors, upper: false);
 
         _choleskyFactors = Enumerable.Range(0, numSamples)
             .Select(s => engine.TensorSlice(factors, new[] { s, 0, 0 }, new[] { 1, n, n }).Reshape(new[] { n, n }).ToMatrix())

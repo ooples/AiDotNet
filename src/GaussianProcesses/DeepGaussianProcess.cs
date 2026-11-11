@@ -851,7 +851,7 @@ internal class DGPLayer<T>
         // One Cholesky factor of Kuu solves all output dimensions at once.
         var Kuu = GaussianProcessEngineOps.AddToDiagonal(
             KernelMatrix(_inducingInputs, _inducingInputs), _numOps.FromDouble(1e-6));
-        var alpha = Linalg.CholeskySolve(Tensor<T>.FromMatrix(_variationalMean), Factor(Kuu), upper: false);
+        var alpha = LinalgDispatch<T>.CholeskySolve(Tensor<T>.FromMatrix(_variationalMean), Factor(Kuu), upper: false);
 
         return AiDotNetEngine.Current.TensorMatMul(Tensor<T>.FromMatrix(Kxu), alpha).ToMatrix();
     }
@@ -919,11 +919,11 @@ internal class DGPLayer<T>
 
         // Data term gradient: Kuu⁻¹ * Kuf * errorSignal
         var KufError = Tensor<T>.FromVector(Kuf.Multiply(errorSignal)).Reshape(new[] { m, 1 });
-        var dataGrad = Linalg.CholeskySolve(KufError, L, upper: false);
+        var dataGrad = LinalgDispatch<T>.CholeskySolve(KufError, L, upper: false);
 
         // KL term gradient: -Kuu⁻¹ * m (pulls m toward zero = prior mean), all output dimensions at once
         var mean = Tensor<T>.FromMatrix(_variationalMean);
-        var klGrad = Linalg.CholeskySolve(mean, L, upper: false);
+        var klGrad = LinalgDispatch<T>.CholeskySolve(mean, L, upper: false);
 
         // ELBO gradient = data_grad - kl_grad (ascent)
         var grad = engine.TensorSubtract(engine.TensorBroadcastTo(dataGrad, new[] { m, _outputDim }), klGrad);

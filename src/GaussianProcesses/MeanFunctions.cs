@@ -383,7 +383,7 @@ public class LinearMean<T> : IMeanFunction<T>
         var Xty = engine.TensorMatMul(XbiasT, Tensor<T>.FromVector(y).Reshape(new[] { n, 1 }));
 
         // Partial-pivoting LU solve of the regularized normal equations
-        var w = Linalg.Solve(XtX, Xty).Reshape(new[] { d + 1 }).ToVector();
+        var w = LinalgDispatch<T>.Solve(XtX, Xty).Reshape(new[] { d + 1 }).ToVector();
 
         // Extract weights and bias
         if (d == 0)
