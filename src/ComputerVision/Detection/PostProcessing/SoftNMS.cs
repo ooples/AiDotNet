@@ -88,13 +88,12 @@ public class SoftNMS<T>
         if (detections.Count == 0) return new List<Detection<T>>();
 
         // Create mutable copies with score tracking
-        var boxes = new List<(Detection<T> det, double score)>();
-        foreach (var det in detections)
-        {
-            boxes.Add((det, _numOps.ToDouble(det.Confidence)));
-        }
+        var initialScores = CvTensorOps<T>.ToDoubleArray(
+            new Tensor<T>(new[] { detections.Count }, new Vector<T>(detections.Select(d => d.Confidence).ToArray())));
+        var boxes = detections.Select((det, index) => (det, score: initialScores[index])).ToList();
 
-        var kept = new List<Detection<T>>();
+        // Kept detections with their decayed scores; the scores become T in one bulk conversion at the end.
+        var keptBoxes = new List<(Detection<T> det, double score)>();
 
         while (boxes.Count > 0)
         {
@@ -117,18 +116,7 @@ public class SoftNMS<T>
             // Keep this detection if above threshold
             if (maxScore >= scoreThreshold)
             {
-                // Create new detection with updated confidence
-                var keptDet = new Detection<T>(
-                    maxDet.Box,
-                    maxDet.ClassId,
-                    _numOps.FromDouble(maxScore),
-                    maxDet.ClassName)
-                {
-                    Mask = maxDet.Mask,
-                    Keypoints = maxDet.Keypoints,
-                    TrackId = maxDet.TrackId
-                };
-                kept.Add(keptDet);
+                keptBoxes.Add((maxDet, maxScore));
             }
 
             // Decay scores of remaining boxes based on IoU with max
@@ -157,7 +145,14 @@ public class SoftNMS<T>
             boxes.RemoveAll(b => b.score < scoreThreshold);
         }
 
-        return kept;
+        // Each kept detection is a copy carrying its updated confidence.
+        var keptScores = CvTensorOps<T>.FromDoubleArray(keptBoxes.Select(k => k.score).ToArray(), new[] { keptBoxes.Count }).ToArray();
+        return keptBoxes.Select((k, index) => new Detection<T>(k.det.Box, k.det.ClassId, keptScores[index], k.det.ClassName)
+        {
+            Mask = k.det.Mask,
+            Keypoints = k.det.Keypoints,
+            TrackId = k.det.TrackId
+        }).ToList();
     }
 
     /// <summary>
@@ -191,6 +186,6 @@ public class SoftNMS<T>
         }
 
         // Sort final result by confidence
-        return result.OrderByDescending(d => _numOps.ToDouble(d.Confidence)).ToList();
+        return CvTensorOps<T>.OrderByDescending(result, d => d.Confidence);
     }
 }
