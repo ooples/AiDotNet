@@ -331,14 +331,14 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         Tensor<T> Gather(int[] idx) => engine.TensorIndexSelect(source, new Tensor<int>(idx, shape), 0);
 
         // dx = remX / denomX and 1 - dx = (denomX - remX) / denomX (likewise for y), all in T
-        var remX = new Tensor<int>(remXs, shape).Cast<T>();
-        var remY = new Tensor<int>(remYs, shape).Cast<T>();
+        var remXTensor = new Tensor<int>(remXs, shape).Cast<T>();
+        var remYTensor = new Tensor<int>(remYs, shape).Cast<T>();
         T denomXT = NumOps.FromDouble(denomX);
         T denomYT = NumOps.FromDouble(denomY);
-        var ax1 = engine.TensorDivideScalar(remX, denomXT);
-        var ax0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remX, denomXT), remX), denomXT);
-        var by1 = engine.TensorDivideScalar(remY, denomYT);
-        var by0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remY, denomYT), remY), denomYT);
+        var ax1 = engine.TensorDivideScalar(remXTensor, denomXT);
+        var ax0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remXTensor, denomXT), remXTensor), denomXT);
+        var by1 = engine.TensorDivideScalar(remYTensor, denomYT);
+        var by0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remYTensor, denomYT), remYTensor), denomYT);
 
         // v00 * (1 - dx) * (1 - dy) + v01 * dx * (1 - dy) + v10 * (1 - dx) * dy + v11 * dx * dy
         var value = engine.TensorAdd(
