@@ -127,7 +127,16 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
             g[i] = NumOps.ToDouble(gradient[i]);
             values[i] = NumOps.ToDouble(parameters[i]);
         }
-        if (_flatState is null || _flatState.Delta.Length != parameters.Length) _flatState = Initial(values);
+        if (_flatState is not null && _flatState.Delta.Length != parameters.Length)
+        {
+            // A differently sized flat vector is a different model: its step count, recent gradient norms and
+            // clipping threshold belong to the old one, as Adam resets its step on the same change.
+            _step = 0;
+            _modelNorms = null;
+            _threshold = null;
+            _flatState = null;
+        }
+        _flatState ??= Initial(values);
         Step(new List<(double[], double[], State)> { (values, g, _flatState) });
         var updated = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++) updated[i] = NumOps.FromDouble(values[i]);
