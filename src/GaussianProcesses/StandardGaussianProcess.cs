@@ -290,54 +290,7 @@ public partial class StandardGaussianProcess<T> : GaussianProcessBase<T>
     /// Tries Cholesky decomposition with increasing jitter until it succeeds with
     /// a well-conditioned factor (checking L diagonal ratio, not just decomposition success).
     /// </summary>
-    private void AddJitter(Matrix<T> K)
-    {
-        double jitterValue = 1e-6;
-        const double maxJitter = 1e-1;
-
-        while (jitterValue <= maxJitter)
-        {
-            var jitter = _numOps.FromDouble(jitterValue);
-            GaussianProcessEngineOps.AddToDiagonalInPlace(K, jitter);
-
-            try
-            {
-                var chol = new CholeskyDecomposition<T>(K);
-
-                // Verify the Cholesky factor is well-conditioned.
-                // If the ratio of max to min diagonal of L is too large,
-                // forward/backward substitution will amplify errors to NaN.
-                // This catches kernels like Exponential/Laplacian that produce
-                // technically positive-definite but ill-conditioned matrices.
-                var diagonal = Tensor<T>.FromVector(GaussianProcessEngineOps.Diagonal(chol.L));
-                bool wellConditioned = diagonal.Length == 0;
-                if (!wellConditioned && GaussianProcessEngineOps.AllFinite(diagonal))
-                {
-                    T minDiag = Engine.TensorMinValue(diagonal);
-                    T maxDiag = Engine.TensorMaxValue(diagonal);
-                    wellConditioned = _numOps.GreaterThan(minDiag, _numOps.Zero)
-                        && _numOps.LessThan(_numOps.Divide(maxDiag, minDiag), _numOps.FromDouble(1e8));
-                }
-
-                if (wellConditioned)
-                    return; // Well-conditioned decomposition
-
-                // Ill-conditioned - remove jitter and try larger value
-                GaussianProcessEngineOps.AddToDiagonalInPlace(K, _numOps.Negate(jitter));
-                jitterValue *= 10;
-            }
-            catch (ArgumentException)
-            {
-                // Cholesky failed - remove jitter and try larger value
-                GaussianProcessEngineOps.AddToDiagonalInPlace(K, _numOps.Negate(jitter));
-                jitterValue *= 10;
-            }
-        }
-
-        // Fallback: add max jitter
-        var maxJitterT = _numOps.FromDouble(maxJitter);
-        GaussianProcessEngineOps.AddToDiagonalInPlace(K, maxJitterT);
-    }
+    private void AddJitter(Matrix<T> K) => GaussianProcessEngineOps.AddAdaptiveJitter(K);
 
     private Vector<T> CalculateKernelVector(Matrix<T> X, Vector<T> x)
     {

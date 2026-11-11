@@ -79,6 +79,52 @@ internal static class GaussianProcessEngineOps
     internal static bool AllFinite<T>(Matrix<T> values) => AllFinite(Tensor<T>.FromMatrix(values));
 
     /// <summary>
+    /// Adds the smallest jitter from 1e-6, 1e-5, ..., 1e-1 to the diagonal of <paramref name="K"/> (in place) for
+    /// which the Cholesky factor exists and is well conditioned (max/min diagonal of L below 1e8). Kernels such as
+    /// Exponential or Laplacian give matrices where Cholesky succeeds but substitution amplifies errors to NaN; the
+    /// diagonal ratio catches them. When no jitter qualifies, 1e-1 is added.
+    /// </summary>
+    internal static void AddAdaptiveJitter<T>(Matrix<T> K)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        double jitterValue = 1e-6;
+        const double maxJitter = 1e-1;
+
+        while (jitterValue <= maxJitter)
+        {
+            var jitter = numOps.FromDouble(jitterValue);
+            AddToDiagonalInPlace(K, jitter);
+
+            try
+            {
+                var chol = new CholeskyDecomposition<T>(K);
+                var diagonal = Tensor<T>.FromVector(Diagonal(chol.L));
+                bool wellConditioned = diagonal.Length == 0;
+                if (!wellConditioned && AllFinite(diagonal))
+                {
+                    T minDiag = engine.TensorMinValue(diagonal);
+                    T maxDiag = engine.TensorMaxValue(diagonal);
+                    wellConditioned = numOps.GreaterThan(minDiag, numOps.Zero)
+                        && numOps.LessThan(numOps.Divide(maxDiag, minDiag), numOps.FromDouble(1e8));
+                }
+
+                if (wellConditioned)
+                    return;
+            }
+            catch (ArgumentException)
+            {
+                // Cholesky failed - remove this jitter and try a larger value below.
+            }
+
+            AddToDiagonalInPlace(K, numOps.Negate(jitter));
+            jitterValue *= 10;
+        }
+
+        AddToDiagonalInPlace(K, numOps.FromDouble(maxJitter));
+    }
+
+    /// <summary>
     /// Converts a caller-supplied table of double configuration values (weights, coefficients) to a
     /// <see cref="Vector{T}"/> once, at construction time.
     /// </summary>
