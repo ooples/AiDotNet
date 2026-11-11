@@ -352,13 +352,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
             _targetScale = NumOps.One;
         }
 
-        var standardizedY = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            standardizedY[i] = NumOps.Divide(NumOps.Subtract(y[i], _targetMean), _targetScale);
-        }
-
-        y = standardizedY;
+        y = Engine.Divide(Engine.Subtract(y, Engine.Fill(y.Length, _targetMean)), _targetScale);
 
         if (_options.LayerSizes[0] != numFeatures)
         {
@@ -371,7 +365,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
 
         for (int epoch = 0; epoch < _options.MaxEpochs; epoch++)
         {
-            T totalLoss = NumOps.Zero;
+            var batchLosses = new List<T>();
 
             // Mini-batch gradient descent
             for (int i = 0; i < numSamples; i += _options.BatchSize)
@@ -383,17 +377,17 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
                 (T batchLoss, List<Matrix<T>> weightGradients, List<Vector<T>> biasGradients) = ComputeGradients(batchX, batchY);
                 UpdateParameters(weightGradients, biasGradients, batchSize);
 
-                totalLoss = NumOps.Add(totalLoss, batchLoss);
+                batchLosses.Add(batchLoss);
             }
 
-            T averageLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(numSamples));
+            bool converged = IsBelowTolerance(batchLosses, numSamples, out T averageLoss);
 
             if (_options.Verbose && epoch % 100 == 0)
             {
                 Console.WriteLine($"Epoch {epoch}, Average Loss: {averageLoss}");
             }
 
-            if (NumOps.LessThan(averageLoss, NumOps.FromDouble(_options.Tolerance)))
+            if (converged)
             {
                 if (_options.Verbose)
                 {
@@ -402,6 +396,17 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
                 break;
             }
         }
+    }
+
+    /// <summary>
+    /// Averages the epoch's batch losses over the sample count and reports whether the result is
+    /// below the convergence tolerance.
+    /// </summary>
+    private bool IsBelowTolerance(List<T> batchLosses, int numSamples, out T averageLoss)
+    {
+        T totalLoss = batchLosses.Count == 0 ? NumOps.Zero : Engine.Sum(new Vector<T>(batchLosses));
+        averageLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(numSamples));
+        return NumOps.LessThan(averageLoss, NumOps.FromDouble(_options.Tolerance));
     }
 
     /// <summary>
@@ -441,7 +446,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
             totalBiasGradients.Add(new Vector<T>(_biases[i].Length));
         }
 
-        T totalLoss = NumOps.Zero;
+        var sampleLosses = new List<T>(batchSize);
 
         // Process each sample in the batch
         for (int sample = 0; sample < batchSize; sample++)
@@ -459,15 +464,11 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
             }
 
             // Compute loss for this sample (output is single value for regression)
-            T sampleTarget = y[sample];
-            T samplePrediction = activations[activations.Count - 1][0];
-            T sampleLoss = NumOps.Multiply(
-                NumOps.Subtract(samplePrediction, sampleTarget),
-                NumOps.Subtract(samplePrediction, sampleTarget));
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            Vector<T> targetVec = y.GetSubVector(sample, 1);
+            Vector<T> sampleError = Engine.Subtract(activations[activations.Count - 1].GetSubVector(0, 1), targetVec);
+            sampleLosses.Add(Engine.DotProduct(sampleError, sampleError));
 
             // Backward pass
-            Vector<T> targetVec = new Vector<T>([sampleTarget]);
             Vector<T> delta = ComputeOutputLayerDelta(activations[activations.Count - 1], targetVec, zs[zs.Count - 1]);
 
             for (int i = numLayers - 1; i >= 0; i--)
@@ -478,13 +479,14 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
 
                 if (i > 0)
                 {
-                    delta = _weights[i].Transpose().Multiply(delta).Transform((d, index) =>
-                        NumOps.Multiply(d, ApplyActivationDerivative(zs[i - 1], false)[index]));
+                    delta = Engine.Multiply(
+                        _weights[i].Transpose().Multiply(delta), ApplyActivationDerivative(zs[i - 1], false));
                 }
             }
         }
 
         // Average loss over batch
+        T totalLoss = sampleLosses.Count == 0 ? NumOps.Zero : Engine.Sum(new Vector<T>(sampleLosses));
         T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
 
         return (avgLoss, totalWeightGradients, totalBiasGradients);
@@ -520,8 +522,9 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
 
         for (int i = 0; i < _weights.Count; i++)
         {
-            Matrix<T> avgWeightGradient = weightGradients[i].Transform((g, _, _) => NumOps.Multiply(g, scaleFactor));
-            Vector<T> avgBiasGradient = biasGradients[i].Transform(g => NumOps.Multiply(g, scaleFactor));
+            Matrix<T> avgWeightGradient = Engine.TensorMultiplyScalar(
+                Tensor<T>.FromMatrix(weightGradients[i]), scaleFactor).ToMatrix();
+            Vector<T> avgBiasGradient = Engine.Multiply(biasGradients[i], scaleFactor);
 
             if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
             {
@@ -566,28 +569,28 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
     {
         if (_useOLS && _olsCoefficients is not null)
         {
-            var predictions = new Vector<T>(X.Rows);
-            for (int i = 0; i < X.Rows; i++)
+            var intercepts = Engine.Fill(X.Rows, _olsIntercept);
+            int used = Math.Min(X.Columns, _olsCoefficients.Length);
+            if (X.Rows == 0 || used == 0)
             {
-                T pred = _olsIntercept;
-                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
-                predictions[i] = pred;
+                return intercepts;
             }
-            return predictions;
+
+            return Engine.Add(intercepts,
+                Engine.MatrixVectorMultiply(X.GetSubMatrix(0, 0, X.Rows, used), _olsCoefficients.GetSubVector(0, used)));
         }
 
-        Vector<T> nnPredictions = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
+        if (X.Rows == 0)
         {
-            Vector<T> input = X.GetRow(i);
-            Vector<T> output = ForwardPass(input);
-
-            // Undo the standardization applied to the response during training, so the caller gets
-            // an answer in the units they supplied.
-            nnPredictions[i] = NumOps.Add(NumOps.Multiply(output[0], _targetScale), _targetMean);
+            return new Vector<T>(0);
         }
-        return nnPredictions;
+
+        // First network output for every row
+        Vector<T> outputs = Vector<T>.Concatenate(X.GetRows().Select(row => ForwardPass(row).GetSubVector(0, 1)).ToList());
+
+        // Undo the standardization applied to the response during training, so the caller gets
+        // an answer in the units they supplied.
+        return Engine.Add(Engine.Multiply(outputs, _targetScale), Engine.Fill(X.Rows, _targetMean));
     }
 
     /// <summary>
@@ -750,7 +753,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
 
         Vector<T> activationDerivative = ApplyActivationDerivative(outputLayerZ, true);
 
-        return error.Transform((e, i) => NumOps.Multiply(e, activationDerivative[i]));
+        return Engine.Multiply(error, activationDerivative);
     }
 
     /// <summary>
