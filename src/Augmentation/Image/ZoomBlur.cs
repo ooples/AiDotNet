@@ -22,24 +22,42 @@ public class ZoomBlur<T> : ImageAugmenterBase<T>
         double cx = data.Width / 2.0, cy = data.Height / 2.0;
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double sum = 0;
-                    for (int s = 0; s < numSteps; s++)
-                    {
-                        double t = s * factor / numSteps;
-                        double sx = x + (cx - x) * t;
-                        double sy = y + (cy - y) * t;
-                        int ix = Math.Max(0, Math.Min(data.Width - 1, (int)Math.Round(sx)));
-                        int iy = Math.Max(0, Math.Min(data.Height - 1, (int)Math.Round(sy)));
-                        sum += NumOps.ToDouble(data.GetPixel(iy, ix, c));
-                    }
-                    result.SetPixel(y, x, c, NumOps.FromDouble(sum / numSteps));
-                }
+        // Every step samples the image at points pulled towards the centre by t; the row index
+        // depends only on y and the column index only on x, so each step is a row/column gather.
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        // Step s pulls by t = s * factor / numSteps: sample indices of every step at once, [steps, size]
+        var steps = engine.Reshape(engine.TensorDivideScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numSteps, 1), NumOps.FromDouble(factor)), NumOps.FromDouble(numSteps)),
+            [numSteps, 1]);
+        var columnIndices = SampleIndices(engine, steps, data.Width, cx);
+        var rowIndices = SampleIndices(engine, steps, data.Height, cy);
+        var sum = new Tensor<T>(image._shape);
+        for (int s = 0; s < numSteps; s++)
+        {
+            var ix = engine.TensorSliceAxis(columnIndices, 0, s).Contiguous();
+            var iy = engine.TensorSliceAxis(rowIndices, 0, s).Contiguous();
+            sum = engine.TensorAdd(sum, engine.TensorIndexSelect(engine.TensorIndexSelect(image, iy, 1), ix, 2));
+        }
+
+        result.SetFromPlanarTensor(engine.TensorDivideScalar(sum, NumOps.FromDouble(numSteps)));
 
         return result;
+    }
+
+    /// <summary>
+    /// round(p + (center - p) * t) clamped to [0, size - 1] for every step t ([steps, 1]) and position p.
+    /// </summary>
+    private static Tensor<int> SampleIndices(IEngine engine, Tensor<T> steps, int size, double center)
+    {
+        int count = steps.Shape[0];
+        int[] shape = [count, size];
+        var positions = engine.Reshape(engine.TensorArange<T>(0, size, 1), [1, size]);
+        var toCenter = engine.ScalarMinusTensor(NumOps.FromDouble(center), positions);
+        var pulled = engine.TensorAdd(
+            engine.TensorBroadcastTo(positions, shape),
+            engine.TensorMultiply(engine.TensorBroadcastTo(toCenter, shape), engine.TensorBroadcastTo(steps, shape)));
+        return engine.TensorClamp(engine.TensorRound(pulled), NumOps.Zero, NumOps.FromDouble(size - 1)).Cast<int>();
     }
 
     public override IDictionary<string, object> GetParameters()

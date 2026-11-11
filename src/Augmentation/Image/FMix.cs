@@ -33,27 +33,20 @@ public class FMix<T> : ImageMixingAugmenterBase<T>
         var mask = GenerateFourierMask(image1.Height, image1.Width, lambda, context);
 
         // Recompute actual lambda from mask area
-        double maskSum = 0;
         long totalPixels = (long)image1.Height * image1.Width;
-        for (int y = 0; y < image1.Height; y++)
-            for (int x = 0; x < image1.Width; x++)
-                maskSum += mask[y, x];
-        lambda = maskSum / totalPixels;
-        LastMixingLambda = NumOps.FromDouble(lambda);
+        LastMixingLambda = NumOps.Divide(Engine.TensorSum(mask), NumOps.FromDouble(totalPixels));
 
         var result = image1.Clone();
 
-        for (int y = 0; y < image1.Height; y++)
-            for (int x = 0; x < image1.Width; x++)
-            {
-                double m = mask[y, x];
-                for (int c = 0; c < Math.Min(image1.Channels, image2.Channels); c++)
-                {
-                    double v1 = NumOps.ToDouble(image1.GetPixel(y, x, c));
-                    double v2 = NumOps.ToDouble(image2.GetPixel(y, x, c));
-                    result.SetPixel(y, x, c, NumOps.FromDouble(v1 * m + v2 * (1 - m)));
-                }
-            }
+        // result = image1 * m + image2 * (1 - m) for the channels both images have
+        var engine = Engine;
+        int channels = Math.Min(image1.Channels, image2.Channels);
+        var m = engine.Reshape(mask, [1, image1.Height, image1.Width]);
+        var planar1 = image1.ToPlanarTensor();
+        var mixed = engine.TensorAdd(
+            engine.TensorMultiply(ImageTensor<T>.LeadingChannels(planar1, channels), m),
+            engine.TensorMultiply(ImageTensor<T>.LeadingChannels(image2.ToPlanarTensor(), channels), engine.ScalarMinusTensor(NumOps.One, m)));
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingBlock(planar1, mixed));
 
         if (labels1 is not null && labels2 is not null)
         {
@@ -66,55 +59,36 @@ public class FMix<T> : ImageMixingAugmenterBase<T>
         return result;
     }
 
-    private double[,] GenerateFourierMask(int height, int width, double targetLambda, AugmentationContext<T> context)
+    private Tensor<T> GenerateFourierMask(int height, int width, double targetLambda, AugmentationContext<T> context)
     {
-        // Generate random low-frequency pattern
-        var mask = new double[height, width];
+        var engine = Engine;
         int freqH = Math.Max(2, height / 8);
         int freqW = Math.Max(2, width / 8);
 
-        // Low-frequency noise grid
-        var lowFreq = new double[freqH, freqW];
-        for (int y = 0; y < freqH; y++)
-            for (int x = 0; x < freqW; x++)
-            {
-                double dist = Math.Sqrt(((double)y * y + (double)x * x) / ((double)freqH * freqH + (double)freqW * freqW));
-                double decay = Math.Pow(Math.Max(dist, 0.01), -DecayPower);
-                lowFreq[y, x] = context.SampleGaussian(0, 1) * decay;
-            }
+        // Low-frequency noise grid: N(0, 1) * max(dist, 0.01)^(-DecayPower) with
+        // dist = sqrt((y^2 + x^2) / (freqH^2 + freqW^2))
+        var gy = engine.Reshape(engine.TensorArange<T>(0, freqH, 1), [freqH, 1]);
+        var gx = engine.Reshape(engine.TensorArange<T>(0, freqW, 1), [1, freqW]);
+        int[] gridShape = [freqH, freqW];
+        var radiusSq = engine.TensorAdd(
+            engine.TensorBroadcastTo(engine.TensorMultiply(gy, gy), gridShape),
+            engine.TensorBroadcastTo(engine.TensorMultiply(gx, gx), gridShape));
+        var dist = engine.TensorSqrt(engine.TensorDivideScalar(radiusSq, NumOps.FromDouble((double)freqH * freqH + (double)freqW * freqW)));
+        var decay = engine.TensorPower(engine.TensorMax(dist, NumOps.FromDouble(0.01)), NumOps.FromDouble(-DecayPower));
+        var lowFreq = engine.TensorMultiply(AugmentationRandom<T>.StandardNormal(context, gridShape), decay);
 
-        // Upsample to full resolution via bilinear interpolation
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-            {
-                double fy = (double)y / height * (freqH - 1);
-                double fx = (double)x / width * (freqW - 1);
-                int y0 = (int)fy; int x0 = (int)fx;
-                int y1 = Math.Min(y0 + 1, freqH - 1);
-                int x1 = Math.Min(x0 + 1, freqW - 1);
-                double ty = fy - y0; double tx = fx - x0;
-
-                mask[y, x] = lowFreq[y0, x0] * (1 - ty) * (1 - tx) +
-                             lowFreq[y1, x0] * ty * (1 - tx) +
-                             lowFreq[y0, x1] * (1 - ty) * tx +
-                             lowFreq[y1, x1] * ty * tx;
-            }
+        // Upsample to full resolution via bilinear interpolation at (y / height * (freqH - 1), x / width * (freqW - 1))
+        var rowPositions = engine.TensorMultiplyScalar(
+            engine.TensorDivideScalar(engine.TensorArange<T>(0, height, 1), NumOps.FromDouble(height)), NumOps.FromDouble(freqH - 1));
+        var colPositions = engine.TensorMultiplyScalar(
+            engine.TensorDivideScalar(engine.TensorArange<T>(0, width, 1), NumOps.FromDouble(width)), NumOps.FromDouble(freqW - 1));
+        var mask = ImageTensor<T>.InterpolateGrid(lowFreq, rowPositions, colPositions, smoothstep: false);
 
         // Threshold to binary mask at the targetLambda percentile
-        var values = new double[height * width];
-        int idx = 0;
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                values[idx++] = mask[y, x];
-        Array.Sort(values);
-        int thresholdIdx = Math.Max(0, Math.Min(values.Length - 1, (int)((1 - targetLambda) * values.Length)));
-        double threshold = values[thresholdIdx];
-
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                mask[y, x] = mask[y, x] > threshold ? 1.0 : 0.0;
-
-        return mask;
+        var sorted = engine.TensorSort(engine.Reshape(mask, [height * width]), 0, false).Values;
+        int thresholdIdx = Math.Max(0, Math.Min(height * width - 1, (int)((1 - targetLambda) * height * width)));
+        T threshold = sorted.GetFlat(thresholdIdx);
+        return engine.TensorGreaterThan(mask, threshold);
     }
 
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)

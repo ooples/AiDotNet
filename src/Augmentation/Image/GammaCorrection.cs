@@ -32,15 +32,11 @@ public class GammaCorrection<T> : ImageAugmenterBase<T>
         var result = data.Clone();
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double normalized = val / maxVal;
-                    double corrected = Math.Pow(normalized, invGamma) * maxVal;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(corrected));
-                }
+        var engine = Engine;
+        var normalized = engine.TensorDivideScalar(data.ToPlanarTensor(), NumOps.FromDouble(maxVal));
+        var corrected = engine.TensorMultiplyScalar(
+            engine.TensorPower(normalized, NumOps.FromDouble(invGamma)), NumOps.FromDouble(maxVal));
+        result.SetFromPlanarTensor(corrected);
 
         return result;
     }

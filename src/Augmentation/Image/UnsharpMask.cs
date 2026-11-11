@@ -28,44 +28,20 @@ public class UnsharpMask<T> : ImageAugmenterBase<T>
         int half = KernelSize / 2;
 
         // Build Gaussian kernel
-        var kernel = new double[KernelSize, KernelSize];
-        double sum = 0;
-        for (int ky = -half; ky <= half; ky++)
-            for (int kx = -half; kx <= half; kx++)
-            {
-                double g = Math.Exp(-(ky * ky + kx * kx) / (2 * Sigma * Sigma));
-                kernel[ky + half, kx + half] = g;
-                sum += g;
-            }
-        for (int ky = 0; ky < KernelSize; ky++)
-            for (int kx = 0; kx < KernelSize; kx++)
-                kernel[ky, kx] /= sum;
+        // (taps -half .. half)
+        var kernel = ImageTensor<T>.GaussianKernel(2 * half + 1, Sigma);
 
-        for (int c = 0; c < data.Channels; c++)
-        {
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double original = NumOps.ToDouble(data.GetPixel(y, x, c));
+        // Compute blurred values (edges replicated)
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var blurred = ImageTensor<T>.Correlate(image, kernel, mirror: false);
 
-                    // Compute blurred value
-                    double blurred = 0;
-                    for (int ky = -half; ky <= half; ky++)
-                        for (int kx = -half; kx <= half; kx++)
-                        {
-                            int ny = Math.Max(0, Math.Min(data.Height - 1, y + ky));
-                            int nx = Math.Max(0, Math.Min(data.Width - 1, x + kx));
-                            blurred += NumOps.ToDouble(data.GetPixel(ny, nx, c)) * kernel[ky + half, kx + half];
-                        }
-
-                    double diff = original - blurred;
-                    double sharpened = Math.Abs(diff) >= Threshold * maxVal
-                        ? original + Amount * diff
-                        : original;
-
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, sharpened))));
-                }
-        }
+        // Sharpen only where |original - blurred| reaches the threshold
+        var diff = engine.TensorSubtract(image, blurred);
+        var boosted = engine.TensorAdd(image, engine.TensorMultiplyScalar(diff, NumOps.FromDouble(Amount)));
+        var belowThreshold = engine.TensorLessThan(engine.TensorAbs(diff), NumOps.FromDouble(Threshold * maxVal));
+        var sharpened = engine.TensorWhere(belowThreshold, image, boosted);
+        result.SetFromPlanarTensor(engine.TensorClamp(sharpened, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

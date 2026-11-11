@@ -30,39 +30,14 @@ public class JpegCompression<T> : ImageAugmenterBase<T>
         var result = data.Clone();
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
 
-        // Process 8x8 blocks
-        for (int c = 0; c < data.Channels; c++)
+        // Simulate quantization by rounding to fewer levels (identical for every 8x8 block)
+        double step = quantScale * maxVal * 0.1;
+        if (step > 0.001)
         {
-            for (int by = 0; by < data.Height; by += 8)
-            {
-                for (int bx = 0; bx < data.Width; bx += 8)
-                {
-                    int blockH = Math.Min(8, data.Height - by);
-                    int blockW = Math.Min(8, data.Width - bx);
-
-                    // Extract block, apply simplified quantization
-                    var block = new double[blockH, blockW];
-                    for (int y = 0; y < blockH; y++)
-                        for (int x = 0; x < blockW; x++)
-                            block[y, x] = NumOps.ToDouble(data.GetPixel(by + y, bx + x, c));
-
-                    // Simulate quantization by rounding to fewer levels
-                    double step = quantScale * maxVal * 0.1;
-                    if (step > 0.001)
-                    {
-                        for (int y = 0; y < blockH; y++)
-                            for (int x = 0; x < blockW; x++)
-                            {
-                                block[y, x] = Math.Round(block[y, x] / step) * step;
-                                block[y, x] = Math.Max(0, Math.Min(maxVal, block[y, x]));
-                            }
-                    }
-
-                    for (int y = 0; y < blockH; y++)
-                        for (int x = 0; x < blockW; x++)
-                            result.SetPixel(by + y, bx + x, c, NumOps.FromDouble(block[y, x]));
-                }
-            }
+            var engine = Engine;
+            T stepT = NumOps.FromDouble(step);
+            var quantized = engine.TensorMultiplyScalar(engine.TensorRound(engine.TensorDivideScalar(data.ToPlanarTensor(), stepT)), stepT);
+            result.SetFromPlanarTensor(engine.TensorClamp(quantized, NumOps.Zero, NumOps.FromDouble(maxVal)));
         }
 
         return result;

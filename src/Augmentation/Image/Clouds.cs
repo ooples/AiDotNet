@@ -27,66 +27,33 @@ public class Clouds<T> : ImageAugmenterBase<T>
         double scale = context.GetRandomDouble(MinScale, MaxScale);
         int gridSize = Math.Max(2, (int)(Math.Min(data.Height, data.Width) * scale));
 
-        // Generate cloud noise map with multiple octaves
-        var cloudMap = new double[data.Height, data.Width];
-
+        // Generate cloud noise map with multiple octaves (octave k: cells of gridSize / 2^k, weight 1 / 2^k)
+        Tensor<T>? map = null;
+        T[] octaveWeights = ImageTensor<T>.OctaveWeights(4);
         for (int octave = 0; octave < 4; octave++)
         {
             int gs = Math.Max(2, gridSize / (1 << octave));
-            double weight = 1.0 / (1 << octave);
-            int gH = data.Height / gs + 2;
-            int gW = data.Width / gs + 2;
-
-            var grid = new double[gH, gW];
-            for (int gy = 0; gy < gH; gy++)
-                for (int gx = 0; gx < gW; gx++)
-                    grid[gy, gx] = context.GetRandomDouble(0, 1);
-
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double fy = (double)y / gs;
-                    double fx = (double)x / gs;
-                    int y0 = (int)fy; int x0 = (int)fx;
-                    int y1 = Math.Min(y0 + 1, gH - 1);
-                    int x1 = Math.Min(x0 + 1, gW - 1);
-                    double ty = fy - y0; double tx = fx - x0;
-
-                    double val = grid[y0, x0] * (1 - ty) * (1 - tx) +
-                                 grid[y1, x0] * ty * (1 - tx) +
-                                 grid[y0, x1] * (1 - ty) * tx +
-                                 grid[y1, x1] * ty * tx;
-
-                    cloudMap[y, x] += val * weight;
-                }
+            var layer = Engine.TensorMultiplyScalar(
+                ImageTensor<T>.GridNoise(context, data.Height, data.Width, gs, 0, 1, smoothstep: false),
+                octaveWeights[octave]);
+            map = map is null ? layer : Engine.TensorAdd(map, layer);
         }
 
         // Normalize and threshold
-        double minC = double.MaxValue, maxC = double.MinValue;
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                if (cloudMap[y, x] < minC) minC = cloudMap[y, x];
-                if (cloudMap[y, x] > maxC) maxC = cloudMap[y, x];
-            }
+        var engine = Engine;
+        map ??= new Tensor<T>([data.Height, data.Width]);
+        T minC = engine.TensorMinValue(map);
+        T maxC = engine.TensorMaxValue(map);
 
-        double rangeC = maxC - minC;
-        if (rangeC < 1e-10) rangeC = 1;
+        T rangeC = NumOps.Subtract(maxC, minC);
+        if (NumOps.LessThan(rangeC, NumOps.FromDouble(1e-10))) rangeC = NumOps.One;
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                double cloud = (cloudMap[y, x] - minC) / rangeC;
-                cloud = Math.Max(0, cloud - 0.3) / 0.7; // threshold
-                double alpha = cloud * opacity;
-
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double clouded = val * (1 - alpha) + maxVal * alpha;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, clouded))));
-                }
-            }
+        // cloud = max(0, normalized - 0.3) / 0.7 (threshold), weighted by opacity
+        var normalized = engine.TensorDivideScalar(engine.TensorSubtractScalar(map, minC), rangeC);
+        var cloud = engine.TensorDivideScalar(
+            engine.TensorMax(engine.TensorSubtractScalar(normalized, NumOps.FromDouble(0.3)), NumOps.Zero), NumOps.FromDouble(0.7));
+        var alpha = engine.TensorMultiplyScalar(cloud, NumOps.FromDouble(opacity));
+        result.SetFromPlanarTensor(ImageTensor<T>.BlendTowardsMax(data.ToPlanarTensor(), alpha, maxVal));
 
         return result;
     }

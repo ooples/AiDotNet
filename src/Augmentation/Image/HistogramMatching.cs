@@ -62,14 +62,10 @@ public class HistogramMatching<T> : ImageAugmenterBase<T>
         int h, int w, int channel, int numBins, double maxVal)
     {
         // Build source CDF
-        var srcHist = new int[numBins];
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                double val = NumOps.ToDouble(src.GetPixel(y, x, channel));
-                int bin = Math.Max(0, Math.Min(numBins - 1, (int)(val / maxVal * (numBins - 1))));
-                srcHist[bin]++;
-            }
+        var engine = Engine;
+        var plane = src.GetChannelPlane(channel);
+        var bins = ImageTensor<T>.HistogramBins(plane, maxVal, numBins);
+        int[] srcHist = engine.TensorBinCount(engine.Reshape(bins, [h * w]), numBins).ToArray();
 
         var srcCdf = new double[numBins];
         srcCdf[0] = srcHist[0];
@@ -116,17 +112,14 @@ public class HistogramMatching<T> : ImageAugmenterBase<T>
         }
 
         // Apply mapping
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                double val = NumOps.ToDouble(src.GetPixel(y, x, channel));
-                int bin = Math.Max(0, Math.Min(numBins - 1, (int)(val / maxVal * (numBins - 1))));
-                double mapped = (double)mapping[bin] / (numBins - 1) * maxVal;
-                double blended = val * (1 - BlendFactor) + mapped * BlendFactor;
-                dst.SetPixel(y, x, channel, NumOps.FromDouble(blended));
-            }
-        }
+        var mappingLevels = engine.TensorMultiplyScalar(
+            engine.TensorDivideScalar(new Tensor<int>(mapping, [numBins]).Cast<T>(), NumOps.FromDouble(numBins - 1.0)),
+            NumOps.FromDouble(maxVal));
+        var mapped = engine.TensorTake(mappingLevels, bins);
+        var blended = engine.TensorAdd(
+            engine.TensorMultiplyScalar(plane, NumOps.FromDouble(1 - BlendFactor)),
+            engine.TensorMultiplyScalar(mapped, NumOps.FromDouble(BlendFactor)));
+        dst.SetChannelPlane(channel, blended);
     }
 
     public override IDictionary<string, object> GetParameters()

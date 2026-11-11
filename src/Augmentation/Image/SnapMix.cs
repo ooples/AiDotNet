@@ -36,29 +36,28 @@ public class SnapMix<T> : ImageMixingAugmenterBase<T>
         int y1 = context.GetRandomInt(0, Math.Max(1, image1.Height - cutH));
         int x1 = context.GetRandomInt(0, Math.Max(1, image1.Width - cutW));
 
-        // Compute saliency weights for proportional label mixing
-        double salTotal1 = 0, salPaste = 0;
-        for (int y = 0; y < image1.Height; y++)
-            for (int x = 0; x < image1.Width; x++)
-            {
-                double s = 0;
-                for (int c = 0; c < image1.Channels; c++)
-                    s += NumOps.ToDouble(image1.GetPixel(y, x, c));
-                salTotal1 += s;
+        // Compute saliency weights for proportional label mixing: total intensity of image1 and
+        // the intensity inside the pasted region
+        var engine = Engine;
+        var planar1 = image1.ToPlanarTensor();
+        int pasteH = Math.Max(0, Math.Min(y1 + cutH, image1.Height) - y1);
+        int pasteW = Math.Max(0, Math.Min(x1 + cutW, image1.Width) - x1);
+        T salTotal1 = engine.TensorSum(planar1);
+        T salPaste = NumOps.Zero;
+        if (pasteH > 0 && pasteW > 0)
+        {
+            salPaste = engine.TensorSum(engine.TensorSlice(planar1, [0, y1, x1], [image1.Channels, pasteH, pasteW]));
 
-                if (y >= y1 && y < y1 + cutH && x >= x1 && x < x1 + cutW)
-                    salPaste += s;
-            }
-
-        // Paste region from image2
-        for (int y = y1; y < y1 + cutH && y < image1.Height; y++)
-            for (int x = x1; x < x1 + cutW && x < image1.Width; x++)
-                for (int c = 0; c < Math.Min(image1.Channels, image2.Channels); c++)
-                    result.SetPixel(y, x, c, image2.GetPixel(y, x, c));
+            // Paste region from image2
+            int channels = Math.Min(image1.Channels, image2.Channels);
+            var patch = engine.TensorSlice(image2.ToPlanarTensor(), [0, y1, x1], [channels, pasteH, pasteW]);
+            result.SetFromPlanarTensor(engine.TensorSetSlice(result.ToPlanarTensor(), patch, [0, y1, x1]));
+        }
 
         // Lambda proportional to saliency
-        double lambda = salTotal1 > 1e-10 ? 1.0 - salPaste / salTotal1 : betaLambda;
-        LastMixingLambda = NumOps.FromDouble(lambda);
+        LastMixingLambda = NumOps.GreaterThan(salTotal1, NumOps.FromDouble(1e-10))
+            ? NumOps.Subtract(NumOps.One, NumOps.Divide(salPaste, salTotal1))
+            : NumOps.FromDouble(betaLambda);
 
         if (labels1 is not null && labels2 is not null)
         {

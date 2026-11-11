@@ -19,34 +19,31 @@ public class MaskDropout<T> : ImageAugmenterBase<T>
     {
         var result = data.Clone();
 
-        // Find unique non-zero values (object IDs) in first channel
-        var objectIds = new HashSet<int>();
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                int id = (int)NumOps.ToDouble(data.GetPixel(y, x, 0));
-                if (id != 0) objectIds.Add(id);
-            }
+        // Object IDs are the truncated values of the first channel, in order of first appearance
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var ids = engine.TensorTrunc(engine.TensorSliceAxis(image, 0, 0));
+        var objectIds = engine.TensorUnique(ids, false);
+        int[] isObject = engine.TensorNotEquals(objectIds, NumOps.Zero).Cast<int>().ToArray();
 
-        // Randomly select objects to drop
-        var dropIds = new HashSet<int>();
-        foreach (int id in objectIds)
-            if (context.GetRandomDouble(0, 1) < DropRate)
-                dropIds.Add(id);
+        // Randomly select non-zero objects to drop (one draw per object, in first-appearance order)
+        var dropPositions = new List<int>();
+        for (int i = 0; i < isObject.Length; i++)
+        {
+            if (isObject[i] != 0 && context.GetRandomDouble(0, 1) < DropRate)
+            {
+                dropPositions.Add(i);
+            }
+        }
 
         // Fill dropped object regions
-        if (dropIds.Count > 0)
+        if (dropPositions.Count > 0)
         {
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    int id = (int)NumOps.ToDouble(data.GetPixel(y, x, 0));
-                    if (dropIds.Contains(id))
-                    {
-                        for (int c = 0; c < data.Channels; c++)
-                            result.SetPixel(y, x, c, NumOps.FromDouble(FillValue));
-                    }
-                }
+            var dropIds = engine.TensorIndexSelect(objectIds, new Tensor<int>(dropPositions.ToArray(), [dropPositions.Count]), 0);
+            var dropped = engine.TensorIsIn(ids, dropIds);
+            var droppedMask = engine.TensorWhere(dropped, ImageTensor<T>.Constant(ids, 1.0), ImageTensor<T>.Constant(ids, 0.0));
+            var mask = engine.TensorBroadcastTo(engine.Reshape(droppedMask, [1, data.Height, data.Width]), image._shape);
+            result.SetFromPlanarTensor(engine.TensorWhere(mask, ImageTensor<T>.Constant(image, FillValue), image));
         }
 
         return result;

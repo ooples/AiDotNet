@@ -32,33 +32,28 @@ public class AutoContrast<T> : ImageAugmenterBase<T>
         int totalPixels = h * w;
         int cutoffPixels = (int)(totalPixels * Cutoff / 100.0);
 
-        for (int c = 0; c < data.Channels; c++)
-        {
-            // Collect all values for this channel
-            var values = new double[totalPixels];
-            int idx = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    values[idx++] = NumOps.ToDouble(data.GetPixel(y, x, c));
+        var engine = Engine;
+        int channels = data.Channels;
+        var image = data.ToPlanarTensor();
 
-            Array.Sort(values);
+        // Per channel: sort the pixel values and take the cutoff percentiles
+        var sorted = engine.TensorSort(engine.Reshape(image, [channels, totalPixels]), 1, false).Values;
+        var lo = engine.Reshape(engine.TensorSlice(sorted, [0, cutoffPixels], [channels, 1]), [channels, 1, 1]);
+        var hi = engine.Reshape(engine.TensorSlice(sorted, [0, totalPixels - 1 - cutoffPixels], [channels, 1]), [channels, 1, 1]);
+        var spread = engine.TensorSubtract(hi, lo);
 
-            double lo = values[cutoffPixels];
-            double hi = values[totalPixels - 1 - cutoffPixels];
+        // Map [lo, hi] to [0, maxVal]
+        var maxTensor = new Tensor<T>([channels, 1, 1]);
+        engine.TensorFill(maxTensor, NumOps.FromDouble(maxVal));
+        var scale = engine.TensorDivide(maxTensor, spread);
+        var mapped = engine.TensorClamp(
+            engine.TensorMultiply(engine.TensorSubtract(image, lo), scale),
+            NumOps.Zero, NumOps.FromDouble(maxVal));
 
-            if (Math.Abs(hi - lo) < 1e-10) continue;
-
-            double scale = maxVal / (hi - lo);
-
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double mapped = (val - lo) * scale;
-                    mapped = Math.Max(0, Math.Min(maxVal, mapped));
-                    result.SetPixel(y, x, c, NumOps.FromDouble(mapped));
-                }
-        }
+        // Channels whose percentiles coincide are left unchanged
+        var flat = engine.TensorBroadcastTo(
+            engine.TensorLessThan(engine.TensorAbs(spread), NumOps.FromDouble(1e-10)), [channels, h, w]);
+        result.SetFromPlanarTensor(engine.TensorWhere(flat, image, mapped));
 
         return result;
     }

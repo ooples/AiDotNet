@@ -55,41 +55,20 @@ public class RgbToXyz<T> : ImageAugmenterBase<T>
             Metadata = new Dictionary<string, object> { ["color_space"] = "XYZ" }
         };
 
-        for (int y = 0; y < data.Height; y++)
-        {
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
+        var image = data.ToPlanarTensor();
+        var (r, g, b) = ImageTensor<T>.UnitRgbPlanes(image, data.IsNormalized);
 
-                if (!data.IsNormalized)
-                {
-                    r /= 255.0;
-                    g /= 255.0;
-                    b /= 255.0;
-                }
+        // Remove sRGB gamma correction (linearize)
+        r = ImageTensor<T>.SrgbToLinear(r);
+        g = ImageTensor<T>.SrgbToLinear(g);
+        b = ImageTensor<T>.SrgbToLinear(b);
 
-                // Remove sRGB gamma correction (linearize)
-                r = SrgbToLinear(r);
-                g = SrgbToLinear(g);
-                b = SrgbToLinear(b);
+        // sRGB to XYZ (D65 illuminant) using the standard matrix
+        var xVal = ImageTensor<T>.MixPlanes(r, g, b, 0.4124564, 0.3575761, 0.1804375);
+        var yVal = ImageTensor<T>.MixPlanes(r, g, b, 0.2126729, 0.7151522, 0.0721750);
+        var zVal = ImageTensor<T>.MixPlanes(r, g, b, 0.0193339, 0.1191920, 0.9503041);
 
-                // sRGB to XYZ (D65 illuminant) using the standard matrix
-                double xVal = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
-                double yVal = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
-                double zVal = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(xVal));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(yVal));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(zVal));
-
-                for (int c = 3; c < data.Channels; c++)
-                {
-                    result.SetPixel(y, x, c, data.GetPixel(y, x, c));
-                }
-            }
-        }
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image, xVal, yVal, zVal));
 
         return result;
     }
@@ -116,11 +95,6 @@ public class RgbToXyz<T> : ImageAugmenterBase<T>
         return (Math.Max(0, Math.Min(1, rOut)),
                 Math.Max(0, Math.Min(1, gOut)),
                 Math.Max(0, Math.Min(1, bOut)));
-    }
-
-    private static double SrgbToLinear(double value)
-    {
-        return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
     }
 
     private static double LinearToSrgb(double value)

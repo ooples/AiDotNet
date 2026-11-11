@@ -33,15 +33,12 @@ public class Posterize<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double normalized = val / maxVal;
-                    double posterized = Math.Floor(normalized * (levels - 1)) / (levels - 1) * maxVal;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(posterized));
-                }
+        var engine = Engine;
+        var normalized = engine.TensorDivideScalar(data.ToPlanarTensor(), NumOps.FromDouble(maxVal));
+        var quantized = engine.TensorFloor(engine.TensorMultiplyScalar(normalized, NumOps.FromDouble(levels - 1)));
+        var posterized = engine.TensorMultiplyScalar(
+            engine.TensorDivideScalar(quantized, NumOps.FromDouble(levels - 1)), NumOps.FromDouble(maxVal));
+        result.SetFromPlanarTensor(posterized);
 
         return result;
     }

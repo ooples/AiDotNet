@@ -292,19 +292,8 @@ public class SegmentationMask<T>
             return area;
         }
 
-        var dense = ToDense();
-        int count = 0;
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                if (NumOps.GreaterThan(dense[y, x], NumOps.Zero))
-                {
-                    count++;
-                }
-            }
-        }
-        return count;
+        var engine = AiDotNetEngine.Current;
+        return (int)NumOps.ToDouble(engine.TensorSum(Foreground(ToDense())));
     }
 
     /// <summary>
@@ -314,26 +303,20 @@ public class SegmentationMask<T>
     public (int xMin, int yMin, int xMax, int yMax) GetBoundingBox()
     {
         var dense = ToDense();
-        int xMin = Width, yMin = Height, xMax = -1, yMax = -1;
-
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                if (NumOps.GreaterThan(dense[y, x], NumOps.Zero))
-                {
-                    xMin = Math.Min(xMin, x);
-                    yMin = Math.Min(yMin, y);
-                    xMax = Math.Max(xMax, x);
-                    yMax = Math.Max(yMax, y);
-                }
-            }
-        }
-
-        if (xMax < 0)
+        var engine = AiDotNetEngine.Current;
+        var foreground = Foreground(dense);
+        if (!NumOps.GreaterThan(engine.TensorMaxValue(foreground), NumOps.Zero))
         {
             return (0, 0, 0, 0); // Empty mask
         }
+
+        // First/last row and column that contain a foreground pixel
+        var rows = engine.ReduceMax(foreground, [1], false);
+        var cols = engine.ReduceMax(foreground, [0], false);
+        int yMin = engine.TensorArgMax(rows, 0).GetFlat(0);
+        int xMin = engine.TensorArgMax(cols, 0).GetFlat(0);
+        int yMax = rows.Length - 1 - engine.TensorArgMax(engine.TensorFlip(rows, [0]), 0).GetFlat(0);
+        int xMax = cols.Length - 1 - engine.TensorArgMax(engine.TensorFlip(cols, [0]), 0).GetFlat(0);
 
         return (xMin, yMin, xMax + 1, yMax + 1);
     }
@@ -353,20 +336,11 @@ public class SegmentationMask<T>
             throw new ArgumentException("Masks must have the same dimensions.");
         }
 
-        int intersection = 0;
-        int union = 0;
-
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                bool m1 = NumOps.GreaterThan(mask1[y, x], NumOps.Zero);
-                bool m2 = NumOps.GreaterThan(mask2[y, x], NumOps.Zero);
-
-                if (m1 && m2) intersection++;
-                if (m1 || m2) union++;
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var m1 = Foreground(mask1);
+        var m2 = Foreground(mask2);
+        int intersection = (int)NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(m1, m2)));
+        int union = (int)NumOps.ToDouble(engine.TensorSum(engine.TensorMax(m1, m2)));
 
         return union > 0 ? (double)intersection / union : 0;
     }
@@ -386,21 +360,11 @@ public class SegmentationMask<T>
             throw new ArgumentException("Masks must have the same dimensions.");
         }
 
-        int intersection = 0;
-        int sum = 0;
-
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                bool m1 = NumOps.GreaterThan(mask1[y, x], NumOps.Zero);
-                bool m2 = NumOps.GreaterThan(mask2[y, x], NumOps.Zero);
-
-                if (m1 && m2) intersection++;
-                if (m1) sum++;
-                if (m2) sum++;
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var m1 = Foreground(mask1);
+        var m2 = Foreground(mask2);
+        int intersection = (int)NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(m1, m2)));
+        int sum = (int)NumOps.ToDouble(engine.TensorSum(m1)) + (int)NumOps.ToDouble(engine.TensorSum(m2));
 
         return sum > 0 ? 2.0 * intersection / sum : 0;
     }
@@ -415,28 +379,21 @@ public class SegmentationMask<T>
             throw new InvalidOperationException("RLE counts are not set.");
         }
 
-        var result = new T[Height, Width];
-        int position = 0;
-        bool isForeground = false;
-
-        foreach (int count in RLECounts)
+        // Runs alternate background/foreground starting with background; pixel p lies in the first
+        // run whose cumulative end exceeds p, and is foreground when that run's index is odd
+        var engine = AiDotNetEngine.Current;
+        int total = Width * Height;
+        if (total == 0 || RLECounts.Length == 0)
         {
-            for (int i = 0; i < count && position < Width * Height; i++)
-            {
-                int y = position / Width;
-                int x = position % Width;
-
-                if (isForeground)
-                {
-                    result[y, x] = NumOps.FromDouble(1);
-                }
-
-                position++;
-            }
-            isForeground = !isForeground;
+            return new T[Height, Width];
         }
 
-        return result;
+        var ends = engine.TensorCumSum(new Tensor<int>((int[])RLECounts.Clone(), [RLECounts.Length]), 0);
+        var positions = engine.TensorArange<int>(0, total, 1);
+        var run = engine.TensorSearchSorted(ends, positions, true);
+        var odd = engine.TensorSubtract(run, engine.TensorMultiplyScalar(engine.TensorDivideScalar(run, 2), 2));
+        var foreground = engine.TensorMultiply(odd, engine.TensorLessThan(run, RLECounts.Length));
+        return ToArray2D(foreground.Cast<T>(), Height, Width);
     }
 
     /// <summary>
@@ -444,31 +401,58 @@ public class SegmentationMask<T>
     /// </summary>
     private int[] EncodeRLE(T[,] dense)
     {
-        var counts = new List<int>();
-        bool currentValue = false;
-        int currentCount = 0;
-
-        for (int y = 0; y < Height; y++)
+        // Runs of equal foreground/background values in row-major order; RLE starts with a
+        // background run, so a leading foreground run gets a zero-length background run first
+        var engine = AiDotNetEngine.Current;
+        var foreground = Foreground(dense);
+        if (foreground.Length == 0)
         {
-            for (int x = 0; x < Width; x++)
-            {
-                bool pixelValue = NumOps.GreaterThan(dense[y, x], NumOps.Zero);
-
-                if (pixelValue == currentValue)
-                {
-                    currentCount++;
-                }
-                else
-                {
-                    counts.Add(currentCount);
-                    currentValue = pixelValue;
-                    currentCount = 1;
-                }
-            }
+            return [0];
         }
 
-        counts.Add(currentCount);
-        return counts.ToArray();
+        var flat = engine.Reshape(foreground, [foreground.Length]);
+        var (values, _, runCounts) = engine.TensorUniqueConsecutiveWithInfo(flat, false, true);
+        int[] counts = runCounts is null ? [foreground.Length] : runCounts.ToArray();
+        bool startsWithForeground = NumOps.GreaterThan(values.GetFlat(0), NumOps.Zero);
+        return startsWithForeground ? [0, .. counts] : counts;
+    }
+
+    /// <summary>
+    /// Copies a dense mask into a tensor (row-major) of the same shape.
+    /// </summary>
+    private static Tensor<T> ToTensor(T[,] dense)
+    {
+        return new Tensor<T>(dense.Cast<T>().ToArray(), [dense.GetLength(0), dense.GetLength(1)]);
+    }
+
+    /// <summary>
+    /// 1 where the dense mask is greater than zero, 0 elsewhere.
+    /// </summary>
+    private static Tensor<T> Foreground(T[,] dense)
+    {
+        return AiDotNetEngine.Current.TensorGreaterThan(ToTensor(dense), NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Copies a row-major tensor into a new [rows, columns] array in one block copy (an element copy
+    /// for non-primitive element types, which block copies do not support).
+    /// </summary>
+    private static T[,] ToArray2D(Tensor<T> values, int rows, int columns)
+    {
+        var flat = values.Contiguous().ToArray();
+        var result = new T[rows, columns];
+        if (typeof(T).IsPrimitive)
+        {
+            Buffer.BlockCopy(flat, 0, result, 0, Buffer.ByteLength(flat));
+            return result;
+        }
+
+        for (int i = 0; i < flat.Length; i++)
+        {
+            result[i / columns, i % columns] = flat[i];
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -476,69 +460,67 @@ public class SegmentationMask<T>
     /// </summary>
     private T[,] RasterizePolygons()
     {
-        if (Polygons is null || Polygons.Count == 0)
+        if (Polygons is null || Polygons.Count == 0 || Width == 0 || Height == 0)
         {
             return new T[Height, Width];
         }
 
-        var result = new T[Height, Width];
-
+        var engine = AiDotNetEngine.Current;
+        var filled = new Tensor<int>([Height, Width]);
         foreach (var polygon in Polygons.Where(p => p.Count >= 3))
         {
-            // Use scanline algorithm to fill polygon
-            FillPolygon(result, polygon);
+            filled = engine.TensorMax(filled, FillPolygon(polygon));
         }
 
-        return result;
+        return ToArray2D(filled.Cast<T>(), Height, Width);
     }
 
     /// <summary>
-    /// Fills a polygon using scanline algorithm.
+    /// Scanline fill of one polygon as a [height, width] 0/1 tensor. Row y crosses edge (p1, p2) when
+    /// y lies in [min(y1, y2), max(y1, y2)) at x = x1 + (y - y1) / (y2 - y1) * (x2 - x1); pixel x is
+    /// filled when it lies between a pair of sorted crossings (inclusive), i.e. when the number of
+    /// crossings below x is odd or a crossing equals x.
     /// </summary>
-    private void FillPolygon(T[,] result, IList<(double x, double y)> polygon)
+    private Tensor<int> FillPolygon(IList<(double x, double y)> polygon)
     {
-        // Find y bounds
-        double minY = double.MaxValue, maxY = double.MinValue;
-        foreach (var (x, y) in polygon)
-        {
-            minY = Math.Min(minY, y);
-            maxY = Math.Max(maxY, y);
-        }
+        var engine = AiDotNetEngine.Current;
+        int edges = polygon.Count;
+        var vertexX = polygon.Select(v => v.x).ToArray();
+        var vertexY = polygon.Select(v => v.y).ToArray();
+        var x1 = new Tensor<T>(Array.ConvertAll(vertexX, NumOps.FromDouble), [1, edges]);
+        var y1 = new Tensor<T>(Array.ConvertAll(vertexY, NumOps.FromDouble), [1, edges]);
+        var x2 = engine.TensorRoll(x1, [-1], [1]);
+        var y2 = engine.TensorRoll(y1, [-1], [1]);
 
-        int yStart = Math.Max(0, (int)Math.Floor(minY));
-        int yEnd = Math.Min(Height - 1, (int)Math.Ceiling(maxY));
+        // Crossing of every row with every edge: [height, edges]
+        int[] rowEdge = [Height, edges];
+        var y = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, Height, 1), [Height, 1]), rowEdge);
+        var y1b = engine.TensorBroadcastTo(y1, rowEdge);
+        var y2b = engine.TensorBroadcastTo(y2, rowEdge);
+        var upward = engine.TensorMultiply(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(y1b, y)), engine.TensorGreaterThan(y2b, y));
+        var downward = engine.TensorMultiply(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(y2b, y)), engine.TensorGreaterThan(y1b, y));
+        var crosses = engine.TensorAdd(upward, downward);
+        var rise = engine.TensorSubtract(y2, y1);
+        var safeRise = engine.TensorWhere(engine.TensorEquals(rise, NumOps.Zero), ImageTensor<T>.Constant(rise, 1.0), rise);
+        var slope = engine.TensorDivide(engine.TensorSubtract(x2, x1), safeRise);
+        var crossingX = engine.TensorAdd(
+            engine.TensorBroadcastTo(x1, rowEdge),
+            engine.TensorMultiply(engine.TensorSubtract(y, y1b), engine.TensorBroadcastTo(slope, rowEdge)));
 
-        // Scanline for each y
-        for (int y = yStart; y <= yEnd; y++)
-        {
-            var intersections = new List<double>();
+        // Crossings strictly below and at-or-below every pixel column: [height, width]
+        int[] grid = [Height, Width, edges];
+        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, Width, 1), [1, Width, 1]), grid);
+        var crossing = engine.TensorBroadcastTo(engine.Reshape(crossingX, [Height, 1, edges]), grid);
+        var counted = engine.TensorBroadcastTo(engine.Reshape(crosses, [Height, 1, edges]), grid);
+        var below = engine.ReduceSum(engine.TensorMultiply(counted, engine.TensorLessThan(crossing, column)), [2], false).Cast<int>();
+        var atOrBelow = engine.ReduceSum(
+            engine.TensorMultiply(counted, engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(crossing, column))), [2], false)
+            .Cast<int>();
 
-            // Find intersections with polygon edges
-            for (int i = 0; i < polygon.Count; i++)
-            {
-                var p1 = polygon[i];
-                var p2 = polygon[(i + 1) % polygon.Count];
-
-                if ((p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y))
-                {
-                    double xIntersect = p1.x + (y - p1.y) / (p2.y - p1.y) * (p2.x - p1.x);
-                    intersections.Add(xIntersect);
-                }
-            }
-
-            intersections.Sort();
-
-            // Fill between pairs of intersections
-            for (int i = 0; i + 1 < intersections.Count; i += 2)
-            {
-                int xStart = Math.Max(0, (int)Math.Ceiling(intersections[i]));
-                int xEnd = Math.Min(Width - 1, (int)Math.Floor(intersections[i + 1]));
-
-                for (int x = xStart; x <= xEnd; x++)
-                {
-                    result[y, x] = NumOps.FromDouble(1);
-                }
-            }
-        }
+        var oddBelow = engine.TensorSubtract(below, engine.TensorMultiplyScalar(engine.TensorDivideScalar(below, 2), 2));
+        var onCrossing = engine.TensorGreaterThan(atOrBelow, below);
+        return engine.TensorMax(oddBelow, onCrossing);
     }
 }

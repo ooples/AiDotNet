@@ -32,37 +32,22 @@ public class FDA<T> : ImageAugmenterBase<T>
         if (maskH < 1 || maskW < 1) return result;
 
         // Simple spectral transfer: replace average of low-frequency region
-        for (int c = 0; c < Math.Min(source.Channels, target.Channels); c++)
-        {
-            // Compute mean of both images in the low-frequency region (center crop as proxy)
-            double srcMean = 0, tgtMean = 0;
-            int count = 0;
-            int startY = (source.Height - maskH) / 2;
-            int startX = (source.Width - maskW) / 2;
+        // Compute mean of both images in the low-frequency region (center crop as proxy) per channel
+        var engine = Engine;
+        int channels = Math.Min(source.Channels, target.Channels);
+        int startY = (source.Height - maskH) / 2;
+        int startX = (source.Width - maskW) / 2;
+        var sourcePlanar = source.ToPlanarTensor();
+        int[] regionStart = [0, startY, startX];
+        int[] regionSize = [channels, maskH, maskW];
+        var srcMean = engine.ReduceMean(engine.TensorSlice(sourcePlanar, regionStart, regionSize), [1, 2], true);
+        var tgtMean = engine.ReduceMean(engine.TensorSlice(target.ToPlanarTensor(), regionStart, regionSize), [1, 2], true);
+        var shift = engine.TensorMultiplyScalar(engine.TensorSubtract(tgtMean, srcMean), NumOps.FromDouble(Beta));
 
-            for (int y = startY; y < startY + maskH; y++)
-                for (int x = startX; x < startX + maskW; x++)
-                {
-                    srcMean += NumOps.ToDouble(source.GetPixel(y, x, c));
-                    tgtMean += NumOps.ToDouble(target.GetPixel(y, x, c));
-                    count++;
-                }
-
-            if (count > 0)
-            {
-                srcMean /= count;
-                tgtMean /= count;
-                double shift = tgtMean - srcMean;
-
-                for (int y = 0; y < source.Height; y++)
-                    for (int x = 0; x < source.Width; x++)
-                    {
-                        double val = NumOps.ToDouble(source.GetPixel(y, x, c)) + shift * Beta;
-                        result.SetPixel(y, x, c,
-                            NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                    }
-            }
-        }
+        var shifted = engine.TensorClamp(
+            engine.TensorAdd(ImageTensor<T>.LeadingChannels(sourcePlanar, channels), shift),
+            NumOps.Zero, NumOps.FromDouble(maxVal));
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingBlock(sourcePlanar, shifted));
 
         return result;
     }

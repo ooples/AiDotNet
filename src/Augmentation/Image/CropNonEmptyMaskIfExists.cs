@@ -27,38 +27,24 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
 
         // Try multiple attempts to find a crop containing non-empty content
         // Use pixel variance as a proxy for non-empty regions when no mask is available
-        double bestScore = -1;
+        T bestScore = NumOps.FromDouble(-1);
+        var absSum = Engine.Reshape(
+            Engine.ReduceSum(Engine.TensorAbs(data.ToPlanarTensor()), [0], false), [data.Height * data.Width]);
         for (int attempt = 0; attempt < MaxAttempts; attempt++)
         {
             int candY = context.GetRandomInt(0, Math.Max(1, data.Height - cropH + 1));
             int candX = context.GetRandomInt(0, Math.Max(1, data.Width - cropW + 1));
 
             // Check if region has non-zero content
-            double sum = 0;
-            int sampleStep = Math.Max(1, cropH * cropW / 100);
-            int count = 0;
-            for (int i = 0; i < cropH * cropW; i += sampleStep)
-            {
-                int sy = candY + i / cropW;
-                int sx = candX + i % cropW;
-                if (sy < data.Height && sx < data.Width)
-                {
-                    // Check all channels for non-empty content
-                    for (int c = 0; c < data.Channels; c++)
-                        sum += Math.Abs(NumOps.ToDouble(data.GetPixel(sy, sx, c)));
-                    count++;
-                }
-            }
-
-            double score = count > 0 ? sum / count : 0;
-            if (score > bestScore)
+            T score = SampledContentScore(absSum, data.Height, data.Width, candY, candX, cropH, cropW);
+            if (Exceeds(score, bestScore))
             {
                 bestScore = score;
                 bestY = candY;
                 bestX = candX;
             }
 
-            if (score > 0) break;
+            if (Exceeds(score, NumOps.Zero)) break;
         }
 
         var parms = new Dictionary<string, object>
@@ -148,6 +134,42 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
             ClassName = mask.ClassName,
             InstanceId = mask.InstanceId
         };
+    }
+
+    /// <summary>
+    /// Mean over sampled crop positions (every max(1, cropH * cropW / 100)-th pixel in row-major
+    /// order, skipping positions outside the image) of the absolute values summed over channels.
+    /// </summary>
+    private static T SampledContentScore(Tensor<T> absSum, int height, int width,
+        int candY, int candX, int cropH, int cropW)
+    {
+        var engine = AiDotNetEngine.Current;
+        int sampleStep = Math.Max(1, cropH * cropW / 100);
+        var offsets = engine.TensorArange<int>(0, cropH * cropW, sampleStep);
+        var rowInCrop = engine.TensorDivideScalar(offsets, cropW);
+        var sy = engine.TensorAddScalar(rowInCrop, candY);
+        var sx = engine.TensorAddScalar(engine.TensorSubtract(offsets, engine.TensorMultiplyScalar(rowInCrop, cropW)), candX);
+        var valid = engine.TensorMultiply(engine.TensorLessThan(sy, height), engine.TensorLessThan(sx, width));
+        int count = engine.TensorSum(valid);
+        if (count <= 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var flat = engine.TensorAdd(
+            engine.TensorMultiplyScalar(engine.TensorClampMax(sy, height - 1), width),
+            engine.TensorClampMax(sx, width - 1));
+        var values = engine.TensorTake(absSum, flat);
+        T sum = engine.TensorSum(engine.TensorMultiply(values, valid.Cast<T>()));
+        return NumOps.Divide(sum, NumOps.FromDouble(count));
+    }
+
+    /// <summary>
+    /// Whether one attempt's score is greater than another.
+    /// </summary>
+    private static bool Exceeds(T score, T other)
+    {
+        return NumOps.GreaterThan(score, other);
     }
 
     public override IDictionary<string, object> GetParameters()

@@ -26,30 +26,14 @@ public class WebPCompression<T> : ImageAugmenterBase<T>
         var result = data.Clone();
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
 
-        // WebP uses 4x4 transform blocks (vs JPEG's 8x8)
-        for (int c = 0; c < data.Channels; c++)
+        // WebP uses 4x4 transform blocks (vs JPEG's 8x8); the quantization step is the same for every block
+        double step = quantScale * maxVal * 0.08;
+        if (step > 0.001)
         {
-            for (int by = 0; by < data.Height; by += 4)
-            {
-                for (int bx = 0; bx < data.Width; bx += 4)
-                {
-                    int blockH = Math.Min(4, data.Height - by);
-                    int blockW = Math.Min(4, data.Width - bx);
-
-                    double step = quantScale * maxVal * 0.08;
-                    if (step > 0.001)
-                    {
-                        for (int y = 0; y < blockH; y++)
-                            for (int x = 0; x < blockW; x++)
-                            {
-                                double val = NumOps.ToDouble(data.GetPixel(by + y, bx + x, c));
-                                val = Math.Round(val / step) * step;
-                                result.SetPixel(by + y, bx + x, c,
-                                    NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                            }
-                    }
-                }
-            }
+            var engine = Engine;
+            T stepT = NumOps.FromDouble(step);
+            var quantized = engine.TensorMultiplyScalar(engine.TensorRound(engine.TensorDivideScalar(data.ToPlanarTensor(), stepT)), stepT);
+            result.SetFromPlanarTensor(engine.TensorClamp(quantized, NumOps.Zero, NumOps.FromDouble(maxVal)));
         }
 
         return result;

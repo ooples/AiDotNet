@@ -25,27 +25,28 @@ public class GhostingArtifact<T> : ImageAugmenterBase<T>
         // Ghosts appear as shifted copies along the phase-encode direction
         bool horizontal = context.GetRandomBool();
 
+        var engine = Engine;
+        var original = data.ToPlanarTensor();
+        var accumulated = original;
+        T min = NumOps.Zero;
+        T max = NumOps.FromDouble(maxVal);
+        // Ghost g has weight ghostIntensity / g
+        var ghostNumbers = engine.Reshape(engine.TensorArange<T>(1, NumGhosts + 1, 1), [NumGhosts, 1, 1, 1]);
+        var weights = engine.TensorDivide(ImageTensor<T>.Constant(ghostNumbers, ghostIntensity), ghostNumbers);
         for (int g = 1; g <= NumGhosts; g++)
         {
             int shift = (int)(g * (horizontal ? data.Width : data.Height) / (NumGhosts + 1.0) * 0.3);
-            double weight = ghostIntensity / g;
 
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    int srcY = horizontal ? y : (y + shift) % data.Height;
-                    int srcX = horizontal ? (x + shift) % data.Width : x;
-
-                    for (int c = 0; c < data.Channels; c++)
-                    {
-                        double current = NumOps.ToDouble(result.GetPixel(y, x, c));
-                        double ghost = NumOps.ToDouble(data.GetPixel(srcY, srcX, c));
-                        double val = current + ghost * weight;
-                        result.SetPixel(y, x, c,
-                            NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                    }
-                }
+            // ghost[y, x] = data[(y + shift) % H, x] (or along x): a roll by -shift
+            int axis = horizontal ? 2 : 1;
+            int size = horizontal ? data.Width : data.Height;
+            int roll = ((-shift % size) + size) % size;
+            var ghost = engine.TensorRoll(original, [roll], [axis]);
+            accumulated = engine.TensorClamp(
+                engine.TensorAdd(accumulated, engine.TensorMultiply(ghost, engine.TensorSliceAxis(weights, 0, g - 1))), min, max);
         }
+
+        result.SetFromPlanarTensor(accumulated);
 
         return result;
     }

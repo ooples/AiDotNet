@@ -46,15 +46,8 @@ public class RandomErasing<T> : ImageAugmenterBase<T>
             int y1 = context.GetRandomInt(0, data.Height - eraseH);
             int x1 = context.GetRandomInt(0, data.Width - eraseW);
 
-            for (int y = y1; y < y1 + eraseH; y++)
-                for (int x = x1; x < x1 + eraseW; x++)
-                    for (int c = 0; c < data.Channels; c++)
-                    {
-                        double val = FillWithNoise
-                            ? context.GetRandomDouble(0, maxVal)
-                            : FillValue;
-                        result.SetPixel(y, x, c, NumOps.FromDouble(val));
-                    }
+            result.SetFromPlanarTensor(
+                ImageTensor<T>.EraseRect(data.ToPlanarTensor(), y1, x1, eraseH, eraseW, FillWithNoise, FillValue, maxVal, context));
 
             break; // Successfully erased
         }

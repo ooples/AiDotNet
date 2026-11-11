@@ -36,15 +36,14 @@ public class SamplePairing<T> : ImageMixingAugmenterBase<T>
         double lambda = 1 - weight;
         LastMixingLambda = NumOps.FromDouble(lambda);
 
-        for (int y = 0; y < image1.Height; y++)
-            for (int x = 0; x < image1.Width; x++)
-                for (int c = 0; c < Math.Min(image1.Channels, image2.Channels); c++)
-                {
-                    double v1 = NumOps.ToDouble(image1.GetPixel(y, x, c));
-                    double v2 = NumOps.ToDouble(image2.GetPixel(y, x, c));
-                    double paired = v1 * (1 - weight) + v2 * weight;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(paired));
-                }
+        // result = image1 * (1 - weight) + image2 * weight for the channels both images have
+        var engine = Engine;
+        int channels = Math.Min(image1.Channels, image2.Channels);
+        var planar1 = image1.ToPlanarTensor();
+        var paired = engine.TensorAdd(
+            engine.TensorMultiplyScalar(ImageTensor<T>.LeadingChannels(planar1, channels), NumOps.FromDouble(1 - weight)),
+            engine.TensorMultiplyScalar(ImageTensor<T>.LeadingChannels(image2.ToPlanarTensor(), channels), NumOps.FromDouble(weight)));
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingBlock(planar1, paired));
 
         if (labels1 is not null && labels2 is not null)
         {

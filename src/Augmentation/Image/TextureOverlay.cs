@@ -28,40 +28,15 @@ public class TextureOverlay<T> : ImageAugmenterBase<T>
         int gridSize = Math.Max(2, (int)(Math.Min(data.Height, data.Width) * scale));
 
         // Generate procedural texture
-        var texture = new double[data.Height, data.Width];
-        int gH = data.Height / gridSize + 2;
-        int gW = data.Width / gridSize + 2;
-        var grid = new double[gH, gW];
-        for (int y = 0; y < gH; y++)
-            for (int x = 0; x < gW; x++)
-                grid[y, x] = context.GetRandomDouble(0, 1);
+        var texture = ImageTensor<T>.GridNoise(context, data.Height, data.Width, gridSize, 0, 1, smoothstep: false);
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                double fy = (double)y / gridSize;
-                double fx = (double)x / gridSize;
-                int y0 = (int)fy; int x0 = (int)fx;
-                int y1 = Math.Min(y0 + 1, gH - 1);
-                int x1 = Math.Min(x0 + 1, gW - 1);
-                double ty = fy - y0; double tx = fx - x0;
-
-                texture[y, x] = grid[y0, x0] * (1 - ty) * (1 - tx) +
-                                grid[y1, x0] * ty * (1 - tx) +
-                                grid[y0, x1] * (1 - ty) * tx +
-                                grid[y1, x1] * ty * tx;
-            }
-
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double tex = texture[y, x] * maxVal;
-                    double blended = val * (1 - alpha) + tex * alpha;
-                    result.SetPixel(y, x, c,
-                        NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, blended))));
-                }
+        var engine = Engine;
+        var tex = engine.TensorMultiplyScalar(texture, NumOps.FromDouble(maxVal));
+        var tex3 = engine.Reshape(tex, [1, data.Height, data.Width]);
+        var blended = engine.TensorAdd(
+            engine.TensorMultiplyScalar(data.ToPlanarTensor(), NumOps.FromDouble(1 - alpha)),
+            engine.TensorMultiplyScalar(tex3, NumOps.FromDouble(alpha)));
+        result.SetFromPlanarTensor(engine.TensorClamp(blended, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

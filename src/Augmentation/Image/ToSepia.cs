@@ -20,21 +20,13 @@ public class ToSepia<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
 
         // Standard sepia matrix
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
-
-                double newR = r * 0.393 + g * 0.769 + b * 0.189;
-                double newG = r * 0.349 + g * 0.686 + b * 0.168;
-                double newB = r * 0.272 + g * 0.534 + b * 0.131;
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Min(maxVal, newR)));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(Math.Min(maxVal, newG)));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(Math.Min(maxVal, newB)));
-            }
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        T max = NumOps.FromDouble(maxVal);
+        var newR = engine.TensorClampMax(ImageTensor<T>.MixChannels(image, 0.393, 0.769, 0.189), max);
+        var newG = engine.TensorClampMax(ImageTensor<T>.MixChannels(image, 0.349, 0.686, 0.168), max);
+        var newB = engine.TensorClampMax(ImageTensor<T>.MixChannels(image, 0.272, 0.534, 0.131), max);
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image, newR, newG, newB));
 
         return result;
     }

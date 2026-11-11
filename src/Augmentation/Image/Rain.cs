@@ -32,6 +32,9 @@ public class Rain<T> : ImageAugmenterBase<T>
         int numDrops = (int)(Intensity * data.Height * data.Width / 100.0);
         int dropLen = Math.Max(3, (int)(DropLength * data.Height));
 
+        // Mark the drop pixels (RNG draws in the original order); every drop pixel brightens the
+        // original value, so overlapping drops are idempotent
+        var dropMask = new int[data.Height * data.Width];
         for (int d = 0; d < numDrops; d++)
         {
             int startY = context.GetRandomInt(0, data.Height);
@@ -48,25 +51,23 @@ public class Rain<T> : ImageAugmenterBase<T>
                 {
                     int x = xCenter + dx;
                     if (y < 0 || y >= data.Height || x < 0 || x >= data.Width) continue;
-
-                    for (int c = 0; c < data.Channels; c++)
-                    {
-                        double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                        double drop = val + Brightness * maxVal * 0.3;
-                        result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, drop))));
-                    }
+                    dropMask[y * data.Width + x] = 1;
                 }
             }
         }
 
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var drops = engine.TensorClamp(
+            engine.TensorAddScalar(image, NumOps.FromDouble(Brightness * maxVal * 0.3)),
+            NumOps.Zero, NumOps.FromDouble(maxVal));
+        var mask = engine.TensorBroadcastTo(
+            new Tensor<int>(dropMask, [1, data.Height, data.Width]).Cast<T>(), image._shape);
+        var rained = engine.TensorWhere(mask, drops, image);
+
         // Slight overall brightness reduction for overcast
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(result.GetPixel(y, x, c));
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, val * 0.95)));
-                }
+        var overcast = engine.TensorMax(engine.TensorMultiplyScalar(rained, NumOps.FromDouble(0.95)), NumOps.Zero);
+        result.SetFromPlanarTensor(overcast);
 
         return result;
     }

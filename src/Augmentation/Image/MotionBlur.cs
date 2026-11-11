@@ -27,11 +27,9 @@ public class MotionBlur<T> : ImageAugmenterBase<T>
         int half = kSize / 2;
 
         // Generate motion blur kernel along the angle
-        var kernel = new double[kSize, kSize];
-        var visited = new bool[kSize, kSize];
+        // Taps at round(half + offset * sin/cos) for offset = -half .. half, each set once, normalized
         double cosA = Math.Cos(angle), sinA = Math.Sin(angle);
-        double sum = 0;
-
+        var taps = new List<int>(kSize);
         for (int i = 0; i < kSize; i++)
         {
             double offset = i - half;
@@ -39,34 +37,24 @@ public class MotionBlur<T> : ImageAugmenterBase<T>
             int kx = (int)Math.Round(half + offset * cosA);
             if (ky >= 0 && ky < kSize && kx >= 0 && kx < kSize)
             {
-                if (!visited[ky, kx])
-                    sum += 1.0;
-                visited[ky, kx] = true;
-                kernel[ky, kx] = 1.0;
+                taps.Add(ky * kSize + kx);
             }
         }
 
-        if (sum > 0)
-            for (int ky = 0; ky < kSize; ky++)
-                for (int kx = 0; kx < kSize; kx++)
-                    kernel[ky, kx] /= sum;
+        var engine = Engine;
+        var line = new Tensor<T>([kSize * kSize]);
+        if (taps.Count > 0)
+        {
+            line = engine.TensorScatter(line, new Tensor<int>(taps.ToArray(), [taps.Count]),
+                ImageTensor<T>.Constant(new Tensor<T>([taps.Count]), 1.0), 0);
+        }
+
+        var kernel = ImageTensor<T>.NormalizeKernel(engine.Reshape(line, [kSize, kSize]));
 
         // Convolve
         var result = data.Clone();
-        for (int c = 0; c < data.Channels; c++)
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double val = 0;
-                    for (int ky = 0; ky < kSize; ky++)
-                        for (int kx = 0; kx < kSize; kx++)
-                        {
-                            int sy = Math.Max(0, Math.Min(data.Height - 1, y + ky - half));
-                            int sx = Math.Max(0, Math.Min(data.Width - 1, x + kx - half));
-                            val += NumOps.ToDouble(data.GetPixel(sy, sx, c)) * kernel[ky, kx];
-                        }
-                    result.SetPixel(y, x, c, NumOps.FromDouble(val));
-                }
+        result.SetFromPlanarTensor(
+            ImageTensor<T>.Correlate(data.ToPlanarTensor(), kernel, mirror: false));
 
         return result;
     }

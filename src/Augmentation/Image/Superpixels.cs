@@ -27,6 +27,10 @@ public class Superpixels<T> : ImageAugmenterBase<T>
         int gridH = (data.Height + cellH - 1) / cellH;
         int gridW = (data.Width + cellW - 1) / cellW;
 
+        var engine = Engine;
+        var original = data.ToPlanarTensor();
+        var image = original;
+        int channels = data.Channels;
         for (int gy = 0; gy < gridH; gy++)
         {
             for (int gx = 0; gx < gridW; gx++)
@@ -39,23 +43,14 @@ public class Superpixels<T> : ImageAugmenterBase<T>
                 int endX = Math.Min(startX + cellW, data.Width);
                 int count = (endY - startY) * (endX - startX);
 
-                // Compute average color for this cell
-                var avg = new double[data.Channels];
-                for (int y = startY; y < endY; y++)
-                    for (int x = startX; x < endX; x++)
-                        for (int c = 0; c < data.Channels; c++)
-                            avg[c] += NumOps.ToDouble(data.GetPixel(y, x, c));
-
-                for (int c = 0; c < data.Channels; c++)
-                    avg[c] /= count;
-
-                // Replace pixels with average
-                for (int y = startY; y < endY; y++)
-                    for (int x = startX; x < endX; x++)
-                        for (int c = 0; c < data.Channels; c++)
-                            result.SetPixel(y, x, c, NumOps.FromDouble(avg[c]));
+                // Replace the cell's pixels with its average color
+                var cell = engine.TensorSlice(original, [0, startY, startX], [channels, endY - startY, endX - startX]);
+                var avg = engine.ReduceMean(cell, [1, 2], true);
+                image = engine.TensorSetSlice(image, engine.TensorBroadcastTo(avg, cell._shape), [0, startY, startX]);
             }
         }
+
+        result.SetFromPlanarTensor(image);
 
         return result;
     }

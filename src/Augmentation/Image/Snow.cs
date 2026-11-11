@@ -27,7 +27,9 @@ public class Snow<T> : ImageAugmenterBase<T>
         double brightness = context.GetRandomDouble(MinBrightness, MaxBrightness);
 
         // Add snow particles
+        // Mark snow particles (RNG draws in the original order); they become fully white
         int numParticles = (int)(snowPoint * data.Height * data.Width * 0.1);
+        var snowMask = new int[data.Height * data.Width];
         for (int i = 0; i < numParticles; i++)
         {
             int y = context.GetRandomInt(0, data.Height);
@@ -40,32 +42,22 @@ public class Snow<T> : ImageAugmenterBase<T>
                     int ny = y + dy; int nx = x + dx;
                     if (ny < 0 || ny >= data.Height || nx < 0 || nx >= data.Width) continue;
                     if (dy * dy + dx * dx > radius * radius) continue;
-
-                    for (int c = 0; c < data.Channels; c++)
-                        result.SetPixel(ny, nx, c, NumOps.FromDouble(maxVal));
+                    snowMask[ny * data.Width + nx] = 1;
                 }
         }
 
-        // Brighten the overall image
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                // Compute luminance
-                double lum = 0;
-                for (int c = 0; c < data.Channels; c++)
-                    lum += NumOps.ToDouble(result.GetPixel(y, x, c));
-                lum /= data.Channels;
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var mask = engine.TensorBroadcastTo(
+            new Tensor<int>(snowMask, [1, data.Height, data.Width]).Cast<T>(), image._shape);
+        var snowed = engine.TensorWhere(mask, ImageTensor<T>.Constant(image, maxVal), image);
 
-                double normLum = lum / maxVal;
-                if (normLum > (1 - snowPoint))
-                {
-                    for (int c = 0; c < data.Channels; c++)
-                    {
-                        double val = NumOps.ToDouble(result.GetPixel(y, x, c)) * brightness;
-                        result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                    }
-                }
-            }
+        // Brighten pixels whose mean luminance (normalized) exceeds 1 - snowPoint
+        var normLum = engine.TensorDivideScalar(engine.ReduceMean(snowed, [0], true), NumOps.FromDouble(maxVal));
+        var bright = engine.TensorBroadcastTo(engine.TensorGreaterThan(normLum, NumOps.FromDouble(1 - snowPoint)), image._shape);
+        var brightened = engine.TensorClamp(
+            engine.TensorMultiplyScalar(snowed, NumOps.FromDouble(brightness)), NumOps.Zero, NumOps.FromDouble(maxVal));
+        result.SetFromPlanarTensor(engine.TensorWhere(bright, brightened, snowed));
 
         return result;
     }

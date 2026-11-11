@@ -21,43 +21,43 @@ public class RandomToneCurve<T> : ImageAugmenterBase<T>
         var result = data.Clone();
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
 
-        // Generate random control points for the tone curve
-        var controlX = new double[NumControlPoints + 2];
-        var controlY = new double[NumControlPoints + 2];
-        controlX[0] = 0; controlY[0] = 0;
-        controlX[NumControlPoints + 1] = 1; controlY[NumControlPoints + 1] = 1;
+        // Random control points for the tone curve: x_i = i / (n + 1) for i = 0 .. n + 1, and
+        // y_i = clamp(x_i + U(-Scale, Scale), 0, 1) for the inner points (y = 0 and 1 at the ends)
+        var engine = Engine;
+        int points = NumControlPoints + 2;
+        var knotsX = engine.TensorDivideScalar(
+            engine.TensorArange<T>(0, points, 1), NumOps.FromDouble(NumControlPoints + 1));
+        var innerY = engine.TensorClamp(
+            engine.TensorAdd(
+                engine.TensorSlice(knotsX, [1], [NumControlPoints]),
+                AugmentationRandom<T>.Uniform(context, [NumControlPoints], -Scale, Scale)),
+            NumOps.Zero, NumOps.One);
+        var knotsY = engine.TensorConcatenate(
+            [new Tensor<T>([1]), innerY, ImageTensor<T>.Constant(new Tensor<T>([1]), 1.0)], 0);
 
-        for (int i = 1; i <= NumControlPoints; i++)
-        {
-            controlX[i] = (double)i / (NumControlPoints + 1);
-            controlY[i] = controlX[i] + context.GetRandomDouble(-Scale, Scale);
-            controlY[i] = Math.Max(0, Math.Min(1, controlY[i]));
-        }
+        // Piecewise-linear lookup between control points: segment = first control point at or above
+        // the normalized value (the last segment when none is)
+        var upperX = engine.TensorSlice(knotsX, [1], [points - 1]);
 
-        // Build lookup using linear interpolation between control points
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double normalized = val / maxVal;
+        var image = data.ToPlanarTensor();
+        var normalized = engine.TensorDivideScalar(image, NumOps.FromDouble(maxVal));
+        var seg = engine.TensorClampMax(engine.TensorSearchSorted(upperX, normalized, false), points - 2);
+        var next = engine.TensorAddScalar(seg, 1);
 
-                    // Find segment
-                    int seg = 0;
-                    for (int i = 1; i < controlX.Length; i++)
-                    {
-                        if (normalized <= controlX[i]) { seg = i - 1; break; }
-                        seg = i - 1;
-                    }
+        var x0 = engine.TensorTake(knotsX, seg);
+        var x1 = engine.TensorTake(knotsX, next);
+        var y0 = engine.TensorTake(knotsY, seg);
+        var y1 = engine.TensorTake(knotsY, next);
 
-                    double t = (controlX[seg + 1] - controlX[seg]) > 1e-10
-                        ? (normalized - controlX[seg]) / (controlX[seg + 1] - controlX[seg])
-                        : 0;
-                    double mapped = controlY[seg] + t * (controlY[seg + 1] - controlY[seg]);
+        var width = engine.TensorSubtract(x1, x0);
+        var t = engine.TensorWhere(
+            engine.TensorGreaterThan(width, NumOps.FromDouble(1e-10)),
+            engine.TensorDivide(engine.TensorSubtract(normalized, x0), width),
+            ImageTensor<T>.Constant(width, 0.0));
+        var mapped = engine.TensorAdd(y0, engine.TensorMultiply(t, engine.TensorSubtract(y1, y0)));
 
-                    result.SetPixel(y, x, c,
-                        NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, mapped * maxVal))));
-                }
+        result.SetFromPlanarTensor(engine.TensorClamp(
+            engine.TensorMultiplyScalar(mapped, NumOps.FromDouble(maxVal)), NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

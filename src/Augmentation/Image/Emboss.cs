@@ -36,26 +36,13 @@ public class Emboss<T> : ImageAugmenterBase<T>
             { 0,          strength,  strength }
         };
 
-        for (int c = 0; c < data.Channels; c++)
-        {
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double original = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double embossed = 0;
-
-                    for (int ky = -1; ky <= 1; ky++)
-                        for (int kx = -1; kx <= 1; kx++)
-                        {
-                            int ny = Math.Max(0, Math.Min(data.Height - 1, y + ky));
-                            int nx = Math.Max(0, Math.Min(data.Width - 1, x + kx));
-                            embossed += NumOps.ToDouble(data.GetPixel(ny, nx, c)) * kernel[ky + 1, kx + 1];
-                        }
-
-                    double blended = original * (1 - alpha) + embossed * alpha;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, blended))));
-                }
-        }
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var embossed = ImageTensor<T>.Correlate(image, ImageTensor<T>.KernelTensor(kernel), mirror: false);
+        var blended = engine.TensorAdd(
+            engine.TensorMultiplyScalar(image, NumOps.FromDouble(1 - alpha)),
+            engine.TensorMultiplyScalar(embossed, NumOps.FromDouble(alpha)));
+        result.SetFromPlanarTensor(engine.TensorClamp(blended, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

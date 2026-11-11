@@ -21,15 +21,14 @@ public class SpeckleNoise<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double noise = context.SampleGaussian(0, std);
-                    double noisy = val + val * noise;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, noisy))));
-                }
+        int h = data.Height, w = data.Width, channels = data.Channels;
+        var noise = AugmentationRandom<T>.Gaussian(context, [h, w, channels], 0, std);
+
+        // noisy = val + val * noise
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var noisy = engine.TensorAdd(image, engine.TensorMultiply(image, ImageTensor<T>.PlanarFromInterleaved(noise, h, w, channels)));
+        result.SetFromPlanarTensor(engine.TensorClamp(noisy, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

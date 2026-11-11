@@ -26,21 +26,9 @@ public class Erode<T> : ImageAugmenterBase<T>
             var input = result.Clone();
             result = input.Clone();
 
-            for (int c = 0; c < data.Channels; c++)
-                for (int y = 0; y < data.Height; y++)
-                    for (int x = 0; x < data.Width; x++)
-                    {
-                        double minVal = double.MaxValue;
-                        for (int ky = -half; ky <= half; ky++)
-                            for (int kx = -half; kx <= half; kx++)
-                            {
-                                int ny = Math.Max(0, Math.Min(data.Height - 1, y + ky));
-                                int nx = Math.Max(0, Math.Min(data.Width - 1, x + kx));
-                                double val = NumOps.ToDouble(input.GetPixel(ny, nx, c));
-                                if (val < minVal) minVal = val;
-                            }
-                        result.SetPixel(y, x, c, NumOps.FromDouble(minVal));
-                    }
+            // Minimum over the edge-replicated neighbourhood
+            var eroded = Engine.TensorAmin(ImageTensor<T>.Neighbourhoods(input.ToPlanarTensor(), 2 * half + 1), [3], false);
+            result.SetFromPlanarTensor(eroded);
         }
 
         return result;

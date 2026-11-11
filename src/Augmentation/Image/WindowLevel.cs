@@ -32,15 +32,22 @@ public class WindowLevel<T> : ImageAugmenterBase<T>
         double upper = (center + width / 2) * maxVal;
         double range = upper - lower;
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double windowed = range > 1e-10 ? (val - lower) / range * maxVal : maxVal / 2;
-                    result.SetPixel(y, x, c,
-                        NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, windowed))));
-                }
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        Tensor<T> windowed;
+        if (range > 1e-10)
+        {
+            windowed = engine.TensorMultiplyScalar(
+                engine.TensorDivideScalar(engine.TensorSubtractScalar(image, NumOps.FromDouble(lower)), NumOps.FromDouble(range)),
+                NumOps.FromDouble(maxVal));
+        }
+        else
+        {
+            engine.TensorFill(image, NumOps.FromDouble(maxVal / 2));
+            windowed = image;
+        }
+
+        result.SetFromPlanarTensor(engine.TensorClamp(windowed, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

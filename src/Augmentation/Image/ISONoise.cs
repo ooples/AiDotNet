@@ -26,20 +26,21 @@ public class ISONoise<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                // Luminance noise (same for all channels)
-                double lumNoise = context.SampleGaussian(0, intensity * 0.01 * maxVal);
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    // Per-channel color noise
-                    double colorNoise = context.SampleGaussian(0, colorShift * maxVal);
-                    double noisy = val + lumNoise + colorNoise;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, noisy))));
-                }
-            }
+        // Draw luminance noise (one per pixel) and colour noise (one per channel) in loop order
+        int h = data.Height, w = data.Width, channels = data.Channels;
+        var engine = Engine;
+        var draws = AugmentationRandom<T>.StandardNormal(context, [h * w, 1 + channels]);
+        var lumNoise = engine.TensorMultiplyScalar(
+            engine.Reshape(engine.TensorSlice(draws, [0, 0], [h * w, 1]), [1, h, w]),
+            NumOps.FromDouble(intensity * 0.01 * maxVal));
+        var colorNoise = engine.TensorMultiplyScalar(
+            engine.TensorSlice(draws, [0, 1], [h * w, channels]), NumOps.FromDouble(colorShift * maxVal));
+
+        // noisy = val + lumNoise + colorNoise
+        var noisy = engine.TensorAdd(
+            engine.TensorAdd(data.ToPlanarTensor(), lumNoise),
+            ImageTensor<T>.PlanarFromInterleaved(colorNoise.Contiguous(), h, w, channels));
+        result.SetFromPlanarTensor(engine.TensorClamp(noisy, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

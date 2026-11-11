@@ -25,24 +25,15 @@ public class RandomBrightnessContrast<T> : ImageAugmenterBase<T>
         double contrastFactor = context.GetRandomDouble(1 - ContrastLimit, 1 + ContrastLimit);
 
         // Compute per-channel mean for contrast adjustment (prevents color shifts)
-        int pixelCount = data.Height * data.Width;
-        var channelMean = new double[data.Channels];
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                    channelMean[c] += NumOps.ToDouble(data.GetPixel(y, x, c));
-        for (int c = 0; c < data.Channels; c++)
-            channelMean[c] /= pixelCount;
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var channelMean = engine.ReduceMean(image, [1, 2], true);
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    // Apply contrast around per-channel mean, then brightness
-                    val = (val - channelMean[c]) * contrastFactor + channelMean[c] + brightnessFactor * maxVal;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                }
+        var contrasted = engine.TensorAdd(
+            engine.TensorMultiplyScalar(engine.TensorSubtract(image, channelMean), NumOps.FromDouble(contrastFactor)),
+            channelMean);
+        var adjusted = engine.TensorAddScalar(contrasted, NumOps.FromDouble(brightnessFactor * maxVal));
+        result.SetFromPlanarTensor(engine.TensorClamp(adjusted, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

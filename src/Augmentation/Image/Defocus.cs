@@ -20,41 +20,15 @@ public class Defocus<T> : ImageAugmenterBase<T>
     {
         int radius = context.GetRandomInt(MinRadius, MaxRadius + 1);
         int kSize = radius * 2 + 1;
+        var engine = Engine;
 
-        // Create circular kernel
-        var kernel = new double[kSize, kSize];
-        double sum = 0;
-        for (int ky = 0; ky < kSize; ky++)
-            for (int kx = 0; kx < kSize; kx++)
-            {
-                double dx = kx - radius, dy = ky - radius;
-                if (dx * dx + dy * dy <= (double)radius * radius)
-                {
-                    kernel[ky, kx] = 1.0;
-                    sum += 1.0;
-                }
-            }
-
-        if (sum > 0)
-            for (int ky = 0; ky < kSize; ky++)
-                for (int kx = 0; kx < kSize; kx++)
-                    kernel[ky, kx] /= sum;
+        // Create circular kernel: taps within the radius, normalized to sum to 1
+        var disk = engine.TensorLessThan(ImageTensor<T>.KernelRadiusSquared(kSize), radius * radius + 1).Cast<T>();
+        var kernel = ImageTensor<T>.NormalizeKernel(disk);
 
         var result = data.Clone();
-        for (int c = 0; c < data.Channels; c++)
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double val = 0;
-                    for (int ky = 0; ky < kSize; ky++)
-                        for (int kx = 0; kx < kSize; kx++)
-                        {
-                            int sy = Math.Max(0, Math.Min(data.Height - 1, y + ky - radius));
-                            int sx = Math.Max(0, Math.Min(data.Width - 1, x + kx - radius));
-                            val += NumOps.ToDouble(data.GetPixel(sy, sx, c)) * kernel[ky, kx];
-                        }
-                    result.SetPixel(y, x, c, NumOps.FromDouble(val));
-                }
+        result.SetFromPlanarTensor(
+            ImageTensor<T>.Correlate(data.ToPlanarTensor(), kernel, mirror: false));
 
         return result;
     }
