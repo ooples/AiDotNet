@@ -114,6 +114,7 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
         var rand = Options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
+
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Initialize membership matrix randomly
@@ -121,56 +122,37 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
         InitializeMembership(n, k, rand);
 
         // Cluster centers
-        var centers = new T[k, d];
+        var centers = new Matrix<T>(k, d);
 
         // Iterative optimization
         for (int iter = 0; iter < Options.MaxIterations; iter++)
         {
             // Step 1: Update centers
-            UpdateCenters(x, centers, n, d, k, m);
+            centers = UpdateCenters(x, m);
 
             // Step 2: Update memberships
-            T maxChange = UpdateMemberships(x, centers, n, d, k, m, metric);
+            T maxChange = UpdateMemberships(x, centers, m, metric);
 
             // Check convergence
-            if (NumOps.LessThan(maxChange, NumOps.FromDouble(Options.Tolerance)))
+            if (IsBelowTolerance(maxChange))
             {
                 break;
             }
         }
 
         // Set cluster centers
-        ClusterCenters = new Matrix<T>(k, d);
-        for (int c = 0; c < k; c++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[c, j] = centers[c, j];
-            }
-        }
+        ClusterCenters = centers;
 
-        // Assign hard labels based on maximum membership
-        Labels = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            int bestCluster = 0;
-            T maxMembership = _membershipMatrix[i, 0];
-
-            for (int c = 1; c < k; c++)
-            {
-                if (NumOps.GreaterThan(_membershipMatrix[i, c], maxMembership))
-                {
-                    maxMembership = _membershipMatrix[i, c];
-                    bestCluster = c;
-                }
-            }
-
-            Labels[i] = NumOps.FromDouble(bestCluster);
-        }
+        // Assign hard labels based on maximum membership (first one on ties)
+        Labels = ClusteringTensorOps.FromIntArray<T>(
+            Engine.TensorArgMax(Tensor<T>.FromMatrix(_membershipMatrix), 1).ToArray());
 
         MergeDegenerateClusters(x);
         IsTrained = true;
     }
+
+    /// <summary>True when the largest membership change is below the tolerance.</summary>
+    private bool IsBelowTolerance(T maxChange) => NumOps.LessThan(maxChange, NumOps.FromDouble(Options.Tolerance));
 
     private void InitializeMembership(int n, int k, Random rand)
     {
@@ -191,94 +173,67 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
         }
     }
 
-    private void UpdateCenters(Matrix<T> x, T[,] centers, int n, int d, int k, double m)
+    private Matrix<T> UpdateCenters(Matrix<T> x, double m)
     {
-        for (int c = 0; c < k; c++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T numerator = NumOps.Zero;
-                T denominator = NumOps.Zero;
-
-                for (int i = 0; i < n; i++)
-                {
-                    T membership = NumOps.FromDouble(Math.Pow(NumOps.ToDouble(_membershipMatrix[i, c]), m));
-                    numerator = NumOps.Add(numerator, NumOps.Multiply(membership, x[i, j]));
-                    denominator = NumOps.Add(denominator, membership);
-                }
-
-                centers[c, j] = NumOps.GreaterThan(denominator, NumOps.Zero)
-                    ? NumOps.Divide(numerator, denominator)
-                    : NumOps.Zero;
-            }
-        }
+        // c_k = sum_i u_ik^m x_i / sum_i u_ik^m (zero when the weights vanish)
+        var weights = Engine.TensorPower(Tensor<T>.FromMatrix(_membershipMatrix), NumOps.FromDouble(m));
+        var numerator = Engine.TensorMatMul(Engine.TensorTranspose(weights), Tensor<T>.FromMatrix(x)).ToMatrix();
+        var denominator = Engine.ReduceSum(weights, new[] { 0 }, false).ToVector();
+        var positive = Engine.TensorGreaterThan(denominator.AsTensor(), NumOps.Zero);
+        var safe = Engine.TensorWhere(positive, denominator.AsTensor(), Engine.TensorOnesLike(denominator.AsTensor()));
+        var divisor = Engine.TensorBroadcastTo(
+            Engine.Reshape(safe, new[] { numerator.Rows, 1 }), new[] { numerator.Rows, numerator.Columns });
+        var centers = Engine.TensorDivide(Tensor<T>.FromMatrix(numerator), divisor).ToMatrix();
+        return ClusteringTensorOps.RowsWherePositive(denominator, centers, new Matrix<T>(centers.Rows, centers.Columns));
     }
 
-    private T UpdateMemberships(Matrix<T> x, T[,] centers, int n, int d, int k, double m, IDistanceMetric<T> metric)
+    private T UpdateMemberships(Matrix<T> x, Matrix<T> centers, double m, IDistanceMetric<T> metric)
     {
-        T maxChange = NumOps.Zero;
-        double exponent = 2.0 / (m - 1);
-        T epsilon = NumOps.FromDouble(1e-10);
+        var oldMemberships = Tensor<T>.FromMatrix(_membershipMatrix);
+        var newMemberships = Tensor<T>.FromMatrix(MembershipsFromDistances(metric.ComputePairwise(x, centers), m));
+        _membershipMatrix = newMemberships.ToMatrix();
 
-        // Cache point arrays for allocation-free distance computation
-        var pointArr = new T[d];
-        var centerArr = new T[d];
-
-        for (int i = 0; i < n; i++)
+        // Largest absolute membership change (zero when there are no memberships)
+        if (newMemberships.Length == 0)
         {
-            for (int j = 0; j < d; j++)
-                pointArr[j] = x[i, j];
-
-            // Compute distances to all centers
-            var distances = new T[k];
-            bool hasZeroDistance = false;
-            int zeroCluster = -1;
-
-            for (int c = 0; c < k; c++)
-            {
-                for (int j = 0; j < d; j++)
-                    centerArr[j] = centers[c, j];
-
-                distances[c] = metric.ComputeInline(pointArr, centerArr, d);
-
-                if (NumOps.LessThan(distances[c], epsilon))
-                {
-                    hasZeroDistance = true;
-                    zeroCluster = c;
-                }
-            }
-
-            // Update memberships
-            for (int c = 0; c < k; c++)
-            {
-                T oldMembership = _membershipMatrix[i, c];
-                T newMembership;
-
-                if (hasZeroDistance)
-                {
-                    // Point is exactly at a center
-                    newMembership = (c == zeroCluster) ? NumOps.One : NumOps.Zero;
-                }
-                else
-                {
-                    // Standard update formula — Math.Pow at double boundary
-                    double distC = NumOps.ToDouble(distances[c]);
-                    double sum = 0;
-                    for (int j = 0; j < k; j++)
-                    {
-                        sum += Math.Pow(distC / NumOps.ToDouble(distances[j]), exponent);
-                    }
-                    newMembership = NumOps.FromDouble(1.0 / sum);
-                }
-
-                _membershipMatrix[i, c] = newMembership;
-                T change = NumOps.Abs(NumOps.Subtract(newMembership, oldMembership));
-                if (NumOps.GreaterThan(change, maxChange))
-                    maxChange = change;
-            }
+            return NumOps.Zero;
         }
 
-        return maxChange;
+        return Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorSubtract(newMemberships, oldMemberships)));
+    }
+
+    /// <summary>
+    /// u_ic = 1 / sum_j (d_ic / d_ij)^(2 / (m - 1)); a point closer than 1e-10 to a center belongs fully to the
+    /// last such center.
+    /// </summary>
+    private Matrix<T> MembershipsFromDistances(Matrix<T> distances, double m)
+    {
+        int n = distances.Rows;
+        int k = distances.Columns;
+        if (n == 0 || k == 0)
+        {
+            return new Matrix<T>(n, k);
+        }
+
+        var dist = Tensor<T>.FromMatrix(distances);
+        var nearZero = Engine.TensorLessThan(dist, NumOps.FromDouble(1e-10));
+
+        // Rows with a (near) zero distance: one-hot at the last such center
+        var position = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<T>(1, k + 1, 1), new[] { 1, k }), new[] { n, k });
+        var lastZero = Engine.TensorArgMax(Engine.TensorMultiply(nearZero, position), 1);
+        var oneHot = Engine.TensorOneHot<T>(lastZero, k);
+        var hasZero = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.ReduceMax(nearZero, new[] { 1 }, false), new[] { n, 1 }), new[] { n, k });
+
+        // Standard update on the other rows (near-zero entries only occur in rows that take the one-hot)
+        var safe = Engine.TensorWhere(nearZero, Engine.TensorOnesLike(dist), dist);
+        var numerators = Engine.TensorBroadcastTo(Engine.Reshape(safe, new[] { n, k, 1 }), new[] { n, k, k });
+        var denominators = Engine.TensorBroadcastTo(Engine.Reshape(safe, new[] { n, 1, k }), new[] { n, k, k });
+        var ratios = Engine.TensorPower(Engine.TensorDivide(numerators, denominators), NumOps.FromDouble(2.0 / (m - 1)));
+        var standard = Engine.TensorReciprocal(Engine.ReduceSum(ratios, new[] { 2 }, false));
+
+        return Engine.TensorWhere(hasZero, oneHot, standard).ToMatrix();
     }
 
     /// <inheritdoc />
@@ -286,34 +241,16 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int c = 0; c < NumClusters; c++)
-                {
-                    var center = GetRow(ClusterCenters, c);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = c;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <summary>
@@ -321,7 +258,7 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="x">The data matrix.</param>
     /// <returns>Membership matrix (n_samples x n_clusters).</returns>
-    public T[,] PredictMembership(Matrix<T> x)
+    public Matrix<T> PredictMembership(Matrix<T> x)
     {
         ValidateIsTrained();
 
@@ -329,54 +266,18 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
         int k = NumClusters;
         double m = _options.Fuzziness;
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-        T epsilon = NumOps.FromDouble(1e-10);
 
-        var memberships = new T[n, k];
-        double exponent = 2.0 / (m - 1);
-
-        for (int i = 0; i < n; i++)
+        if (ClusterCenters is null)
         {
-            var point = GetRow(x, i);
-
-            var distances = new T[k];
-            bool hasZeroDistance = false;
-            int zeroCluster = -1;
-
-            if (ClusterCenters is not null)
-            {
-                for (int c = 0; c < k; c++)
-                {
-                    var center = GetRow(ClusterCenters, c);
-                    distances[c] = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(distances[c], epsilon))
-                    {
-                        hasZeroDistance = true;
-                        zeroCluster = c;
-                    }
-                }
-            }
-
-            for (int c = 0; c < k; c++)
-            {
-                if (hasZeroDistance)
-                {
-                    memberships[i, c] = (c == zeroCluster) ? NumOps.One : NumOps.Zero;
-                }
-                else
-                {
-                    double distC = NumOps.ToDouble(distances[c]);
-                    double sum = 0;
-                    for (int j = 0; j < k; j++)
-                    {
-                        sum += Math.Pow(distC / NumOps.ToDouble(distances[j]), exponent);
-                    }
-                    memberships[i, c] = NumOps.FromDouble(1.0 / sum);
-                }
-            }
+            // No centers: every ratio is 0 / 0
+            var undefined = new Matrix<T>(n, k);
+            return n * k == 0
+                ? undefined
+                : Engine.TensorFullLike(Tensor<T>.FromMatrix(undefined), NumOps.FromDouble(double.NaN)).ToMatrix();
         }
 
-        return memberships;
+        var centers = ClusterCenters.Rows == k ? ClusterCenters : ClusterCenters.GetSubMatrix(0, 0, k, ClusterCenters.Columns);
+        return MembershipsFromDistances(metric.ComputePairwise(x, centers), m);
     }
 
     /// <inheritdoc />
