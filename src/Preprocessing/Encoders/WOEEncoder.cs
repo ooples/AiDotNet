@@ -37,7 +37,7 @@ public class WOEEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly WOEHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, double>>? _woeValues;
+    private Dictionary<int, CategoryValueMap<T>>? _woeValues;
     private int _nInputFeatures;
 
     /// <summary>
@@ -53,7 +53,7 @@ public class WOEEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the WOE values for each category.
     /// </summary>
-    public Dictionary<int, Dictionary<double, double>>? WOEValues => _woeValues;
+    public Dictionary<int, CategoryValueMap<T>>? WOEValues => _woeValues;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -106,83 +106,61 @@ public class WOEEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
         // Count total events (1s) and non-events (0s)
-        int totalEvents = 0;
-        int totalNonEvents = 0;
+        var y = Tensor<T>.FromVector(target);
+        var events = IsOne(y);
+        var nonEvents = Engine.TensorLessThan(Engine.TensorAbs(y), NumOps.FromDouble(1e-10));
+        var invalid = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(Engine.TensorAdd(events, nonEvents)));
+        if (invalid.Length > 0)
+            throw new ArgumentException($"Target must be binary (0 or 1). Found value: {y.GetFlat(invalid[0])}");
 
-        for (int i = 0; i < target.Length; i++)
-        {
-            double t = NumOps.ToDouble(target[i]);
-            if (Math.Abs(t - 1) < 1e-10)
-            {
-                totalEvents++;
-            }
-            else if (Math.Abs(t) < 1e-10)
-            {
-                totalNonEvents++;
-            }
-            else
-            {
-                throw new ArgumentException($"Target must be binary (0 or 1). Found value: {t}");
-            }
-        }
-
+        int totalEvents = PreprocessingTensorOps.CountNonZero(events);
+        int totalNonEvents = PreprocessingTensorOps.CountNonZero(nonEvents);
         if (totalEvents == 0 || totalNonEvents == 0)
         {
             throw new ArgumentException("Target must contain both classes (0 and 1).");
         }
 
-        _woeValues = new Dictionary<int, Dictionary<double, double>>();
-
+        // WOE per category from its event and non-event counts
+        _woeValues = new Dictionary<int, CategoryValueMap<T>>();
         foreach (int col in columnsToProcess)
         {
-            // Count events and non-events per category
-            var categoryStats = new Dictionary<double, (int Events, int NonEvents)>();
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double categoryValue = NumOps.ToDouble(data[i, col]);
-                double targetValue = NumOps.ToDouble(target[i]);
-
-                if (!categoryStats.TryGetValue(categoryValue, out var stats))
-                {
-                    stats = (0, 0);
-                }
-
-                if (Math.Abs(targetValue - 1) < 1e-10)
-                {
-                    categoryStats[categoryValue] = (stats.Events + 1, stats.NonEvents);
-                }
-                else
-                {
-                    categoryStats[categoryValue] = (stats.Events, stats.NonEvents + 1);
-                }
-            }
-
-            // Calculate WOE for each category
-            var woeMap = new Dictionary<double, double>();
-
-            foreach (var kvp in categoryStats)
-            {
-                double categoryValue = kvp.Key;
-                int events = kvp.Value.Events;
-                int nonEvents = kvp.Value.NonEvents;
-
-                // Add regularization to prevent log(0)
-                double distEvents = (events + _regularization) / (totalEvents + _regularization * categoryStats.Count);
-                double distNonEvents = (nonEvents + _regularization) / (totalNonEvents + _regularization * categoryStats.Count);
-
-                double woe = Math.Log(distEvents / distNonEvents);
-
-                // Clamp to prevent extreme values
-                woe = Math.Max(-5, Math.Min(5, woe));
-
-                woeMap[categoryValue] = woe;
-            }
-
-            _woeValues[col] = woeMap;
+            var column = PreprocessingTensorOps.Column(data, col);
+            var categories = PreprocessingTensorOps.SortedUnique(column);
+            var woe = WeightOfEvidence(column, events, categories, totalEvents, totalNonEvents, out _, out _);
+            _woeValues[col] = new CategoryValueMap<T>(categories, woe);
         }
 
         IsFitted = true;
+    }
+
+    /// <summary>A 0/1 mask of the targets within 1e-10 of 1 (the events).</summary>
+    private Tensor<T> IsOne(Tensor<T> y) =>
+        Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtractScalar(y, NumOps.One)), NumOps.FromDouble(1e-10));
+
+    /// <summary>
+    /// Regularized event and non-event distributions per category and their clamped weight of evidence
+    /// <c>clamp(log(distEvents / distNonEvents), -5, 5)</c>; rows that are not events count as non-events.
+    /// </summary>
+    private Tensor<T> WeightOfEvidence(Tensor<T> column, Tensor<T> events, Tensor<T> categories, int totalEvents,
+        int totalNonEvents, out Tensor<T> distEvents, out Tensor<T> distNonEvents)
+    {
+        var engine = Engine;
+        int k = categories.Length;
+        var position = PreprocessingTensorOps.LookupSorted(categories, column, out _);
+        var counts = PreprocessingTensorOps.CategoryCounts<T>(position, k);
+        var eventCounts = PreprocessingTensorOps.CategorySums(position, events, k);
+        var nonEventCounts = engine.TensorSubtract(counts, eventCounts);
+
+        // Add regularization to prevent log(0)
+        T regularization = NumOps.FromDouble(_regularization);
+        distEvents = engine.TensorDivideScalar(
+            engine.TensorAddScalar(eventCounts, regularization), NumOps.FromDouble(totalEvents + _regularization * k));
+        distNonEvents = engine.TensorDivideScalar(
+            engine.TensorAddScalar(nonEventCounts, regularization), NumOps.FromDouble(totalNonEvents + _regularization * k));
+
+        // Clamp to prevent extreme values
+        return engine.TensorClamp(engine.TensorLog(engine.TensorDivide(distEvents, distNonEvents)),
+            NumOps.FromDouble(-5), NumOps.FromDouble(5));
     }
 
     /// <summary>
@@ -204,48 +182,10 @@ public class WOEEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (!processSet.Contains(j))
-                {
-                    result[i, j] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-
-                if (_woeValues.TryGetValue(j, out var woeMap) &&
-                    woeMap.TryGetValue(categoryValue, out double woe))
-                {
-                    result[i, j] = NumOps.FromDouble(woe);
-                }
-                else
-                {
-                    // Unknown category
-                    switch (_handleUnknown)
-                    {
-                        case WOEHandleUnknown.UseZero:
-                            result[i, j] = NumOps.Zero;
-                            break;
-                        case WOEHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            result[i, j] = NumOps.Zero;
-                            break;
-                    }
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Unknown categories get 0 (or throw)
+        var processSet = new HashSet<int>(GetColumnsToProcess(data.Columns));
+        return CategoryValueMap<T>.EncodeColumns(data, processSet, _woeValues, _ => NumOps.Zero,
+            _handleUnknown == WOEHandleUnknown.Error);
     }
 
     /// <summary>
@@ -262,76 +202,29 @@ public class WOEEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="data">The feature matrix.</param>
     /// <param name="target">The binary target.</param>
     /// <returns>Dictionary mapping column index to IV value.</returns>
-    public Dictionary<int, double> CalculateInformationValue(Matrix<T> data, Vector<T> target)
+    public Dictionary<int, T> CalculateInformationValue(Matrix<T> data, Vector<T> target)
     {
         if (_woeValues is null)
         {
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
-        // Count total events and non-events
-        int totalEvents = 0;
-        int totalNonEvents = 0;
+        // Count total events and non-events (every target that is not 1 is a non-event)
+        var events = IsOne(Tensor<T>.FromVector(target));
+        int totalEvents = PreprocessingTensorOps.CountNonZero(events);
+        int totalNonEvents = target.Length - totalEvents;
 
-        for (int i = 0; i < target.Length; i++)
-        {
-            double t = NumOps.ToDouble(target[i]);
-            if (Math.Abs(t - 1) < 1e-10)
-            {
-                totalEvents++;
-            }
-            else
-            {
-                totalNonEvents++;
-            }
-        }
-
-        var ivValues = new Dictionary<int, double>();
-
+        var ivValues = new Dictionary<int, T>();
         foreach (var colKvp in _woeValues)
         {
             int col = colKvp.Key;
-            var woeMap = colKvp.Value;
+            var column = PreprocessingTensorOps.Column(data, col);
+            var categories = PreprocessingTensorOps.SortedUnique(column);
+            WeightOfEvidence(column, events, categories, totalEvents, totalNonEvents, out var distEvents, out var distNonEvents);
 
-            // Count events/non-events per category
-            var categoryStats = new Dictionary<double, (int Events, int NonEvents)>();
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double categoryValue = NumOps.ToDouble(data[i, col]);
-                double targetValue = NumOps.ToDouble(target[i]);
-
-                if (!categoryStats.TryGetValue(categoryValue, out var stats))
-                {
-                    stats = (0, 0);
-                }
-
-                if (Math.Abs(targetValue - 1) < 1e-10)
-                {
-                    categoryStats[categoryValue] = (stats.Events + 1, stats.NonEvents);
-                }
-                else
-                {
-                    categoryStats[categoryValue] = (stats.Events, stats.NonEvents + 1);
-                }
-            }
-
-            // Calculate IV
-            double iv = 0;
-            foreach (var catKvp in categoryStats)
-            {
-                double categoryValue = catKvp.Key;
-                int events = catKvp.Value.Events;
-                int nonEvents = catKvp.Value.NonEvents;
-
-                double distEvents = (events + _regularization) / (totalEvents + _regularization * categoryStats.Count);
-                double distNonEvents = (nonEvents + _regularization) / (totalNonEvents + _regularization * categoryStats.Count);
-
-                double woe = woeMap.GetValueOrDefault(categoryValue, 0);
-                iv += (distEvents - distNonEvents) * woe;
-            }
-
-            ivValues[col] = iv;
+            // IV = sum over categories of (distEvents - distNonEvents) * fitted WOE (0 for categories not seen in fit)
+            var woe = colKvp.Value.Map(categories, new Tensor<T>(new[] { categories.Length }), out _);
+            ivValues[col] = Engine.TensorSum(Engine.TensorMultiply(Engine.TensorSubtract(distEvents, distNonEvents), woe));
         }
 
         return ivValues;
