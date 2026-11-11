@@ -230,6 +230,13 @@ $fleet = @((New-Runner 'online' @('self-hosted', 'cpu-a')), (New-Runner 'online'
 $plan = Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet
 Assert-True ($plan.Count -eq 10 -and $plan.Label -ceq 'cpu-a' -and -not $plan.Warning) `
     'Two online runners at five shards each should take ten.'
+Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet -Pending 4).Count -eq 6) `
+    'Jobs already queued for the label did not reduce the routed count.'
+Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet -Pending 25).Count -eq 0) `
+    'A backlog larger than the capacity still routed shards.'
+Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet -Pending -3).Count -eq 10) `
+    'A negative pending count raised the routed count.'
+Assert-True ((Get-SelfHostedPendingJobs -Repository 'o/r' -Token '' -Label 'cpu-a') -eq 0) 'A missing token produced a pending count.'
 Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"CPU-A","shardsPerRunner":5}' -Runners $fleet).Count -eq 0) `
     'A label matched a runner label of another case.'
 Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners @()).Count -eq 0) `
