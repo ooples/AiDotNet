@@ -32,8 +32,8 @@ public class JamesSteinEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly JamesSteinHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, double>>? _encodingMap;
-    private double _globalMean;
+    private Dictionary<int, CategoryValueMap<T>>? _encodingMap;
+    private T _globalMean = MathHelper.GetNumericOperations<T>().Zero;
     private int _nInputFeatures;
 
     /// <summary>
@@ -44,7 +44,7 @@ public class JamesSteinEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the global target mean.
     /// </summary>
-    public double GlobalMean => _globalMean;
+    public T GlobalMean => _globalMean;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -86,91 +86,48 @@ public class JamesSteinEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nInputFeatures = data.Columns;
+        var engine = Engine;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
         // Compute global mean and variance
         int n = target.Length;
-        double targetSum = 0;
-        for (int i = 0; i < n; i++)
-        {
-            targetSum += NumOps.ToDouble(target[i]);
-        }
-        _globalMean = targetSum / n;
+        var y = Tensor<T>.FromVector(target);
+        _globalMean = engine.TensorMean(y);
+        T globalMean = _globalMean;
+        T globalVariance = NumOps.Divide(
+            engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, globalMean)), NumOps.FromDouble(n - 1));
+        bool degenerateVariance = NumOps.LessThan(globalVariance, NumOps.FromDouble(1e-10));
+        T eps = NumOps.FromDouble(1e-10);
+        T two = NumOps.FromDouble(2);
 
-        double globalVariance = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(target[i]) - _globalMean;
-            globalVariance += diff * diff;
-        }
-        globalVariance /= (n - 1);
-
-        _encodingMap = new Dictionary<int, Dictionary<double, double>>();
-
+        _encodingMap = new Dictionary<int, CategoryValueMap<T>>();
         foreach (int col in columnsToProcess)
         {
-            var categoryStats = new Dictionary<double, (double Sum, double SumSq, int Count)>();
-
-            // Collect statistics per category
-            for (int i = 0; i < n; i++)
+            _encodingMap[col] = CategoryValueMap<T>.FromTargetStatistics(PreprocessingTensorOps.Column(data, col), y, (counts, sums) =>
             {
-                double categoryValue = NumOps.ToDouble(data[i, col]);
-                double targetValue = NumOps.ToDouble(target[i]);
+                var categoryMean = engine.TensorDivide(sums, counts);
+                var full = PreprocessingTensorOps.Filled(new[] { counts.Length }, NumOps.One);
 
-                if (!categoryStats.TryGetValue(categoryValue, out var stats))
+                // James-Stein shrinkage B = clamp(1 - (count - 2) * sigma^2 / (count * (mean - grand_mean)^2), 0, 1);
+                // full shrinkage to the global mean for count <= 2, a degenerate variance or a vanishing denominator
+                Tensor<T> shrinkage = full;
+                if (!degenerateVariance)
                 {
-                    stats = (0, 0, 0);
+                    var denominator = engine.TensorMultiply(counts, engine.TensorSquare(engine.TensorSubtractScalar(categoryMean, globalMean)));
+                    var partial = engine.TensorClamp(
+                        PreprocessingTensorOps.OneMinus(engine.TensorDivide(
+                            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(counts, two), globalVariance), denominator)),
+                        NumOps.Zero, NumOps.One);
+                    var shrinkable = engine.TensorMultiply(
+                        engine.TensorGreaterThan(counts, two), PreprocessingTensorOps.AtLeast(denominator, eps));
+                    shrinkage = engine.TensorWhere(shrinkable, partial, full);
                 }
 
-                categoryStats[categoryValue] = (
-                    stats.Sum + targetValue,
-                    stats.SumSq + targetValue * targetValue,
-                    stats.Count + 1
-                );
-            }
-
-            // Compute James-Stein shrinkage for each category
-            var colEncoding = new Dictionary<double, double>();
-
-            foreach (var kvp in categoryStats)
-            {
-                double categoryValue = kvp.Key;
-                var (sum, sumSq, count) = kvp.Value;
-
-                double categoryMean = sum / count;
-
-                // Compute shrinkage factor B using James-Stein formula
-                // B = (k - 2) * sigma^2 / (n * (mean - grand_mean)^2)
-                // where k is the number of categories
-                double shrinkage;
-
-                if (count <= 2 || globalVariance < 1e-10)
-                {
-                    shrinkage = 1.0; // Full shrinkage to global mean
-                }
-                else
-                {
-                    double diffFromGlobal = categoryMean - _globalMean;
-                    double denominator = count * diffFromGlobal * diffFromGlobal;
-
-                    if (denominator < 1e-10)
-                    {
-                        shrinkage = 1.0;
-                    }
-                    else
-                    {
-                        // Simplified James-Stein shrinkage
-                        shrinkage = Math.Max(0, 1 - (count - 2) * globalVariance / denominator);
-                        shrinkage = Math.Min(1, shrinkage);
-                    }
-                }
-
-                // Apply shrinkage: (1 - B) * category_mean + B * global_mean
-                double encodedValue = (1 - shrinkage) * categoryMean + shrinkage * _globalMean;
-                colEncoding[categoryValue] = encodedValue;
-            }
-
-            _encodingMap[col] = colEncoding;
+                // (1 - B) * category_mean + B * global_mean
+                return engine.TensorAdd(
+                    engine.TensorMultiply(PreprocessingTensorOps.OneMinus(shrinkage), categoryMean),
+                    engine.TensorMultiplyScalar(shrinkage, globalMean));
+            });
         }
 
         IsFitted = true;
@@ -195,47 +152,9 @@ public class JamesSteinEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("JamesSteinEncoder has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (!processSet.Contains(j))
-                {
-                    result[i, j] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-
-                if (_encodingMap.TryGetValue(j, out var colEncoding) &&
-                    colEncoding.TryGetValue(categoryValue, out double encodedValue))
-                {
-                    result[i, j] = NumOps.FromDouble(encodedValue);
-                }
-                else
-                {
-                    switch (_handleUnknown)
-                    {
-                        case JamesSteinHandleUnknown.UseGlobalMean:
-                            result[i, j] = NumOps.FromDouble(_globalMean);
-                            break;
-                        case JamesSteinHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            result[i, j] = NumOps.FromDouble(_globalMean);
-                            break;
-                    }
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        var processSet = new HashSet<int>(GetColumnsToProcess(data.Columns));
+        return CategoryValueMap<T>.EncodeColumns(data, processSet, _encodingMap, _ => _globalMean,
+            _handleUnknown == JamesSteinHandleUnknown.Error);
     }
 
     /// <summary>
