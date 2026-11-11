@@ -208,6 +208,29 @@ public class ActiveLearningStrategyTests
         Assert.Equal(selected.Distinct().Count(), selected.Length);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task EntropySampling_BatchDiversity_NaNPredictions_TerminatesWithoutSelectingNaNScores()
+    {
+        // Arrange - NaN parameters make every logit, probability and entropy score NaN. The greedy
+        // diversity loop used to retry forever when no remaining candidate beat MinValue.
+        var strategy = new EntropySampling<double> { UseBatchDiversity = true };
+        var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
+        var nanParameters = new Vector<double>(10);
+        for (int i = 0; i < nanParameters.Length; i++)
+        {
+            nanParameters[i] = double.NaN;
+        }
+
+        model.SetParameters(nanParameters);
+        var pool = ActiveLearningTestHelper.CreateUnlabeledPool(15, 5);
+
+        // Act - run off the test thread so the timeout can fire if selection hangs
+        var selected = await Task.Run(() => strategy.SelectSamples(model, pool, 5));
+
+        // Assert - no candidate has a comparable score, so the greedy selection stops with none
+        Assert.Empty(selected);
+    }
+
     #endregion
 
     #region LeastConfidenceSampling Tests

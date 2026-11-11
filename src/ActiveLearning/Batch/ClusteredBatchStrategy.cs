@@ -117,14 +117,10 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
         _lastClusterAssignments = clusterAssignments;
 
         // Map scores to candidates
-        var candidateScores = new T[candidateIndices.Length];
-        for (int i = 0; i < candidateIndices.Length; i++)
-        {
-            candidateScores[i] = scores[i];
-        }
+        var candidateScores = scores.GetSubVector(0, candidateIndices.Length);
 
         // Select from clusters
-        var selected = SelectFromClusters(clusterAssignments, new Vector<T>(candidateScores), effectiveBatchSize);
+        var selected = SelectFromClusters(clusterAssignments, candidateScores, effectiveBatchSize);
 
         // Map back to pool indices
         var poolIndices = new int[selected.Length];
@@ -154,23 +150,35 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
         }
 
         // Group samples by cluster
-        var clusterGroups = new Dictionary<int, List<(int Index, T Score)>>();
+        var memberLists = new Dictionary<int, List<int>>();
 
         for (int i = 0; i < clusterAssignments.Length; i++)
         {
             int cluster = clusterAssignments[i];
-            if (!clusterGroups.TryGetValue(cluster, out var group))
+            if (!memberLists.TryGetValue(cluster, out var members))
             {
-                group = new List<(int Index, T Score)>();
-                clusterGroups[cluster] = group;
+                members = new List<int>();
+                memberLists[cluster] = members;
             }
-            group.Add((i, scores[i]));
+            members.Add(i);
         }
 
-        // Sort each cluster by score (descending)
-        foreach (var group in clusterGroups.Values)
+        // Sort each cluster by score (descending), ties in pool order
+        var engine = AiDotNetEngine.Current;
+        var scoreTensor = Tensor<T>.FromVector(scores);
+        var clusterGroups = new Dictionary<int, List<(int Index, int Rank)>>();
+        foreach (var entry in memberLists)
         {
-            group.Sort((a, b) => NumOps.Compare(b.Score, a.Score));
+            var members = entry.Value.ToArray();
+            var memberScores = engine.TensorIndexSelect(scoreTensor, new Tensor<int>(members, new[] { members.Length }), 0);
+            var order = ActiveLearningEngineOps.StableOrder(memberScores, descending: true);
+            var group = new List<(int Index, int Rank)>(members.Length);
+            for (int r = 0; r < order.Length; r++)
+            {
+                group.Add((members[order[r]], r));
+            }
+
+            clusterGroups[entry.Key] = group;
         }
 
         // Round-robin selection from clusters
@@ -269,25 +277,28 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
         }
 
         int n = features.Count;
-        int dim = features[0].Length;
+        var engine = AiDotNetEngine.Current;
+        var samples = ActiveLearningEngineOps.StackVectors(features);
 
         // Initialize centroids using k-means++
-        var centroids = InitializeCentroids(features, k);
+        var centroids = InitializeCentroids(samples, k);
         var assignments = new int[n];
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Assign samples to nearest centroid
+            // Assign samples to nearest centroid (first one on ties)
+            var nearest = engine.TensorArgMin(ActiveLearningEngineOps.SquaredDistances(samples, centroids), 1).ToArray();
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
-                int nearest = FindNearestCentroid(features[i], centroids);
-                if (nearest != assignments[i])
+                if (nearest[i] != assignments[i])
                 {
-                    assignments[i] = nearest;
                     changed = true;
+                    break;
                 }
             }
+
+            assignments = nearest;
 
             if (!changed)
             {
@@ -295,147 +306,87 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
             }
 
             // Update centroids
-            centroids = UpdateCentroids(features, assignments, k, dim);
+            centroids = UpdateCentroids(samples, assignments, k);
         }
 
         return assignments;
     }
 
-    private List<Vector<T>> InitializeCentroids(List<Vector<T>> features, int k)
+    /// <summary>
+    /// k-means++ initialization over the [n, d] samples.
+    /// </summary>
+    /// <returns>A [k, d] tensor of centroids.</returns>
+    private Tensor<T> InitializeCentroids(Tensor<T> samples, int k)
     {
-        var centroids = new List<Vector<T>>();
+        var engine = AiDotNetEngine.Current;
+        int n = samples.Shape[0];
+        int dim = samples.Shape[1];
         var random = RandomHelper.Shared;
+        var centroids = new List<Tensor<T>>(k);
 
         // First centroid: random sample
-        int firstIdx = random.Next(features.Count);
-        centroids.Add(features[firstIdx].Clone());
+        int firstIdx = random.Next(n);
+        centroids.Add(engine.TensorSlice(samples, new[] { firstIdx, 0 }, new[] { 1, dim }));
+
+        // Squared distance from every sample to its nearest centroid so far
+        var minDist = new Tensor<T>(new[] { n });
+        minDist.Fill(NumOps.MaxValue);
 
         // Remaining centroids: k-means++ initialization
         for (int c = 1; c < k; c++)
         {
-            var distances = new T[features.Count];
-            T totalDistance = NumOps.Zero;
-
-            for (int i = 0; i < features.Count; i++)
-            {
-                T minDist = NumOps.MaxValue;
-                foreach (var centroid in centroids)
-                {
-                    var dist = ComputeSquaredDistance(features[i], centroid);
-                    if (NumOps.Compare(dist, minDist) < 0)
-                    {
-                        minDist = dist;
-                    }
-                }
-                distances[i] = minDist;
-                totalDistance = NumOps.Add(totalDistance, minDist);
-            }
+            var newest = centroids[centroids.Count - 1];
+            minDist = engine.TensorMin(minDist, ActiveLearningEngineOps.SquaredDistances(samples, newest).Reshape(new[] { n }));
+            var cumulative = engine.TensorCumSum(minDist, 0);
+            var totalDistance = engine.TensorSlice(cumulative, new[] { n - 1 }, new[] { 1 });
 
             // Sample proportional to distance squared
-            if (NumOps.Compare(totalDistance, NumOps.Zero) <= 0)
+            if (engine.TensorCountNonzero(engine.TensorGreaterThan(totalDistance, NumOps.Zero)) == 0)
             {
                 // All distances are zero, pick randomly
-                int randIdx = random.Next(features.Count);
-                centroids.Add(features[randIdx].Clone());
+                int randIdx = random.Next(n);
+                centroids.Add(engine.TensorSlice(samples, new[] { randIdx, 0 }, new[] { 1, dim }));
             }
             else
             {
-                T threshold = NumOps.Multiply(NumOps.FromDouble(random.NextDouble()), totalDistance);
-                T cumulative = NumOps.Zero;
-                int selectedIdx = 0;
-
-                for (int i = 0; i < features.Count; i++)
+                // First sample whose cumulative distance reaches the threshold
+                var threshold = engine.TensorMultiplyScalar(totalDistance, NumOps.FromDouble(random.NextDouble()));
+                int selectedIdx = engine.TensorSearchSorted(cumulative, threshold).GetFlat(0);
+                if (selectedIdx >= n)
                 {
-                    cumulative = NumOps.Add(cumulative, distances[i]);
-                    if (NumOps.Compare(cumulative, threshold) >= 0)
-                    {
-                        selectedIdx = i;
-                        break;
-                    }
+                    selectedIdx = 0;
                 }
 
-                centroids.Add(features[selectedIdx].Clone());
+                centroids.Add(engine.TensorSlice(samples, new[] { selectedIdx, 0 }, new[] { 1, dim }));
             }
         }
 
-        return centroids;
+        return engine.TensorConcatenate(centroids.ToArray(), 0);
     }
 
-    private int FindNearestCentroid(Vector<T> sample, List<Vector<T>> centroids)
-    {
-        int nearest = 0;
-        T minDist = NumOps.MaxValue;
-
-        for (int c = 0; c < centroids.Count; c++)
-        {
-            var dist = ComputeSquaredDistance(sample, centroids[c]);
-            if (NumOps.Compare(dist, minDist) < 0)
-            {
-                minDist = dist;
-                nearest = c;
-            }
-        }
-
-        return nearest;
-    }
-
-    private List<Vector<T>> UpdateCentroids(List<Vector<T>> features, int[] assignments, int k, int dim)
-    {
-        var newCentroids = new List<Vector<T>>();
-        var counts = new int[k];
-
-        // Initialize centroid sums
-        var sums = new T[k][];
-        for (int c = 0; c < k; c++)
-        {
-            sums[c] = new T[dim];
-            for (int d = 0; d < dim; d++)
-            {
-                sums[c][d] = NumOps.Zero;
-            }
-        }
-
-        // Accumulate sums
-        for (int i = 0; i < features.Count; i++)
-        {
-            int cluster = assignments[i];
-            counts[cluster]++;
-            for (int d = 0; d < dim; d++)
-            {
-                sums[cluster][d] = NumOps.Add(sums[cluster][d], features[i][d]);
-            }
-        }
-
-        // Compute new centroids
-        for (int c = 0; c < k; c++)
-        {
-            var centroid = new T[dim];
-            if (counts[c] > 0)
-            {
-                for (int d = 0; d < dim; d++)
-                {
-                    centroid[d] = NumOps.Divide(sums[c][d], NumOps.FromDouble(counts[c]));
-                }
-            }
-            else
-            {
-                // Empty cluster: keep old centroid or reinitialize
-                for (int d = 0; d < dim; d++)
-                {
-                    centroid[d] = NumOps.Zero;
-                }
-            }
-            newCentroids.Add(new Vector<T>(centroid));
-        }
-
-        return newCentroids;
-    }
-
-    private T ComputeSquaredDistance(Vector<T> a, Vector<T> b)
+    /// <summary>
+    /// Mean of the samples assigned to each cluster; empty clusters get a zero centroid.
+    /// </summary>
+    /// <returns>A [k, d] tensor of centroids.</returns>
+    private Tensor<T> UpdateCentroids(Tensor<T> samples, int[] assignments, int k)
     {
         var engine = AiDotNetEngine.Current;
-        var diff = engine.Subtract(a, b);
-        return engine.DotProduct(diff, diff);
+        int n = samples.Shape[0];
+        int dim = samples.Shape[1];
+        var clusterIndex = new Tensor<int>(assignments, new[] { n });
+
+        // Accumulate sums and counts
+        var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { k, dim }), 0, clusterIndex, samples);
+        var ones = new Tensor<T>(new[] { n, 1 });
+        ones.Fill(NumOps.One);
+        var counts = engine.TensorIndexAdd(new Tensor<T>(new[] { k, 1 }), 0, clusterIndex, ones);
+
+        // Compute new centroids
+        var shape = new[] { k, dim };
+        var countsWide = engine.TensorBroadcastTo(counts, shape);
+        var means = engine.TensorDivide(sums, countsWide);
+        var nonEmpty = engine.TensorGreaterThan(countsWide, NumOps.Zero);
+        return engine.TensorWhere(nonEmpty, means, new Tensor<T>(shape));
     }
 
 
