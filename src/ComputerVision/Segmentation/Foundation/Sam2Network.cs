@@ -198,6 +198,11 @@ internal sealed partial class Sam2Network<T>
                 int dim = first ? c.EmbedDims[stage - 1] : c.EmbedDims[stage], dimOut = c.EmbedDims[stage];
                 int window = c.GlobalAttentionBlocks.Contains(total) ? 0 : first ? c.WindowSizes[stage - 1] : c.WindowSizes[stage];
                 bool pool = stage > 0 && stage <= c.QueryPoolStages && i == 0;
+                // A pooling block max-pools its queries 2x2 inside each window (q_stride 2), so a windowed one needs an
+                // even window: an odd one drops its last row and column, and a 1x1 window pools to no tokens at all.
+                if (pool && window != 0 && window % 2 != 0)
+                    throw new ArgumentException($"Hiera stage {stage} pools its queries inside the previous stage's {window}x{window} " +
+                        "window; the window sizes of every stage before a pooling stage must be even (or that block global).");
                 Blocks.Add(new Block(Norm(dim, c.LayerNormEpsilon), Linear(3 * dimOut), Linear(dimOut), dim != dimOut ? Linear(dimOut) : null,
                     Norm(dimOut, c.LayerNormEpsilon), Linear((int)(dimOut * c.MlpRatio)), Linear(dimOut), dim, dimOut, c.HeadsPerStage[stage], window, pool));
             }
