@@ -214,27 +214,20 @@ public class CopyOnWriteCloneTests
     [Fact]
     public void NestedTransformerGraph_IsIdenticalAndIndependentAfterCopyOnWriteShare()
     {
-        var architecture = new NeuralNetworkArchitecture<float>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            inputSize: 4,
-            outputSize: 16);
-        var options = new XTTSv2CloneOptions
-        {
-            VocabSize = 32,
-            LLMDim = 8,
-            NumEncoderLayers = 0,
-            NumLLMLayers = 1,
-            NumHeads = 2,
-            NumCodebooks = 1,
-            CodebookSize = 16,
-            SpeakerEmbeddingDim = 8,
-            DropoutRate = 0,
-        };
-        using var source = new XTTSv2Clone<float>(architecture, options);
-        using var destination = new XTTSv2Clone<float>(architecture, new XTTSv2CloneOptions(options));
+        // XTTS-v2 conditions every synthesis on a reference recording, so both models get the same one; the bounded
+        // fixture is the released component set at test widths, and both instances start from its pinned seed.
+        using var source = AiDotNet.Tests.TextToSpeech.XTTSv2Fixture.CreateClone<float>();
+        using var destination = AiDotNet.Tests.TextToSpeech.XTTSv2Fixture.CreateClone<float>();
+        var reference = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorMultiplyScalar(
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorSin(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorMultiplyScalar(
+                AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorArange<float>(0, (int)(0.34 * source.SampleRate), 1),
+                (float)(2 * Math.PI * 180.0 / source.SampleRate))),
+            0.4f);
+        source.Voice = new AiDotNet.TextToSpeech.TtsVoice<float> { ReferenceAudio = reference };
+        destination.Voice = new AiDotNet.TextToSpeech.TtsVoice<float> { ReferenceAudio = reference };
+        // Text token ids of "ehlo" in the fixture's tokenizer (ids 0-3 are its special tokens).
         var input = new Tensor<float>(
-            new Vector<float>(new[] { 1f, 2f, 3f, 4f }),
+            new Vector<float>(new[] { 8f, 11f, 15f, 18f }),
             new[] { 4 });
 
         _ = source.Predict(input);
