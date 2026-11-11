@@ -34,7 +34,8 @@ public class SumEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly SumEncoderHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, List<double>>? _categories;
+    private Dictionary<int, Tensor<T>>? _categories;
+    private Dictionary<int, Tensor<T>>? _contrastMatrices;
     private int _nInputFeatures;
     private int _nOutputFeatures;
 
@@ -74,19 +75,21 @@ public class SumEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nInputFeatures = data.Columns;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
-        _categories = new Dictionary<int, List<double>>();
+        _categories = new Dictionary<int, Tensor<T>>();
+        _contrastMatrices = new Dictionary<int, Tensor<T>>();
 
         foreach (int col in columnsToProcess)
         {
-            var uniqueValues = new HashSet<double>();
+            var column = PreprocessingTensorOps.Column(data, col);
+            var sortedCategories = column.Length == 0 ? new Tensor<T>(new[] { 0 }) : PreprocessingTensorOps.SortedUnique(column);
+            _categories[col] = sortedCategories;
 
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double value = NumOps.ToDouble(data[i, col]);
-                uniqueValues.Add(value);
-            }
-
-            _categories[col] = uniqueValues.OrderBy(v => v).ToList();
+            // Sum coding: category c < k - 1 is 1 in column c and 0 elsewhere; the reference (last)
+            // category is -1 in all columns
+            int k = sortedCategories.Length;
+            _contrastMatrices[col] = PreprocessingTensorOps.RationalMatrix<T>(k, Math.Max(1, k - 1),
+                (row, c) => row == k - 1 ? -1 : row == c ? 1 : 0,
+                _ => 1);
         }
 
         // Calculate total output features
@@ -97,7 +100,7 @@ public class SumEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             if (processSet.Contains(col))
             {
-                int nCategories = _categories[col].Count;
+                int nCategories = _categories[col].Length;
                 // k-1 columns for k categories (sum coding)
                 _nOutputFeatures += Math.Max(1, nCategories - 1);
             }
@@ -115,77 +118,33 @@ public class SumEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
-        if (_categories is null)
+        if (_categories is null || _contrastMatrices is null)
         {
             throw new InvalidOperationException("SumEncoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(_nInputFeatures));
+        var blocks = new List<Tensor<T>>(_nInputFeatures);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < _nInputFeatures; j++)
         {
-            int outCol = 0;
-
-            for (int j = 0; j < _nInputFeatures; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (!processSet.Contains(j))
             {
-                if (!processSet.Contains(j))
-                {
-                    result[i, outCol++] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-                var categories = _categories[j];
-                int nCategories = categories.Count;
-                int nCols = Math.Max(1, nCategories - 1);
-
-                int categoryIndex = categories.IndexOf(categoryValue);
-
-                if (categoryIndex < 0)
-                {
-                    // Unknown category
-                    switch (_handleUnknown)
-                    {
-                        case SumEncoderHandleUnknown.UseZeros:
-                            for (int c = 0; c < nCols; c++)
-                            {
-                                result[i, outCol++] = NumOps.FromDouble(0);
-                            }
-                            break;
-                        case SumEncoderHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            for (int c = 0; c < nCols; c++)
-                            {
-                                result[i, outCol++] = NumOps.FromDouble(0);
-                            }
-                            break;
-                    }
-                }
-                else if (categoryIndex == nCategories - 1)
-                {
-                    // Reference category (last one) - encode as -1 in all columns
-                    for (int c = 0; c < nCols; c++)
-                    {
-                        result[i, outCol++] = NumOps.FromDouble(-1);
-                    }
-                }
-                else
-                {
-                    // Non-reference category - encode as 1 in its column, 0 elsewhere
-                    for (int c = 0; c < nCols; c++)
-                    {
-                        double value = (c == categoryIndex) ? 1 : 0;
-                        result[i, outCol++] = NumOps.FromDouble(value);
-                    }
-                }
+                blocks.Add(engine.Reshape(column, new[] { numRows, 1 }));
+                continue;
             }
+
+            // Known categories take their contrast row; unknown ones are zeros (or throw)
+            blocks.Add(PreprocessingTensorOps.ContrastBlock(_categories[j], _contrastMatrices[j], column,
+                _handleUnknown == SumEncoderHandleUnknown.Error, j));
         }
 
-        return new Matrix<T>(result);
+        if (blocks.Count == 0)
+            return new Matrix<T>(numRows, 0);
+        return engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
     }
 
     /// <summary>
@@ -219,7 +178,7 @@ public class SumEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             if (processSet.Contains(col))
             {
                 var categories = _categories[col];
-                int nCols = Math.Max(1, categories.Count - 1);
+                int nCols = Math.Max(1, categories.Length - 1);
 
                 for (int c = 0; c < nCols; c++)
                 {
