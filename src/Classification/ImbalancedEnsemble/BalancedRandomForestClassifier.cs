@@ -226,6 +226,8 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
     /// </summary>
     private int[] _sampleClasses = Array.Empty<int>();
 
+    private Tensor<int> _sampleClassTensor = new Tensor<int>(new[] { 0 });
+
     /// <summary>
     /// Trains the balanced random forest classifier.
     /// </summary>
@@ -244,7 +246,8 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
 
         NumFeatures = x.Columns;
         ClassLabels = ExtractClassLabels(y);
-        _sampleClasses = GetClassIndicesFromLabels(y);
+        _sampleClassTensor = GetClassIndexTensor(y);
+        _sampleClasses = _sampleClassTensor.ToArray();
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
@@ -274,13 +277,14 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
         actualMaxFeatures = Math.Max(1, Math.Min(actualMaxFeatures, NumFeatures));
 
         // Build trees
+        var features = Tensor<T>.FromMatrix(x);
         for (int t = 0; t < _nEstimators; t++)
         {
             // Create balanced bootstrap sample
             var sampleIndices = CreateBalancedBootstrap(classSamples, minoritySize);
 
             // Build tree on balanced sample
-            var tree = BuildTree(x, y, sampleIndices, 0, actualMaxFeatures);
+            var tree = BuildTree(features, y, sampleIndices, 0, actualMaxFeatures);
             _trees.Add(tree);
         }
     }
@@ -330,42 +334,18 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    private DecisionTreeNode BuildTree(Matrix<T> x, Vector<T> y, int[] sampleIndices,
+    private DecisionTreeNode BuildTree(Tensor<T> x, Vector<T> y, int[] sampleIndices,
         int depth, int maxFeatures)
     {
-        // Compute class distribution
-        var classCounts = new int[NumClasses];
-        foreach (int i in sampleIndices)
-        {
-            int classIdx = _sampleClasses[i];
-            if (classIdx >= 0 && classIdx < NumClasses)
-            {
-                classCounts[classIdx]++;
-            }
-        }
-
-        // Majority class prediction
-        int majorityClass = 0;
-        int maxCount = 0;
-        for (int c = 0; c < NumClasses; c++)
-        {
-            if (classCounts[c] > maxCount)
-            {
-                maxCount = classCounts[c];
-                majorityClass = c;
-            }
-        }
-
-        // Class probabilities
-        var classProbs = new double[NumClasses];
+        // Class distribution, majority class (the first wins ties) and class probabilities
+        var engine = Engine;
+        var classCounts = ClassCounts(_sampleClassTensor, sampleIndices);
+        int majorityClass = NumClasses == 0 ? 0 : engine.TensorArgMax(classCounts, 0).ToArray()[0];
         int total = sampleIndices.Length;
-        for (int c = 0; c < NumClasses; c++)
-        {
-            classProbs[c] = (double)classCounts[c] / total;
-        }
+        var classProbs = engine.TensorDivideScalar(classCounts, NumOps.FromDouble(total)).ToArray();
 
         // Stopping conditions
-        bool isPure = classCounts.Count(c => c > 0) <= 1;
+        bool isPure = engine.TensorCountNonzero(classCounts) <= 1;
         bool maxDepthReached = _maxDepth.HasValue && depth >= _maxDepth.Value;
         bool tooFewSamples = sampleIndices.Length < _minSamplesSplit;
 
@@ -384,71 +364,10 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
         var selectedFeatures = featureIndices.Take(maxFeatures).ToArray();
 
         // Find best split
-        int bestFeature = -1;
-        double bestThreshold = 0;
-        double bestGini = double.MaxValue;
-        int[]? bestLeftIndices = null;
-        int[]? bestRightIndices = null;
-
-        foreach (int feature in selectedFeatures)
-        {
-            // Get unique values for this feature
-            var values = new SortedSet<double>();
-            foreach (int i in sampleIndices)
-            {
-                values.Add(NumOps.ToDouble(x[i, feature]));
-            }
-
-            if (values.Count < 2)
-            {
-                continue;
-            }
-
-            // Try split points (midpoints between consecutive values)
-            var valueList = values.ToList();
-            for (int v = 0; v < valueList.Count - 1; v++)
-            {
-                double threshold = (valueList[v] + valueList[v + 1]) / 2.0;
-
-                var leftIndices = new List<int>();
-                var rightIndices = new List<int>();
-
-                foreach (int i in sampleIndices)
-                {
-                    if (NumOps.ToDouble(x[i, feature]) <= threshold)
-                    {
-                        leftIndices.Add(i);
-                    }
-                    else
-                    {
-                        rightIndices.Add(i);
-                    }
-                }
-
-                if (leftIndices.Count < _minSamplesLeaf || rightIndices.Count < _minSamplesLeaf)
-                {
-                    continue;
-                }
-
-                // Compute weighted Gini impurity
-                double leftGini = ComputeGini(y, leftIndices);
-                double rightGini = ComputeGini(y, rightIndices);
-                double weightedGini = ((double)leftIndices.Count / total) * leftGini +
-                                      ((double)rightIndices.Count / total) * rightGini;
-
-                if (weightedGini < bestGini)
-                {
-                    bestGini = weightedGini;
-                    bestFeature = feature;
-                    bestThreshold = threshold;
-                    bestLeftIndices = [.. leftIndices];
-                    bestRightIndices = [.. rightIndices];
-                }
-            }
-        }
+        var (bestFeature, bestThreshold) = BestGiniSplit(x, _sampleClassTensor, sampleIndices, selectedFeatures, _minSamplesLeaf);
 
         // No valid split found
-        if (bestFeature < 0 || bestLeftIndices is null || bestRightIndices is null)
+        if (bestFeature < 0)
         {
             return new DecisionTreeNode
             {
@@ -456,6 +375,8 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
                 ClassProbabilities = classProbs
             };
         }
+
+        var (bestLeftIndices, bestRightIndices) = PartitionByThreshold(x, sampleIndices, bestFeature, bestThreshold);
 
         // Recursively build children
         var leftChild = BuildTree(x, y, bestLeftIndices, depth + 1, maxFeatures);
@@ -470,46 +391,6 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
             PredictedClass = majorityClass,
             ClassProbabilities = classProbs
         };
-    }
-
-    /// <summary>
-    /// Computes the Gini impurity for a set of samples.
-    /// </summary>
-    /// <param name="y">All labels.</param>
-    /// <param name="indices">Indices of samples to consider.</param>
-    /// <returns>Gini impurity value.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Gini impurity measures how "mixed" the classes are:
-    /// - 0 = perfectly pure (all same class)
-    /// - Higher values = more mixed (harder to predict)
-    /// The formula is: 1 - sum(p_i^2) where p_i is the proportion of class i.</para>
-    /// </remarks>
-    private double ComputeGini(Vector<T> y, List<int> indices)
-    {
-        if (indices.Count == 0)
-        {
-            return 0;
-        }
-
-        var classCounts = new int[NumClasses];
-        foreach (int i in indices)
-        {
-            int classIdx = _sampleClasses[i];
-            if (classIdx >= 0 && classIdx < NumClasses)
-            {
-                classCounts[classIdx]++;
-            }
-        }
-
-        double gini = 1.0;
-        int total = indices.Count;
-        for (int c = 0; c < NumClasses; c++)
-        {
-            double p = (double)classCounts[c] / total;
-            gini -= p * p;
-        }
-
-        return gini;
     }
 
     /// <summary>
@@ -544,61 +425,53 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var bestClasses = new int[input.Rows];
-
-        for (int i = 0; i < input.Rows; i++)
+        // Majority vote over the trees (the first class wins ties)
+        var engine = Engine;
+        int rows = input.Rows;
+        var features = Tensor<T>.FromMatrix(input);
+        var allRows = Enumerable.Range(0, rows).ToArray();
+        var votes = new Tensor<T>(new[] { rows, NumClasses });
+        foreach (var tree in _trees)
         {
-            var votes = new int[NumClasses];
-
-            foreach (var tree in _trees)
-            {
-                int prediction = PredictTree(tree, input, i);
-                votes[prediction]++;
-            }
-
-            // Majority vote
-            int bestClass = 0;
-            int maxVotes = 0;
-            for (int c = 0; c < NumClasses; c++)
-            {
-                if (votes[c] > maxVotes)
-                {
-                    maxVotes = votes[c];
-                    bestClass = c;
-                }
-            }
-
-            bestClasses[i] = bestClass;
+            var predicted = new int[rows];
+            AssignPredictions(tree, features, allRows, predicted);
+            votes = engine.TensorAdd(votes, engine.TensorOneHot<T>(new Tensor<int>(predicted, new[] { rows }), NumClasses));
         }
 
-        return ClassIndicesToLabels(new Tensor<int>(bestClasses, new[] { bestClasses.Length }));
+        return MajorityVoteLabels(votes);
     }
 
     /// <summary>
     /// Gets prediction from a single tree.
     /// </summary>
     /// <param name="node">Tree root node.</param>
-    /// <param name="x">Feature matrix.</param>
-    /// <param name="sampleIdx">Sample index.</param>
-    /// <returns>Predicted class index.</returns>
+    /// <param name="x">Features [n_samples, n_features].</param>
+    /// <param name="rows">The rows that reach this node.</param>
+    /// <param name="predicted">Receives the predicted class index of every row.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Traverses the tree from root to leaf by comparing feature
     /// values to thresholds at each node.</para>
     /// </remarks>
-    private int PredictTree(DecisionTreeNode node, Matrix<T> x, int sampleIdx)
+    private void AssignPredictions(DecisionTreeNode node, Tensor<T> x, int[] rows, int[] predicted)
     {
-        while (node.LeftChild is not null && node.RightChild is not null)
+        if (rows.Length == 0)
         {
-            if (NumOps.ToDouble(x[sampleIdx, node.FeatureIndex]) <= node.Threshold)
-            {
-                node = node.LeftChild;
-            }
-            else
-            {
-                node = node.RightChild;
-            }
+            return;
         }
-        return node.PredictedClass;
+
+        if (node.LeftChild is null || node.RightChild is null)
+        {
+            foreach (int i in rows)
+            {
+                predicted[i] = node.PredictedClass;
+            }
+
+            return;
+        }
+
+        var (left, right) = PartitionByThreshold(x, rows, node.FeatureIndex, node.Threshold);
+        AssignPredictions(node.LeftChild, x, left, predicted);
+        AssignPredictions(node.RightChild, x, right, predicted);
     }
 
     /// <summary>
@@ -699,9 +572,11 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
         var node = new DecisionTreeNode
         {
             FeatureIndex = jObj["FeatureIndex"]?.ToObject<int>() ?? 0,
-            Threshold = jObj["Threshold"]?.ToObject<double>() ?? 0,
+            Threshold = jObj["Threshold"] is JToken threshold
+                ? threshold.ToObject<T>() ?? MathHelper.GetNumericOperations<T>().Zero
+                : MathHelper.GetNumericOperations<T>().Zero,
             PredictedClass = jObj["PredictedClass"]?.ToObject<int>() ?? 0,
-            ClassProbabilities = jObj["ClassProbabilities"]?.ToObject<double[]>()
+            ClassProbabilities = jObj["ClassProbabilities"]?.ToObject<T[]>()
         };
 
         if (jObj["LeftChild"] is JObject leftObj)
@@ -729,7 +604,7 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
         /// <summary>
         /// Threshold value for the split.
         /// </summary>
-        public double Threshold { get; set; }
+        public T Threshold { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
         /// <summary>
         /// Left child (values &lt;= threshold).
@@ -749,6 +624,6 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
         /// <summary>
         /// Class probabilities for leaf nodes.
         /// </summary>
-        public double[]? ClassProbabilities { get; set; }
+        public T[]? ClassProbabilities { get; set; }
     }
 }
