@@ -136,8 +136,9 @@ public partial class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplana
             : new Vector<T>(numPrototypes);
         var labelClasses = engine.TensorRound(labels.AsTensor()).Cast<int>().ToArray();
 
-        // Sort by distance
-        var order = numPrototypes > 0 ? engine.TensorSort(distances).Item2.ToArray() : Array.Empty<int>();
+        // Sort by distance (stable: equal distances keep prototype order)
+        var distanceRanks = numPrototypes > 0 ? ExplainerTensorOps<T>.DenseRanks(distances) : Array.Empty<int>();
+        var order = Enumerable.Range(0, numPrototypes).OrderBy(i => distanceRanks[i]).ToArray();
         var distanceValues = distances.ToArray();
         var similarityValues = similarities.ToArray();
         var labelValues = labels.ToArray();
@@ -424,11 +425,10 @@ public class PrototypeExplanation<T>
         {
             lines.Add("");
             lines.Add("Key Distinguishing Features (vs nearest different class):");
-            var sorted = DistinguishingFeatures
-                .OrderByDescending(kvp => Math.Abs(NumOps.ToDouble(kvp.Value)))
-                .Take(5);
-            var top = sorted.ToList();
             var engine = AiDotNetEngine.Current;
+            var entries = DistinguishingFeatures.ToList();
+            var magnitudeRanks = ExplainerTensorOps<T>.DenseRanks(engine.TensorAbs(new Vector<T>(entries.Select(kvp => kvp.Value)).AsTensor()));
+            var top = Enumerable.Range(0, entries.Count).OrderByDescending(k => magnitudeRanks[k]).Take(5).Select(k => entries[k]).ToList();
             var diffs = new Vector<T>(top.Select(kvp => kvp.Value)).AsTensor();
             var magnitudes = engine.TensorAbs(diffs).ToArray();
             var higher = engine.TensorGreaterThan(diffs, NumOps.Zero).Cast<int>().ToArray();
