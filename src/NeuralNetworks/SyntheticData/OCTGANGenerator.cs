@@ -398,12 +398,16 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
     /// <summary>The generator from <c>p(0) = z ⊕ c</c> ([batch, dim p]) to an activated row ([batch, row width]).</summary>
     private Tensor<T> GeneratorForward(Tensor<T> input, bool gumbel)
+        => ApplyOutputActivations(GeneratorHead(input), gumbel);
+
+    /// <summary>The generator's output head before Eqs. 14-16: raw values, mode logits and category logits.</summary>
+    private Tensor<T> GeneratorHead(Tensor<T> input)
     {
         if (_usingCustomLayers)
         {
             var current = input;
             foreach (var layer in Layers) current = layer.Forward(current);
-            return ApplyOutputActivations(current, gumbel);
+            return current;
         }
 
         // Eq. 11: z' = p(0) + ∫₀¹ g(p(t), t) dt.
@@ -415,8 +419,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             var block = Engine.ReLU(_genBNLayers[i].Forward(Layers[GeneratorOdeDepth + i].Forward(h)));
             h = Engine.TensorConcatenate(new[] { h, block }, axis: 1);
         }
-        // Eqs. 14-16.
-        return ApplyOutputActivations(Layers[^1].Forward(h), gumbel);
+        return Layers[^1].Forward(h);
     }
 
     /// <summary>Eq. 17: g(p, t) = Leaky(FC13(... Leaky(FC6(Norm(p) ⊕ t)))) with Norm(p) = p / ‖p‖₂.</summary>
@@ -615,11 +618,12 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 _random = RandomHelper.CreateSeededRandom(noiseState);
                 try
                 {
-                    var fake = GeneratorForward(input, gumbel: true);
+                    var head = GeneratorHead(input);
+                    var fake = ApplyOutputActivations(head, gumbel: true);
                     var scores = DiscriminatorForward(WithCondition(fake, cond), training: true);
                     var loss = Engine.TensorNegate(Engine.ReduceMean(scores, new[] { 0, 1 }, keepDims: false));
                     if (_condWidth > 0 && _catOutputBlocks.Count > 0)
-                        loss = Engine.TensorAdd(loss, ConditionalCrossEntropy(fake, cond, mask));
+                        loss = Engine.TensorAdd(loss, ConditionalCrossEntropy(head, cond, mask));
                     return loss;
                 }
                 finally
@@ -635,12 +639,16 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// L_matching = H(c_s, d̂_s): the cross-entropy between the one-hot condition and the generated distribution of
     /// the conditioned discrete column, averaged over the batch.
     /// </summary>
-    private Tensor<T> ConditionalCrossEntropy(Tensor<T> fake, Tensor<T> cond, Tensor<T> mask)
+    private Tensor<T> ConditionalCrossEntropy(Tensor<T> head, Tensor<T> cond, Tensor<T> mask)
     {
-        int batch = fake.Shape[0];
-        var blocks = _catOutputBlocks.Select(b => Engine.TensorSlice(fake, new[] { 0, b.Offset }, new[] { batch, b.Width })).ToArray();
-        var aligned = blocks.Length == 1 ? blocks[0] : Engine.TensorConcatenate(blocks, axis: 1);
-        var logp = Engine.TensorLog(Engine.TensorAddScalar(aligned, NumOps.FromDouble(1e-8)));
+        // CTGAN's conditional loss, which section 3.3 adopts: cross-entropy of the conditioned column's category LOGITS
+        // against the requested one-hot, not the log of the (temperature 0.2, Gumbel-noised) sample - that sample is a
+        // noisy, nearly one-hot draw whose log carries little of the logits' gradient.
+        int batch = head.Shape[0];
+        var blocks = _catOutputBlocks
+            .Select(b => Engine.TensorLogSoftmax(Engine.TensorSlice(head, new[] { 0, b.Offset }, new[] { batch, b.Width }), axis: -1))
+            .ToArray();
+        var logp = blocks.Length == 1 ? blocks[0] : Engine.TensorConcatenate(blocks, axis: 1);
         var perRow = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorMultiply(mask, cond), logp), new[] { 1 }, keepDims: false);
         return Engine.TensorNegate(Engine.ReduceMean(perRow, new[] { 0 }, keepDims: false));
     }
