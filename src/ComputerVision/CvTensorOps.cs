@@ -271,7 +271,7 @@ internal static class CvTensorOps<T>
             throw new InvalidOperationException($"{present} rows exceed the fixed count of {count}.");
         return present == count
             ? rows
-            : Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { count - present, rows.Shape[1] }) }, 0);
+            : Engine.TensorConstantPad(rows, new[] { 0, 0, 0, count - present }, NumOps.Zero);
     }
 
     /// <summary>
