@@ -369,28 +369,63 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// </remarks>
     protected (Matrix<T> Q, Matrix<T> R) ComputePositiveDiagonalQr(Matrix<T> matrix)
     {
+        return ComputeSignNormalizedQr(matrix, complete: false, nonNegativeDiagonal: true);
+    }
+
+    /// <summary>
+    /// QR factorization from one engine QR call with a fixed sign convention on the R diagonal.
+    /// </summary>
+    /// <param name="matrix">The m x n matrix to factor.</param>
+    /// <param name="complete">
+    /// True for the complete factorization (Q m x m, R m x n); false for the thin one (Q m x n,
+    /// R n x n, zero-padded when m &lt; n).
+    /// </param>
+    /// <param name="nonNegativeDiagonal">
+    /// True to make R[j,j] &gt;= 0 (Gram-Schmidt, Givens); false to make R[j,j] &lt;= 0 (reflecting
+    /// each column with u = x + ‖x‖ e1).
+    /// </param>
+    /// <remarks>
+    /// Column j of Q and row j of R are scaled by the same sign, so A = QR is preserved. For a
+    /// full-column-rank matrix this pins down the leading min(m, n) columns of Q uniquely.
+    /// </remarks>
+    protected (Matrix<T> Q, Matrix<T> R) ComputeSignNormalizedQr(Matrix<T> matrix, bool complete, bool nonNegativeDiagonal)
+    {
         int m = matrix.Rows;
         int n = matrix.Columns;
         if (m == 0 || n == 0)
         {
-            return (new Matrix<T>(m, n), new Matrix<T>(n, n));
+            return complete
+                ? (Matrix<T>.CreateIdentity(m), new Matrix<T>(m, n))
+                : (new Matrix<T>(m, n), new Matrix<T>(n, n));
         }
 
-        var (q, r) = Linalg.QR(Tensor<T>.FromMatrix(matrix), "reduced");
+        var (q, r) = Linalg.QR(Tensor<T>.FromMatrix(matrix), complete ? "complete" : "reduced");
+
+        // sign'(x) = +1 for x >= 0, -1 for x < 0 (sign(0) = 0 would erase the column).
         var signs = Engine.TensorSign(Engine.TensorDiagonal(r));
-        // sign(0) = 0 would erase the column; use +1 there.
         signs = Engine.TensorAdd(signs, Engine.TensorSubtract(Engine.TensorOnesLike(signs), Engine.TensorAbs(signs)));
+        if (!nonNegativeDiagonal)
+        {
+            signs = Engine.TensorNegate(signs);
+        }
+
+        int qColumns = q.Shape[1];
+        if (signs.Length < qColumns)
+        {
+            signs = Engine.TensorSetSlice(Engine.TensorOnesLike(new Tensor<T>(new[] { qColumns })), signs, new[] { 0 });
+        }
+
         var signMatrix = Engine.TensorDiagEmbed(signs);
         q = Engine.TensorMatMul(q, signMatrix);
         r = Engine.TensorMatMul(signMatrix, r);
 
-        int k = Math.Min(m, n);
-        if (k == n)
+        if (complete || m >= n)
         {
             return (q.ToMatrix(), r.ToMatrix());
         }
 
-        // m < n: pad Q with zero columns and R with zero rows so the shapes stay m x n and n x n.
+        // Thin factorization with m < n: pad Q with zero columns and R with zero rows so the
+        // shapes stay m x n and n x n.
         var paddedQ = Engine.TensorSetSlice(new Tensor<T>(new[] { m, n }), q, new[] { 0, 0 });
         var paddedR = Engine.TensorSetSlice(new Tensor<T>(new[] { n, n }), r, new[] { 0, 0 });
         return (paddedQ.ToMatrix(), paddedR.ToMatrix());
