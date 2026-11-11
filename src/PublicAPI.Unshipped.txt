@@ -1367,3 +1367,6 @@ static AiDotNet.Serialization.LayerStateBag.FormatDelegate(System.Delegate? valu
 *REMOVED*override AiDotNet.ActivationFunctions.TanhActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
 *REMOVED*override AiDotNet.ActivationFunctions.TaylorSoftmaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
 *REMOVED*override AiDotNet.ActivationFunctions.ThresholdedReLUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+AiDotNet.Configuration.JitCompilationConfig.PersistCompiledProgram.get -> bool
+AiDotNet.Configuration.JitCompilationConfig.PersistCompiledProgram.set -> void
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.CompiledPlansChanged.get -> bool

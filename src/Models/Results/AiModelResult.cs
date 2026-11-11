@@ -240,6 +240,26 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal byte[] SerializedModelData { get; private set; } = [];
 
     /// <summary>
+    /// The neural network's forward as an embedded AiDotNet.Tensors program package (portable program, parameters by
+    /// shape only, plus compiled plans for the devices it ran on), so a loaded model predicts compiled from its first
+    /// call. Empty when compilation is off, <see cref="AiDotNet.Configuration.JitCompilationConfig.PersistCompiledProgram"/>
+    /// is off, or the network could not be traced.
+    /// </summary>
+    [JsonProperty]
+    internal byte[] CompiledProgram { get; private set; } = [];
+
+    // Compiled inference for a neural model (created on first prediction), and a package loaded with the model.
+    [JsonIgnore] private AiDotNet.Inference.CompiledNeuralPredictor<T>? _compiledPredictor;
+    [JsonIgnore] private AiDotNet.Tensors.Engines.Export.ProgramPackage? _loadedProgram;
+    [JsonIgnore] private readonly object _compiledPredictorGate = new();
+
+    /// <summary>
+    /// True when this model, loaded from a file, compiled plans for hardware the file had none for. Saving the model
+    /// again stores them, so the next load on this machine starts compiled.
+    /// </summary>
+    public bool CompiledPlansChanged => _compiledPredictor?.HasNewCompiledTargets == true;
+
+    /// <summary>
     /// Gets or sets the results of the optimization process that created the model.
     /// </summary>
     /// <value>An OptimizationResult&lt;T&gt; object containing detailed optimization information.</value>
@@ -2822,14 +2842,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private TOutput DispatchModelInference(TInput normalizedNewData)
     {
-        // JIT FIRST, AND ONLY WHEN IT WAS ASKED FOR. InferenceOptimizationConfig is defaulted to
-        // non-null in the builder (AiModelBuilder._inferenceOptimizationConfig), while
-        // JitCompiledFunction is non-null ONLY after an explicit ConfigureJitCompilation on a
-        // NeuralNetworkBase model. With the inference-optimization branch tested first, that branch
-        // matched for every neural model and returned before this one was ever consulted, so
-        // ConfigureJitCompilation was inert for precisely the models it targets -- including the
-        // value-stability guard below it, which never executed. An explicit request outranks a
-        // default, so the compiled plan is consulted first when one exists.
+        // COMPILED FIRST. A caller-supplied JitCompiledFunction (AiModelResultOptions) wins outright. Otherwise a
+        // neural model goes through the compiled predictor whenever compilation is on (the default), which itself
+        // runs the inference-optimized network when there is one -- so compilation composes with the
+        // inference-optimization branch below instead of shadowing it, and that branch only serves models with
+        // compilation turned off.
         if (JitCompiledFunction != null && normalizedNewData is Tensor<T> jitInput)
         {
             var jitResult = JitCompiledFunction(new[] { jitInput });
@@ -2838,6 +2855,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 return typedJitFirst;
             }
             // Fallback to model if JIT result is unexpected.
+            return PredictViaModelOrThrow(normalizedNewData);
+        }
+
+        // Compilation is on by default for neural models: the compiled predictor serves the inference-optimized
+        // network when there is one, so compilation composes with those optimizations instead of replacing them.
+        if (JitCompilationConfig is { Enabled: true } && Model is NeuralNetworkBase<T> compiledModel
+            && normalizedNewData is Tensor<T> compiledInput)
+        {
+            var predictor = EnsureCompiledPredictor(compiledModel);
+            var compiledResult = predictor.Predict(new[] { compiledInput });
+            if (compiledResult.Length > 0 && compiledResult[0] is TOutput typedCompiled) return typedCompiled;
             return PredictViaModelOrThrow(normalizedNewData);
         }
 
@@ -2856,6 +2884,50 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         return PredictViaModelOrThrow(normalizedNewData);
+    }
+
+    private AiDotNet.Inference.CompiledNeuralPredictor<T> EnsureCompiledPredictor(NeuralNetworkBase<T> neuralModel)
+    {
+        var existing = _compiledPredictor;
+        if (existing is not null) return existing;
+        lock (_compiledPredictorGate)
+        {
+            if (_compiledPredictor is not null) return _compiledPredictor;
+            var effective = InferenceOptimizationConfig is not null
+                ? EnsureStatelessInferenceOptimizationsInitialized(neuralModel) ?? neuralModel
+                : neuralModel;
+            _compiledPredictor = new AiDotNet.Inference.CompiledNeuralPredictor<T>(
+                effective, JitCompilationConfig!, _loadedProgram);
+            _loadedProgram = null;
+            return _compiledPredictor;
+        }
+    }
+
+    // A damaged or newer embedded program never blocks loading the model: it is dropped and re-traced on first use.
+    private AiDotNet.Tensors.Engines.Export.ProgramPackage? LoadCompiledProgram(byte[]? bytes)
+    {
+        if (bytes is null || bytes.Length == 0) return null;
+        try
+        {
+            return AiDotNet.Tensors.Engines.Export.ProgramPackage.Load(new MemoryStream(bytes, writable: false));
+        }
+        catch (AiDotNet.Tensors.Engines.Export.ProgramFormatException ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Ignoring the saved compiled program ({ex.Message}); it will be re-traced.");
+            return null;
+        }
+    }
+
+    // The package a save embeds: the compiled predictor's program and plans, traced from a prediction already made.
+    private byte[] ExportCompiledProgram()
+    {
+        if (JitCompilationConfig is not { Enabled: true, PersistCompiledProgram: true } || Model is not NeuralNetworkBase<T> nn)
+            return [];
+        var package = EnsureCompiledPredictor(nn).Export(example: null);
+        if (package is null) return CompiledProgram; // nothing new to add; keep what the model was loaded with
+        using var ms = new MemoryStream();
+        package.Save(ms, includeParameterValues: false);
+        return ms.ToArray();
     }
 
     private TOutput PredictViaModelOrThrow(TInput normalizedNewData)
@@ -5937,6 +6009,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 using (ModelPersistenceGuard.InternalOperation())
                 {
                     SerializedModelData = modelToSerialize.Serialize();
+                    CompiledProgram = ExportCompiledProgram();
                 }
 
                 // Refresh metadata for consistency and to keep ModelMetaData aligned with the persisted snapshot.
@@ -6035,7 +6108,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
                 InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
-                JitCompilationConfig = deserializedObject.JitCompilationConfig;
+                // Files saved before compilation was on by default carry no config: they get today's default, as a
+                // freshly built model does. An explicit opt-out was saved as a config with Enabled = false.
+                JitCompilationConfig = deserializedObject.JitCompilationConfig ?? AiDotNet.Configuration.JitCompilationConfig.Default;
+                CompiledProgram = deserializedObject.CompiledProgram ?? [];
                 AllowNondeterminism = deserializedObject.AllowNondeterminism;
                 SerializedModelData = deserializedObject.SerializedModelData;
 
@@ -6069,6 +6145,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
                 // Reset transient runtime state (will be reinitialized lazily)
                 JitCompiledFunction = null;
+                _compiledPredictor = null;
+                _loadedProgram = LoadCompiledProgram(CompiledProgram);
                 _inferenceOptimizer = null;
                 ReleaseInferenceOptimizedModel();
                 _inferenceOptimizationsInitialized = false;
