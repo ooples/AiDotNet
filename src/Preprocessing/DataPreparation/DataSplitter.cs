@@ -218,30 +218,15 @@ public static class DataSplitter
                 ComputeEmbargoedLayout(totalSamples, trainRatio, validationRatio, embargo);
         }
 
-        var XTrain = new Matrix<T>(trainSize, X.Columns);
-        var yTrain = new Vector<T>(trainSize);
-        var XVal = new Matrix<T>(validationSize, X.Columns);
-        var yVal = new Vector<T>(validationSize);
-        var XTest = new Matrix<T>(testSize, X.Columns);
-        var yTest = new Vector<T>(testSize);
-
-        for (int i = 0; i < trainSize; i++)
-        {
-            XTrain.SetRow(i, X.GetRow(indices[i]));
-            yTrain[i] = y[indices[i]];
-        }
-
-        for (int i = 0; i < validationSize; i++)
-        {
-            XVal.SetRow(i, X.GetRow(indices[valStart + i]));
-            yVal[i] = y[indices[valStart + i]];
-        }
-
-        for (int i = 0; i < testSize; i++)
-        {
-            XTest.SetRow(i, X.GetRow(indices[testStart + i]));
-            yTest[i] = y[indices[testStart + i]];
-        }
+        var trainRows = indices.Skip(0).Take(trainSize).ToArray();
+        var valRows = indices.Skip(valStart).Take(validationSize).ToArray();
+        var testRows = indices.Skip(testStart).Take(testSize).ToArray();
+        var XTrain = PreprocessingTensorOps.SelectRows(X, trainRows);
+        var yTrain = PreprocessingTensorOps.SelectElements(y, trainRows);
+        var XVal = PreprocessingTensorOps.SelectRows(X, valRows);
+        var yVal = PreprocessingTensorOps.SelectElements(y, valRows);
+        var XTest = PreprocessingTensorOps.SelectRows(X, testRows);
+        var yTest = PreprocessingTensorOps.SelectElements(y, testRows);
 
         return (XTrain, yTrain, XVal, yVal, XTest, yTest);
     }
