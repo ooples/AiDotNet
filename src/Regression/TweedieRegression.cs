@@ -169,21 +169,16 @@ public partial class TweedieRegression<T> : RegressionBase<T>
         // different algorithm. The real estimation now runs.
 
         int numFeatures = x.Columns;
-        int numSamples = x.Rows;
         Coefficients = new Vector<T>(numFeatures);
         Intercept = NumOps.Zero;
 
         // Calculate mean of positive values for initialization
-        T sumY = NumOps.Zero;
-        int countPositive = 0;
-        for (int i = 0; i < numSamples; i++)
-        {
-            if (NumOps.GreaterThan(y[i], NumOps.Zero))
-            {
-                sumY = NumOps.Add(sumY, y[i]);
-                countPositive++;
-            }
-        }
+        var yTensor = y.AsTensor();
+        var isPositive = Engine.TensorGreaterThan(yTensor, NumOps.Zero);
+        int countPositive = Engine.TensorCountNonzero(isPositive);
+        T sumY = countPositive > 0
+            ? Engine.TensorSum(Engine.TensorWhere(isPositive, yTensor, Engine.TensorZerosLike(yTensor)))
+            : NumOps.Zero;
         T meanPositive = countPositive > 0 ? NumOps.Divide(sumY, NumOps.FromDouble(countPositive)) : NumOps.One;
         double meanPositiveDouble = NumOps.ToDouble(meanPositive);
 
@@ -218,10 +213,7 @@ public partial class TweedieRegression<T> : RegressionBase<T>
             var minRegularization = 1e-10;
             var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
             var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
-            for (int i = 0; i < xTwx.Rows; i++)
-            {
-                xTwx[i, i] = NumOps.Add(xTwx[i, i], effectiveStrength);
-            }
+            xTwx = RegressionEngineOps2.AddDiagonal(xTwx, effectiveStrength);
 
             Vector<T> newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, _options.DecompositionType);
 
@@ -237,7 +229,7 @@ public partial class TweedieRegression<T> : RegressionBase<T>
             // all-zero initialization, leaving only the intercept and a negative R-squared.
             bool converged = HasConverged(currentCoefficients, newCoefficients);
 
-            Coefficients = new Vector<T>([.. newCoefficients.Take(numFeatures)]);
+            Coefficients = newCoefficients.GetSubVector(0, numFeatures);
             Intercept = newCoefficients[numFeatures];
 
             if (converged)
@@ -271,35 +263,45 @@ public partial class TweedieRegression<T> : RegressionBase<T>
     private void ValidateTweedieData(Vector<T> y)
     {
         double p = _options.PowerParameter;
-
-        for (int i = 0; i < y.Length; i++)
+        if (p <= 0 || y.Length == 0)
         {
-            double value = NumOps.ToDouble(y[i]);
-
-            // For p >= 2 (Gamma, Inverse Gaussian, etc.), values must be strictly positive
-            if (p >= 2 && value <= 0)
-            {
-                throw new ArgumentException(
-                    $"Tweedie regression with power parameter p ≥ 2 requires strictly positive target values. " +
-                    $"Found value {value} at index {i}. Use p in range (1, 2) if you have zeros in your data.");
-            }
-
-            // For 1 <= p < 2 (Poisson or compound Poisson-Gamma), values must be non-negative
-            if (p >= 1 && p < 2 && value < 0)
-            {
-                throw new ArgumentException(
-                    $"Tweedie regression with power parameter 1 ≤ p < 2 requires non-negative target values. " +
-                    $"Found value {value} at index {i}.");
-            }
-
-            // For p > 0 and p != integer, values must be non-negative
-            if (p > 0 && value < 0)
-            {
-                throw new ArgumentException(
-                    $"Tweedie regression with power parameter p > 0 requires non-negative target values. " +
-                    $"Found value {value} at index {i}.");
-            }
+            return;
         }
+
+        // The first offending sample decides the message, exactly as a front-to-back scan would:
+        // p >= 2 rejects y <= 0, any other p > 0 rejects y < 0.
+        var values = y.AsTensor();
+        var offending = p >= 2
+            ? Engine.TensorLessEqual(values, Engine.TensorZerosLike(values))
+            : Engine.TensorLessThan(values, NumOps.Zero);
+        int i = RegressionEngineOps2.FirstNonzero(offending);
+        if (i < 0)
+        {
+            return;
+        }
+
+        T value = y[i];
+
+        // For p >= 2 (Gamma, Inverse Gaussian, etc.), values must be strictly positive
+        if (p >= 2)
+        {
+            throw new ArgumentException(
+                $"Tweedie regression with power parameter p ≥ 2 requires strictly positive target values. " +
+                $"Found value {value} at index {i}. Use p in range (1, 2) if you have zeros in your data.");
+        }
+
+        // For 1 <= p < 2 (Poisson or compound Poisson-Gamma), values must be non-negative
+        if (p >= 1)
+        {
+            throw new ArgumentException(
+                $"Tweedie regression with power parameter 1 ≤ p < 2 requires non-negative target values. " +
+                $"Found value {value} at index {i}.");
+        }
+
+        // For p > 0 and p != integer, values must be non-negative
+        throw new ArgumentException(
+            $"Tweedie regression with power parameter p > 0 requires non-negative target values. " +
+            $"Found value {value} at index {i}.");
     }
 
     /// <summary>
@@ -354,39 +356,50 @@ public partial class TweedieRegression<T> : RegressionBase<T>
 
         return _options.LinkFunction switch
         {
-            TweedieLinkFunction.Log => eta.Transform(NumOps.Exp),
-            TweedieLinkFunction.Power => eta.Transform(v =>
-            {
-                double etaVal = NumOps.ToDouble(v);
-                double oneMinusP = 1.0 - p;
-
-                if (Math.Abs(oneMinusP) < 1e-10)
-                {
-                    // When p ≈ 1, inverse is exp
-                    return NumOps.FromDouble(Math.Exp(etaVal));
-                }
-
-                // μ = η^(1/(1-p))
-                // Need to handle sign and ensure positive result
-                double invPower = 1.0 / oneMinusP;
-                if (etaVal <= 0 && Math.Abs(invPower - Math.Round(invPower)) > 1e-10)
-                {
-                    // Non-integer power of non-positive number
-                    return NumOps.FromDouble(1e-10);
-                }
-
-                double result = Math.Pow(Math.Abs(etaVal), invPower);
-                if (etaVal < 0 && Math.Abs(invPower - Math.Round(invPower)) < 1e-10)
-                {
-                    // Integer power, preserve sign
-                    result *= Math.Sign(etaVal);
-                }
-
-                return NumOps.FromDouble(Math.Max(result, 1e-10));
-            }),
+            TweedieLinkFunction.Log => Engine.Exp(eta),
+            TweedieLinkFunction.Power => ApplyInversePowerLink(eta, p),
             TweedieLinkFunction.Identity => eta.Clone(),
-            _ => eta.Transform(NumOps.Exp)
+            _ => Engine.Exp(eta)
         };
+    }
+
+    /// <summary>
+    /// Inverse of the power link, μ = η^(1/(1-p)), element-wise with the same guards for
+    /// non-positive η as the scalar definition and a floor of 1e-10.
+    /// </summary>
+    private Vector<T> ApplyInversePowerLink(Vector<T> eta, double p)
+    {
+        double oneMinusP = 1.0 - p;
+        if (Math.Abs(oneMinusP) < 1e-10)
+        {
+            // When p ≈ 1, inverse is exp
+            return Engine.Exp(eta);
+        }
+
+        // μ = η^(1/(1-p))
+        // Need to handle sign and ensure positive result
+        double invPower = 1.0 / oneMinusP;
+        double roundingGap = Math.Abs(invPower - Math.Round(invPower));
+        T floor = NumOps.FromDouble(1e-10);
+        var etaTensor = eta.AsTensor();
+        var result = Engine.TensorPower(Engine.TensorAbs(etaTensor), NumOps.FromDouble(invPower));
+
+        if (roundingGap > 1e-10)
+        {
+            // Non-integer power of non-positive number
+            result = Engine.TensorWhere(
+                Engine.TensorLessEqual(etaTensor, Engine.TensorZerosLike(etaTensor)),
+                Engine.Fill(eta.Length, floor).AsTensor(),
+                result);
+        }
+        else if (roundingGap < 1e-10)
+        {
+            // Integer power, preserve sign
+            result = Engine.TensorWhere(
+                Engine.TensorLessThan(etaTensor, NumOps.Zero), Engine.TensorNegate(result), result);
+        }
+
+        return Engine.TensorMax(result, floor).ToVector();
     }
 
     /// <summary>
@@ -406,25 +419,9 @@ public partial class TweedieRegression<T> : RegressionBase<T>
     /// </remarks>
     private Vector<T> ClampMu(Vector<T> mu)
     {
-        var result = new Vector<T>(mu.Length);
         T minValue = NumOps.FromDouble(1e-10);
         T maxValue = NumOps.FromDouble(1e10);
-
-        for (int i = 0; i < mu.Length; i++)
-        {
-            T value = mu[i];
-            if (NumOps.LessThan(value, minValue))
-            {
-                value = minValue;
-            }
-            else if (NumOps.GreaterThan(value, maxValue))
-            {
-                value = maxValue;
-            }
-            result[i] = value;
-        }
-
-        return result;
+        return Engine.Clamp(mu, minValue, maxValue);
     }
 
     /// <summary>
@@ -448,27 +445,23 @@ public partial class TweedieRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ComputeWeights(Vector<T> mu)
     {
-        var weights = new Vector<T>(mu.Length);
         double p = _options.PowerParameter;
-
-        for (int i = 0; i < mu.Length; i++)
+        var muVal = RegressionEngineOps2.ClampMin(mu, NumOps.FromDouble(1e-10));
+        var weights = _options.LinkFunction switch
         {
-            double muVal = Math.Max(NumOps.ToDouble(mu[i]), 1e-10);
-            double weight = _options.LinkFunction switch
-            {
-                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ^p × (1/μ)²) = μ^(2-p)
-                TweedieLinkFunction.Log => Math.Pow(muVal, 2.0 - p),
-                // W = 1 / (V(μ) × (g'(μ))²) = μ^p / (1-p)²
-                TweedieLinkFunction.Power => Math.Pow(muVal, p) / Math.Max((1.0 - p) * (1.0 - p), 1e-10),
-                // W = 1 / (V(μ) × 1) = 1/μ^p
-                TweedieLinkFunction.Identity => 1.0 / Math.Pow(muVal, p),
-                _ => Math.Pow(muVal, 2.0 - p)
-            };
+            // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ^p × (1/μ)²) = μ^(2-p)
+            TweedieLinkFunction.Log => Engine.Power(muVal, NumOps.FromDouble(2.0 - p)),
+            // W = 1 / (V(μ) × (g'(μ))²) = μ^p / (1-p)²
+            TweedieLinkFunction.Power => Engine.Divide(
+                Engine.Power(muVal, NumOps.FromDouble(p)),
+                NumOps.FromDouble(Math.Max((1.0 - p) * (1.0 - p), 1e-10))),
+            // W = 1 / (V(μ) × 1) = 1/μ^p
+            TweedieLinkFunction.Identity => Engine.Reciprocal(Engine.Power(muVal, NumOps.FromDouble(p))),
+            _ => Engine.Power(muVal, NumOps.FromDouble(2.0 - p))
+        };
 
-            // Clamp weights to prevent numerical issues
-            weight = Math.Max(1e-10, Math.Min(1e10, weight));
-            weights[i] = NumOps.FromDouble(weight);
-        }
+        // Clamp weights to prevent numerical issues
+        weights = Engine.Clamp(weights, NumOps.FromDouble(1e-10), NumOps.FromDouble(1e10));
 
         return Matrix<T>.CreateDiagonal(weights);
     }
@@ -496,31 +489,21 @@ public partial class TweedieRegression<T> : RegressionBase<T>
     /// </remarks>
     private Vector<T> ComputeWorkingResponse(Vector<T> eta, Vector<T> y, Vector<T> mu)
     {
-        var z = new Vector<T>(eta.Length);
         double p = _options.PowerParameter;
+        var muVal = RegressionEngineOps2.ClampMin(mu, NumOps.FromDouble(1e-10));
+        var diff = Engine.Subtract(y, muVal);
 
-        for (int i = 0; i < eta.Length; i++)
+        return _options.LinkFunction switch
         {
-            double etaVal = NumOps.ToDouble(eta[i]);
-            double yVal = NumOps.ToDouble(y[i]);
-            double muVal = Math.Max(NumOps.ToDouble(mu[i]), 1e-10);
-            double diff = yVal - muVal;
-
-            double zVal = _options.LinkFunction switch
-            {
-                // g'(μ) = 1/μ, so z = η + (y - μ)/μ
-                TweedieLinkFunction.Log => etaVal + diff / muVal,
-                // g'(μ) = (1-p)μ^(-p), so z = η + (y - μ)(1-p)μ^(-p)
-                TweedieLinkFunction.Power => etaVal + diff * (1.0 - p) * Math.Pow(muVal, -p),
-                // g'(μ) = 1, so z = η + (y - μ) = y
-                TweedieLinkFunction.Identity => yVal,
-                _ => etaVal + diff / muVal
-            };
-
-            z[i] = NumOps.FromDouble(zVal);
-        }
-
-        return z;
+            // g'(μ) = 1/μ, so z = η + (y - μ)/μ
+            TweedieLinkFunction.Log => Engine.Add(eta, Engine.Divide(diff, muVal)),
+            // g'(μ) = (1-p)μ^(-p), so z = η + (y - μ)(1-p)μ^(-p)
+            TweedieLinkFunction.Power => Engine.Add(eta, Engine.Multiply(
+                Engine.Multiply(diff, NumOps.FromDouble(1.0 - p)), Engine.Power(muVal, NumOps.FromDouble(-p)))),
+            // g'(μ) = 1, so z = η + (y - μ) = y
+            TweedieLinkFunction.Identity => y.Clone(),
+            _ => Engine.Add(eta, Engine.Divide(diff, muVal))
+        };
     }
 
     /// <summary>
@@ -567,19 +550,16 @@ public partial class TweedieRegression<T> : RegressionBase<T>
         int numParams = Coefficients.Length + 1;
         double power = _options.PowerParameter;
 
-        double sumPearsonResidualsSq = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double yVal = NumOps.ToDouble(y[i]);
-            double muVal = Math.Max(NumOps.ToDouble(predictions[i]), 1e-10);
-            // For Tweedie, variance = μ^p
-            double variance = Math.Pow(muVal, power);
-            double pearsonResidualSq = (yVal - muVal) * (yVal - muVal) / Math.Max(variance, 1e-10);
-            sumPearsonResidualsSq += pearsonResidualSq;
-        }
+        T floor = NumOps.FromDouble(1e-10);
+        var muVal = RegressionEngineOps2.ClampMin(predictions, floor);
+        // For Tweedie, variance = μ^p
+        var variance = Engine.Power(muVal, NumOps.FromDouble(power));
+        var residual = Engine.Subtract(y, muVal);
+        var pearsonResidualsSq = Engine.Divide(
+            Engine.Multiply(residual, residual), RegressionEngineOps2.ClampMin(variance, floor));
+        T sumPearsonResidualsSq = n == 0 ? NumOps.Zero : Engine.Sum(pearsonResidualsSq);
 
-        double dispersion = sumPearsonResidualsSq / Math.Max(1, n - numParams);
-        _dispersion = NumOps.FromDouble(dispersion);
+        _dispersion = NumOps.Divide(sumPearsonResidualsSq, NumOps.FromDouble(Math.Max(1, n - numParams)));
     }
 
     /// <summary>
@@ -604,9 +584,7 @@ public partial class TweedieRegression<T> : RegressionBase<T>
         // quantity, which is what drove R-squared sharply negative on positive data. The omission
         // was invisible while an OLS short-circuit was fitting response-scale coefficients earlier
         // in Train, so eta and mu happened to coincide.
-        var eta = x.Multiply(Coefficients);
-        for (int i = 0; i < eta.Length; i++)
-            eta[i] = NumOps.Add(eta[i], Intercept);
+        var eta = RegressionEngineOps2.AddScalar(x.Multiply(Coefficients), Intercept);
 
         return ApplyInverseLink(eta);
     }
