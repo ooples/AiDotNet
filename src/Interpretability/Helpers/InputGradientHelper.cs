@@ -247,7 +247,10 @@ public class InputGradientHelper<T>
         // Compute gradient of specific output w.r.t. input using tape
         var eng = AiDotNetEngine.Current;
         using var tape = new GradientTape<T>();
-        var output = _neuralNetwork?.Predict(inputTensor) ?? inputTensor;
+        // Predict runs under a no-grad scope; the differentiable forward is what connects the output to the input.
+        var output = _neuralNetwork is NeuralNetworks.NeuralNetworkBase<T> differentiable
+            ? differentiable.PredictWithGradients(inputTensor)
+            : _neuralNetwork?.Predict(inputTensor) ?? inputTensor;
 
         // Create a selector that extracts the target output index
         // Loss = output[outputIndex] (we want gradient of this single output w.r.t. input)

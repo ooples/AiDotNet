@@ -6971,7 +6971,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Train(input, expectedOutput);
     }
 
-    public virtual Tensor<T> Predict(Tensor<T> input)
+    public virtual Tensor<T> Predict(Tensor<T> input) => PredictFunnel(input, differentiable: false);
+
+    /// <summary>
+    /// Runs the same inference forward as <see cref="Predict(Tensor{T})"/> (evaluation mode: dropout off, batch
+    /// normalization on running statistics) but records it on the active <see cref="GradientTape{T}"/>, so gradients
+    /// with respect to the input -- and higher derivatives -- can be taken.
+    /// </summary>
+    /// <param name="input">The input; take gradients with respect to this tensor.</param>
+    /// <returns>The network output, connected to <paramref name="input"/> on the tape.</returns>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Predict(Tensor{T})"/> runs under a no-grad scope, so a gradient of its output is zero. Use this for
+    /// input attributions (saliency, integrated gradients), physics-informed residuals that need derivatives of the
+    /// network output, and adversarial inputs.
+    /// </para>
+    /// <para><b>For Beginners:</b> this answers "how does the output change if I nudge the input?", which a normal
+    /// prediction does not keep track of.</para>
+    /// </remarks>
+    public Tensor<T> PredictWithGradients(Tensor<T> input) => PredictFunnel(input, differentiable: true);
+
+    private Tensor<T> PredictFunnel(Tensor<T> input, bool differentiable)
     {
         RequireArchitectureAgreesWithInput();
         // A model that assembles its layers lazily does so here; the seed must be wired onto those layers.
@@ -7007,11 +7027,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Not while a layer observer is recording: it keeps intermediate outputs to read after Predict returns.
         // Not while a graph is being traced either: the trace's results are lazy nodes, and keeping the output reads its
         // storage, which realizes it on the host and marks the trace as escaping the graph, so the plan is refused.
-        var resultScope = ReleasesInferenceIntermediates && Graph.LayerForwardObserver<T>.Current is null
+        // A differentiable forward keeps its intermediates: the tape holds them for the backward.
+        var resultScope = !differentiable && ReleasesInferenceIntermediates && Graph.LayerForwardObserver<T>.Current is null
                           && !Tensors.Engines.Compilation.GraphMode.IsActive
             ? TensorScope.Begin()
             : null;
-        using var noGrad = new NoGradScope<T>();
+        IDisposable? noGrad = differentiable ? null : new NoGradScope<T>();
         try
         {
             var output = PredictInInferenceMode(input);
@@ -7055,6 +7076,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
             finally
             {
+                noGrad?.Dispose();
                 // Even when restoring the mode throws: an abandoned scope would keep collecting this thread's GPU results.
                 resultScope?.Dispose();
             }
@@ -7207,7 +7229,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Here the topology is not guessed, it is OBSERVED: the caller wanted this forward anyway, so
         // tracing it costs one observer allocation and yields the real dataflow. Runs then come from
         // the trace, which breaks at branches and rejoins by construction.
-        if (!_chainValidatedFromTrace)
+        // The one-time chain validation runs its own instrumented forward whose output is not the recorded one; while
+        // a forward is being differentiated it waits for the next plain Predict.
+        bool recording = AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>();
+        if (!_chainValidatedFromTrace && !recording)
         {
             _chainValidatedFromTrace = true;
             return PredictAndValidateChain(input);
@@ -7226,8 +7251,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var callerArena = t_callerArena;
         if (callerArena.Owner is not null) ExchangeCallerArena(default);
 
+        // A forward that is being differentiated (PredictWithGradients) cannot run in an inference arena: the arena
+        // returns a detached copy of the output, which cuts it off the tape, and recycles the intermediates the tape
+        // still holds for the backward.
         if (!InferenceArenaSettings.Enabled
-            || GraphCaptureCompatibility.IsActive)
+            || GraphCaptureCompatibility.IsActive
+            || recording)
             return PredictCore(input);
 
         if (ReferenceEquals(callerArena.Owner, this) && callerArena.Arena is { } arenaOfCaller
@@ -8768,7 +8797,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Not engaged (small model with no opt-in, or training) → behave exactly like the plain eager
         // forward: no gate, no trace, no overhead, so wrapping any model is always safe. Engagement is
         // computed each call (explicit opt-in for any size, or foundation-scale auto in eval).
-        if (!InferenceAccelerationEngaged)
+        // A forward being differentiated (PredictWithGradients, a PINN residual, an attribution) runs eager: a
+        // compiled replay records as one opaque step, so higher derivatives through it would vanish.
+        if (!InferenceAccelerationEngaged || AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
             return eagerForward();
 
         return _inferenceGate.Run(

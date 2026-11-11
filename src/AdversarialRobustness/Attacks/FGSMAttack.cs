@@ -132,7 +132,8 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
         var inputTensor = Tensor<T>.FromVector(vectorInput);
         var targetTensor = Tensor<T>.FromVector(vectorLabel);
         using var tape = new GradientTape<T>();
-        var outputTensor = nnModel.ForwardForTraining(inputTensor);
+        // The evaluation-mode forward is the model being attacked (dropout off), recorded on the tape.
+        var outputTensor = nnModel.PredictWithGradients(inputTensor);
         var diff = eng.TensorSubtract(outputTensor, targetTensor);
         var squared = eng.TensorMultiply(diff, diff);
         var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();

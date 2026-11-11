@@ -82,7 +82,7 @@ public static class NeuralNetworkDerivatives<T>
     private static Func<Tensor<T>, Tensor<T>> Component(NeuralNetworkBase<T> network, int n, int k) => x =>
     {
         var engine = Tensors.Engines.AiDotNetEngine.Current;
-        var output = network.Predict(engine.Reshape(x, new[] { 1, n }));
+        var output = network.PredictWithGradients(engine.Reshape(x, new[] { 1, n }));
         int total = output.Length;
         if (k >= total)
             throw new ArgumentOutOfRangeException(nameof(k), $"The network has {total} outputs; output {k} was requested.");

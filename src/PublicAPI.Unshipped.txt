@@ -1370,3 +1370,4 @@ static AiDotNet.Serialization.LayerStateBag.FormatDelegate(System.Delegate? valu
 AiDotNet.Configuration.JitCompilationConfig.PersistCompiledProgram.get -> bool
 AiDotNet.Configuration.JitCompilationConfig.PersistCompiledProgram.set -> void
 AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.CompiledPlansChanged.get -> bool
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.PredictWithGradients(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

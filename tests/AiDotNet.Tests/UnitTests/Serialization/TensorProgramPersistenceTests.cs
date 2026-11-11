@@ -64,12 +64,9 @@ public class TensorProgramPersistenceTests
     [Fact]
     public void Closure_ThatReadsItsInputOnTheHost_IsNotSavedAsAProgram()
     {
-        // Picks a column by a value read out of the input: a program would bake in the first input's choice.
+        // Scales by a value read out of the input on the host: a program would bake in the first input's value.
         Func<Tensor<float>, Tensor<float>> f = x =>
-        {
-            int column = x[0] > 0 ? 1 : 0;
-            return AiDotNetEngine.Current.TensorNarrow(x, x.Rank - 1, column, 1);
-        };
+            AiDotNetEngine.Current.TensorMultiplyScalar(x, x.ToArray()[0]);
         string saved = DelegateState.Save(f, new[] { 3 });
         Assert.False(saved.StartsWith(DelegateState.ProgramScheme, StringComparison.Ordinal));
     }
@@ -134,11 +131,16 @@ public class TensorProgramPersistenceTests
         }
         Assert.NotEmpty(result.CompiledProgram);
         Assert.Equal(result.CompiledProgram, restored.CompiledProgram);
+        var embedded = AiDotNet.Tensors.Engines.Export.ProgramPackage.Load(new System.IO.MemoryStream(result.CompiledProgram));
+        Assert.False(embedded.Program.ParametersBound);       // weights are not stored twice
+        Assert.NotEmpty(embedded.Targets);                    // this device's compiled plan travels with the model
 
         AssertClose(before, restored.Predict(x));
+        Assert.False(restored.CompiledPlansChanged); // same machine and shape: the embedded plan was used, not recompiled
+
         var other = Random(5, 7, 4); // another batch size and values: the program has a symbolic batch
         AssertClose(network.Predict(other), restored.Predict(other));
-        Assert.False(restored.CompiledPlansChanged); // same machine: the embedded plan was used, not recompiled
+        Assert.True(restored.CompiledPlansChanged);  // a plan for the new shape was compiled from the program and added
     }
 
     [Fact]
@@ -200,6 +202,34 @@ public class TensorProgramPersistenceTests
         double z = 0.1 * 0.5 + 0.2 * -1.0 + -0.3 * 2.0 + 0.4 * 0.25;
         double dt = 1 - Math.Tanh(z) * Math.Tanh(z);
         Assert.Equal(new[] { 0.5 * dt, -1.0 * dt, 2.0 * dt, 0.25 * dt }, g.ToArray(), new ToleranceComparer(1e-12));
+    }
+
+    [Fact]
+    public void InputGradientHelper_NetworkGradients_AreNonZeroAndMatchFiniteDifferences()
+    {
+        // Predict runs under a no-grad scope, so a tape over it saw nothing and every gradient explainer
+        // (saliency, integrated gradients, DeepLIFT, ...) got zeros. The helper must use the differentiable forward.
+        var net = new FeedForwardNeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 3, outputSize: 1, layers: new List<ILayer<double>>
+            {
+                new InputLayer<double>(3),
+                new DenseLayer<double>(4, activationFunction: new TanhActivation<double>()),
+                new DenseLayer<double>(1, activationFunction: new IdentityActivation<double>()),
+            }), lossFunction: new MeanSquaredErrorLoss<double>());
+        var helper = new InputGradientHelper<double>(net);
+        var x = new Vector<double>(new[] { 0.2, -0.5, 0.9 });
+
+        var g = helper.ComputeGradient(x, 0);
+        double F(Vector<double> v) => net.Predict(new Tensor<double>(v.ToArray(), new[] { 1, 3 }))[0];
+        const double h = 1e-5;
+        for (int i = 0; i < 3; i++)
+        {
+            var up = x.Clone(); up[i] += h;
+            var down = x.Clone(); down[i] -= h;
+            Assert.Equal((F(up) - F(down)) / (2 * h), g[i], 6);
+        }
+        Assert.Contains(g.ToArray(), v => v != 0);
     }
 
     [Fact]
