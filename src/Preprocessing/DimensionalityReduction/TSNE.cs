@@ -42,7 +42,7 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly TSNEInitialization _initialization;
 
     // Fitted parameters
-    private double[,]? _embedding;
+    private Matrix<T>? _embedding;
     private int _nSamples;
 
     /// <summary>
@@ -68,7 +68,7 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -124,57 +124,36 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nSamples = data.Rows;
         int n = data.Rows;
-        int p = data.Columns;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
 
         // Compute pairwise distances
-        var distances = ComputeDistances(X, n, p);
+        var distances = ComputeDistances(x);
 
-        // Compute joint probabilities P
-        var P = ComputeJointProbabilities(distances, n);
-
-        // Apply early exaggeration
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                P[i, j] *= _earlyExaggeration;
-            }
-        }
+        // Compute joint probabilities P and apply early exaggeration
+        var p = engine.TensorMultiplyScalar(ComputeJointProbabilities(distances, n), NumOps.FromDouble(_earlyExaggeration));
 
         // Initialize embedding Y
-        _embedding = InitializeEmbedding(X, n, p, random);
+        var y = InitializeEmbedding(x, n, random);
 
-        // Gradient descent
-        var Y = _embedding;
-        var gains = new double[n, _nComponents];
-        var velocity = new double[n, _nComponents];
-
-        // Initialize gains to 1
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < _nComponents; j++)
-            {
-                gains[i, j] = 1.0;
-            }
-        }
-
-        double momentum = 0.5;
+        // Gradient descent with momentum and adaptive gains
+        var gains = DimensionalityReductionOps.Full(new[] { n, _nComponents }, NumOps.One);
+        var velocity = new Tensor<T>(new[] { n, _nComponents });
+        var zero = NumOps.Zero;
+        var gainDecay = NumOps.FromDouble(0.8);
+        var gainStep = NumOps.FromDouble(0.2);
+        var minGain = NumOps.FromDouble(0.01);
+        var learningRate = NumOps.FromDouble(_learningRate);
+        var inverseExaggeration = NumOps.FromDouble(1.0 / _earlyExaggeration);
+        var momentum = NumOps.FromDouble(0.5);
+        var lateMomentum = NumOps.FromDouble(0.8);
         int earlyExaggerationEnd = 250;
 
         for (int iter = 0; iter < _nIter; iter++)
@@ -182,327 +161,200 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // Update momentum
             if (iter == 250)
             {
-                momentum = 0.8;
+                momentum = lateMomentum;
             }
 
             // Remove early exaggeration
             if (iter == earlyExaggerationEnd)
             {
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        P[i, j] /= _earlyExaggeration;
-                    }
-                }
+                p = engine.TensorMultiplyScalar(p, inverseExaggeration);
             }
 
-            // Compute Q (student-t distribution)
-            var Q = ComputeQ(Y, n);
+            // Compute Q (student-t distribution) and gradients
+            var (q, kernel) = ComputeQ(y, n);
+            var gradient = ComputeGradient(p, q, kernel, y);
 
-            // Compute gradients
-            var gradient = ComputeGradient(P, Q, Y, n);
+            // Adaptive gains: shrink where gradient and velocity share a sign, grow otherwise
+            var sameSign = engine.TensorEquals(engine.TensorGreaterThan(gradient, zero), engine.TensorGreaterThan(velocity, zero));
+            gains = engine.TensorWhere(
+                sameSign,
+                engine.TensorClampMin(engine.TensorMultiplyScalar(gains, gainDecay), minGain),
+                engine.TensorAddScalar(gains, gainStep));
 
-            // Update with momentum and adaptive learning rate
-            for (int i = 0; i < n; i++)
-            {
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    // Adaptive gains
-                    bool sameSign = (gradient[i, d] > 0) == (velocity[i, d] > 0);
-                    if (sameSign)
-                    {
-                        gains[i, d] = Math.Max(gains[i, d] * 0.8, 0.01);
-                    }
-                    else
-                    {
-                        gains[i, d] += 0.2;
-                    }
-
-                    // Update velocity
-                    velocity[i, d] = momentum * velocity[i, d] - _learningRate * gains[i, d] * gradient[i, d];
-
-                    // Update position
-                    Y[i, d] += velocity[i, d];
-                }
-            }
+            // Update velocity and position
+            velocity = engine.TensorSubtract(
+                engine.TensorMultiplyScalar(velocity, momentum),
+                engine.TensorMultiplyScalar(engine.TensorMultiply(gains, gradient), learningRate));
+            y = engine.TensorAdd(y, velocity);
 
             // Re-center
-            for (int d = 0; d < _nComponents; d++)
-            {
-                double mean = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    mean += Y[i, d];
-                }
-                mean /= n;
-
-                for (int i = 0; i < n; i++)
-                {
-                    Y[i, d] -= mean;
-                }
-            }
+            y = DimensionalityReductionOps.SubtractRow(y, DimensionalityReductionOps.ColumnMeans(y));
         }
 
-        _embedding = Y;
+        _embedding = y.ToMatrix();
     }
 
-    private double[,] ComputeDistances(double[,] X, int n, int p)
+    private Tensor<T> ComputeDistances(Tensor<T> x)
     {
-        var distances = new double[n, n];
-
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        switch (_metric)
         {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                switch (_metric)
-                {
-                    case TSNEMetric.Euclidean:
-                        for (int k = 0; k < p; k++)
-                        {
-                            double diff = X[i, k] - X[j, k];
-                            dist += diff * diff;
-                        }
-                        dist = Math.Sqrt(dist);
-                        break;
+            case TSNEMetric.Manhattan:
+                return engine.TensorCDist(x, x, 1.0);
 
-                    case TSNEMetric.Manhattan:
-                        for (int k = 0; k < p; k++)
-                        {
-                            dist += Math.Abs(X[i, k] - X[j, k]);
-                        }
-                        break;
+            case TSNEMetric.Cosine:
+                // 1 - x_i . x_j / (|x_i| |x_j|), or 1 when the norm product is at most 1e-10; zero diagonal
+                var dot = DimensionalityReductionOps.MatMulTranspose(x, x);
+                var squaredNorms = DimensionalityReductionOps.RowSums(engine.TensorSquare(x));
+                var denom = engine.TensorSqrt(engine.TensorMatMul(
+                    DimensionalityReductionOps.AsColumn(squaredNorms), DimensionalityReductionOps.AsRow(squaredNorms)));
+                var valid = engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
+                var cosine = engine.TensorWhere(
+                    valid,
+                    engine.TensorSubtract(engine.TensorOnesLike(dot), engine.TensorDivide(dot, engine.TensorWhere(valid, denom, engine.TensorOnesLike(denom)))),
+                    engine.TensorOnesLike(dot));
+                engine.TensorFillDiagonalInPlace(cosine, NumOps.Zero);
+                return cosine;
 
-                    case TSNEMetric.Cosine:
-                        double dot = 0, normI = 0, normJ = 0;
-                        for (int k = 0; k < p; k++)
-                        {
-                            dot += X[i, k] * X[j, k];
-                            normI += X[i, k] * X[i, k];
-                            normJ += X[j, k] * X[j, k];
-                        }
-                        double denom = Math.Sqrt(normI * normJ);
-                        dist = denom > 1e-10 ? 1 - dot / denom : 1;
-                        break;
-                }
-
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
+            default:
+                return DimensionalityReductionOps.EuclideanDistances(x, x);
         }
-
-        return distances;
     }
 
-    private double[,] ComputeJointProbabilities(double[,] distances, int n)
+    /// <summary>
+    /// Conditional probabilities p_j|i = exp(-d_ij^2 / (2 sigma_i^2)) / sum, with every row's sigma found by the
+    /// same 50-step bisection on the entropy (all rows advanced together; a row stops once |H - log perplexity|
+    /// &lt; 1e-5), then P = max((P + P^T) / (2n), 1e-12).
+    /// </summary>
+    private Tensor<T> ComputeJointProbabilities(Tensor<T> distances, int n)
     {
-        // Compute conditional probabilities using binary search for sigma
-        var P = new double[n, n];
-        double logPerplexity = Math.Log(_perplexity);
+        var engine = Engine;
+        var one = NumOps.One;
+        var squared = engine.TensorSquare(distances);
+        var offDiagonal = engine.TensorSubtract(
+            DimensionalityReductionOps.Full(new[] { n, n }, one), DimensionalityReductionOps.Identity<T>(n));
 
-        for (int i = 0; i < n; i++)
+        var sigma = DimensionalityReductionOps.Full(new[] { n, 1 }, one);
+        var sigmaLow = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(1e-20));
+        var sigmaHigh = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(1e20));
+        var active = DimensionalityReductionOps.Full(new[] { n, 1 }, one);
+        var conditional = new Tensor<T>(new[] { n, n });
+
+        var logPerplexity = NumOps.FromDouble(Math.Log(_perplexity));
+        var floor = NumOps.FromDouble(1e-10);
+        var tolerance = NumOps.FromDouble(1e-5);
+        var unboundedColumn = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(1e19));
+        var allOnes = DimensionalityReductionOps.Full(new[] { n, n }, one);
+        var half = NumOps.FromDouble(0.5);
+        var two = NumOps.FromDouble(2.0);
+
+        for (int iter = 0; iter < 50; iter++)
         {
-            // Binary search for sigma
-            double sigmaLow = 1e-20;
-            double sigmaHigh = 1e20;
-            double sigma = 1.0;
+            // P_i|j with the current sigma, normalized where the row sum exceeds 1e-10
+            var scale = engine.TensorMultiplyScalar(engine.TensorSquare(sigma), two);
+            var unnormalized = engine.TensorMultiply(
+                engine.TensorExp(engine.TensorNegate(engine.TensorDivide(squared, scale))), offDiagonal);
+            var sumP = engine.ReduceSum(unnormalized, new[] { 1 }, true);
+            var normalizable = engine.TensorGreaterThan(sumP, floor);
+            var rows = engine.TensorDivide(unnormalized, engine.TensorWhere(normalizable, sumP, engine.TensorOnesLike(sumP)));
 
-            for (int iter = 0; iter < 50; iter++)
+            // Entropy over entries above 1e-10 (zero for rows that could not be normalized)
+            var significant = engine.TensorGreaterThan(rows, floor);
+            var logs = engine.TensorLog(engine.TensorWhere(significant, rows, engine.TensorOnesLike(rows)));
+            var entropy = engine.TensorMultiply(
+                engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(rows, logs), new[] { 1 }, true)), normalizable);
+
+            // Rows still searching take the new probabilities
+            conditional = engine.TensorWhere(engine.TensorMultiply(allOnes, active), rows, conditional);
+
+            // Adjust sigma for rows that have not converged
+            var perpDiff = engine.TensorSubtractScalar(entropy, logPerplexity);
+            var converged = engine.TensorLessThan(engine.TensorAbs(perpDiff), tolerance);
+            active = engine.TensorMultiply(active, engine.TensorSubtract(engine.TensorOnesLike(converged), converged));
+            if (!DimensionalityReductionOps.Above(engine.TensorSum(active), NumOps.Zero))
             {
-                // Compute P_i|j with current sigma
-                double sumP = 0;
-                double entropy = 0;
-
-                for (int j = 0; j < n; j++)
-                {
-                    if (j != i)
-                    {
-                        double pij = Math.Exp(-distances[i, j] * distances[i, j] / (2 * sigma * sigma));
-                        P[i, j] = pij;
-                        sumP += pij;
-                    }
-                }
-
-                if (sumP > 1e-10)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        if (j != i)
-                        {
-                            P[i, j] /= sumP;
-                            if (P[i, j] > 1e-10)
-                            {
-                                entropy -= P[i, j] * Math.Log(P[i, j]);
-                            }
-                        }
-                    }
-                }
-
-                // Adjust sigma
-                double perpDiff = entropy - logPerplexity;
-                if (Math.Abs(perpDiff) < 1e-5)
-                {
-                    break;
-                }
-
-                if (perpDiff > 0)
-                {
-                    sigmaHigh = sigma;
-                    sigma = (sigmaLow + sigma) / 2;
-                }
-                else
-                {
-                    sigmaLow = sigma;
-                    if (sigmaHigh >= 1e19)
-                    {
-                        sigma *= 2;
-                    }
-                    else
-                    {
-                        sigma = (sigma + sigmaHigh) / 2;
-                    }
-                }
+                break;
             }
+
+            var tooWide = engine.TensorGreaterThan(perpDiff, NumOps.Zero);
+            var lowered = engine.TensorMultiplyScalar(engine.TensorAdd(sigmaLow, sigma), half);
+            var raised = engine.TensorWhere(
+                engine.TensorGreaterEqual(sigmaHigh, unboundedColumn),
+                engine.TensorMultiplyScalar(sigma, two),
+                engine.TensorMultiplyScalar(engine.TensorAdd(sigma, sigmaHigh), half));
+
+            var newHigh = engine.TensorWhere(tooWide, sigma, sigmaHigh);
+            var newLow = engine.TensorWhere(tooWide, sigmaLow, sigma);
+            var newSigma = engine.TensorWhere(tooWide, lowered, raised);
+            sigmaHigh = engine.TensorWhere(active, newHigh, sigmaHigh);
+            sigmaLow = engine.TensorWhere(active, newLow, sigmaLow);
+            sigma = engine.TensorWhere(active, newSigma, sigma);
         }
 
-        // Symmetrize
-        var Psym = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                Psym[i, j] = (P[i, j] + P[j, i]) / (2 * n);
-            }
-        }
-
-        // Ensure minimum probability
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                Psym[i, j] = Math.Max(Psym[i, j], 1e-12);
-            }
-        }
-
-        return Psym;
+        // Symmetrize and ensure minimum probability
+        var symmetric = engine.TensorDivideScalar(
+            engine.TensorAdd(conditional, engine.TensorTranspose(conditional)), NumOps.FromDouble(2.0 * n));
+        return engine.TensorClampMin(symmetric, NumOps.FromDouble(1e-12));
     }
 
-    private double[,] InitializeEmbedding(double[,] X, int n, int p, Random random)
+    private Tensor<T> InitializeEmbedding(Tensor<T> x, int n, Random random)
     {
-        var Y = new double[n, _nComponents];
-
+        var engine = Engine;
         switch (_initialization)
         {
             case TSNEInitialization.PCA:
-                // Simple PCA initialization
-                var mean = new double[p];
-                for (int j = 0; j < p; j++)
+                // PCA projection scaled so the first component has standard deviation 1e-4 (sklearn init="pca")
+                var centered = DimensionalityReductionOps.SubtractRow(x, DimensionalityReductionOps.ColumnMeans(x));
+                var (_, vectors) = DimensionalityReductionOps.SymmetricEigen(
+                    DimensionalityReductionOps.TransposeMatMul(centered, centered), descending: true);
+                int available = Math.Min(_nComponents, x.Shape[1]);
+                var projected = engine.TensorMatMul(centered, DimensionalityReductionOps.FirstColumns(vectors, available));
+                if (available < _nComponents)
                 {
-                    for (int i = 0; i < n; i++)
-                    {
-                        mean[j] += X[i, j];
-                    }
-                    mean[j] /= n;
+                    projected = engine.TensorConcatenate(
+                        new[] { projected, new Tensor<T>(new[] { n, _nComponents - available }) }, 1);
                 }
 
-                // Use first few principal directions (simplified)
-                for (int i = 0; i < n; i++)
-                {
-                    for (int d = 0; d < _nComponents; d++)
-                    {
-                        Y[i, d] = 0;
-                        for (int j = 0; j < Math.Min(p, _nComponents); j++)
-                        {
-                            Y[i, d] += (X[i, j] - mean[j]) * (d == j ? 1 : 0);
-                        }
-                        Y[i, d] *= 0.0001;
-                    }
-                }
-                break;
+                var firstColumn = engine.TensorNarrow(projected, 1, 0, 1);
+                var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(firstColumn), new[] { 0 }, true));
+                var scale = engine.TensorDivide(
+                    DimensionalityReductionOps.Full(new[] { 1, 1 }, NumOps.FromDouble(1e-4)),
+                    engine.TensorWhere(
+                        engine.TensorGreaterThan(std, NumOps.Zero), std, engine.TensorOnesLike(std)));
+                return engine.TensorMultiply(projected, scale);
 
             case TSNEInitialization.Random:
             default:
-                for (int i = 0; i < n; i++)
-                {
-                    for (int d = 0; d < _nComponents; d++)
-                    {
-                        // Initialize with small random values
-                        Y[i, d] = 0.0001 * (random.NextDouble() - 0.5);
-                    }
-                }
-                break;
+                // Small random values 1e-4 (u - 0.5)
+                return engine.TensorMultiplyScalar(
+                    engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, n, _nComponents), NumOps.FromDouble(0.5)),
+                    NumOps.FromDouble(0.0001));
         }
-
-        return Y;
     }
 
-    private double[,] ComputeQ(double[,] Y, int n)
+    /// <summary>Returns (Q, kernel) with kernel = 1 / (1 + |y_i - y_j|^2) off the diagonal (zero on it).</summary>
+    private (Tensor<T> Q, Tensor<T> Kernel) ComputeQ(Tensor<T> y, int n)
     {
-        var Q = new double[n, n];
-        double sumQ = 0;
+        var engine = Engine;
+        var kernel = engine.TensorReciprocal(engine.TensorAddScalar(DimensionalityReductionOps.SquaredDistances(y, y), NumOps.One));
+        engine.TensorFillDiagonalInPlace(kernel, NumOps.Zero);
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diff = Y[i, d] - Y[j, d];
-                    dist += diff * diff;
-                }
-
-                // Student-t distribution with 1 degree of freedom
-                double qij = 1.0 / (1.0 + dist);
-                Q[i, j] = qij;
-                Q[j, i] = qij;
-                sumQ += 2 * qij;
-            }
-        }
-
-        // Normalize
-        if (sumQ > 0)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Q[i, j] = Math.Max(Q[i, j] / sumQ, 1e-12);
-                }
-            }
-        }
-
-        return Q;
+        // Normalize by the total (when positive) with a 1e-12 floor; the diagonal only enters through the kernel (zero)
+        var sumQ = engine.ReduceSum(engine.Reshape(kernel, new[] { 1, n * n }), new[] { 1 }, true);
+        var positive = engine.TensorGreaterThan(sumQ, NumOps.Zero);
+        var q = engine.TensorClampMin(
+            engine.TensorDivide(kernel, engine.TensorWhere(positive, sumQ, engine.TensorOnesLike(sumQ))), NumOps.FromDouble(1e-12));
+        return (q, kernel);
     }
 
-    private double[,] ComputeGradient(double[,] P, double[,] Q, double[,] Y, int n)
+    /// <summary>dC/dy_i = sum_j 4 (p_ij - q_ij) (y_i - y_j) / (1 + |y_i - y_j|^2).</summary>
+    private Tensor<T> ComputeGradient(Tensor<T> p, Tensor<T> q, Tensor<T> kernel, Tensor<T> y)
     {
-        var gradient = new double[n, _nComponents];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
-
-                double dist = 0;
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diff = Y[i, d] - Y[j, d];
-                    dist += diff * diff;
-                }
-
-                double mult = 4 * (P[i, j] - Q[i, j]) / (1 + dist);
-
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    gradient[i, d] += mult * (Y[i, d] - Y[j, d]);
-                }
-            }
-        }
-
-        return gradient;
+        var engine = Engine;
+        var weights = engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSubtract(p, q), kernel), NumOps.FromDouble(4.0));
+        return engine.TensorSubtract(
+            DimensionalityReductionOps.ScaleRows(y, DimensionalityReductionOps.RowSums(weights)),
+            engine.TensorMatMul(weights, y));
     }
 
     /// <summary>
@@ -524,19 +376,7 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int d = _embedding.GetLength(1);
-        var result = new T[n, d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>
