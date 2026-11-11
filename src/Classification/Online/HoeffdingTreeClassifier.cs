@@ -82,6 +82,11 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
     private readonly List<T> _knownClasses;
 
     /// <summary>
+    /// Numeric operations for the static deserializer and the node defaults.
+    /// </summary>
+    private static readonly INumericOperations<T> StaticOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
     /// Gets the total number of samples the model has seen.
     /// </summary>
     public long SamplesSeen { get; private set; }
@@ -105,7 +110,7 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
 
         // Split information (for internal nodes)
         public int SplitFeature { get; set; } = -1;
-        public double SplitThreshold { get; set; }
+        public T SplitThreshold { get; set; } = StaticOps.Zero;
         public HoeffdingNode? Left { get; set; }
         public HoeffdingNode? Right { get; set; }
 
@@ -118,8 +123,8 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
     /// </summary>
     private class FeatureStats
     {
-        public double Min { get; set; } = double.MaxValue;
-        public double Max { get; set; } = double.MinValue;
+        public T Min { get; set; } = StaticOps.MaxValue;
+        public T Max { get; set; } = StaticOps.MinValue;
         /// <summary>
         /// When true, Min/Max range is frozen (established during batch pass 1).
         /// Bin assignments use the stable range without shifting boundaries.
@@ -232,7 +237,7 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
         if (_root != null && _root.FeatureStatistics != null)
         {
             // Save the established ranges
-            var savedRanges = new (double Min, double Max)[NumFeatures];
+            var savedRanges = new (T Min, T Max)[NumFeatures];
             for (int f = 0; f < NumFeatures; f++)
             {
                 var stats = _root.FeatureStatistics[f];
@@ -320,29 +325,31 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
         if (leaf.FeatureStatistics is null || NumFeatures == 0)
             return;
 
-        var splitCandidates = new List<(int Feature, double Threshold, double Gain)>();
-        double currentEntropy = CalculateEntropy(leaf.ClassCounts, leaf.TotalCount);
+        var splitCandidates = new List<(int Feature, T Threshold, T Gain)>();
+        T currentEntropy = CalculateEntropy(leaf.ClassCounts, leaf.TotalCount);
 
         for (int f = 0; f < NumFeatures; f++)
         {
             var stats = leaf.FeatureStatistics[f];
-            if (Math.Abs(stats.Max - stats.Min) < 1e-10) continue;
+            T range = NumOps.Subtract(stats.Max, stats.Min);
+            if (NumOps.Compare(NumOps.Abs(range), NumOps.FromDouble(1e-10)) < 0) continue;
 
             for (int b = 1; b < _options.NumBins; b++)
             {
-                double threshold = stats.Min + (stats.Max - stats.Min) * b / _options.NumBins;
-                double gain = CalculateInformationGain(leaf, f, threshold, currentEntropy);
+                T threshold = NumOps.Add(stats.Min,
+                    NumOps.Divide(NumOps.Multiply(range, NumOps.FromDouble(b)), NumOps.FromDouble(_options.NumBins)));
+                T gain = CalculateInformationGain(leaf, f, threshold, currentEntropy);
                 splitCandidates.Add((f, threshold, gain));
             }
         }
 
         if (splitCandidates.Count == 0) return;
 
-        splitCandidates.Sort((a, b) => b.Gain.CompareTo(a.Gain));
+        splitCandidates.Sort((a, b) => NumOps.Compare(b.Gain, a.Gain));
         var best = splitCandidates[0];
 
         // Split if the best candidate has positive information gain
-        if (best.Gain > 1e-10)
+        if (NumOps.Compare(best.Gain, NumOps.FromDouble(1e-10)) > 0)
         {
             PerformSplit(leaf, best.Feature, best.Threshold);
         }
@@ -388,8 +395,8 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
             return node;
         }
 
-        double value = NumOps.ToDouble(features[node.SplitFeature]);
-        if (value <= node.SplitThreshold)
+        T value = features[node.SplitFeature];
+        if (NumOps.Compare(value, node.SplitThreshold) <= 0)
         {
             var left = node.Left ?? throw new InvalidOperationException("Left child node has not been initialized.");
             return SortToLeaf(left, features);
@@ -483,7 +490,7 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
         var featureStatistics = leaf.FeatureStatistics ?? throw new InvalidOperationException("FeatureStatistics has not been initialized.");
         for (int f = 0; f < features.Length; f++)
         {
-            double value = NumOps.ToDouble(features[f]);
+            T value = features[f];
             var stats = featureStatistics[f];
 
             // Update min/max range — used for BOTH bin assignment and split threshold mapping.
@@ -491,8 +498,8 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
             // and must not change, ensuring all samples use consistent bin boundaries.
             if (!stats.RangeFrozen)
             {
-                stats.Min = Math.Min(stats.Min, value);
-                stats.Max = Math.Max(stats.Max, value);
+                stats.Min = NumOps.Compare(value, stats.Min) < 0 ? value : stats.Min;
+                stats.Max = NumOps.Compare(value, stats.Max) > 0 ? value : stats.Max;
             }
 
             var binsByClass = stats.BinsByClass ?? throw new InvalidOperationException("BinsByClass has not been initialized.");
@@ -510,15 +517,23 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
         }
     }
 
-    private int GetBinIndex(double value, double min, double max)
+    private int GetBinIndex(T value, T min, T max)
     {
-        if (Math.Abs(max - min) < 1e-10)
+        T range = NumOps.Subtract(max, min);
+        if (NumOps.Compare(NumOps.Abs(range), NumOps.FromDouble(1e-10)) < 0)
         {
             return 0;
         }
 
-        int bin = (int)(((value - min) / (max - min)) * (_options.NumBins - 1));
-        return Math.Max(0, Math.Min(_options.NumBins - 1, bin));
+        // bin = trunc(((value - min) / (max - min)) * (NumBins - 1)), clamped to [0, NumBins - 1]
+        T scaled = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(value, min), range), NumOps.FromDouble(_options.NumBins - 1));
+        if (NumOps.Compare(scaled, NumOps.Zero) <= 0)
+        {
+            return 0;
+        }
+
+        T last = NumOps.FromDouble(_options.NumBins - 1);
+        return NumOps.Compare(scaled, last) >= 0 ? _options.NumBins - 1 : NumOps.ToInt32(NumOps.Floor(scaled));
     }
 
     private void AttemptSplit(HoeffdingNode leaf)
@@ -534,19 +549,21 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
         }
 
         // Calculate information gain for each feature/threshold combination
-        var splitCandidates = new List<(int Feature, double Threshold, double Gain)>();
-        double currentEntropy = CalculateEntropy(leaf.ClassCounts, leaf.TotalCount);
+        var splitCandidates = new List<(int Feature, T Threshold, T Gain)>();
+        T currentEntropy = CalculateEntropy(leaf.ClassCounts, leaf.TotalCount);
 
         for (int f = 0; f < NumFeatures; f++)
         {
             var stats = leaf.FeatureStatistics[f];
-            if (Math.Abs(stats.Max - stats.Min) < 1e-10) continue;
+            T range = NumOps.Subtract(stats.Max, stats.Min);
+            if (NumOps.Compare(NumOps.Abs(range), NumOps.FromDouble(1e-10)) < 0) continue;
 
             // Try bin boundaries as thresholds
             for (int b = 1; b < _options.NumBins; b++)
             {
-                double threshold = stats.Min + (stats.Max - stats.Min) * b / _options.NumBins;
-                double gain = CalculateInformationGain(leaf, f, threshold, currentEntropy);
+                T threshold = NumOps.Add(stats.Min,
+                    NumOps.Divide(NumOps.Multiply(range, NumOps.FromDouble(b)), NumOps.FromDouble(_options.NumBins)));
+                T gain = CalculateInformationGain(leaf, f, threshold, currentEntropy);
                 splitCandidates.Add((f, threshold, gain));
             }
         }
@@ -557,7 +574,7 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
         }
 
         // Sort by gain
-        splitCandidates.Sort((a, b) => b.Gain.CompareTo(a.Gain));
+        splitCandidates.Sort((a, b) => NumOps.Compare(b.Gain, a.Gain));
         var best = splitCandidates[0];
         var secondBest = splitCandidates[1];
 
@@ -566,33 +583,35 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
         double epsilon = Math.Sqrt(r * r * Math.Log(1.0 / _options.Delta) / (2.0 * leaf.TotalCount));
 
         // Check if we should split
-        bool shouldSplit = (best.Gain - secondBest.Gain > epsilon) ||
-                          (epsilon < _options.TieThreshold && best.Gain > secondBest.Gain);
+        bool shouldSplit = (NumOps.Compare(NumOps.Subtract(best.Gain, secondBest.Gain), NumOps.FromDouble(epsilon)) > 0) ||
+                          (epsilon < _options.TieThreshold && NumOps.Compare(best.Gain, secondBest.Gain) > 0);
 
-        if (shouldSplit && best.Gain > 0)
+        if (shouldSplit && NumOps.Compare(best.Gain, NumOps.Zero) > 0)
         {
             PerformSplit(leaf, best.Feature, best.Threshold);
         }
     }
 
-    private double CalculateEntropy(Dictionary<int, long> classCounts, long total)
+    private T CalculateEntropy(Dictionary<int, long> classCounts, long total)
     {
-        if (total == 0) return 0;
+        if (total == 0) return NumOps.Zero;
 
-        double entropy = 0;
+        T entropy = NumOps.Zero;
+        T logTwo = NumOps.Log(NumOps.FromDouble(2.0));
+        T totalCount = NumOps.FromDouble(total);
         foreach (var count in classCounts.Values)
         {
             if (count > 0)
             {
-                double p = (double)count / total;
-                entropy -= p * (Math.Log(p) / Math.Log(2));
+                T p = NumOps.Divide(NumOps.FromDouble(count), totalCount);
+                entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, NumOps.Divide(NumOps.Log(p), logTwo)));
             }
         }
         return entropy;
     }
 
-    private double CalculateInformationGain(HoeffdingNode leaf, int feature, double threshold,
-        double currentEntropy)
+    private T CalculateInformationGain(HoeffdingNode leaf, int feature, T threshold,
+        T currentEntropy)
     {
         var leafFeatureStats = leaf.FeatureStatistics ?? throw new InvalidOperationException("FeatureStatistics has not been initialized.");
         var stats = leafFeatureStats[feature];
@@ -627,20 +646,21 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
 
         if (leftTotal == 0 || rightTotal == 0)
         {
-            return 0;
+            return NumOps.Zero;
         }
 
-        long total = leftTotal + rightTotal;
-        double leftWeight = (double)leftTotal / total;
-        double rightWeight = (double)rightTotal / total;
+        T total = NumOps.FromDouble(leftTotal + rightTotal);
+        T leftWeight = NumOps.Divide(NumOps.FromDouble(leftTotal), total);
+        T rightWeight = NumOps.Divide(NumOps.FromDouble(rightTotal), total);
 
-        double leftEntropy = CalculateEntropy(leftCounts, leftTotal);
-        double rightEntropy = CalculateEntropy(rightCounts, rightTotal);
+        T leftEntropy = CalculateEntropy(leftCounts, leftTotal);
+        T rightEntropy = CalculateEntropy(rightCounts, rightTotal);
 
-        return currentEntropy - leftWeight * leftEntropy - rightWeight * rightEntropy;
+        return NumOps.Subtract(NumOps.Subtract(currentEntropy, NumOps.Multiply(leftWeight, leftEntropy)),
+            NumOps.Multiply(rightWeight, rightEntropy));
     }
 
-    private void PerformSplit(HoeffdingNode leaf, int feature, double threshold)
+    private void PerformSplit(HoeffdingNode leaf, int feature, T threshold)
     {
         leaf.IsLeaf = false;
         leaf.SplitFeature = feature;
@@ -776,7 +796,7 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
             Depth = jObj["Depth"]?.ToObject<int>() ?? 0,
             TotalCount = jObj["TotalCount"]?.ToObject<long>() ?? 0,
             SplitFeature = jObj["SplitFeature"]?.ToObject<int>() ?? -1,
-            SplitThreshold = jObj["SplitThreshold"]?.ToObject<double>() ?? 0
+            SplitThreshold = jObj["SplitThreshold"] is JToken threshold ? threshold.ToObject<T>() ?? StaticOps.Zero : StaticOps.Zero
         };
 
         var ccObj = jObj["ClassCounts"] as JObject;
@@ -800,8 +820,8 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
                 {
                     var stats = new FeatureStats
                     {
-                        Min = featureObj["Min"]?.ToObject<double>() ?? double.MaxValue,
-                        Max = featureObj["Max"]?.ToObject<double>() ?? double.MinValue,
+                        Min = featureObj["Min"] is JToken min ? min.ToObject<T>() ?? StaticOps.MaxValue : StaticOps.MaxValue,
+                        Max = featureObj["Max"] is JToken max ? max.ToObject<T>() ?? StaticOps.MinValue : StaticOps.MinValue,
                         RangeFrozen = featureObj["RangeFrozen"]?.ToObject<bool>() ?? false
                     };
 
