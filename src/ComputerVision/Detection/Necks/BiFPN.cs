@@ -145,8 +145,7 @@ public class BiFPN<T> : NeckBase<T>
             var fusionWeights = new List<Tensor<T>>();
             for (int j = 0; j < 2; j++)
             {
-                var weight = new Tensor<T>(new[] { 1 });
-                weight[0] = NumOps.FromDouble(1.0); // Initialize to equal contribution
+                var weight = CvTensorOps<T>.Fill(new[] { 1 }, 1.0); // Initialize to equal contribution
                 fusionWeights.Add(weight);
             }
             _topDownFusionWeights.Add(fusionWeights);
@@ -171,8 +170,7 @@ public class BiFPN<T> : NeckBase<T>
             var fusionWeights = new List<Tensor<T>>();
             for (int j = 0; j < numInputs; j++)
             {
-                var weight = new Tensor<T>(new[] { 1 });
-                weight[0] = NumOps.FromDouble(1.0);
+                var weight = CvTensorOps<T>.Fill(new[] { 1 }, 1.0);
                 fusionWeights.Add(weight);
             }
             _bottomUpFusionWeights.Add(fusionWeights);
@@ -188,11 +186,12 @@ public class BiFPN<T> : NeckBase<T>
     private void InitializeConvWeights(Tensor<T> weights, Random random)
     {
         double scale = Math.Sqrt(2.0 / weights.Shape[1]);
-        for (int i = 0; i < weights.Length; i++)
+        var values = new double[weights.Length];
+        for (int i = 0; i < values.Length; i++)
         {
-            double val = random.NextDouble() * 2 * scale - scale;
-            weights[i] = NumOps.FromDouble(val);
+            values[i] = random.NextDouble() * 2 * scale - scale;
         }
+        CvTensorOps<T>.FromDoubleArray(values, new[] { values.Length }).AsSpan().CopyTo(weights.AsWritableSpan());
     }
 
     /// <inheritdoc/>
@@ -499,9 +498,9 @@ public class BiFPN<T> : NeckBase<T>
         {
             writer.Write(dim);
         }
-        for (int i = 0; i < tensor.Length; i++)
+        foreach (double value in CvTensorOps<T>.ToDoubleArray(tensor))
         {
-            writer.Write(NumOps.ToDouble(tensor[i]));
+            writer.Write(value);
         }
     }
 
@@ -520,10 +519,12 @@ public class BiFPN<T> : NeckBase<T>
                 throw new InvalidOperationException($"Tensor shape mismatch at dimension {i}: expected {tensor.Shape[i]}, got {dim}.");
             }
         }
-        for (int i = 0; i < tensor.Length; i++)
+        var wire = new double[tensor.Length];
+        for (int i = 0; i < wire.Length; i++)
         {
-            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+            wire[i] = reader.ReadDouble();
         }
+        CvTensorOps<T>.FromDoubleArray(wire, new[] { wire.Length }).AsSpan().CopyTo(tensor.AsWritableSpan());
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)
@@ -562,9 +563,6 @@ public class BiFPN<T> : NeckBase<T>
                     $"dst=[{string.Join(",", dst._shape)}].");
             }
         }
-        for (int i = 0; i < src.Length; i++)
-        {
-            dst[i] = src[i];
-        }
+        src.AsSpan().CopyTo(dst.AsWritableSpan());
     }
 }

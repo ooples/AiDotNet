@@ -159,11 +159,12 @@ public class PANet<T> : NeckBase<T>
     {
         double scale = Math.Sqrt(2.0 / weights.Shape[1]);
 
-        for (int i = 0; i < weights.Length; i++)
+        var values = new double[weights.Length];
+        for (int i = 0; i < values.Length; i++)
         {
-            double val = _random.NextDouble() * 2 * scale - scale;
-            weights[i] = NumOps.FromDouble(val);
+            values[i] = _random.NextDouble() * 2 * scale - scale;
         }
+        CvTensorOps<T>.FromDoubleArray(values, new[] { values.Length }).AsSpan().CopyTo(weights.AsWritableSpan());
     }
 
     /// <inheritdoc/>
@@ -351,9 +352,9 @@ public class PANet<T> : NeckBase<T>
         }
 
         // Write data
-        for (int i = 0; i < tensor.Length; i++)
+        foreach (double value in CvTensorOps<T>.ToDoubleArray(tensor))
         {
-            writer.Write(NumOps.ToDouble(tensor[i]));
+            writer.Write(value);
         }
     }
 
@@ -376,10 +377,12 @@ public class PANet<T> : NeckBase<T>
         }
 
         // Read data
-        for (int i = 0; i < tensor.Length; i++)
+        var wire = new double[tensor.Length];
+        for (int i = 0; i < wire.Length; i++)
         {
-            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+            wire[i] = reader.ReadDouble();
         }
+        CvTensorOps<T>.FromDoubleArray(wire, new[] { wire.Length }).AsSpan().CopyTo(tensor.AsWritableSpan());
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)
@@ -418,9 +421,6 @@ public class PANet<T> : NeckBase<T>
                     $"dst=[{string.Join(",", dst._shape)}].");
             }
         }
-        for (int i = 0; i < src.Length; i++)
-        {
-            dst[i] = src[i];
-        }
+        src.AsSpan().CopyTo(dst.AsWritableSpan());
     }
 }

@@ -122,11 +122,12 @@ public class FPN<T> : NeckBase<T>
         // Drawn from the model's initialization scope (#2201). A fixed seed of 42 here ignored the configured seed and gave every same-shape tensor identical values.
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
 
-        for (int i = 0; i < weights.Length; i++)
+        var values = new double[weights.Length];
+        for (int i = 0; i < values.Length; i++)
         {
-            double val = random.NextDouble() * 2 * scale - scale;
-            weights[i] = NumOps.FromDouble(val);
+            values[i] = random.NextDouble() * 2 * scale - scale;
         }
+        CvTensorOps<T>.FromDoubleArray(values, new[] { values.Length }).AsSpan().CopyTo(weights.AsWritableSpan());
     }
 
     /// <inheritdoc/>
@@ -267,9 +268,9 @@ public class FPN<T> : NeckBase<T>
         {
             writer.Write(dim);
         }
-        for (int i = 0; i < tensor.Length; i++)
+        foreach (double value in CvTensorOps<T>.ToDoubleArray(tensor))
         {
-            writer.Write(NumOps.ToDouble(tensor[i]));
+            writer.Write(value);
         }
     }
 
@@ -288,10 +289,12 @@ public class FPN<T> : NeckBase<T>
                 throw new InvalidOperationException($"Tensor shape mismatch at dimension {i}: expected {tensor.Shape[i]}, got {dim}.");
             }
         }
-        for (int i = 0; i < tensor.Length; i++)
+        var wire = new double[tensor.Length];
+        for (int i = 0; i < wire.Length; i++)
         {
-            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+            wire[i] = reader.ReadDouble();
         }
+        CvTensorOps<T>.FromDoubleArray(wire, new[] { wire.Length }).AsSpan().CopyTo(tensor.AsWritableSpan());
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)
@@ -319,9 +322,6 @@ public class FPN<T> : NeckBase<T>
                     $"dst=[{string.Join(",", dst._shape)}].");
             }
         }
-        for (int i = 0; i < src.Length; i++)
-        {
-            dst[i] = src[i];
-        }
+        src.AsSpan().CopyTo(dst.AsWritableSpan());
     }
 }
