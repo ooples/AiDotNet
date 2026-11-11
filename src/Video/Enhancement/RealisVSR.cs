@@ -450,6 +450,8 @@ public partial class RealisVSR<T> : VideoSuperResolutionBase<T>, ITrainingObject
     protected override IReadOnlyList<TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (_usingCustomLayers || !_useNativeMode) return null;
+        // Train on one NumFrames-frame clip of a longer sequence, as the paper's data pipeline does.
+        (input, expectedOutput) = TrainingClip(input, expectedOutput);
         var batch = Prepare(input, expectedOutput);
         var random = RandomHelper.CreateSeededRandom(_random.Next());
         return new[]
