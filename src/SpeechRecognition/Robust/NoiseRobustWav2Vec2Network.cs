@@ -41,6 +41,12 @@ internal sealed class NoiseRobustWav2Vec2Network<T>
             var forward = new LSTMLayer<T>(reconstructionHidden);
             var backward = new LSTMLayer<T>(reconstructionHidden);
             var norm = new LayerNormalizationLayer<T>(2 * reconstructionHidden);
+            // The bottleneck reads the contextual representations, not its neighbour in the layer list; state each
+            // input width so a chain walk over the list cannot size the LSTMs from the wrong layer (shapes only, so the
+            // weights still initialize on the first forward and no random draws move).
+            forward.ResolveShapesOnly(new[] { 1, 1, width });
+            backward.ResolveShapesOnly(new[] { 1, 1, width });
+            norm.ResolveShapesOnly(new[] { 1, 1, 2 * reconstructionHidden });
             layers.Add(forward); layers.Add(backward); layers.Add(norm);
             Bottleneck.Add((forward, backward, norm));
             width = 2 * reconstructionHidden;
