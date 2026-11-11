@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Interpretability.Helpers;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -136,24 +137,14 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
         // Determine target output
         if (outputIndex < 0)
         {
-            outputIndex = 0;
-            double maxVal = double.MinValue;
-            for (int i = 0; i < prediction.Length; i++)
-            {
-                double val = NumOps.ToDouble(prediction[i]);
-                if (val > maxVal)
-                {
-                    maxVal = val;
-                    outputIndex = i;
-                }
-            }
+            outputIndex = prediction.Length == 0 ? 0 : ExplainerTensorOps<T>.ArgMax(prediction);
         }
 
-        double outputValue = outputIndex < prediction.Length
-            ? NumOps.ToDouble(prediction[outputIndex])
-            : 0;
+        T outputValue = outputIndex < prediction.Length
+            ? prediction[outputIndex]
+            : NumOps.Zero;
 
-        T[] relevanceScores;
+        Vector<T> relevanceScores;
 
         if (_getLayerActivations != null && _getLayerWeights != null && _layerSizes != null)
         {
@@ -167,24 +158,21 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
         }
 
         // Compute positive and negative relevance
-        double posRelevance = 0;
-        double negRelevance = 0;
-        for (int i = 0; i < numFeatures; i++)
-        {
-            double rel = NumOps.ToDouble(relevanceScores[i]);
-            if (rel > 0) posRelevance += rel;
-            else negRelevance += rel;
-        }
+        var engine = AiDotNetEngine.Current;
+        var scores = relevanceScores.GetSubVector(0, numFeatures);
+        var positivePart = engine.ReLU(scores);
+        T posRelevance = engine.Sum(positivePart);
+        T negRelevance = engine.Sum(engine.Subtract(scores, positivePart));
 
         return new LRPExplanation<T>
         {
-            RelevanceScores = new Vector<T>(relevanceScores),
+            RelevanceScores = relevanceScores,
             Input = instance,
             Prediction = prediction,
             OutputIndex = outputIndex,
-            OutputValue = NumOps.FromDouble(outputValue),
-            TotalPositiveRelevance = NumOps.FromDouble(posRelevance),
-            TotalNegativeRelevance = NumOps.FromDouble(negRelevance),
+            OutputValue = outputValue,
+            TotalPositiveRelevance = posRelevance,
+            TotalNegativeRelevance = negRelevance,
             FeatureNames = _featureNames ?? Enumerable.Range(0, numFeatures).Select(i => $"Feature {i}").ToArray(),
             Rule = _rule
         };
@@ -204,15 +192,15 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
     /// <summary>
     /// Computes full LRP using layer activations and weights.
     /// </summary>
-    private T[] ComputeFullLRP(Vector<T> input, int outputIndex)
+    private Vector<T> ComputeFullLRP(Vector<T> input, int outputIndex)
     {
         // Get activations
         var activations = (_getLayerActivations ?? throw new InvalidOperationException("_getLayerActivations is null where it is required."))(input);
         int numLayers = activations.Length;
 
         // Initialize relevance at output layer
-        var relevance = new double[activations[numLayers - 1].Length];
-        relevance[outputIndex] = NumOps.ToDouble(activations[numLayers - 1][outputIndex]);
+        var relevance = new Vector<T>(activations[numLayers - 1].Length);
+        relevance[outputIndex] = activations[numLayers - 1][outputIndex];
 
         // Propagate backward through layers
         for (int layer = numLayers - 2; layer >= 0; layer--)
@@ -220,213 +208,129 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
             var weights = (_getLayerWeights ?? throw new InvalidOperationException("_getLayerWeights is null where it is required."))(layer);
             var lowerActivations = activations[layer];
 
-            var newRelevance = new double[lowerActivations.Length];
-
-            switch (_rule)
+            relevance = _rule switch
             {
-                case LRPRule.Basic:
-                    PropagateBasicRule(lowerActivations, weights, relevance, newRelevance);
-                    break;
-                case LRPRule.Epsilon:
-                    PropagateEpsilonRule(lowerActivations, weights, relevance, newRelevance);
-                    break;
-                case LRPRule.Gamma:
-                    PropagateGammaRule(lowerActivations, weights, relevance, newRelevance);
-                    break;
-                case LRPRule.AlphaBeta:
-                    PropagateAlphaBetaRule(lowerActivations, weights, relevance, newRelevance);
-                    break;
-            }
-
-            relevance = newRelevance;
+                LRPRule.Basic => PropagateBasicRule(lowerActivations, weights, relevance),
+                LRPRule.Epsilon => PropagateEpsilonRule(lowerActivations, weights, relevance),
+                LRPRule.Gamma => PropagateGammaRule(lowerActivations, weights, relevance),
+                LRPRule.AlphaBeta => PropagateAlphaBetaRule(lowerActivations, weights, relevance),
+                _ => new Vector<T>(lowerActivations.Length)
+            };
         }
 
-        // Convert to T[]
-        var result = new T[relevance.Length];
-        for (int i = 0; i < relevance.Length; i++)
-        {
-            result[i] = NumOps.FromDouble(relevance[i]);
-        }
-
-        return result;
+        return relevance;
     }
 
     /// <summary>
     /// LRP-0 Basic rule.
     /// </summary>
-    private void PropagateBasicRule(Vector<T> lowerAct, Matrix<T> weights, double[] upperRel, double[] lowerRel)
+    private Vector<T> PropagateBasicRule(Vector<T> lowerAct, Matrix<T> weights, Vector<T> upperRel)
     {
-        int lowerSize = lowerAct.Length;
-        int upperSize = upperRel.Length;
+        var engine = AiDotNetEngine.Current;
+        var w = weights.Rows == lowerAct.Length && weights.Columns == upperRel.Length
+            ? weights
+            : weights.GetSubMatrix(0, 0, lowerAct.Length, upperRel.Length);
 
-        for (int j = 0; j < lowerSize; j++)
-        {
-            double sum = 0;
-            double aj = NumOps.ToDouble(lowerAct[j]);
-
-            for (int k = 0; k < upperSize; k++)
-            {
-                // Compute z_jk = a_j * w_jk
-                double wjk = NumOps.ToDouble(weights[j, k]);
-                double zjk = aj * wjk;
-
-                // Compute denominator (sum of z for all inputs to neuron k)
-                double zk = 0;
-                for (int i = 0; i < lowerSize; i++)
-                {
-                    zk += NumOps.ToDouble(lowerAct[i]) * NumOps.ToDouble(weights[i, k]);
-                }
-
-                if (Math.Abs(zk) > 1e-10)
-                {
-                    sum += zjk / zk * upperRel[k];
-                }
-            }
-
-            lowerRel[j] = sum;
-        }
+        // z_k = sum_i a_i w_ik; R_j = sum_k (a_j w_jk / z_k) R_k, skipping neurons with |z_k| <= 1e-10
+        var z = engine.MatrixVectorMultiply(engine.MatrixTranspose(w), lowerAct);
+        return Redistribute(lowerAct, w, SafeRatio(upperRel, z));
     }
 
     /// <summary>
     /// LRP-ε Epsilon rule for numerical stability.
     /// </summary>
-    private void PropagateEpsilonRule(Vector<T> lowerAct, Matrix<T> weights, double[] upperRel, double[] lowerRel)
+    private Vector<T> PropagateEpsilonRule(Vector<T> lowerAct, Matrix<T> weights, Vector<T> upperRel)
     {
-        int lowerSize = lowerAct.Length;
-        int upperSize = upperRel.Length;
+        var engine = AiDotNetEngine.Current;
+        var w = weights.Rows == lowerAct.Length && weights.Columns == upperRel.Length
+            ? weights
+            : weights.GetSubMatrix(0, 0, lowerAct.Length, upperRel.Length);
 
-        for (int j = 0; j < lowerSize; j++)
-        {
-            double sum = 0;
-            double aj = NumOps.ToDouble(lowerAct[j]);
-
-            for (int k = 0; k < upperSize; k++)
-            {
-                double wjk = NumOps.ToDouble(weights[j, k]);
-                double zjk = aj * wjk;
-
-                double zk = 0;
-                for (int i = 0; i < lowerSize; i++)
-                {
-                    zk += NumOps.ToDouble(lowerAct[i]) * NumOps.ToDouble(weights[i, k]);
-                }
-
-                // Add epsilon with sign of zk
-                double signZk = zk >= 0 ? 1 : -1;
-                zk = zk + signZk * _epsilon;
-
-                sum += zjk / zk * upperRel[k];
-            }
-
-            lowerRel[j] = sum;
-        }
+        // z_k = sum_i a_i w_ik, then add epsilon with the sign of z_k (zero counts as positive)
+        var z = engine.MatrixVectorMultiply(engine.MatrixTranspose(w), lowerAct).AsTensor();
+        var nonNegative = engine.TensorGreaterEqual(z, engine.TensorFullLike(z, NumOps.Zero));
+        T epsilon = NumOps.FromDouble(_epsilon);
+        var signedEpsilon = engine.TensorWhere(nonNegative, engine.TensorFullLike(z, epsilon),
+            engine.TensorFullLike(z, NumOps.Negate(epsilon)));
+        var stabilized = engine.TensorAdd(z, signedEpsilon);
+        var share = engine.TensorDivide(upperRel.AsTensor(), stabilized).ToVector();
+        return Redistribute(lowerAct, w, share);
     }
 
     /// <summary>
     /// LRP-γ Gamma rule emphasizing positive contributions.
     /// </summary>
-    private void PropagateGammaRule(Vector<T> lowerAct, Matrix<T> weights, double[] upperRel, double[] lowerRel)
+    private Vector<T> PropagateGammaRule(Vector<T> lowerAct, Matrix<T> weights, Vector<T> upperRel)
     {
-        int lowerSize = lowerAct.Length;
-        int upperSize = upperRel.Length;
+        var engine = AiDotNetEngine.Current;
+        var w = weights.Rows == lowerAct.Length && weights.Columns == upperRel.Length
+            ? weights
+            : weights.GetSubMatrix(0, 0, lowerAct.Length, upperRel.Length);
 
-        for (int j = 0; j < lowerSize; j++)
-        {
-            double sum = 0;
-            double aj = NumOps.ToDouble(lowerAct[j]);
-
-            for (int k = 0; k < upperSize; k++)
-            {
-                double wjk = NumOps.ToDouble(weights[j, k]);
-
-                // Modify weights: w+ = max(0, w), increase positive weights
-                double wjkPlus = Math.Max(0, wjk);
-                double wjkMod = wjk + _gamma * wjkPlus;
-
-                double zjk = aj * wjkMod;
-
-                double zk = 0;
-                for (int i = 0; i < lowerSize; i++)
-                {
-                    double wik = NumOps.ToDouble(weights[i, k]);
-                    double wikPlus = Math.Max(0, wik);
-                    double wikMod = wik + _gamma * wikPlus;
-                    zk += NumOps.ToDouble(lowerAct[i]) * wikMod;
-                }
-
-                if (Math.Abs(zk) > 1e-10)
-                {
-                    sum += zjk / zk * upperRel[k];
-                }
-            }
-
-            lowerRel[j] = sum;
-        }
+        // Modify weights: w + gamma * max(0, w), increasing the positive weights
+        var positiveWeights = engine.ReLU(Tensor<T>.FromMatrix(w)).ToMatrix();
+        var modified = engine.MatrixAdd(w, engine.MatrixMultiplyScalar(positiveWeights, NumOps.FromDouble(_gamma)));
+        var z = engine.MatrixVectorMultiply(engine.MatrixTranspose(modified), lowerAct);
+        return Redistribute(lowerAct, modified, SafeRatio(upperRel, z));
     }
 
     /// <summary>
     /// LRP-αβ rule separating positive and negative contributions.
     /// </summary>
-    private void PropagateAlphaBetaRule(Vector<T> lowerAct, Matrix<T> weights, double[] upperRel, double[] lowerRel, double alpha = 2, double beta = 1)
+    private Vector<T> PropagateAlphaBetaRule(Vector<T> lowerAct, Matrix<T> weights, Vector<T> upperRel, double alpha = 2, double beta = 1)
     {
-        int lowerSize = lowerAct.Length;
-        int upperSize = upperRel.Length;
+        var engine = AiDotNetEngine.Current;
+        var w = weights.Rows == lowerAct.Length && weights.Columns == upperRel.Length
+            ? weights
+            : weights.GetSubMatrix(0, 0, lowerAct.Length, upperRel.Length);
 
-        for (int j = 0; j < lowerSize; j++)
-        {
-            double sum = 0;
-            double aj = NumOps.ToDouble(lowerAct[j]);
+        // Positive and negative weight parts and their per-neuron totals z_k+ / z_k-
+        var positiveWeights = engine.ReLU(Tensor<T>.FromMatrix(w)).ToMatrix();
+        var negativeWeights = engine.MatrixSubtract(w, positiveWeights);
+        var zPlus = engine.MatrixVectorMultiply(engine.MatrixTranspose(positiveWeights), lowerAct);
+        var zMinus = engine.MatrixVectorMultiply(engine.MatrixTranspose(negativeWeights), lowerAct);
 
-            for (int k = 0; k < upperSize; k++)
-            {
-                double wjk = NumOps.ToDouble(weights[j, k]);
+        // R_j = a_j * sum_k (alpha w+_jk / z_k+ - beta w-_jk / z_k-) R_k, a ratio counting 0 where |z| <= 1e-10
+        var positiveShare = engine.Multiply(SafeRatio(upperRel, zPlus), NumOps.FromDouble(alpha));
+        var negativeShare = engine.Multiply(SafeRatio(upperRel, zMinus), NumOps.FromDouble(beta));
+        var spread = engine.Subtract(
+            engine.MatrixVectorMultiply(positiveWeights, positiveShare),
+            engine.MatrixVectorMultiply(negativeWeights, negativeShare));
+        return engine.Multiply(lowerAct, spread);
+    }
 
-                // Positive contribution
-                double zjkPlus = aj * Math.Max(0, wjk);
-                double zkPlus = 0;
-                for (int i = 0; i < lowerSize; i++)
-                {
-                    zkPlus += NumOps.ToDouble(lowerAct[i]) * Math.Max(0, NumOps.ToDouble(weights[i, k]));
-                }
+    /// <summary>
+    /// relevance / z, with 0 where |z| &lt;= 1e-10.
+    /// </summary>
+    private static Vector<T> SafeRatio(Vector<T> relevance, Vector<T> z)
+    {
+        var engine = AiDotNetEngine.Current;
+        var zTensor = z.AsTensor();
+        var usable = engine.TensorGreaterThan(engine.TensorAbs(zTensor), NumOps.FromDouble(1e-10));
+        var safeZ = engine.TensorWhere(usable, zTensor, engine.TensorFullLike(zTensor, NumOps.One));
+        var ratio = engine.TensorDivide(relevance.AsTensor(), safeZ);
+        return engine.TensorWhere(usable, ratio, engine.TensorFullLike(zTensor, NumOps.Zero)).ToVector();
+    }
 
-                // Negative contribution
-                double zjkMinus = aj * Math.Min(0, wjk);
-                double zkMinus = 0;
-                for (int i = 0; i < lowerSize; i++)
-                {
-                    zkMinus += NumOps.ToDouble(lowerAct[i]) * Math.Min(0, NumOps.ToDouble(weights[i, k]));
-                }
-
-                double posContrib = Math.Abs(zkPlus) > 1e-10 ? alpha * zjkPlus / zkPlus : 0;
-                double negContrib = Math.Abs(zkMinus) > 1e-10 ? beta * zjkMinus / zkMinus : 0;
-
-                sum += (posContrib - negContrib) * upperRel[k];
-            }
-
-            lowerRel[j] = sum;
-        }
+    /// <summary>
+    /// R_j = a_j * sum_k w_jk * share_k: the lower-layer relevance from per-neuron shares.
+    /// </summary>
+    private static Vector<T> Redistribute(Vector<T> lowerAct, Matrix<T> weights, Vector<T> share)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.Multiply(lowerAct, engine.MatrixVectorMultiply(weights, share));
     }
 
     /// <summary>
     /// Computes approximate LRP using gradient × input (a simple approximation).
     /// </summary>
-    private T[] ComputeApproximateLRP(Vector<T> input, int outputIndex)
+    private Vector<T> ComputeApproximateLRP(Vector<T> input, int outputIndex)
     {
-        int numFeatures = input.Length;
-        var relevance = new T[numFeatures];
-
         // Compute gradients
         var gradients = ComputeNumericalGradient(input, outputIndex);
 
         // Relevance ≈ gradient × input (a simple approximation to LRP)
-        for (int i = 0; i < numFeatures; i++)
-        {
-            double grad = NumOps.ToDouble(gradients[i]);
-            double inputVal = NumOps.ToDouble(input[i]);
-            relevance[i] = NumOps.FromDouble(grad * inputVal);
-        }
-
-        return relevance;
+        return AiDotNetEngine.Current.Multiply(gradients, input);
     }
 
     /// <summary>
@@ -434,33 +338,8 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
     /// </summary>
     private Vector<T> ComputeNumericalGradient(Vector<T> input, int outputIndex)
     {
-        int n = input.Length;
-        var gradient = new T[n];
-        double epsilon = 1e-4;
-
-        for (int i = 0; i < n; i++)
-        {
-            var inputPlus = new T[n];
-            var inputMinus = new T[n];
-            for (int j = 0; j < n; j++)
-            {
-                inputPlus[j] = input[j];
-                inputMinus[j] = input[j];
-            }
-
-            inputPlus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) + epsilon);
-            inputMinus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) - epsilon);
-
-            var predPlus = _predictFunction(new Vector<T>(inputPlus));
-            var predMinus = _predictFunction(new Vector<T>(inputMinus));
-
-            double valPlus = outputIndex < predPlus.Length ? NumOps.ToDouble(predPlus[outputIndex]) : 0;
-            double valMinus = outputIndex < predMinus.Length ? NumOps.ToDouble(predMinus[outputIndex]) : 0;
-
-            gradient[i] = NumOps.FromDouble((valPlus - valMinus) / (2 * epsilon));
-        }
-
-        return new Vector<T>(gradient);
+        return ExplainerTensorOps<T>.CentralDifferenceGradient(
+            _predictFunction, input, outputIndex, 1e-4, input.Length, outOfRangeIsZero: true);
     }
 }
 
@@ -582,15 +461,15 @@ public class LRPExplanation<T>
     /// </summary>
     public override string ToString()
     {
-        double totalRel = NumOps.ToDouble(TotalPositiveRelevance) + NumOps.ToDouble(TotalNegativeRelevance);
+        T totalRel = NumOps.Add(TotalPositiveRelevance, TotalNegativeRelevance);
 
         var lines = new List<string>
         {
             $"Layer-wise Relevance Propagation (Rule: {Rule}):",
-            $"  Output value: {NumOps.ToDouble(OutputValue):F4}",
+            $"  Output value: {OutputValue:F4}",
             $"  Total relevance: {totalRel:F4}",
-            $"  Positive relevance: {NumOps.ToDouble(TotalPositiveRelevance):F4}",
-            $"  Negative relevance: {NumOps.ToDouble(TotalNegativeRelevance):F4}",
+            $"  Positive relevance: {TotalPositiveRelevance:F4}",
+            $"  Negative relevance: {TotalNegativeRelevance:F4}",
             "",
             "Top Positive (supporting prediction):"
         };
@@ -598,7 +477,7 @@ public class LRPExplanation<T>
         var positive = GetPositiveRelevance().Take(5);
         foreach (var (name, rel) in positive)
         {
-            lines.Add($"  {name}: +{NumOps.ToDouble(rel):F4}");
+            lines.Add($"  {name}: +{rel:F4}");
         }
 
         lines.Add("");
@@ -607,7 +486,7 @@ public class LRPExplanation<T>
         var negative = GetNegativeRelevance().Take(5);
         foreach (var (name, rel) in negative)
         {
-            lines.Add($"  {name}: {NumOps.ToDouble(rel):F4}");
+            lines.Add($"  {name}: {rel:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);
