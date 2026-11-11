@@ -345,6 +345,15 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     }
 
     /// <summary>
+    /// True when any element of <paramref name="value"/> (typically a single-element tensor) is
+    /// strictly above <paramref name="threshold"/>; evaluated with an engine comparison.
+    /// </summary>
+    protected bool AnyAbove(Tensor<T> value, T threshold)
+    {
+        return Engine.TensorCountNonzero(Engine.TensorGreaterThan(value, threshold)) > 0;
+    }
+
+    /// <summary>
     /// Thin QR factorization with a non-negative diagonal in R, computed with one engine QR call.
     /// </summary>
     /// <param name="matrix">The m x n matrix to factor.</param>
