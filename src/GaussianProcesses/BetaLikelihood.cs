@@ -98,14 +98,7 @@ public class BetaLikelihood<T>
     /// </remarks>
     public Vector<T> GetMeans(Vector<T> f)
     {
-        var mu = new Vector<T>(f.Length);
-        for (int i = 0; i < f.Length; i++)
-        {
-            double fi = _numOps.ToDouble(f[i]);
-            double mui = Sigmoid(fi);
-            mu[i] = _numOps.FromDouble(mui);
-        }
-        return mu;
+        return AiDotNetEngine.Current.Sigmoid(f);
     }
 
     /// <summary>
@@ -145,31 +138,26 @@ public class BetaLikelihood<T>
     /// Where α_i, β_i come from sigmoid(f_i).
     /// </para>
     /// </remarks>
-    public double LogLikelihood(Vector<T> y, Vector<T> f)
+    public T LogLikelihood(Vector<T> y, Vector<T> f)
     {
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have same length.");
 
-        double logLik = 0;
+        var engine = AiDotNetEngine.Current;
+        var (logY, logOneMinusY) = ClampedLogs(y);
+        var (_, alpha, beta) = BetaParameters(f);
 
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = _numOps.ToDouble(y[i]);
-            double fi = _numOps.ToDouble(f[i]);
+        // Log Beta PDF: log Γ(α+β) - log Γ(α) - log Γ(β) + (α-1)log(y) + (β-1)log(1-y)
+        var logNormalizer = engine.TensorSubtract(
+            engine.TensorSubtract(engine.TensorLgamma(engine.TensorAdd(alpha, beta)), engine.TensorLgamma(alpha)),
+            engine.TensorLgamma(beta));
+        var terms = engine.TensorAdd(
+            logNormalizer,
+            engine.TensorAdd(
+                engine.TensorMultiply(engine.TensorSubtractScalar(alpha, _numOps.One), logY),
+                engine.TensorMultiply(engine.TensorSubtractScalar(beta, _numOps.One), logOneMinusY)));
 
-            // Clamp y to valid range
-            yi = Math.Max(Epsilon, Math.Min(1 - Epsilon, yi));
-
-            double mu = Sigmoid(fi);
-            var (alpha, beta) = GetBetaParameters(mu);
-
-            // Log Beta PDF: log Γ(α+β) - log Γ(α) - log Γ(β) + (α-1)log(y) + (β-1)log(1-y)
-            logLik += LogGamma(alpha + beta) - LogGamma(alpha) - LogGamma(beta);
-            logLik += (alpha - 1) * Math.Log(yi);
-            logLik += (beta - 1) * Math.Log(1 - yi);
-        }
-
-        return logLik;
+        return engine.TensorSum(terms);
     }
 
     /// <summary>
@@ -191,30 +179,17 @@ public class BetaLikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have same length.");
 
-        var grad = new Vector<T>(f.Length);
+        var engine = AiDotNetEngine.Current;
+        var (logY, logOneMinusY) = ClampedLogs(y);
+        var (mu, alpha, beta) = BetaParameters(f);
 
-        for (int i = 0; i < f.Length; i++)
-        {
-            double yi = _numOps.ToDouble(y[i]);
-            double fi = _numOps.ToDouble(f[i]);
+        // ∂log p / ∂μ
+        var dLogP_dMu = DLogPDMu(alpha, beta, logY, logOneMinusY);
 
-            yi = Math.Max(Epsilon, Math.Min(1 - Epsilon, yi));
+        // ∂μ / ∂f = μ(1-μ)
+        var dMu_dF = engine.TensorMultiply(mu, engine.ScalarMinusTensor(_numOps.One, mu));
 
-            double mu = Sigmoid(fi);
-            var (alpha, beta) = GetBetaParameters(mu);
-
-            // ∂log p / ∂μ
-            double dLogP_dMu = _precision * (Digamma(beta) - Digamma(alpha));
-            dLogP_dMu += _precision * Math.Log(yi);
-            dLogP_dMu -= _precision * Math.Log(1 - yi);
-
-            // ∂μ / ∂f = μ(1-μ)
-            double dMu_dF = mu * (1 - mu);
-
-            grad[i] = _numOps.FromDouble(dLogP_dMu * dMu_dF);
-        }
-
-        return grad;
+        return engine.TensorMultiply(dLogP_dMu, dMu_dF).ToVector();
     }
 
     /// <summary>
@@ -236,38 +211,30 @@ public class BetaLikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have same length.");
 
-        var hess = new Vector<T>(f.Length);
+        var engine = AiDotNetEngine.Current;
+        var (logY, logOneMinusY) = ClampedLogs(y);
+        var (mu, alpha, beta) = BetaParameters(f);
+        T one = _numOps.One;
 
-        for (int i = 0; i < f.Length; i++)
-        {
-            double yi = _numOps.ToDouble(y[i]);
-            double fi = _numOps.ToDouble(f[i]);
+        // Derivatives of sigmoid: μ = sigmoid(f)
+        var dMu_dF = engine.TensorMultiply(mu, engine.ScalarMinusTensor(one, mu)); // ∂μ/∂f
+        var d2Mu_dF2 = engine.TensorMultiply(                                       // ∂²μ/∂f²
+            dMu_dF,
+            engine.ScalarMinusTensor(one, engine.TensorMultiplyScalar(mu, _numOps.FromDouble(2))));
 
-            yi = Math.Max(Epsilon, Math.Min(1 - Epsilon, yi));
+        // First derivative: ∂logP/∂μ (needed for chain rule)
+        var dLogP_dMu = DLogPDMu(alpha, beta, logY, logOneMinusY);
 
-            double mu = Sigmoid(fi);
-            var (alpha, beta) = GetBetaParameters(mu);
+        // Second derivative: ∂²logP/∂μ² (from trigamma functions)
+        var d2LogP_dMu2 = engine.TensorMultiplyScalar(
+            engine.TensorAdd(engine.TensorPolygamma(1, alpha), engine.TensorPolygamma(1, beta)),
+            _numOps.FromDouble(-_precision * _precision));
 
-            // Derivatives of sigmoid: μ = sigmoid(f)
-            double dMu_dF = mu * (1 - mu);           // ∂μ/∂f
-            double d2Mu_dF2 = dMu_dF * (1 - 2 * mu); // ∂²μ/∂f²
-
-            // First derivative: ∂logP/∂μ (needed for chain rule)
-            double dLogP_dMu = _precision * (Digamma(beta) - Digamma(alpha));
-            dLogP_dMu += _precision * Math.Log(yi);
-            dLogP_dMu -= _precision * Math.Log(1 - yi);
-
-            // Second derivative: ∂²logP/∂μ² (from trigamma functions)
-            double d2LogP_dMu2 = -_precision * _precision * (Trigamma(alpha) + Trigamma(beta));
-
-            // Full chain rule for second derivative:
-            // ∂²logP/∂f² = (∂²logP/∂μ²)(∂μ/∂f)² + (∂logP/∂μ)(∂²μ/∂f²)
-            double d2 = d2LogP_dMu2 * dMu_dF * dMu_dF + dLogP_dMu * d2Mu_dF2;
-
-            hess[i] = _numOps.FromDouble(d2);
-        }
-
-        return hess;
+        // Full chain rule for second derivative:
+        // ∂²logP/∂f² = (∂²logP/∂μ²)(∂μ/∂f)² + (∂logP/∂μ)(∂²μ/∂f²)
+        return engine.TensorAdd(
+            engine.TensorMultiply(d2LogP_dMu2, engine.TensorSquare(dMu_dF)),
+            engine.TensorMultiply(dLogP_dMu, d2Mu_dF2)).ToVector();
     }
 
     /// <summary>
@@ -342,31 +309,68 @@ public class BetaLikelihood<T>
     public static BetaLikelihood<T> FromData(Vector<T> y)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
 
         // Compute sample mean and variance
-        double sum = 0, sumSq = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = numOps.ToDouble(y[i]);
-            sum += yi;
-            sumSq += yi * yi;
-        }
-
-        double mean = sum / y.Length;
-        double variance = sumSq / y.Length - mean * mean;
+        var values = Tensor<T>.FromVector(y);
+        T count = numOps.FromDouble(y.Length);
+        T mean = numOps.Divide(engine.TensorSum(values), count);
+        T variance = numOps.Subtract(
+            numOps.Divide(engine.TensorSumOfSquares(values), count),
+            numOps.Multiply(mean, mean));
 
         // Estimate precision via method of moments
         // Var(Y) = μ(1-μ)/(ν+1) → ν = μ(1-μ)/Var - 1
-        variance = Math.Max(variance, 1e-6); // Avoid division by zero
-        mean = Math.Max(0.01, Math.Min(0.99, mean)); // Avoid extreme means
+        variance = MathHelper.Max(variance, numOps.FromDouble(1e-6)); // Avoid division by zero
+        mean = MathHelper.Max(numOps.FromDouble(0.01), MathHelper.Min(numOps.FromDouble(0.99), mean)); // Avoid extreme means
 
-        double precision = mean * (1 - mean) / variance - 1;
-        precision = Math.Max(2.0, Math.Min(1000.0, precision)); // Reasonable bounds
+        T precision = numOps.Subtract(
+            numOps.Divide(numOps.Multiply(mean, numOps.Subtract(numOps.One, mean)), variance),
+            numOps.One);
+        precision = MathHelper.Max(numOps.FromDouble(2.0), MathHelper.Min(numOps.FromDouble(1000.0), precision)); // Reasonable bounds
 
-        return new BetaLikelihood<T>(precision);
+        // The likelihood's precision is a configuration value, stored as double.
+        return new BetaLikelihood<T>(numOps.ToDouble(precision));
     }
 
     #region Private Methods
+
+    /// <summary>
+    /// log(y) and log(1 - y) with y clamped to [Epsilon, 1 - Epsilon].
+    /// </summary>
+    private (Tensor<T> LogY, Tensor<T> LogOneMinusY) ClampedLogs(Vector<T> y)
+    {
+        var engine = AiDotNetEngine.Current;
+        var clamped = engine.TensorClamp(
+            Tensor<T>.FromVector(y), _numOps.FromDouble(Epsilon), _numOps.FromDouble(1 - Epsilon));
+        return (engine.TensorLog(clamped), engine.TensorLog(engine.ScalarMinusTensor(_numOps.One, clamped)));
+    }
+
+    /// <summary>
+    /// μ = sigmoid(f) and the Beta parameters α = μ̃ν, β = (1 - μ̃)ν with μ̃ = clamp(μ, Epsilon, 1 - Epsilon).
+    /// </summary>
+    private (Tensor<T> Mu, Tensor<T> Alpha, Tensor<T> Beta) BetaParameters(Vector<T> f)
+    {
+        var engine = AiDotNetEngine.Current;
+        var mu = engine.TensorSigmoid(Tensor<T>.FromVector(f));
+        var clampedMu = engine.TensorClamp(mu, _numOps.FromDouble(Epsilon), _numOps.FromDouble(1 - Epsilon));
+        T precision = _numOps.FromDouble(_precision);
+        var alpha = engine.TensorMultiplyScalar(clampedMu, precision);
+        var beta = engine.TensorMultiplyScalar(engine.ScalarMinusTensor(_numOps.One, clampedMu), precision);
+        return (mu, alpha, beta);
+    }
+
+    /// <summary>
+    /// ∂log p / ∂μ = ν(ψ(β) - ψ(α)) + ν log(y) - ν log(1 - y).
+    /// </summary>
+    private Tensor<T> DLogPDMu(Tensor<T> alpha, Tensor<T> beta, Tensor<T> logY, Tensor<T> logOneMinusY)
+    {
+        var engine = AiDotNetEngine.Current;
+        var sum = engine.TensorAdd(
+            engine.TensorSubtract(engine.TensorDigamma(beta), engine.TensorDigamma(alpha)),
+            engine.TensorSubtract(logY, logOneMinusY));
+        return engine.TensorMultiplyScalar(sum, _numOps.FromDouble(_precision));
+    }
 
     /// <summary>
     /// Sigmoid function.
@@ -380,101 +384,6 @@ public class BetaLikelihood<T>
             double ex = Math.Exp(x);
             return ex / (1.0 + ex);
         }
-    }
-
-    /// <summary>
-    /// Log Gamma function.
-    /// </summary>
-    private static double LogGamma(double x)
-    {
-        // Lanczos approximation
-        double[] coeffs = {
-            76.18009172947146, -86.50532032941677, 24.01409824083091,
-            -1.231739572450155, 0.001208650973866179, -0.000005395239384953
-        };
-
-        double y = x;
-        double tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-        double ser = 1.000000000190015;
-
-        for (int j = 0; j < 6; j++)
-        {
-            y += 1;
-            ser += coeffs[j] / y;
-        }
-
-        return -tmp + Math.Log(2.5066282746310005 * ser / x);
-    }
-
-    /// <summary>
-    /// Digamma function (derivative of log Gamma).
-    /// </summary>
-    private static double Digamma(double x)
-    {
-        // Asymptotic expansion for x >= 6; smaller x are handled via recurrence/iteration below
-        if (x >= 6)
-        {
-            double result = Math.Log(x) - 1.0 / (2 * x);
-            double x2 = x * x;
-            result -= 1.0 / (12 * x2);
-            result += 1.0 / (120 * x2 * x2);
-            return result;
-        }
-
-        // Recurrence relation for small x
-        if (x < 1)
-        {
-            return Digamma(x + 1) - 1.0 / x;
-        }
-
-        // Iterative approach for moderate x (1 <= x < 6)
-        double sum = 0;
-        while (x < 6)
-        {
-            sum -= 1.0 / x;
-            x += 1;
-        }
-        // Now x >= 6, use asymptotic expansion directly
-        double result2 = Math.Log(x) - 1.0 / (2 * x);
-        double x2_2 = x * x;
-        result2 -= 1.0 / (12 * x2_2);
-        result2 += 1.0 / (120 * x2_2 * x2_2);
-        return sum + result2;
-    }
-
-    /// <summary>
-    /// Trigamma function (second derivative of log Gamma).
-    /// </summary>
-    private static double Trigamma(double x)
-    {
-        // Asymptotic expansion for large x (valid for x >= 6)
-        if (x >= 6)
-        {
-            double result = 1.0 / x + 1.0 / (2 * x * x);
-            double x3 = x * x * x;
-            result += 1.0 / (6 * x3);
-            return result;
-        }
-
-        // Recurrence
-        if (x < 1)
-        {
-            return Trigamma(x + 1) + 1.0 / (x * x);
-        }
-
-        // Iterative approach for moderate x (1 <= x < 6)
-        double sum = 0;
-        while (x < 6)
-        {
-            sum += 1.0 / (x * x);
-            x += 1;
-        }
-        // Now x >= 6, use asymptotic expansion directly
-        double result2 = 1.0 / x + 1.0 / (2 * x * x);
-        double x3_2 = x * x * x;
-        result2 += 1.0 / (6 * x3_2);
-        return sum + result2;
     }
 
     /// <summary>
