@@ -53,6 +53,7 @@ public class KeywordExtractionQueryProcessor : QueryProcessorBase
         _minWordLength = minWordLength;
     }
 
+    /// <inheritdoc />
     protected override string ProcessQueryCore(string query)
     {
         if (string.IsNullOrWhiteSpace(query))

@@ -20,6 +20,7 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
     AggregationStrategyBase<IFullModel<T, TInput, TOutput>, T>
 {
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -91,6 +92,7 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
         return InterfaceGuard.Parameterizable(first).WithParameters(aggregated);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "FedBN";
 
     private static List<(int Start, int Length)> GetBatchNormParameterRanges(NeuralNetworkBase<T> network)

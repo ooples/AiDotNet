@@ -54,6 +54,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             _rrfK = rrfK;
         }
 
+        /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
         {
             var denseResults = _denseRetriever.Retrieve(query, topK * 2, metadataFilters).ToList();

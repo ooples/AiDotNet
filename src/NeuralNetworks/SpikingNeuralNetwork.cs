@@ -424,6 +424,19 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // Reset network state (clears SpikingLayer internal states)
         ResetState();
 
+        // The simulation loop below exists for stacks of stateful SpikingLayers, whose membranes carry from one
+        // step to the next. With none in the stack (the default SpikingNetworkCore, which unrolls its own time
+        // steps on every Forward and starts each call from rest), every step computes the same output, so the
+        // loop repeated the whole network SimulationSteps times (100 by default) to average identical values.
+        // One pass is the forward Train evaluates through the tape.
+        if (!HasStatefulSpikingLayers())
+        {
+            Tensor<T> output = input;
+            foreach (var layer in Layers)
+                output = layer.Forward(output);
+            return output;
+        }
+
         // SpikingLayers handle their own LIF dynamics (membrane, spikes, refractory).
         // We run the simulation for multiple timesteps, feeding the same input each step
         // and letting SpikingLayers accumulate membrane potential and generate spikes.
@@ -1430,6 +1443,13 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// diverged from training (peeled off only the LAST non-spiking layer
     /// instead of every layer after the last spiking one).
     /// </summary>
+    private bool HasStatefulSpikingLayers()
+    {
+        foreach (var layer in Layers)
+            if (layer is Layers.SpikingLayer<T>) return true;
+        return false;
+    }
+
     private int FindReadoutBoundary()
     {
         int boundary = Layers.Count;

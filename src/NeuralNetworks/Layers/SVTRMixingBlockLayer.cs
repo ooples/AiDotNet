@@ -52,6 +52,7 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
     public int WindowHeight => _windowHeight;
     public int WindowWidth => _windowWidth;
     public double DropPathRate => _dropPathRate;
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
     public SVTRMixingBlockLayer(
         int hiddenSize, int numHeads, int height, int width,
@@ -84,6 +85,7 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
         foreach (var layer in ParameterLayers) RegisterSubLayer(layer);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         bool unbatched = input.Rank == 2;
@@ -203,17 +205,20 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
         return new Vector<T>(result);
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in ParameterLayers) layer.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
         foreach (var layer in ParameterLayers) layer.ClearGradients();
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         foreach (var layer in ParameterLayers) layer.ResetState();

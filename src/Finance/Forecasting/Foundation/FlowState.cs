@@ -438,6 +438,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
         return activations;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized.");

@@ -152,12 +152,16 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     #region IAudioEventDetector
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedEvents => ClassLabels;
     public IReadOnlyList<string> EventLabels => ClassLabels;
+    /// <inheritdoc />
     public double TimeResolution => _options.WindowSize * (1 - _options.WindowOverlap);
 
+    /// <inheritdoc />
     public AudioEventResult<T> Detect(Tensor<T> audio) { ThrowIfDisposed(); return Detect(audio, NumOps.FromDouble(_options.Threshold)); }
 
+    /// <inheritdoc />
     public AudioEventResult<T> Detect(Tensor<T> audio, T threshold)
     {
         ThrowIfDisposed();
@@ -180,9 +184,12 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         return new AudioEventResult<T> { Events = merged, TotalDuration = totalDuration, DetectedEventTypes = merged.Select(e => e.EventType).Distinct().ToList(), EventStats = ComputeEventStatistics(merged) };
     }
 
+    /// <inheritdoc />
     public Task<AudioEventResult<T>> DetectAsync(Tensor<T> audio, CancellationToken cancellationToken = default) => Task.Run(() => Detect(audio), cancellationToken);
+    /// <inheritdoc />
     public AudioEventResult<T> DetectSpecific(Tensor<T> audio, IReadOnlyList<string> eventTypes) => DetectSpecific(audio, eventTypes, NumOps.FromDouble(_options.Threshold));
 
+    /// <inheritdoc />
     public AudioEventResult<T> DetectSpecific(Tensor<T> audio, IReadOnlyList<string> eventTypes, T threshold)
     {
         var result = Detect(audio, threshold);
@@ -191,6 +198,7 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         return new AudioEventResult<T> { Events = filtered, TotalDuration = result.TotalDuration, DetectedEventTypes = filtered.Select(e => e.EventType).Distinct().ToList(), EventStats = ComputeEventStatistics(filtered) };
     }
 
+    /// <inheritdoc />
     public Tensor<T> GetEventProbabilities(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -205,7 +213,9 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         return probs;
     }
 
+    /// <inheritdoc />
     public IStreamingEventDetectionSession<T> StartStreamingSession() => StartStreamingSession(_options.SampleRate, NumOps.FromDouble(_options.Threshold));
+    /// <inheritdoc />
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sampleRate, T threshold) => new EATStreamingSession(this, sampleRate, threshold);
 
     #endregion
@@ -225,6 +235,7 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -239,8 +250,10 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => _melSpectrogram?.Forward(rawAudio) ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         var result = new Tensor<T>(modelOutput._shape);
@@ -248,6 +261,7 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = _useNativeMode ? "EAT-Native" : "EAT-ONNX", Description = "EAT: Efficient Audio Transformer (Chen et al., 2024)", FeatureCount = ClassLabels.Count, Complexity = _options.NumEncoderLayers };
@@ -335,6 +349,7 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Disposal
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(EAT<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

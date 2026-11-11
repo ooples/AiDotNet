@@ -64,6 +64,7 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
     private readonly DenseLayer<T>? _sharedGateLogit;     // hidden -> 1 (sigmoid gate)
     private readonly int _sharedFfnDim;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     /// <summary>The router (gating) linear projection, hidden -&gt; numExperts (bias-free).</summary>

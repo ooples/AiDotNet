@@ -257,6 +257,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return action;
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         // Default to agent 0
@@ -318,6 +319,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _stepCount++;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // Clear any per-agent reward override left at this buffer position by an earlier joint
@@ -382,6 +384,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
@@ -623,6 +626,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return ConcatenateVectors(individualActions);
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -632,11 +636,13 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         // No episode-specific state
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         return SelectAction(input, training: false);
@@ -653,6 +659,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -660,6 +667,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         };
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
 
     /// <summary>

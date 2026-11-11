@@ -31,8 +31,11 @@ public class BlockedKFoldStrategy<T> : ICrossValidationStrategy<T>
     private readonly bool _shuffle;
     private readonly int? _randomSeed;
 
+    /// <inheritdoc />
     public string Name => $"Blocked {_nFolds}-Fold (gap={_gapSize})";
+    /// <inheritdoc />
     public string Description => "K-Fold with gap between train and validation to prevent leakage.";
+    /// <inheritdoc />
     public int NumSplits => _nFolds;
 
     /// <summary>
@@ -55,6 +58,7 @@ public class BlockedKFoldStrategy<T> : ICrossValidationStrategy<T>
         _randomSeed = randomSeed;
     }
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize <= 0)

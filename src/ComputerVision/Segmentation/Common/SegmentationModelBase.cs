@@ -562,6 +562,7 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
 
     #region Parameter Updates
 
+    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;

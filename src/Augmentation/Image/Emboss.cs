@@ -19,6 +19,7 @@ public class Emboss<T> : ImageAugmenterBase<T>
         MinStrength = minStrength; MaxStrength = maxStrength;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -60,6 +61,7 @@ public class Emboss<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

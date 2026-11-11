@@ -163,6 +163,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract, 
     /// </remarks>
     public override bool MakesUpstreamBiasRedundant => false;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -632,6 +633,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract, 
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
     /// <summary>
@@ -640,6 +642,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract, 
     /// </summary>
     internal override bool KeepsResultsBetweenCalls => GetType() != typeof(LayerNormalizationLayer<T>);
 
+    /// <inheritdoc />
     public override void ResetState()
     {
 

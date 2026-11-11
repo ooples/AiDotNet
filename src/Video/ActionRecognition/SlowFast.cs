@@ -148,6 +148,7 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int NumClasses => _numClasses;
     internal int SlowFrames => _slowFrames;
@@ -510,6 +511,7 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => Classify(input);
 
     private bool _shapesProbed;

@@ -28,6 +28,7 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
     private readonly ITeacherModel<Vector<T>, Vector<T>>[] _modalityTeachers;
     private readonly double[] _modalityWeights;
 
+    /// <inheritdoc />
     public override int OutputDimension => _modalityTeachers[0].OutputDimension;
 
     public MultiModalTeacherModel(

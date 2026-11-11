@@ -27,9 +27,13 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "Kruskal-Wallis H Test";
+    /// <inheritdoc />
     public string Description => "Non-parametric test for comparing multiple independent groups.";
+    /// <inheritdoc />
     public bool IsPaired => false;
+    /// <inheritdoc />
     public bool IsNonParametric => true;
 
     /// <summary>

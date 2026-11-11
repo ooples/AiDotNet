@@ -12,8 +12,10 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 /// </remarks>
 public abstract class FederatedHeterogeneityCorrectionBase<T> : FederatedLearningComponentBase<T>, IFederatedHeterogeneityCorrection<T>
 {
+    /// <inheritdoc />
     public abstract Vector<T> Correct(int clientId, int roundNumber, Vector<T> globalParameters, Vector<T> localParameters, int localEpochs);
 
+    /// <inheritdoc />
     public abstract string GetCorrectionName();
 
     protected static int SafeLocalSteps(int localEpochs) => Math.Max(1, localEpochs);

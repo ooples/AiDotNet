@@ -40,6 +40,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         private static int DefaultWordCount(string s)
             => string.IsNullOrWhiteSpace(s) ? 0 : s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
 
+        /// <inheritdoc />
         protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
         {
             var words = SplitWordsWithPositions(text);

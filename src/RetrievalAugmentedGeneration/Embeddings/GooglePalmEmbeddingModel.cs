@@ -39,7 +39,9 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly bool _ownsHttpClient;
     private bool _disposed;
 
+    /// <inheritdoc />
     public override int EmbeddingDimension => _dimension;
+    /// <inheritdoc />
     public override int MaxTokens => 2048;
 
     /// <summary>
@@ -150,6 +152,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
         return await EmbedBatchCoreAsync(textList);
     }
 
+    /// <inheritdoc />
     protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
     {
         var endpoint = $"https://{_location}-aiplatform.googleapis.com/v1/projects/{_projectId}/locations/{_location}/publishers/google/models/{_model}:predict";
@@ -207,6 +210,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
         public double[] Values { get; set; } = Array.Empty<double>();
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)

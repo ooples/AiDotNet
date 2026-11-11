@@ -610,6 +610,7 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         DiscriminatorB.SetTrainingMode(isTraining);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
@@ -633,6 +634,7 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         return GeneratorAtoB.ForwardForTraining(input);
     }
 
+    /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(
@@ -655,6 +657,7 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         return activations;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

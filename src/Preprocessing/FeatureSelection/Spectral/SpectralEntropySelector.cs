@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Spectral;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _windowSize;
@@ -29,10 +29,13 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int WindowSize => _windowSize;
     public double[]? SpectralEntropyScores => _spectralEntropyScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public SpectralEntropySelector(
@@ -48,6 +51,7 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _windowSize = windowSize;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -134,6 +138,7 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -150,11 +155,13 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("SpectralEntropySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -167,6 +174,7 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

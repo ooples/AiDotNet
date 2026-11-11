@@ -64,7 +64,9 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
     public bool IsFrozen { get; private set; }
     public string Name => $"CSPDarknet-{_widthMultiplier:0.0}x";
+    /// <inheritdoc />
     public IReadOnlyList<int> OutputChannels { get; }
+    /// <inheritdoc />
     public IReadOnlyList<int> Strides => new[] { 8, 16, 32 };
 
     /// <summary>
@@ -116,6 +118,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return Math.Max(1, (int)Math.Round((double)baseCounts[stage] * depth * 0.33));
     }
 
+    /// <inheritdoc />
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         var features = new List<Tensor<T>>();
@@ -129,6 +132,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return features;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
@@ -173,6 +177,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     // a SEPARATE source, and once the vector started folding the base enumeration the
     // two drifted apart immediately.
 
+    /// <inheritdoc />
     public void WriteParameters(BinaryWriter writer)
     {
         BackboneSerialization.WriteLayerParameters(writer, _stem);
@@ -180,6 +185,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         foreach (var stage in _stages) stage.WriteParameters(writer);
     }
 
+    /// <inheritdoc />
     public void ReadParameters(BinaryReader reader)
     {
         BackboneSerialization.ReadLayerParameters(reader, _stem);
@@ -193,6 +199,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var features = ExtractFeatures(input);
@@ -233,6 +240,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         Layers.AddRange(_stages);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -247,6 +255,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
 
 
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
@@ -378,6 +387,7 @@ public partial class CSPBlock<T> : LayerBase<T>, IShapeContract
         };
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     private IEnumerable<LayerBase<T>> InnerLayers()
@@ -389,6 +399,7 @@ public partial class CSPBlock<T> : LayerBase<T>, IShapeContract
         yield return _cv3;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Hands the children to GetSubLayers() via the generated EnsureSubLayersRegistered().
@@ -406,17 +417,20 @@ public partial class CSPBlock<T> : LayerBase<T>, IShapeContract
         return _activation.Activate(output);
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var l in InnerLayers()) l.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
         foreach (var l in InnerLayers()) l.SetTrainingMode(isTraining);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         foreach (var l in InnerLayers()) l.ResetState();
@@ -517,8 +531,10 @@ public partial class CSPBottleneckBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>Stride-1 "same"-padded convs plus a residual add: shape in, shape out.</summary>
     protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Identity;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Hands _cv1/_cv2 to GetSubLayers() via the generated EnsureSubLayersRegistered().
@@ -533,12 +549,14 @@ public partial class CSPBottleneckBlock<T> : LayerBase<T>, IShapeContract
         return y;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _cv1.UpdateParameters(learningRate);
         _cv2.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
@@ -546,6 +564,7 @@ public partial class CSPBottleneckBlock<T> : LayerBase<T>, IShapeContract
         _cv2.SetTrainingMode(isTraining);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _cv1.ResetState();
