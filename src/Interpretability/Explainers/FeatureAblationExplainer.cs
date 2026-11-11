@@ -39,8 +39,6 @@ namespace AiDotNet.Interpretability.Explainers;
 /// </remarks>
 public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExplanation<T>>, IGlobalExplainer<T, GlobalFeatureAblationResult<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
     private readonly Func<Tensor<T>, Tensor<T>>? _tensorPredictFunction;
     [AiDotNet.Attributes.TrainableParameter]
@@ -142,12 +140,7 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
 
         _predictFunction = input =>
         {
-            var tensor = new Tensor<T>(new[] { 1, input.Length });
-            for (int i = 0; i < input.Length; i++)
-            {
-                tensor[0, i] = input[i];
-            }
-            return tensorPredictFunction(tensor).ToVector();
+            return tensorPredictFunction(ExplainerTensorOps<T>.RowTensor(input)).ToVector();
         };
     }
 
@@ -177,41 +170,42 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
         var groups = _featureGroups ?? CreateDefaultGroups(input.Length);
         int numGroups = groups.Length;
 
-        // Compute attributions for each group
-        var attributions = new T[numGroups];
-        var groupScores = new T[numGroups];
-
-        if (_perturbEachSeparately)
+        // Compute ablated predictions for each group
+        var ablatedPredictions = new List<Vector<T>>(numGroups);
+        var cumulativeAblated = input.Clone();
+        for (int g = 0; g < numGroups; g++)
         {
-            // Independent ablation
-            for (int g = 0; g < numGroups; g++)
+            if (_perturbEachSeparately)
             {
-                var ablated = AblateFeatures(input, baseline, groups[g]);
-                var ablatedPrediction = _predictFunction(ablated);
-                T ablatedScore = ablatedPrediction[actualTarget];
-
-                // Attribution = drop in score when feature is removed
-                attributions[g] = NumOps.Subtract(baseScore, ablatedScore);
-                groupScores[g] = ablatedScore;
+                // Independent ablation
+                ablatedPredictions.Add(_predictFunction(AblateFeatures(input, baseline, groups[g])));
+            }
+            else
+            {
+                // Cumulative ablation (Shapley-like order)
+                cumulativeAblated = AblateFeatures(cumulativeAblated, baseline, groups[g]);
+                ablatedPredictions.Add(_predictFunction(cumulativeAblated));
             }
         }
-        else
+
+        var engine = AiDotNetEngine.Current;
+        var groupScores = new Vector<T>(numGroups);
+        var attributions = new Vector<T>(numGroups);
+        if (numGroups > 0)
         {
-            // Cumulative ablation (Shapley-like order)
-            var cumulativeAblated = input.Clone();
-            T prevScore = baseScore;
+            var scores = engine.TensorSliceAxis(ExplainerTensorOps<T>.Stack(ablatedPredictions), 1, actualTarget);
+            groupScores = scores.ToVector();
 
-            for (int g = 0; g < numGroups; g++)
-            {
-                cumulativeAblated = AblateFeatures(cumulativeAblated, baseline, groups[g]);
-                var ablatedPrediction = _predictFunction(cumulativeAblated);
-                T ablatedScore = ablatedPrediction[actualTarget];
-
-                // Attribution = marginal contribution
-                attributions[g] = NumOps.Subtract(prevScore, ablatedScore);
-                groupScores[g] = ablatedScore;
-                prevScore = ablatedScore;
-            }
+            // Independent: attribution = drop in score when the feature is removed.
+            // Cumulative: attribution = marginal contribution, the drop from the previous step's score.
+            var previousScores = _perturbEachSeparately || numGroups == 1
+                ? engine.TensorFullLike(scores, baseScore)
+                : engine.TensorConcatenate(new[]
+                {
+                    engine.TensorFullLike(new Tensor<T>(new[] { 1 }), baseScore),
+                    engine.TensorSlice(scores, new[] { 0 }, new[] { numGroups - 1 })
+                }, 0);
+            attributions = engine.TensorSubtract(previousScores, scores).ToVector();
         }
 
         // Get feature/group names
@@ -220,13 +214,13 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
 
         return new FeatureAblationExplanation<T>(
             input: input,
-            attributions: new Vector<T>(attributions),
+            attributions: attributions,
             baseline: baseline,
             featureGroups: groups,
             featureNames: names,
             targetClass: actualTarget,
             basePrediction: baseScore,
-            ablatedPredictions: new Vector<T>(groupScores));
+            ablatedPredictions: groupScores);
     }
 
     /// <summary>
@@ -265,38 +259,27 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
         var groups = _featureGroups ?? CreateDefaultGroups(numFeatures);
         int numGroups = groups.Length;
 
-        // Accumulate attributions
-        var sumAttributions = new double[numGroups];
-        var sumAbsAttributions = new double[numGroups];
-        var sumSquaredAttributions = new double[numGroups];
-
+        // Collect attributions
+        var sampleAttributions = new List<Vector<T>>(numSamples);
         for (int i = 0; i < numSamples; i++)
         {
             var explanation = ExplainLocal(data.GetRow(i), targetClass);
-
-            for (int g = 0; g < numGroups; g++)
-            {
-                double attr = NumOps.ToDouble(explanation.Attributions[g]);
-                sumAttributions[g] += attr;
-                sumAbsAttributions[g] += Math.Abs(attr);
-                sumSquaredAttributions[g] += attr * attr;
-            }
+            sampleAttributions.Add(explanation.Attributions.GetSubVector(0, numGroups));
         }
 
-        // Compute statistics
-        var meanAttributions = new T[numGroups];
-        var meanAbsAttributions = new T[numGroups];
-        var stdAttributions = new T[numGroups];
-
-        for (int g = 0; g < numGroups; g++)
+        // Compute statistics: mean, mean |attribution| and population std per group
+        var meanAttributions = new Vector<T>(numGroups);
+        var meanAbsAttributions = new Vector<T>(numGroups);
+        var stdAttributions = new Vector<T>(numGroups);
+        if (numSamples > 0 && numGroups > 0)
         {
-            double mean = sumAttributions[g] / numSamples;
-            double meanAbs = sumAbsAttributions[g] / numSamples;
-            double variance = sumSquaredAttributions[g] / numSamples - mean * mean;
-
-            meanAttributions[g] = NumOps.FromDouble(mean);
-            meanAbsAttributions[g] = NumOps.FromDouble(meanAbs);
-            stdAttributions[g] = NumOps.FromDouble(Math.Sqrt(Math.Max(0, variance)));
+            var engine = AiDotNetEngine.Current;
+            var stacked = ExplainerTensorOps<T>.Stack(sampleAttributions);
+            var mean = engine.ReduceMean(stacked, new[] { 0 }, true);
+            var deviations = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape));
+            meanAttributions = mean.ToVector();
+            meanAbsAttributions = engine.ReduceMean(engine.TensorAbs(stacked), new[] { 0 }, false).ToVector();
+            stdAttributions = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(deviations), new[] { 0 }, false)).ToVector();
         }
 
         var names = _featureNames ?? groups.Select((g, i) =>
@@ -305,9 +288,9 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
         return new GlobalFeatureAblationResult<T>(
             featureGroups: groups,
             featureNames: names,
-            meanAttributions: new Vector<T>(meanAttributions),
-            meanAbsoluteAttributions: new Vector<T>(meanAbsAttributions),
-            stdAttributions: new Vector<T>(stdAttributions),
+            meanAttributions: meanAttributions,
+            meanAbsoluteAttributions: meanAbsAttributions,
+            stdAttributions: stdAttributions,
             numSamples: numSamples);
     }
 
@@ -316,15 +299,18 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
     /// </summary>
     private Vector<T> AblateFeatures(Vector<T> input, Vector<T> baseline, int[] featureIndices)
     {
-        var result = input.Clone();
+        // Replace the group's (in-range) features by the baseline, or zero past the baseline's end
+        var ablate = new bool[input.Length];
         foreach (var idx in featureIndices)
         {
-            if (idx >= 0 && idx < result.Length)
+            if (idx >= 0 && idx < ablate.Length)
             {
-                result[idx] = idx < baseline.Length ? baseline[idx] : NumOps.Zero;
+                ablate[idx] = true;
             }
         }
-        return result;
+
+        var replacement = ExplainerTensorOps<T>.PadOrTruncate(baseline, input.Length);
+        return AiDotNetEngine.Current.TensorWhere(ablate, replacement.AsTensor(), input.AsTensor()).ToVector();
     }
 
     /// <summary>
@@ -342,20 +328,7 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
     /// </summary>
     private int GetPredictedClass(Vector<T> output)
     {
-        int maxIdx = 0;
-        double maxVal = NumOps.ToDouble(output[0]);
-
-        for (int i = 1; i < output.Length; i++)
-        {
-            double val = NumOps.ToDouble(output[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        return ExplainerTensorOps<T>.ArgMax(output);
     }
 
     /// <summary>
@@ -500,7 +473,7 @@ public class FeatureAblationExplanation<T> : AiDotNet.Interpretability.IFeatureA
                $"  Base prediction: {BasePrediction}\n" +
                $"  Top features:\n" +
                string.Join("\n", top.Select(f =>
-                   $"    {f.Name}: {NumOps.ToDouble(f.Attribution):F4}"));
+                   $"    {f.Name}: {f.Attribution:F4}"));
     }
 }
 
@@ -599,7 +572,7 @@ public class GlobalFeatureAblationResult<T>
 
         return $"Global Feature Ablation ({NumSamples} samples):\n" +
                string.Join("\n", top.Select(f =>
-                   $"  {f.Name}: |attr|={NumOps.ToDouble(f.MeanAbsAttribution):F4} " +
-                   $"(mean={NumOps.ToDouble(f.MeanAttribution):F4}, std={NumOps.ToDouble(f.Std):F4})"));
+                   $"  {f.Name}: |attr|={f.MeanAbsAttribution:F4} " +
+                   $"(mean={f.MeanAttribution:F4}, std={f.Std:F4})"));
     }
 }

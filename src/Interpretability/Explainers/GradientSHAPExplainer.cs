@@ -175,15 +175,13 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
             : RandomHelper.CreateSecureRandom();
 
         // Accumulate attributions
-        var attributions = new double[numFeatures];
-        var attributionVariances = new double[numFeatures];
-        var sampleAttributions = new List<double[]>();
+        var sampleAttributions = new List<Vector<T>>(_numSamples);
 
         // Get prediction for input
         var inputPred = _predictFunction(instance);
         if (outputIndex >= inputPred.Length)
             throw new ArgumentOutOfRangeException(nameof(outputIndex), $"Output index {outputIndex} is out of bounds for prediction with {inputPred.Length} outputs.");
-        double inputVal = NumOps.ToDouble(inputPred[outputIndex]);
+        T inputVal = inputPred[outputIndex];
 
         // Sample baselines and compute attributions
         for (int s = 0; s < _numSamples; s++)
@@ -193,70 +191,42 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
             var baseline = _backgroundData.GetRow(baselineIdx);
 
             // Get baseline prediction
-            var baselinePred = _predictFunction(baseline);
-            double baselineVal = NumOps.ToDouble(baselinePred[outputIndex]);
+            _predictFunction(baseline);
 
             // Compute Integrated Gradients from this baseline
             var sampleAttr = ComputeIntegratedGradients(instance, baseline, outputIndex, rand);
 
             // Store for variance computation
-            var sampleAttrDouble = new double[numFeatures];
-            for (int j = 0; j < numFeatures; j++)
-            {
-                sampleAttrDouble[j] = NumOps.ToDouble(sampleAttr[j]);
-                attributions[j] += sampleAttrDouble[j];
-            }
-            sampleAttributions.Add(sampleAttrDouble);
+            sampleAttributions.Add(new Vector<T>(sampleAttr));
         }
 
-        // Average attributions
-        for (int j = 0; j < numFeatures; j++)
-        {
-            attributions[j] /= _numSamples;
-        }
-
-        // Compute variances
-        foreach (var sample in sampleAttributions)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                double diff = sample[j] - attributions[j];
-                attributionVariances[j] += diff * diff;
-            }
-        }
-        for (int j = 0; j < numFeatures; j++)
-        {
-            attributionVariances[j] /= _numSamples;
-        }
+        // Average attributions and their (population) variances
+        var engine = AiDotNetEngine.Current;
+        var samples = ExplainerTensorOps<T>.Stack(sampleAttributions);
+        var mean = engine.ReduceMean(samples, new[] { 0 }, true);
+        var centered = engine.TensorSubtract(samples, engine.TensorBroadcastTo(mean, samples.Shape));
+        var attributions = mean.ToVector();
+        var attributionVariances = engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false).ToVector();
 
         // Compute expected value (average prediction over background)
-        double expectedValue = 0;
         int bgSampleCount = Math.Min(100, numBackground);
+        var backgroundPredictions = new List<Vector<T>>(bgSampleCount);
         for (int i = 0; i < bgSampleCount; i++)
         {
             var bg = _backgroundData.GetRow(i);
             var pred = _predictFunction(bg);
             if (outputIndex >= pred.Length)
                 throw new InvalidOperationException($"Background prediction {i} has {pred.Length} outputs but outputIndex is {outputIndex}.");
-            expectedValue += NumOps.ToDouble(pred[outputIndex]);
+            backgroundPredictions.Add(pred.GetSubVector(0, outputIndex + 1));
         }
-        expectedValue /= bgSampleCount;
-
-        // Convert to Vector<T>
-        var attrVector = new T[numFeatures];
-        var varVector = new T[numFeatures];
-        for (int j = 0; j < numFeatures; j++)
-        {
-            attrVector[j] = NumOps.FromDouble(attributions[j]);
-            varVector[j] = NumOps.FromDouble(attributionVariances[j]);
-        }
+        T expectedValue = engine.TensorMean(engine.TensorSliceAxis(ExplainerTensorOps<T>.Stack(backgroundPredictions), 1, outputIndex));
 
         return new GradientSHAPExplanation<T>
         {
-            Attributions = new Vector<T>(attrVector),
-            AttributionVariances = new Vector<T>(varVector),
-            ExpectedValue = NumOps.FromDouble(expectedValue),
-            InputPrediction = NumOps.FromDouble(inputVal),
+            Attributions = attributions,
+            AttributionVariances = attributionVariances,
+            ExpectedValue = expectedValue,
+            InputPrediction = inputVal,
             FeatureNames = _featureNames ?? Enumerable.Range(0, numFeatures).Select(i => $"Feature {i}").ToArray(),
             OutputIndex = outputIndex,
             NumSamples = _numSamples
@@ -352,33 +322,7 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     /// </summary>
     private Vector<T> ComputeNumericalGradient(Vector<T> input, int outputIndex)
     {
-        int n = input.Length;
-        var gradient = new T[n];
-        double epsilon = 1e-4;
-
-        for (int j = 0; j < n; j++)
-        {
-            var inputPlus = new T[n];
-            var inputMinus = new T[n];
-            for (int k = 0; k < n; k++)
-            {
-                inputPlus[k] = input[k];
-                inputMinus[k] = input[k];
-            }
-
-            inputPlus[j] = NumOps.FromDouble(NumOps.ToDouble(input[j]) + epsilon);
-            inputMinus[j] = NumOps.FromDouble(NumOps.ToDouble(input[j]) - epsilon);
-
-            var predPlus = _predictFunction(new Vector<T>(inputPlus));
-            var predMinus = _predictFunction(new Vector<T>(inputMinus));
-
-            double valPlus = NumOps.ToDouble(predPlus[outputIndex]);
-            double valMinus = NumOps.ToDouble(predMinus[outputIndex]);
-
-            gradient[j] = NumOps.FromDouble((valPlus - valMinus) / (2 * epsilon));
-        }
-
-        return new Vector<T>(gradient);
+        return ExplainerTensorOps<T>.CentralDifferenceGradient(_predictFunction, input, outputIndex, 1e-4, input.Length);
     }
 }
 
@@ -485,31 +429,24 @@ public class GradientSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttr
     /// </summary>
     public override string ToString()
     {
-        double attrSum = 0;
-        for (int i = 0; i < Attributions.Length; i++)
-        {
-            attrSum += NumOps.ToDouble(Attributions[i]);
-        }
+        T attrSum = AiDotNetEngine.Current.Sum(Attributions);
 
         var lines = new List<string>
         {
             "GradientSHAP Explanation:",
-            $"  Expected value (base): {NumOps.ToDouble(ExpectedValue):F4}",
-            $"  Input prediction: {NumOps.ToDouble(InputPrediction):F4}",
+            $"  Expected value (base): {ExpectedValue:F4}",
+            $"  Input prediction: {InputPrediction:F4}",
             $"  Sum of SHAP values: {attrSum:F4}",
             $"  Samples used: {NumSamples}",
             "",
             "Top Feature Attributions (with ±2σ confidence):"
         };
 
-        var withConfidence = GetAttributionsWithConfidence().Take(10);
-        foreach (var (name, lower, attr, upper) in withConfidence)
+        var withConfidence = GetAttributionsWithConfidence().Take(10).ToList();
+        var signs = ExplainerTensorOps<T>.SignPrefixes(withConfidence.Select(entry => entry.attribution));
+        foreach (var ((name, lower, attr, upper), sign) in withConfidence.Zip(signs, (entry, prefix) => (entry, prefix)))
         {
-            double attrVal = NumOps.ToDouble(attr);
-            double lowerVal = NumOps.ToDouble(lower);
-            double upperVal = NumOps.ToDouble(upper);
-            string sign = attrVal >= 0 ? "+" : "";
-            lines.Add($"  {name}: {sign}{attrVal:F4} [{lowerVal:F4}, {upperVal:F4}]");
+            lines.Add($"  {name}: {sign}{attr:F4} [{lower:F4}, {upper:F4}]");
         }
 
         return string.Join(Environment.NewLine, lines);

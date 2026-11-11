@@ -169,19 +169,8 @@ public partial class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanati
         // Create predict function wrapper
         _predictFunction = input =>
         {
-            var tensor = new Tensor<T>(new[] { 1, input.Length });
-            for (int i = 0; i < input.Length; i++)
-            {
-                tensor[0, i] = input[i];
-            }
-            var output = neuralNetwork.Predict(tensor);
-            var result = new T[output.Length];
-            var outputArray = output.ToArray();
-            for (int i = 0; i < output.Length; i++)
-            {
-                result[i] = outputArray[i];
-            }
-            return new Vector<T>(result);
+            var output = neuralNetwork.Predict(ExplainerTensorOps<T>.RowTensor(input));
+            return output.ToVector();
         };
 
         _numFeatures = numFeatures;
@@ -215,11 +204,11 @@ public partial class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanati
         var inputPred = _predictFunction(instance);
         var baselinePred = _predictFunction(baseline);
 
-        double inputVal = outputIndex < inputPred.Length ? NumOps.ToDouble(inputPred[outputIndex]) : 0;
-        double baselineVal = outputIndex < baselinePred.Length ? NumOps.ToDouble(baselinePred[outputIndex]) : 0;
-        double deltaOutput = inputVal - baselineVal;
+        T inputVal = OutputOrZero(inputPred, outputIndex);
+        T baselineVal = OutputOrZero(baselinePred, outputIndex);
+        T deltaOutput = NumOps.Subtract(inputVal, baselineVal);
 
-        T[] attributions;
+        Vector<T> attributions;
 
         if (_computeMultipliers != null)
         {
@@ -234,18 +223,18 @@ public partial class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanati
         }
 
         // Verify sum property (attributions should sum to delta output)
-        double attrSum = attributions.Sum(a => NumOps.ToDouble(a));
-        double completenessError = Math.Abs(attrSum - deltaOutput);
+        T attrSum = AiDotNetEngine.Current.Sum(attributions);
+        T completenessError = NumOps.Abs(NumOps.Subtract(attrSum, deltaOutput));
 
         return new DeepLIFTExplanation<T>
         {
-            Attributions = new Vector<T>(attributions),
+            Attributions = attributions,
             Baseline = baseline,
             Input = instance,
-            BaselinePrediction = NumOps.FromDouble(baselineVal),
-            InputPrediction = NumOps.FromDouble(inputVal),
-            DeltaOutput = NumOps.FromDouble(deltaOutput),
-            CompletenessError = NumOps.FromDouble(completenessError),
+            BaselinePrediction = baselineVal,
+            InputPrediction = inputVal,
+            DeltaOutput = deltaOutput,
+            CompletenessError = completenessError,
             FeatureNames = _featureNames ?? Enumerable.Range(0, numFeatures).Select(i => $"Feature {i}").ToArray(),
             OutputIndex = outputIndex,
             Rule = _rule
@@ -271,105 +260,61 @@ public partial class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanati
     /// <summary>
     /// Computes attributions from multipliers.
     /// </summary>
-    private T[] ComputeAttributionsFromMultipliers(Vector<T> input, Vector<T> baseline, Vector<T> multipliers)
+    private Vector<T> ComputeAttributionsFromMultipliers(Vector<T> input, Vector<T> baseline, Vector<T> multipliers)
     {
-        int n = input.Length;
-        var attributions = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double deltaInput = NumOps.ToDouble(input[i]) - NumOps.ToDouble(baseline[i]);
-            double mult = NumOps.ToDouble(multipliers[i]);
-            attributions[i] = NumOps.FromDouble(deltaInput * mult);
-        }
-
-        return attributions;
+        var engine = AiDotNetEngine.Current;
+        return engine.Multiply(engine.Subtract(input, baseline), multipliers.GetSubVector(0, input.Length));
     }
 
     /// <summary>
     /// Computes approximate DeepLIFT attributions using path integration.
     /// This approximation follows the rescale rule.
     /// </summary>
-    private T[] ComputeApproximateAttributions(Vector<T> input, Vector<T> baseline, int outputIndex)
+    private Vector<T> ComputeApproximateAttributions(Vector<T> input, Vector<T> baseline, int outputIndex)
     {
         int n = input.Length;
-        var attributions = new T[n];
+        var engine = AiDotNetEngine.Current;
+        var deltaInput = engine.Subtract(input, baseline);
 
         // Compute delta outputs for perturbed inputs
         // Using a path approximation similar to integrated gradients but with rescale rule
-
         if (_rule == DeepLIFTRule.Rescale)
         {
             // Rescale rule: contribution proportional to delta_input * (delta_output / sum(delta_inputs))
             var inputPred = _predictFunction(input);
             var baselinePred = _predictFunction(baseline);
-
-            double outputDiff = (outputIndex < inputPred.Length ? NumOps.ToDouble(inputPred[outputIndex]) : 0)
-                              - (outputIndex < baselinePred.Length ? NumOps.ToDouble(baselinePred[outputIndex]) : 0);
+            T outputDiff = NumOps.Subtract(OutputOrZero(inputPred, outputIndex), OutputOrZero(baselinePred, outputIndex));
 
             // Compute contributions using gradient scaling
-            double totalGradContrib = 0;
             var gradients = ComputeNumericalGradient(input, outputIndex);
-
-            for (int i = 0; i < n; i++)
-            {
-                double deltaInput = NumOps.ToDouble(input[i]) - NumOps.ToDouble(baseline[i]);
-                double grad = NumOps.ToDouble(gradients[i]);
-                totalGradContrib += Math.Abs(deltaInput * grad);
-            }
+            var rawContrib = engine.Multiply(deltaInput, gradients.GetSubVector(0, n));
+            T totalGradContrib = engine.Sum(engine.Abs(rawContrib));
 
             // Rescale to match output difference
-            for (int i = 0; i < n; i++)
+            if (NumOps.GreaterThan(NumOps.Abs(totalGradContrib), NumOps.FromDouble(1e-10)))
             {
-                double deltaInput = NumOps.ToDouble(input[i]) - NumOps.ToDouble(baseline[i]);
-                double grad = NumOps.ToDouble(gradients[i]);
-                double rawContrib = deltaInput * grad;
-
-                // Rescale
-                if (Math.Abs(totalGradContrib) > 1e-10)
-                {
-                    attributions[i] = NumOps.FromDouble(rawContrib * outputDiff / totalGradContrib);
-                }
-                else
-                {
-                    attributions[i] = NumOps.FromDouble(outputDiff / n);
-                }
-            }
-        }
-        else // RevealCancel rule
-        {
-            // Separate positive and negative contributions
-            var posAttrib = new double[n];
-            var negAttrib = new double[n];
-
-            var gradients = ComputeNumericalGradient(input, outputIndex);
-            var midpoint = new T[n];
-            for (int i = 0; i < n; i++)
-            {
-                midpoint[i] = NumOps.FromDouble((NumOps.ToDouble(input[i]) + NumOps.ToDouble(baseline[i])) / 2);
-            }
-            var midGradients = ComputeNumericalGradient(new Vector<T>(midpoint), outputIndex);
-
-            for (int i = 0; i < n; i++)
-            {
-                double deltaInput = NumOps.ToDouble(input[i]) - NumOps.ToDouble(baseline[i]);
-                double avgGrad = (NumOps.ToDouble(gradients[i]) + NumOps.ToDouble(midGradients[i])) / 2;
-                double contrib = deltaInput * avgGrad;
-
-                if (contrib >= 0)
-                    posAttrib[i] = contrib;
-                else
-                    negAttrib[i] = contrib;
+                return engine.Divide(engine.Multiply(rawContrib, outputDiff), totalGradContrib);
             }
 
-            // Combine
-            for (int i = 0; i < n; i++)
-            {
-                attributions[i] = NumOps.FromDouble(posAttrib[i] + negAttrib[i]);
-            }
+            return engine.Fill(n, NumOps.Divide(outputDiff, NumOps.FromDouble(n)));
         }
 
-        return attributions;
+        // RevealCancel rule: average the gradients at the input and at the midpoint. The positive and
+        // negative contributions are kept apart and recombined, which is delta_input * avgGrad itself.
+        var gradientsAtInput = ComputeNumericalGradient(input, outputIndex);
+        T two = NumOps.FromDouble(2);
+        var midpoint = engine.Divide(engine.Add(input, baseline), two);
+        var midGradients = ComputeNumericalGradient(midpoint, outputIndex);
+        var avgGrad = engine.Divide(engine.Add(gradientsAtInput.GetSubVector(0, n), midGradients.GetSubVector(0, n)), two);
+        return engine.Multiply(deltaInput, avgGrad);
+    }
+
+    /// <summary>
+    /// The prediction's value at <paramref name="outputIndex"/>, or zero when the prediction is shorter.
+    /// </summary>
+    private static T OutputOrZero(Vector<T> prediction, int outputIndex)
+    {
+        return outputIndex < prediction.Length ? prediction[outputIndex] : NumOps.Zero;
     }
 
     /// <summary>
@@ -396,33 +341,8 @@ public partial class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanati
         }
 
         // Fall back to numerical gradient approximation
-        int n = input.Length;
-        var gradient = new T[n];
-        double epsilon = 1e-4;
-
-        for (int i = 0; i < n; i++)
-        {
-            var inputPlus = new T[n];
-            var inputMinus = new T[n];
-            for (int j = 0; j < n; j++)
-            {
-                inputPlus[j] = input[j];
-                inputMinus[j] = input[j];
-            }
-
-            inputPlus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) + epsilon);
-            inputMinus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) - epsilon);
-
-            var predPlus = _predictFunction(new Vector<T>(inputPlus));
-            var predMinus = _predictFunction(new Vector<T>(inputMinus));
-
-            double valPlus = outputIndex < predPlus.Length ? NumOps.ToDouble(predPlus[outputIndex]) : 0;
-            double valMinus = outputIndex < predMinus.Length ? NumOps.ToDouble(predMinus[outputIndex]) : 0;
-
-            gradient[i] = NumOps.FromDouble((valPlus - valMinus) / (2 * epsilon));
-        }
-
-        return new Vector<T>(gradient);
+        return ExplainerTensorOps<T>.CentralDifferenceGradient(
+            _predictFunction, input, outputIndex, 1e-4, input.Length, outOfRangeIsZero: true);
     }
 }
 
@@ -547,10 +467,10 @@ public class DeepLIFTExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
         var lines = new List<string>
         {
             $"DeepLIFT Explanation (Rule: {Rule}):",
-            $"  Baseline prediction: {NumOps.ToDouble(BaselinePrediction):F4}",
-            $"  Input prediction: {NumOps.ToDouble(InputPrediction):F4}",
-            $"  Delta output: {NumOps.ToDouble(DeltaOutput):F4}",
-            $"  Completeness error: {NumOps.ToDouble(CompletenessError):F6}",
+            $"  Baseline prediction: {BaselinePrediction:F4}",
+            $"  Input prediction: {InputPrediction:F4}",
+            $"  Delta output: {DeltaOutput:F4}",
+            $"  Completeness error: {CompletenessError:F6}",
             "",
             "Top Positive Contributions:"
         };
@@ -558,7 +478,7 @@ public class DeepLIFTExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
         var positive = GetPositiveContributions().Take(5);
         foreach (var (name, attr) in positive)
         {
-            lines.Add($"  {name}: +{NumOps.ToDouble(attr):F4}");
+            lines.Add($"  {name}: +{attr:F4}");
         }
 
         lines.Add("");
@@ -567,7 +487,7 @@ public class DeepLIFTExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
         var negative = GetNegativeContributions().Take(5);
         foreach (var (name, attr) in negative)
         {
-            lines.Add($"  {name}: {NumOps.ToDouble(attr):F4}");
+            lines.Add($"  {name}: {attr:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

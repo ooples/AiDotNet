@@ -215,19 +215,8 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
 
         _predictFunction = input =>
         {
-            var tensor = new Tensor<T>(new[] { 1, input.Length });
-            for (int i = 0; i < input.Length; i++)
-            {
-                tensor[0, i] = input[i];
-            }
-            var output = neuralNetwork.Predict(tensor);
-            var result = new T[output.Length];
-            var outputArray = output.ToArray();
-            for (int i = 0; i < output.Length; i++)
-            {
-                result[i] = outputArray[i];
-            }
-            return new Vector<T>(result);
+            var output = neuralNetwork.Predict(ExplainerTensorOps<T>.RowTensor(input));
+            return output.ToVector();
         };
 
         _gradientFunction = gradientHelper.CreateGradientFunction();
@@ -281,12 +270,11 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
         }
 
         // Compute attributions relative to each background sample
-        var attributions = new double[numFeatures];
+        var sampleAttributions = new Vector<T>[_numSamples];
 
         if (_gpuHelper != null && _gpuHelper.IsGPUEnabled)
         {
             // Parallel processing of background samples
-            var sampleAttributions = new double[_numSamples][];
             Parallel.For(0, _numSamples, new ParallelOptions
             {
                 MaxDegreeOfParallelism = _gpuHelper.MaxParallelism
@@ -295,15 +283,6 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
                 var reference = _backgroundData.GetRow(sampleIndices[s]);
                 sampleAttributions[s] = ComputeDeepLIFTAttributions(instance, reference, outputIndex);
             });
-
-            // Average across samples
-            for (int s = 0; s < _numSamples; s++)
-            {
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    attributions[j] += sampleAttributions[s][j];
-                }
-            }
         }
         else
         {
@@ -311,36 +290,20 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
             for (int s = 0; s < _numSamples; s++)
             {
                 var reference = _backgroundData.GetRow(sampleIndices[s]);
-                var sampleAttr = ComputeDeepLIFTAttributions(instance, reference, outputIndex);
-
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    attributions[j] += sampleAttr[j];
-                }
+                sampleAttributions[s] = ComputeDeepLIFTAttributions(instance, reference, outputIndex);
             }
         }
 
         // Average across samples
-        double invSamples = 1.0 / _numSamples;
-        for (int j = 0; j < numFeatures; j++)
-        {
-            attributions[j] *= invSamples;
-        }
+        var attributions = ExplainerTensorOps<T>.Mean(sampleAttributions);
 
         // Get prediction
         var prediction = _predictFunction(instance);
         T predVal = outputIndex < prediction.Length ? prediction[outputIndex] : NumOps.Zero;
 
-        // Convert attributions to T
-        var attrT = new T[numFeatures];
-        for (int j = 0; j < numFeatures; j++)
-        {
-            attrT[j] = NumOps.FromDouble(attributions[j]);
-        }
-
         return new DeepSHAPExplanation<T>
         {
-            Attributions = new Vector<T>(attrT),
+            Attributions = attributions,
             ExpectedValue = _expectedValue,
             Prediction = predVal,
             Instance = instance,
@@ -414,66 +377,50 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
     /// special rules to compute more stable multipliers.
     /// </para>
     /// </remarks>
-    private double[] ComputeDeepLIFTAttributions(Vector<T> input, Vector<T> reference, int outputIndex)
+    private Vector<T> ComputeDeepLIFTAttributions(Vector<T> input, Vector<T> reference, int outputIndex)
     {
         int numFeatures = input.Length;
-        var attributions = new double[numFeatures];
+        var engine = AiDotNetEngine.Current;
 
         // Compute difference from reference
-        var diff = new double[numFeatures];
-        for (int j = 0; j < numFeatures; j++)
-        {
-            diff[j] = NumOps.ToDouble(input[j]) - NumOps.ToDouble(reference[j]);
-        }
+        var diff = engine.Subtract(input, reference.GetSubVector(0, numFeatures));
 
         // Use DeepLIFT multipliers if available, otherwise approximate with gradients
         if (_deepLiftMultipliers != null)
         {
             var multipliers = _deepLiftMultipliers(input, reference);
-            for (int j = 0; j < numFeatures; j++)
-            {
-                attributions[j] = diff[j] * NumOps.ToDouble(multipliers[j]);
-            }
+            return engine.Multiply(diff, multipliers.GetSubVector(0, numFeatures));
         }
-        else if (_gradientFunction != null)
+
+        if (_gradientFunction != null)
         {
             // Approximate DeepLIFT using average of gradients at input and reference
             // This is called "Gradient × Input" approximation
             var gradAtInput = _gradientFunction(input, outputIndex);
             var gradAtRef = _gradientFunction(reference, outputIndex);
 
-            for (int j = 0; j < numFeatures; j++)
-            {
-                // Average gradient (simple DeepLIFT approximation)
-                double avgGrad = 0.5 * (NumOps.ToDouble(gradAtInput[j]) + NumOps.ToDouble(gradAtRef[j]));
-                attributions[j] = diff[j] * avgGrad;
-            }
+            // Average gradient (simple DeepLIFT approximation)
+            var avgGrad = engine.Multiply(
+                engine.Add(gradAtInput.GetSubVector(0, numFeatures), gradAtRef.GetSubVector(0, numFeatures)),
+                NumOps.FromDouble(0.5));
+            return engine.Multiply(diff, avgGrad);
         }
-        else
+
+        // Fall back to simple difference weighting
+        var inputPred = _predictFunction(input);
+        var refPred = _predictFunction(reference);
+
+        T predDiff = NumOps.Subtract(inputPred[outputIndex], refPred[outputIndex]);
+
+        // Distribute prediction difference proportionally to input differences
+        T totalDiff = engine.Sum(engine.Abs(diff));
+
+        if (NumOps.GreaterThan(totalDiff, NumOps.FromDouble(1e-10)))
         {
-            // Fall back to simple difference weighting
-            var inputPred = _predictFunction(input);
-            var refPred = _predictFunction(reference);
-
-            double predDiff = NumOps.ToDouble(inputPred[outputIndex]) - NumOps.ToDouble(refPred[outputIndex]);
-
-            // Distribute prediction difference proportionally to input differences
-            double totalDiff = 0;
-            for (int j = 0; j < numFeatures; j++)
-            {
-                totalDiff += Math.Abs(diff[j]);
-            }
-
-            if (totalDiff > 1e-10)
-            {
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    attributions[j] = predDiff * (diff[j] / totalDiff);
-                }
-            }
+            return engine.Multiply(engine.Divide(diff, totalDiff), predDiff);
         }
 
-        return attributions;
+        return new Vector<T>(numFeatures);
     }
 
     /// <summary>
@@ -481,17 +428,17 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
     /// </summary>
     private T ComputeExpectedValue(Matrix<T> backgroundData)
     {
-        double sum = 0;
         int numSamples = Math.Min(backgroundData.Rows, 100);
+        var firstOutputs = new List<Vector<T>>(numSamples);
 
         for (int i = 0; i < numSamples; i++)
         {
             var sample = backgroundData.GetRow(i);
             var pred = _predictFunction(sample);
-            sum += NumOps.ToDouble(pred[0]);
+            firstOutputs.Add(pred.GetSubVector(0, 1));
         }
 
-        return NumOps.FromDouble(sum / numSamples);
+        return AiDotNetEngine.Current.TensorMean(ExplainerTensorOps<T>.Stack(firstOutputs));
     }
 }
 
@@ -558,16 +505,11 @@ public class DeepSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
     /// Verifies that attributions sum to (prediction - expected_value).
     /// </summary>
     /// <returns>The sum error (should be close to zero).</returns>
-    public double GetSumError()
+    public T GetSumError()
     {
-        double attrSum = 0;
-        for (int i = 0; i < Attributions.Length; i++)
-        {
-            attrSum += NumOps.ToDouble(Attributions[i]);
-        }
-
-        double expectedDiff = NumOps.ToDouble(Prediction) - NumOps.ToDouble(ExpectedValue);
-        return Math.Abs(attrSum - expectedDiff);
+        T attrSum = AiDotNetEngine.Current.Sum(Attributions);
+        T expectedDiff = NumOps.Subtract(Prediction, ExpectedValue);
+        return NumOps.Abs(NumOps.Subtract(attrSum, expectedDiff));
     }
 
     /// <summary>
@@ -578,20 +520,19 @@ public class DeepSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
         var lines = new List<string>
         {
             "DeepSHAP Explanation:",
-            $"  Expected value: {NumOps.ToDouble(ExpectedValue):F4}",
-            $"  Prediction: {NumOps.ToDouble(Prediction):F4}",
+            $"  Expected value: {ExpectedValue:F4}",
+            $"  Prediction: {Prediction:F4}",
             $"  Sum error: {GetSumError():F6}",
             $"  Samples used: {NumSamples}",
             "",
             "Top Feature Attributions:"
         };
 
-        var sorted = GetSortedAttributions().Take(10);
-        foreach (var (name, value, attr) in sorted)
+        var sorted = GetSortedAttributions().Take(10).ToList();
+        var signs = ExplainerTensorOps<T>.SignPrefixes(sorted.Select(entry => entry.attribution));
+        foreach (var ((name, value, attr), sign) in sorted.Zip(signs, (entry, prefix) => (entry, prefix)))
         {
-            double attrVal = NumOps.ToDouble(attr);
-            string sign = attrVal >= 0 ? "+" : "";
-            lines.Add($"  {name} = {NumOps.ToDouble(value):F4}: {sign}{attrVal:F4}");
+            lines.Add($"  {name} = {value:F4}: {sign}{attr:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);
@@ -639,23 +580,11 @@ public class GlobalDeepSHAPExplanation<T>
         FeatureNames = featureNames ?? localExplanations[0].FeatureNames;
 
         // Compute mean absolute attributions
-        var meanAbs = new double[numFeatures];
-        foreach (var explanation in localExplanations)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                meanAbs[j] += Math.Abs(NumOps.ToDouble(explanation.Attributions[j]));
-            }
-        }
-
-        double invN = 1.0 / localExplanations.Length;
-        var result = new T[numFeatures];
-        for (int j = 0; j < numFeatures; j++)
-        {
-            result[j] = NumOps.FromDouble(meanAbs[j] * invN);
-        }
-
-        MeanAbsoluteAttributions = new Vector<T>(result);
+        var engine = AiDotNetEngine.Current;
+        var attributions = ExplainerTensorOps<T>.Stack(localExplanations
+            .Select(e => e.Attributions.Length == numFeatures ? e.Attributions : e.Attributions.GetSubVector(0, numFeatures))
+            .ToList());
+        MeanAbsoluteAttributions = engine.ReduceMean(engine.TensorAbs(attributions), new[] { 0 }, false).ToVector();
     }
 
     /// <summary>
@@ -687,7 +616,7 @@ public class GlobalDeepSHAPExplanation<T>
         var sorted = GetSortedImportance();
         foreach (var (name, importance) in sorted)
         {
-            lines.Add($"  {name}: {NumOps.ToDouble(importance):F4}");
+            lines.Add($"  {name}: {importance:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

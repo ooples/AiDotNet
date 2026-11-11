@@ -178,7 +178,6 @@ public class GPUExplainerHelper<T> : IDisposable
         int batchSize = Math.Max(1, inputs.Rows / _maxParallelism);
         int numBatches = (inputs.Rows + batchSize - 1) / batchSize;
 
-        var allPredictions = new T[inputs.Rows];
         var batches = new List<(int start, int count)>();
 
         for (int b = 0; b < numBatches; b++)
@@ -188,18 +187,21 @@ public class GPUExplainerHelper<T> : IDisposable
             batches.Add((start, count));
         }
 
+        var batchPredictions = new Tensor<T>[batches.Count];
+
         // Process batches in parallel
-        Parallel.ForEach(batches, new ParallelOptions { MaxDegreeOfParallelism = _maxParallelism }, batch =>
+        Parallel.For(0, batches.Count, new ParallelOptions { MaxDegreeOfParallelism = _maxParallelism }, b =>
         {
+            var batch = batches[b];
             var batchInputs = ExtractRows(inputs, batch.start, batch.count);
             var batchPreds = predictFunction(batchInputs);
-            for (int i = 0; i < batch.count; i++)
-            {
-                allPredictions[batch.start + i] = batchPreds[i];
-            }
+            batchPredictions[b] = batchPreds.GetSubVector(0, batch.count).AsTensor();
         });
 
-        return new Vector<T>(allPredictions);
+        if (batchPredictions.Length == 0)
+            return new Vector<T>(0);
+
+        return AiDotNetEngine.Current.TensorConcatenate(batchPredictions, 0).ToVector();
     }
 
     /// <summary>
@@ -236,70 +238,54 @@ public class GPUExplainerHelper<T> : IDisposable
         int numFeatures = instance.Length;
         int nBackground = Math.Min(backgroundData.Rows, nBackgroundSamples);
 
-        var coalitionPredictions = new T[numCoalitions];
+        if (numCoalitions == 0)
+            return new Vector<T>(0);
 
+        var engine = AiDotNetEngine.Current;
+        var background = Tensor<T>.FromMatrix(backgroundData.GetSubMatrix(0, 0, nBackground, numFeatures));
+        var instanceRow = instance.AsTensor().Reshape(new[] { 1, numFeatures });
+
+        // Each coalition row: instance value where the feature is in the coalition, background value otherwise.
+        bool[] CoalitionMask(IEnumerable<bool[]> selected) =>
+            selected.SelectMany(coalition => Enumerable.Repeat(coalition, nBackground))
+                .SelectMany(coalition => coalition.Take(numFeatures))
+                .ToArray();
+
+        Tensor<T> meanPredictions;
         if (IsGPUEnabled)
         {
             // Build all masked inputs at once for GPU processing
-            var allMaskedInputs = new T[numCoalitions * nBackground, numFeatures];
-
-            for (int c = 0; c < numCoalitions; c++)
-            {
-                var coalition = coalitions[c];
-                for (int b = 0; b < nBackground; b++)
-                {
-                    int row = c * nBackground + b;
-                    for (int j = 0; j < numFeatures; j++)
-                    {
-                        allMaskedInputs[row, j] = coalition[j] ? instance[j] : backgroundData[b, j];
-                    }
-                }
-            }
+            var shape = new[] { numCoalitions * nBackground, numFeatures };
+            var allMaskedInputs = engine.TensorWhere(CoalitionMask(coalitions),
+                engine.TensorBroadcastTo(instanceRow, shape),
+                engine.TensorTile(background, new[] { numCoalitions, 1 }));
 
             // Single GPU prediction call
-            var allMaskedMatrix = new Matrix<T>(allMaskedInputs);
-            var allPredictions = predictFunction(allMaskedMatrix);
+            var allPredictions = predictFunction(allMaskedInputs.ToMatrix());
 
             // Average predictions for each coalition
-            for (int c = 0; c < numCoalitions; c++)
-            {
-                double sum = 0;
-                for (int b = 0; b < nBackground; b++)
-                {
-                    sum += NumOps.ToDouble(allPredictions[c * nBackground + b]);
-                }
-                coalitionPredictions[c] = NumOps.FromDouble(sum / nBackground);
-            }
+            var grouped = allPredictions.GetSubVector(0, numCoalitions * nBackground).AsTensor()
+                .Reshape(new[] { numCoalitions, nBackground });
+            meanPredictions = engine.ReduceMean(grouped, new[] { 1 }, false);
         }
         else
         {
             // CPU parallel processing by coalition
+            var shape = new[] { nBackground, numFeatures };
+            var instanceRows = engine.TensorBroadcastTo(instanceRow, shape);
+            var perCoalition = new Tensor<T>[numCoalitions];
             Parallel.For(0, numCoalitions, new ParallelOptions { MaxDegreeOfParallelism = _maxParallelism }, c =>
             {
-                var coalition = coalitions[c];
-                var maskedInputs = new T[nBackground, numFeatures];
-
-                for (int b = 0; b < nBackground; b++)
-                {
-                    for (int j = 0; j < numFeatures; j++)
-                    {
-                        maskedInputs[b, j] = coalition[j] ? instance[j] : backgroundData[b, j];
-                    }
-                }
-
-                var maskedMatrix = new Matrix<T>(maskedInputs);
+                var maskedMatrix = engine.TensorWhere(CoalitionMask(new[] { coalitions[c] }), instanceRows, background)
+                    .ToMatrix();
                 var predictions = predictFunction(maskedMatrix);
-
-                double sum = 0;
-                for (int i = 0; i < nBackground; i++)
-                {
-                    sum += NumOps.ToDouble(predictions[i]);
-                }
-                coalitionPredictions[c] = NumOps.FromDouble(sum / nBackground);
+                perCoalition[c] = predictions.GetSubVector(0, nBackground).AsTensor();
             });
+
+            meanPredictions = engine.ReduceMean(engine.TensorStack(perCoalition, 0), new[] { 1 }, false);
         }
 
-        return new Vector<T>(coalitionPredictions);
+        return meanPredictions.ToVector();
     }
 
     /// <summary>
@@ -330,19 +316,19 @@ public class GPUExplainerHelper<T> : IDisposable
         int numSamples = inputs.Rows;
         int numFeatures = inputs.Columns;
 
-        var gradients = new T[numSamples, numFeatures];
+        var gradients = new Tensor<T>[numSamples];
 
         Parallel.For(0, numSamples, new ParallelOptions { MaxDegreeOfParallelism = _maxParallelism }, i =>
         {
             var input = inputs.GetRow(i);
             var grad = gradientFunction(input, outputIndex);
-            for (int j = 0; j < numFeatures; j++)
-            {
-                gradients[i, j] = grad[j];
-            }
+            gradients[i] = (grad.Length == numFeatures ? grad : grad.GetSubVector(0, numFeatures)).AsTensor();
         });
 
-        return new Matrix<T>(gradients);
+        if (numSamples == 0)
+            return new Matrix<T>(0, numFeatures);
+
+        return AiDotNetEngine.Current.TensorStack(gradients, 0).ToMatrix();
     }
 
     /// <summary>
@@ -374,40 +360,21 @@ public class GPUExplainerHelper<T> : IDisposable
         int numSteps = 50,
         int outputIndex = 0)
     {
-        int numFeatures = input.Length;
+        var engine = AiDotNetEngine.Current;
+        var difference = engine.Subtract(input, baseline);
 
-        // Create all interpolated inputs
-        var interpolatedInputs = new T[numSteps, numFeatures];
-        for (int step = 0; step < numSteps; step++)
-        {
-            double alpha = (step + 0.5) / numSteps; // Midpoint rule
-            for (int j = 0; j < numFeatures; j++)
-            {
-                double baseVal = NumOps.ToDouble(baseline[j]);
-                double inputVal = NumOps.ToDouble(input[j]);
-                interpolatedInputs[step, j] = NumOps.FromDouble(baseVal + alpha * (inputVal - baseVal));
-            }
-        }
+        // Create all interpolated inputs: alpha_s = (s + 0.5) / numSteps (midpoint rule)
+        var alphas = engine.TensorDivideScalar(engine.TensorArange<T>(0.5, numSteps, 1), NumOps.FromDouble(numSteps));
+        var offsets = engine.TensorOuter(alphas, difference.AsTensor());
+        var path = engine.TensorAdd(offsets,
+            engine.TensorBroadcastTo(baseline.AsTensor().Reshape(new[] { 1, input.Length }), offsets.Shape));
 
         // Compute gradients in parallel
-        var inputMatrix = new Matrix<T>(interpolatedInputs);
-        var gradients = BatchComputeGradients(gradientFunction, inputMatrix, outputIndex);
+        var gradients = BatchComputeGradients(gradientFunction, path.ToMatrix(), outputIndex);
 
         // Average gradients and scale by (input - baseline)
-        var attributions = new T[numFeatures];
-        for (int j = 0; j < numFeatures; j++)
-        {
-            double gradSum = 0;
-            for (int step = 0; step < numSteps; step++)
-            {
-                gradSum += NumOps.ToDouble(gradients[step, j]);
-            }
-            double avgGrad = gradSum / numSteps;
-            double diff = NumOps.ToDouble(input[j]) - NumOps.ToDouble(baseline[j]);
-            attributions[j] = NumOps.FromDouble(avgGrad * diff);
-        }
-
-        return new Vector<T>(attributions);
+        var averageGradient = engine.ReduceMean(Tensor<T>.FromMatrix(gradients), new[] { 0 }, false).ToVector();
+        return engine.Multiply(averageGradient, difference);
     }
 
     /// <summary>
@@ -551,27 +518,14 @@ public class GPUExplainerHelper<T> : IDisposable
 
         // Process permutations in parallel
         var permutedPredictions = new Vector<T>[numPermutations];
+        var engine = AiDotNetEngine.Current;
+        var column = data.GetColumn(featureIndex).AsTensor();
         Parallel.For(0, numPermutations, new ParallelOptions { MaxDegreeOfParallelism = _maxParallelism }, p =>
         {
-            var permutedData = new T[data.Rows, data.Columns];
-
             // Copy data with permuted feature
-            for (int i = 0; i < data.Rows; i++)
-            {
-                for (int j = 0; j < data.Columns; j++)
-                {
-                    if (j == featureIndex)
-                    {
-                        permutedData[i, j] = data[permutations[p][i], j];
-                    }
-                    else
-                    {
-                        permutedData[i, j] = data[i, j];
-                    }
-                }
-            }
-
-            var permutedMatrix = new Matrix<T>(permutedData);
+            var order = new Tensor<int>(permutations[p], new[] { permutations[p].Length });
+            var permutedMatrix = data.Clone();
+            engine.SetColumn(permutedMatrix, featureIndex, engine.TensorIndexSelect(column, order, 0).ToVector());
             permutedPredictions[p] = predictFunction(permutedMatrix);
         });
 
@@ -584,15 +538,7 @@ public class GPUExplainerHelper<T> : IDisposable
     /// </summary>
     private Matrix<T> ExtractRows(Matrix<T> matrix, int startRow, int count)
     {
-        var result = new T[count, matrix.Columns];
-        for (int i = 0; i < count; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = matrix[startRow + i, j];
-            }
-        }
-        return new Matrix<T>(result);
+        return matrix.Slice(startRow, count);
     }
 
     /// <summary>

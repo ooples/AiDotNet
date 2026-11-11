@@ -175,18 +175,13 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
         var gradient = ComputeGradient(instance, target);
 
         // Compute Input × Gradient
-        var attributions = new T[_numFeatures];
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            var product = NumOps.Multiply(instance[i], gradient[i]);
-            attributions[i] = _absoluteValue
-                ? NumOps.FromDouble(Math.Abs(NumOps.ToDouble(product)))
-                : product;
-        }
+        var engine = AiDotNetEngine.Current;
+        var products = engine.Multiply(instance, gradient);
+        var attributions = _absoluteValue ? engine.Abs(products) : products;
 
         return new InputXGradientExplanation<T>
         {
-            Attributions = new Vector<T>(attributions),
+            Attributions = attributions,
             Gradients = gradient,
             Instance = instance,
             Prediction = prediction,
@@ -261,20 +256,10 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
     /// </remarks>
     private static int GetPredictedClass(Vector<T> prediction)
     {
-        int maxIdx = 0;
-        double maxVal = NumOps.ToDouble(prediction[0]);
+        if (prediction.Length == 0)
+            throw new ArgumentException("The prediction has no outputs.", nameof(prediction));
 
-        for (int i = 1; i < prediction.Length; i++)
-        {
-            double val = NumOps.ToDouble(prediction[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        return AiDotNetEngine.Current.TensorArgMax(prediction.AsTensor(), 0).GetFlat(0);
     }
 
     /// <summary>
@@ -386,12 +371,7 @@ public class InputXGradientExplanation<T> : AiDotNet.Interpretability.IFeatureAt
     /// </remarks>
     public T GetAttributionSum()
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < Attributions.Length; i++)
-        {
-            sum = NumOps.Add(sum, Attributions[i]);
-        }
-        return sum;
+        return AiDotNetEngine.Current.Sum(Attributions);
     }
 
     /// <summary>
@@ -408,7 +388,7 @@ public class InputXGradientExplanation<T> : AiDotNet.Interpretability.IFeatureAt
 
         foreach (var (name, value, attr, grad) in top)
         {
-            lines.Add($"  {name}: value={NumOps.ToDouble(value):F4}, attr={NumOps.ToDouble(attr):F4}, grad={NumOps.ToDouble(grad):F4}");
+            lines.Add($"  {name}: value={value:F4}, attr={attr:F4}, grad={grad:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

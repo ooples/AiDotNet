@@ -366,25 +366,22 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         EnsureHvpAvailable();
         EnsureTrainingGradientsComputed();
 
-        var selfInfluences = new Vector<T>(_trainingData.Rows);
+        var cachedGrads = _cachedTrainingGradients
+            ?? throw new InvalidOperationException("Training gradients not computed.");
+        var gradientDotIhvp = new List<T>(_trainingData.Rows);
 
         for (int i = 0; i < _trainingData.Rows; i++)
         {
             // Get gradient for this training sample
-            var cachedGrads = _cachedTrainingGradients
-                ?? throw new InvalidOperationException("Training gradients not computed.");
-            var trainGradient = new Vector<T>(cachedGrads.Columns);
-            for (int j = 0; j < trainGradient.Length; j++)
-            {
-                trainGradient[j] = _cachedTrainingGradients[i, j];
-            }
+            var trainGradient = cachedGrads.GetRow(i);
 
             // Compute inverse Hessian-vector product
             var ihvp = ComputeInverseHessianVectorProduct(trainGradient);
-
-            // Self-influence = -gradient dot ihvp — vectorized
-            selfInfluences[i] = NumOps.Negate(VectorHelper.DotProduct(trainGradient, ihvp));
+            gradientDotIhvp.Add(VectorHelper.DotProduct(trainGradient, ihvp));
         }
+
+        // Self-influence = -gradient dot ihvp
+        var selfInfluences = Engine.Multiply(new Vector<T>(gradientDotIhvp), NumOps.Negate(NumOps.One));
 
         return new SelfInfluenceResult<T>(
             selfInfluences: selfInfluences,
@@ -452,15 +449,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
                     "vector layout as the model at scoring time.",
                     nameof(checkpointGradients));
 
-            for (int i = 0; i < numTrainingSamples; i++)
-            {
-                double dot = 0;
-                for (int j = 0; j < testGradient.Length; j++)
-                {
-                    dot += NumOps.ToDouble(testGradient[j]) * NumOps.ToDouble(checkpointGrad[i, j]);
-                }
-                tracInScores[i] = NumOps.Add(tracInScores[i], NumOps.FromDouble(dot));
-            }
+            // Add each training sample's gradient dot test gradient
+            tracInScores = (Vector<T>)Engine.Add(tracInScores, Engine.MatrixVectorMultiply(checkpointGrad, testGradient));
         }
 
         return new TracInResult<T>(
@@ -518,10 +508,10 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             // Sample a random training point
             int idx = rand.Next(_trainingData.Rows);
             var input = _trainingData.GetRow(idx);
-            var label = _trainingLabels[idx];
+            var label = _trainingLabels.GetSubVector(idx, 1);
 
             // Compute Hessian-vector product for this sample
-            var hvp = ComputeHessianVectorProduct(input, new Vector<T>(new[] { label }), estimate);
+            var hvp = ComputeHessianVectorProduct(input, label, estimate);
 
             // Update: estimate = vector + (1 - damping) * estimate - hvp / scale — vectorized
             var scaledEstimate = Engine.Multiply(estimate, NumOps.FromDouble(1 - _damping));
@@ -540,6 +530,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         var x = new Vector<T>(vector.Length); // Initial guess
         var r = vector.Clone(); // Residual
         var p = r.Clone(); // Search direction
+        T tolerance = NumOps.FromDouble(1e-10);
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
@@ -550,25 +541,25 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             Ap = (Vector<T>)Engine.Add(Ap, Engine.Multiply(p, NumOps.FromDouble(_damping)));
 
             // Compute step size
-            double rDotR = NumOps.ToDouble(VectorHelper.DotProduct(r, r));
-            double pDotAp = NumOps.ToDouble(VectorHelper.DotProduct(p, Ap));
+            T rDotR = VectorHelper.DotProduct(r, r);
+            T pDotAp = VectorHelper.DotProduct(p, Ap);
 
-            if (Math.Abs(pDotAp) < 1e-10) break;
+            if (NumOps.LessThan(NumOps.Abs(pDotAp), tolerance)) break;
 
-            double alpha = rDotR / pDotAp;
+            T alpha = NumOps.Divide(rDotR, pDotAp);
 
             // Update solution: x = x + alpha * p — vectorized
-            x = (Vector<T>)Engine.Add(x, Engine.Multiply(p, NumOps.FromDouble(alpha)));
+            x = (Vector<T>)Engine.Add(x, Engine.Multiply(p, alpha));
 
             // Update residual: r_new = r - alpha * Ap — vectorized
-            var rNew = (Vector<T>)Engine.Subtract(r, Engine.Multiply(Ap, NumOps.FromDouble(alpha)));
+            var rNew = (Vector<T>)Engine.Subtract(r, Engine.Multiply(Ap, alpha));
 
-            double rNewDotRNew = NumOps.ToDouble(VectorHelper.DotProduct(rNew, rNew));
-            if (rNewDotRNew < 1e-10) break;
+            T rNewDotRNew = VectorHelper.DotProduct(rNew, rNew);
+            if (NumOps.LessThan(rNewDotRNew, tolerance)) break;
 
             // Update search direction: p = r_new + beta * p — vectorized
-            double beta = rNewDotRNew / rDotR;
-            p = (Vector<T>)Engine.Add(rNew, Engine.Multiply(p, NumOps.FromDouble(beta)));
+            T beta = NumOps.Divide(rNewDotRNew, rDotR);
+            p = (Vector<T>)Engine.Add(rNew, Engine.Multiply(p, beta));
 
             r = rNew;
         }
@@ -591,25 +582,22 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             return ComputeIHVP_LiSSA(vector);
         }
 
-        var hessian = new Matrix<T>(n, n);
-
-        // Compute Hessian columns via Hessian-vector products with unit vectors
+        // Compute Hessian columns via Hessian-vector products with unit vectors (entries past an HVP's end stay zero)
+        var columns = new List<Vector<T>>(n);
         for (int j = 0; j < n; j++)
         {
-            // Use Hessian-vector product with unit vector
-            var unitVector = new Vector<T>(n);
-            unitVector[j] = NumOps.One;
-
-            var hvp = ComputeAverageHessianVectorProduct(unitVector);
-
-            for (int i = 0; i < n && i < hvp.Length; i++)
-            {
-                hessian[i, j] = hvp[i];
-            }
-
-            // Add damping
-            hessian[j, j] = NumOps.Add(hessian[j, j], NumOps.FromDouble(_damping));
+            var unitVector = ExplainerTensorOps<T>.RangeIndicator(n, j, j + 1).ToVector();
+            columns.Add(ExplainerTensorOps<T>.PadOrTruncate(ComputeAverageHessianVectorProduct(unitVector), n));
         }
+
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // Add damping
+        var hessianT = Engine.TensorTranspose(ExplainerTensorOps<T>.Stack(columns));
+        var hessian = Engine.TensorAdd(hessianT, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(n), NumOps.FromDouble(_damping))).ToMatrix();
 
         // Solve (H + damping*I) * result = vector using Cholesky
         return SolvePositiveDefinite(hessian, vector);
@@ -674,9 +662,9 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         {
             int idx = rand.Next(_trainingData.Rows);
             var input = _trainingData.GetRow(idx);
-            var label = _trainingLabels[idx];
+            var label = _trainingLabels.GetSubVector(idx, 1);
 
-            var hvp = ComputeHessianVectorProduct(input, new Vector<T>(new[] { label }), vector);
+            var hvp = ComputeHessianVectorProduct(input, label, vector);
 
             avgHvp = (Vector<T>)Engine.Add(avgHvp, hvp);
         }
@@ -696,23 +684,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
 
         var cachedGrads = _cachedTrainingGradients
             ?? throw new InvalidOperationException("Training gradients not computed.");
-        int n = cachedGrads.Columns;
-        var avg = new Vector<T>(n);
-
-        for (int i = 0; i < _trainingData.Rows; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                avg[j] = NumOps.Add(avg[j], _cachedTrainingGradients[i, j]);
-            }
-        }
-
-        for (int j = 0; j < n; j++)
-        {
-            avg[j] = NumOps.Divide(avg[j], NumOps.FromDouble(_trainingData.Rows));
-        }
-
-        return avg;
+        return Engine.ReduceMean(Tensor<T>.FromMatrix(cachedGrads), new[] { 0 }, false).ToVector();
     }
 
     /// <summary>
@@ -726,21 +698,14 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         int numParams = 0;
 
         // Compute first gradient to determine size
-        var firstGrad = ComputeGradient(_trainingData.GetRow(0),
-            new Vector<T>(new[] { _trainingLabels[0] }));
+        var firstGrad = ComputeGradient(_trainingData.GetRow(0), _trainingLabels.GetSubVector(0, 1));
         numParams = firstGrad.Length;
 
-        _cachedTrainingGradients = new Matrix<T>(numSamples, numParams);
-
-        for (int j = 0; j < numParams; j++)
-        {
-            _cachedTrainingGradients[0, j] = firstGrad[j];
-        }
+        var gradients = new List<Vector<T>>(numSamples) { firstGrad };
 
         for (int i = 1; i < numSamples; i++)
         {
-            var grad = ComputeGradient(_trainingData.GetRow(i),
-                new Vector<T>(new[] { _trainingLabels[i] }));
+            var grad = ComputeGradient(_trainingData.GetRow(i), _trainingLabels.GetSubVector(i, 1));
 
             // Reject inconsistent gradient widths instead of silently truncating /
             // zero-filling. A mismatch here means ComputeGradient is returning
@@ -755,11 +720,12 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
                     $"to share the same parameter vector layout.");
             }
 
-            for (int j = 0; j < numParams; j++)
-            {
-                _cachedTrainingGradients[i, j] = grad[j];
-            }
+            gradients.Add(grad);
         }
+
+        _cachedTrainingGradients = numParams > 0
+            ? ExplainerTensorOps<T>.Stack(gradients).ToMatrix()
+            : new Matrix<T>(numSamples, 0);
     }
 
 
@@ -953,10 +919,12 @@ public class InfluenceFunctionResult<T>
     /// <returns>Indices and influence scores of top influential samples.</returns>
     public IEnumerable<(int Index, T Influence)> GetTopInfluential(int k = 10)
     {
-        return Enumerable.Range(0, Influences.Length)
-            .Select(i => (Index: i, Influence: Influences[i]))
-            .OrderByDescending(x => Math.Abs(NumOps.ToDouble(x.Influence)))
-            .Take(k);
+        var ranks = ExplainerTensorOps<T>.DenseRanks(AiDotNetEngine.Current.TensorAbs(Influences.AsTensor()));
+        var order = Enumerable.Range(0, Influences.Length)
+            .OrderByDescending(i => ranks[i])
+            .Take(k)
+            .ToList();
+        return order.Zip(Influences.GetElements(order), (i, value) => (Index: i, Influence: value));
     }
 
     /// <summary>
@@ -964,10 +932,12 @@ public class InfluenceFunctionResult<T>
     /// </summary>
     public IEnumerable<(int Index, T Influence)> GetMostHelpful(int k = 10)
     {
-        return Enumerable.Range(0, Influences.Length)
-            .Select(i => (Index: i, Influence: Influences[i]))
-            .OrderByDescending(x => NumOps.ToDouble(x.Influence))
-            .Take(k);
+        var ranks = ExplainerTensorOps<T>.DenseRanks(Influences.AsTensor());
+        var order = Enumerable.Range(0, Influences.Length)
+            .OrderByDescending(i => ranks[i])
+            .Take(k)
+            .ToList();
+        return order.Zip(Influences.GetElements(order), (i, value) => (Index: i, Influence: value));
     }
 
     /// <summary>
@@ -975,10 +945,12 @@ public class InfluenceFunctionResult<T>
     /// </summary>
     public IEnumerable<(int Index, T Influence)> GetMostHarmful(int k = 10)
     {
-        return Enumerable.Range(0, Influences.Length)
-            .Select(i => (Index: i, Influence: Influences[i]))
-            .OrderBy(x => NumOps.ToDouble(x.Influence))
-            .Take(k);
+        var ranks = ExplainerTensorOps<T>.DenseRanks(Influences.AsTensor());
+        var order = Enumerable.Range(0, Influences.Length)
+            .OrderBy(i => ranks[i])
+            .Take(k)
+            .ToList();
+        return order.Zip(Influences.GetElements(order), (i, value) => (Index: i, Influence: value));
     }
 
     /// <summary>
@@ -1046,10 +1018,15 @@ public class SelfInfluenceResult<T>
     /// </remarks>
     public IEnumerable<(int Index, T SelfInfluence, Vector<T> Data, T Label)> GetPotentiallyProblematic(int k = 10)
     {
-        return Enumerable.Range(0, SelfInfluences.Length)
-            .Select(i => (Index: i, SelfInfluence: SelfInfluences[i], Data: TrainingData.GetRow(i), Label: TrainingLabels[i]))
-            .OrderByDescending(x => NumOps.ToDouble(x.SelfInfluence))
-            .Take(k);
+        var ranks = ExplainerTensorOps<T>.DenseRanks(SelfInfluences.AsTensor());
+        var order = Enumerable.Range(0, SelfInfluences.Length)
+            .OrderByDescending(i => ranks[i])
+            .Take(k)
+            .ToList();
+        return order
+            .Zip(SelfInfluences.GetElements(order), (i, value) => (i, value))
+            .Zip(TrainingLabels.GetElements(order), (entry, label) =>
+                (Index: entry.i, SelfInfluence: entry.value, Data: TrainingData.GetRow(entry.i), Label: label));
     }
 
     /// <summary>
@@ -1059,19 +1036,14 @@ public class SelfInfluenceResult<T>
     {
         var topProblematic = GetPotentiallyProblematic(5).ToList();
 
-        double mean = 0, max = double.MinValue;
-        for (int i = 0; i < SelfInfluences.Length; i++)
-        {
-            double val = NumOps.ToDouble(SelfInfluences[i]);
-            mean += val;
-            if (val > max) max = val;
-        }
-        mean /= SelfInfluences.Length;
+        var engine = AiDotNetEngine.Current;
+        T mean = SelfInfluences.Length > 0 ? engine.Mean(SelfInfluences) : NumOps.Zero;
+        T max = SelfInfluences.Length > 0 ? engine.TensorMaxValue(SelfInfluences.AsTensor()) : NumOps.Zero;
 
         return $"Self-Influence Analysis:\n" +
                $"  Mean self-influence: {mean:F4}\n" +
                $"  Max self-influence: {max:F4}\n" +
-               $"  Top problematic samples: {string.Join(", ", topProblematic.Select(x => $"#{x.Index}({NumOps.ToDouble(x.SelfInfluence):F4})"))}";
+               $"  Top problematic samples: {string.Join(", ", topProblematic.Select(x => $"#{x.Index}({x.SelfInfluence:F4})"))}";
     }
 }
 
@@ -1119,10 +1091,12 @@ public class TracInResult<T>
     /// </summary>
     public IEnumerable<(int Index, T Score)> GetTopInfluential(int k = 10)
     {
-        return Enumerable.Range(0, TracInScores.Length)
-            .Select(i => (Index: i, Score: TracInScores[i]))
-            .OrderByDescending(x => NumOps.ToDouble(x.Score))
-            .Take(k);
+        var ranks = ExplainerTensorOps<T>.DenseRanks(TracInScores.AsTensor());
+        var order = Enumerable.Range(0, TracInScores.Length)
+            .OrderByDescending(i => ranks[i])
+            .Take(k)
+            .ToList();
+        return order.Zip(TracInScores.GetElements(order), (i, value) => (Index: i, Score: value));
     }
 
     /// <summary>
@@ -1132,6 +1106,6 @@ public class TracInResult<T>
     {
         var top = GetTopInfluential(5).ToList();
         return $"TracIn Result (using {NumCheckpoints} checkpoints):\n" +
-               $"  Top influential: {string.Join(", ", top.Select(x => $"#{x.Index}({NumOps.ToDouble(x.Score):F4})"))}";
+               $"  Top influential: {string.Join(", ", top.Select(x => $"#{x.Index}({x.Score:F4})"))}";
     }
 }

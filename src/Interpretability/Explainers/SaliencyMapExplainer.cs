@@ -144,7 +144,7 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
             outputIndex = GetArgMax(prediction);
         }
 
-        T[] saliency;
+        Vector<T> saliency;
 
         switch (_method)
         {
@@ -155,10 +155,10 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
                 saliency = ComputeGradientTimesInput(instance, outputIndex);
                 break;
             case SaliencyMethod.SmoothGrad:
-                saliency = ComputeSmoothGrad(instance, outputIndex);
+                saliency = new Vector<T>(ComputeSmoothGrad(instance, outputIndex));
                 break;
             case SaliencyMethod.SmoothGradSquared:
-                saliency = ComputeSmoothGradSquared(instance, outputIndex);
+                saliency = new Vector<T>(ComputeSmoothGradSquared(instance, outputIndex));
                 break;
             default:
                 saliency = ComputeGradientTimesInput(instance, outputIndex);
@@ -166,28 +166,19 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
         }
 
         // Compute statistics
-        double maxAbs = 0;
-        double sumAbs = 0;
-        for (int i = 0; i < numFeatures; i++)
-        {
-            double absVal = Math.Abs(NumOps.ToDouble(saliency[i]));
-            maxAbs = Math.Max(maxAbs, absVal);
-            sumAbs += absVal;
-        }
+        var engine = AiDotNetEngine.Current;
+        var absSaliency = engine.Abs(saliency);
+        T maxAbs = numFeatures > 0 ? engine.TensorMaxValue(absSaliency.AsTensor()) : NumOps.Zero;
 
         // Normalize to get relative importance
-        var normalizedSaliency = new T[numFeatures];
-        for (int i = 0; i < numFeatures; i++)
-        {
-            normalizedSaliency[i] = maxAbs > 0
-                ? NumOps.FromDouble(Math.Abs(NumOps.ToDouble(saliency[i])) / maxAbs)
-                : NumOps.Zero;
-        }
+        var normalizedSaliency = NumOps.GreaterThan(maxAbs, NumOps.Zero)
+            ? engine.Divide(absSaliency, maxAbs)
+            : new Vector<T>(numFeatures);
 
         return new SaliencyMapExplanation<T>
         {
-            Saliency = new Vector<T>(saliency),
-            NormalizedSaliency = new Vector<T>(normalizedSaliency),
+            Saliency = saliency,
+            NormalizedSaliency = normalizedSaliency,
             Input = instance,
             Prediction = prediction,
             OutputIndex = outputIndex,
@@ -210,31 +201,19 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
     /// <summary>
     /// Computes vanilla gradient.
     /// </summary>
-    private T[] ComputeVanillaGradient(Vector<T> input, int outputIndex)
+    private Vector<T> ComputeVanillaGradient(Vector<T> input, int outputIndex)
     {
         var gradient = ComputeGradient(input, outputIndex);
-        var result = new T[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = gradient[i];
-        }
-        return result;
+        return gradient.GetSubVector(0, input.Length);
     }
 
     /// <summary>
     /// Computes gradient × input.
     /// </summary>
-    private T[] ComputeGradientTimesInput(Vector<T> input, int outputIndex)
+    private Vector<T> ComputeGradientTimesInput(Vector<T> input, int outputIndex)
     {
         var gradient = ComputeGradient(input, outputIndex);
-        var result = new T[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.FromDouble(
-                NumOps.ToDouble(gradient[i]) * NumOps.ToDouble(input[i])
-            );
-        }
-        return result;
+        return AiDotNetEngine.Current.Multiply(gradient.GetSubVector(0, input.Length), input);
     }
 
     /// <summary>
@@ -357,36 +336,7 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
     /// </summary>
     private Vector<T> ComputeNumericalGradient(Vector<T> input, int outputIndex)
     {
-        int n = input.Length;
-        var gradient = new T[n];
-        double epsilon = 1e-4;
-
-        for (int i = 0; i < n; i++)
-        {
-            var inputPlus = new T[n];
-            var inputMinus = new T[n];
-            for (int j = 0; j < n; j++)
-            {
-                inputPlus[j] = input[j];
-                inputMinus[j] = input[j];
-            }
-
-            inputPlus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) + epsilon);
-            inputMinus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) - epsilon);
-
-            var predPlus = _predictFunction(new Vector<T>(inputPlus));
-            var predMinus = _predictFunction(new Vector<T>(inputMinus));
-
-            if (outputIndex >= predPlus.Length)
-                throw new ArgumentOutOfRangeException(nameof(outputIndex), $"Output index {outputIndex} is out of bounds for prediction with {predPlus.Length} outputs.");
-
-            double valPlus = NumOps.ToDouble(predPlus[outputIndex]);
-            double valMinus = NumOps.ToDouble(predMinus[outputIndex]);
-
-            gradient[i] = NumOps.FromDouble((valPlus - valMinus) / (2 * epsilon));
-        }
-
-        return new Vector<T>(gradient);
+        return ExplainerTensorOps<T>.CentralDifferenceGradient(_predictFunction, input, outputIndex, 1e-4, input.Length);
     }
 
     /// <summary>
@@ -394,18 +344,7 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
     /// </summary>
     private int GetArgMax(Vector<T> values)
     {
-        int maxIdx = 0;
-        double maxVal = double.MinValue;
-        for (int i = 0; i < values.Length; i++)
-        {
-            double val = NumOps.ToDouble(values[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-        return maxIdx;
+        return ExplainerTensorOps<T>.ArgMaxSkippingNaN(values);
     }
 }
 
@@ -519,11 +458,10 @@ public class SaliencyMapExplanation<T> : AiDotNet.Interpretability.IFeatureAttri
         };
 
         var top = GetTopSalientFeatures(10);
-        foreach (var (name, sal) in top)
+        var signs = ExplainerTensorOps<T>.SignPrefixes(top.Select(entry => entry.saliency));
+        foreach (var ((name, sal), sign) in top.Zip(signs, (entry, prefix) => (entry, prefix)))
         {
-            double salVal = NumOps.ToDouble(sal);
-            string sign = salVal >= 0 ? "+" : "";
-            lines.Add($"  {name}: {sign}{salVal:F4}");
+            lines.Add($"  {name}: {sign}{sal:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

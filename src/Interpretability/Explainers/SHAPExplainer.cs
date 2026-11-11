@@ -303,12 +303,7 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
         List<double> weights,
         int numFeatures)
     {
-        var predictionsList = new List<T>(predictions.Length);
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            predictionsList.Add(predictions[i]);
-        }
-        return SolveWeightedLeastSquares(coalitions, predictionsList, weights, numFeatures);
+        return SolveWeightedLeastSquares(coalitions, new List<T>(predictions), weights, numFeatures);
     }
 
     /// <summary>
@@ -317,18 +312,15 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
     private T ComputeCoalitionPrediction(Vector<T> instance, bool[] coalition)
     {
         int nBackground = Math.Min(_backgroundData.Rows, 10); // Limit for efficiency
-        var maskedInputs = new T[nBackground, NumFeatures];
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { nBackground, NumFeatures };
 
-        for (int b = 0; b < nBackground; b++)
-        {
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                // If feature is in coalition, use instance value; otherwise use background value
-                maskedInputs[b, j] = coalition[j] ? instance[j] : _backgroundData[b, j];
-            }
-        }
+        // If feature is in coalition, use instance value; otherwise use background value
+        var inCoalition = Enumerable.Repeat(coalition, nBackground).SelectMany(row => row.Take(NumFeatures)).ToArray();
+        var instanceRows = engine.TensorBroadcastTo(instance.AsTensor().Reshape(new[] { 1, NumFeatures }), shape);
+        var backgroundRows = Tensor<T>.FromMatrix(_backgroundData.Slice(0, nBackground));
 
-        var maskedMatrix = new Matrix<T>(maskedInputs);
+        var maskedMatrix = engine.TensorWhere(inCoalition, instanceRows, backgroundRows).ToMatrix();
         var predictions = _predictFunction(maskedMatrix);
         return ComputeMean(predictions);
     }
@@ -479,10 +471,7 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
     private T PredictSingle(Vector<T> instance)
     {
         var matrix = new Matrix<T>(1, instance.Length);
-        for (int j = 0; j < instance.Length; j++)
-        {
-            matrix[0, j] = instance[j];
-        }
+        AiDotNetEngine.Current.SetRow(matrix, 0, instance);
         var predictions = _predictFunction(matrix);
         return predictions[0];
     }
@@ -492,12 +481,7 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
         if (values.Length == 0)
             return NumOps.Zero;
 
-        var sum = NumOps.Zero;
-        for (int i = 0; i < values.Length; i++)
-        {
-            sum = NumOps.Add(sum, values[i]);
-        }
-        return NumOps.Divide(sum, NumOps.FromDouble(values.Length));
+        return AiDotNetEngine.Current.Mean(values);
     }
 
     /// <summary>

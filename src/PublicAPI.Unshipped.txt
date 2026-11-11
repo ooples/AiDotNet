@@ -1275,6 +1275,48 @@ AiDotNet.Preprocessing.DimensionalityReduction.PaCMAP<T>.Embedding.get -> AiDotN
 AiDotNet.Preprocessing.DimensionalityReduction.TriMAP<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.PHATE<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.LatentDirichletAllocation<T>.Components.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
+*REMOVED*AiDotNet.Interpretability.FaithfulnessAuditor<T>.Audit(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, double>! score, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! attributions) -> AiDotNet.Interpretability.FaithfulnessReport<T>!
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.Comprehensiveness.get -> double
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.DeletionAuc.get -> double
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.FaithfulnessScore.get -> double
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.InsertionAuc.get -> double
+*REMOVED*AiDotNet.Interpretability.FaithfulnessReport<T>.Sufficiency.get -> double
+AiDotNet.Interpretability.FaithfulnessAuditor<T>.Audit(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>! score, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! attributions) -> AiDotNet.Interpretability.FaithfulnessReport<T>!
+AiDotNet.Interpretability.FaithfulnessReport<T>.Comprehensiveness.get -> T
+AiDotNet.Interpretability.FaithfulnessReport<T>.DeletionAuc.get -> T
+AiDotNet.Interpretability.FaithfulnessReport<T>.FaithfulnessScore.get -> T
+AiDotNet.Interpretability.FaithfulnessReport<T>.InsertionAuc.get -> T
+AiDotNet.Interpretability.FaithfulnessReport<T>.Sufficiency.get -> T
+*REMOVED*AiDotNet.Interpretability.Explainers.TreeSHAPExplanation<T>.GetSumError() -> double
+AiDotNet.Interpretability.Explainers.TreeSHAPExplanation<T>.GetSumError() -> T
+*REMOVED*AiDotNet.Interpretability.Explainers.DeepSHAPExplanation<T>.GetSumError() -> double
+AiDotNet.Interpretability.Explainers.DeepSHAPExplanation<T>.GetSumError() -> T
+*REMOVED*AiDotNet.Interpretability.Explainers.ALE2DResult<T>.ALEValues2D.get -> T[,]!
+AiDotNet.Interpretability.Explainers.ALE2DResult<T>.ALEValues2D.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.Interpretability.Explainers.PartialDependence2DResult<T>.PartialDependence2D.get -> T[,]!
+*REMOVED*AiDotNet.Interpretability.Explainers.PartialDependenceResult<T>.IceCurves.get -> System.Collections.Generic.Dictionary<int, T[,]!>?
+AiDotNet.Interpretability.Explainers.PartialDependence2DResult<T>.PartialDependence2D.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Interpretability.Explainers.PartialDependenceResult<T>.IceCurves.get -> System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Matrix<T>!>?
+*REMOVED*AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.AttentionRollout.get -> T[,]!
+*REMOVED*AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.AverageAttentionPerLayer.get -> System.Collections.Generic.List<T[,]!>!
+*REMOVED*AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.LayerAttention.get -> System.Collections.Generic.List<T[,,]!>!
+AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.AttentionRollout.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.AverageAttentionPerLayer.get -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Matrix<T>!>!
+AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.LayerAttention.get -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+*REMOVED*AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.Heatmap.get -> T[,]!
+*REMOVED*AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.OriginalHeatmap.get -> T[,]!
+AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.Heatmap.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.OriginalHeatmap.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.Interpretability.Explainers.LayerAttributionResult<T>.ReshapeSpatial(int height, int width, int channels) -> T[,,]!
+AiDotNet.Interpretability.Explainers.LayerAttributionResult<T>.ReshapeSpatial(int height, int width, int channels) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Interpretability.Explainers.DiCEExplainer<T>.ExplainWithTarget(AiDotNet.Tensors.LinearAlgebra.Vector<T>! instance, double targetValue) -> AiDotNet.Interpretability.Explainers.DiCEExplanation<T>!
+*REMOVED*AiDotNet.Interpretability.Explainers.DiCEExplanation<T>.AverageDistance.get -> double
+*REMOVED*AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.Distance.get -> double
+*REMOVED*AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.SingleCounterfactual(AiDotNet.Tensors.LinearAlgebra.Vector<T>! counterfactualInstance, T prediction, System.Collections.Generic.List<AiDotNet.Interpretability.Explainers.FeatureChange<T>!>! changes, double distance) -> void
+AiDotNet.Interpretability.Explainers.DiCEExplainer<T>.ExplainWithTarget(AiDotNet.Tensors.LinearAlgebra.Vector<T>! instance, T targetValue) -> AiDotNet.Interpretability.Explainers.DiCEExplanation<T>!
+AiDotNet.Interpretability.Explainers.DiCEExplanation<T>.AverageDistance.get -> T
+AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.Distance.get -> T
+AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.SingleCounterfactual(AiDotNet.Tensors.LinearAlgebra.Vector<T>! counterfactualInstance, T prediction, System.Collections.Generic.List<AiDotNet.Interpretability.Explainers.FeatureChange<T>!>! changes, T distance) -> void
 override AiDotNet.Diffusion.DDPMModel<T>.CanPredictFromTimestepTensor.get -> bool
 override AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! timesteps, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerLayers(int encoderDim = 512, int numLayers = 18, int numAttentionHeads = 8, int feedForwardExpansionFactor = 4, int numMels = 80, int vocabSize = 5000, double dropoutRate = 0.1, int maxSequenceLength = 750, int convKernelSize = 31) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!

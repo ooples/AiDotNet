@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Interpretability.Helpers;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -167,18 +168,10 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
         if (X.Columns != NumFeatures)
             throw new ArgumentException($"Data has {X.Columns} features but expected {NumFeatures}.");
 
-        var predictions = new T[X.Rows];
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var pred = _surrogateIntercept;
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                pred = NumOps.Add(pred, NumOps.Multiply((_surrogateCoefficients ?? throw new InvalidOperationException("_surrogateCoefficients has not been initialized."))[j], X[i, j]));
-            }
-            predictions[i] = pred;
-        }
-
-        return new Vector<T>(predictions);
+        var coefficients = _surrogateCoefficients ?? throw new InvalidOperationException("_surrogateCoefficients has not been initialized.");
+        var engine = AiDotNetEngine.Current;
+        var predictions = engine.MatrixVectorMultiply(X, coefficients.GetSubVector(0, NumFeatures));
+        return engine.TensorAddScalar(predictions.AsTensor(), _surrogateIntercept).ToVector();
     }
 
     /// <summary>
@@ -359,22 +352,14 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
         int n = actual.Length;
         if (n == 0) return NumOps.Zero;
 
-        double mean = 0;
-        for (int i = 0; i < n; i++)
-            mean += NumOps.ToDouble(actual[i]);
-        mean /= n;
+        var engine = AiDotNetEngine.Current;
+        var actualTensor = actual.AsTensor();
+        T mean = engine.TensorMean(actualTensor);
+        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actualTensor, predicted.GetSubVector(0, n).AsTensor()));
+        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actualTensor, mean));
 
-        double ssRes = 0, ssTot = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double a = NumOps.ToDouble(actual[i]);
-            double p = NumOps.ToDouble(predicted[i]);
-            ssRes += (a - p) * (a - p);
-            ssTot += (a - mean) * (a - mean);
-        }
-
-        if (ssTot < 1e-10) return NumOps.Zero;
-        return NumOps.FromDouble(1 - ssRes / ssTot);
+        if (NumOps.LessThan(ssTot, NumOps.FromDouble(1e-10))) return NumOps.Zero;
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
     }
 
     private static TInput ConvertToModelInput<TInput>(Matrix<T> data)
@@ -491,10 +476,10 @@ public class SurrogateExplanation<T>
             $"  Feature Weights:"
         };
 
-        foreach (var (index, name, weight) in top)
+        var directions = ExplainerTensorOps<T>.SignPrefixes(top.Select(entry => entry.Weight));
+        foreach (var ((index, name, weight), direction) in top.Zip(directions, (entry, prefix) => (entry, prefix)))
         {
             var featureLabel = name ?? $"Feature {index}";
-            var direction = !NumOps.LessThan(weight, NumOps.Zero) ? "+" : "";
             lines.Add($"    {featureLabel}: {direction}{weight}");
         }
 

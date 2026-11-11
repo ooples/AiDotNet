@@ -82,61 +82,34 @@ public static class BackgroundSummarizer<T>
         int d = data.Columns;
 
         // Initialize cluster centers using KMeans++ initialization
-        var centers = InitializeCentersKMeansPlusPlus(data, k, rand);
+        var engine = AiDotNetEngine.Current;
+        var points = Tensor<T>.FromMatrix(data);
+        var centers = Tensor<T>.FromMatrix(InitializeCentersKMeansPlusPlus(data, k, rand));
         var assignments = new int[n];
-        var clusterCounts = new int[k];
+        var clusterSizes = new Tensor<T>(new[] { k });
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
             // Assign each point to nearest center
-            bool changed = false;
-            Array.Clear(clusterCounts, 0, k);
-
-            for (int i = 0; i < n; i++)
-            {
-                int nearest = FindNearestCenter(data.GetRow(i), centers);
-                if (assignments[i] != nearest)
-                {
-                    changed = true;
-                    assignments[i] = nearest;
-                }
-                clusterCounts[nearest]++;
-            }
+            var nearest = AssignToNearestCenters(points, centers);
+            bool changed = !nearest.SequenceEqual(assignments);
+            assignments = nearest;
+            var clusterIndex = new Tensor<int>(assignments, new[] { n });
+            clusterSizes = engine.TensorIndexAdd(new Tensor<T>(new[] { k }), 0, clusterIndex,
+                engine.TensorFullLike(new Tensor<T>(new[] { n }), NumOps.One));
 
             if (!changed) break;
 
-            // Update cluster centers
-            centers = new Matrix<T>(k, d);
-            for (int i = 0; i < n; i++)
-            {
-                int cluster = assignments[i];
-                for (int j = 0; j < d; j++)
-                {
-                    centers[cluster, j] = NumOps.Add(centers[cluster, j], data[i, j]);
-                }
-            }
-
-            for (int c = 0; c < k; c++)
-            {
-                if (clusterCounts[c] > 0)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        centers[c, j] = NumOps.Divide(centers[c, j],
-                            NumOps.FromDouble(clusterCounts[c]));
-                    }
-                }
-            }
+            // Update cluster centers: member mean, or zero for an empty cluster
+            var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { k, d }), 0, clusterIndex, points);
+            var divisors = engine.TensorMax(clusterSizes, NumOps.One).Reshape(new[] { k, 1 });
+            centers = engine.TensorDivide(sums, engine.TensorBroadcastTo(divisors, new[] { k, d }));
         }
 
         // Create weights proportional to cluster sizes
-        var weights = new T[k];
-        for (int c = 0; c < k; c++)
-        {
-            weights[c] = NumOps.FromDouble((double)clusterCounts[c] / n);
-        }
+        var weights = engine.TensorDivideScalar(clusterSizes, NumOps.FromDouble(n));
 
-        return new BackgroundSummary<T>(centers, new Vector<T>(weights));
+        return new BackgroundSummary<T>(centers.ToMatrix(), weights.ToVector());
     }
 
     /// <summary>
@@ -173,9 +146,10 @@ public static class BackgroundSummarizer<T>
 
         // Group samples by stratum value
         var strata = new Dictionary<string, List<int>>();
+        var stratumKeys = Enumerable.Select(data.GetColumn(stratifyColumn), value => FormatStratumKey(value)).ToArray();
         for (int i = 0; i < data.Rows; i++)
         {
-            string key = NumOps.ToDouble(data[i, stratifyColumn]).ToString("F2");
+            string key = stratumKeys[i];
             if (!strata.ContainsKey(key))
             {
                 strata[key] = new List<int>();
@@ -192,15 +166,7 @@ public static class BackgroundSummarizer<T>
         }
 
         // Create output matrix
-        var result = new Matrix<T>(selectedIndices.Count, data.Columns);
-        for (int i = 0; i < selectedIndices.Count; i++)
-        {
-            int srcIdx = selectedIndices[i];
-            for (int j = 0; j < data.Columns; j++)
-            {
-                result[i, j] = data[srcIdx, j];
-            }
-        }
+        var result = SelectRows(data, selectedIndices);
 
         return new BackgroundSummary<T>(result, CreateUniformWeights(selectedIndices.Count));
     }
@@ -243,14 +209,7 @@ public static class BackgroundSummarizer<T>
             .Take(nSamples)
             .ToList();
 
-        var result = new Matrix<T>(nSamples, data.Columns);
-        for (int i = 0; i < nSamples; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                result[i, j] = data[indices[i], j];
-            }
-        }
+        var result = SelectRows(data, indices);
 
         return new BackgroundSummary<T>(result, CreateUniformWeights(nSamples));
     }
@@ -292,11 +251,13 @@ public static class BackgroundSummarizer<T>
             : RandomHelper.CreateSecureRandom();
 
         // Group by categorical features
+        var columnKeys = categoricalColumns
+            .Select(c => Enumerable.Select(data.GetColumn(c), value => FormatStratumKey(value)).ToArray())
+            .ToArray();
         var groups = new Dictionary<string, List<int>>();
         for (int i = 0; i < data.Rows; i++)
         {
-            var key = string.Join("_", categoricalColumns.Select(c =>
-                NumOps.ToDouble(data[i, c]).ToString("F2")));
+            var key = string.Join("_", columnKeys.Select(keys => keys[i]));
             if (!groups.ContainsKey(key))
             {
                 groups[key] = new List<int>();
@@ -304,14 +265,19 @@ public static class BackgroundSummarizer<T>
             groups[key].Add(i);
         }
 
-        // Allocate samples proportionally to group sizes
-        int totalGroups = groups.Count;
-        int samplesPerGroup = Math.Max(1, nSamples / totalGroups);
+        // Group weight = group size / rows; a sample kept as-is carries groupWeight / groupSize.
+        var engine = AiDotNetEngine.Current;
+        var groupList = groups.Values.ToList();
+        var groupSizes = new Tensor<int>(groupList.Select(g => g.Count).ToArray(), new[] { groupList.Count }).Cast<T>();
+        var groupWeights = engine.TensorDivideScalar(groupSizes, NumOps.FromDouble(data.Rows));
+        var sampleWeights = engine.TensorDivide(groupWeights, groupSizes);
 
-        var allSamples = new List<Vector<T>>();
-        var allWeights = new List<double>();
+        var allSamples = new List<Tensor<T>>();
+        var allWeights = new List<Tensor<T>>();
 
-        foreach (var (_, indices) in groups)
+        foreach (var (indices, groupWeightT, sampleWeight) in groupList
+            .Zip(groupWeights.ToVector(), (indices, weight) => (indices, weight))
+            .Zip(sampleWeights.ToVector(), (group, sample) => (group.indices, group.weight, sample)))
         {
             double groupWeight = (double)indices.Count / data.Rows;
             int groupSamples = Math.Max(1, (int)(nSamples * groupWeight));
@@ -319,52 +285,27 @@ public static class BackgroundSummarizer<T>
             if (indices.Count <= groupSamples)
             {
                 // Use all samples from this group
-                foreach (var idx in indices)
-                {
-                    allSamples.Add(data.GetRow(idx));
-                    allWeights.Add(groupWeight / indices.Count);
-                }
+                allSamples.Add(Tensor<T>.FromMatrix(SelectRows(data, indices)));
+                allWeights.Add(engine.Fill(indices.Count, sampleWeight).AsTensor());
             }
             else
             {
                 // Apply KMeans within this group
-                var groupData = new Matrix<T>(indices.Count, data.Columns);
-                for (int i = 0; i < indices.Count; i++)
-                {
-                    for (int j = 0; j < data.Columns; j++)
-                    {
-                        groupData[i, j] = data[indices[i], j];
-                    }
-                }
+                var groupData = SelectRows(data, indices);
 
                 var groupSummary = KMeans(groupData, groupSamples, randomState: rand.Next());
-                for (int i = 0; i < groupSummary.Data.Rows; i++)
-                {
-                    allSamples.Add(groupSummary.Data.GetRow(i));
-                    allWeights.Add(groupWeight * NumOps.ToDouble(groupSummary.Weights[i]));
-                }
+                allSamples.Add(Tensor<T>.FromMatrix(groupSummary.Data));
+                allWeights.Add(engine.TensorMultiplyScalar(groupSummary.Weights.AsTensor(), groupWeightT));
             }
         }
 
         // Normalize weights
-        double weightSum = allWeights.Sum();
-        for (int i = 0; i < allWeights.Count; i++)
-        {
-            allWeights[i] /= weightSum;
-        }
+        var weights = engine.TensorConcatenate(allWeights.ToArray(), 0);
+        weights = engine.TensorDivideScalar(weights, engine.TensorSum(weights));
 
-        var resultData = new Matrix<T>(allSamples.Count, data.Columns);
-        for (int i = 0; i < allSamples.Count; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                resultData[i, j] = allSamples[i][j];
-            }
-        }
+        var resultData = engine.TensorConcatenate(allSamples.ToArray(), 0).ToMatrix();
 
-        return new BackgroundSummary<T>(
-            resultData,
-            new Vector<T>(allWeights.Select(w => NumOps.FromDouble(w)).ToArray()));
+        return new BackgroundSummary<T>(resultData, weights.ToVector());
     }
 
     /// <summary>
@@ -472,27 +413,6 @@ public static class BackgroundSummarizer<T>
     }
 
     /// <summary>
-    /// Finds the nearest center for a data point.
-    /// </summary>
-    private static int FindNearestCenter(Vector<T> point, Matrix<T> centers)
-    {
-        int nearest = 0;
-        double minDist = double.MaxValue;
-
-        for (int c = 0; c < centers.Rows; c++)
-        {
-            double dist = ComputeDistance(point, centers.GetRow(c));
-            if (dist < minDist)
-            {
-                minDist = dist;
-                nearest = c;
-            }
-        }
-
-        return nearest;
-    }
-
-    /// <summary>
     /// Computes Euclidean distance between two vectors.
     /// </summary>
     private static double ComputeDistance(Vector<T> a, Vector<T> b)
@@ -501,17 +421,58 @@ public static class BackgroundSummarizer<T>
     }
 
     /// <summary>
+    /// Group key for a stratum value: the value with two decimals.
+    /// </summary>
+    private static string FormatStratumKey(T value)
+    {
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, "{0:F2}", value);
+    }
+
+    /// <summary>
     /// Creates uniform weights that sum to 1.
     /// </summary>
     private static Vector<T> CreateUniformWeights(int n)
     {
-        var weights = new T[n];
-        T weight = NumOps.FromDouble(1.0 / n);
-        for (int i = 0; i < n; i++)
+        return AiDotNetEngine.Current.Fill(n, NumOps.FromDouble(1.0 / n));
+    }
+
+    /// <summary>
+    /// The rows of <paramref name="data"/> at <paramref name="indices"/>, in that order.
+    /// </summary>
+    private static Matrix<T> SelectRows(Matrix<T> data, IReadOnlyList<int> indices)
+    {
+        if (indices.Count == 0)
+            return new Matrix<T>(0, data.Columns);
+
+        var positions = new Tensor<int>(indices.ToArray(), new[] { indices.Count });
+        return AiDotNetEngine.Current.TensorIndexSelect(Tensor<T>.FromMatrix(data), positions, 0).ToMatrix();
+    }
+
+    /// <summary>
+    /// The index of the nearest center (Euclidean distance, first on ties) for every row of the data.
+    /// </summary>
+    private static int[] AssignToNearestCenters(Tensor<T> data, Tensor<T> centers)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = data.Shape[0];
+        int d = data.Shape[1];
+        int k = centers.Shape[0];
+        var assignments = new int[n];
+
+        // Rows are processed in chunks so the [rows, k, d] difference tensor stays bounded.
+        int chunk = Math.Max(1, (1 << 22) / Math.Max(1, k * d));
+        var centerGrid = centers.Reshape(new[] { 1, k, d });
+        for (int start = 0; start < n; start += chunk)
         {
-            weights[i] = weight;
+            int rows = Math.Min(chunk, n - start);
+            var block = engine.TensorSlice(data, new[] { start, 0 }, new[] { rows, d }).Reshape(new[] { rows, 1, d });
+            var shape = new[] { rows, k, d };
+            var differences = engine.TensorSubtract(engine.TensorBroadcastTo(block, shape), engine.TensorBroadcastTo(centerGrid, shape));
+            var distances = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(differences), new[] { 2 }, false));
+            engine.TensorArgMin(distances, 1).ToArray().CopyTo(assignments, start);
         }
-        return new Vector<T>(weights);
+
+        return assignments;
     }
 }
 
@@ -534,8 +495,6 @@ public static class BackgroundSummarizer<T>
 /// </remarks>
 public class BackgroundSummary<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// Gets the summarized background data (rows = samples).
     /// </summary>
@@ -590,19 +549,8 @@ public class BackgroundSummary<T>
     /// </remarks>
     public Vector<T> GetWeightedMean()
     {
-        var mean = new T[NumFeatures];
-
-        for (int i = 0; i < NumSamples; i++)
-        {
-            double w = NumOps.ToDouble(Weights[i]);
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                mean[j] = NumOps.Add(mean[j],
-                    NumOps.Multiply(Data[i, j], NumOps.FromDouble(w)));
-            }
-        }
-
-        return new Vector<T>(mean);
+        var engine = AiDotNetEngine.Current;
+        return engine.MatrixVectorMultiply(engine.MatrixTranspose(Data), Weights);
     }
 
     /// <summary>
@@ -618,26 +566,19 @@ public class BackgroundSummary<T>
     /// </remarks>
     public Vector<T> GetExpectedPrediction(Func<Vector<T>, Vector<T>> predictFunction)
     {
-        Vector<T>? result = null;
+        if (NumSamples == 0)
+            return new Vector<T>(0);
 
+        var predictions = new Tensor<T>[NumSamples];
         for (int i = 0; i < NumSamples; i++)
         {
-            var prediction = predictFunction(Data.GetRow(i));
-            double w = NumOps.ToDouble(Weights[i]);
-
-            if (result == null)
-            {
-                result = new Vector<T>(prediction.Length);
-            }
-
-            for (int j = 0; j < prediction.Length; j++)
-            {
-                result[j] = NumOps.Add(result[j],
-                    NumOps.Multiply(prediction[j], NumOps.FromDouble(w)));
-            }
+            predictions[i] = predictFunction(Data.GetRow(i)).AsTensor();
         }
 
-        return result ?? new Vector<T>(0);
+        // Weighted sum of the predictions: weights^T [samples, outputs]
+        var engine = AiDotNetEngine.Current;
+        var stacked = engine.TensorStack(predictions, 0);
+        return engine.TensorMatMul(Weights.AsTensor().Reshape(new[] { 1, NumSamples }), stacked).ToVector();
     }
 
     /// <summary>
@@ -645,13 +586,15 @@ public class BackgroundSummary<T>
     /// </summary>
     public override string ToString()
     {
-        double minWeight = double.MaxValue, maxWeight = double.MinValue;
-        for (int i = 0; i < NumSamples; i++)
+        if (NumSamples == 0)
         {
-            double w = NumOps.ToDouble(Weights[i]);
-            if (w < minWeight) minWeight = w;
-            if (w > maxWeight) maxWeight = w;
+            return $"BackgroundSummary: {NumSamples} samples, {NumFeatures} features, " +
+                   $"weights range: [{double.MaxValue:F4}, {double.MinValue:F4}]";
         }
+
+        var engine = AiDotNetEngine.Current;
+        T minWeight = engine.TensorMinValue(Weights.AsTensor());
+        T maxWeight = engine.TensorMaxValue(Weights.AsTensor());
 
         return $"BackgroundSummary: {NumSamples} samples, {NumFeatures} features, " +
                $"weights range: [{minWeight:F4}, {maxWeight:F4}]";

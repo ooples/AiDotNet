@@ -4,6 +4,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Interpretability.Helpers;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -105,12 +106,8 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
     public GradCAMExplanation<T> Explain(Vector<T> instance)
     {
         // Reshape vector to tensor
-        var inputTensor = new Tensor<T>(_inputShape);
-        var dataSpan = inputTensor.Data.Span;
-        for (int i = 0; i < instance.Length && i < dataSpan.Length; i++)
-        {
-            dataSpan[i] = instance[i];
-        }
+        int inputLength = _inputShape.Aggregate(1, (product, dim) => product * dim);
+        var inputTensor = new Tensor<T>(_inputShape, ExplainerTensorOps<T>.PadOrTruncate(instance, inputLength));
 
         return ExplainTensor(inputTensor, targetClass: -1);
     }
@@ -134,7 +131,7 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
             targetClass = GetPredictedClass(predictions);
         }
 
-        T[,] heatmap;
+        Tensor<T> heatmap;
 
         if (_featureMapFunction != null && _gradientFunction != null)
         {
@@ -160,21 +157,16 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
         var upsampledHeatmap = UpsampleHeatmap(heatmap, targetHeight, targetWidth);
 
         // Get class scores
-        var predSpan = predictions.Data.Span;
-        if (numClasses > predSpan.Length)
+        if (numClasses > predictions.Length)
             throw new InvalidOperationException(
-                $"Prediction tensor has {predSpan.Length} elements but expected {numClasses} class scores based on tensor shape.");
+                $"Prediction tensor has {predictions.Length} elements but expected {numClasses} class scores based on tensor shape.");
 
-        var classScores = new T[numClasses];
-        for (int i = 0; i < numClasses; i++)
-        {
-            classScores[i] = predSpan[i];
-        }
+        var classScores = predictions.ToVector().GetSubVector(0, numClasses).ToArray();
 
         return new GradCAMExplanation<T>
         {
-            Heatmap = upsampledHeatmap,
-            OriginalHeatmap = heatmap,
+            Heatmap = upsampledHeatmap.ToMatrix(),
+            OriginalHeatmap = heatmap.ToMatrix(),
             TargetClass = targetClass,
             ClassScores = classScores,
             InputShape = _inputShape,
@@ -196,198 +188,133 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
     /// <summary>
     /// Computes standard Grad-CAM heatmap.
     /// </summary>
-    private T[,] ComputeGradCAM(Tensor<T> featureMaps, Tensor<T> gradients)
+    private Tensor<T> ComputeGradCAM(Tensor<T> featureMaps, Tensor<T> gradients)
     {
         // Feature maps: [channels, height, width] or [batch, channels, height, width]
         int channels = _featureMapShape[0];
         int height = _featureMapShape.Length > 1 ? _featureMapShape[1] : 1;
         int width = _featureMapShape.Length > 2 ? _featureMapShape[2] : 1;
+        var engine = AiDotNetEngine.Current;
 
-        var gradSpan = gradients.Data.Span;
-        var featSpan = featureMaps.Data.Span;
+        var grad = ChannelPlanes(gradients, channels, height * width);
+        var feat = ChannelPlanes(featureMaps, channels, height * width);
 
         // Global average pooling of gradients to get channel weights
-        var weights = new double[channels];
+        var weights = engine.ReduceMean(grad, new[] { 1 }, false);
 
-        for (int c = 0; c < channels; c++)
-        {
-            double sum = 0;
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    if (idx < gradSpan.Length)
-                    {
-                        sum += NumOps.ToDouble(gradSpan[idx]);
-                    }
-                }
-            }
-            weights[c] = sum / (height * width);
-        }
+        return WeightedHeatmap(weights, feat, height, width);
+    }
 
-        // Weighted combination of feature maps
-        var heatmap = new T[height, width];
+    /// <summary>
+    /// The leading channels * pixels entries of a tensor (zero where it is shorter) as a [channels, pixels] tensor.
+    /// </summary>
+    private static Tensor<T> ChannelPlanes(Tensor<T> values, int channels, int pixels)
+    {
+        return new Tensor<T>(new[] { channels, pixels },
+            ExplainerTensorOps<T>.PadOrTruncate(values.ToVector(), channels * pixels));
+    }
 
-        for (int h = 0; h < height; h++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                double value = 0;
-                for (int c = 0; c < channels; c++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    if (idx < featSpan.Length)
-                    {
-                        value += weights[c] * NumOps.ToDouble(featSpan[idx]);
-                    }
-                }
-                // ReLU to keep only positive contributions
-                heatmap[h, w] = NumOps.FromDouble(Math.Max(0, value));
-            }
-        }
+    /// <summary>
+    /// ReLU(sum_c weights_c * features_c) as a normalized [height, width] heatmap.
+    /// </summary>
+    private static Tensor<T> WeightedHeatmap(Tensor<T> weights, Tensor<T> features, int height, int width)
+    {
+        var engine = AiDotNetEngine.Current;
+
+        // Weighted combination of feature maps, ReLU to keep only positive contributions
+        var combined = engine.TensorMatMul(weights.Reshape(new[] { 1, weights.Length }), features);
+        var heatmap = engine.ReLU(combined).Reshape(new[] { height, width });
 
         // Normalize
-        NormalizeHeatmap(heatmap);
-
-        return heatmap;
+        return ExplainerTensorOps<T>.MinMaxNormalize(heatmap, 1e-10);
     }
 
     /// <summary>
     /// Computes Grad-CAM++ heatmap (better for multiple instances).
     /// </summary>
-    private T[,] ComputeGradCAMPlusPlus(Tensor<T> featureMaps, Tensor<T> gradients)
+    private Tensor<T> ComputeGradCAMPlusPlus(Tensor<T> featureMaps, Tensor<T> gradients)
     {
         int channels = _featureMapShape[0];
         int height = _featureMapShape.Length > 1 ? _featureMapShape[1] : 1;
         int width = _featureMapShape.Length > 2 ? _featureMapShape[2] : 1;
+        var engine = AiDotNetEngine.Current;
 
-        var gradSpan = gradients.Data.Span;
-        var featSpan = featureMaps.Data.Span;
+        var grad = ChannelPlanes(gradients, channels, height * width);
+        var feat = ChannelPlanes(featureMaps, channels, height * width);
 
-        // Grad-CAM++ uses pixel-wise weights instead of global average
-        var weights = new double[channels];
+        // Grad-CAM++ uses pixel-wise weights instead of global average:
+        // alpha = g^2 / (2 g^2 + f g^3 + 1e-8), weight_c = sum over pixels of alpha * ReLU(g)
+        var grad2 = engine.TensorSquare(grad);
+        var grad3 = engine.TensorMultiply(grad2, grad);
+        var denominator = engine.TensorAddScalar(
+            engine.TensorAdd(engine.TensorMultiplyScalar(grad2, NumOps.FromDouble(2)), engine.TensorMultiply(feat, grad3)),
+            NumOps.FromDouble(1e-8));
+        var alpha = engine.TensorDivide(grad2, denominator);
+        var weights = engine.ReduceSum(engine.TensorMultiply(alpha, engine.ReLU(grad)), new[] { 1 }, false);
 
-        for (int c = 0; c < channels; c++)
-        {
-            double sumAlpha = 0;
-            double sumGrad = 0;
-
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    if (idx < gradSpan.Length && idx < featSpan.Length)
-                    {
-                        double grad = NumOps.ToDouble(gradSpan[idx]);
-                        double feat = NumOps.ToDouble(featSpan[idx]);
-
-                        // Alpha coefficient for Grad-CAM++
-                        double grad2 = grad * grad;
-                        double grad3 = grad2 * grad;
-                        double alpha = grad2 / (2 * grad2 + feat * grad3 + 1e-8);
-
-                        sumAlpha += alpha * Math.Max(0, grad);
-                        sumGrad += grad;
-                    }
-                }
-            }
-
-            weights[c] = sumAlpha;
-        }
-
-        // Weighted combination
-        var heatmap = new T[height, width];
-
-        for (int h = 0; h < height; h++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                double value = 0;
-                for (int c = 0; c < channels; c++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    if (idx < featSpan.Length)
-                    {
-                        value += weights[c] * NumOps.ToDouble(featSpan[idx]);
-                    }
-                }
-                heatmap[h, w] = NumOps.FromDouble(Math.Max(0, value));
-            }
-        }
-
-        NormalizeHeatmap(heatmap);
-
-        return heatmap;
+        return WeightedHeatmap(weights, feat, height, width);
     }
 
     /// <summary>
     /// Computes a simulated heatmap when gradient access is not available.
     /// Uses occlusion sensitivity as an approximation.
     /// </summary>
-    private T[,] ComputeSimulatedHeatmap(Tensor<T> input, int targetClass)
+    private Tensor<T> ComputeSimulatedHeatmap(Tensor<T> input, int targetClass)
     {
-        var inputSpan = input.Data.Span;
-        int height = _inputShape.Length >= 2 ? _inputShape[_inputShape.Length - 2] : (int)Math.Sqrt(inputSpan.Length);
+        int inputLength = input.Length;
+        int height = _inputShape.Length >= 2 ? _inputShape[_inputShape.Length - 2] : (int)Math.Sqrt(inputLength);
         int width = _inputShape.Length >= 1 ? _inputShape[_inputShape.Length - 1] : height;
 
         // Use a smaller resolution for efficiency
         int heatmapHeight = Math.Min(height, 14);
         int heatmapWidth = Math.Min(width, 14);
+        if (heatmapHeight <= 0 || heatmapWidth <= 0)
+        {
+            return new Tensor<T>(new[] { Math.Max(0, heatmapHeight), Math.Max(0, heatmapWidth) });
+        }
 
-        var heatmap = new T[heatmapHeight, heatmapWidth];
+        var engine = AiDotNetEngine.Current;
 
         // Get baseline prediction
-        var basePred = _predictFunction(input);
-        var basePredSpan = basePred.Data.Span;
-        double baseScore = targetClass < basePredSpan.Length
-            ? NumOps.ToDouble(basePredSpan[targetClass])
-            : 0;
+        var basePrediction = _predictFunction(input).ToVector();
+        T baseScore = targetClass < basePrediction.Length ? basePrediction[targetClass] : NumOps.Zero;
 
         // Occlude different regions and measure importance
         int patchHeight = height / heatmapHeight;
         int patchWidth = width / heatmapWidth;
+        var zeros = engine.TensorFullLike(input, NumOps.Zero);
+        var occludedScores = new List<Vector<T>>(heatmapHeight * heatmapWidth);
 
         for (int i = 0; i < heatmapHeight; i++)
         {
             for (int j = 0; j < heatmapWidth; j++)
             {
-                // Create occluded version
-                var occluded = new Tensor<T>(input._shape);
-                var occSpan = occluded.Data.Span;
-                inputSpan.CopyTo(occSpan);
-
-                // Zero out the patch
+                // Zero out the patch: flat entries h * width + w of the patch rows and columns
                 int startH = i * patchHeight;
                 int startW = j * patchWidth;
-                for (int h = startH; h < startH + patchHeight && h < height; h++)
-                {
-                    for (int w = startW; w < startW + patchWidth && w < width; w++)
-                    {
-                        int idx = h * width + w;
-                        if (idx < occSpan.Length)
-                        {
-                            occSpan[idx] = NumOps.Zero;
-                        }
-                    }
-                }
+                var rows = ExplainerTensorOps<T>.RangeIndicator(height, startH, startH + patchHeight);
+                var columns = ExplainerTensorOps<T>.RangeIndicator(width, startW, startW + patchWidth);
+                var patch = ExplainerTensorOps<T>.PadOrTruncate(engine.TensorOuter(rows, columns).ToVector(), inputLength);
+                var occluded = engine.TensorWhere(new Tensor<T>(input._shape, patch), zeros, input);
 
                 // Get prediction with occlusion
-                var occPred = _predictFunction(occluded);
-                var occPredSpan = occPred.Data.Span;
-                double occScore = targetClass < occPredSpan.Length
-                    ? NumOps.ToDouble(occPredSpan[targetClass])
-                    : 0;
-
-                // Importance = drop in score when occluded
-                heatmap[i, j] = NumOps.FromDouble(Math.Max(0, baseScore - occScore));
+                occludedScores.Add(ScoreOrZero(_predictFunction(occluded).ToVector(), targetClass));
             }
         }
 
-        NormalizeHeatmap(heatmap);
+        // Importance = drop in score when occluded
+        var scores = ExplainerTensorOps<T>.Stack(occludedScores).Reshape(new[] { heatmapHeight, heatmapWidth });
+        var heatmap = engine.ReLU(engine.TensorSubtract(engine.TensorFullLike(scores, baseScore), scores));
 
-        return heatmap;
+        return ExplainerTensorOps<T>.MinMaxNormalize(heatmap, 1e-10);
+    }
+
+    /// <summary>
+    /// The one-entry vector holding the score at <paramref name="targetClass"/>, or zero when the prediction is shorter.
+    /// </summary>
+    private static Vector<T> ScoreOrZero(Vector<T> prediction, int targetClass)
+    {
+        return targetClass < prediction.Length ? prediction.GetSubVector(targetClass, 1) : new Vector<T>(1);
     }
 
     /// <summary>
@@ -395,99 +322,15 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
     /// </summary>
     private int GetPredictedClass(Tensor<T> predictions)
     {
-        int maxIdx = 0;
-        double maxVal = double.MinValue;
-        var predSpan = predictions.Data.Span;
-
-        for (int i = 0; i < predSpan.Length; i++)
-        {
-            double val = NumOps.ToDouble(predSpan[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
-    }
-
-    /// <summary>
-    /// Normalizes heatmap to [0, 1] range.
-    /// </summary>
-    private void NormalizeHeatmap(T[,] heatmap)
-    {
-        double minVal = double.MaxValue;
-        double maxVal = double.MinValue;
-
-        int height = heatmap.GetLength(0);
-        int width = heatmap.GetLength(1);
-
-        for (int i = 0; i < height; i++)
-        {
-            for (int j = 0; j < width; j++)
-            {
-                double val = NumOps.ToDouble(heatmap[i, j]);
-                minVal = Math.Min(minVal, val);
-                maxVal = Math.Max(maxVal, val);
-            }
-        }
-
-        double range = maxVal - minVal;
-        if (range < 1e-10) range = 1;
-
-        for (int i = 0; i < height; i++)
-        {
-            for (int j = 0; j < width; j++)
-            {
-                double val = (NumOps.ToDouble(heatmap[i, j]) - minVal) / range;
-                heatmap[i, j] = NumOps.FromDouble(val);
-            }
-        }
+        return ExplainerTensorOps<T>.ArgMaxSkippingNaN(predictions.ToVector());
     }
 
     /// <summary>
     /// Upsamples heatmap to target size using bilinear interpolation.
     /// </summary>
-    private T[,] UpsampleHeatmap(T[,] heatmap, int targetHeight, int targetWidth)
+    private static Tensor<T> UpsampleHeatmap(Tensor<T> heatmap, int targetHeight, int targetWidth)
     {
-        int srcHeight = heatmap.GetLength(0);
-        int srcWidth = heatmap.GetLength(1);
-
-        var result = new T[targetHeight, targetWidth];
-
-        for (int i = 0; i < targetHeight; i++)
-        {
-            for (int j = 0; j < targetWidth; j++)
-            {
-                // Map to source coordinates
-                double srcY = (double)i / targetHeight * srcHeight;
-                double srcX = (double)j / targetWidth * srcWidth;
-
-                // Bilinear interpolation
-                int y0 = Math.Min((int)srcY, srcHeight - 1);
-                int y1 = Math.Min(y0 + 1, srcHeight - 1);
-                int x0 = Math.Min((int)srcX, srcWidth - 1);
-                int x1 = Math.Min(x0 + 1, srcWidth - 1);
-
-                double yFrac = srcY - y0;
-                double xFrac = srcX - x0;
-
-                double v00 = NumOps.ToDouble(heatmap[y0, x0]);
-                double v01 = NumOps.ToDouble(heatmap[y0, x1]);
-                double v10 = NumOps.ToDouble(heatmap[y1, x0]);
-                double v11 = NumOps.ToDouble(heatmap[y1, x1]);
-
-                double value = v00 * (1 - yFrac) * (1 - xFrac)
-                             + v01 * (1 - yFrac) * xFrac
-                             + v10 * yFrac * (1 - xFrac)
-                             + v11 * yFrac * xFrac;
-
-                result[i, j] = NumOps.FromDouble(value);
-            }
-        }
-
-        return result;
+        return ExplainerTensorOps<T>.BilinearResize(heatmap, targetHeight, targetWidth);
     }
 }
 
@@ -503,12 +346,12 @@ public class GradCAMExplanation<T>
     /// Gets or sets the upsampled heatmap (same size as input).
     /// Values are in [0, 1] where 1 = most important.
     /// </summary>
-    public T[,] Heatmap { get; set; } = new T[0, 0];
+    public Matrix<T> Heatmap { get; set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets or sets the original (low-resolution) heatmap from feature maps.
     /// </summary>
-    public T[,] OriginalHeatmap { get; set; } = new T[0, 0];
+    public Matrix<T> OriginalHeatmap { get; set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets or sets the target class that was explained.
@@ -535,8 +378,8 @@ public class GradCAMExplanation<T>
     /// </summary>
     public T GetImportanceAt(double normalizedY, double normalizedX)
     {
-        int height = Heatmap.GetLength(0);
-        int width = Heatmap.GetLength(1);
+        int height = Heatmap.Rows;
+        int width = Heatmap.Columns;
 
         int y = Math.Min((int)(normalizedY * height), height - 1);
         int x = Math.Min((int)(normalizedX * width), width - 1);
@@ -550,8 +393,8 @@ public class GradCAMExplanation<T>
     public List<(int y, int x, T importance)> GetImportantRegions(double threshold = 0.5)
     {
         var regions = new List<(int, int, T)>();
-        int height = Heatmap.GetLength(0);
-        int width = Heatmap.GetLength(1);
+        int height = Heatmap.Rows;
+        int width = Heatmap.Columns;
 
         for (int i = 0; i < height; i++)
         {
@@ -572,26 +415,22 @@ public class GradCAMExplanation<T>
     /// </summary>
     public override string ToString()
     {
-        int height = Heatmap.GetLength(0);
-        int width = Heatmap.GetLength(1);
+        int height = Heatmap.Rows;
+        int width = Heatmap.Columns;
 
         // Compute statistics
-        double maxImportance = 0;
-        double avgImportance = 0;
-        int aboveThreshold = 0;
-
-        for (int i = 0; i < height; i++)
+        var engine = AiDotNetEngine.Current;
+        var map = Tensor<T>.FromMatrix(Heatmap);
+        T maxImportance = NumOps.Zero;
+        T avgImportance = NumOps.Zero;
+        T percentHighImportance = NumOps.Zero;
+        if (map.Length > 0)
         {
-            for (int j = 0; j < width; j++)
-            {
-                double val = NumOps.ToDouble(Heatmap[i, j]);
-                maxImportance = Math.Max(maxImportance, val);
-                avgImportance += val;
-                if (val > 0.5) aboveThreshold++;
-            }
+            maxImportance = engine.TensorMaxValue(engine.TensorMax(map, NumOps.Zero));
+            avgImportance = engine.TensorMean(map);
+            var aboveThreshold = engine.TensorGreaterThan(map, NumOps.FromDouble(0.5));
+            percentHighImportance = NumOps.Multiply(NumOps.FromDouble(100), engine.TensorMean(aboveThreshold));
         }
-        avgImportance /= (height * width);
-        double percentHighImportance = 100.0 * aboveThreshold / (height * width);
 
         return $"{(IsGradCAMPlusPlus ? "Grad-CAM++" : "Grad-CAM")} Explanation:\n" +
                $"  Target class: {TargetClass}\n" +

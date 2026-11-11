@@ -180,19 +180,8 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
         // Create predict function wrapper
         _predictFunction = input =>
         {
-            var tensor = new Tensor<T>(new[] { 1, input.Length });
-            for (int i = 0; i < input.Length; i++)
-            {
-                tensor[0, i] = input[i];
-            }
-            var output = neuralNetwork.Predict(tensor);
-            var result = new T[output.Length];
-            var outputArray = output.ToArray();
-            for (int i = 0; i < output.Length; i++)
-            {
-                result[i] = outputArray[i];
-            }
-            return new Vector<T>(result);
+            var output = neuralNetwork.Predict(ExplainerTensorOps<T>.RowTensor(input));
+            return output.ToVector();
         };
 
         // Use backpropagation-based gradient function
@@ -242,9 +231,9 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
         if (outputIndex < 0 || outputIndex >= inputPred.Length)
             throw new ArgumentOutOfRangeException(nameof(outputIndex), $"Output index {outputIndex} is out of bounds for prediction with {inputPred.Length} outputs.");
 
-        double inputPredVal = NumOps.ToDouble(inputPred[outputIndex]);
-        double baselinePredVal = NumOps.ToDouble(baselinePred[outputIndex]);
-        double predDiff = inputPredVal - baselinePredVal;
+        T inputPredVal = inputPred[outputIndex];
+        T baselinePredVal = baselinePred[outputIndex];
+        T predDiff = NumOps.Subtract(inputPredVal, baselinePredVal);
 
         Vector<T> attributionsVector;
 
@@ -257,72 +246,42 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
         else
         {
             // Standard sequential computation
-            var attributions = new T[_numFeatures];
-            var scaledInputs = new Vector<T>[_numSteps + 1];
-
             // Create interpolated inputs along the path
-            for (int step = 0; step <= _numSteps; step++)
-            {
-                double alpha = (double)step / _numSteps;
-                var scaled = new T[_numFeatures];
-
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    double baseVal = NumOps.ToDouble(baseline[j]);
-                    double inputVal = NumOps.ToDouble(instance[j]);
-                    scaled[j] = NumOps.FromDouble(baseVal + alpha * (inputVal - baseVal));
-                }
-                scaledInputs[step] = new Vector<T>(scaled);
-            }
+            var scaledInputs = ExplainerTensorOps<T>.InterpolationPath(
+                baseline, instance, ExplainerTensorOps<T>.UniformAlphasWithEndpoints(_numSteps));
+            var gradients = new Vector<T>[_numSteps + 1];
 
             // Compute gradients at each step and integrate using trapezoidal rule
             // We need to include both endpoints (step 0 and step _numSteps)
             for (int step = 0; step <= _numSteps; step++)
             {
-                var gradient = ComputeGradient(scaledInputs[step], outputIndex);
+                var gradient = ComputeGradient(scaledInputs.GetSlice(step).ToVector(), outputIndex);
 
                 // Validate gradient length matches expected number of features
                 if (gradient.Length != _numFeatures)
                     throw new InvalidOperationException($"Gradient function returned {gradient.Length} values but expected {_numFeatures}.");
 
-                // Add to running sum (trapezoidal rule: endpoints get half weight)
-                double weight = (step == 0 || step == _numSteps) ? 0.5 : 1.0;
-
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    double gradVal = NumOps.ToDouble(gradient[j]);
-                    attributions[j] = NumOps.FromDouble(
-                        NumOps.ToDouble(attributions[j]) + weight * gradVal / _numSteps);
-                }
+                gradients[step] = gradient;
             }
 
-            // Multiply by (input - baseline)
-            for (int j = 0; j < _numFeatures; j++)
-            {
-                double inputVal = NumOps.ToDouble(instance[j]);
-                double baseVal = NumOps.ToDouble(baseline[j]);
-                attributions[j] = NumOps.FromDouble(NumOps.ToDouble(attributions[j]) * (inputVal - baseVal));
-            }
-
-            attributionsVector = new Vector<T>(attributions);
+            // Trapezoidal rule (endpoints get half weight), then multiply by (input - baseline)
+            var engine = AiDotNetEngine.Current;
+            attributionsVector = engine.Multiply(ExplainerTensorOps<T>.TrapezoidAverage(gradients),
+                engine.Subtract(instance, baseline));
         }
 
         // Compute convergence delta (how close attributions sum to prediction difference)
-        double attrSum = 0;
-        for (int j = 0; j < attributionsVector.Length; j++)
-        {
-            attrSum += NumOps.ToDouble(attributionsVector[j]);
-        }
-        double convergenceDelta = Math.Abs(attrSum - predDiff);
+        T attrSum = AiDotNetEngine.Current.Sum(attributionsVector);
+        T convergenceDelta = NumOps.Abs(NumOps.Subtract(attrSum, predDiff));
 
         return new IntegratedGradientsExplanation<T>
         {
             Attributions = attributionsVector,
             Baseline = baseline,
             Input = instance,
-            BaselinePrediction = NumOps.FromDouble(baselinePredVal),
-            InputPrediction = NumOps.FromDouble(inputPredVal),
-            ConvergenceDelta = NumOps.FromDouble(convergenceDelta),
+            BaselinePrediction = baselinePredVal,
+            InputPrediction = inputPredVal,
+            ConvergenceDelta = convergenceDelta,
             FeatureNames = _featureNames ?? Enumerable.Range(0, _numFeatures).Select(i => $"Feature {i}").ToArray(),
             OutputIndex = outputIndex,
             NumSteps = _numSteps
@@ -386,34 +345,7 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
     /// </summary>
     private Vector<T> ComputeNumericalGradient(Vector<T> input, int outputIndex)
     {
-        var gradient = new T[_numFeatures];
-        double epsilon = 1e-4;
-
-        for (int j = 0; j < _numFeatures; j++)
-        {
-            // Forward perturbation
-            var inputPlus = new T[_numFeatures];
-            var inputMinus = new T[_numFeatures];
-
-            for (int k = 0; k < _numFeatures; k++)
-            {
-                inputPlus[k] = input[k];
-                inputMinus[k] = input[k];
-            }
-
-            inputPlus[j] = NumOps.FromDouble(NumOps.ToDouble(input[j]) + epsilon);
-            inputMinus[j] = NumOps.FromDouble(NumOps.ToDouble(input[j]) - epsilon);
-
-            var predPlus = _predictFunction(new Vector<T>(inputPlus));
-            var predMinus = _predictFunction(new Vector<T>(inputMinus));
-
-            double plusVal = NumOps.ToDouble(predPlus[outputIndex]);
-            double minusVal = NumOps.ToDouble(predMinus[outputIndex]);
-
-            gradient[j] = NumOps.FromDouble((plusVal - minusVal) / (2 * epsilon));
-        }
-
-        return new Vector<T>(gradient);
+        return ExplainerTensorOps<T>.CentralDifferenceGradient(_predictFunction, input, outputIndex, 1e-4, _numFeatures);
     }
 }
 
@@ -495,20 +427,19 @@ public class IntegratedGradientsExplanation<T> : AiDotNet.Interpretability.IFeat
         var lines = new List<string>
         {
             "Integrated Gradients Explanation:",
-            $"  Baseline prediction: {NumOps.ToDouble(BaselinePrediction):F4}",
-            $"  Input prediction: {NumOps.ToDouble(InputPrediction):F4}",
-            $"  Prediction difference: {NumOps.ToDouble(InputPrediction) - NumOps.ToDouble(BaselinePrediction):F4}",
-            $"  Convergence delta: {NumOps.ToDouble(ConvergenceDelta):F6} (smaller is better)",
+            $"  Baseline prediction: {BaselinePrediction:F4}",
+            $"  Input prediction: {InputPrediction:F4}",
+            $"  Prediction difference: {NumOps.Subtract(InputPrediction, BaselinePrediction):F4}",
+            $"  Convergence delta: {ConvergenceDelta:F6} (smaller is better)",
             "",
             "Top Feature Attributions:"
         };
 
-        var sorted = GetSortedAttributions().Take(10);
-        foreach (var (name, attr) in sorted)
+        var sorted = GetSortedAttributions().Take(10).ToList();
+        var signs = ExplainerTensorOps<T>.SignPrefixes(sorted.Select(entry => entry.attribution));
+        foreach (var ((name, attr), sign) in sorted.Zip(signs, (entry, prefix) => (entry, prefix)))
         {
-            double val = NumOps.ToDouble(attr);
-            string sign = val >= 0 ? "+" : "";
-            lines.Add($"  {name}: {sign}{val:F4}");
+            lines.Add($"  {name}: {sign}{attr:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

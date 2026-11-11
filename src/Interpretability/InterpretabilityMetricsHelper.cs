@@ -47,12 +47,8 @@ namespace AiDotNet.Interpretability
             if (sensitiveFeature == null)
                 throw new ArgumentNullException(nameof(sensitiveFeature));
 
-            var uniqueGroups = new HashSet<T>();
-            for (int i = 0; i < sensitiveFeature.Length; i++)
-            {
-                uniqueGroups.Add(sensitiveFeature[i]);
-            }
-            return uniqueGroups.ToList();
+            // Bulk set construction keeps first-occurrence order, as adding each element in turn did.
+            return new HashSet<T>(sensitiveFeature).ToList();
         }
 
         /// <summary>
@@ -77,15 +73,11 @@ namespace AiDotNet.Interpretability
             if (sensitiveFeature == null)
                 throw new ArgumentNullException(nameof(sensitiveFeature));
 
-            var indices = new List<int>();
-            for (int i = 0; i < sensitiveFeature.Length; i++)
-            {
-                if (_numOps.Equals(sensitiveFeature[i], groupValue))
-                {
-                    indices.Add(i);
-                }
-            }
-            return indices;
+            var engine = AiDotNetEngine.Current;
+            var values = sensitiveFeature.AsTensor();
+            var differs = engine.TensorNotEquals(values, groupValue);
+            var matches = engine.TensorSubtract(engine.TensorFullLike(values, _numOps.One), differs);
+            return matches.ToVector().NonZeroIndices().ToList();
         }
 
         /// <summary>
@@ -112,12 +104,11 @@ namespace AiDotNet.Interpretability
             if (indices == null)
                 throw new ArgumentNullException(nameof(indices));
 
-            var subset = new T[indices.Count];
-            for (int i = 0; i < indices.Count; i++)
-            {
-                subset[i] = vector[indices[i]];
-            }
-            return new Vector<T>(subset);
+            if (indices.Count == 0)
+                return new Vector<T>(0);
+
+            var positions = new Tensor<int>(indices.ToArray(), new[] { indices.Count });
+            return AiDotNetEngine.Current.TensorIndexSelect(vector.AsTensor(), positions, 0).ToVector();
         }
 
         /// <summary>
@@ -144,17 +135,10 @@ namespace AiDotNet.Interpretability
             if (predictions.Length == 0)
                 return _numOps.Zero;
 
-            int positiveCount = 0;
-            T threshold = _numOps.FromDouble(0.5);
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                if (_numOps.GreaterThanOrEquals(predictions[i], threshold))
-                {
-                    positiveCount++;
-                }
-            }
-
-            return _numOps.Divide(_numOps.FromDouble(positiveCount), _numOps.FromDouble(predictions.Length));
+            var engine = AiDotNetEngine.Current;
+            var values = predictions.AsTensor();
+            var positive = engine.TensorGreaterEqual(values, engine.TensorFullLike(values, _numOps.FromDouble(0.5)));
+            return _numOps.Divide(engine.TensorSum(positive), _numOps.FromDouble(predictions.Length));
         }
 
         /// <summary>
@@ -186,29 +170,16 @@ namespace AiDotNet.Interpretability
             if (predictions.Length == 0 || actualLabels.Length == 0)
                 return _numOps.Zero;
 
-            int truePositives = 0;
-            int actualPositives = 0;
-            T threshold = _numOps.FromDouble(0.5);
+            var (actualPositive, _, predictedPositive) = ClassifyAtThreshold(predictions, actualLabels);
+            var engine = AiDotNetEngine.Current;
+            // TPR = true positives / actual positives.
+            T numerator = engine.TensorSum(engine.TensorMultiply(actualPositive, predictedPositive));
+            T denominator = engine.TensorSum(actualPositive);
 
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                bool isActualPositive = _numOps.GreaterThanOrEquals(actualLabels[i], threshold);
-                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], threshold);
-
-                if (isActualPositive)
-                {
-                    actualPositives++;
-                    if (isPredictedPositive)
-                    {
-                        truePositives++;
-                    }
-                }
-            }
-
-            if (actualPositives == 0)
+            if (_numOps.Equals(denominator, _numOps.Zero))
                 return _numOps.Zero;
 
-            return _numOps.Divide(_numOps.FromDouble(truePositives), _numOps.FromDouble(actualPositives));
+            return _numOps.Divide(numerator, denominator);
         }
 
         /// <summary>
@@ -240,29 +211,16 @@ namespace AiDotNet.Interpretability
             if (predictions.Length == 0 || actualLabels.Length == 0)
                 return _numOps.Zero;
 
-            int falsePositives = 0;
-            int actualNegatives = 0;
-            T threshold = _numOps.FromDouble(0.5);
+            var (_, actualNegative, predictedPositive) = ClassifyAtThreshold(predictions, actualLabels);
+            var engine = AiDotNetEngine.Current;
+            // FPR = false positives / actual negatives.
+            T numerator = engine.TensorSum(engine.TensorMultiply(actualNegative, predictedPositive));
+            T denominator = engine.TensorSum(actualNegative);
 
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                bool isActualNegative = _numOps.LessThan(actualLabels[i], threshold);
-                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], threshold);
-
-                if (isActualNegative)
-                {
-                    actualNegatives++;
-                    if (isPredictedPositive)
-                    {
-                        falsePositives++;
-                    }
-                }
-            }
-
-            if (actualNegatives == 0)
+            if (_numOps.Equals(denominator, _numOps.Zero))
                 return _numOps.Zero;
 
-            return _numOps.Divide(_numOps.FromDouble(falsePositives), _numOps.FromDouble(actualNegatives));
+            return _numOps.Divide(numerator, denominator);
         }
 
         /// <summary>
@@ -294,29 +252,40 @@ namespace AiDotNet.Interpretability
             if (predictions.Length == 0 || actualLabels.Length == 0)
                 return _numOps.Zero;
 
-            int truePositives = 0;
-            int predictedPositives = 0;
-            T threshold = _numOps.FromDouble(0.5);
+            var (actualPositive, _, predictedPositive) = ClassifyAtThreshold(predictions, actualLabels);
+            var engine = AiDotNetEngine.Current;
+            // Precision = true positives / predicted positives.
+            T numerator = engine.TensorSum(engine.TensorMultiply(actualPositive, predictedPositive));
+            T denominator = engine.TensorSum(predictedPositive);
 
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                bool isActualPositive = _numOps.GreaterThanOrEquals(actualLabels[i], threshold);
-                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], threshold);
-
-                if (isPredictedPositive)
-                {
-                    predictedPositives++;
-                    if (isActualPositive)
-                    {
-                        truePositives++;
-                    }
-                }
-            }
-
-            if (predictedPositives == 0)
+            if (_numOps.Equals(denominator, _numOps.Zero))
                 return _numOps.Zero;
 
-            return _numOps.Divide(_numOps.FromDouble(truePositives), _numOps.FromDouble(predictedPositives));
+            return _numOps.Divide(numerator, denominator);
+        }
+
+        /// <summary>
+        /// 0/1 masks at the 0.5 threshold: actual positive (label &gt;= 0.5), actual negative (label &lt; 0.5) and
+        /// predicted positive (prediction &gt;= 0.5), over the first predictions.Length labels.
+        /// </summary>
+        private static (Tensor<T> ActualPositive, Tensor<T> ActualNegative, Tensor<T> PredictedPositive) ClassifyAtThreshold(
+            Vector<T> predictions, Vector<T> actualLabels)
+        {
+            if (actualLabels.Length < predictions.Length)
+                throw new ArgumentException(
+                    $"Expected at least {predictions.Length} labels, one per prediction, but got {actualLabels.Length}.",
+                    nameof(actualLabels));
+
+            var engine = AiDotNetEngine.Current;
+            T threshold = _numOps.FromDouble(0.5);
+            var labels = (actualLabels.Length == predictions.Length
+                ? actualLabels
+                : actualLabels.GetSubVector(0, predictions.Length)).AsTensor();
+            var thresholds = engine.TensorFullLike(labels, threshold);
+            return (
+                engine.TensorGreaterEqual(labels, thresholds),
+                engine.TensorLessThan(labels, threshold),
+                engine.TensorGreaterEqual(predictions.AsTensor(), thresholds));
         }
     }
 }
