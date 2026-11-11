@@ -76,6 +76,30 @@ public static class SegmentationTensorOps
     /// <typeparam name="T">The numeric type.</typeparam>
     /// <param name="logits">Logits tensor [C, H, W] or [B, C, H, W].</param>
     /// <returns>Probability map [C, H, W] or [B, C, H, W] with values in [0, 1].</returns>
+    /// <summary>
+    /// One structure per class present in a label map <c>[H, W]</c>: its pixel area and the mean probability
+    /// <c>[C, H, W]</c> of that class over its pixels, summed in double in row-major order. Labels truncate to
+    /// their integer class. Both maps convert in one bulk pass each.
+    /// </summary>
+    internal static List<SegmentedStructure> ClassStructures<T>(Tensor<T> labels, Tensor<T> probs)
+    {
+        int h = labels.Shape[0], w = labels.Shape[1];
+        int numC = probs.Shape[0];
+        int plane = h * w;
+        var labelValues = ToDoubleArray(labels);
+        var probValues = ToDoubleArray(probs);
+        var structures = new List<SegmentedStructure>();
+        for (int c = 0; c < numC; c++)
+        {
+            int area = 0; double confSum = 0;
+            for (int pixel = 0; pixel < plane; pixel++)
+                if ((int)labelValues[pixel] == c) { area++; confSum += probValues[(c * plane) + pixel]; }
+            if (area > 0)
+                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
+        }
+        return structures;
+    }
+
     public static Tensor<T> SoftmaxAlongClassDim<T>(Tensor<T> logits)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));

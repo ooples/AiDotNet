@@ -267,18 +267,7 @@ public partial class MedNeXt<T> : Common.MedicalSegmentationBase<T>
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
         var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
-        int h = labels.Shape[0], w = labels.Shape[1];
-        int numC = probs.Shape[0];
-        var structures = new List<SegmentedStructure>();
-        for (int c = 0; c < numC; c++)
-        {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
-            if (area > 0)
-                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
-        }
+        var structures = Common.SegmentationTensorOps.ClassStructures(labels, probs);
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
     /// <inheritdoc/>
@@ -292,19 +281,14 @@ public partial class MedNeXt<T> : Common.MedicalSegmentationBase<T>
         var structAccum = new Dictionary<int, (double area, double confSum)>();
         for (int d = 0; d < depth; d++)
         {
-            var slice = new Tensor<T>([numC, h, w]);
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        slice[c, y, x] = volume[c, d, y, x];
+            var slice = Engine.Reshape(Engine.TensorSlice(volume, new[] { 0, d, 0, 0 }, new[] { numC, 1, h, w }), new[] { numC, h, w });
             var result = SegmentSlice(slice);
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    volLabels[d, y, x] = result.Labels[y, x];
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        volProbs[c, d, y, x] = result.Probabilities[c, y, x];
+            // The slice's [H, W] labels and first numC probability planes go to depth d.
+            volLabels = Engine.TensorSetSlice(volLabels,
+                Engine.Reshape(Engine.TensorSlice(result.Labels, new[] { 0, 0 }, new[] { h, w }), new[] { 1, h, w }), new[] { d, 0, 0 });
+            volProbs = Engine.TensorSetSlice(volProbs,
+                Engine.Reshape(Engine.TensorSlice(result.Probabilities, new[] { 0, 0, 0 }, new[] { numC, h, w }), new[] { numC, 1, h, w }),
+                new[] { 0, d, 0, 0 });
             foreach (var s in result.Structures)
             {
                 if (structAccum.TryGetValue(s.ClassId, out var existing))

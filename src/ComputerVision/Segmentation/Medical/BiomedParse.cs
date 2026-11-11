@@ -289,18 +289,7 @@ public partial class BiomedParse<T> : Common.MedicalSegmentationBase<T>
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
         var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
-        int h = labels.Shape[0], w = labels.Shape[1];
-        int numC = probs.Shape[0];
-        var structures = new List<SegmentedStructure>();
-        for (int c = 0; c < numC; c++)
-        {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
-            if (area > 0)
-                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
-        }
+        var structures = Common.SegmentationTensorOps.ClassStructures(labels, probs);
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
     /// <inheritdoc/>
