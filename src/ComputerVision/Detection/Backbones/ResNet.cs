@@ -58,6 +58,12 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// </summary>
     private readonly IActivationFunction<T> _activation;
 
+    /// <summary>
+    /// Whether the batch normalizations keep normalizing with their running statistics while the backbone trains.
+    /// See <see cref="ResNetBackboneOptions.FreezeBatchNormStatistics"/>.
+    /// </summary>
+    private readonly bool _freezeBatchNormStatistics;
+
     public bool IsFrozen { get; private set; }
     public string Name => $"ResNet-{GetLayerCount(_variant)}";
     /// <inheritdoc />
@@ -80,6 +86,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         _variant = options.Variant;
         _inChannels = options.InChannels;
         _activation = activation ?? new ReLUActivation<T>();
+        _freezeBatchNormStatistics = options.FreezeBatchNormStatistics;
         _stages = new List<ResNetStage<T>>();
 
         bool useBottleneck = options.Variant >= ResNetVariant.ResNet50;
@@ -120,16 +127,23 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     }
 
     /// <inheritdoc />
-    /// <remarks>The stem and stage layers are held directly rather than in Layers, so the mode is passed to each.</remarks>
+    /// <remarks>
+    /// The stem and stage layers are held directly rather than in Layers, so the mode is passed to each. With
+    /// <see cref="ResNetBackboneOptions.FreezeBatchNormStatistics"/> set, the batch normalizations stay in inference
+    /// mode whatever the requested mode: they normalize with their running statistics and never update them, while
+    /// their scale and shift still train.
+    /// </remarks>
     public override void SetTrainingMode(bool isTraining) => ApplyTrainingMode(isTraining);
 
     private void ApplyTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
         _conv1.SetTrainingMode(isTraining);
-        _bn1.SetTrainingMode(isTraining);
+        bool normalizationTraining = isTraining && !_freezeBatchNormStatistics;
+        _bn1.SetTrainingMode(normalizationTraining);
         foreach (var stage in _stages)
-            foreach (var layer in stage.EnumerateLayers()) layer.SetTrainingMode(isTraining);
+            foreach (var layer in stage.EnumerateLayers())
+                layer.SetTrainingMode(layer is BatchNormalizationLayer<T> ? normalizationTraining : isTraining);
     }
 
     private static int GetLayerCount(ResNetVariant variant) => variant switch
