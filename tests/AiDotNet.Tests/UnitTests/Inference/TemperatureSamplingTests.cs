@@ -166,6 +166,21 @@ public class TemperatureSamplingTests
         Assert.Equal(2, random.Draws);
     }
 
+    [Fact]
+    public void NeuralDraftSoftmax_AtATinyTemperature_KeepsLogitsThatDifferBelowTheScale()
+    {
+        // Dividing first rounds both logits to the same float; centering on the maximum keeps their 0.954 gap.
+        var logits = new Vector<float>(new[] { 10.00001049041748f, 10.000011444091797f });
+        var draft = new NeuralDraftModel<float>(_ => logits, vocabSize: 2, maxDraftTokens: 1, seed: 1);
+
+        var result = draft.GenerateDraft(new Vector<int>(new[] { 0 }), 1, 1e-6f);
+
+        double gap = (10.000011444091797 - 10.00001049041748) / 1e-6;
+        double expectedHigh = 1.0 / (1.0 + Math.Exp(-gap));
+        Assert.Equal(expectedHigh, result.Probabilities[0, 1], 3);
+        Assert.Equal(1.0 - expectedHigh, result.Probabilities[0, 0], 3);
+    }
+
     private sealed class CountingRandom : Random
     {
         private readonly double[] _values;

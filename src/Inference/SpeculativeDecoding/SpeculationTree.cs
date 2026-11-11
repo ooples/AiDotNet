@@ -12,6 +12,12 @@ internal class SpeculationTree<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Draft probability assumed for a path token the tree has no recorded probability for. Path verification uses
+    /// the same value, so both acceptance paths agree.
+    /// </summary>
+    internal const double MissingPathProbability = 0.01;
+
+    /// <summary>
     /// Root node of the tree.
     /// </summary>
     public TreeNode<T> Root { get; }
@@ -61,7 +67,7 @@ internal class SpeculationTree<T>
 
         var path = allPaths[pathIndex].ToArray();
         var probs = new T[path.Length];
-        T missing = NumOps.FromDouble(0.01); // Default probability
+        T missing = NumOps.FromDouble(MissingPathProbability);
 
         // Traverse tree to collect probabilities
         var node = Root;

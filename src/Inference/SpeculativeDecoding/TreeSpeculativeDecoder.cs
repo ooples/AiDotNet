@@ -133,7 +133,7 @@ internal class TreeSpeculativeDecoder<T>
                 var targetProbs = allTargetProbs[pathIdx];
                 var draftProbs = tree.GetPathProbabilities(pathIdx);
 
-                int accepted = VerifyPath(path, draftProbs, targetProbs, tokens.Count, temperature);
+                int accepted = VerifyPath(path, draftProbs, targetProbs, tokens.Count, temperature, eosToken);
 
                 if (accepted > bestAcceptedLength)
                 {
@@ -322,7 +322,8 @@ internal class TreeSpeculativeDecoder<T>
         Vector<T> draftProbs,
         Matrix<T> targetProbs,
         int contextLength,
-        T temperature)
+        T temperature,
+        int? stopToken)
     {
         // Path token i is checked against target row contextLength + i - 1; only rows the target produced count.
         int firstRow = contextLength - 1;
@@ -336,13 +337,15 @@ internal class TreeSpeculativeDecoder<T>
             pTarget[i] = TemperatureSampling<T>.Apply(targetProbs.GetRow(firstRow + i), temperature).AsSpan()[tokens[i]];
         }
 
-        // A path longer than its recorded draft probabilities uses 0.01 for the rest.
+        // A path longer than its recorded draft probabilities uses the tree's missing-path probability for the rest.
         var pDraft = new T[verifiable];
         int recorded = Math.Min(verifiable, draftProbs.Length);
         draftProbs.AsSpan().Slice(0, recorded).CopyTo(pDraft);
-        pDraft.AsSpan(recorded).Fill(NumOps.FromDouble(0.01));
+        pDraft.AsSpan(recorded).Fill(NumOps.FromDouble(SpeculationTree<T>.MissingPathProbability));
 
-        return TemperatureSampling<T>.CountAccepted(Vector<T>.Wrap(pTarget), Vector<T>.Wrap(pDraft), _random);
+        // Acceptance ends at an accepted EOS, so a path ranks by the prefix it would actually emit.
+        return TemperatureSampling<T>.CountAccepted(
+            Vector<T>.Wrap(pTarget), Vector<T>.Wrap(pDraft), _random, path.ToArray(), stopToken);
     }
 
     /// <summary>

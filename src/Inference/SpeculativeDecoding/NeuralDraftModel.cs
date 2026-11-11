@@ -130,7 +130,11 @@ public class NeuralDraftModel<T> : IDraftModel<T>
     /// </summary>
     private static Vector<T> Softmax(Vector<T> logits, T temperature)
     {
+        // Subtract the maximum before dividing: at a small temperature, dividing first can round distinct logits
+        // to the same value or overflow before softmax sees them.
         var engine = AiDotNetEngine.Current;
-        return (Vector<T>)engine.Softmax(engine.Divide(logits, temperature));
+        var maxLogit = new Vector<T>(logits.Length);
+        maxLogit.Fill(TensorPrimitivesHelper<T>.Max(logits));
+        return (Vector<T>)engine.Softmax(engine.Divide(engine.Subtract(logits, maxLogit), temperature));
     }
 }

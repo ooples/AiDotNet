@@ -850,7 +850,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // Row-major, batch 0: the last position's row starts at lastPos * runtimeVocab ([1, seq, vocab]) or 0 ([1, vocab]).
             var logits = new Vector<T>(vocabSize);
             int copy = Math.Min(vocabSize, runtimeVocab);
-            output.ToVector().AsSpan().Slice(rank > 2 ? lastPos * runtimeVocab : 0, copy).CopyTo(logits.AsWritableSpan());
+            int offset = rank > 2 ? lastPos * runtimeVocab : 0;
+            var source = output.IsContiguous ? output.AsSpan() : output.ToVector().AsSpan();
+            source.Slice(offset, copy).CopyTo(logits.AsWritableSpan());
             return logits;
         };
 
