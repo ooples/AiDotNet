@@ -216,27 +216,8 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)
     {
-        var action = new Vector<T>(_a2cOptions.ActionSize);
-
-        for (int i = 0; i < _a2cOptions.ActionSize; i++)
-        {
-            var mean = output[i];
-            var logStd = output[_a2cOptions.ActionSize + i];
-            var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
-
-            if (training)
-            {
-                // Sample from Gaussian using MathHelper
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
-                action[i] = NumOps.Add(mean, NumOps.Multiply(std, noise));
-            }
-            else
-            {
-                action[i] = mean;
-            }
-        }
-
-        return action;
+        // Gaussian head [mean | log_std]: mean + exp(log_std) * N(0, 1) when training, the mean otherwise.
+        return RLTensorOps.GaussianHeadAction(output, _a2cOptions.ActionSize, training, Random);
     }
 
     /// <inheritdoc/>

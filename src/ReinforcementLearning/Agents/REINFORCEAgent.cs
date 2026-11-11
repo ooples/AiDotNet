@@ -183,27 +183,8 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)
     {
-        var action = new Vector<T>(_reinforceOptions.ActionSize);
-
-        for (int i = 0; i < _reinforceOptions.ActionSize; i++)
-        {
-            var mean = output[i];
-            var logStd = output[_reinforceOptions.ActionSize + i];
-            var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
-
-            if (training)
-            {
-                // Sample from Gaussian using MathHelper
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
-                action[i] = NumOps.Add(mean, NumOps.Multiply(std, noise));
-            }
-            else
-            {
-                action[i] = mean;  // Deterministic for evaluation
-            }
-        }
-
-        return action;
+        // Gaussian head [mean | log_std]: mean + exp(log_std) * N(0, 1) when training, the mean otherwise.
+        return RLTensorOps.GaussianHeadAction(output, _reinforceOptions.ActionSize, training, Random);
     }
 
     /// <inheritdoc/>

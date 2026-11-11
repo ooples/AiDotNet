@@ -283,6 +283,49 @@ internal static class RLTensorOps
         return Engine.Add(mean, Engine.Multiply(Engine.Exp(logStd), noise));
     }
 
+    /// <summary>
+    /// <paramref name="count"/> draws of <c>MathHelper.GetNormalRandom(0, 1, random)</c>, taken in index order exactly
+    /// as a per-element loop takes them (the agents' Gaussian exploration stream).
+    /// </summary>
+    internal static Vector<T> NormalRandom<T>(Random random, int count)
+    {
+        if (random is null)
+        {
+            throw new ArgumentNullException(nameof(random));
+        }
+
+        if (count <= 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        T zero = ops.Zero;
+        T one = ops.One;
+        return new Vector<T>(Enumerable.Range(0, count).Select(_ => MathHelper.GetNormalRandom(zero, one, random)));
+    }
+
+    /// <summary>
+    /// The agents' Gaussian action head: mean + exp(log_std) * GetNormalRandom(0, 1) per dimension when training
+    /// (draws in index order), the mean otherwise. <paramref name="output"/> is [means | log stds].
+    /// </summary>
+    internal static Vector<T> GaussianHeadAction<T>(Vector<T> output, int actionSize, bool training, Random random)
+    {
+        if (output is null)
+        {
+            throw new ArgumentNullException(nameof(output));
+        }
+
+        var mean = output.GetSubVector(0, actionSize);
+        if (!training)
+        {
+            return mean;
+        }
+
+        var std = Engine.Exp(output.GetSubVector(actionSize, actionSize));
+        return Engine.Add(mean, Engine.Multiply(std, NormalRandom<T>(random, actionSize)));
+    }
+
     /// <summary>A one-hot vector of the given length with a one at <paramref name="index"/>.</summary>
     internal static Vector<T> OneHot<T>(int length, int index)
     {
