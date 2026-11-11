@@ -192,12 +192,13 @@ public class CodeSwitchingASROptions : ModelOptions
     /// The number of Mandarin token ids, i.e. where the English inventory begins (after the blank).
     /// </summary>
     /// <remarks>
-    /// When <see cref="VocabSize"/> has been set explicitly the configured per-language sizes may
-    /// not fit inside it, so the boundary is placed at half the available ids. The two inventories
+    /// When <see cref="VocabSize"/> has been set explicitly and the configured per-language sizes plus
+    /// the blank do not fit inside it, the boundary is placed at half the available ids; when they fit,
+    /// the Mandarin inventory is <see cref="MandarinCharVocabSize"/> as configured. The two inventories
     /// stay disjoint either way, which is the property the LID target depends on.
     /// </remarks>
     public int MandarinTokenCount =>
-        _explicitVocabSize is int v
+        _explicitVocabSize is int v && MandarinCharVocabSize + EnglishBpeVocabSize + 1 > v
             ? Math.Max(1, (v - 1) / 2)
             : MandarinCharVocabSize;
 

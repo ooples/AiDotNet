@@ -29,7 +29,6 @@ public class BranchformerOptions : ModelOptions
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        FeedForwardMultiplier = other.FeedForwardMultiplier;
         ConvKernel = other.ConvKernel;
         RopeTheta = other.RopeTheta;
         CgmlpDim = other.CgmlpDim;
@@ -66,9 +65,6 @@ public class BranchformerOptions : ModelOptions
 
     /// <summary>Attention heads per block.</summary>
     public int NumAttentionHeads { get; set; } = 8;
-
-    /// <summary>Expansion of each half-step feed-forward module (section 2.3: 4).</summary>
-    public int FeedForwardMultiplier { get; set; } = 4;
 
     /// <summary>Depthwise convolution kernel (Table 1: 32).</summary>
     public int ConvKernel { get; set; } = 31;
@@ -126,7 +122,7 @@ public class BranchformerOptions : ModelOptions
     internal ConformerAsrConfiguration ToConfiguration() => new()
     {
         SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
-        NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, ConvKernel = ConvKernel, RopeTheta = RopeTheta,
+        NumAttentionHeads = NumAttentionHeads, ConvKernel = ConvKernel, RopeTheta = RopeTheta,
         Block = ConformerAsrBlock.Branchformer, CgmlpDim = CgmlpDim, AttentionDecoderLayers = AttentionDecoderLayers, AttentionDecoderFeedForward = AttentionDecoderFeedForward, CtcWeight = CtcWeight, LabelSmoothing = LabelSmoothing, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
         VocabSize = VocabSize,
     };

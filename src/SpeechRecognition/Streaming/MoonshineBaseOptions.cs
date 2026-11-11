@@ -34,8 +34,6 @@ public class MoonshineBaseOptions : ModelOptions
         StartToken = other.StartToken;
         EndToken = other.EndToken;
         MaxTextLength = other.MaxTextLength;
-        FrequencyMasks = other.FrequencyMasks;
-        FrequencyMaskWidth = other.FrequencyMaskWidth;
         TimeMasks = other.TimeMasks;
         TimeMaskRatio = other.TimeMaskRatio;
         VocabSize = other.VocabSize;
@@ -80,12 +78,6 @@ public class MoonshineBaseOptions : ModelOptions
     /// <summary>Most tokens a transcription decodes.</summary>
     public int MaxTextLength { get; set; } = 194;
 
-    /// <summary>SpecAugment frequency masks; Moonshine reads the waveform and trains without them.</summary>
-    public int FrequencyMasks { get; set; } = 0;
-
-    /// <summary>Largest frequency mask, in mel bins (section 3.1: F = 27).</summary>
-    public int FrequencyMaskWidth { get; set; } = 27;
-
     /// <summary>SpecAugment time masks; none for Moonshine.</summary>
     public int TimeMasks { get; set; } = 0;
 
@@ -108,11 +100,12 @@ public class MoonshineBaseOptions : ModelOptions
     /// <summary>ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
 
+    // The stem reads one channel of samples with no frequency axis, so no SpecAugment frequency mask applies.
     internal ConformerAsrConfiguration ToConfiguration() => new()
     {
         SampleRate = SampleRate, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
         NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, RopeTheta = RopeTheta,
-        Block = ConformerAsrBlock.Transformer, Decoder = ConformerAsrDecoder.Attention, Subsampling = ConformerAsrSubsampling.RawWaveformStem, EncoderFeedForward = ConformerAsrFeedForward.Gelu, DecoderFeedForward = ConformerAsrFeedForward.SwiGlu, DecoderRotary = true, AttentionDecoderLayers = NumDecoderLayers, AttentionDecoderFeedForward = 4 * EncoderDim, DecoderStartToken = StartToken, DecoderEndToken = EndToken, CtcWeight = 0, LabelSmoothing = 0, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
+        Block = ConformerAsrBlock.Transformer, Decoder = ConformerAsrDecoder.Attention, Subsampling = ConformerAsrSubsampling.RawWaveformStem, EncoderFeedForward = ConformerAsrFeedForward.Gelu, DecoderFeedForward = ConformerAsrFeedForward.SwiGlu, DecoderRotary = true, AttentionDecoderLayers = NumDecoderLayers, AttentionDecoderFeedForward = 4 * EncoderDim, DecoderStartToken = StartToken, DecoderEndToken = EndToken, CtcWeight = 0, LabelSmoothing = 0, FrequencyMasks = 0, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
         VocabSize = VocabSize,
     };
 }

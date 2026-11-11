@@ -221,12 +221,14 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
             inputFeatures: _options.EmbeddingDimension,
             outputSize: _options.EmbeddingDimension);
 
+        // The diarizer's network is the extractor's, so the diarizer's seed initializes it.
         _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(
             extractorArch,
             options: new SpeakerEmbeddingOptions
             {
                 SampleRate = _options.SampleRate,
-                EmbeddingDimension = _options.EmbeddingDimension
+                EmbeddingDimension = _options.EmbeddingDimension,
+                Seed = _options.Seed,
             });
 
         InitializeLayers();

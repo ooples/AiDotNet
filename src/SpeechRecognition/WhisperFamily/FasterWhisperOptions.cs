@@ -26,7 +26,6 @@ public class FasterWhisperOptions : ModelOptions
         NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
-        DecoderDim = other.DecoderDim;
         NumDecoderLayers = other.NumDecoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
         VocabSize = other.VocabSize;
@@ -47,8 +46,10 @@ public class FasterWhisperOptions : ModelOptions
     /// <summary>Encoder blocks (<c>n_audio_layer</c>).</summary>
     public int NumEncoderLayers { get; set; } = 32;
 
-    /// <summary>Decoder width (<c>n_text_state</c>).</summary>
-    public int DecoderDim { get; set; } = 1280;
+    /// <summary>Decoder width (<c>n_text_state</c>): the encoder width. openai-whisper's cross-attention projects
+    /// the audio states with the decoder's n_state x n_state key and value maps, so every released checkpoint has
+    /// n_text_state = n_audio_state; setting either width sets both.</summary>
+    public int DecoderDim { get => EncoderDim; set => EncoderDim = value; }
 
     /// <summary>Decoder blocks (<c>n_text_layer</c>).</summary>
     public int NumDecoderLayers { get; set; } = 32;
@@ -81,7 +82,6 @@ public class FasterWhisperOptions : ModelOptions
     // openai-whisper's ModelDimensions for these options: 30-second windows of 1500 encoder positions.
     internal WhisperDimensions ToDimensions()
     {
-        if (EncoderDim != DecoderDim) throw new NotSupportedException("openai-whisper's network ties the encoder and decoder widths.");
         return new WhisperDimensions(NumMels, 1500, EncoderDim, NumAttentionHeads, NumEncoderLayers, VocabSize, MaxTextLength, DecoderDim,
             NumAttentionHeads, NumDecoderLayers);
     }

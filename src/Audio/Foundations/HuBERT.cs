@@ -121,7 +121,7 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, learningRateOverride: _options.LearningRate)
     ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
         new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
         { InitialLearningRate = _options.LearningRate });

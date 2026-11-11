@@ -149,6 +149,14 @@ internal sealed class HubertUnitExtractor<T>
             Centroids = centroids;
         });
 
+    /// <summary>The features <c>[frames, hidden]</c> the units quantize: HuBERT's output at <see cref="Layer"/> for one
+    /// chunk of 16 kHz audio <c>[samples]</c>.</summary>
+    public Tensor<T> LayerFeatures(Tensor<T> chunk)
+    {
+        using var _ = new NoGradScope<T>();
+        return Network.Forward(chunk, Layer)[Layer];
+    }
+
     /// <summary>The units of 16 kHz audio, consecutive repeats merged when <paramref name="deduplicate"/>.</summary>
     public int[] Units(IReadOnlyList<double> audio, bool deduplicate)
     {

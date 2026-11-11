@@ -77,8 +77,9 @@ public class HuBERTOptions : ModelOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 5e-5;
+    /// <summary>Gets or sets the peak learning rate of the pre-training schedule (5e-4, HuBERT Base's; Hsu et al. 2021,
+    /// section IV-C, which trains Large at 1.5e-3).</summary>
+    public double LearningRate { get; set; } = 5e-4;
 
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.1;

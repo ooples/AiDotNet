@@ -170,8 +170,30 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     private List<int> BiasedGreedy(ParaformerNetwork<T> network, SeACoBiasNetwork<T> bias, Tensor<T> encoded, List<int[]> hotwords)
     {
         var tokens = new List<int>();
+        if (BiasedProbabilities(network, bias, encoded, hotwords) is not { } probabilities) return tokens;
+        foreach (int best in Merge(probabilities.Asr, probabilities.Biased))
+            if (best != 0 && best != StartToken && best != EndToken && tokens.Count < _options.MaxTextLength) tokens.Add(best);
+        return tokens;
+    }
+
+    /// <summary>
+    /// The bias decoder's probabilities <c>[n, vocabulary + 1]</c> for <paramref name="hotwords"/> on the audio, after
+    /// attention score filtering keeps <see cref="SeACoOptions.AttentionFilterTopK"/> of them; null when the backbone
+    /// predicts no acoustic token or the model has no bias decoder.
+    /// </summary>
+    internal Tensor<T>? BiasProbabilities(Tensor<T> audio, IReadOnlyList<string> hotwords)
+    {
+        ThrowIfDisposed();
+        if (_network is null || _encoder is null || _bias is null) return null;
+        using (new Tensors.Engines.Autodiff.NoGradScope<T>())
+            return BiasedProbabilities(_network, _bias, _encoder.Encode(PreprocessAudio(audio)), HotwordIds(hotwords))?.Biased;
+    }
+
+    private (Tensor<T> Asr, Tensor<T> Biased)? BiasedProbabilities(ParaformerNetwork<T> network, SeACoBiasNetwork<T> bias, Tensor<T> encoded,
+        List<int[]> hotwords)
+    {
         var acoustic = network.AcousticEmbeddings(encoded);
-        if (acoustic is null) return tokens;
+        if (acoustic is null) return null;
         var hidden = network.Hidden(encoded, acoustic);
         var asr = Engine.Softmax(network.Output.Forward(hidden), axis: -1);
         var all = new List<int[]>(hotwords) { new[] { StartToken } };
@@ -182,10 +204,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
             var keep = bias.Filter(z, hidden, k);
             z = Engine.TensorConcatenate(keep.Select(i => Engine.TensorSlice(z, new[] { i, 0 }, new[] { 1, _options.EncoderDim })).ToArray(), 0);
         }
-        var biased = Engine.Softmax(bias.Logits(z, acoustic, hidden), axis: -1);
-        foreach (int best in Merge(asr, biased))
-            if (best != 0 && best != StartToken && best != EndToken && tokens.Count < _options.MaxTextLength) tokens.Add(best);
-        return tokens;
+        return (asr, Engine.Softmax(bias.Logits(z, acoustic, hidden), axis: -1));
     }
 
     /// <summary>
