@@ -377,6 +377,70 @@ internal static class RLTensorOps
         return best;
     }
 
+    /// <summary>The first <paramref name="count"/> elements of a vector (the vector itself when it is exactly that long).</summary>
+    internal static Vector<T> Head<T>(Vector<T> values, int count)
+    {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        return values.Length == count ? values : values.GetSubVector(0, count);
+    }
+
+    /// <summary>Linear Q-values for every action: W * phi, using the first W.Columns features.</summary>
+    internal static Vector<T> LinearQValues<T>(Matrix<T> weights, Vector<T> features)
+    {
+        if (weights is null)
+        {
+            throw new ArgumentNullException(nameof(weights));
+        }
+
+        return Engine.MatrixVectorMultiply(weights, Head(features, weights.Columns));
+    }
+
+    /// <summary>Linear Q-value of one action: w_a . phi over the first W.Columns features.</summary>
+    internal static T LinearQValue<T>(Matrix<T> weights, int action, Vector<T> features)
+    {
+        if (weights is null)
+        {
+            throw new ArgumentNullException(nameof(weights));
+        }
+
+        return Engine.DotProduct(Engine.GetRow(weights, action), Head(features, weights.Columns));
+    }
+
+    /// <summary>The semi-gradient step w_a += scale * phi over the first W.Columns features.</summary>
+    internal static void AddScaledToRow<T>(Matrix<T> weights, int action, Vector<T> features, T scale)
+    {
+        if (weights is null)
+        {
+            throw new ArgumentNullException(nameof(weights));
+        }
+
+        var row = Engine.GetRow(weights, action);
+        var step = Engine.Multiply(Head(features, weights.Columns), scale);
+        Engine.SetRow(weights, action, Engine.Add(row, step));
+    }
+
+    /// <summary>Frobenius norm sqrt(sum w^2) of a matrix.</summary>
+    internal static T FrobeniusNorm<T>(Matrix<T> weights)
+    {
+        if (weights is null)
+        {
+            throw new ArgumentNullException(nameof(weights));
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (weights.Rows == 0 || weights.Columns == 0)
+        {
+            return ops.Zero;
+        }
+
+        var flat = Vector<T>.FromSpan(weights.AsSpan());
+        return ops.Sqrt(Engine.DotProduct(flat, flat));
+    }
+
     /// <summary>Concatenates vectors end to end.</summary>
     internal static Vector<T> Concat<T>(params Vector<T>[] parts)
     {
