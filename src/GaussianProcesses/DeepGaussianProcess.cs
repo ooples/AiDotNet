@@ -285,14 +285,12 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
         _X = X;
 
         // Center y for better GP conditioning (zero-mean prior assumption)
-        double yMeanVal = 0;
-        for (int i = 0; i < y.Length; i++) yMeanVal += _numOps.ToDouble(y[i]);
-        yMeanVal /= y.Length;
-        _yMean = yMeanVal;
-
-        _y = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _y[i] = _numOps.FromDouble(_numOps.ToDouble(y[i]) - _yMean);
+        var engine = AiDotNetEngine.Current;
+        var targets = Tensor<T>.FromVector(y);
+        T targetMean = engine.TensorMean(targets);
+        // _yMean is a serialized double field; the centering itself stays in T.
+        _yMean = _numOps.ToDouble(targetMean);
+        _y = engine.TensorSubtractScalar(targets, targetMean).ToVector();
 
         // Initialize each layer
         int inputDim = X.Columns;
@@ -384,12 +382,8 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
             // For Gaussian likelihood: d/df_L log N(y|f_L, σ²) = (y - f_L) / σ²
             var finalOutput = layerInputs[^1];
             double noiseVar = 0.01;
-            var errorSignal = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                double diff = _numOps.ToDouble(_y[i]) - _numOps.ToDouble(finalOutput[i, 0]);
-                errorSignal[i] = _numOps.FromDouble(diff / noiseVar);
-            }
+            var errorSignal = AiDotNetEngine.Current.Divide(
+                AiDotNetEngine.Current.Subtract(_y, finalOutput.GetColumn(0)), _numOps.FromDouble(noiseVar));
 
             // --- Update last layer's variational mean ---
             // Gradient of ELBO w.r.t. m_L: Kuu^{-1} * Kuf * error_signal - Kuu^{-1} * m_L
@@ -406,11 +400,7 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
                 //   d ELBO / d h_l = d f_{l+1} / d h_l * error_from_above
                 // For GP layer l+1: d f / d h ≈ Kxu * Kuu^{-1} * m (the GP prediction is linear in input through kernel)
                 // Simplified: use the prediction error directly scaled by learning rate
-                var hiddenError = new Vector<T>(n);
-                for (int i = 0; i < n; i++)
-                {
-                    hiddenError[i] = _numOps.Multiply(errorSignal[i], _numOps.FromDouble(0.1));
-                }
+                var hiddenError = AiDotNetEngine.Current.Multiply(errorSignal, _numOps.FromDouble(0.1));
                 _layers[l].UpdateVariationalMeanDSVI(hiddenError, layerInputs[l], _learningRate * 0.1);
             }
         }
@@ -432,20 +422,18 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
         // Use deterministic seed based on input for reproducible predictions
         // Mixed by hand, not with HashCode.Combine: its seed is randomized per process, so the "reproducible"
         // prediction changed on every run (#2361). double.GetHashCode is a function of the bits alone.
+        // The seed hashes the IEEE bits of each coordinate, so it is computed on the double values.
         int seed = 0;
-        for (int i = 0; i < x.Length; i++)
-            seed = unchecked(seed * 31 + _numOps.ToDouble(x[i]).GetHashCode());
+        foreach (double coordinate in Array.ConvertAll(x.ToArray(), _numOps.ToDouble))
+            seed = unchecked(seed * 31 + coordinate.GetHashCode());
         var random = RandomHelper.CreateSeededRandom(seed);
 
         // Create input matrix from single vector
-        var input = new Matrix<T>(1, x.Length);
-        for (int i = 0; i < x.Length; i++)
-        {
-            input[0, i] = x[i];
-        }
+        var engine = AiDotNetEngine.Current;
+        var input = Tensor<T>.FromVector(x).Reshape(new[] { 1, x.Length }).ToMatrix();
 
         // Collect samples by propagating through layers multiple times
-        var samples = new List<double>();
+        var samples = new Tensor<T>[_numSamples];
 
         for (int s = 0; s < _numSamples; s++)
         {
@@ -456,60 +444,35 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
                 currentInput = _layers[l].Forward(currentInput, 1, random);
             }
 
-            samples.Add(_numOps.ToDouble(currentInput[0, 0]));
+            samples[s] = Tensor<T>.FromMatrix(currentInput);
         }
 
-        // Compute mean and variance from samples, add back centered mean
-        double mean = samples.Average() + _yMean;
-        double sampleMean = samples.Average();
-        double variance = samples.Select(s => (s - sampleMean) * (s - sampleMean)).Average();
+        // Mean of the first output over the samples, add back centered mean
+        var stacked = engine.TensorConcatenate(samples, 0);
+        var firstOutput = engine.TensorSlice(stacked, new[] { 0, 0 }, new[] { _numSamples, 1 });
+        T mean = _numOps.Add(engine.TensorMean(firstOutput), _numOps.FromDouble(_yMean));
 
         // Scale variance based on proximity to training data and data density.
         // GP posterior variance should be small near training points and grow
         // as we move away. Use nearest-neighbor distance as a proxy.
-        double minDistSq = double.MaxValue;
         int n = _X.Rows;
-        for (int i = 0; i < n; i++)
-        {
-            double distSq = 0;
-            for (int j = 0; j < Math.Min(x.Length, _X.Columns); j++)
-            {
-                double d = _numOps.ToDouble(x[j]) - _numOps.ToDouble(_X[i, j]);
-                distSq += d * d;
-            }
-            if (distSq < minDistSq) minDistSq = distSq;
-        }
+        int sharedDims = Math.Min(x.Length, _X.Columns);
+        var training = Tensor<T>.FromMatrix(_X);
+        var point = engine.TensorSlice(Tensor<T>.FromVector(x), new[] { 0 }, new[] { sharedDims })
+            .Reshape(new[] { 1, sharedDims });
+        var offsets = engine.TensorSubtract(
+            engine.TensorSlice(training, new[] { 0, 0 }, new[] { n, sharedDims }),
+            engine.TensorBroadcastTo(point, new[] { n, sharedDims }));
+        T minDistSq = engine.TensorMinValue(engine.ReduceSum(engine.TensorSquare(offsets), new[] { 1 }, keepDims: false));
 
-        // Compute data scale for relative distance
-        double dataScale = 0;
-        for (int j = 0; j < _X.Columns; j++)
-        {
-            double colMin = double.MaxValue, colMax = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double v = _numOps.ToDouble(_X[i, j]);
-                if (v < colMin) colMin = v;
-                if (v > colMax) colMax = v;
-            }
-            double range = colMax - colMin;
-            dataScale += range * range;
-        }
-        dataScale = Math.Max(dataScale, 1e-10);
+        // Compute data scale for relative distance: sum of squared column ranges
+        var columnMax = engine.ReduceMax(training, new[] { 0 }, keepDims: false);
+        var columnMin = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(training), new[] { 0 }, keepDims: false));
+        T dataScale = MathHelper.Max(
+            engine.TensorSumOfSquares(engine.TensorSubtract(columnMax, columnMin)), _numOps.FromDouble(1e-10));
 
         // Relative distance: 0 = on training point, 1 = at data range boundary
-        double relDist = Math.Sqrt(minDistSq / dataScale);
-
-        // Compute data variance for prior/signal strength estimation
-        double yVar = 0;
-        double yMeanLocal = 0;
-        for (int i = 0; i < _y.Length; i++) yMeanLocal += _numOps.ToDouble(_y[i]);
-        yMeanLocal /= _y.Length;
-        for (int i = 0; i < _y.Length; i++)
-        {
-            double d = _numOps.ToDouble(_y[i]) - yMeanLocal;
-            yVar += d * d;
-        }
-        yVar /= Math.Max(1, _y.Length - 1);
+        T relDist = _numOps.Sqrt(_numOps.Divide(minDistSq, dataScale));
 
         // DGP variance estimation using GP posterior principles:
         //
@@ -522,9 +485,8 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
         // 3. More data → less variance (1/sqrt(n) contraction)
         // 4. At training points: variance < 100 * noise_variance
         // 5. Coverage: mean +/- 2*sigma should cover truth >50% of the time
-        double interpFactor = Math.Min(1.0, relDist * 3.0);
-        double priorVariance = Math.Max(yVar, 1e-4);
-        double contractionFactor = 1.0 / Math.Sqrt(Math.Max(n, 1));
+        T interpFactor = MathHelper.Min(_numOps.One, _numOps.Multiply(relDist, _numOps.FromDouble(3.0)));
+        T contractionFactor = _numOps.FromDouble(1.0 / Math.Sqrt(Math.Max(n, 1)));
 
         // Replace MC variance with analytical formula:
         // - Baseline: small noise floor (1% of signal) ensures non-zero variance
@@ -542,11 +504,12 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
         // Multiply by 4 to provide wider CIs for better coverage calibration.
         // With 10 training points the contraction factor is ~0.316, so we need
         // a larger prior to ensure 95% CIs achieve at least 50% empirical coverage.
-        double kernelPriorVariance = 4.0;
-        double noiseLevel = kernelPriorVariance * 0.02;
-        variance = (noiseLevel + interpFactor * kernelPriorVariance) * contractionFactor;
+        T kernelPriorVariance = _numOps.FromDouble(4.0);
+        T noiseLevel = _numOps.Multiply(kernelPriorVariance, _numOps.FromDouble(0.02));
+        T variance = _numOps.Multiply(
+            _numOps.Add(noiseLevel, _numOps.Multiply(interpFactor, kernelPriorVariance)), contractionFactor);
 
-        return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
+        return (mean, variance);
     }
 
     /// <inheritdoc/>
@@ -816,17 +779,15 @@ internal class DGPLayer<T>
         // Initialize inducing inputs randomly
         _inducingInputs = new Matrix<T>(m, inputDim);
         var random = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < inputDim; j++)
-            {
-                _inducingInputs[i, j] = _numOps.FromDouble(random.NextDouble() * 2 - 1);
+        AiDotNetEngine.Current.TensorRandomUniformRange(
+                new[] { m, inputDim }, _numOps.FromDouble(-1.0), _numOps.One, random.Next())
+            .AsSpan().CopyTo(_inducingInputs.AsWritableSpan());
             }
         }
 
         // Initialize variational parameters
         _variationalMean = new Matrix<T>(m, _outputDim);
-        _variationalCovCholesky = CreateIdentityMatrix(m);
+        _variationalCovCholesky = AiDotNetEngine.Current.TensorEye<T>(m).ToMatrix();
     }
 
     public void InitializeInducingInputs(Matrix<T> X)
@@ -857,94 +818,40 @@ internal class DGPLayer<T>
         int m = _variationalMean.Rows;
         int d = _outputDim;
         int features = X.Columns;
+        int rows = Math.Min(m, X.Rows);
+        if (rows == 0 || d == 0) return;
 
         // Set variational mean to project training data features into the output dimensions.
-        // For each inducing point, use the corresponding training point's features.
-        for (int i = 0; i < m && i < X.Rows; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                // Map input features to output dims (cycle through features if outputDim > features)
-                int featureIdx = j % features;
-                _variationalMean[i, j] = X[i, featureIdx];
-            }
-        }
+        // For each inducing point, use the corresponding training point's features,
+        // cycling through the features if outputDim > features.
+        var featureIndices = new int[d];
+        for (int j = 0; j < d; j++)
+            featureIndices[j] = j % features;
+
+        var firstRows = AiDotNetEngine.Current.TensorSlice(Tensor<T>.FromMatrix(X), new[] { 0, 0 }, new[] { rows, features });
+        var projected = AiDotNetEngine.Current.TensorIndexSelect(firstRows, new Tensor<int>(featureIndices, new[] { d }), 1);
+        projected.AsSpan().CopyTo(_variationalMean.AsWritableSpan());
     }
 
     internal void ComputeKuu()
     {
-        int m = _inducingInputs.Rows;
-        _Kuu = new Matrix<T>(m, m);
-
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < m; j++)
-            {
-                _Kuu[i, j] = _kernel.Calculate(_inducingInputs.GetRow(i), _inducingInputs.GetRow(j));
-            }
-            // Add jitter
-            _Kuu[i, i] = _numOps.Add(_Kuu[i, i], _numOps.FromDouble(1e-6));
-        }
+        // Kernel matrix of the inducing inputs plus jitter on the diagonal
+        _Kuu = GaussianProcessEngineOps.AddToDiagonal(
+            KernelMatrix(_inducingInputs, _inducingInputs), _numOps.FromDouble(1e-6));
     }
 
     public Matrix<T> Forward(Matrix<T> input, int numSamples, Random random)
     {
-        int n = input.Rows;
-        var output = new Matrix<T>(n, _outputDim);
-
         // Compute kernel between input and inducing points
-        var Kxu = new Matrix<T>(n, _inducingInputs.Rows);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < _inducingInputs.Rows; j++)
-            {
-                Kxu[i, j] = _kernel.Calculate(input.GetRow(i), _inducingInputs.GetRow(j));
-            }
-        }
+        var Kxu = KernelMatrix(input, _inducingInputs);
 
-        // Compute predictive mean: Kxu * Kuu^(-1) * m
-        // First solve for Kuu^(-1) * m for each output dimension
-        int m_points = _inducingInputs.Rows;
+        // Compute predictive mean: Kxu * Kuu^(-1) * m, with Kuu jittered for numerical stability.
+        // One Cholesky factor of Kuu solves all output dimensions at once.
+        var Kuu = GaussianProcessEngineOps.AddToDiagonal(
+            KernelMatrix(_inducingInputs, _inducingInputs), _numOps.FromDouble(1e-6));
+        var alpha = Linalg.CholeskySolve(Tensor<T>.FromMatrix(_variationalMean), Factor(Kuu), upper: false);
 
-        // Build Kuu
-        var Kuu = new Matrix<T>(m_points, m_points);
-        for (int i = 0; i < m_points; i++)
-        {
-            for (int j = i; j < m_points; j++)
-            {
-                var kval = _kernel.Calculate(_inducingInputs.GetRow(i), _inducingInputs.GetRow(j));
-                Kuu[i, j] = kval;
-                Kuu[j, i] = kval;
-            }
-            // Add jitter for numerical stability
-            Kuu[i, i] = _numOps.Add(Kuu[i, i], _numOps.FromDouble(1e-6));
-        }
-
-        // Pre-compute Cholesky factorization of Kuu once — reused across all output dimensions
-        var kuuDecomp = MatrixDecompositionFactory.CreateDecomposition(Kuu, MatrixDecompositionType.Cholesky);
-
-        // Solve Kuu * alpha_d = m_d for each output dimension
-        for (int d = 0; d < _outputDim; d++)
-        {
-            var m_d = new Vector<T>(m_points);
-            for (int j = 0; j < m_points; j++)
-                m_d[j] = _variationalMean[j, d];
-
-            var alpha_d = MatrixSolutionHelper.SolveLinearSystem(m_d, kuuDecomp);
-
-            // Predict: mean_d = Kxu * alpha_d
-            for (int i = 0; i < n; i++)
-            {
-                T sum = _numOps.Zero;
-                for (int j = 0; j < m_points; j++)
-                {
-                    sum = _numOps.Add(sum, _numOps.Multiply(Kxu[i, j], alpha_d[j]));
-                }
-                output[i, d] = sum;
-            }
-        }
-
-        return output;
+        return AiDotNetEngine.Current.TensorMatMul(Tensor<T>.FromMatrix(Kxu), alpha).ToMatrix();
     }
 
     public void UpdateFromTargets(Vector<T> targets, Matrix<T> predictions, double learningRate)
@@ -954,56 +861,45 @@ internal class DGPLayer<T>
         // This is the optimal variational mean for the last layer given the targets directly.
         int m = _Kuu.Rows;
         double noiseVar = 0.01; // small observation noise
+        var engine = AiDotNetEngine.Current;
 
-        var KuuPlusNoise = new Matrix<T>(m, m);
-        for (int i = 0; i < m; i++)
+        var KuuPlusNoise = GaussianProcessEngineOps.AddToDiagonal(_Kuu, _numOps.FromDouble(noiseVar));
+
+        // For last layer, all dims map to the same target
+        var y_d = targets;
+
+        // If fewer inducing points than targets, project targets to inducing space.
+        // Use evenly-spaced samples from targets to capture the full range.
+        if (m < targets.Length)
         {
-            for (int j = 0; j < m; j++)
-                KuuPlusNoise[i, j] = _Kuu[i, j];
-            KuuPlusNoise[i, i] = _numOps.Add(KuuPlusNoise[i, i], _numOps.FromDouble(noiseVar));
-        }
-
-        // For each output dimension, solve (Kuu+σ²I) * beta = y, then m = Kuu * beta
-        for (int d = 0; d < _outputDim; d++)
-        {
-            var y_d = new Vector<T>(targets.Length);
-            for (int i = 0; i < targets.Length; i++)
-                y_d[i] = targets[i]; // For last layer, all dims map to the same target
-
-            // If fewer inducing points than targets, project targets to inducing space.
-            // Use evenly-spaced samples from targets to capture the full range.
-            if (m < targets.Length)
+            var targetIndices = new int[m];
+            for (int i = 0; i < m; i++)
             {
-                var y_induce = new Vector<T>(m);
-                for (int i = 0; i < m; i++)
-                {
-                    // Map inducing index to evenly-spaced target index
-                    int targetIdx = (int)((double)i / m * targets.Length);
-                    targetIdx = Math.Min(targetIdx, targets.Length - 1);
-                    y_induce[i] = y_d[targetIdx];
-                }
-                y_d = y_induce;
-            }
-            else if (m > targets.Length)
-            {
-                // More inducing than targets — pad with mean
-                T mean = _numOps.Zero;
-                for (int i = 0; i < targets.Length; i++)
-                    mean = _numOps.Add(mean, targets[i]);
-                mean = _numOps.Divide(mean, _numOps.FromDouble(targets.Length));
-                var y_padded = new Vector<T>(m);
-                for (int i = 0; i < m; i++)
-                    y_padded[i] = i < targets.Length ? targets[i] : mean;
-                y_d = y_padded;
+                // Map inducing index to evenly-spaced target index
+                targetIndices[i] = Math.Min((int)((double)i / m * targets.Length), targets.Length - 1);
             }
 
-            var beta = MatrixSolutionHelper.SolveLinearSystem(KuuPlusNoise, y_d,
-                MatrixDecompositionType.Cholesky);
-            var m_d = _Kuu.Multiply(beta);
-
-            for (int j = 0; j < _variationalMean.Rows; j++)
-                _variationalMean[j, d] = m_d[j];
+            y_d = GaussianProcessEngineOps.Select(targets, targetIndices);
         }
+        else if (m > targets.Length)
+        {
+            // More inducing than targets - pad with mean
+            T mean = engine.TensorMean(Tensor<T>.FromVector(targets));
+            y_d = engine.TensorConcatenate(new[]
+            {
+                Tensor<T>.FromVector(targets),
+                Tensor<T>.CreateDefault(new[] { m - targets.Length }, mean)
+            }, 0).ToVector();
+        }
+
+        // Solve (Kuu+σ²I) * beta = y, then m = Kuu * beta; every output dimension gets the same mean
+        var beta = MatrixSolutionHelper.SolveLinearSystem(KuuPlusNoise, y_d, MatrixDecompositionType.Cholesky);
+        var m_d = _Kuu.Multiply(beta);
+
+        int rows = _variationalMean.Rows;
+        if (rows == 0 || _outputDim == 0) return;
+        var column = engine.TensorSlice(Tensor<T>.FromVector(m_d), new[] { 0 }, new[] { rows }).Reshape(new[] { rows, 1 });
+        engine.TensorBroadcastTo(column, new[] { rows, _outputDim }).AsSpan().CopyTo(_variationalMean.AsWritableSpan());
     }
 
     /// <summary>
@@ -1012,41 +908,25 @@ internal class DGPLayer<T>
     /// </summary>
     internal void UpdateVariationalMeanDSVI(Vector<T> errorSignal, Matrix<T> layerInput, double learningRate)
     {
+        var engine = AiDotNetEngine.Current;
         int m = _Kuu.Rows;
-        int n = layerInput.Rows;
 
         // Compute Kuf (kernel between inducing and input points)
-        var Kuf = new Matrix<T>(m, n);
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                Kuf[i, j] = _kernel.Calculate(_inducingInputs.GetRow(i), layerInput.GetRow(j));
-            }
-        }
+        var Kuf = KernelMatrix(_inducingInputs, layerInput);
+        var L = Factor(_Kuu);
 
         // Data term gradient: Kuu⁻¹ * Kuf * errorSignal
-        var KufError = Kuf.Multiply(errorSignal);
-        var dataGrad = MatrixSolutionHelper.SolveLinearSystem(_Kuu, KufError, MatrixDecompositionType.Cholesky);
+        var KufError = Tensor<T>.FromVector(Kuf.Multiply(errorSignal)).Reshape(new[] { m, 1 });
+        var dataGrad = Linalg.CholeskySolve(KufError, L, upper: false);
 
-        // KL term gradient: -Kuu⁻¹ * m (pulls m toward zero = prior mean)
-        // Update for each output dimension
-        T lr = _numOps.FromDouble(learningRate);
-        for (int d = 0; d < _outputDim; d++)
-        {
-            var m_d = new Vector<T>(m);
-            for (int i = 0; i < m; i++)
-                m_d[i] = _variationalMean[i, d];
+        // KL term gradient: -Kuu⁻¹ * m (pulls m toward zero = prior mean), all output dimensions at once
+        var mean = Tensor<T>.FromMatrix(_variationalMean);
+        var klGrad = Linalg.CholeskySolve(mean, L, upper: false);
 
-            var klGrad = MatrixSolutionHelper.SolveLinearSystem(_Kuu, m_d, MatrixDecompositionType.Cholesky);
-
-            for (int i = 0; i < m; i++)
-            {
-                // ELBO gradient = data_grad - kl_grad (ascent)
-                T grad = _numOps.Subtract(dataGrad[i], klGrad[i]);
-                _variationalMean[i, d] = _numOps.Add(_variationalMean[i, d], _numOps.Multiply(lr, grad));
-            }
-        }
+        // ELBO gradient = data_grad - kl_grad (ascent)
+        var grad = engine.TensorSubtract(engine.TensorBroadcastTo(dataGrad, new[] { m, _outputDim }), klGrad);
+        engine.TensorAdd(mean, engine.TensorMultiplyScalar(grad, _numOps.FromDouble(learningRate)))
+            .AsSpan().CopyTo(_variationalMean.AsWritableSpan());
     }
 
     public void UpdateFromNextLayer(DGPLayer<T> nextLayer, Matrix<T> input, double learningRate)
@@ -1060,42 +940,40 @@ internal class DGPLayer<T>
 
         // Compute sensitivity: how changes in our output affect next layer's variational mean
         // This is approximated by computing the kernel-weighted influence
-        var Kxu = new Matrix<T>(input.Rows, _inducingInputs.Rows);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int j = 0; j < _inducingInputs.Rows; j++)
-            {
-                Kxu[i, j] = _kernel.Calculate(input.GetRow(i), _inducingInputs.GetRow(j));
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var Kxu = KernelMatrix(input, _inducingInputs);
 
         // Update variational mean based on gradient signal from next layer
         // Gradient is approximated as: kernel-weighted sum of next layer's variational updates
-        for (int j = 0; j < _variationalMean.Rows; j++)
-        {
-            for (int d = 0; d < _outputDim; d++)
-            {
-                T gradient = _numOps.Zero;
-                T weightSum = _numOps.Zero;
+        //   g[j, d] = Σ_i Kxu[i, j] * next[i, d mod D'] / Σ_i |Kxu[i, j]|, over i < min(n, next rows),
+        // applied only where the weights sum to more than 1e-10. Rows past the inducing count get no update.
+        int sourceRows = Math.Min(input.Rows, nextLayer._variationalMean.Rows);
+        int rows = Math.Min(_variationalMean.Rows, Kxu.Columns);
+        if (rows == 0 || _outputDim == 0) return;
 
-                // Accumulate gradient signal from next layer
-                for (int i = 0; i < Math.Min(input.Rows, nextLayer._variationalMean.Rows); i++)
-                {
-                    T weight = j < Kxu.Columns ? Kxu[i % Kxu.Rows, j] : _numOps.Zero;
-                    int nextD = d % nextLayer._variationalMean.Columns;
-                    gradient = _numOps.Add(gradient, _numOps.Multiply(weight, nextLayer._variationalMean[i % nextLayer._variationalMean.Rows, nextD]));
-                    weightSum = _numOps.Add(weightSum, _numOps.Abs(weight));
-                }
+        var nextColumns = new int[_outputDim];
+        for (int d = 0; d < _outputDim; d++)
+            nextColumns[d] = d % nextLayer._variationalMean.Columns;
 
-                // Normalize and apply update
-                if (_numOps.ToDouble(weightSum) > 1e-10)
-                {
-                    gradient = _numOps.Divide(gradient, weightSum);
-                    T update = _numOps.Multiply(_numOps.FromDouble(learningRate), gradient);
-                    _variationalMean[j, d] = _numOps.Add(_variationalMean[j, d], update);
-                }
-            }
-        }
+        var weights = engine.TensorSlice(Tensor<T>.FromMatrix(Kxu), new[] { 0, 0 }, new[] { sourceRows, rows });
+        var nextValues = engine.TensorIndexSelect(
+            engine.TensorSlice(Tensor<T>.FromMatrix(nextLayer._variationalMean), new[] { 0, 0 },
+                new[] { sourceRows, nextLayer._variationalMean.Columns }),
+            new Tensor<int>(nextColumns, new[] { _outputDim }), 1);
+        var gradient = engine.TensorMatMul(engine.TensorTranspose(weights), nextValues);
+        var weightSum = engine.ReduceSum(engine.TensorAbs(weights), new[] { 0 }, keepDims: false).Reshape(new[] { rows, 1 });
+
+        var hasWeight = engine.TensorGreaterThan(weightSum, _numOps.FromDouble(1e-10));
+        var safeSum = engine.TensorWhere(hasWeight, weightSum, engine.TensorOnesLike(weightSum));
+        var update = engine.TensorMultiplyScalar(
+            engine.TensorDivide(gradient, engine.TensorBroadcastTo(safeSum, new[] { rows, _outputDim })),
+            _numOps.FromDouble(learningRate));
+        update = engine.TensorWhere(
+            engine.TensorBroadcastTo(hasWeight, new[] { rows, _outputDim }), update, engine.TensorZerosLike(update));
+
+        var mean = Tensor<T>.FromMatrix(_variationalMean);
+        var updatedRows = engine.TensorAdd(engine.TensorSlice(mean, new[] { 0, 0 }, new[] { rows, _outputDim }), update);
+        updatedRows.AsSpan().CopyTo(_variationalMean.AsWritableSpan());
     }
 
     public void UpdateKernel(IKernelFunction<T> kernel)
@@ -1107,13 +985,37 @@ internal class DGPLayer<T>
         }
     }
 
-    private Matrix<T> CreateIdentityMatrix(int size)
+    /// <summary>
+    /// Kernel matrix k(a_i, b_j) between the rows of <paramref name="A"/> and <paramref name="B"/>.
+    /// </summary>
+    private Matrix<T> KernelMatrix(Matrix<T> A, Matrix<T> B)
     {
-        var matrix = new Matrix<T>(size, size);
-        for (int i = 0; i < size; i++)
+        var K = new Matrix<T>(A.Rows, B.Rows);
+        for (int i = 0; i < A.Rows; i++)
         {
-            matrix[i, i] = _numOps.One;
+            var ai = A.GetRow(i);
+            for (int j = 0; j < B.Rows; j++)
+            {
+                K[i, j] = _kernel.Calculate(ai, B.GetRow(j));
+            }
         }
-        return matrix;
+
+        return K;
+    }
+
+    /// <summary>
+    /// Lower Cholesky factor of a symmetric positive definite matrix.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The matrix is not positive definite.</exception>
+    private static Tensor<T> Factor(Matrix<T> K)
+    {
+        var (L, info) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(K), upper: false);
+        if (AiDotNetEngine.Current.TensorCountNonzero(info) > 0)
+        {
+            throw new InvalidOperationException(
+                "Inducing-point kernel matrix is not positive definite; check the kernel or the inducing inputs.");
+        }
+
+        return L;
     }
 }
