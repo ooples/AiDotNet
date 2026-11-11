@@ -145,53 +145,40 @@ public class ImportanceSampler<T> : DataSamplerBase
         if (!_needsUpdate) return;
 
         int n = _importanceScores.Length;
-        double[] rawScores = new double[n];
+        var engine = AiDotNetEngine.Current;
 
-        // Convert to doubles
-        for (int i = 0; i < n; i++)
-        {
-            rawScores[i] = Math.Max(0.0, NumOps.ToDouble(_importanceScores[i]));
-        }
+        // Convert to doubles (one cast) and clamp negatives to zero
+        var rawScores = engine.TensorClampMin(
+            new Tensor<double>(DoubleStorage.ToDoubles(_importanceScores), new[] { n }), 0.0);
 
         // Stabilization: clip extreme values
         if (_stabilize)
         {
-            double mean = rawScores.Average();
-            double stdDev = Math.Sqrt(rawScores.Average(x => Math.Pow(x - mean, 2)));
+            double mean = engine.TensorMean(rawScores);
+            var centered = engine.TensorSubtractScalar(rawScores, mean);
+            double stdDev = Math.Sqrt(engine.TensorMean(engine.TensorMultiply(centered, centered)));
             double maxAllowed = mean + 3 * stdDev;
 
-            for (int i = 0; i < n; i++)
-            {
-                rawScores[i] = Math.Min(rawScores[i], maxAllowed);
-            }
+            rawScores = engine.TensorClampMax(rawScores, maxAllowed);
         }
 
         // Add smoothing: blend with uniform distribution
         double uniformProb = 1.0 / n;
-        for (int i = 0; i < n; i++)
-        {
-            rawScores[i] = (1.0 - _smoothingFactor) * rawScores[i] + _smoothingFactor * uniformProb;
-        }
+        rawScores = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(rawScores, 1.0 - _smoothingFactor), _smoothingFactor * uniformProb);
 
-        // Normalize
-        double sum = rawScores.Sum();
+        // Normalize: the left-to-right running sum's last entry is the total
+        double sum = engine.TensorCumSum(rawScores, 0).AsSpan()[n - 1];
         if (sum <= 0)
         {
             // Fallback to uniform
-            for (int i = 0; i < n; i++)
-            {
-                rawScores[i] = uniformProb;
-            }
+            rawScores = new Tensor<double>(new[] { n });
+            rawScores.Fill(uniformProb);
             sum = 1.0;
         }
 
         // Compute cumulative probabilities
-        double cumulative = 0;
-        for (int i = 0; i < n; i++)
-        {
-            cumulative += rawScores[i] / sum;
-            _cumulativeProbabilities[i] = cumulative;
-        }
+        engine.TensorCumSum(engine.TensorDivideScalar(rawScores, sum), 0).AsSpan().CopyTo(_cumulativeProbabilities);
         _cumulativeProbabilities[n - 1] = 1.0; // Ensure exactly 1.0
 
         _needsUpdate = false;

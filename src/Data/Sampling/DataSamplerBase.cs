@@ -217,31 +217,34 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     private void ComputeCumulativeProbabilitiesCore()
     {
         CumulativeProbabilities = new double[WeightsArray.Length];
-
-        // Convert weights to doubles and compute sum
-        double sum = 0;
-        for (int i = 0; i < WeightsArray.Length; i++)
+        if (WeightsArray.Length == 0)
         {
-            double w = NumOps.ToDouble(WeightsArray[i]);
-            if (w < 0)
-            {
-                throw new ArgumentException($"Weight at index {i} is negative ({w}). Weights must be non-negative.");
-            }
-            sum += w;
+            throw new ArgumentException("Total weight must be greater than zero.");
         }
+
+        // Convert weights to doubles in one cast and validate them with engine ops
+        var engine = AiDotNetEngine.Current;
+        var weights = new Tensor<double>(DoubleStorage.ToDoubles(WeightsArray), new[] { WeightsArray.Length });
+        var negative = engine.TensorLessThan(weights, 0.0);
+        if (engine.TensorMaxValue(negative) > 0.0)
+        {
+            // ArgMax returns the first maximum, i.e. the first negative weight.
+            int i = engine.TensorArgMax(negative, 0).AsSpan()[0];
+            double w = weights.AsSpan()[i];
+            throw new ArgumentException($"Weight at index {i} is negative ({w}). Weights must be non-negative.");
+        }
+
+        // Running sum (left to right, like the previous scalar accumulation); its last entry is the total
+        var runningSum = engine.TensorCumSum(weights, 0);
+        double sum = runningSum.AsSpan()[WeightsArray.Length - 1];
 
         if (sum <= 0)
         {
             throw new ArgumentException("Total weight must be greater than zero.");
         }
 
-        // Compute cumulative probabilities
-        double cumulative = 0;
-        for (int i = 0; i < WeightsArray.Length; i++)
-        {
-            cumulative += NumOps.ToDouble(WeightsArray[i]) / sum;
-            CumulativeProbabilities[i] = cumulative;
-        }
+        // Compute cumulative probabilities: cumulative sum of w / sum
+        engine.TensorCumSum(engine.TensorDivideScalar(weights, sum), 0).AsSpan().CopyTo(CumulativeProbabilities);
 
         // Ensure last element is exactly 1.0 to avoid floating point issues
         CumulativeProbabilities[WeightsArray.Length - 1] = 1.0;
