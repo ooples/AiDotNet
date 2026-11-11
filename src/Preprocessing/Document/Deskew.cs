@@ -106,49 +106,65 @@ public class Deskew<T> : IDisposable
     /// <returns>The rotated image.</returns>
     public Tensor<T> RotateImage(Tensor<T> image, double angle)
     {
+        var engine = AiDotNetEngine.Current;
         int channels = image.Shape[0];
         int height = image.Shape[1];
         int width = image.Shape[2];
 
         double radians = angle * Math.PI / 180.0;
-        double cos = Math.Cos(radians);
-        double sin = Math.Sin(radians);
-
+        T cos = _numOps.FromDouble(Math.Cos(radians));
+        T sin = _numOps.FromDouble(Math.Sin(radians));
         int centerX = width / 2;
         int centerY = height / 2;
 
-        var result = new T[channels * height * width];
+        // Output pixel offsets from the center as [height, 1] and [1, width]
+        var dy = engine.Reshape(engine.TensorSubtractScalar(PixelRange(height), _numOps.FromDouble(centerY)), new[] { height, 1 });
+        var dx = engine.Reshape(engine.TensorSubtractScalar(PixelRange(width), _numOps.FromDouble(centerX)), new[] { 1, width });
 
-        for (int c = 0; c < channels; c++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    // Translate to center, rotate, translate back
-                    double dx = x - centerX;
-                    double dy = y - centerY;
+        // Translate to center, rotate, translate back
+        var srcX = engine.TensorAddScalar(
+            engine.TensorAdd(engine.TensorMultiplyScalar(dx, cos), engine.TensorMultiplyScalar(dy, sin)), _numOps.FromDouble(centerX));
+        var srcY = engine.TensorAddScalar(
+            engine.TensorSubtract(engine.TensorMultiplyScalar(dy, cos), engine.TensorMultiplyScalar(dx, sin)), _numOps.FromDouble(centerY));
 
-                    double srcX = dx * cos + dy * sin + centerX;
-                    double srcY = -dx * sin + dy * cos + centerY;
+        // Inside test: 0 <= srcX < width - 1 and 0 <= srcY < height - 1
+        var zero = _numOps.Zero;
+        var negativeX = engine.TensorLessThan(srcX, zero);
+        var negativeY = engine.TensorLessThan(srcY, zero);
+        var inside = engine.TensorMultiply(
+            engine.TensorMultiply(engine.TensorSubtract(engine.TensorOnesLike(negativeX), negativeX), engine.TensorLessThan(srcX, _numOps.FromDouble(width - 1))),
+            engine.TensorMultiply(engine.TensorSubtract(engine.TensorOnesLike(negativeY), negativeY), engine.TensorLessThan(srcY, _numOps.FromDouble(height - 1))));
 
-                    int idx = c * height * width + y * width + x;
+        // Bilinear interpolation from the clamped neighbours
+        var floorX = engine.TensorFloor(srcX);
+        var floorY = engine.TensorFloor(srcY);
+        var x0 = engine.TensorClamp(floorX, zero, _numOps.FromDouble(width - 1));
+        var y0 = engine.TensorClamp(floorY, zero, _numOps.FromDouble(height - 1));
+        var x1 = engine.TensorClamp(engine.TensorAddScalar(x0, _numOps.One), zero, _numOps.FromDouble(width - 1));
+        var y1 = engine.TensorClamp(engine.TensorAddScalar(y0, _numOps.One), zero, _numOps.FromDouble(height - 1));
+        var fx = engine.TensorSubtract(srcX, x0);
+        var fy = engine.TensorSubtract(srcY, y0);
 
-                    if (srcX >= 0 && srcX < width - 1 && srcY >= 0 && srcY < height - 1)
-                    {
-                        // Bilinear interpolation
-                        result[idx] = SampleBilinear(image, c, srcX, srcY);
-                    }
-                    else
-                    {
-                        // Background (white for documents)
-                        result[idx] = _numOps.FromDouble(1.0);
-                    }
-                }
-            }
-        }
+        var pixels = engine.Reshape(image, new[] { channels, height * width });
+        var v00 = Gather(pixels, y0, x0, width);
+        var v01 = Gather(pixels, y0, x1, width);
+        var v10 = Gather(pixels, y1, x0, width);
+        var v11 = Gather(pixels, y1, x1, width);
 
-        return new Tensor<T>([channels, height, width], new Vector<T>(result));
+        var flatFx = engine.Reshape(fx, new[] { 1, height * width });
+        var flatFy = engine.Reshape(fy, new[] { 1, height * width });
+        var one = _numOps.One;
+        var oneMinusFx = engine.TensorSubtract(engine.TensorOnesLike(flatFx), flatFx);
+        var oneMinusFy = engine.TensorSubtract(engine.TensorOnesLike(flatFy), flatFy);
+        var top = engine.TensorAdd(engine.TensorMultiply(v00, oneMinusFx), engine.TensorMultiply(v01, flatFx));
+        var bottom = engine.TensorAdd(engine.TensorMultiply(v10, oneMinusFx), engine.TensorMultiply(v11, flatFx));
+        var sampled = engine.TensorAdd(engine.TensorMultiply(top, oneMinusFy), engine.TensorMultiply(bottom, flatFy));
+
+        // Background (white for documents) outside the source image
+        var insideAll = engine.TensorMultiply(
+            Tensor<T>.CreateDefault(new[] { channels, height * width }, one), engine.Reshape(inside, new[] { 1, height * width }));
+        var result = engine.TensorWhere(insideAll, sampled, Tensor<T>.CreateDefault(new[] { channels, height * width }, one));
+        return engine.Reshape(result, new[] { channels, height, width });
     }
 
     #endregion
@@ -158,122 +174,112 @@ public class Deskew<T> : IDisposable
     private Tensor<T> ToGrayscale(Tensor<T> image)
     {
         if (image.Shape[0] == 1)
+        {
             return image;
+        }
 
+        var engine = AiDotNetEngine.Current;
         int height = image.Shape[1];
         int width = image.Shape[2];
-        var result = new T[height * width];
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                double r = _numOps.ToDouble(image[0, y, x]);
-                double g = image.Shape[0] > 1 ? _numOps.ToDouble(image[1, y, x]) : r;
-                double b = image.Shape[0] > 2 ? _numOps.ToDouble(image[2, y, x]) : r;
-
-                result[y * width + x] = _numOps.FromDouble(0.299 * r + 0.587 * g + 0.114 * b);
-            }
-        }
-
-        return new Tensor<T>([1, height, width], new Vector<T>(result));
+        var r = engine.TensorNarrow(image, 0, 0, 1);
+        var g = image.Shape[0] > 1 ? engine.TensorNarrow(image, 0, 1, 1) : r;
+        var b = image.Shape[0] > 2 ? engine.TensorNarrow(image, 0, 2, 1) : r;
+        var gray = engine.TensorAdd(
+            engine.TensorAdd(engine.TensorMultiplyScalar(r, _numOps.FromDouble(0.299)), engine.TensorMultiplyScalar(g, _numOps.FromDouble(0.587))),
+            engine.TensorMultiplyScalar(b, _numOps.FromDouble(0.114)));
+        return engine.Reshape(gray, new[] { 1, height, width });
     }
 
+    /// <summary>
+    /// Sobel gradient magnitude / 4, capped at 1, on the interior pixels; the one-pixel border is zero.
+    /// </summary>
     private Tensor<T> DetectEdges(Tensor<T> gray)
     {
+        var engine = AiDotNetEngine.Current;
         int height = gray.Shape[1];
         int width = gray.Shape[2];
-        var result = new T[height * width];
 
-        // Sobel kernels
-        for (int y = 1; y < height - 1; y++)
+        if (height < 3 || width < 3)
         {
-            for (int x = 1; x < width - 1; x++)
-            {
-                // Sobel X
-                double gx = -_numOps.ToDouble(gray[0, y - 1, x - 1]) - 2 * _numOps.ToDouble(gray[0, y, x - 1]) - _numOps.ToDouble(gray[0, y + 1, x - 1])
-                          + _numOps.ToDouble(gray[0, y - 1, x + 1]) + 2 * _numOps.ToDouble(gray[0, y, x + 1]) + _numOps.ToDouble(gray[0, y + 1, x + 1]);
-
-                // Sobel Y
-                double gy = -_numOps.ToDouble(gray[0, y - 1, x - 1]) - 2 * _numOps.ToDouble(gray[0, y - 1, x]) - _numOps.ToDouble(gray[0, y - 1, x + 1])
-                          + _numOps.ToDouble(gray[0, y + 1, x - 1]) + 2 * _numOps.ToDouble(gray[0, y + 1, x]) + _numOps.ToDouble(gray[0, y + 1, x + 1]);
-
-                double magnitude = Math.Sqrt(gx * gx + gy * gy);
-                result[y * width + x] = _numOps.FromDouble(Math.Min(magnitude / 4.0, 1.0));
-            }
+            return new Tensor<T>(new[] { 1, height, width });
         }
 
-        return new Tensor<T>([1, height, width], new Vector<T>(result));
+        var input = engine.Reshape(engine.TensorNarrow(gray, 0, 0, 1), new[] { 1, 1, height, width });
+        var sobelX = new Tensor<int>(new[] { -1, 0, 1, -2, 0, 2, -1, 0, 1 }, new[] { 1, 1, 3, 3 }).Cast<T>();
+        var sobelY = new Tensor<int>(new[] { -1, -2, -1, 0, 0, 0, 1, 2, 1 }, new[] { 1, 1, 3, 3 }).Cast<T>();
+        var gx = engine.Conv2D(input, sobelX);
+        var gy = engine.Conv2D(input, sobelY);
+
+        var magnitude = engine.TensorSqrt(engine.TensorAdd(engine.TensorSquare(gx), engine.TensorSquare(gy)));
+        var interior = engine.Reshape(
+            engine.TensorClampMax(engine.TensorDivideScalar(magnitude, _numOps.FromDouble(4.0)), _numOps.One),
+            new[] { height - 2, width - 2 });
+
+        // Zero border
+        var columnPad = new Tensor<T>(new[] { height - 2, 1 });
+        var rows = engine.TensorConcatenate(new[] { columnPad, interior, columnPad }, 1);
+        var rowPad = new Tensor<T>(new[] { 1, width });
+        var full = engine.TensorConcatenate(new[] { rowPad, rows, rowPad }, 0);
+        return engine.Reshape(full, new[] { 1, height, width });
     }
 
+    /// <summary>
+    /// Scores every candidate angle a in [-maxAngle, maxAngle) (180 steps) by the sum over edge pixels
+    /// (value &gt; 0.3) of |x cos a + y sin a| and returns the first best angle. Rows are processed in chunks to
+    /// bound the [pixels, angles] projection tensor.
+    /// </summary>
     private double HoughSkewDetection(Tensor<T> edges, double maxAngle)
     {
+        var engine = AiDotNetEngine.Current;
         int height = edges.Shape[1];
         int width = edges.Shape[2];
 
         // Accumulator for angles
         int numAngles = 180;
-        var accumulator = new double[numAngles];
-
         double angleStep = (2 * maxAngle) / numAngles;
         double threshold = 0.3; // Edge threshold
 
-        // Vote for angles based on edge pixels
-        for (int y = 0; y < height; y++)
+        var radians = engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(PixelRange(numAngles), _numOps.FromDouble(angleStep)), _numOps.FromDouble(-maxAngle)),
+            _numOps.FromDouble(Math.PI / 180.0));
+        var cos = engine.Reshape(engine.TensorCos(radians), new[] { 1, numAngles });
+        var sin = engine.Reshape(engine.TensorSin(radians), new[] { 1, numAngles });
+
+        var edgeMask = engine.TensorGreaterThan(
+            engine.Reshape(engine.TensorNarrow(edges, 0, 0, 1), new[] { height, width }), _numOps.FromDouble(threshold));
+        var xs = engine.Reshape(PixelRange(width), new[] { 1, width });
+        var accumulator = new Tensor<T>(new[] { numAngles });
+
+        int rowsPerChunk = Math.Max(1, (1 << 22) / Math.Max(1, width * numAngles));
+        for (int start = 0; start < height; start += rowsPerChunk)
         {
-            for (int x = 0; x < width; x++)
-            {
-                if (_numOps.ToDouble(edges[0, y, x]) > threshold)
-                {
-                    for (int a = 0; a < numAngles; a++)
-                    {
-                        double angle = -maxAngle + a * angleStep;
-                        double radians = angle * Math.PI / 180.0;
+            int count = Math.Min(rowsPerChunk, height - start);
+            var ys = engine.Reshape(
+                engine.TensorAddScalar(PixelRange(count), _numOps.FromDouble(start)), new[] { count, 1 });
+            var pixelX = engine.Reshape(engine.TensorMultiply(Tensor<T>.CreateDefault(new[] { count, width }, _numOps.One), xs), new[] { count * width, 1 });
+            var pixelY = engine.Reshape(engine.TensorMultiply(Tensor<T>.CreateDefault(new[] { count, width }, _numOps.One), ys), new[] { count * width, 1 });
+            var weight = engine.Reshape(engine.TensorNarrow(edgeMask, 0, start, count), new[] { count * width, 1 });
 
-                        // Project point onto line at this angle
-                        double rho = x * Math.Cos(radians) + y * Math.Sin(radians);
-
-                        // Simple accumulation (in real Hough, we'd bin by rho too)
-                        accumulator[a] += Math.Abs(rho);
-                    }
-                }
-            }
+            // Project point onto line at this angle
+            var rho = engine.TensorAbs(engine.TensorAdd(engine.TensorMatMul(pixelX, cos), engine.TensorMatMul(pixelY, sin)));
+            accumulator = engine.TensorAdd(accumulator, engine.ReduceSum(engine.TensorMultiply(rho, weight), new[] { 0 }, false));
         }
 
-        // Find peak in accumulator
-        int maxIdx = 0;
-        double maxVal = 0;
-        for (int a = 0; a < numAngles; a++)
-        {
-            if (accumulator[a] > maxVal)
-            {
-                maxVal = accumulator[a];
-                maxIdx = a;
-            }
-        }
-
+        // Find peak in accumulator (first maximum; 0 when nothing voted)
+        int maxIdx = engine.TensorArgMax(accumulator, 0)[0];
         return -maxAngle + maxIdx * angleStep;
     }
 
-    private T SampleBilinear(Tensor<T> image, int channel, double x, double y)
+    /// <summary>0, 1, ..., count - 1 as T.</summary>
+    private static Tensor<T> PixelRange(int count) =>
+        Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, count))).Cast<T>();
+
+    /// <summary>Gathers pixels[c, y * width + x] for every output pixel, [channels, height * width].</summary>
+    private static Tensor<T> Gather(Tensor<T> pixels, Tensor<T> y, Tensor<T> x, int width)
     {
-        int x0 = PreprocessingHelpers.Clamp((int)Math.Floor(x), 0, image.Shape[2] - 1);
-        int x1 = PreprocessingHelpers.Clamp(x0 + 1, 0, image.Shape[2] - 1);
-        int y0 = PreprocessingHelpers.Clamp((int)Math.Floor(y), 0, image.Shape[1] - 1);
-        int y1 = PreprocessingHelpers.Clamp(y0 + 1, 0, image.Shape[1] - 1);
-
-        double dx = x - x0;
-        double dy = y - y0;
-
-        double v00 = _numOps.ToDouble(image[channel, y0, x0]);
-        double v01 = _numOps.ToDouble(image[channel, y0, x1]);
-        double v10 = _numOps.ToDouble(image[channel, y1, x0]);
-        double v11 = _numOps.ToDouble(image[channel, y1, x1]);
-
-        double top = v00 * (1 - dx) + v01 * dx;
-        double bottom = v10 * (1 - dx) + v11 * dx;
-
-        return _numOps.FromDouble(top * (1 - dy) + bottom * dy);
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.TensorAdd(engine.TensorMultiplyScalar(y.Cast<int>(), width), x.Cast<int>());
+        return engine.TensorIndexSelect(pixels, engine.Reshape(flat, new[] { flat.Length }), 1);
     }
 
     #endregion
