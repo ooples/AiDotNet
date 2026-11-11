@@ -211,18 +211,22 @@ public partial class DBNet<T> : TextDetectorBase<T>
     /// </summary>
     private Tensor<T> HardNegativeWeights(Tensor<T> loss, Tensor<T> kernel, Tensor<T> mask, double ratio)
     {
-        var weights = new Tensor<T>(loss.Shape.ToArray());
+        // The selection reads detached values in double, as before, from one bulk conversion each.
+        var lossValues = CvTensorOps<T>.ToDoubleArray(loss);
+        var kernelValues = CvTensorOps<T>.ToDoubleArray(kernel);
+        var maskValues = CvTensorOps<T>.ToDoubleArray(mask);
+        var weights = new double[loss.Length];
         var negatives = new List<(double Loss, int Index)>();
         int positives = 0;
-        for (int i = 0; i < loss.Length; i++)
+        for (int i = 0; i < weights.Length; i++)
         {
-            if (NumOps.ToDouble(mask[i]) < 0.5) continue;
-            if (NumOps.ToDouble(kernel[i]) > 0.5) { weights[i] = NumOps.One; positives++; }
-            else negatives.Add((NumOps.ToDouble(loss[i]), i));
+            if (maskValues[i] < 0.5) continue;
+            if (kernelValues[i] > 0.5) { weights[i] = 1.0; positives++; }
+            else negatives.Add((lossValues[i], i));
         }
         int keep = (int)Math.Min(negatives.Count, positives * ratio);
-        foreach (var (_, index) in negatives.OrderByDescending(n => n.Loss).Take(keep)) weights[index] = NumOps.One;
-        return weights;
+        foreach (var (_, index) in negatives.OrderByDescending(n => n.Loss).Take(keep)) weights[index] = 1.0;
+        return CvTensorOps<T>.FromDoubleArray(weights, loss.Shape.ToArray());
     }
     /// <inheritdoc/>
     protected override List<TextRegion<T>> PostProcess(
@@ -243,12 +247,16 @@ public partial class DBNet<T> : TextDetectorBase<T>
         // Binarize the probability map
         double binThreshold = NumOps.ToDouble(Options.BinaryThreshold);
         var textMask = new bool[mapH, mapW];
+        // The first image's maps, in double as before, each in one bulk conversion.
+        var binaryValues = CvTensorOps<T>.ToDoubleArray(Engine.TensorSlice(binaryMap, new[] { 0, 0, 0, 0 }, new[] { 1, 1, mapH, mapW }));
+        var probValues = CvTensorOps<T>.ToDoubleArray(Engine.TensorSlice(probMap, new[] { 0, 0, 0, 0 }, new[] { 1, 1, probMap.Shape[2], probMap.Shape[3] }));
+        int probW = probMap.Shape[3];
 
         for (int h = 0; h < mapH; h++)
         {
             for (int w = 0; w < mapW; w++)
             {
-                textMask[h, w] = NumOps.ToDouble(binaryMap[0, 0, h, w]) > binThreshold;
+                textMask[h, w] = binaryValues[(h * mapW) + w] > binThreshold;
             }
         }
 
@@ -256,7 +264,7 @@ public partial class DBNet<T> : TextDetectorBase<T>
         var components = FindConnectedComponents(textMask, mapH, mapW);
 
         // Convert components to text regions
-        var regions = new List<TextRegion<T>>();
+        var accepted = new List<(List<(double X, double Y)> Polygon, double Confidence)>();
 
         foreach (var component in components)
         {
@@ -273,7 +281,7 @@ public partial class DBNet<T> : TextDetectorBase<T>
             double avgProb = 0;
             foreach (var (h, w) in component)
             {
-                avgProb += NumOps.ToDouble(probMap[0, 0, h, w]);
+                avgProb += probValues[(h * probW) + w];
             }
             avgProb /= component.Count;
 
@@ -290,13 +298,18 @@ public partial class DBNet<T> : TextDetectorBase<T>
 
             if (polygon.Count >= 4)
             {
-                var region = TextRegion<T>.FromPolygon(
-                    polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(),
-                    NumOps.FromDouble(avgProb));
-
-                region.RegionType = TextRegionType.Word;
-                regions.Add(region);
+                accepted.Add((polygon, avgProb));
             }
+        }
+
+        // Every region's confidence becomes T in one bulk conversion.
+        var confidences = CvTensorOps<T>.FromDoubleArray(accepted.Select(a => a.Confidence).ToArray(), new[] { accepted.Count }).ToArray();
+        var regions = new List<TextRegion<T>>(accepted.Count);
+        for (int i = 0; i < accepted.Count; i++)
+        {
+            var region = TextRegion<T>.FromPolygon(CvTensorOps<T>.PointsFromDoubles(accepted[i].Polygon), confidences[i]);
+            region.RegionType = TextRegionType.Word;
+            regions.Add(region);
         }
 
         // Apply polygon NMS
@@ -305,8 +318,7 @@ public partial class DBNet<T> : TextDetectorBase<T>
         // Limit to max detections
         if (regions.Count > Options.MaxDetections)
         {
-            regions = regions
-                .OrderByDescending(r => NumOps.ToDouble(r.Confidence))
+            regions = CvTensorOps<T>.OrderByDescending(regions, r => r.Confidence)
                 .Take(Options.MaxDetections)
                 .ToList();
         }
@@ -526,7 +538,7 @@ public partial class DBNet<T> : TextDetectorBase<T>
         if (regions.Count == 0)
             return regions;
 
-        var sorted = regions.OrderByDescending(r => NumOps.ToDouble(r.Confidence)).ToList();
+        var sorted = CvTensorOps<T>.OrderByDescending(regions, r => r.Confidence);
         var selected = new List<TextRegion<T>>();
         var used = new bool[sorted.Count];
 
