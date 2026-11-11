@@ -54,12 +54,13 @@ namespace AiDotNet.ActiveLearning.Batch;
 public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly T NegativeGamma = NumOps.Negate(NumOps.FromDouble(0.1)); // RBF kernel width
 
     private readonly SubmodularObjective _objective;
     private readonly T _lambda; // Informativeness weight
     private T _diversityTradeoff;
     [Scratch]
-    private List<Vector<T>>? _cachedFeatures;
+    private Tensor<T>? _cachedFeatures;
 
     /// <inheritdoc/>
     public string Name => $"Submodular Batch Selection ({_objective})";
@@ -136,13 +137,9 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
         _cachedFeatures = ExtractFeatures(candidateIndices, unlabeledPool);
 
         // Use uniform scores for pure diversity selection
-        var uniformScores = new T[candidateIndices.Length];
-        for (int i = 0; i < candidateIndices.Length; i++)
-        {
-            uniformScores[i] = NumOps.One;
-        }
+        var uniformScores = AiDotNetEngine.Current.Fill(candidateIndices.Length, NumOps.One);
 
-        return GreedyMaximizationWithScores(candidateIndices, new Vector<T>(uniformScores), batchSize);
+        return GreedyMaximizationWithScores(candidateIndices, uniformScores, batchSize);
     }
 
     /// <inheritdoc/>
@@ -160,9 +157,9 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
 
     #region Private Methods
 
-    private List<Vector<T>> ExtractFeatures(int[] indices, IDataset<T, TInput, TOutput> pool)
+    private Tensor<T> ExtractFeatures(int[] indices, IDataset<T, TInput, TOutput> pool)
     {
-        var features = new List<Vector<T>>();
+        var features = new List<Vector<T>>(indices.Length);
 
         foreach (var idx in indices)
         {
@@ -171,7 +168,9 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
             features.Add(feature);
         }
 
-        return features;
+        return features.Count == 0
+            ? new Tensor<T>(new[] { 0, 0 })
+            : ActiveLearningEngineOps.StackVectors(features);
     }
 
     private Vector<T> ConvertToVector(TInput input)
@@ -199,53 +198,58 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
         return new Vector<T>(new[] { NumOps.Zero });
     }
 
+    /// <summary>
+    /// Greedy maximization of λ·informativeness + (1-λ)·marginal diversity gain. Every remaining
+    /// candidate's exact marginal gain is evaluated each round (the previous lazy upper-bound skip
+    /// only pruned candidates whose exact gain could not win, so the selected set is the same for
+    /// non-negative weights). Ties go to the lowest candidate index.
+    /// </summary>
     private int[] GreedyMaximizationWithScores(int[] candidateIndices, Vector<T> scores, int batchSize)
     {
-        var selected = new List<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, candidateIndices.Length));
-
-        // Lazy evaluation: cache upper bounds for efficiency
-        var upperBounds = new T[candidateIndices.Length];
-        for (int i = 0; i < candidateIndices.Length; i++)
+        var features = _cachedFeatures;
+        int n = candidateIndices.Length;
+        if (features is null || n == 0 || features.Shape[0] < n)
         {
-            upperBounds[i] = NumOps.MaxValue;
+            return Array.Empty<int>();
         }
 
-        for (int b = 0; b < batchSize && remaining.Count > 0; b++)
+        var engine = AiDotNetEngine.Current;
+        int dim = features.Shape[1];
+        var rows = features.Shape[0] == n
+            ? features
+            : engine.TensorSlice(features, new[] { 0, 0 }, new[] { n, dim });
+
+        var informativeness = engine.TensorMultiplyScalar(Tensor<T>.FromVector(scores.GetSubVector(0, n)), _lambda);
+        var selected = new List<int>();
+        var isSelected = new bool[n];
+
+        // Running per-sample state of the selected set
+        var maxSimToSelected = new Tensor<T>(new[] { n });
+        var minDistToSelected = new Tensor<T>(new[] { n });
+        minDistToSelected.Fill(NumOps.MaxValue);
+
+        for (int b = 0; b < batchSize && selected.Count < n; b++)
         {
-            T maxGain = NumOps.MinValue;
-            int bestIdx = -1;
-
-            // Find sample with maximum marginal gain
-            foreach (var idx in remaining)
+            var diversityGain = _objective switch
             {
-                // Lazy evaluation: skip if upper bound is worse than current best
-                if (bestIdx >= 0 && NumOps.Compare(upperBounds[idx], maxGain) < 0)
-                {
-                    continue;
-                }
+                SubmodularObjective.GraphCut => GraphCutGains(rows, isSelected),
+                SubmodularObjective.LogDeterminant => selected.Count == 0 ? Ones(n) : minDistToSelected,
+                _ => FacilityLocationGains(rows, maxSimToSelected)
+            };
 
-                // Compute marginal gain
-                var diversityGain = ComputeMarginalGainInternal(selected, idx);
-
-                // Combine with informativeness score
-                var informativenessGain = scores[idx];
-                var totalGain = ComputeCombinedGain(diversityGain, informativenessGain);
-
-                upperBounds[idx] = totalGain;
-
-                if (NumOps.Compare(totalGain, maxGain) > 0)
-                {
-                    maxGain = totalGain;
-                    bestIdx = idx;
-                }
+            var totalGain = engine.TensorAdd(informativeness, engine.TensorMultiplyScalar(diversityGain, _diversityTradeoff));
+            int bestIdx = ActiveLearningEngineOps.ArgMaxAbove(totalGain.Reshape(new[] { 1, n }), isSelected, NumOps.MinValue);
+            if (bestIdx < 0)
+            {
+                break;
             }
 
-            if (bestIdx >= 0)
-            {
-                selected.Add(bestIdx);
-                remaining.Remove(bestIdx);
-            }
+            selected.Add(bestIdx);
+            isSelected[bestIdx] = true;
+
+            var newest = engine.TensorSlice(rows, new[] { bestIdx, 0 }, new[] { 1, dim });
+            maxSimToSelected = engine.TensorMax(maxSimToSelected, SimilaritiesToRows(rows, newest).Reshape(new[] { n }));
+            minDistToSelected = engine.TensorMin(minDistToSelected, ActiveLearningEngineOps.DistancesToPoint(rows, newest));
         }
 
         // Map back to pool indices
@@ -254,136 +258,149 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
 
     private T ComputeMarginalGainInternal(IReadOnlyList<int> currentSelection, int candidateIndex)
     {
-        if (_cachedFeatures == null || candidateIndex >= _cachedFeatures.Count)
+        var features = _cachedFeatures;
+        if (features is null || candidateIndex < 0 || candidateIndex >= features.Shape[0])
         {
             return NumOps.Zero;
         }
 
-        return _objective switch
-        {
-            SubmodularObjective.FacilityLocation => FacilityLocationGain(currentSelection, candidateIndex),
-            SubmodularObjective.GraphCut => GraphCutGain(currentSelection, candidateIndex),
-            SubmodularObjective.LogDeterminant => LogDeterminantGain(currentSelection, candidateIndex),
-            _ => FacilityLocationGain(currentSelection, candidateIndex)
-        };
-    }
+        var engine = AiDotNetEngine.Current;
+        int n = features.Shape[0];
+        int dim = features.Shape[1];
+        var candidate = engine.TensorSlice(features, new[] { candidateIndex, 0 }, new[] { 1, dim });
+        var selection = currentSelection.ToArray();
+        var selectionRows = selection.Length == 0
+            ? new Tensor<T>(new[] { 0, dim })
+            : engine.TensorIndexSelect(features, new Tensor<int>(selection, new[] { selection.Length }), 0);
+        var self = new bool[n];
+        self[candidateIndex] = true;
 
-    private T FacilityLocationGain(IReadOnlyList<int> currentSelection, int candidateIndex)
-    {
-        // Facility location: gain is improvement in max similarity for each point
-        // Δf(v|S) = Σ max(0, sim(u,v) - max_{s∈S} sim(u,s))
-        if (_cachedFeatures == null)
+        switch (_objective)
         {
-            return NumOps.Zero;
-        }
-
-        T totalGain = NumOps.Zero;
-        var candidateFeature = _cachedFeatures[candidateIndex];
-
-        for (int u = 0; u < _cachedFeatures.Count; u++)
-        {
-            if (u == candidateIndex)
+            case SubmodularObjective.GraphCut:
             {
-                continue;
-            }
-
-            // Current max similarity to selected set
-            T maxSimToSelected = NumOps.Zero;
-            foreach (var s in currentSelection)
-            {
-                var sim = ComputeSimilarity(_cachedFeatures[u], _cachedFeatures[s]);
-                if (NumOps.Compare(sim, maxSimToSelected) > 0)
+                // Σ_{u≠v} ±sim(u, v): reward unselected points, penalize selected ones
+                var isSelected = new bool[n];
+                foreach (var s in selection)
                 {
-                    maxSimToSelected = sim;
+                    isSelected[s] = true;
                 }
+
+                var signed = engine.TensorMultiply(SimilaritiesToRows(features, candidate).Reshape(new[] { n }), Signs(isSelected));
+                return engine.TensorSum(engine.TensorMaskedFill(signed, self, NumOps.Zero));
             }
 
-            // Similarity to candidate
-            var simToCandidate = ComputeSimilarity(_cachedFeatures[u], candidateFeature);
-
-            // Marginal improvement
-            var improvement = NumOps.Subtract(simToCandidate, maxSimToSelected);
-            if (NumOps.Compare(improvement, NumOps.Zero) > 0)
+            case SubmodularObjective.LogDeterminant:
             {
-                totalGain = NumOps.Add(totalGain, improvement);
+                // Approximation: minimum distance to the selected set (first selection gets 1)
+                if (selection.Length == 0)
+                {
+                    return NumOps.One;
+                }
+
+                return engine.TensorMinValue(ActiveLearningEngineOps.DistancesToPoint(selectionRows, candidate));
+            }
+
+            default:
+            {
+                // Facility location: Δf(v|S) = Σ_{u≠v} max(0, sim(u,v) - max(0, max_{s∈S} sim(u,s)))
+                var maxSimToSelected = selection.Length == 0
+                    ? new Tensor<T>(new[] { n })
+                    : engine.TensorMax(engine.ReduceMax(SimilaritiesToRows(features, selectionRows), new[] { 1 }, keepDims: false), NumOps.Zero);
+                var improvement = PositivePart(engine.TensorSubtract(SimilaritiesToRows(features, candidate).Reshape(new[] { n }), maxSimToSelected));
+                return engine.TensorSum(engine.TensorMaskedFill(improvement, self, NumOps.Zero));
             }
         }
-
-        return totalGain;
     }
 
-    private T GraphCutGain(IReadOnlyList<int> currentSelection, int candidateIndex)
+    /// <summary>
+    /// Facility-location gains of every candidate v: Σ_{u≠v} max(0, sim(u,v) - m(u)), where m(u) is
+    /// the (non-negative) maximum similarity of u to the selected set.
+    /// </summary>
+    private Tensor<T> FacilityLocationGains(Tensor<T> rows, Tensor<T> maxSimToSelected)
     {
-        // Graph cut: gain is sum of similarities to unselected minus selected
-        if (_cachedFeatures == null)
+        var engine = AiDotNetEngine.Current;
+        return SimilarityColumnSums(rows, (sim, start, count) =>
         {
-            return NumOps.Zero;
-        }
-
-        T gain = NumOps.Zero;
-        var candidateFeature = _cachedFeatures[candidateIndex];
-
-        for (int u = 0; u < _cachedFeatures.Count; u++)
-        {
-            if (u == candidateIndex)
-            {
-                continue;
-            }
-
-            var sim = ComputeSimilarity(_cachedFeatures[u], candidateFeature);
-
-            if (currentSelection.Contains(u))
-            {
-                // Penalty for similarity to already selected
-                gain = NumOps.Subtract(gain, sim);
-            }
-            else
-            {
-                // Reward for covering unselected points
-                gain = NumOps.Add(gain, sim);
-            }
-        }
-
-        return gain;
+            var shape = new[] { count, rows.Shape[0] };
+            var m = engine.TensorSlice(maxSimToSelected, new[] { start }, new[] { count }).Reshape(new[] { count, 1 });
+            return PositivePart(engine.TensorSubtract(sim, engine.TensorBroadcastTo(m, shape)));
+        });
     }
 
-    private T LogDeterminantGain(IReadOnlyList<int> currentSelection, int candidateIndex)
+    /// <summary>
+    /// Graph-cut gains of every candidate v: Σ_{u≠v, u∉S} sim(u,v) - Σ_{u≠v, u∈S} sim(u,v).
+    /// </summary>
+    private Tensor<T> GraphCutGains(Tensor<T> rows, bool[] isSelected)
     {
-        // Log-determinant is computationally expensive; use approximation
-        // Based on distance to nearest selected point
-        if (_cachedFeatures == null)
+        var engine = AiDotNetEngine.Current;
+        var signs = Signs(isSelected);
+        return SimilarityColumnSums(rows, (sim, start, count) =>
         {
-            return NumOps.Zero;
-        }
-
-        var candidateFeature = _cachedFeatures[candidateIndex];
-
-        if (currentSelection.Count == 0)
-        {
-            // First selection: high gain
-            return NumOps.One;
-        }
-
-        // Gain proportional to minimum distance to selected set
-        T minDist = NumOps.MaxValue;
-        foreach (var s in currentSelection)
-        {
-            var dist = ComputeDistance(candidateFeature, _cachedFeatures[s]);
-            if (NumOps.Compare(dist, minDist) < 0)
-            {
-                minDist = dist;
-            }
-        }
-
-        return minDist;
+            var shape = new[] { count, rows.Shape[0] };
+            var s = engine.TensorSlice(signs, new[] { start }, new[] { count }).Reshape(new[] { count, 1 });
+            return engine.TensorMultiply(sim, engine.TensorBroadcastTo(s, shape));
+        });
     }
 
-    private T ComputeCombinedGain(T diversityGain, T informativenessGain)
+    /// <summary>
+    /// Σ_{u≠v} f(sim(u, v)) for every column v, computed blockwise over the rows u.
+    /// </summary>
+    private static Tensor<T> SimilarityColumnSums(Tensor<T> rows, Func<Tensor<T>, int, int, Tensor<T>> transform)
     {
-        // Linear combination: λ * informativeness + (1-λ) * diversity
-        var infTerm = NumOps.Multiply(_lambda, informativenessGain);
-        var divTerm = NumOps.Multiply(_diversityTradeoff, diversityGain);
-        return NumOps.Add(infTerm, divTerm);
+        var engine = AiDotNetEngine.Current;
+        int n = rows.Shape[0];
+        int dim = rows.Shape[1];
+        int blockRows = ActiveLearningEngineOps.PairwiseBlockRows(n, dim);
+        var sums = new Tensor<T>(new[] { n });
+
+        for (int start = 0; start < n; start += blockRows)
+        {
+            int count = Math.Min(blockRows, n - start);
+            var block = engine.TensorSlice(rows, new[] { start, 0 }, new[] { count, dim });
+            var terms = transform(SimilaritiesToRows(block, rows), start, count);
+            var offDiagonal = engine.TensorMaskedFill(terms, ActiveLearningEngineOps.SelfMask(start, count, n), NumOps.Zero);
+            sums = engine.TensorAdd(sums, engine.ReduceSum(offDiagonal, new[] { 0 }, keepDims: false));
+        }
+
+        return sums;
+    }
+
+    /// <summary>
+    /// RBF similarities exp(-γ·||a_i - b_j||²) between the rows of a [m, d] and a [k, d] tensor.
+    /// </summary>
+    /// <returns>A [m, k] tensor.</returns>
+    private static Tensor<T> SimilaritiesToRows(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorExp(engine.TensorMultiplyScalar(ActiveLearningEngineOps.SquaredDistances(a, b), NegativeGamma));
+    }
+
+    /// <summary>
+    /// Elementwise max(0, x), mapping NaN to zero like the scalar "x &gt; 0" test.
+    /// </summary>
+    private static Tensor<T> PositivePart(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorWhere(engine.TensorGreaterThan(values, NumOps.Zero), values, new Tensor<T>(values.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// -1 for selected samples and +1 for the others.
+    /// </summary>
+    private static Tensor<T> Signs(bool[] isSelected)
+    {
+        var shape = new[] { isSelected.Length };
+        var minusOne = new Tensor<T>(shape);
+        minusOne.Fill(NumOps.Negate(NumOps.One));
+        return AiDotNetEngine.Current.TensorWhere(isSelected, minusOne, Ones(isSelected.Length));
+    }
+
+    private static Tensor<T> Ones(int n)
+    {
+        var ones = new Tensor<T>(new[] { n });
+        ones.Fill(NumOps.One);
+        return ones;
     }
 
     private T ComputeSimilarity(Vector<T> a, Vector<T> b)
@@ -400,11 +417,6 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
         var engine = AiDotNetEngine.Current;
         var diff = engine.Subtract(a, b);
         return engine.DotProduct(diff, diff);
-    }
-
-    private T ComputeDistance(Vector<T> a, Vector<T> b)
-    {
-        return VectorHelper.EuclideanDistance(a, b);
     }
 
     #endregion
