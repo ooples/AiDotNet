@@ -99,22 +99,16 @@ public partial class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value at the specified x-coordinate.</returns>
     public T Interpolate(T x)
     {
-        T numerator = _numOps.Zero;
-        T denominator = _numOps.Zero;
-
-        for (int i = 0; i < _x.Length; i++)
+        int match = InterpolationSearch.IndexOfFirstEqual(_x, x);
+        if (match >= 0)
         {
-            if (_numOps.Equals(x, _x[i]))
-            {
-                return _y[i]; // Return exact value if x matches a known point
-            }
-
-            T diff = _numOps.Subtract(x, _x[i]);
-            T term = _numOps.Divide(_weights[i], diff);
-
-            numerator = _numOps.Add(numerator, _numOps.Multiply(term, _y[i]));
-            denominator = _numOps.Add(denominator, term);
+            return _y[match]; // Return exact value if x matches a known point
         }
+
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> terms = engine.TensorDivide(_weights.AsTensor(), engine.ScalarMinusTensor(x, _x.AsTensor()));
+        T numerator = engine.TensorSum(engine.TensorMultiply(terms, _y.AsTensor()));
+        T denominator = engine.TensorSum(terms);
 
         return _numOps.Divide(numerator, denominator);
     }
@@ -140,22 +134,17 @@ public partial class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// <returns>A vector containing the calculated barycentric weights.</returns>
     private Vector<T> CalculateWeights()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
-        Vector<T> weights = new Vector<T>(n);
+        Tensor<T> knots = _x.AsTensor();
 
-        for (int i = 0; i < n; i++)
-        {
-            T weight = _numOps.One;
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    weight = _numOps.Multiply(weight, _numOps.Subtract(_x[i], _x[j]));
-                }
-            }
-            weights[i] = _numOps.Divide(_numOps.One, weight);
-        }
+        // products[i] = product over j != i of (x[i] - x[j]), multiplied in ascending j. The diagonal of the
+        // difference matrix is exactly zero, so adding the identity turns it into the multiplicative identity.
+        Tensor<T> differences = engine.TensorAdd(
+            engine.TensorSubtract(knots.Reshape(n, 1), knots.Reshape(1, n)),
+            engine.TensorEye<T>(n));
+        Tensor<T> products = engine.TensorSliceAxis(engine.TensorCumProd(differences, 1), 1, n - 1);
 
-        return weights;
+        return engine.TensorReciprocal(products).ToVector();
     }
 }
