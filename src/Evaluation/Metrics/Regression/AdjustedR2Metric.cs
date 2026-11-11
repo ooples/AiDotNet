@@ -24,13 +24,21 @@ public class AdjustedR2Metric<T> : IRegressionMetric<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly int _numPredictors;
 
+    /// <inheritdoc />
     public string Name => "AdjustedR2";
+    /// <inheritdoc />
     public string Category => "Regression";
+    /// <inheritdoc />
     public string Description => "R² adjusted for number of predictors.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.HigherIsBetter;
+    /// <inheritdoc />
     public T? MinValue => default; // Can be negative
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
     /// <summary>
@@ -42,6 +50,7 @@ public class AdjustedR2Metric<T> : IRegressionMetric<T>
         _numPredictors = Math.Max(1, numPredictors);
     }
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -78,6 +87,7 @@ public class AdjustedR2Metric<T> : IRegressionMetric<T>
         return NumOps.FromDouble(adjustedR2);
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

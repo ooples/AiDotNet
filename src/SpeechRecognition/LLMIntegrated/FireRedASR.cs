@@ -64,8 +64,11 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private bool _useNativeMode;
     private bool _disposed;
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public FireRedASR(
@@ -142,6 +145,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         };
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
@@ -149,6 +153,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
+    /// <inheritdoc />
     public string DetectLanguage(Tensor<T> audio)
     {
         var features = PreprocessAudio(audio);
@@ -165,6 +170,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         return ClassifyLanguageFromTokens(tokens);
     }
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
         var detected = DetectLanguage(audio);
@@ -178,6 +184,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         return result;
     }
 
+    /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null)
         => throw new NotSupportedException("FireRedASR does not support streaming.");
 
@@ -196,6 +203,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
                 dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -211,8 +219,10 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         Name = _useNativeMode ? "FireRedASR-Native" : "FireRedASR-ONNX",
@@ -363,6 +373,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FireRedASR<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

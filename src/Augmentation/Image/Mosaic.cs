@@ -55,12 +55,14 @@ public class Mosaic<T> : ImageAugmenterBase<T>
                     canvas.SetPixel(startY + y, startX + x, c, resized.GetPixel(y, x, c));
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         // Single-image fallback: use the same image in all 4 quadrants
         return ApplyMosaic(data, data, data, data, context);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

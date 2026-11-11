@@ -229,6 +229,28 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
     }
 
     /// <summary>
+    /// Detects each image of a batch with its own <see cref="Detect(Tensor{T}, double, double)"/>, for detectors whose
+    /// forward pass handles one image: a two-stage head classifies one image's proposals, so slicing a batched output
+    /// along its first axis would split proposals, not images.
+    /// </summary>
+    protected BatchDetectionResult<T> DetectEachImage(Tensor<T> images, double confidenceThreshold, double nmsThreshold)
+    {
+        var startTime = DateTime.UtcNow;
+        int batchSize = images.Shape[0];
+        var imageShape = images.Shape.ToArray();
+        imageShape[0] = 1;
+        var results = new List<DetectionResult<T>>(batchSize);
+        for (int i = 0; i < batchSize; i++)
+        {
+            var start = new int[imageShape.Length];
+            start[0] = i;
+            results.Add(Detect(Engine.TensorSlice(images, start, imageShape), confidenceThreshold, nmsThreshold));
+        }
+
+        return new BatchDetectionResult<T> { Results = results, TotalInferenceTime = DateTime.UtcNow - startTime };
+    }
+
+    /// <summary>
     /// Extracts the outputs for a single batch item from batch outputs.
     /// </summary>
     protected virtual List<Tensor<T>> ExtractBatchOutputs(List<Tensor<T>> batchOutputs, int batchIndex)

@@ -104,6 +104,7 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int NumFeatures => _numFeatures;
     internal int NumIterations => _numIterations;
@@ -329,6 +330,7 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
 
     #region Private Methods
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
@@ -549,6 +551,7 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         return count > 0 ? sumAngle / count : 0;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
 
     #endregion
@@ -573,6 +576,7 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

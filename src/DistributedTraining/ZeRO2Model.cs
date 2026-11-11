@@ -107,6 +107,7 @@ public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
         // Sharding is initialized lazily via EnsureShardingInitialized() to avoid virtual calls in constructor
     }
 
+    /// <inheritdoc />
     protected override void InitializeSharding()
     {
         var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();

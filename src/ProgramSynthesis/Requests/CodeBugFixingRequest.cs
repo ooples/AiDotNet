@@ -7,6 +7,7 @@ namespace AiDotNet.ProgramSynthesis.Requests;
 /// </summary>
 public sealed class CodeBugFixingRequest : CodeTaskRequestBase
 {
+    /// <inheritdoc />
     public override CodeTask Task => CodeTask.BugFixing;
 
     public string Code { get; set; } = string.Empty;

@@ -23,15 +23,24 @@ public class TheilUMetric<T> : ITimeSeriesMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "TheilU";
+    /// <inheritdoc />
     public string Category => "TimeSeries";
+    /// <inheritdoc />
     public string Description => "Theil's U statistic comparing to naive forecast.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => default;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, int? seasonalPeriod = null)
     {
         if (predictions.Length != actuals.Length)

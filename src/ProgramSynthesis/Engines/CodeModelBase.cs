@@ -38,10 +38,13 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
 
     protected ITokenizer Tokenizer => _tokenizer;
 
+    /// <inheritdoc />
     public ProgramLanguage TargetLanguage => CodeArchitecture.TargetLanguage;
 
+    /// <inheritdoc />
     public int MaxSequenceLength => CodeArchitecture.MaxSequenceLength;
 
+    /// <inheritdoc />
     public int VocabularySize => CodeArchitecture.VocabularySize;
 
     protected CodeModelBase(
@@ -62,6 +65,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         }
     }
 
+    /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         CodeModelArchitectureSerialization.Write(
@@ -71,6 +75,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
             includeEncoderDecoderLayerCounts: true);
     }
 
+    /// <inheritdoc />
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         CodeModelArchitectureSerialization.ReadAndValidate(
@@ -81,6 +86,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
             includeEncoderDecoderLayerCounts: true);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -135,6 +141,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         };
     }
 
+    /// <inheritdoc />
     public Tensor<T> EncodeCode(string code)
     {
         var tokenIds = TokenizeToIds(code);
@@ -142,6 +149,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         return Predict(input);
     }
 
+    /// <inheritdoc />
     public string DecodeCode(Tensor<T> encoding)
     {
         if (encoding == null)
@@ -153,6 +161,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         return _tokenizer.Decode(tokenIds, skipSpecialTokens: true);
     }
 
+    /// <inheritdoc />
     [Obsolete("Use PerformTask(CodeTaskRequestBase) for structured outputs.")]
     public string PerformTask(string code, CodeTask task)
     {
@@ -161,6 +170,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         return FormatLegacyResult(result);
     }
 
+    /// <inheritdoc />
     public CodeTaskResultBase PerformTask(CodeTaskRequestBase request)
     {
         if (request is null)
@@ -226,6 +236,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         }
     }
 
+    /// <inheritdoc />
     public virtual Tensor<T> GetEmbeddings(string code)
     {
         var tokenIds = TokenizeToIds(code);

@@ -18,6 +18,7 @@ public class MedianBlur<T> : ImageAugmenterBase<T>
         MaxKernelSize = maxKernelSize;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         // Pick random odd kernel size
@@ -50,6 +51,7 @@ public class MedianBlur<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

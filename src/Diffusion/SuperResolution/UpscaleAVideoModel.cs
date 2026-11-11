@@ -505,6 +505,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PrepareTrainingSample(
         Tensor<T> input,
         Tensor<T> expectedOutput)
@@ -520,6 +521,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         return _temporalVAE.EncodeVideoForDiffusion(targetNCFHW, sampleMode: true);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictTrainingNoise(
         Tensor<T> noisySample,
         int[] timesteps,

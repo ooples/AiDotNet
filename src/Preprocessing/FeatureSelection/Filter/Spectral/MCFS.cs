@@ -24,7 +24,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Spectral;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nClusters;
@@ -36,9 +36,12 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? MCFSScores => _mcfsScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public MCFS(
@@ -62,6 +65,7 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _randomState = randomState;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -264,6 +268,7 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -280,11 +285,13 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("MCFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -297,6 +304,7 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return Array.Empty<string>();

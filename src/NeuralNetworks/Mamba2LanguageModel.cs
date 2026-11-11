@@ -113,6 +113,7 @@ public partial class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -128,6 +129,7 @@ public partial class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
     }
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

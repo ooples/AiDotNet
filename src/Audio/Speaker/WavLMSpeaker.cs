@@ -56,9 +56,13 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
 
     #region Properties
 
+    /// <inheritdoc />
     public T DefaultThreshold { get; }
+    /// <inheritdoc />
     public ISpeakerEmbeddingExtractor<T> EmbeddingExtractor => this;
+    /// <inheritdoc />
     public new bool IsOnnxMode => !_useNativeMode && OnnxEncoder is not null;
+    /// <inheritdoc />
     public double MinimumDurationSeconds => _options.MinDurationSeconds;
     public double VerificationThreshold => NumOps.ToDouble(DefaultThreshold);
 
@@ -117,9 +121,11 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
 
     #region ISpeakerVerifier
 
+    /// <inheritdoc />
     public SpeakerVerificationResult<T> Verify(Tensor<T> audio, Tensor<T> referenceEmbedding)
         => Verify(audio, referenceEmbedding, DefaultThreshold);
 
+    /// <inheritdoc />
     public SpeakerVerificationResult<T> Verify(Tensor<T> audio, Tensor<T> referenceEmbedding, T threshold)
     {
         ThrowIfDisposed();
@@ -130,6 +136,7 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
         return new SpeakerVerificationResult<T> { IsAccepted = isAccepted, Score = score, Threshold = threshold, Confidence = confidence };
     }
 
+    /// <inheritdoc />
     public SpeakerVerificationResult<T> VerifyWithReferenceAudio(Tensor<T> audio, Tensor<T> referenceAudio)
     {
         ThrowIfDisposed();
@@ -137,9 +144,11 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
         return Verify(audio, refEmb);
     }
 
+    /// <inheritdoc />
     public Task<SpeakerVerificationResult<T>> VerifyAsync(Tensor<T> audio, Tensor<T> referenceEmbedding, CancellationToken cancellationToken = default)
         => Task.Run(() => Verify(audio, referenceEmbedding), cancellationToken);
 
+    /// <inheritdoc />
     public SpeakerProfile<T> Enroll(IReadOnlyList<Tensor<T>> enrollmentAudio)
     {
         ThrowIfDisposed();
@@ -155,8 +164,10 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
         };
     }
 
+    /// <inheritdoc />
     public SpeakerProfile<T> Enroll(Tensor<T> enrollmentAudio) => Enroll([enrollmentAudio]);
 
+    /// <inheritdoc />
     public SpeakerProfile<T> UpdateProfile(SpeakerProfile<T> existingProfile, Tensor<T> newAudio)
     {
         ThrowIfDisposed();
@@ -171,6 +182,7 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
         };
     }
 
+    /// <inheritdoc />
     public T ComputeScore(Tensor<T> audio, Tensor<T> referenceEmbedding)
     {
         ThrowIfDisposed();
@@ -178,6 +190,7 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
         return ComputeCosineSimilarity(testEmb, referenceEmbedding);
     }
 
+    /// <inheritdoc />
     public T GetThresholdForFAR(double targetFAR)
     {
         double threshold = 0.85 - Math.Log10(1.0 / targetFAR) * 0.1;
@@ -189,6 +202,7 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
 
     #region ISpeakerEmbeddingExtractor
 
+    /// <inheritdoc />
     public Tensor<T> ExtractEmbedding(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -197,12 +211,15 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
         return NormalizeEmbedding(raw);
     }
 
+    /// <inheritdoc />
     public Task<Tensor<T>> ExtractEmbeddingAsync(Tensor<T> audio, CancellationToken cancellationToken = default)
         => Task.Run(() => ExtractEmbedding(audio), cancellationToken);
 
+    /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> ExtractEmbeddings(IReadOnlyList<Tensor<T>> audioSegments)
         => audioSegments.Select(a => ExtractEmbedding(a)).ToList();
 
+    /// <inheritdoc />
     public T ComputeSimilarity(Tensor<T> embedding1, Tensor<T> embedding2)
         => ComputeCosineSimilarity(embedding1, embedding2);
 
@@ -227,6 +244,7 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
             dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -244,14 +262,17 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MfccExtractor is not null) return MfccExtractor.Extract(rawAudio);
         return rawAudio;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => NormalizeEmbedding(o);
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -274,6 +295,7 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
     #region Disposal
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(WavLMSpeaker<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

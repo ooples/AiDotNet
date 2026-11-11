@@ -22,15 +22,24 @@ public class PrevalenceThresholdMetric<T> : IClassificationMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "PrevalenceThreshold";
+    /// <inheritdoc />
     public string Category => "Classification";
+    /// <inheritdoc />
     public string Description => "Prevalence Threshold (minimum prevalence for 50% PPV).";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -63,6 +72,7 @@ public class PrevalenceThresholdMetric<T> : IClassificationMetric<T>
         return NumOps.FromDouble(sqrtFPR / denominator);
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

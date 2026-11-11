@@ -19,6 +19,7 @@ public sealed class BasicCompositionPrivacyAccountant : PrivacyAccountantBase
     private double _epsilonTotal;
     private double _deltaTotal;
 
+    /// <inheritdoc />
     public override void AddRound(double epsilon, double delta, double samplingRate)
     {
         if (epsilon <= 0.0)
@@ -40,10 +41,13 @@ public sealed class BasicCompositionPrivacyAccountant : PrivacyAccountantBase
         _deltaTotal += delta;
     }
 
+    /// <inheritdoc />
     public override double GetTotalEpsilonConsumed() => _epsilonTotal;
 
+    /// <inheritdoc />
     public override double GetTotalDeltaConsumed() => _deltaTotal;
 
+    /// <inheritdoc />
     public override double GetEpsilonAtDelta(double targetDelta)
     {
         if (targetDelta <= 0.0 || targetDelta >= 1.0)
@@ -54,6 +58,7 @@ public sealed class BasicCompositionPrivacyAccountant : PrivacyAccountantBase
         return _epsilonTotal;
     }
 
+    /// <inheritdoc />
     public override string GetAccountantName() => "Basic";
 }
 

@@ -196,6 +196,7 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     #endregion
 
     #region Private Methods
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         // Native GroundedSAM2 is an image -> pixel-mask model: it takes an RGB image [C,H,W] / [B,C,H,W]
@@ -242,6 +243,7 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
         return unbatched ? RemoveBatchDimensionView(maskLogits) : maskLogits;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

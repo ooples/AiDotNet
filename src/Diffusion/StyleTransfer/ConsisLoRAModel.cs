@@ -65,9 +65,13 @@ public partial class ConsisLoRAModel<T> : LatentDiffusionModelBase<T>
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
 
+    /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
     public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
     public ConsisLoRAModel(
@@ -94,6 +98,7 @@ public partial class ConsisLoRAModel<T> : LatentDiffusionModelBase<T>
 
 
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "ConsisLoRA", Version = "1.0",

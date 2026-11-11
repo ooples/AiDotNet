@@ -254,6 +254,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return ForwardInternal(input);
         }
 
+        /// <inheritdoc />
         public override Tensor<T> ForwardWithMemory(Tensor<T> input)
         {
             if (!SupportsTraining)
@@ -542,6 +543,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         // spectral and pointwise weights belong to FourierLayer, which registers them itself -- so
         // there was never anything here the base walk could not reach.
 
+        /// <inheritdoc />
         public override Vector<T> GetGradients()
         {
             var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
@@ -821,6 +823,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             RegisterTrainableParameter(_pointwiseBias, PersistentTensorRole.Biases);
         }
 
+        /// <inheritdoc />
         public override bool SupportsTraining => true;
 
         /// <summary>
@@ -838,6 +841,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             // tensors (and _pointwiseWeights / _pointwiseBias) directly.
         }
 
+        /// <inheritdoc />
         protected override Tensor<T> ForwardTraced(Tensor<T> input)
         {
             int expectedRank = _spatialDimensions.Length + 2;
@@ -861,11 +865,13 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return _activation.Activate(combined);
         }
 
+        /// <inheritdoc />
         public override void ClearGradients()
         {
             // No-op: see GetParameterGradients — no persistent gradient buffers.
         }
 
+        /// <inheritdoc />
         public override void ResetState()
         {
             // No cached state — tape owns the gradient graph for the current forward.

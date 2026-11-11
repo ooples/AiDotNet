@@ -56,6 +56,7 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
     {
     }
 
+    /// <inheritdoc />
     public override async Task<IFullModel<T, TInput, TOutput>> SearchAsync(
         TInput inputs,
         TOutput targets,
@@ -116,6 +117,7 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
         }
     }
 
+    /// <inheritdoc />
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();
