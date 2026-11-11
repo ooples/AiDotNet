@@ -486,53 +486,7 @@ public abstract class OCRBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.I
     /// Resizes tensor using bilinear interpolation.
     /// </summary>
     protected Tensor<T> ResizeBilinear(Tensor<T> input, int targetH, int targetW)
-    {
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int srcH = input.Shape[2];
-        int srcW = input.Shape[3];
-
-        // In double, exactly as before, on one bulk conversion of the input; NCHW flat indexing.
-        var source = CvTensorOps<T>.ToDoubleArray(input);
-        var output = new double[batch * channels * targetH * targetW];
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                int sourcePlane = ((b * channels) + c) * srcH * srcW;
-                int targetPlane = ((b * channels) + c) * targetH * targetW;
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcY = (double)h / targetH * srcH;
-                        double srcX = (double)w / targetW * srcW;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, srcH - 1);
-                        int x1 = Math.Min(x0 + 1, srcW - 1);
-
-                        double wy1 = srcY - y0;
-                        double wy0 = 1.0 - wy1;
-                        double wx1 = srcX - x0;
-                        double wx0 = 1.0 - wx1;
-
-                        double v00 = source[sourcePlane + (y0 * srcW) + x0];
-                        double v01 = source[sourcePlane + (y0 * srcW) + x1];
-                        double v10 = source[sourcePlane + (y1 * srcW) + x0];
-                        double v11 = source[sourcePlane + (y1 * srcW) + x1];
-
-                        double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-                        output[targetPlane + (h * targetW) + w] = val;
-                    }
-                }
-            }
-        }
-
-        return CvTensorOps<T>.FromDoubleArray(output, new[] { batch, channels, targetH, targetW });
-    }
+        => CvTensorOps<T>.ResizeBilinearDouble(input, targetH, targetW);
 
     /// <summary>
     /// Gets the total parameter count.

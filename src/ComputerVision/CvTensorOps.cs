@@ -666,6 +666,54 @@ internal static class CvTensorOps<T>
     public static Tensor<T> FromDoubleArray(double[] values, int[] shape)
         => new Tensor<T>(shape, new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
 
+    /// <summary>
+    /// Bilinear resize of an NCHW tensor in double precision, with the source mapping
+    /// <c>src = dst / out * in</c> (no half-pixel offset), the far tap clamped to the last row or column, and
+    /// <c>wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11)</c> evaluated in that order: exactly the
+    /// arithmetic of the OCR and instance-mask resizers it serves, on one bulk conversion each way.
+    /// </summary>
+    public static Tensor<T> ResizeBilinearDouble(Tensor<T> input, int targetH, int targetW)
+    {
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int srcH = input.Shape[2];
+        int srcW = input.Shape[3];
+        var source = ToDoubleArray(input);
+        var output = new double[batch * channels * targetH * targetW];
+        for (int plane = 0; plane < batch * channels; plane++)
+        {
+            int sourcePlane = plane * srcH * srcW;
+            int targetPlane = plane * targetH * targetW;
+            for (int h = 0; h < targetH; h++)
+            {
+                for (int w = 0; w < targetW; w++)
+                {
+                    double srcY = (double)h / targetH * srcH;
+                    double srcX = (double)w / targetW * srcW;
+
+                    int y0 = (int)Math.Floor(srcY);
+                    int x0 = (int)Math.Floor(srcX);
+                    int y1 = Math.Min(y0 + 1, srcH - 1);
+                    int x1 = Math.Min(x0 + 1, srcW - 1);
+
+                    double wy1 = srcY - y0;
+                    double wy0 = 1.0 - wy1;
+                    double wx1 = srcX - x0;
+                    double wx0 = 1.0 - wx1;
+
+                    double v00 = source[sourcePlane + (y0 * srcW) + x0];
+                    double v01 = source[sourcePlane + (y0 * srcW) + x1];
+                    double v10 = source[sourcePlane + (y1 * srcW) + x0];
+                    double v11 = source[sourcePlane + (y1 * srcW) + x1];
+
+                    output[targetPlane + (h * targetW) + w] = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
+                }
+            }
+        }
+
+        return FromDoubleArray(output, new[] { batch, channels, targetH, targetW });
+    }
+
     /// <summary>Polygon vertices computed in double, as <typeparamref name="T"/> pairs in one bulk conversion.</summary>
     public static List<(T X, T Y)> PointsFromDoubles(IReadOnlyList<(double X, double Y)> points)
     {

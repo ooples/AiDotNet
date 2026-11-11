@@ -411,9 +411,9 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
     /// </summary>
     protected Tensor<T> ResizeMask(Tensor<T> mask, int targetHeight, int targetWidth)
     {
-        // Asymmetric bilinear mapping src = dst * in / out with the far tap clamped to the last row/column.
+        // Bilinear in double, src = dst / out * in with the far tap clamped to the last row/column, as before.
         var nchw = Engine.Reshape(mask, new[] { 1, 1, mask.Shape[0], mask.Shape[1] });
-        var resized = AiDotNet.ComputerVision.CvTensorOps<T>.ResizeBilinearAsymmetric(nchw, targetHeight, targetWidth);
+        var resized = AiDotNet.ComputerVision.CvTensorOps<T>.ResizeBilinearDouble(nchw, targetHeight, targetWidth);
         return Engine.Reshape(resized, new[] { targetHeight, targetWidth });
     }
 
