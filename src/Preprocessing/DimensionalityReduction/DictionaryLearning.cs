@@ -40,8 +40,8 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[]? _mean;
-    private double[,]? _components; // Dictionary atoms (n_atoms x n_features)
+    private Vector<T>? _mean;
+    private Matrix<T>? _components; // Dictionary atoms (n_atoms x n_features)
     private int _nFeaturesIn;
 
     /// <summary>
@@ -67,12 +67,12 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the mean of each feature.
     /// </summary>
-    public double[]? Mean => _mean;
+    public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the dictionary atoms (each row is an atom).
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -125,6 +125,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
@@ -134,626 +135,235 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Center the data
-        _mean = new double[p];
-        var centered = new double[n, p];
+        // Compute mean and center data
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = DimensionalityReductionOps.ColumnMeans(x);
+        var centered = DimensionalityReductionOps.SubtractRow(x, mean);
+        _mean = mean.ToVector();
 
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(data[i, j]);
-            }
-            _mean[j] = sum / n;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                centered[i, j] = NumOps.ToDouble(data[i, j]) - _mean[j];
-            }
-        }
-
-        // Initialize dictionary with random samples + noise
-        _components = new double[k, p];
-        var usedIndices = new HashSet<int>();
-
+        // Initialize dictionary: atom c starts from sample c (a random sample once c >= n) plus uniform noise
+        // in [-0.05, 0.05), drawn atom by atom in the original order, then normalized
+        var atoms = new Tensor<T>[k];
+        T noiseScale = NumOps.FromDouble(0.1);
+        T half = NumOps.FromDouble(0.5);
         for (int c = 0; c < k; c++)
         {
-            int idx;
-            if (c < n && !usedIndices.Contains(c % n))
-            {
-                idx = c % n;
-            }
-            else
-            {
-                idx = random.Next(n);
-            }
-            usedIndices.Add(idx);
-
-            double norm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                _components[c, j] = centered[idx, j] + 0.1 * (random.NextDouble() - 0.5);
-                norm += _components[c, j] * _components[c, j];
-            }
-
-            // Normalize
-            norm = Math.Sqrt(norm);
-            if (norm > 1e-10)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    _components[c, j] /= norm;
-                }
-            }
+            int idx = c < n ? c : random.Next(n);
+            var noise = engine.TensorMultiplyScalar(
+                engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, 1, p), half), noiseScale);
+            atoms[c] = engine.TensorAdd(engine.TensorNarrow(centered, 0, idx, 1), noise);
         }
 
-        // Alternating minimization
-        var codes = new double[n, k];
+        var components = DimensionalityReductionOps.NormalizeRows(engine.TensorConcatenate(atoms, 0));
+        T tol = NumOps.FromDouble(_tol);
 
+        // Alternating optimization
         for (int iter = 0; iter < _maxIter; iter++)
         {
-            double[] oldComponents = new double[k * p];
-            for (int c = 0; c < k; c++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    oldComponents[c * p + j] = _components[c, j];
-                }
-            }
+            var oldComponents = components;
 
-            // Step 1: Update codes (sparse coding)
-            UpdateCodes(centered, codes, n, p, k);
+            // Sparse coding step: update codes given dictionary
+            var codes = UpdateCodes(centered, components);
 
-            // Step 2: Update dictionary
-            if (_fitAlgorithm == DictionaryFitAlgorithm.CD)
-            {
-                UpdateDictionaryCD(centered, codes, n, p, k);
-            }
-            else
-            {
-                UpdateDictionaryLeastSquares(centered, codes, n, p, k);
-            }
+            // Dictionary update step
+            components = _fitAlgorithm == DictionaryFitAlgorithm.CD
+                ? UpdateDictionaryCD(centered, codes, components)
+                : UpdateDictionaryLeastSquares(centered, codes);
 
             // Check convergence
-            double maxChange = 0;
-            for (int c = 0; c < k; c++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double change = Math.Abs(_components[c, j] - oldComponents[c * p + j]);
-                    maxChange = Math.Max(maxChange, change);
-                }
-            }
-
-            if (maxChange < _tol)
+            if (DimensionalityReductionOps.Below(DimensionalityReductionOps.MaxAbsDifference(components, oldComponents), tol))
             {
                 break;
             }
         }
+
+        _components = components.ToMatrix();
     }
 
-    private void UpdateCodes(double[,] data, double[,] codes, int n, int p, int k)
+    private Tensor<T> UpdateCodes(Tensor<T> data, Tensor<T> components)
     {
-        // Choose sparse coding algorithm
         if (_transformAlgorithm == SparseCodingAlgorithm.OMP)
         {
-            // OMP - Orthogonal Matching Pursuit
+            // Use Orthogonal Matching Pursuit, one sample at a time (each sample selects its own atoms)
+            int n = data.Shape[0];
+            var rows = new Tensor<T>[n];
             for (int i = 0; i < n; i++)
             {
-                OMPSparseCoding(data, codes, i, p, k);
+                rows[i] = OMPSparseCoding(Engine.TensorNarrow(data, 0, i, 1), components);
             }
+
+            return Engine.TensorConcatenate(rows, 0);
         }
-        else
-        {
-            // LASSO-like sparse coding for each sample
-            for (int i = 0; i < n; i++)
-            {
-                SparseCodingForSample(data, codes, i, p, k);
-            }
-        }
+
+        // Use LASSO coordinate descent for every sample at once
+        return SparseCodingLasso(data, components);
     }
 
-    private void OMPSparseCoding(double[,] data, double[,] codes, int sample, int p, int k)
+    /// <summary>
+    /// Orthogonal Matching Pursuit for one sample x ([1, p]): greedily adds the atom most correlated with the
+    /// residual and refits the selected atoms by least squares, until the atom budget is used, the best
+    /// correlation falls below 1e-6, or the residual norm falls below 1e-6 times the signal norm.
+    /// </summary>
+    private Tensor<T> OMPSparseCoding(Tensor<T> x, Tensor<T> components)
     {
-        // Orthogonal Matching Pursuit algorithm
-        // Greedy algorithm that iteratively selects atoms to minimize residual
+        var engine = Engine;
+        int k = components.Shape[0];
+        int p = components.Shape[1];
+        T tolerance = NumOps.FromDouble(1e-6);
+        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
 
-        // Get the signal to encode
-        var x = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            x[j] = data[sample, j];
-        }
-
-        // Initialize residual as the signal
-        var residual = (double[])x.Clone();
-
-        // Track selected atoms
-        var selectedAtoms = new List<int>();
-        var tolerance = 1e-6;
-
-        // Maximum number of atoms to select (based on sparsity level)
-        // Use alpha to determine sparsity - higher alpha = fewer atoms
+        // Maximum number of atoms per sample (controls sparsity via alpha)
         int maxAtoms = Math.Max(1, (int)Math.Ceiling(k / (1 + _alpha)));
-        maxAtoms = Math.Min(maxAtoms, Math.Min(k, p)); // Can't select more than available
+        maxAtoms = Math.Min(maxAtoms, Math.Min(k, p));
 
-        // Initialize all codes to zero
-        for (int c = 0; c < k; c++)
-        {
-            codes[sample, c] = 0;
-        }
-
-        // Precompute D^T * x (correlations with signal)
-        var Dtx = new double[k];
-        for (int c = 0; c < k; c++)
-        {
-            double sum = 0;
-            for (int j = 0; j < p; j++)
-            {
-                sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * x[j];
-            }
-            Dtx[c] = sum;
-        }
+        var selectedAtoms = new List<int>();
+        var selectedMask = new Tensor<T>(new[] { k });
+        var code = new Tensor<T>(new[] { 1, k });
+        var residual = x;
+        var dtx = DimensionalityReductionOps.MatMulTranspose(x, components);                      // [1, k]
+        T signalNorm = NumOps.Sqrt(engine.TensorSum(engine.TensorSquare(x)));
+        T residualTolerance = NumOps.Multiply(tolerance, signalNorm);
 
         for (int iter = 0; iter < maxAtoms; iter++)
         {
-            // Step 1: Find atom most correlated with residual
-            int bestAtom = -1;
-            double bestCorrelation = 0;
+            // Find the unselected atom with maximum |correlation| with the residual
+            var correlation = engine.TensorAbs(engine.Reshape(
+                DimensionalityReductionOps.MatMulTranspose(residual, components), new[] { k }));
+            var open = engine.TensorWhere(selectedMask, engine.TensorFullLike(correlation, negativeInfinity), correlation);
+            int bestAtom = DimensionalityReductionOps.FirstArgMax(open);
 
-            for (int c = 0; c < k; c++)
-            {
-                // Skip already selected atoms
-                if (selectedAtoms.Contains(c))
-                {
-                    continue;
-                }
-
-                // Compute correlation with residual
-                double correlation = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    correlation += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * residual[j];
-                }
-
-                if (Math.Abs(correlation) > Math.Abs(bestCorrelation))
-                {
-                    bestCorrelation = correlation;
-                    bestAtom = c;
-                }
-            }
-
-            if (bestAtom < 0 || Math.Abs(bestCorrelation) < tolerance)
+            if (DimensionalityReductionOps.Below(engine.TensorMaxValue(open), tolerance))
             {
                 break;
             }
 
-            // Step 2: Add best atom to selected set
             selectedAtoms.Add(bestAtom);
+            selectedMask = DimensionalityReductionOps.MarkIndex(selectedMask, bestAtom);
 
-            // Step 3: Solve least squares problem for selected atoms
-            // x = D_selected * coefficients => coefficients = (D_selected^T * D_selected)^-1 * D_selected^T * x
-            int numSelected = selectedAtoms.Count;
+            // Least squares on the selected atoms: (D_S D_S^T + 1e-10 I) c = D_S x
+            var selected = DimensionalityReductionOps.IndexTensor(selectedAtoms.ToArray());
+            var atoms = DimensionalityReductionOps.SelectRows(components, selected);
+            var gram = engine.TensorAdd(
+                DimensionalityReductionOps.MatMulTranspose(atoms, atoms),
+                engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(selectedAtoms.Count), DimensionalityReductionOps.Constant<T>(1e-10)));
+            var coefficients = DimensionalityReductionOps.Solve(
+                gram, engine.Reshape(DimensionalityReductionOps.SelectColumns(dtx, selected), new[] { selectedAtoms.Count }));
 
-            // Build D_selected^T * D_selected
-            var DtD = new double[numSelected, numSelected];
-            for (int i = 0; i < numSelected; i++)
-            {
-                for (int j = 0; j < numSelected; j++)
-                {
-                    double sum = 0;
-                    for (int f = 0; f < p; f++)
-                    {
-                        sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[selectedAtoms[i], f] * _components[selectedAtoms[j], f];
-                    }
-                    DtD[i, j] = sum;
-                }
-                DtD[i, i] += 1e-10; // Small regularization for stability
-            }
+            // Update residual and the code
+            var coefficientRow = engine.Reshape(coefficients, new[] { 1, selectedAtoms.Count });
+            residual = engine.TensorSubtract(x, engine.TensorMatMul(coefficientRow, atoms));
+            code = engine.TensorScatter(new Tensor<T>(new[] { 1, k }), engine.Reshape(selected, new[] { 1, selectedAtoms.Count }), coefficientRow, 1);
 
-            // Build D_selected^T * x
-            var DtxSelected = new double[numSelected];
-            for (int i = 0; i < numSelected; i++)
-            {
-                DtxSelected[i] = Dtx[selectedAtoms[i]];
-            }
-
-            // Solve via Cholesky or LU decomposition
-            var coefficients = SolvePositiveDefinite(DtD, DtxSelected, numSelected);
-
-            // Step 4: Update residual
-            for (int j = 0; j < p; j++)
-            {
-                residual[j] = x[j];
-                for (int i = 0; i < numSelected; i++)
-                {
-                    residual[j] -= coefficients[i] * (_components ?? throw new InvalidOperationException("Components not initialized."))[selectedAtoms[i], j];
-                }
-            }
-
-            // Update codes for selected atoms
-            for (int i = 0; i < numSelected; i++)
-            {
-                codes[sample, selectedAtoms[i]] = coefficients[i];
-            }
-
-            // Check stopping criterion (residual energy)
-            double residualNorm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                residualNorm += residual[j] * residual[j];
-            }
-            residualNorm = Math.Sqrt(residualNorm);
-
-            double signalNorm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                signalNorm += x[j] * x[j];
-            }
-            signalNorm = Math.Sqrt(signalNorm);
-
-            if (residualNorm < tolerance * signalNorm)
+            // Check residual convergence
+            if (DimensionalityReductionOps.Below(DimensionalityReductionOps.Norm(residual), residualTolerance))
             {
                 break;
             }
         }
+
+        return code;
     }
 
-    private static double[] SolvePositiveDefinite(double[,] A, double[] b, int n)
+    /// <summary>
+    /// LASSO codes by cyclic coordinate descent, every sample at once: up to 100 sweeps of
+    /// code[:, c] = S((D x)[c] - sum_{j != c} (D D^T)[c, j] code[:, j]) / (D D^T)[c, c], alpha / (D D^T)[c, c]),
+    /// each sample stopping on its own once its largest coordinate change in a sweep is below 1e-6.
+    /// </summary>
+    private Tensor<T> SparseCodingLasso(Tensor<T> data, Tensor<T> components)
     {
-        // Solve A * x = b where A is positive definite
-        // Using Cholesky decomposition: A = L * L^T
+        var engine = Engine;
+        int n = data.Shape[0];
+        int k = components.Shape[0];
 
-        // Cholesky decomposition
-        var L = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < j; k++)
-                {
-                    sum += L[i, k] * L[j, k];
-                }
+        // Precompute D D^T and X D^T
+        var dtd = DimensionalityReductionOps.MatMulTranspose(components, components);   // [k, k]
+        var dtx = DimensionalityReductionOps.MatMulTranspose(data, components);         // [n, k]
+        var alpha = DimensionalityReductionOps.Scalar(NumOps.FromDouble(_alpha));
+        T floor = NumOps.FromDouble(1e-10);
+        T stop = NumOps.FromDouble(1e-6);
 
-                if (i == j)
-                {
-                    double diag = A[i, i] - sum;
-                    L[i, j] = diag > 0 ? Math.Sqrt(diag) : 1e-10;
-                }
-                else
-                {
-                    L[i, j] = (A[i, j] - sum) / L[j, j];
-                }
-            }
-        }
+        var codes = new Tensor<T>(new[] { n, k });
+        var active = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.One);
 
-        // Forward substitution: L * y = b
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < i; j++)
-            {
-                sum += L[i, j] * y[j];
-            }
-            y[i] = (b[i] - sum) / L[i, i];
-        }
-
-        // Backward substitution: L^T * x = y
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            double sum = 0;
-            for (int j = i + 1; j < n; j++)
-            {
-                sum += L[j, i] * x[j];
-            }
-            x[i] = (y[i] - sum) / L[i, i];
-        }
-
-        return x;
-    }
-
-    private void SparseCodingForSample(double[,] data, double[,] codes, int sample, int p, int k)
-    {
-        // Coordinate descent for LASSO
-        var x = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            x[j] = data[sample, j];
-        }
-
-        // Compute D^T * D
-        var DtD = new double[k, k];
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                double sum = 0;
-                for (int f = 0; f < p; f++)
-                {
-                    sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[i, f] * _components[j, f];
-                }
-                DtD[i, j] = sum;
-            }
-        }
-
-        // Compute D^T * x
-        var Dtx = new double[k];
-        for (int i = 0; i < k; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < p; j++)
-            {
-                sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[i, j] * x[j];
-            }
-            Dtx[i] = sum;
-        }
-
-        // Initialize codes to zero
-        for (int c = 0; c < k; c++)
-        {
-            codes[sample, c] = 0;
-        }
-
-        // Coordinate descent
         for (int iter = 0; iter < 100; iter++)
         {
-            double maxChange = 0;
+            var maxChange = new Tensor<T>(new[] { n, 1 });
 
             for (int c = 0; c < k; c++)
             {
-                double oldCode = codes[sample, c];
+                var oldCode = engine.TensorNarrow(codes, 1, c, 1);                       // [n, 1]
+                var dtdColumn = engine.TensorNarrow(dtd, 1, c, 1);                       // [k, 1]
+                var dtdDiagonal = engine.TensorNarrow(dtdColumn, 0, c, 1);               // [1, 1]
 
-                // Compute residual
-                double residual = Dtx[c];
-                for (int j = 0; j < k; j++)
-                {
-                    if (j != c)
-                    {
-                        residual -= DtD[c, j] * codes[sample, j];
-                    }
-                }
+                // residual = (X D^T)[:, c] - codes (D D^T)[:, c] + code[:, c] (D D^T)[c, c]
+                var residual = engine.TensorAdd(
+                    engine.TensorSubtract(engine.TensorNarrow(dtx, 1, c, 1), engine.TensorMatMul(codes, dtdColumn)),
+                    engine.TensorMultiply(oldCode, dtdDiagonal));
 
-                // Soft thresholding
-                double denominator = DtD[c, c];
-                if (denominator < 1e-10)
-                {
-                    denominator = 1e-10;
-                }
+                var denominator = engine.TensorClampMin(dtdDiagonal, floor);
+                var newCode = DimensionalityReductionOps.SoftThreshold(
+                    engine.TensorDivide(residual, denominator), engine.TensorDivide(alpha, denominator));
+                newCode = engine.TensorWhere(active, newCode, oldCode);
 
-                double newCode = SoftThreshold(residual / denominator, _alpha / denominator);
-                codes[sample, c] = newCode;
-
-                maxChange = Math.Max(maxChange, Math.Abs(newCode - oldCode));
+                maxChange = engine.TensorMax(maxChange, engine.TensorAbs(engine.TensorSubtract(newCode, oldCode)));
+                codes = DimensionalityReductionOps.WithColumn(codes, c, newCode);
             }
 
-            if (maxChange < 1e-6)
+            // Samples whose sweep changed every code by less than 1e-6 are done
+            active = engine.TensorMultiply(active, engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(maxChange, stop)));
+            if (DimensionalityReductionOps.Below(engine.TensorMaxValue(active), NumOps.One))
             {
                 break;
             }
         }
+
+        return codes;
     }
 
-    private void UpdateDictionaryCD(double[,] data, double[,] codes, int n, int p, int k)
+    /// <summary>
+    /// Block coordinate descent over the atoms: each atom is refit to its residual by least squares and
+    /// renormalized; an atom whose codes are all ~0 is left as it was.
+    /// </summary>
+    private Tensor<T> UpdateDictionaryCD(Tensor<T> data, Tensor<T> codes, Tensor<T> components)
     {
-        // Coordinate descent dictionary update
+        var engine = Engine;
+        int k = components.Shape[0];
+        T floor = NumOps.FromDouble(1e-10);
+
         for (int c = 0; c < k; c++)
         {
-            // Compute residual for all samples without atom c
-            var residual = new double[n, p];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    residual[i, j] = data[i, j];
-                    for (int cc = 0; cc < k; cc++)
-                    {
-                        if (cc != c)
-                        {
-                            residual[i, j] -= codes[i, cc] * (_components ?? throw new InvalidOperationException("Components not initialized."))[cc, j];
-                        }
-                    }
-                }
-            }
+            var codeColumn = engine.TensorNarrow(codes, 1, c, 1);                // [n, 1]
+            var row = engine.TensorNarrow(components, 0, c, 1);                  // [1, p]
 
-            // Update atom c
-            double codesSquared = 0;
-            for (int i = 0; i < n; i++)
-            {
-                codesSquared += codes[i, c] * codes[i, c];
-            }
+            // Compute residual without this atom
+            var residual = engine.TensorAdd(
+                engine.TensorSubtract(data, engine.TensorMatMul(codes, components)),
+                engine.TensorMatMul(codeColumn, row));
 
-            if (codesSquared < 1e-10)
-            {
-                continue;
-            }
+            // Least squares update of this atom
+            var codesSquared = engine.ReduceSum(engine.TensorSquare(codeColumn), new[] { 0 }, true);   // [1, 1]
+            var updated = DimensionalityReductionOps.NormalizeRows(engine.TensorDivide(
+                DimensionalityReductionOps.TransposeMatMul(codeColumn, residual), codesSquared));
 
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    sum += codes[i, c] * residual[i, j];
-                }
-                (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] = sum / codesSquared;
-            }
-
-            // Normalize atom
-            double norm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                norm += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * _components[c, j];
-            }
-            norm = Math.Sqrt(norm);
-
-            if (norm > 1e-10)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] /= norm;
-                }
-            }
+            // Skip unused atoms
+            var keep = engine.TensorLessThan(codesSquared, floor);
+            components = DimensionalityReductionOps.WithRow(components, c, engine.TensorWhere(keep, row, updated));
         }
+
+        return components;
     }
 
-    private void UpdateDictionaryLeastSquares(double[,] data, double[,] codes, int n, int p, int k)
+    /// <summary>Least squares dictionary D = (A^T A + 1e-6 I)^-1 A^T X with normalized atoms.</summary>
+    private Tensor<T> UpdateDictionaryLeastSquares(Tensor<T> data, Tensor<T> codes)
     {
-        // Least squares dictionary update: D = X^T * A * (A^T * A)^-1
+        var engine = Engine;
+        int k = codes.Shape[1];
 
-        // Compute A^T * A
-        var AtA = new double[k, k];
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                double sum = 0;
-                for (int s = 0; s < n; s++)
-                {
-                    sum += codes[s, i] * codes[s, j];
-                }
-                AtA[i, j] = sum;
-            }
-            AtA[i, i] += 1e-6; // Regularization
-        }
-
-        var AtAInv = InvertMatrix(AtA, k);
-
-        // Compute X^T * A
-        var XtA = new double[p, k];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                double sum = 0;
-                for (int s = 0; s < n; s++)
-                {
-                    sum += data[s, i] * codes[s, j];
-                }
-                XtA[i, j] = sum;
-            }
-        }
-
-        // D = XtA * AtAInv (transposed to get k x p)
-        for (int c = 0; c < k; c++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int l = 0; l < k; l++)
-                {
-                    sum += XtA[j, l] * AtAInv[l, c];
-                }
-                (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] = sum;
-            }
-
-            // Normalize atom
-            double norm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                norm += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * _components[c, j];
-            }
-            norm = Math.Sqrt(norm);
-
-            if (norm > 1e-10)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] /= norm;
-                }
-            }
-        }
-    }
-
-    private static double SoftThreshold(double x, double lambda)
-    {
-        if (x > lambda)
-        {
-            return x - lambda;
-        }
-        else if (x < -lambda)
-        {
-            return x + lambda;
-        }
-        else
-        {
-            return 0;
-        }
-    }
-
-    private static double[,] InvertMatrix(double[,] matrix, int n)
-    {
-        var result = new double[n, n];
-        var temp = new double[n, 2 * n];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                temp[i, j] = matrix[i, j];
-                temp[i, j + n] = (i == j) ? 1.0 : 0.0;
-            }
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            double maxVal = Math.Abs(temp[i, i]);
-            int maxRow = i;
-            for (int k = i + 1; k < n; k++)
-            {
-                if (Math.Abs(temp[k, i]) > maxVal)
-                {
-                    maxVal = Math.Abs(temp[k, i]);
-                    maxRow = k;
-                }
-            }
-
-            if (maxRow != i)
-            {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    (temp[i, j], temp[maxRow, j]) = (temp[maxRow, j], temp[i, j]);
-                }
-            }
-
-            double pivot = temp[i, i];
-            if (Math.Abs(pivot) < 1e-10)
-            {
-                pivot = 1e-10;
-            }
-
-            for (int j = 0; j < 2 * n; j++)
-            {
-                temp[i, j] /= pivot;
-            }
-
-            for (int k = 0; k < n; k++)
-            {
-                if (k != i)
-                {
-                    double factor = temp[k, i];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        temp[k, j] -= factor * temp[i, j];
-                    }
-                }
-            }
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                result[i, j] = temp[i, j + n];
-            }
-        }
-
-        return result;
+        var ata = engine.TensorAdd(
+            DimensionalityReductionOps.TransposeMatMul(codes, codes),
+            engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(k), NumOps.FromDouble(1e-6)));
+        var atx = DimensionalityReductionOps.TransposeMatMul(codes, data);
+        return DimensionalityReductionOps.NormalizeRows(DimensionalityReductionOps.Solve(ata, atx));
     }
 
     /// <summary>
@@ -766,33 +376,8 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("DictionaryLearning has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = data.Columns;
-        int k = _components.GetLength(0);
-
-        // Center data and compute sparse codes
-        var centered = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                centered[i, j] = NumOps.ToDouble(data[i, j]) - _mean[j];
-            }
-        }
-
-        var codes = new double[n, k];
-        UpdateCodes(centered, codes, n, p, k);
-
-        var result = new T[n, k];
-        for (int i = 0; i < n; i++)
-        {
-            for (int c = 0; c < k; c++)
-            {
-                result[i, c] = NumOps.FromDouble(codes[i, c]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        var centered = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
+        return UpdateCodes(centered, Tensor<T>.FromMatrix(_components)).ToMatrix();
     }
 
     /// <summary>
@@ -805,25 +390,10 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("DictionaryLearning has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = _nFeaturesIn;
-        int k = _components.GetLength(0);
-        var result = new T[n, p];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = _mean[j];
-                for (int c = 0; c < k; c++)
-                {
-                    sum += NumOps.ToDouble(data[i, c]) * _components[c, j];
-                }
-                result[i, j] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        int k = _components.Rows;
+        var codes = DimensionalityReductionOps.FirstColumns(Tensor<T>.FromMatrix(data), k);
+        var reconstructed = Engine.TensorMatMul(codes, Tensor<T>.FromMatrix(_components));
+        return DimensionalityReductionOps.AddRow(reconstructed, Tensor<T>.FromVector(_mean)).ToMatrix();
     }
 
     /// <summary>
@@ -831,7 +401,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        int k = _components?.GetLength(0) ?? _nComponents;
+        int k = _components?.Rows ?? _nComponents;
         var names = new string[k];
         for (int i = 0; i < k; i++)
         {

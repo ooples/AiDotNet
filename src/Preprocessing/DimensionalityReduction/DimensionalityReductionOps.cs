@@ -190,6 +190,23 @@ internal static class DimensionalityReductionOps
     /// <summary>A loop-level constant (step size, weight) as T; one conversion per iteration, not per element.</summary>
     internal static T Constant<T>(double value) => MathHelper.GetNumericOperations<T>().FromDouble(value);
 
+    /// <summary>Euclidean (Frobenius) norm of a tensor.</summary>
+    internal static T Norm<T>(Tensor<T> x) =>
+        MathHelper.GetNumericOperations<T>().Sqrt(Engine.TensorSum(Engine.TensorSquare(x)));
+
+    /// <summary>Index of the first largest entry of a rank-1 tensor.</summary>
+    internal static int FirstArgMax<T>(Tensor<T> values) => Engine.TensorArgMax(values, 0)[0];
+
+    /// <summary>Index of the first smallest entry of a rank-1 tensor.</summary>
+    internal static int FirstArgMin<T>(Tensor<T> values) => Engine.TensorArgMin(values, 0)[0];
+
+    /// <summary>Returns a copy of a rank-1 0/1 mask with position <paramref name="index"/> set to 1.</summary>
+    internal static Tensor<T> MarkIndex<T>(Tensor<T> mask, int index)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return Engine.TensorScatter(mask, IndexTensor(new[] { index }), Scalar(numOps.One), 0);
+    }
+
     /// <summary>|a - b| &lt; tolerance: the scalar convergence test of an iterative fit (one call per iteration).</summary>
     internal static bool ChangeBelow<T>(T a, T b, T tolerance)
     {
