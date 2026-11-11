@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -451,34 +452,12 @@ internal class SpeculativeDecoder<T>
     /// </summary>
     private static Vector<T> ComputeAdjustedDistribution(Vector<T> targetDist, Vector<T> draftDist)
     {
-        // Compute max(0, p_target - p_draft), then normalize
-        var adjusted = new Vector<T>(targetDist.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < targetDist.Length; i++)
-        {
-            T diff = NumOps.Subtract(targetDist[i], draftDist[i]);
-            adjusted[i] = NumOps.GreaterThan(diff, NumOps.Zero) ? diff : NumOps.Zero;
-            sum = NumOps.Add(sum, adjusted[i]);
-        }
-
-        // Normalize
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < adjusted.Length; i++)
-            {
-                adjusted[i] = NumOps.Divide(adjusted[i], sum);
-            }
-        }
-        else
-        {
-            // Fallback to target distribution
-            for (int i = 0; i < adjusted.Length; i++)
-            {
-                adjusted[i] = targetDist[i];
-            }
-        }
-
-        return adjusted;
+        // max(0, p_target - p_draft), normalized; falls back to the target distribution when nothing is left
+        var engine = AiDotNetEngine.Current;
+        var adjusted = (Vector<T>)engine.ReLU(engine.Subtract(targetDist, draftDist));
+        T sum = engine.Sum(adjusted);
+        return NumOps.GreaterThan(sum, NumOps.Zero)
+            ? (Vector<T>)engine.Divide(adjusted, sum)
+            : (Vector<T>)targetDist.Clone();
     }
 }
