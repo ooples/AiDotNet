@@ -127,8 +127,8 @@ public class SuperGlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         var vocabulary = TextLoaderHelper.BuildVocabulary(texts, totalSamples, _options.VocabularySize);
 
         int seqLen = _options.MaxSequenceLength;
-        var featuresData = new double[totalSamples * seqLen];
-        var labelsData = new double[totalSamples * _numClasses];
+        var featuresData = new int[totalSamples * seqLen];
+        var labelsData = new int[totalSamples * _numClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -139,11 +139,11 @@ public class SuperGlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
 
             int label = Math.Min(labelValues[i], _numClasses - 1);
             if (label >= 0)
-                labelsData[i * _numClasses + label] = 1.0;
+                labelsData[i * _numClasses + label] = 1;
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, _numClasses }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, _numClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 
