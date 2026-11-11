@@ -546,6 +546,28 @@ internal static class PreprocessingTensorOps
         return engine.TensorClamp(block, ops.Zero, ops.FromDouble(blocks - 1)).Cast<int>().AsSpan().ToArray();
     }
 
+    /// <summary>
+    /// The Euclidean distance of every row of <paramref name="data"/> from the column means. With
+    /// <paramref name="standardize"/>, each column difference is first divided by the column's population
+    /// standard deviation (1 where that is below 1e-10).
+    /// </summary>
+    public static Tensor<T> CentroidDistances<T>(Matrix<T> data, bool standardize)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var x = Tensor<T>.FromMatrix(data);
+        var diff = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        if (standardize)
+        {
+            var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorMultiply(diff, diff), new[] { 0 }, true));
+            var tiny = engine.TensorLessThan(std, ops.FromDouble(1e-10));
+            std = engine.TensorWhere(tiny, Filled(std.Shape.ToArray(), ops.One), std);
+            diff = engine.TensorDivide(diff, std);
+        }
+
+        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, false));
+    }
+
     /// <summary>The values 0, 1, ..., count - 1 as a 1-D tensor.</summary>
     public static Tensor<T> Range<T>(int count) =>
         new Tensor<int>(Enumerable.Range(0, count).ToArray(), new[] { count }).Cast<T>();

@@ -84,43 +84,28 @@ public class CovariateShiftSplitter<T> : DataSplitterBase<T>
         int shiftDim = Math.Min(_shiftDimension, nFeatures - 1);
 
         // Get values along the shift dimension
-        var values = new double[nSamples];
-        for (int i = 0; i < nSamples; i++)
-        {
-            values[i] = Convert.ToDouble(X[i, shiftDim]);
-        }
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var values = PreprocessingTensorOps.Column(X, shiftDim);
 
         // Calculate percentiles
-        var sortedValues = values.OrderBy(v => v).ToArray();
-        double median = sortedValues[nSamples / 2];
-        double q25 = sortedValues[(int)(nSamples * 0.25)];
-        double q75 = sortedValues[(int)(nSamples * 0.75)];
+        var sortedValues = engine.TensorSort(values).Item1;
+        T median = sortedValues.GetFlat(nSamples / 2);
+        T q25 = sortedValues.GetFlat((int)(nSamples * 0.25));
+        T q75 = sortedValues.GetFlat((int)(nSamples * 0.75));
 
         // Determine shift threshold based on shift strength
         // Higher shift strength means more separation
-        double trainThreshold = median - (median - q25) * _shiftStrength;
-        double testThreshold = median + (q75 - median) * _shiftStrength;
+        T strength = NumOps.FromDouble(_shiftStrength);
+        T trainThreshold = NumOps.Subtract(median, NumOps.Multiply(NumOps.Subtract(median, q25), strength));
+        T testThreshold = NumOps.Add(median, NumOps.Multiply(NumOps.Subtract(q75, median), strength));
 
-        // Categorize samples
-        var trainCandidates = new List<int>();
-        var testCandidates = new List<int>();
-        var middleSamples = new List<int>();
-
-        for (int i = 0; i < nSamples; i++)
-        {
-            if (values[i] <= trainThreshold)
-            {
-                trainCandidates.Add(i);
-            }
-            else if (values[i] >= testThreshold)
-            {
-                testCandidates.Add(i);
-            }
-            else
-            {
-                middleSamples.Add(i);
-            }
-        }
+        // Categorize samples: at most the train threshold, else at least the test threshold, else middle
+        var trainMask = PreprocessingTensorOps.Not(engine.TensorGreaterThan(values, trainThreshold));
+        var testMask = engine.TensorMultiply(PreprocessingTensorOps.AtLeast(values, testThreshold), PreprocessingTensorOps.Not(trainMask));
+        var middleMask = PreprocessingTensorOps.Not(engine.TensorAdd(trainMask, testMask));
+        var trainCandidates = PreprocessingTensorOps.MaskPositions(trainMask).ToList();
+        var testCandidates = PreprocessingTensorOps.MaskPositions(testMask).ToList();
+        var middleSamples = PreprocessingTensorOps.MaskPositions(middleMask).ToList();
 
         // Shuffle candidates
         var trainArray = trainCandidates.ToArray();

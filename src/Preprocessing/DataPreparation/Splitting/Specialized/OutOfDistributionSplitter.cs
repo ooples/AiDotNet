@@ -69,52 +69,14 @@ public class OutOfDistributionSplitter<T> : DataSplitterBase<T>
         ValidateInputs(X, y);
 
         int nSamples = X.Rows;
-        int nFeatures = X.Columns;
         int targetTestSize = Math.Max(1, (int)(nSamples * _testSize));
 
-        // Compute centroid
-        var centroid = new double[nFeatures];
-        for (int j = 0; j < nFeatures; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < nSamples; i++)
-            {
-                sum += Convert.ToDouble(X[i, j]);
-            }
-            centroid[j] = sum / nSamples;
-        }
-
-        // Compute standard deviation per feature for normalization
-        var stdDev = new double[nFeatures];
-        for (int j = 0; j < nFeatures; j++)
-        {
-            double sumSq = 0;
-            for (int i = 0; i < nSamples; i++)
-            {
-                double diff = Convert.ToDouble(X[i, j]) - centroid[j];
-                sumSq += diff * diff;
-            }
-            stdDev[j] = Math.Sqrt(sumSq / nSamples);
-            if (stdDev[j] < 1e-10) stdDev[j] = 1; // Avoid division by zero
-        }
-
-        // Compute Mahalanobis-like distance for each sample
-        var distances = new double[nSamples];
-        for (int i = 0; i < nSamples; i++)
-        {
-            double dist = 0;
-            for (int j = 0; j < nFeatures; j++)
-            {
-                double normalizedDiff = (Convert.ToDouble(X[i, j]) - centroid[j]) / stdDev[j];
-                dist += normalizedDiff * normalizedDiff;
-            }
-            distances[i] = Math.Sqrt(dist);
-        }
+        // Mahalanobis-like distance for each sample: centroid distance with per-feature standardization
+        // (population standard deviation, 1 where it is below 1e-10)
+        var distances = PreprocessingTensorOps.CentroidDistances(X, standardize: true);
 
         // Sort by distance (most distant = OOD)
-        var sortedIndices = Enumerable.Range(0, nSamples)
-            .OrderByDescending(i => distances[i])
-            .ToArray();
+        var sortedIndices = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorArgsort(distances, 0, true).AsSpan().ToArray();
 
         // OOD samples go to test, others can go to either based on testSize
         int oodCount = (int)((1 - _oodPercentile) * nSamples);
