@@ -487,13 +487,7 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
             input = AddBatchDimension(input);
         }
 
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        }
-
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
+        var onnxInput = CvTensorOps<T>.ToOnnxFloat(input);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.FirstOrDefault() ?? "pixel_values";
         var inputs = new List<NamedOnnxValue>
@@ -503,14 +497,7 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
 
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
-        var outputShape = outputTensor.Dimensions.ToArray();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
-
-        var result = new Tensor<T>(outputShape, new Vector<T>(outputData));
+        var result = CvTensorOps<T>.FromOnnxFloat(outputTensor);
 
         if (!hasBatch)
         {
