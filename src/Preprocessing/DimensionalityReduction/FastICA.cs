@@ -38,6 +38,7 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly ICAFunction _fun;
     private readonly int _maxIterations;
     private readonly double _tolerance;
+    private const double TinyEigenvalue = 1e-30; // eigenvalue floor (sklearn clips at finfo.tiny), representable as float
     private readonly int _randomState;
     private readonly bool _whiten;
 
@@ -260,9 +261,10 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var random = RandomHelper.CreateSeededRandom(_randomState);
         T sampleCount = NumOps.FromDouble(n);
         T tolerance = NumOps.FromDouble(_tolerance);
+        var ones = DimensionalityReductionOps.Full(new[] { nComponents }, NumOps.One);
 
-        // Random initialization, then orthogonalize
-        var w = OrthogonalizeMatrix(
+        // Random initialization, then symmetric decorrelation (sklearn _ica_par)
+        var w = SymmetricDecorrelation(
             engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, nComponents, p), NumOps.FromDouble(0.5)));
 
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -274,14 +276,12 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             var (g, gPrime) = ApplyNonLinearity(wx);
             var expectedXg = engine.TensorDivideScalar(DimensionalityReductionOps.TransposeMatMul(g, x), sampleCount);
             var expectedGPrime = DimensionalityReductionOps.ColumnMeans(gPrime);                   // [k]
-            w = engine.TensorSubtract(expectedXg, DimensionalityReductionOps.ScaleRows(wOld, expectedGPrime));
+            w = SymmetricDecorrelation(engine.TensorSubtract(expectedXg, DimensionalityReductionOps.ScaleRows(wOld, expectedGPrime)));
 
-            // Symmetric decorrelation (using Gram-Schmidt for simplicity)
-            w = OrthogonalizeMatrix(w);
-
-            // Check convergence: max | |W| - |W_old| |
-            T maxChange = DimensionalityReductionOps.MaxAbsDifference(engine.TensorAbs(w), engine.TensorAbs(wOld));
-            if (DimensionalityReductionOps.Below(maxChange, tolerance))
+            // Convergence (sklearn): max | |diag(W W_old^T)| - 1 |
+            var alignment = engine.TensorDiagonal(DimensionalityReductionOps.MatMulTranspose(w, wOld));
+            T change = DimensionalityReductionOps.MaxAbsDifference(engine.TensorAbs(alignment), ones);
+            if (DimensionalityReductionOps.Below(change, tolerance))
             {
                 break;
             }
@@ -293,41 +293,18 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>Divides a row by its Euclidean norm.</summary>
     private Tensor<T> UnitRow(Tensor<T> row) => Engine.TensorDivideScalar(row, DimensionalityReductionOps.Norm(row));
 
-    /// <summary>
-    /// Gram-Schmidt on the rows: each row has its projections on the earlier rows removed and is normalized;
-    /// a row whose norm is at most 1e-10 is replaced by a fresh unit random row seeded with randomState + row.
-    /// </summary>
-    private Tensor<T> OrthogonalizeMatrix(Tensor<T> w)
+    /// <summary>Symmetric decorrelation W &lt;- (W W^T)^(-1/2) W (Hyvarinen 1999; sklearn FastICA).</summary>
+    private Tensor<T> SymmetricDecorrelation(Tensor<T> w)
     {
+        // S = W W^T = U diag(s) U^T; W <- U diag(1 / sqrt(s)) U^T W, s clipped below at a tiny positive floor
+        // (sklearn _sym_decorrelation)
         var engine = Engine;
-        int rowsCount = w.Shape[0];
-        int cols = w.Shape[1];
-        T floor = NumOps.FromDouble(1e-10);
-        T half = NumOps.FromDouble(0.5);
-        var rows = new Tensor<T>[rowsCount];
-
-        for (int i = 0; i < rowsCount; i++)
-        {
-            var row = engine.TensorNarrow(w, 0, i, 1);
-            for (int j = 0; j < i; j++)
-            {
-                row = engine.TensorSubtract(row, engine.TensorMatMul(DimensionalityReductionOps.MatMulTranspose(row, rows[j]), rows[j]));
-            }
-
-            T norm = DimensionalityReductionOps.Norm(row);
-            if (DimensionalityReductionOps.Above(norm, floor))
-            {
-                rows[i] = engine.TensorDivideScalar(row, norm);
-            }
-            else
-            {
-                // Reinitialize with random values if degenerate
-                var random = RandomHelper.CreateSeededRandom(_randomState + i);
-                rows[i] = UnitRow(engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, 1, cols), half));
-            }
-        }
-
-        return engine.TensorConcatenate(rows, 0);
+        var (values, vectors) = DimensionalityReductionOps.SymmetricEigen(
+            DimensionalityReductionOps.MatMulTranspose(w, w), descending: true);
+        var scale = engine.TensorRsqrt(engine.TensorClampMin(values, NumOps.FromDouble(TinyEigenvalue)));
+        var inverseRoot = DimensionalityReductionOps.MatMulTranspose(
+            DimensionalityReductionOps.ScaleColumns(vectors, scale), vectors);
+        return engine.TensorMatMul(inverseRoot, w);
     }
 
     /// <summary>The contrast function g and its derivative g' applied to every projection.</summary>
