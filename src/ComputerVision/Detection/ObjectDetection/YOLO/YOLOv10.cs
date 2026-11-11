@@ -217,21 +217,25 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         // Build detection list with confidence filtering
         var candidateDetections = new List<Detection<T>>();
 
+        // The decoder float outputs become T in one bulk pass each.
+        var boxValues = CvTensorOps<T>.FromDoubleArray(Array.ConvertAll(boxes, value => (double)value), new[] { boxes.Length }).ToArray();
+        var scoreValues = CvTensorOps<T>.FromDoubleArray(Array.ConvertAll(scores, value => (double)value), new[] { scores.Length }).ToArray();
+
         for (int i = 0; i < scores.Length; i++)
         {
             if (scores[i] >= confidenceThreshold)
             {
                 var box = new BoundingBox<T>(
-                    NumOps.FromDouble(boxes[i * 4]),
-                    NumOps.FromDouble(boxes[i * 4 + 1]),
-                    NumOps.FromDouble(boxes[i * 4 + 2]),
-                    NumOps.FromDouble(boxes[i * 4 + 3]));
+                    boxValues[i * 4],
+                    boxValues[i * 4 + 1],
+                    boxValues[i * 4 + 2],
+                    boxValues[i * 4 + 3]);
 
                 int classId = classIds[i];
                 candidateDetections.Add(new Detection<T>(
                     box,
                     classId,
-                    NumOps.FromDouble(scores[i]),
+                    scoreValues[i],
                     classId < ClassNames.Length ? ClassNames[classId] : null));
             }
         }
@@ -275,8 +279,7 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         foreach (var kvp in byClass)
         {
             var classDetections = kvp.Value;
-            var sorted = classDetections
-                .OrderByDescending(d => NumOps.ToDouble(d.Confidence))
+            var sorted = CvTensorOps<T>.OrderByDescending(classDetections, d => d.Confidence)
                 .Take(perClassLimit);
 
             foreach (var detection in sorted)
@@ -290,7 +293,7 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         }
 
         // Sort final results by confidence
-        return selected.OrderByDescending(d => NumOps.ToDouble(d.Confidence)).ToList();
+        return CvTensorOps<T>.OrderByDescending(selected, d => d.Confidence);
     }
 
     /// <inheritdoc/>
