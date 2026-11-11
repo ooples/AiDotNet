@@ -100,28 +100,26 @@ public class TimeStretch<T> : AudioAugmenterBase<T>
         var engine = Engine;
         var rows = engine.Reshape(waveform, [outerElements, originalSamples]);
 
-        // Source position of every output sample: i * originalSamples / newLength. Positions and the
-        // interpolation are evaluated in double, so an integral T cannot truncate the fractional weights
+        // Source position of every output sample: i * originalSamples / newLength
         var srcPos = engine.TensorDivideScalar(
-            engine.TensorMultiplyScalar(engine.TensorArange<double>(0, newLength, 1), (double)originalSamples),
-            (double)newLength);
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, newLength, 1), NumOps.FromDouble(originalSamples)),
+            NumOps.FromDouble(newLength));
         var srcFloor = engine.TensorFloor(srcPos);
-        double last = originalSamples - 1;
+        T last = NumOps.FromDouble(originalSamples - 1);
 
-        // Positions at or past the last sample take the last sample as is (index clamped, weight 0)
-        var atEnd = engine.TensorGreaterThan(srcFloor, originalSamples - 1.5);
+        // Positions at or past the last sample take the last sample (index clamped, weight 0)
+        var atEnd = engine.TensorGreaterThan(srcFloor, NumOps.FromDouble(originalSamples - 1.5));
         var lower = engine.TensorClampMax(srcFloor, last).Cast<int>();
-        var upper = engine.TensorClampMax(engine.TensorAddScalar(srcFloor, 1.0), last).Cast<int>();
-        var frac = engine.TensorMultiply(engine.TensorSubtract(srcPos, srcFloor), engine.ScalarMinusTensor(1.0, atEnd));
+        var upper = engine.TensorClampMax(engine.TensorAddScalar(srcFloor, NumOps.One), last).Cast<int>();
+        var frac = engine.TensorMultiply(
+            engine.TensorSubtract(srcPos, srcFloor),
+            engine.ScalarMinusTensor(NumOps.One, atEnd));
 
         int[] outShape = [outerElements, newLength];
-        var wide = rows.Contiguous().Cast<double>();
-        var val1 = engine.TensorIndexSelect(wide, lower, 1);
-        var val2 = engine.TensorIndexSelect(wide, upper, 1);
+        var val1 = engine.TensorIndexSelect(rows, lower, 1);
+        var val2 = engine.TensorIndexSelect(rows, upper, 1);
         var weight = engine.TensorBroadcastTo(engine.Reshape(frac, [1, newLength]), outShape);
-        var blended = engine.TensorAdd(val1, engine.TensorMultiply(weight, engine.TensorSubtract(val2, val1))).Cast<T>();
-        var endMask = engine.TensorBroadcastTo(engine.Reshape(atEnd.Cast<T>(), [1, newLength]), outShape);
-        var interpolated = engine.TensorWhere(endMask, engine.TensorIndexSelect(rows, lower, 1), blended);
+        var interpolated = engine.TensorAdd(val1, engine.TensorMultiply(weight, engine.TensorSubtract(val2, val1)));
         interpolated.Contiguous().CopyTo(result.AsWritableSpan());
 
         return result;
