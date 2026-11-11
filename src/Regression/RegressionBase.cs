@@ -1,5 +1,4 @@
 global using AiDotNet.Factories;
-using AiDotNet.Autodiff;
 using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Parameters;

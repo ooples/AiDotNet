@@ -1,4 +1,3 @@
-using AiDotNet.Autodiff;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining.Layers;

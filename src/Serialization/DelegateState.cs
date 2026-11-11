@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using AiDotNet.Autodiff;
 
 namespace AiDotNet.Serialization;
 

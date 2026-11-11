@@ -1,7 +1,6 @@
 using AiDotNet.Optimizers;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;

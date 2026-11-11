@@ -1,6 +1,5 @@
 using System.Linq;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Initialization;

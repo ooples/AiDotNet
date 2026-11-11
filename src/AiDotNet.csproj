@@ -397,7 +397,6 @@
 
         <!-- Global usings for internal AiDotNet namespaces -->
         <ItemGroup>
-          <Using Include="AiDotNet.Autodiff" />
           <Using Include="AiDotNet.Validation" />
         </ItemGroup>
 

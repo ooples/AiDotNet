@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Initialization;

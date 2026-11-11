@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
@@ -142,21 +141,4 @@ public class ReLU6Activation<T> : ActivationFunctionBase<T>, Fused.IFusedActivat
         });
     }
 
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with ReLU6 activation applied.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as JIT compilation is not supported.</exception>
-    /// <remarks>
-    /// <para>
-    /// ReLU6 would be implemented as min(max(0, x), 6) = min(ReLU(x), 6).
-    /// Currently not supported until TensorOperations.Minimum is implemented.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        throw new NotSupportedException(
-            "ReLU6Activation does not support JIT compilation. Use the standard Activate method instead.");
-    }
 }

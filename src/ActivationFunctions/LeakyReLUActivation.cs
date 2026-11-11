@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
@@ -227,28 +226,6 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedAct
             output[i] = Derivative(input[i]);
         }
         return output;
-    }
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with LeakyReLU activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps the LeakyReLU activation to TensorOperations&lt;T&gt;.LeakyReLU(input, alpha),
-    /// which handles both forward and backward passes for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        // Convert alpha to double for TensorOperations
-        double alphaDouble = NumOps.ToDouble(_alpha);
-        return TensorOperations<T>.LeakyReLU(input, alphaDouble);
     }
 
     #region GPU Training Support

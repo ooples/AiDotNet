@@ -1,7 +1,6 @@
 global using AiDotNet.Factories;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Parameters;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using Newtonsoft.Json;
