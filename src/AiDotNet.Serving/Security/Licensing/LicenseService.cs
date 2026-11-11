@@ -196,43 +196,8 @@ public sealed class LicenseService : ILicenseService
             };
         }
 
-        // Seats held: active activations whose lease is current (see ActivationLease).
-        int seatsUsed = await CountLeasedSeatsAsync(entity.Id, cancellationToken).ConfigureAwait(false);
-
-        // Check seat limit BEFORE activation to avoid over-activating under concurrency.
-        // A machine whose lease is current does not consume a new seat, so check for it first; a lapsed one does.
-        if (!string.IsNullOrWhiteSpace(request.MachineId))
-        {
-            var leaseStart = _clock.GetUtcNow() - ActivationLease;
-            bool alreadyActive = (await _db.LicenseActivations
-                .Where(a => a.LicenseKeyId == entity.Id && a.MachineId == request.MachineId && a.IsActive)
-                .Select(a => a.LastSeenAt)
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false))
-                .Any(lastSeen => lastSeen >= leaseStart);
-
-            if (!alreadyActive && seatsUsed >= entity.MaxSeats)
-            {
-                return new LicenseValidationResponse
-                {
-                    Status = LicenseKeyStatus.SeatLimitReached,
-                    Tier = entity.Tier.ToString(),
-                    ExpiresAt = entity.ExpiresAt,
-                    SeatsUsed = seatsUsed,
-                    SeatsMax = entity.MaxSeats,
-                    Message = $"Seat limit reached ({seatsUsed}/{entity.MaxSeats}). Contact your administrator."
-                };
-            }
-
-            await UpsertActivationAsync(entity.Id, request.MachineId, request.MachineName, request.Environment, cancellationToken)
-                .ConfigureAwait(false);
-
-            // Re-count after upsert to include this machine
-            seatsUsed = await CountLeasedSeatsAsync(entity.Id, cancellationToken).ConfigureAwait(false);
-        }
-
-        // Final seat-limit guard (covers edge cases where MachineId is empty)
-        if (seatsUsed > entity.MaxSeats)
+        var (admitted, seatsUsed) = await AdmitSeatAsync(entity, request, cancellationToken).ConfigureAwait(false);
+        if (!admitted)
         {
             return new LicenseValidationResponse
             {
@@ -331,6 +296,85 @@ public sealed class LicenseService : ILicenseService
         }).ToList();
 
         return info;
+    }
+
+    /// <summary>
+    /// Decides whether this request holds a seat and, only if it does, renews its machine's lease.
+    /// </summary>
+    /// <remarks>
+    /// Serialized per license key. The count, the decision and the renewal run in one transaction that first takes
+    /// a write lock on the key's own row, so a second admission for the same key waits until the first has
+    /// committed. Without it, two lapsed machines on a one-seat key could both read a free seat and both persist a
+    /// lease. The seat limit is checked BEFORE the renewal is written, so a rejected request never extends its
+    /// lease: a machine over the limit (for instance after an administrator lowered MaxSeats) lapses instead of
+    /// holding its seat by validating repeatedly.
+    /// </remarks>
+    /// <returns>Whether a seat is held, and the leased seats counted for the response.</returns>
+    private async Task<(bool Admitted, int SeatsUsed)> AdmitSeatAsync(
+        LicenseKeyEntity entity,
+        LicenseValidateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            // A retrying strategy re-runs this whole block; an activation tracked by a failed attempt must not be
+            // saved twice.
+            foreach (var tracked in _db.ChangeTracker.Entries<LicenseActivationEntity>().ToList())
+            {
+                tracked.State = EntityState.Detached;
+            }
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await LockLicenseKeyAsync(entity.Id, cancellationToken).ConfigureAwait(false);
+
+            // Seats held: active activations whose lease is current (see ActivationLease). Read after the lock, so
+            // a waiting request counts the lease the request ahead of it just committed.
+            int seatsUsed = await CountLeasedSeatsAsync(entity.Id, cancellationToken).ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(request.MachineId))
+            {
+                // Nothing to renew: the request only reports whether the key is within its limit.
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return (seatsUsed <= entity.MaxSeats, seatsUsed);
+            }
+
+            // A machine whose lease is current does not take a new seat; a lapsed or new one does.
+            var leaseStart = _clock.GetUtcNow() - ActivationLease;
+            bool alreadyActive = (await _db.LicenseActivations
+                .Where(a => a.LicenseKeyId == entity.Id && a.MachineId == request.MachineId && a.IsActive)
+                .Select(a => a.LastSeenAt)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+                .Any(lastSeen => lastSeen >= leaseStart);
+
+            int seatsAfter = alreadyActive ? seatsUsed : seatsUsed + 1;
+            if (seatsAfter > entity.MaxSeats)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return (false, seatsUsed);
+            }
+
+            await UpsertActivationAsync(entity.Id, request.MachineId, request.MachineName, request.Environment, cancellationToken)
+                .ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return (true, seatsAfter);
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Takes a write lock on one license key's row, held until the enclosing transaction ends.
+    /// </summary>
+    /// <remarks>
+    /// A no-op UPDATE rather than a provider-specific lock statement: every supported provider takes a write lock
+    /// for it that is held to commit -- a row lock on PostgreSQL, SQL Server and MySQL (InnoDB), the database write
+    /// lock on SQLite -- so one statement serializes admissions on all four.
+    /// </remarks>
+    private Task<int> LockLicenseKeyAsync(Guid licenseKeyId, CancellationToken cancellationToken)
+    {
+        return _db.LicenseKeys
+            .Where(k => k.Id == licenseKeyId)
+            .ExecuteUpdateAsync(set => set.SetProperty(k => k.MaxSeats, k => k.MaxSeats), cancellationToken);
     }
 
     /// <summary>

@@ -162,6 +162,25 @@ public class TreeBasedRegressionIntegrationTests
 #endif
     }
 
+    // A short target vector used to train silently: the fast builder zero-padded the missing targets,
+    // so two rows with one target of 10 trained on [10, 0]. Both builders must reject it, and a longer
+    // target vector is just as inconsistent.
+    [Theory(Timeout = 120000)]
+    [InlineData(SplitCriterion.VarianceReduction, 1)]
+    [InlineData(SplitCriterion.VarianceReduction, 3)]
+    [InlineData(SplitCriterion.MeanSquaredError, 1)]
+    [InlineData(SplitCriterion.MeanSquaredError, 3)]
+    public async Task DecisionTreeRegression_Train_TargetCountMismatch_Throws(SplitCriterion criterion, int targets)
+    {
+        var regression = new DecisionTreeRegression<double>(
+            new DecisionTreeOptions { MaxDepth = 3, MinSamplesSplit = 2, SplitCriterion = criterion });
+        var x = CreateMatrix(new double[,] { { 1 }, { 2 } });
+        var y = CreateVector(Enumerable.Repeat(10.0, targets).ToArray());
+
+        var error = Assert.Throws<ArgumentException>(() => regression.Train(x, y));
+        Assert.Equal("y", error.ParamName);
+    }
+
     #endregion
 
     #region RandomForestRegression Tests
