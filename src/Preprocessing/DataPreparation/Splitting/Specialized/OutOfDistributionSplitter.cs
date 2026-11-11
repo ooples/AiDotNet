@@ -76,7 +76,7 @@ public class OutOfDistributionSplitter<T> : DataSplitterBase<T>
         var distances = PreprocessingTensorOps.CentroidDistances(X, standardize: true);
 
         // Sort by distance (most distant = OOD)
-        var sortedIndices = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorArgsort(distances, 0, true).AsSpan().ToArray();
+        var sortedIndices = PreprocessingTensorOps.StableOrder(distances, descending: true);
 
         // OOD samples go to test, others can go to either based on testSize
         int oodCount = (int)((1 - _oodPercentile) * nSamples);

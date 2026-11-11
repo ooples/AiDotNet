@@ -65,7 +65,7 @@ public class AntiClusteringSplitter<T> : DataSplitterBase<T>
         var distances = PreprocessingTensorOps.CentroidDistances(X, standardize: false);
 
         // Sort samples by distance from centroid
-        var sortedIndices = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorArgsort(distances, 0, false).AsSpan().ToArray();
+        var sortedIndices = PreprocessingTensorOps.StableOrder(distances, descending: false);
 
         if (_shuffle)
         {

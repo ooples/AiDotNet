@@ -57,7 +57,7 @@ internal static class PreprocessingTensorOps
         if (count == 0)
             return Array.Empty<int>();
 
-        var order = AiDotNetEngine.Current.TensorArgsort(scores, 0, true);
+        var order = StableOrder(scores, descending: true);
         var selected = order.AsSpan().Slice(0, count).ToArray();
         Array.Sort(selected);
         return selected;
@@ -73,10 +73,47 @@ internal static class PreprocessingTensorOps
         if (count == 0)
             return Array.Empty<int>();
 
-        var order = AiDotNetEngine.Current.TensorArgsort(scores, 0, false);
+        var order = StableOrder(scores, descending: false);
         var selected = order.AsSpan().Slice(0, count).ToArray();
         Array.Sort(selected);
         return selected;
+    }
+
+    /// <summary>
+    /// The indices that sort a 1-D tensor ascending (or descending), with tied values kept in their original
+    /// index order, like LINQ <c>OrderBy</c>/<c>OrderByDescending</c>; with <paramref name="lastAmongTies"/>
+    /// the tied values come in reverse index order instead. The engine argsort is not documented as stable, so
+    /// it sorts a distinct composite key (rank of the value, then the index) whose order is unique.
+    /// </summary>
+    public static int[] StableOrder<T>(Tensor<T> values, bool descending, bool lastAmongTies = false)
+    {
+        int count = values.Length;
+        if (count == 0)
+            return Array.Empty<int>();
+
+        var engine = AiDotNetEngine.Current;
+        var flat = values.Rank == 1 ? values : engine.Reshape(values, new[] { count });
+        var sorted = engine.TensorSort(flat, 0, false).Item1;
+
+        // ascending rank: #{m : v[m] < v[j]}; descending rank: #{m : v[m] > v[j]} = count - #{m : v[m] <= v[j]}
+        var less = engine.TensorSearchSorted(sorted, flat, false).AsSpan().ToArray();
+        var atMost = engine.TensorSearchSorted(sorted, flat, true).AsSpan().ToArray();
+        var keys = new long[count];
+        for (int j = 0; j < count; j++)
+        {
+            long rank = descending ? count - atMost[j] : less[j];
+            keys[j] = rank * count + (lastAmongTies ? count - 1 - j : j);
+        }
+
+        return engine.TensorArgsort(new Tensor<long>(keys, new[] { count }), 0, false).AsSpan().ToArray();
+    }
+
+    /// <summary>The index of the first (lowest-index) largest entry of a 1-D tensor.</summary>
+    public static int FirstArgMax<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var flat = values.Rank == 1 ? values : engine.Reshape(values, new[] { values.Length });
+        return MaskPositions(engine.TensorEquals(flat, engine.TensorMaxValue(flat)))[0];
     }
 
     /// <summary>

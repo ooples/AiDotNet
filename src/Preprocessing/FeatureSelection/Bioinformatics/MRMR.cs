@@ -107,7 +107,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 : engine.TensorWhere(engine.TensorGreaterThan(redundancy, eps), engine.TensorDivide(relevance, redundancy), relevance);
 
             var open = engine.TensorWhere(isSelected, excluded, score);
-            int bestFeature = engine.TensorArgMax(open, 0).GetFlat(0);
+            int bestFeature = PreprocessingTensorOps.FirstArgMax(open);
             selectedScores[bestFeature] = open;
             selected.Add(bestFeature);
             isSelected[bestFeature] = true;

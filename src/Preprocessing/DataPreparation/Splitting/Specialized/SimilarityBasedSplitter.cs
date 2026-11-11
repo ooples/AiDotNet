@@ -93,7 +93,7 @@ public class SimilarityBasedSplitter<T> : DataSplitterBase<T>
             NumOps.FromDouble(nSamples - 1));
 
         // Sort by similarity (most similar first when testing on similar samples)
-        var sortedIndices = engine.TensorArgsort(avgSimilarity, 0, _testSimilar).AsSpan().ToArray();
+        var sortedIndices = PreprocessingTensorOps.StableOrder(avgSimilarity, descending: _testSimilar);
 
         if (_shuffle)
         {

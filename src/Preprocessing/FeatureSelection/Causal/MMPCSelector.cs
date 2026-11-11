@@ -93,7 +93,7 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         while (candidates.Count < Math.Min(_nFeaturesToSelect, p))
         {
             var open = engine.TensorWhere(isCandidate, excluded, minAssoc);
-            int bestFeature = engine.TensorArgMax(open, 0).GetFlat(0);
+            int bestFeature = PreprocessingTensorOps.FirstArgMax(open);
             if (PreprocessingTensorOps.IsBelow(engine.TensorMaxValue(open), threshold))
                 break;
 
