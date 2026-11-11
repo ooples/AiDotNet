@@ -27,9 +27,8 @@ internal static class BackboneSerialization
     {
         var p = layer.GetParameters();
         writer.Write(p.Length);
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < p.Length; i++)
-            writer.Write(ops.ToDouble(p[i]));
+        foreach (double value in CvTensorOps<T>.ToDoubleArray(p.ToArray()))
+            writer.Write(value);
     }
 
     public static void ReadLayerParameters<T>(BinaryReader reader, LayerBase<T> layer)
@@ -39,10 +38,9 @@ internal static class BackboneSerialization
             throw new InvalidDataException(
                 $"Negative parameter length ({len}) on the wire — corrupt parameter stream.");
         if (len == 0) return;
-        var values = new T[len];
-        var ops = MathHelper.GetNumericOperations<T>();
+        var wire = new double[len];
         for (int i = 0; i < len; i++)
-            values[i] = ops.FromDouble(reader.ReadDouble());
-        layer.SetParameters(new Vector<T>(values));
+            wire[i] = reader.ReadDouble();
+        layer.SetParameters(new Vector<T>(CvTensorOps<T>.FromDoubleArray(wire, new[] { len }).ToArray()));
     }
 }
