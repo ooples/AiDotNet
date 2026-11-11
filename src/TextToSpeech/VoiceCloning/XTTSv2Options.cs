@@ -61,11 +61,11 @@ public class XTTSv2Options : CodecTtsOptions
         Validation.Guard.NotNull(other);
         InputSampleRate = other.InputSampleRate;
         PaperTextVocabularySize = other.PaperTextVocabularySize;
-        AudioVocabularySize = other.AudioVocabularySize;
+        _audioVocabularySize = other._audioVocabularySize;
         StartTextToken = other.StartTextToken;
         StopTextToken = other.StopTextToken;
-        StartAudioToken = other.StartAudioToken;
-        StopAudioToken = other.StopAudioToken;
+        _startAudioToken = other._startAudioToken;
+        _stopAudioToken = other._stopAudioToken;
         MaxPromptTokens = other.MaxPromptTokens;
         ConditioningBlocks = other.ConditioningBlocks;
         ConditioningHeads = other.ConditioningHeads;
@@ -127,21 +127,24 @@ public class XTTSv2Options : CodecTtsOptions
     public int TextVocabularySize { get => VocabSize; set => VocabSize = value; }
     /// <summary>Vocabulary size stated by the paper and present in the pinned official checkpoint.</summary>
     public int PaperTextVocabularySize { get; set; } = 6681;
-    /// <summary>1024 dVAE codes plus start and stop.</summary>
+    /// <summary>The dVAE codes plus start and stop: <see cref="CodebookSize"/> + 2 (1026) unless set.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("AudioVocabularySize must equal CodebookSize+2 with the following special IDs; native tests reject unpaired values and round-trip paired vocabularies.")]
-    public int AudioVocabularySize { get; set; } = 1026;
+    public int AudioVocabularySize { get => _audioVocabularySize ?? CodebookSize + 2; set => _audioVocabularySize = value; }
+    private int? _audioVocabularySize;
     /// <summary>Resolved from <c>[START]</c> in the released tokenizer when it is loaded.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("The loaded tokenizer owns [START]'s ID; native tests load tokenizer assets with exchanged start/stop IDs and verify the resolved IDs.")]
     public int StartTextToken { get; set; } = -1;
     /// <summary>Resolved from <c>[STOP]</c> in the released tokenizer when it is loaded.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("The loaded tokenizer owns [STOP]'s ID; native tests load tokenizer assets with exchanged start/stop IDs and verify the resolved IDs.")]
     public int StopTextToken { get; set; } = -1;
-    /// <summary>Gets or sets the token ID for start audio. Defaults to <c>1024</c>.</summary>
+    /// <summary>Gets or sets the token ID for start audio: <see cref="CodebookSize"/> (1024) unless set.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("StartAudioToken must follow the dVAE codes, before StopAudioToken; native tests reject unpaired IDs and encode/decode paired audio vocabularies.")]
-    public int StartAudioToken { get; set; } = 1024;
-    /// <summary>Gets or sets the token ID for stop audio. Defaults to <c>1025</c>.</summary>
+    public int StartAudioToken { get => _startAudioToken ?? CodebookSize; set => _startAudioToken = value; }
+    private int? _startAudioToken;
+    /// <summary>Gets or sets the token ID for stop audio: <see cref="CodebookSize"/> + 1 (1025) unless set.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("StopAudioToken must follow StartAudioToken at CodebookSize+1; native tests reject unpaired IDs and encode/decode paired audio vocabularies.")]
-    public int StopAudioToken { get; set; } = 1025;
+    public int StopAudioToken { get => _stopAudioToken ?? CodebookSize + 1; set => _stopAudioToken = value; }
+    private int? _stopAudioToken;
     /// <summary>Gets or sets the max prompt tokens. Defaults to <c>70</c>.</summary>
     public int MaxPromptTokens { get; set; } = 70;
 
