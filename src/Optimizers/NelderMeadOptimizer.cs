@@ -485,7 +485,7 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     private bool IsLowerOrEqual(T value, T other) => NumOps.LessThanOrEquals(value, other);
 
     /// <summary>
-    /// The relative spread test: |worst - best| <= tolerance * (|best| + tolerance).
+    /// The relative spread test: |worst - best| &lt;= tolerance * (|best| + tolerance).
     /// </summary>
     private bool SimplexHasConverged(T best, T worst, T tolerance)
     {
