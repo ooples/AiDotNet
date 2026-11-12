@@ -158,7 +158,8 @@ public class TADAMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public bool UseTaskConditioning { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the dimension of task embeddings.
+    /// Gets or sets the hidden width of the task-embedding network (TEN) that maps the task representation to
+    /// the FiLM scale.
     /// </summary>
     /// <value>Default is 64.</value>
     public int TaskEmbeddingDimension { get; set; } = 64;
@@ -168,14 +169,18 @@ public class TADAMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// </summary>
     /// <value>Default is true.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Metric scaling learns to weight different dimensions
-    /// of the embedding space differently when computing distances.
+    /// <para>
+    /// Oreshkin et al. 2018, Eq. 3: logits are <c>-alpha d(q, c_k)</c> with one learned scalar <c>alpha</c>. When false,
+    /// <c>alpha</c> stays at <c>1 / InitialTemperature</c>.
+    /// </para>
+    /// <para><b>For Beginners:</b> Metric scaling learns how sharply distances are turned into
+    /// class probabilities.
     /// </para>
     /// </remarks>
     public bool UseMetricScaling { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the initial value for the learnable temperature parameter.
+    /// Gets or sets the initial temperature; the learned metric scale starts at <c>alpha = 1 / InitialTemperature</c>.
     /// </summary>
     /// <value>Default is 1.0.</value>
     /// <remarks>
@@ -217,10 +222,10 @@ public class TADAMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public bool NormalizeEmbeddings { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the L2 regularization strength.
+    /// Gets or sets the L2 penalty on the task-embedding network's post-multiplier <c>gamma0</c>.
     /// </summary>
-    /// <value>Default is 0.0 (no regularization).</value>
-    public double L2Regularization { get; set; } = 0.0;
+    /// <value>Default is 0.01, the paper's value (Sec. 2.2).</value>
+    public double L2Regularization { get; set; } = 0.01;
 
     #endregion
 
