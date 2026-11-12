@@ -131,11 +131,18 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             var fbnet = new FBNet<double>(searchSpace, numLayers: 5, latencyWeight: 0.5);
             double taskLoss = 1.0;
 
+            // A twin with the same seed draws the same Gumbel masks, so its expected latency is the LAT(a) the
+            // loss sees.
+            var twin = new FBNet<double>(searchSpace, numLayers: 5, latencyWeight: 0.5);
+            double latency = twin.ComputeExpectedLatency();
+
             // Act
             var totalLoss = fbnet.ComputeTotalLoss(taskLoss);
 
-            // Assert
-            Assert.True(totalLoss > taskLoss - 0.01); // Should include some latency term
+            // Assert - FBNet (Wu et al. 2019), Eq. 2: L = CE * alpha * log(LAT)^beta with alpha = 0.5, beta = 0.6.
+            // The old assertion encoded an additive CE + alpha * log(LAT), which is not the paper's loss.
+            double expected = taskLoss * 0.5 * Math.Pow(Math.Log(Math.Max(latency, 1.0 + 1e-6)), 0.6);
+            Assert.Equal(expected, totalLoss, 1e-9);
         }
 
         [Fact(Timeout = 60000)]
@@ -346,8 +353,9 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             // Act
             var totalLoss = fbnet.ComputeTotalLoss(taskLoss);
 
-            // Assert - with zero weight, total loss should equal task loss
-            Assert.True(Math.Abs(totalLoss - taskLoss) < 0.01);
+            // Assert - FBNet (Wu et al. 2019), Eq. 2: L = CE * alpha * log(LAT)^beta, so alpha = 0 gives 0. The old
+            // assertion (total == task loss) encoded an additive latency term, which is not the paper's loss.
+            Assert.Equal(0.0, totalLoss, 12);
         }
 
         [Fact(Timeout = 60000)]

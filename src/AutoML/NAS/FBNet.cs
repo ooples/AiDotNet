@@ -129,24 +129,22 @@ namespace AiDotNet.AutoML.NAS
         public T ComputeExpectedLatency()
         {
             T totalLatency = _ops.Zero;
+            var operations = _nasSearchSpace.Operations;
+            int pricedOps = operations == null ? 0 : Math.Min(_numOperations, operations.Count);
+            var opLatency = pricedOps == 0 || operations == null
+                ? new Vector<T>(0)
+                : new Vector<T>(operations.Take(pricedOps)
+                    .Select(op => _hardwareCostModel.EstimateOperationCost(op, _inputChannels, _inputChannels, _spatialSize).Latency));
 
+            var engine = AiDotNetEngine.Current;
             for (int layerIdx = 0; layerIdx < _numLayers; layerIdx++)
             {
-                var theta = _architectureParams[layerIdx];
-                var probs = GumbelSoftmax(theta, hard: false);
-
-                // Compute expected latency for this layer
-                for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+                // LAT(a) = sum_l sum_i m_l,i * LAT(b_l,i) with Gumbel-softmax masks m (FBNet, Eq. 4). Every layer
+                // still draws its mask in order, so the seeded noise stream is unchanged.
+                var probs = GumbelSoftmax(_architectureParams[layerIdx], hard: false);
+                if (pricedOps > 0)
                 {
-                    if (_nasSearchSpace.Operations != null && opIdx < _nasSearchSpace.Operations.Count)
-                    {
-                        var operation = _nasSearchSpace.Operations[opIdx];
-                        var cost = _hardwareCostModel.EstimateOperationCost(
-                            operation, _inputChannels, _inputChannels, _spatialSize);
-
-                        T weightedLatency = _ops.Multiply(probs[opIdx], cost.Latency);
-                        totalLatency = _ops.Add(totalLatency, weightedLatency);
-                    }
+                    totalLatency = _ops.Add(totalLatency, engine.DotProduct(probs.GetSubVector(0, pricedOps), opLatency));
                 }
             }
 
@@ -154,20 +152,33 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Computes the total loss with latency regularization
-        /// Loss = Cross-Entropy + λ * log(Latency)
-        /// Using log(latency) makes the loss more sensitive to changes when latency is small
+        /// Computes the FBNet loss CE * alpha * log(LAT)^beta (Wu et al. 2019, Sec. 3.2), with alpha the latency
+        /// weight (paper default 0.2) and beta <see cref="LatencyExponent"/> (paper default 0.6). LAT is the expected
+        /// latency in milliseconds, as in the paper's lookup table. The paper never defines LAT &lt;= 1, where
+        /// log(LAT) &lt;= 0 and log(LAT)^beta is zero or undefined for fractional beta; only that domain is guarded,
+        /// by clamping LAT to at least 1 + 1e-6 before the log. Above that the loss is exactly the paper's.
         /// </summary>
         public T ComputeTotalLoss(T taskLoss)
         {
             T latency = ComputeExpectedLatency();
 
-            // Avoid log(0) by adding small epsilon
-            T logLatency = _ops.Log(_ops.Add(latency, _ops.FromDouble(1e-8)));
+            T minLatency = _ops.FromDouble(MinLatencyMs);
+            T logLatency = _ops.Log(_ops.GreaterThan(latency, minLatency) ? latency : minLatency);
 
-            T latencyLoss = _ops.Multiply(_latencyWeight, logLatency);
-            return _ops.Add(taskLoss, latencyLoss);
+            // FBNet (Wu et al. 2019, Eq. 2, Sec. 3.2): L(a, w_a) = CE(a, w_a) * alpha * log(LAT(a))^beta. The latency term
+            // scales the task loss multiplicatively; alpha is the latency weight and beta the latency exponent.
+            T latencyFactor = _ops.Multiply(_latencyWeight, _ops.Power(logLatency, _ops.FromDouble(LatencyExponent)));
+            return _ops.Multiply(taskLoss, latencyFactor);
         }
+
+        /// <summary>
+        /// Gets or sets the exponent beta of the latency term in the FBNet loss CE * alpha * log(LAT)^beta
+        /// (default 0.6, the paper's value).
+        /// </summary>
+        public double LatencyExponent { get; set; } = 0.6;
+
+        // Lower bound on LAT (ms) so log(LAT) > 0; the paper's loss is undefined at LAT <= 1.
+        private const double MinLatencyMs = 1.0 + 1e-6;
 
         /// <summary>
         /// Derives the discrete architecture by selecting the operation with highest probability
@@ -178,17 +189,7 @@ namespace AiDotNet.AutoML.NAS
 
             for (int layerIdx = 0; layerIdx < _numLayers; layerIdx++)
             {
-                var theta = _architectureParams[layerIdx];
-                int selectedOp = 0;
-                T maxLogit = theta[0];
-                for (int opIdx = 1; opIdx < _numOperations; opIdx++)
-                {
-                    if (_ops.GreaterThan(theta[opIdx], maxLogit))
-                    {
-                        maxLogit = theta[opIdx];
-                        selectedOp = opIdx;
-                    }
-                }
+                int selectedOp = NasSamplingHelper.ArgMax(_architectureParams[layerIdx]);
 
                 if (_nasSearchSpace.Operations != null && selectedOp < _nasSearchSpace.Operations.Count)
                 {
