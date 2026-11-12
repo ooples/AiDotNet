@@ -157,70 +157,39 @@ public partial class CBLOFDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
+        var centroids = _centroids;
+        var isLargeCluster = _isLargeCluster;
+        var clusterSizes = _clusterSizes;
+        if (centroids == null || isLargeCluster == null || clusterSizes == null)
         {
-            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            // Find nearest cluster and distance
-            int nearestCluster = 0;
-            T nearestDist = NumOps.MaxValue;
-
-            var centroids = _centroids;
-            var isLargeCluster = _isLargeCluster;
-            var clusterSizes = _clusterSizes;
-            if (centroids == null || isLargeCluster == null || clusterSizes == null)
-            {
-                throw new InvalidOperationException("Model not properly fitted.");
-            }
-
-            for (int c = 0; c < _nClusters; c++)
-            {
-                var centroid = new Vector<T>(centroids.GetRowReadOnlySpan(c).ToArray());
-
-                T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
-                if (NumOps.LessThan(dist, nearestDist))
-                {
-                    nearestDist = dist;
-                    nearestCluster = c;
-                }
-            }
-
-            T cblof;
-            if (isLargeCluster[nearestCluster])
-            {
-                // Large cluster: CBLOF = size * distance_to_centroid
-                cblof = NumOps.Multiply(NumOps.FromDouble(clusterSizes[nearestCluster]), nearestDist);
-            }
-            else
-            {
-                // Small cluster: CBLOF = size * distance_to_nearest_large_cluster
-                T minLargeDist = NumOps.MaxValue;
-                for (int c = 0; c < _nClusters; c++)
-                {
-                    if (!isLargeCluster[c]) continue;
-
-                    var centroid = new Vector<T>(centroids.Columns);
-                    for (int j = 0; j < centroids.Columns; j++)
-                    {
-                        centroid[j] = centroids[c, j];
-                    }
-
-                    T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
-                    if (NumOps.LessThan(dist, minLargeDist))
-                    {
-                        minLargeDist = dist;
-                    }
-                }
-
-                cblof = NumOps.Multiply(NumOps.FromDouble(clusterSizes[nearestCluster]), minLargeDist);
-            }
-
-            scores[i] = cblof;
+            throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        return scores;
+        var engine = Engine;
+        int k = _nClusters;
+        var large = new int[k];
+        for (int c = 0; c < k; c++)
+        {
+            large[c] = isLargeCluster[c] ? 1 : 0;
+        }
+
+        var largeTensor = Tensor<int>.FromVector(Vector<int>.Wrap(large), new[] { k }).Cast<T>();
+        var sizes = Tensor<int>.FromVector(Vector<int>.Wrap(clusterSizes), new[] { k }).Cast<T>();
+
+        // Nearest cluster (first on ties) and the distance to it
+        var distances = AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(centroids));
+        var nearestCluster = AnomalyTensorOps.FirstArgMinRows(distances);
+        var nearestDist = engine.TensorAmin(distances, new[] { 1 }, false);
+
+        // Distance to the nearest large cluster
+        var smallColumns = engine.TensorEqScalar(AnomalyTensorOps.BroadcastRow(largeTensor, X.Rows), NumOps.Zero);
+        var minLargeDist = engine.TensorAmin(engine.TensorMaskedFill(distances, smallColumns, NumOps.MaxValue), new[] { 1 }, false);
+
+        // Large cluster: CBLOF = size * distance_to_centroid;
+        // small cluster: CBLOF = size * distance_to_nearest_large_cluster
+        return engine.TensorMultiply(
+            engine.TensorGather(sizes, nearestCluster, 0),
+            engine.TensorWhere(engine.TensorGather(largeTensor, nearestCluster, 0), nearestDist, minLargeDist)).ToVector();
     }
 
     private bool[] DetermineLargeClusters(int totalPoints)
@@ -259,13 +228,15 @@ public partial class CBLOFDetector<T> : AnomalyDetectorBase<T>
     {
         var random = RandomHelper.CreateSeededRandom(_randomSeed);
         int n = X.Rows;
-        int d = X.Columns;
+        int k = _nClusters;
+        var engine = Engine;
+        var points = AnomalyTensorOps.ToTensor(X);
 
         // Initialize centroids randomly
-        var centroids = new Matrix<T>(_nClusters, d);
+        var initial = new int[k];
         var selectedIndices = new HashSet<int>();
 
-        for (int c = 0; c < _nClusters; c++)
+        for (int c = 0; c < k; c++)
         {
             int idx;
             do
@@ -274,93 +245,33 @@ public partial class CBLOFDetector<T> : AnomalyDetectorBase<T>
             } while (selectedIndices.Contains(idx));
 
             selectedIndices.Add(idx);
-
-            for (int j = 0; j < d; j++)
-            {
-                centroids[c, j] = X[idx, j];
-            }
+            initial[c] = idx;
         }
 
+        var centroids = AnomalyTensorOps.SelectRows(points, initial);
         var assignments = new int[n];
         int maxIterations = 100;
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            // Assignment step
+            // Assignment step (first nearest on ties)
+            var nearest = AnomalyTensorOps.FirstArgMinRows(AnomalyTensorOps.PairwiseDistances(points, centroids)).ToArray();
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
-                int nearest = 0;
-                T minDist = NumOps.MaxValue;
-
-                var point = new Vector<T>(d);
-                for (int j = 0; j < d; j++)
+                if (assignments[i] != nearest[i])
                 {
-                    point[j] = X[i, j];
-                }
-
-                for (int c = 0; c < _nClusters; c++)
-                {
-                    var centroid = new Vector<T>(d);
-                    for (int j = 0; j < d; j++)
-                    {
-                        centroid[j] = centroids[c, j];
-                    }
-
-                    T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearest = c;
-                    }
-                }
-
-                if (assignments[i] != nearest)
-                {
-                    assignments[i] = nearest;
+                    assignments[i] = nearest[i];
                     changed = true;
                 }
             }
 
             if (!changed) break;
 
-            // Update step
-            var newCentroids = new Matrix<T>(_nClusters, d);
-            var counts = new int[_nClusters];
-
-            for (int i = 0; i < n; i++)
-            {
-                int cluster = assignments[i];
-                counts[cluster]++;
-                for (int j = 0; j < d; j++)
-                {
-                    newCentroids[cluster, j] = NumOps.Add(newCentroids[cluster, j], X[i, j]);
-                }
-            }
-
-            for (int c = 0; c < _nClusters; c++)
-            {
-                if (counts[c] > 0)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCentroids[c, j] = NumOps.Divide(newCentroids[c, j], NumOps.FromDouble(counts[c]));
-                    }
-                }
-                else
-                {
-                    // Re-initialize empty cluster
-                    int randomIdx = random.Next(n);
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCentroids[c, j] = X[randomIdx, j];
-                    }
-                }
-            }
-
-            centroids = newCentroids;
+            // Update step: cluster means, empty clusters re-initialized from a random point
+            centroids = AnomalyTensorOps.KMeansUpdate(points, assignments, k, random);
         }
 
-        return (centroids, assignments);
+        return (centroids.ToMatrix(), assignments);
     }
 }

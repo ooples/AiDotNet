@@ -202,7 +202,7 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// because this method fitted ordinary least squares and returned.
     /// </para>
     /// <para>
-    /// Optimization is mini-batch Adam with decoupled L2 decay and early stopping, using the Epochs,
+    /// Optimization is mini-batch Adam with an L2 weight penalty and early stopping, using the Epochs,
     /// BatchSize, LearningRate, L2Regularization, DropoutRate and EarlyStoppingPatience settings that were
     /// previously read by nothing.
     /// </para>
@@ -219,26 +219,32 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
                 nameof(events));
         }
 
-        for (int i = 0; i < times.Length; i++)
+        int[] nonPositive = RegressionEngineOps.NonzeroIndices(
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorGreaterThan(Tensor<T>.FromVector(times), NumOps.Zero)));
+        if (nonPositive.Length > 0)
         {
-            if (!NumOps.GreaterThan(times[i], NumOps.Zero))
-            {
-                throw new ArgumentException(
-                    $"Survival times must be strictly positive; got {NumOps.ToDouble(times[i]):G6} at index {i}.",
-                    nameof(times));
-            }
+            int i = nonPositive[0];
+            throw new ArgumentException(
+                $"Survival times must be strictly positive; got {NumOps.ToDouble(times[i]):G6} at index {i}.",
+                nameof(times));
         }
 
-        for (int i = 0; i < events.Length; i++)
+        var eventTensor = Tensor<T>.FromVector(events);
+        var roundedEvents = Engine.TensorRound(eventTensor);
+        var invalidEvents = Engine.TensorAdd(
+            Engine.TensorAdd(
+                Engine.TensorLessThan(eventTensor, NumOps.Zero),
+                Engine.TensorGreaterThan(eventTensor, NumOps.FromDouble(_options.NumRisks))),
+            Engine.TensorGreaterThan(
+                Engine.TensorAbs(Engine.TensorSubtract(eventTensor, roundedEvents)), NumOps.FromDouble(1e-9)));
+        int[] invalid = RegressionEngineOps.NonzeroIndices(invalidEvents);
+        if (invalid.Length > 0)
         {
-            double e = NumOps.ToDouble(events[i]);
-            if (e < 0 || e > _options.NumRisks || Math.Abs(e - Math.Round(e)) > 1e-9)
-            {
-                throw new ArgumentException(
-                    $"Event codes must be 0 for censored or a 1-based cause index up to NumRisks " +
-                    $"({_options.NumRisks}); got {e:G6} at index {i}.",
-                    nameof(events));
-            }
+            int i = invalid[0];
+            throw new ArgumentException(
+                $"Event codes must be 0 for censored or a 1-based cause index up to NumRisks " +
+                $"({_options.NumRisks}); got {NumOps.ToDouble(events[i]):G6} at index {i}.",
+                nameof(events));
         }
 
         _numFeatures = x.Columns;
@@ -246,9 +252,10 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         InitializeTimeBins(times);
         InitializeNetwork();
 
-        int[] timeBinIndices = ConvertTimesToBins(times);
+        var timeBins = TimeBinsOf(times);
+        var eventCodes = roundedEvents.ToVector();
 
-        await Task.Run(() => FitNetwork(x, timeBinIndices, events));
+        await Task.Run(() => FitNetwork(x, timeBins, eventCodes));
 
         await CalculateFeatureImportancesAsync(x.Columns);
     }
@@ -273,25 +280,13 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// Predicts the probability mass function (PMF) of event time for each sample.
     /// </summary>
     /// <param name="input">Input feature matrix.</param>
-    /// <returns>Array of PMFs, where pmfs[sample][risk][timeBin] is the probability.</returns>
-    public T[,,] PredictPMF(Matrix<T> input)
+    /// <returns>
+    /// A [samples, NumRisks, time bins] tensor, where pmf[sample, risk, timeBin] is the probability that
+    /// the event of that cause happens in that bin. Each sample's cells sum to one.
+    /// </returns>
+    public Tensor<T> PredictPMF(Matrix<T> input)
     {
-        var indices = Enumerable.Range(0, input.Rows).ToArray();
-        var (pmfs, _) = ForwardPass(input, indices, training: false);
-
-        var result = new T[input.Rows, _options.NumRisks, NumTimeBins];
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int k = 0; k < _options.NumRisks; k++)
-            {
-                for (int t = 0; t < NumTimeBins; t++)
-                {
-                    result[i, k, t] = pmfs[i][k][t];
-                }
-            }
-        }
-
-        return result;
+        return PredictFlatPmf(input).Reshape(input.Rows, _options.NumRisks, NumTimeBins);
     }
 
     /// <summary>
@@ -302,31 +297,10 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <returns>Matrix where [i,j] is P(T > times[j] | X_i).</returns>
     public Matrix<T> PredictSurvival(Matrix<T> input, Vector<T> times)
     {
-        var pmf = PredictPMF(input);
-        var survivalProbs = new Matrix<T>(input.Rows, times.Length);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int j = 0; j < times.Length; j++)
-            {
-                int binIndex = GetTimeBinIndex(times[j]);
-
-                // S(t) = 1 - sum of PMF up to time bin
-                T cumProb = NumOps.Zero;
-                for (int k = 0; k < _options.NumRisks; k++)
-                {
-                    for (int b = 0; b <= binIndex && b < NumTimeBins; b++)
-                    {
-                        cumProb = NumOps.Add(cumProb, pmf[i, k, b]);
-                    }
-                }
-
-                T survival = NumOps.Subtract(NumOps.One, cumProb);
-                survivalProbs[i, j] = NumOps.LessThan(survival, NumOps.Zero) ? NumOps.Zero : survival;
-            }
-        }
-
-        return survivalProbs;
+        // S(t) = 1 - sum of the PMF over every cause up to and including t's bin, floored at zero.
+        var incidence = Engine.TensorCumSum(AllCausePmf(PredictFlatPmf(input), input.Rows), 1);
+        var atTimes = Engine.TensorIndexSelect(incidence, TimeBinIndicesOf(times), 1);
+        return Engine.TensorMax(Engine.ScalarMinusTensor(NumOps.One, atTimes), NumOps.Zero).ToMatrix();
     }
 
     /// <summary>
@@ -344,27 +318,10 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
                 $"Risk index must be between 0 and {_options.NumRisks - 1}");
         }
 
-        var pmf = PredictPMF(input);
-        var cif = new Matrix<T>(input.Rows, times.Length);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int j = 0; j < times.Length; j++)
-            {
-                int binIndex = GetTimeBinIndex(times[j]);
-
-                // CIF(t, k) = sum of PMF_k up to time bin
-                T cumProb = NumOps.Zero;
-                for (int b = 0; b <= binIndex && b < NumTimeBins; b++)
-                {
-                    cumProb = NumOps.Add(cumProb, pmf[i, riskIndex, b]);
-                }
-
-                cif[i, j] = cumProb;
-            }
-        }
-
-        return cif;
+        // CIF(t, k) = sum of PMF_k up to and including t's bin.
+        var causePmf = Engine.TensorSliceAxis(PredictPMF(input), 1, riskIndex);
+        var incidence = Engine.TensorCumSum(causePmf, 1);
+        return Engine.TensorIndexSelect(incidence, TimeBinIndicesOf(times), 1).ToMatrix();
     }
 
     /// <summary>
@@ -374,32 +331,18 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <returns>Vector of expected event times.</returns>
     public Vector<T> PredictExpectedTime(Matrix<T> input)
     {
-        var pmf = PredictPMF(input);
-        var expectedTimes = new Vector<T>(input.Rows);
+        int n = input.Rows;
+        var mass = AllCausePmf(PredictFlatPmf(input), n);
+        var centers = TimeBinCenters();
 
-        for (int i = 0; i < input.Rows; i++)
-        {
-            T expected = NumOps.Zero;
-            T totalProb = NumOps.Zero;
+        var weighted = Engine.TensorMatMul(mass, new Tensor<T>(new[] { centers.Length, 1 }, centers)).Reshape(n);
+        var totalProb = Engine.ReduceSum(mass, new[] { 1 }, keepDims: false);
 
-            for (int k = 0; k < _options.NumRisks; k++)
-            {
-                for (int t = 0; t < NumTimeBins; t++)
-                {
-                    T prob = pmf[i, k, t];
-                    T time = GetTimeBinCenterT(t);
-                    expected = NumOps.Add(expected, NumOps.Multiply(prob, time));
-                    totalProb = NumOps.Add(totalProb, prob);
-                }
-            }
-
-            // Normalize by total probability (may be < 1 for censored observations)
-            expectedTimes[i] = NumOps.GreaterThan(totalProb, NumOps.Zero)
-                ? NumOps.Divide(expected, totalProb)
-                : GetTimeBinCenterT(NumTimeBins - 1);
-        }
-
-        return expectedTimes;
+        // Normalize by total probability (may be < 1 for censored observations)
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(totalProb, NumOps.Zero),
+            Engine.TensorDivide(weighted, totalProb),
+            Tensor<T>.CreateDefault(new[] { n }, centers[centers.Length - 1])).ToVector();
     }
 
     /// <summary>
@@ -407,40 +350,33 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     /// <param name="input">Input feature matrix.</param>
     /// <returns>Vector of median survival times.</returns>
+    /// <remarks>
+    /// The median is the center of the first bin where the all-cause cumulative incidence reaches 0.5, or
+    /// the last bin's center when it never does. The incidence is a running sum of probabilities, so it
+    /// never decreases and "reached 0.5" flips from 0 to 1 exactly once; the difference of that flag from
+    /// its own one-bin shift is therefore a one-hot pick of the crossing bin.
+    /// </remarks>
     public Vector<T> PredictMedianSurvivalTime(Matrix<T> input)
     {
-        var pmf = PredictPMF(input);
-        var medianTimes = new Vector<T>(input.Rows);
+        int n = input.Rows;
+        int bins = NumTimeBins;
+        var centers = TimeBinCenters();
+        var incidence = Engine.TensorCumSum(AllCausePmf(PredictFlatPmf(input), n), 1);
 
-        T half = NumOps.FromDouble(0.5);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            T cumProb = NumOps.Zero;
-            bool found = false;
-
-            // Find time bin where cumulative probability crosses 0.5
-            for (int t = 0; t < NumTimeBins; t++)
+        var reached = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(incidence, NumOps.FromDouble(0.5)));
+        var reachedBefore = bins > 1
+            ? Engine.TensorConcatenate(new[]
             {
-                for (int k = 0; k < _options.NumRisks; k++)
-                {
-                    cumProb = NumOps.Add(cumProb, pmf[i, k, t]);
-                }
+                Tensor<T>.CreateDefault(new[] { n, 1 }, NumOps.Zero),
+                Engine.TensorSlice(reached, new[] { 0, 0 }, new[] { n, bins - 1 })
+            }, 1)
+            : Tensor<T>.CreateDefault(new[] { n, 1 }, NumOps.Zero);
+        var crossing = Engine.TensorSubtract(reached, reachedBefore);
 
-                if (!NumOps.LessThan(cumProb, half))
-                {
-                    medianTimes[i] = GetTimeBinCenterT(t);
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found)
-            {
-                medianTimes[i] = GetTimeBinCenterT(NumTimeBins - 1);
-            }
-        }
-
-        return medianTimes;
+        var atCrossing = Engine.TensorMatMul(crossing, new Tensor<T>(new[] { bins, 1 }, centers)).Reshape(n);
+        var neverReached = Engine.ScalarMinusTensor(
+            NumOps.One, Engine.ReduceSum(crossing, new[] { 1 }, keepDims: false));
+        return Engine.TensorAdd(atCrossing, Engine.TensorMultiplyScalar(neverReached, centers[bins - 1])).ToVector();
     }
 
     /// <summary>
@@ -452,33 +388,10 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <returns>C-index between 0 and 1 (0.5 = random, 1 = perfect).</returns>
     public double ComputeCIndex(Matrix<T> x, Vector<T> times, Vector<T> events)
     {
+        // DeepHit predicts expected time - lower expected time = higher risk
         var expectedTimes = PredictExpectedTime(x);
-        int concordant = 0;
-        int discordant = 0;
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            if (NumOps.ToDouble(events[i]) == 0) continue;  // Skip censored
-
-            for (int j = 0; j < x.Rows; j++)
-            {
-                if (i == j) continue;
-
-                double ti = NumOps.ToDouble(times[i]);
-                double tj = NumOps.ToDouble(times[j]);
-
-                // i had event before j
-                if (ti < tj)
-                {
-                    // DeepHit predicts expected time - lower expected time = higher risk
-                    double pi = NumOps.ToDouble(expectedTimes[i]);
-                    double pj = NumOps.ToDouble(expectedTimes[j]);
-
-                    if (pi < pj) concordant++;  // Correct: i predicted to fail earlier
-                    else if (pi > pj) discordant++;
-                }
-            }
-        }
+        var (concordant, discordant) = SurvivalNetworkOps.ConcordanceCounts(
+            times, events, expectedTimes, higherScoreFailsFirst: false);
 
         int total = concordant + discordant;
         return total > 0 ? (double)concordant / total : 0.5;
@@ -492,59 +405,53 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <param name="events">Event indicators.</param>
     /// <param name="horizon">Time horizon for evaluation.</param>
     /// <returns>AUC at the specified horizon.</returns>
+    /// <remarks>
+    /// Cases had an event by the horizon; controls survived past it. A case/control pair counts 1 when the
+    /// case's predicted risk 1 - S(horizon) is higher, 1/2 when the two risks are within 1e-10, and 0
+    /// otherwise.
+    /// </remarks>
     public double ComputeTimeDependentAUC(Matrix<T> x, Vector<T> times, Vector<T> events, T horizon)
     {
         var horizonVec = new Vector<T>(new[] { horizon });
-        var survivalProbs = PredictSurvival(x, horizonVec);
+        var survival = Tensor<T>.FromMatrix(PredictSurvival(x, horizonVec)).Reshape(x.Rows);
+        var risk = Engine.ScalarMinusTensor(NumOps.One, survival).ToVector();
 
-        double horizonValue = NumOps.ToDouble(horizon);
-        var cases = new List<int>();
-        var controls = new List<int>();
+        var timeTensor = Tensor<T>.FromVector(times);
+        var cases = Engine.TensorMultiply(
+            Engine.TensorLessEqual(timeTensor, Tensor<T>.CreateDefault(new[] { times.Length }, horizon)),
+            Engine.TensorGreaterThan(Tensor<T>.FromVector(events), NumOps.Zero)).ToVector();
+        var controls = Engine.TensorGreaterThan(timeTensor, horizon).ToVector();
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            double ti = NumOps.ToDouble(times[i]);
-            double ei = NumOps.ToDouble(events[i]);
-
-            if (ti <= horizonValue && ei > 0)
-            {
-                cases.Add(i);  // Event occurred before horizon
-            }
-            else if (ti > horizonValue)
-            {
-                controls.Add(i);  // Survived past horizon
-            }
-        }
-
-        if (cases.Count == 0 || controls.Count == 0)
+        if (Engine.TensorCountNonzero(Tensor<T>.FromVector(cases)) == 0 ||
+            Engine.TensorCountNonzero(Tensor<T>.FromVector(controls)) == 0)
         {
             return 0.5;
         }
 
-        // Compute AUC
+        int n = x.Rows;
+        T tieTolerance = NumOps.FromDouble(1e-10);
+        T one = NumOps.One;
+        int blockRows = (int)Math.Max(1L, Math.Min(n, (1L << 24) / Math.Max(1, n)));
         int concordant = 0;
         int total = 0;
 
-        foreach (int caseIdx in cases)
+        for (int start = 0; start < n; start += blockRows)
         {
-            double caseRisk = 1 - NumOps.ToDouble(survivalProbs[caseIdx, 0]);  // Risk = 1 - S(t)
+            int count = Math.Min(blockRows, n - start);
+            var caseRisk = SurvivalNetworkOps.BroadcastColumn(risk.GetSubVector(start, count), n);
+            var controlRisk = SurvivalNetworkOps.BroadcastRow(risk, count);
+            var pairs = Engine.TensorOuter(
+                Tensor<T>.FromVector(cases.GetSubVector(start, count)), Tensor<T>.FromVector(controls));
 
-            foreach (int controlIdx in controls)
-            {
-                double controlRisk = 1 - NumOps.ToDouble(survivalProbs[controlIdx, 0]);
-                total++;
+            var higher = Engine.TensorGreaterThan(caseRisk, controlRisk);
+            var tie = Engine.TensorMultiply(
+                Engine.ScalarMinusTensor(one, higher),
+                Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(caseRisk, controlRisk)), tieTolerance));
 
-                if (caseRisk > controlRisk)
-                {
-                    concordant++;
-                }
-                else if (Math.Abs(caseRisk - controlRisk) < 1e-10)
-                {
-                    // Tie - count as 0.5
-                    concordant++;
-                    total++;
-                }
-            }
+            int pairCount = Engine.TensorCountNonzero(pairs);
+            int ties = Engine.TensorCountNonzero(Engine.TensorMultiply(pairs, tie));
+            concordant += Engine.TensorCountNonzero(Engine.TensorMultiply(pairs, higher)) + ties;
+            total += pairCount + ties;
         }
 
         return total > 0 ? (double)concordant / total : 0.5;
@@ -562,84 +469,79 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         int supportable = Math.Max(2, times.Length / targetObservationsPerBin);
         _effectiveTimeBins = Math.Max(2, Math.Min(_options.NumTimeBins, supportable));
 
-        T minTime = times[0];
-        T maxTime = times[0];
-        for (int i = 1; i < times.Length; i++)
-        {
-            if (NumOps.LessThan(times[i], minTime)) minTime = times[i];
-            if (NumOps.GreaterThan(times[i], maxTime)) maxTime = times[i];
-        }
+        var timeTensor = Tensor<T>.FromVector(times);
+        T minTime = Engine.TensorMinValue(timeTensor);
+        T maxTime = Engine.TensorMaxValue(timeTensor);
 
         // Add small buffer
         T range = NumOps.Subtract(maxTime, minTime);
         maxTime = NumOps.Add(maxTime, NumOps.Multiply(range, NumOps.FromDouble(0.01)));
 
-        _timeBinEdges = new Vector<T>(NumTimeBins + 1);
+        // edge[i] = min + i * width, for i = 0..NumTimeBins.
         T binWidth = NumOps.Divide(NumOps.Subtract(maxTime, minTime), NumOps.FromDouble(NumTimeBins));
-
-        for (int i = 0; i <= NumTimeBins; i++)
-        {
-            _timeBinEdges[i] = NumOps.Add(minTime, NumOps.Multiply(NumOps.FromDouble(i), binWidth));
-        }
+        _timeBinEdges = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, NumTimeBins + 1, 1), binWidth), minTime).ToVector();
     }
 
     /// <summary>
-    /// Converts times to bin indices.
+    /// The interior bin edges edge[1] .. edge[NumTimeBins - 1]: a time's bin is the number of them at or
+    /// below it, so times below the grid land in bin 0 and times at or past the last edge in the last bin.
     /// </summary>
-    private int[] ConvertTimesToBins(Vector<T> times)
+    private Vector<T>? InteriorBinEdges()
     {
-        var binIndices = new int[times.Length];
-
-        for (int i = 0; i < times.Length; i++)
+        if (_timeBinEdges is null || _timeBinEdges.Length < 3)
         {
-            binIndices[i] = GetTimeBinIndex(times[i]);
+            return null;
         }
 
-        return binIndices;
+        return _timeBinEdges.GetSubVector(1, _timeBinEdges.Length - 2);
     }
 
     /// <summary>
-    /// Gets the bin index for a given time.
+    /// The bin index of each time, for gathering bin columns.
     /// </summary>
-    private int GetTimeBinIndex(T time)
+    private Tensor<int> TimeBinIndicesOf(Vector<T> times)
     {
-        if (_timeBinEdges == null)
+        var interior = InteriorBinEdges();
+        if (interior is null)
         {
-            return 0;
+            return new Tensor<int>(new int[times.Length], new[] { times.Length });
         }
 
-        for (int i = 1; i < _timeBinEdges.Length; i++)
-        {
-            if (NumOps.LessThan(time, _timeBinEdges[i]))
-            {
-                return i - 1;
-            }
-        }
-
-        return NumTimeBins - 1;
+        return Engine.TensorSearchSorted(Tensor<T>.FromVector(interior), Tensor<T>.FromVector(times), true);
     }
 
     /// <summary>
-    /// Gets the center time of a bin as T.
+    /// The bin index of each time as a value of T, for building per-subject bin masks.
     /// </summary>
-    private T GetTimeBinCenterT(int binIndex)
+    private Vector<T> TimeBinsOf(Vector<T> times)
     {
-        if (_timeBinEdges == null)
+        var interior = InteriorBinEdges();
+        if (interior is null)
         {
-            return NumOps.FromDouble(binIndex);
+            return new Vector<T>(times.Length);
         }
 
-        T left = _timeBinEdges[binIndex];
-        T right = _timeBinEdges[Math.Min(binIndex + 1, _timeBinEdges.Length - 1)];
-        return NumOps.Divide(NumOps.Add(left, right), NumOps.FromDouble(2));
+        var atOrBelow = Engine.TensorLessEqual(
+            SurvivalNetworkOps.BroadcastRow(interior, times.Length),
+            SurvivalNetworkOps.BroadcastColumn(times, interior.Length));
+        return Engine.ReduceSum(atOrBelow, new[] { 1 }, keepDims: false).ToVector();
     }
 
     /// <summary>
-    /// Gets the center time of a bin as double (for evaluation metrics).
+    /// The center time of every bin; the bin index itself when no grid has been fitted.
     /// </summary>
-    private double GetTimeBinCenter(int binIndex)
+    private Vector<T> TimeBinCenters()
     {
-        return NumOps.ToDouble(GetTimeBinCenterT(binIndex));
+        int bins = NumTimeBins;
+        if (_timeBinEdges is null || _timeBinEdges.Length < bins + 1)
+        {
+            return Engine.TensorArange<T>(0, bins, 1).ToVector();
+        }
+
+        return Engine.Divide(
+            Engine.Add(_timeBinEdges.GetSubVector(0, bins), _timeBinEdges.GetSubVector(1, bins)),
+            NumOps.FromDouble(2));
     }
 
     /// <summary>
@@ -691,22 +593,13 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Initializes weight matrix with He initialization.
+    /// Initializes a weight matrix uniformly in (-s, s), s = sqrt(2 / fan-in), drawn row-major from the
+    /// model's seeded generator.
     /// </summary>
     private Matrix<T> InitializeWeights(int inputSize, int outputSize)
     {
-        double scale = Math.Sqrt(2.0 / inputSize);
-        var w = new Matrix<T>(inputSize, outputSize);
-
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                w[i, j] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * scale);
-            }
-        }
-
-        return w;
+        return SurvivalNetworkOps.UniformWeights(
+            _random, inputSize, outputSize, SurvivalNetworkOps.HeScale<T>(inputSize));
     }
 
     /// <summary>
@@ -718,14 +611,25 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// What one layer computed on the way forward, kept so the backward pass can retrace it.
+    /// What one layer computed on the way forward for the whole batch, kept so the backward pass can
+    /// retrace it. Every tensor is [batch, width].
     /// </summary>
     private sealed class LayerCache
     {
-        public Vector<T>[] Input { get; set; } = [];
-        public Vector<T>[] PreActivation { get; set; } = [];
-        public Vector<T>[] DropoutMask { get; set; } = [];
-        public bool HasActivation { get; set; }
+        public LayerCache(Tensor<T> input, Tensor<T> preActivation, Tensor<T>? dropoutMask, bool hasActivation)
+        {
+            Input = input;
+            PreActivation = preActivation;
+            DropoutMask = dropoutMask;
+            HasActivation = hasActivation;
+        }
+
+        public Tensor<T> Input { get; }
+        public Tensor<T> PreActivation { get; }
+
+        /// <summary>The inverted-dropout mask, or null when no unit was dropped.</summary>
+        public Tensor<T>? DropoutMask { get; }
+        public bool HasActivation { get; }
     }
 
     /// <summary>
@@ -739,6 +643,26 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
+    /// The PMF of every input row over (cause, time bin) cells, flattened to [rows, NumRisks * bins] with
+    /// cell index cause * bins + bin.
+    /// </summary>
+    private Tensor<T> PredictFlatPmf(Matrix<T> input)
+    {
+        var indices = Enumerable.Range(0, input.Rows).ToArray();
+        var (pmf, _) = ForwardPass(input, indices, training: false);
+        return pmf;
+    }
+
+    /// <summary>
+    /// The PMF summed over causes, [rows, bins].
+    /// </summary>
+    private Tensor<T> AllCausePmf(Tensor<T> flatPmf, int rows)
+    {
+        return Engine.ReduceSum(
+            flatPmf.Reshape(rows, _options.NumRisks, NumTimeBins), new[] { 1 }, keepDims: false);
+    }
+
+    /// <summary>
     /// Forward pass through the shared trunk and the per-cause heads.
     /// </summary>
     /// <param name="x">Feature matrix.</param>
@@ -746,405 +670,277 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <param name="training">
     /// When true, dropout is applied. When false no units are dropped, so predictions are deterministic.
     /// </param>
-    /// <returns>The per-sample PMF over (cause, time bin), and the caches the backward pass needs.</returns>
-    private (Vector<T>[][] Pmfs, DeepHitForwardCache Cache) ForwardPass(Matrix<T> x, int[] indices, bool training)
+    /// <returns>
+    /// The PMF over (cause, time bin) per sample as [n, NumRisks * bins], and the caches the backward pass
+    /// needs.
+    /// </returns>
+    private (Tensor<T> Pmf, DeepHitForwardCache Cache) ForwardPass(Matrix<T> x, int[] indices, bool training)
     {
         int n = indices.Length;
         var cache = new DeepHitForwardCache();
+        T dropoutRate = NumOps.FromDouble(_options.DropoutRate);
+        T keepScale = NumOps.Divide(NumOps.One, NumOps.Subtract(NumOps.One, dropoutRate));
+        var dropout = new DropoutSettings(training && _options.DropoutRate > 0, dropoutRate, keepScale);
 
-        var current = new Vector<T>[n];
-        for (int i = 0; i < n; i++)
-        {
-            current[i] = new Vector<T>(_numFeatures);
-            for (int j = 0; j < _numFeatures; j++)
-            {
-                current[i][j] = StandardizeFeature(x[indices[i], j], j);
-            }
-        }
+        var current = SurvivalNetworkOps.StandardizedRows(x, indices, _numFeatures, _featureMean, _featureStd);
 
         // Shared trunk.
         for (int layer = 0; layer < _sharedWeights.Count; layer++)
         {
-            current = ApplyLayer(current, _sharedWeights[layer], _sharedBiases[layer],
-                applyActivation: true, training: training, caches: cache.Shared);
+            current = ApplyLayer(current, n, _sharedWeights[layer], _sharedBiases[layer],
+                applyActivation: true, dropout, cache.Shared);
         }
 
         var sharedOutput = current;
-
-        var pmfs = new Vector<T>[n][];
-        for (int i = 0; i < n; i++)
-        {
-            pmfs[i] = new Vector<T>[_options.NumRisks];
-        }
+        var logits = new Tensor<T>[_options.NumRisks];
+        var noDropout = new DropoutSettings(false, dropoutRate, keepScale);
 
         for (int k = 0; k < _options.NumRisks; k++)
         {
             var causeCaches = new List<LayerCache>();
-            current = CloneArray(sharedOutput);
+            current = sharedOutput;
 
             for (int layer = 0; layer < _causeWeights[k].Count; layer++)
             {
-                current = ApplyLayer(current, _causeWeights[k][layer], _causeBiases[k][layer],
-                    applyActivation: true, training: training, caches: causeCaches);
+                current = ApplyLayer(current, n, _causeWeights[k][layer], _causeBiases[k][layer],
+                    applyActivation: true, dropout, causeCaches);
             }
 
             cache.Cause.Add(causeCaches);
 
             // Output layer produces logits, with no activation.
             var outputCaches = new List<LayerCache>();
-            var logits = ApplyLayer(current, _outputWeights[k], _outputBiases[k],
-                applyActivation: false, training: false, caches: outputCaches);
+            logits[k] = ApplyLayer(current, n, _outputWeights[k], _outputBiases[k],
+                applyActivation: false, noDropout, outputCaches);
             cache.Output.Add(outputCaches[0]);
-
-            for (int i = 0; i < n; i++)
-            {
-                pmfs[i][k] = logits[i];
-            }
         }
 
         // One softmax over every (cause, time bin) cell, as DeepHit specifies.
-        ApplySoftmaxAcrossAll(pmfs);
-
-        return (pmfs, cache);
+        var allLogits = logits.Length == 1 ? logits[0] : Engine.TensorConcatenate(logits, 1);
+        return (SoftmaxAcrossAll(allLogits, n), cache);
     }
 
     /// <summary>
-    /// Applies a single fully-connected layer, recording what the backward pass will need.
+    /// Whether a layer applies dropout, and with what rate and inverted-dropout scale.
+    /// </summary>
+    private readonly struct DropoutSettings
+    {
+        public DropoutSettings(bool enabled, T rate, T keepScale)
+        {
+            Enabled = enabled;
+            Rate = rate;
+            KeepScale = keepScale;
+        }
+
+        public bool Enabled { get; }
+        public T Rate { get; }
+        public T KeepScale { get; }
+    }
+
+    /// <summary>
+    /// Applies a single fully-connected layer to the whole batch, recording what the backward pass will need.
     /// </summary>
     /// <remarks>
-    /// Dropout is applied only when <paramref name="training"/> is true. It previously ran on EVERY call,
-    /// including from Predict, which made predictions random: the same model and the same input returned
-    /// different answers each time. Inverted dropout also means the surviving units are scaled at training
-    /// time, so inference needs no rescaling of its own.
+    /// Dropout is applied only when training. It previously ran on EVERY call, including from Predict,
+    /// which made predictions random: the same model and the same input returned different answers each
+    /// time. Inverted dropout also means the surviving units are scaled at training time, so inference
+    /// needs no rescaling of its own.
     /// </remarks>
-    private Vector<T>[] ApplyLayer(Vector<T>[] input, Matrix<T> weights, Vector<T> biases,
-        bool applyActivation, bool training, List<LayerCache> caches)
+    private Tensor<T> ApplyLayer(Tensor<T> input, int n, Matrix<T> weights, Vector<T> biases,
+        bool applyActivation, DropoutSettings dropout, List<LayerCache> caches)
     {
-        int n = input.Length;
-        int outputSize = weights.Columns;
-        var weightTensor = Tensor<T>.FromMatrix(weights);
-        var biasTensor = Tensor<T>.FromVector(biases).Reshape(1, outputSize);
+        var preActivation = SurvivalNetworkOps.Linear(input, n, weights, biases);
+        var output = applyActivation ? _options.Activation.Activate(preActivation) : preActivation;
 
-        var preActivation = new Vector<T>[n];
-        var output = new Vector<T>[n];
-
-        for (int i = 0; i < n; i++)
+        Tensor<T>? mask = null;
+        if (applyActivation && dropout.Enabled)
         {
-            var inputTensor = Tensor<T>.FromVector(input[i]).Reshape(1, input[i].Length);
-            var result = Engine.TensorAdd(
-                Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
-
-            preActivation[i] = result.Reshape(outputSize).ToVector();
-
-            if (applyActivation)
-            {
-                var activated = _options.Activation.Activate(
-                    Tensor<T>.FromVector(preActivation[i]).Reshape(1, outputSize));
-                output[i] = activated.Reshape(outputSize).ToVector();
-            }
-            else
-            {
-                output[i] = preActivation[i];
-            }
+            mask = SurvivalNetworkOps.DropoutMask(_random, n, weights.Columns, dropout.Rate, dropout.KeepScale);
+            output = Engine.TensorMultiply(output, mask);
         }
 
-        var masks = new Vector<T>[n];
-        if (applyActivation && training && _options.DropoutRate > 0)
-        {
-            T keepScale = NumOps.FromDouble(1.0 / (1.0 - _options.DropoutRate));
-            for (int i = 0; i < n; i++)
-            {
-                masks[i] = new Vector<T>(outputSize);
-                for (int j = 0; j < outputSize; j++)
-                {
-                    bool keep = _random.NextDouble() >= _options.DropoutRate;
-                    masks[i][j] = keep ? keepScale : NumOps.Zero;
-                    output[i][j] = NumOps.Multiply(output[i][j], masks[i][j]);
-                }
-            }
-        }
-        else
-        {
-            for (int i = 0; i < n; i++)
-            {
-                masks[i] = Vector<T>.CreateDefault(outputSize, NumOps.One);
-            }
-        }
-
-        caches.Add(new LayerCache
-        {
-            Input = input,
-            PreActivation = preActivation,
-            DropoutMask = masks,
-            HasActivation = applyActivation
-        });
-
+        caches.Add(new LayerCache(input, preActivation, mask, applyActivation));
         return output;
     }
 
     /// <summary>
-    /// Backpropagates one layer, accumulating its parameter gradients and returning the delta for its input.
+    /// Backpropagates one layer, returning its parameter gradients and the delta for its input.
     /// </summary>
     /// <param name="cache">What the layer recorded on the way forward.</param>
-    /// <param name="delta">d(loss)/d(layer output).</param>
+    /// <param name="delta">d(loss)/d(layer output), [batch, out].</param>
     /// <param name="weights">The layer's weight matrix.</param>
-    /// <param name="gradWeights">Accumulator for d(loss)/d(weights).</param>
-    /// <param name="gradBiases">Accumulator for d(loss)/d(biases).</param>
-    /// <returns>d(loss)/d(layer input).</returns>
-    private Vector<T>[] BackwardLayer(LayerCache cache, Vector<T>[] delta, Matrix<T> weights,
-        Matrix<T> gradWeights, Vector<T> gradBiases)
+    /// <returns>d(loss)/d(weights), d(loss)/d(biases) and d(loss)/d(layer input).</returns>
+    private (Matrix<T> WeightGradient, Vector<T> BiasGradient, Tensor<T> InputDelta) BackwardLayer(
+        LayerCache cache, Tensor<T> delta, Matrix<T> weights)
     {
-        int n = delta.Length;
-        int outputSize = weights.Columns;
-        int inputSize = weights.Rows;
-
-        var inputDelta = new Vector<T>[n];
-        for (int i = 0; i < n; i++)
+        // Back through dropout, then the activation.
+        var d = cache.DropoutMask is null ? delta : Engine.TensorMultiply(delta, cache.DropoutMask);
+        if (cache.HasActivation)
         {
-            inputDelta[i] = new Vector<T>(inputSize);
+            d = Engine.TensorMultiply(d, _options.Activation.Derivative(cache.PreActivation));
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int k = 0; k < outputSize; k++)
-            {
-                // Back through dropout, then the activation.
-                T d = NumOps.Multiply(delta[i][k], cache.DropoutMask[i][k]);
-                if (cache.HasActivation)
-                {
-                    d = NumOps.Multiply(d, _options.Activation.Derivative(cache.PreActivation[i][k]));
-                }
-
-                gradBiases[k] = NumOps.Add(gradBiases[k], d);
-
-                for (int j = 0; j < inputSize; j++)
-                {
-                    gradWeights[j, k] = NumOps.Add(gradWeights[j, k], NumOps.Multiply(d, cache.Input[i][j]));
-                    inputDelta[i][j] = NumOps.Add(inputDelta[i][j], NumOps.Multiply(d, weights[j, k]));
-                }
-            }
-        }
-
-        return inputDelta;
-    }
-
-    private void ApplySoftmaxAcrossAll(Vector<T>[][] pmfs)
-    {
-        int n = pmfs.Length;
-        T tiny = NumOps.FromDouble(1e-10);
-
-        for (int i = 0; i < n; i++)
-        {
-            // Find max logit for numerical stability
-            T maxLogit = pmfs[i][0][0];
-            for (int k = 0; k < _options.NumRisks; k++)
-            {
-                for (int t = 0; t < NumTimeBins; t++)
-                {
-                    if (NumOps.GreaterThan(pmfs[i][k][t], maxLogit))
-                        maxLogit = pmfs[i][k][t];
-                }
-            }
-
-            // Softmax with numerical stability
-            T sumExp = NumOps.Zero;
-            for (int k = 0; k < _options.NumRisks; k++)
-            {
-                for (int t = 0; t < NumTimeBins; t++)
-                {
-                    T expVal = NumOps.Exp(NumOps.Subtract(pmfs[i][k][t], maxLogit));
-                    pmfs[i][k][t] = expVal;
-                    sumExp = NumOps.Add(sumExp, expVal);
-                }
-            }
-
-            // Normalize
-            T denom = NumOps.Add(sumExp, tiny);
-            for (int k = 0; k < _options.NumRisks; k++)
-            {
-                for (int t = 0; t < NumTimeBins; t++)
-                {
-                    pmfs[i][k][t] = NumOps.Divide(pmfs[i][k][t], denom);
-                }
-            }
-        }
+        return SurvivalNetworkOps.LinearBackward(cache.Input, d, weights);
     }
 
     /// <summary>
-    /// Computes loss and gradients.
+    /// One softmax per row over every (cause, time bin) cell: exp(z - max) / (sum + 1e-10).
     /// </summary>
-    private (T loss, Vector<T>[][]) ComputeLossAndGradients(
-        Vector<T>[][] pmfs, int[] timeBinIndices, Vector<T> events, int[] batchIndices)
+    private Tensor<T> SoftmaxAcrossAll(Tensor<T> logits, int n)
     {
-        int n = batchIndices.Length;
-        T logLikeLoss = NumOps.Zero;
-        T rankingLoss = NumOps.Zero;
+        int cells = _options.NumRisks * NumTimeBins;
         T tiny = NumOps.FromDouble(1e-10);
 
-        var gradients = new Vector<T>[n][];
-        for (int i = 0; i < n; i++)
-        {
-            gradients[i] = new Vector<T>[_options.NumRisks];
-            for (int k = 0; k < _options.NumRisks; k++)
-            {
-                gradients[i][k] = new Vector<T>(NumTimeBins);
-            }
-        }
+        // Subtract the row max for numerical stability
+        var maxLogit = Engine.ReduceMax(logits, new[] { 1 }, keepDims: false).ToVector();
+        var exps = Engine.TensorExp(Engine.TensorSubtract(logits, SurvivalNetworkOps.BroadcastColumn(maxLogit, cells)));
+        var denominator = Engine.TensorAddScalar(Engine.ReduceSum(exps, new[] { 1 }, keepDims: false), tiny).ToVector();
+        return Engine.TensorDivide(exps, SurvivalNetworkOps.BroadcastColumn(denominator, cells));
+    }
 
-        // Log-likelihood loss
-        for (int bi = 0; bi < n; bi++)
-        {
-            int idx = batchIndices[bi];
-            int eventType = (int)NumOps.ToDouble(events[idx]);
-            int timeBin = timeBinIndices[idx];
+    /// <summary>
+    /// The [n, causes * bins] cell mask a[i, cause] * b[i, bin], laid out like the flattened PMF.
+    /// </summary>
+    private Tensor<T> CellProduct(Tensor<T> perCause, Tensor<T> perBin, int n)
+    {
+        int causes = _options.NumRisks;
+        int bins = NumTimeBins;
+        var shape = new[] { n, causes, bins };
+        var product = Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(perCause.Reshape(n, causes, 1), shape),
+            Engine.TensorBroadcastTo(perBin.Reshape(n, 1, bins), shape));
+        return product.Reshape(n, causes * bins);
+    }
 
-            if (eventType > 0)
-            {
-                // Event occurred - maximize probability at (eventType-1, timeBin)
-                int k = eventType - 1;  // Event types are 1-indexed
-                if (k < _options.NumRisks && timeBin < NumTimeBins)
-                {
-                    T prob = pmfs[bi][k][timeBin];
-                    logLikeLoss = NumOps.Subtract(logLikeLoss, NumOps.Log(NumOps.Add(prob, tiny)));
+    /// <summary>
+    /// Computes the DeepHit loss of one batch and its gradient with respect to the logits.
+    /// </summary>
+    /// <param name="pmf">The batch PMF, [n, NumRisks * bins].</param>
+    /// <param name="timeBins">Each subject's time bin.</param>
+    /// <param name="eventCodes">Each subject's event: 0 censored, otherwise the 1-based cause.</param>
+    /// <returns>The loss, and d(loss)/d(logit) as [n, NumRisks * bins].</returns>
+    /// <remarks>
+    /// <para>
+    /// Lee et al. (2018), eqs. 2-3. The log-likelihood term is -log P(cause k, bin s) for an observed event
+    /// and -log(1 - sum over causes of F_k(s)) for a subject censored in bin s, where
+    /// F_k(s) = sum of P(k, m) over m &lt;= s includes the censoring bin itself: the subject is known to
+    /// survive that bin. The previous version stopped before the censoring bin, so it credited the subject
+    /// with surviving one bin less than it did.
+    /// </para>
+    /// <para>
+    /// The ranking term compares every event subject i with every subject j still event-free at i's time
+    /// (s_i &lt; s_j) through eta = exp(-(F_{k_i}(s_i | x_i) - F_{k_i}(s_i | x_j)) / sigma), using the
+    /// cumulative incidence of i's own cause k_i as the paper's A_{k,i,j} specifies. The previous version
+    /// compared the incidence summed over every cause, which differs from the paper whenever there is
+    /// more than one competing risk.
+    /// </para>
+    /// <para>
+    /// Normalization: the reported loss is mean NLL + RankingWeight * (pair sum / n^2) -- the mean over
+    /// anchors of the mean over partners, as pycox does -- and the returned gradient is exactly its
+    /// derivative. The previous version reported (NLL + RankingWeight * pair sum) / n while descending a
+    /// gradient whose ranking part carried 1/n of that weight, so early stopping tracked a different
+    /// objective from the one being optimized.
+    /// </para>
+    /// <para>
+    /// All gradients are with respect to the LOGITS. With one softmax over all cells,
+    /// dp[a]/dz[b] = p[a](delta_ab - p[b]), so the derivative of a cell-set mass M = sum over A of p is
+    /// p[b](1{b in A} - M). Every gradient here therefore sums to zero over a subject's cells, as a softmax
+    /// logit gradient must.
+    /// </para>
+    /// </remarks>
+    private (T Loss, Tensor<T> Gradients) ComputeLossAndGradients(
+        Tensor<T> pmf, Vector<T> timeBins, Vector<T> eventCodes)
+    {
+        int n = timeBins.Length;
+        int causes = _options.NumRisks;
+        int bins = NumTimeBins;
+        int cells = causes * bins;
+        T tiny = NumOps.FromDouble(1e-10);
+        T batchSize = NumOps.FromDouble(n);
 
-                    // Gradient for softmax cross-entropy
-                    for (int kk = 0; kk < _options.NumRisks; kk++)
-                    {
-                        for (int tt = 0; tt < NumTimeBins; tt++)
-                        {
-                            T target = (kk == k && tt == timeBin) ? NumOps.One : NumOps.Zero;
-                            gradients[bi][kk][tt] = NumOps.Subtract(pmfs[bi][kk][tt], target);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // Censored - maximize survival probability up to censoring time
-                T cumProb = NumOps.Zero;
-                for (int k = 0; k < _options.NumRisks; k++)
-                {
-                    for (int t = 0; t < timeBin && t < NumTimeBins; t++)
-                    {
-                        cumProb = NumOps.Add(cumProb, pmfs[bi][k][t]);
-                    }
-                }
+        // Per-subject masks: one-hot of the subject's bin, bins at or before it, one-hot of its cause.
+        var binColumn = SurvivalNetworkOps.BroadcastColumn(timeBins, bins);
+        var binPositions = SurvivalNetworkOps.BroadcastRow(Engine.TensorArange<T>(0, bins, 1).ToVector(), n);
+        var ownBin = Engine.TensorEquals(binPositions, binColumn);
+        var atOrBeforeBin = Engine.TensorLessEqual(binPositions, binColumn);
+        var causeOneHot = Engine.TensorEquals(
+            SurvivalNetworkOps.BroadcastRow(Engine.TensorArange<T>(1, causes + 1, 1).ToVector(), n),
+            SurvivalNetworkOps.BroadcastColumn(eventCodes, causes));
+        var isEvent = Engine.ReduceSum(causeOneHot, new[] { 1 }, keepDims: false).ToVector();
+        var censored = Engine.Subtract(Engine.Fill(n, NumOps.One), isEvent);
 
-                logLikeLoss = NumOps.Subtract(logLikeLoss,
-                    NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, cumProb), tiny)));
+        var target = CellProduct(causeOneHot, ownBin, n);
+        var ownCauseToBin = CellProduct(causeOneHot, atOrBeforeBin, n);
+        var allCausesToBin = CellProduct(Tensor<T>.CreateDefault(new[] { n, causes }, NumOps.One), atOrBeforeBin, n);
 
-                // Gradient with respect to the LOGITS, not the probabilities. With one softmax over all
-                // cells, dp[a]/dz[b] = p[a](delta_ab - p[b]), so for L = -log(1 - C) with
-                // C = sum of p over the cells before the censoring bin:
-                //
-                //   dL/dz[b] = p[b] * (1{b before bin} - C) / (1 - C)
-                //
-                // which is p[b] before the bin and -p[b]*C/(1-C) after it. The previous version used
-                // p[b]/(1-C) before the bin and ZERO after, treating the probability derivative as if it
-                // were the logit derivative. A softmax logit gradient must sum to zero over all cells,
-                // because adding a constant to every logit leaves the probabilities unchanged; that one
-                // summed to C/(1-C), so every censored subject pushed the whole distribution one way.
-                T survDenom = NumOps.Add(NumOps.Subtract(NumOps.One, cumProb), tiny);
-                T tailScale = NumOps.Divide(cumProb, survDenom);
-                for (int k = 0; k < _options.NumRisks; k++)
-                {
-                    for (int t = 0; t < NumTimeBins; t++)
-                    {
-                        gradients[bi][k][t] = t < timeBin
-                            ? pmfs[bi][k][t]
-                            : NumOps.Negate(NumOps.Multiply(pmfs[bi][k][t], tailScale));
-                    }
-                }
-            }
-        }
+        // Log-likelihood term.
+        var eventProbability = Engine.ReduceSum(Engine.TensorMultiply(pmf, target), new[] { 1 }, keepDims: false).ToVector();
+        var incidenceToBin = Engine.ReduceSum(Engine.TensorMultiply(pmf, allCausesToBin), new[] { 1 }, keepDims: false).ToVector();
+        var survival = Engine.Add(Engine.Subtract(Engine.Fill(n, NumOps.One), incidenceToBin), Engine.Fill(n, tiny));
+        var eventNll = Engine.Negate(Engine.Log(Engine.Add(eventProbability, Engine.Fill(n, tiny))));
+        var censoredNll = Engine.Negate(Engine.Log(survival));
+        T logLikeLoss = Engine.Sum(Engine.Add(Engine.Multiply(isEvent, eventNll), Engine.Multiply(censored, censoredNll)));
 
-        // Ranking loss
+        // Event: softmax cross-entropy, p - onehot. Censored: L = -log(1 - C + tiny), so
+        // dL/dz[b] = p[b] * (1{b at or before the bin} - C) / (1 - C + tiny).
+        var eventGradient = Engine.TensorSubtract(pmf, target);
+        var censoredGradient = Engine.TensorMultiply(pmf, Engine.TensorDivide(
+            Engine.TensorSubtract(allCausesToBin, SurvivalNetworkOps.BroadcastColumn(incidenceToBin, cells)),
+            SurvivalNetworkOps.BroadcastColumn(survival, cells)));
+        var gradients = Engine.TensorAdd(
+            Engine.TensorMultiply(eventGradient, SurvivalNetworkOps.BroadcastColumn(isEvent, cells)),
+            Engine.TensorMultiply(censoredGradient, SurvivalNetworkOps.BroadcastColumn(censored, cells)));
+
+        // Ranking term.
+        T rankingLoss = NumOps.Zero;
+        T rankWeight = NumOps.FromDouble(_options.RankingWeight);
         if (_options.RankingWeight > 0)
         {
             T sigma = NumOps.FromDouble(_options.RankingSigma);
-            T rankWeight = NumOps.FromDouble(_options.RankingWeight);
-            T nT = NumOps.FromDouble(n);
 
-            for (int i = 0; i < n; i++)
-            {
-                int idxI = batchIndices[i];
-                int eventI = (int)NumOps.ToDouble(events[idxI]);
-                int timeBinI = timeBinIndices[idxI];
+            // Cause-specific cumulative incidence per cell, then F_{k_i}(s_i) for i itself and for every j.
+            var incidence = Engine.TensorCumSum(pmf.Reshape(n, causes, bins), 2).Reshape(n, cells);
+            var ownIncidence = Engine.ReduceSum(
+                Engine.TensorMultiply(target, incidence), new[] { 1 }, keepDims: false).ToVector();
+            var partnerIncidence = Engine.TensorMatMul(target, Engine.TensorTranspose(incidence));
 
-                if (eventI == 0) continue;  // Skip censored for ranking
+            // A[i, j] = 1 when i had an event and s_i < s_j.
+            var comparable = Engine.TensorMultiply(
+                SurvivalNetworkOps.BroadcastColumn(isEvent, n),
+                Engine.TensorLessThan(
+                    SurvivalNetworkOps.BroadcastColumn(timeBins, n), SurvivalNetworkOps.BroadcastRow(timeBins, n)));
 
-                for (int j = 0; j < n; j++)
-                {
-                    if (i == j) continue;
+            // DeepHit eq. 8: eta = exp(-(F_i(s_i) - F_j(s_i)) / sigma). Subject i failed first, so its
+            // cumulative incidence at that time SHOULD exceed j's, and the penalty shrinks as it does.
+            var eta = Engine.TensorExp(Engine.TensorNegate(Engine.TensorDivideScalar(
+                Engine.TensorSubtract(SurvivalNetworkOps.BroadcastColumn(ownIncidence, n), partnerIncidence), sigma)));
+            var pairPenalty = Engine.TensorMultiply(comparable, eta);
+            rankingLoss = Engine.TensorSum(pairPenalty);
 
-                    int idxJ = batchIndices[j];
-                    int timeBinJ = timeBinIndices[idxJ];
+            // d(eta)/dz_i[b] = (-eta/sigma) p_i[b] (1{b in A_i} - F_i) and, for the partner,
+            // d(eta)/dz_j[b] = (eta/sigma) p_j[b] (1{b in A_i} - F_j), with A_i the cells of cause k_i at or
+            // before s_i. Summed over partners (rows) and over anchors (columns) respectively.
+            var pairWeight = Engine.TensorMultiplyScalar(pairPenalty, NumOps.Divide(rankWeight, NumOps.Multiply(sigma, batchSize)));
+            var anchorWeight = Engine.ReduceSum(pairWeight, new[] { 1 }, keepDims: false).ToVector();
+            var anchorGradient = Engine.TensorNegate(Engine.TensorMultiply(
+                SurvivalNetworkOps.BroadcastColumn(anchorWeight, cells),
+                Engine.TensorMultiply(pmf, Engine.TensorSubtract(
+                    ownCauseToBin, SurvivalNetworkOps.BroadcastColumn(ownIncidence, cells)))));
 
-                    // i should have higher risk by time timeBinI than j
-                    if (timeBinI < timeBinJ)
-                    {
-                        // Compute CIF up to timeBinI
-                        T cifI = NumOps.Zero;
-                        T cifJ = NumOps.Zero;
-                        for (int k = 0; k < _options.NumRisks; k++)
-                        {
-                            for (int t = 0; t <= timeBinI && t < NumTimeBins; t++)
-                            {
-                                cifI = NumOps.Add(cifI, pmfs[i][k][t]);
-                                cifJ = NumOps.Add(cifJ, pmfs[j][k][t]);
-                            }
-                        }
+            var partnerCells = Engine.TensorMatMul(Engine.TensorTranspose(pairWeight), ownCauseToBin);
+            var partnerOffset = Engine.ReduceSum(
+                Engine.TensorMultiply(pairWeight, partnerIncidence), new[] { 0 }, keepDims: false).ToVector();
+            var partnerGradient = Engine.TensorMultiply(pmf, Engine.TensorSubtract(
+                partnerCells, SurvivalNetworkOps.BroadcastColumn(partnerOffset, cells)));
 
-                        // DeepHit eq. 8: eta = exp(-(F_i(T_i) - F_j(T_i)) / sigma). Subject i failed first,
-                        // so its cumulative incidence at that time SHOULD exceed j's; the penalty must
-                        // therefore shrink as F_i - F_j grows.
-                        //
-                        // The sign was inverted here. `diff` was computed as cifJ - cifI and then negated,
-                        // giving exp(+(F_i - F_j)/sigma) -- a penalty that grows when the ranking is
-                        // RIGHT. Minimizing it drove F_i below F_j, so the ranking term actively fought
-                        // the log-likelihood term. That is why the loss stopped improving within a few
-                        // epochs and early stopping cut training short: the two terms had reached a
-                        // stalemate, not a fit.
-                        T diff = NumOps.Subtract(cifI, cifJ);
-                        T eta = NumOps.Exp(NumOps.Negate(NumOps.Divide(diff, sigma)));
-                        rankingLoss = NumOps.Add(rankingLoss, eta);
-
-                        // As in the censored branch, this must be a gradient with respect to the LOGITS.
-                        // d(eta)/d(F_i) = -eta/sigma over the cells at or before timeBinI, so pushing that
-                        // through the softmax Jacobian gives, for subject i,
-                        //
-                        //   d(eta)/dz_i[b] = (-eta/sigma) * p_i[b] * (1{b <= timeBinI} - F_i)
-                        //
-                        // and the same with the opposite sign and F_j for subject j. The old code added a
-                        // bare constant to the leading cells instead, which does not sum to zero over the
-                        // cells and so injected a spurious uniform shift into every update.
-                        T scale = NumOps.Divide(NumOps.Multiply(NumOps.Divide(eta, sigma), rankWeight), nT);
-                        for (int k = 0; k < _options.NumRisks; k++)
-                        {
-                            for (int t = 0; t < NumTimeBins; t++)
-                            {
-                                T indicator = t <= timeBinI ? NumOps.One : NumOps.Zero;
-
-                                T centeredI = NumOps.Subtract(indicator, cifI);
-                                gradients[i][k][t] = NumOps.Subtract(
-                                    gradients[i][k][t],
-                                    NumOps.Multiply(scale, NumOps.Multiply(pmfs[i][k][t], centeredI)));
-
-                                T centeredJ = NumOps.Subtract(indicator, cifJ);
-                                gradients[j][k][t] = NumOps.Add(
-                                    gradients[j][k][t],
-                                    NumOps.Multiply(scale, NumOps.Multiply(pmfs[j][k][t], centeredJ)));
-                            }
-                        }
-                    }
-                }
-            }
+            gradients = Engine.TensorAdd(gradients, Engine.TensorAdd(anchorGradient, partnerGradient));
         }
 
+        // loss = mean NLL + rankWeight * pairSum / n^2; the gradient above is n times its derivative.
         T totalLoss = NumOps.Divide(
-            NumOps.Add(logLikeLoss, NumOps.Multiply(NumOps.FromDouble(_options.RankingWeight), rankingLoss)),
-            NumOps.FromDouble(n));
-        return (totalLoss, gradients);
+            NumOps.Add(logLikeLoss, NumOps.Divide(NumOps.Multiply(rankWeight, rankingLoss), batchSize)),
+            batchSize);
+        return (totalLoss, Engine.TensorDivideScalar(gradients, batchSize));
     }
 
 
@@ -1158,45 +954,9 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     private void ComputeFeatureStandardization(Matrix<T> x)
     {
-        int n = x.Rows;
-        _featureMean = new Vector<T>(x.Columns);
-        _featureStd = new Vector<T>(x.Columns);
-
-        for (int j = 0; j < x.Columns; j++)
-        {
-            double sum = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(x[i, j]);
-            }
-            double mean = sum / n;
-
-            double sq = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                double d = NumOps.ToDouble(x[i, j]) - mean;
-                sq += d * d;
-            }
-            double std = Math.Sqrt(sq / n);
-            if (std < 1e-10) std = 1.0;
-
-            _featureMean[j] = NumOps.FromDouble(mean);
-            _featureStd[j] = NumOps.FromDouble(std);
-        }
-    }
-
-    /// <summary>
-    /// Applies the training standardization to one feature value.
-    /// </summary>
-    private T StandardizeFeature(T value, int featureIndex)
-    {
-        if (_featureMean is null || _featureStd is null ||
-            featureIndex >= _featureMean.Length || featureIndex >= _featureStd.Length)
-        {
-            return value;
-        }
-
-        return NumOps.Divide(NumOps.Subtract(value, _featureMean[featureIndex]), _featureStd[featureIndex]);
+        var (mean, std) = SurvivalNetworkOps.ColumnMeanAndStd(x);
+        _featureMean = mean;
+        _featureStd = std;
     }
 
     /// <summary>
@@ -1212,45 +972,29 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         var weights = new List<Matrix<T>>();
         var biases = new List<Vector<T>>();
 
-        for (int layer = 0; layer < _sharedWeights.Count; layer++)
-        {
-            weights.Add(_sharedWeights[layer]);
-            biases.Add(_sharedBiases[layer]);
-        }
+        weights.AddRange(_sharedWeights);
+        biases.AddRange(_sharedBiases);
 
         for (int k = 0; k < _options.NumRisks; k++)
         {
-            for (int layer = 0; layer < _causeWeights[k].Count; layer++)
-            {
-                weights.Add(_causeWeights[k][layer]);
-                biases.Add(_causeBiases[k][layer]);
-            }
+            weights.AddRange(_causeWeights[k]);
+            biases.AddRange(_causeBiases[k]);
         }
 
-        for (int k = 0; k < _options.NumRisks; k++)
-        {
-            weights.Add(_outputWeights[k]);
-            biases.Add(_outputBiases[k]);
-        }
+        weights.AddRange(_outputWeights);
+        biases.AddRange(_outputBiases);
 
         return (weights, biases);
     }
 
     /// <summary>
-    /// Allocates zeroed gradient accumulators shaped like the parameters.
+    /// Allocates zeroed accumulators shaped like the parameters.
     /// </summary>
     private (List<Matrix<T>> Weights, List<Vector<T>> Biases) AllocateLike(
         List<Matrix<T>> weights, List<Vector<T>> biases)
     {
-        var gw = new List<Matrix<T>>(weights.Count);
-        var gb = new List<Vector<T>>(biases.Count);
-
-        for (int i = 0; i < weights.Count; i++)
-        {
-            gw.Add(new Matrix<T>(weights[i].Rows, weights[i].Columns));
-            gb.Add(new Vector<T>(biases[i].Length));
-        }
-
+        var gw = weights.Select(w => new Matrix<T>(w.Rows, w.Columns)).ToList();
+        var gb = biases.Select(b => new Vector<T>(b.Length)).ToList();
         return (gw, gb);
     }
 
@@ -1258,13 +1002,13 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// Fits the network by minimizing the DeepHit loss: the log-likelihood term plus the ranking term.
     /// </summary>
     /// <param name="x">Feature matrix.</param>
-    /// <param name="timeBinIndices">Discretized event time per subject.</param>
-    /// <param name="events">Event type per subject: 0 for censored, 1..NumRisks for a cause.</param>
+    /// <param name="timeBins">Discretized event time per subject.</param>
+    /// <param name="eventCodes">Event type per subject: 0 for censored, 1..NumRisks for a cause.</param>
     /// <remarks>
-    /// Mini-batch Adam with decoupled L2 decay and early stopping. SaveWeights and RestoreWeights already
-    /// existed for exactly this purpose and had no callers, because training never ran.
+    /// Mini-batch Adam with the L2 penalty on the weight gradients, and early stopping. The best epoch's
+    /// weights are kept, not the last epoch's.
     /// </remarks>
-    private void FitNetwork(Matrix<T> x, int[] timeBinIndices, Vector<T> events)
+    private void FitNetwork(Matrix<T> x, Vector<T> timeBins, Vector<T> eventCodes)
     {
         int n = x.Rows;
         int batchSize = Math.Max(1, Math.Min(_options.BatchSize, n));
@@ -1272,8 +1016,10 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         var (mW, mB) = AllocateLike(weights, biases);
         var (vW, vB) = AllocateLike(weights, biases);
         int adamStep = 0;
+        var binTensor = Tensor<T>.FromVector(timeBins);
+        var codeTensor = Tensor<T>.FromVector(eventCodes);
 
-        double bestLoss = double.MaxValue;
+        T bestLoss = NumOps.MaxValue;
         int epochsWithoutImprovement = 0;
         var bestWeights = SaveWeights();
 
@@ -1282,36 +1028,37 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             order = ShuffleArray(order);
-            double epochLoss = 0.0;
-            int batches = 0;
+            var batchLosses = new List<T>();
 
             for (int start = 0; start < n; start += batchSize)
             {
                 int count = Math.Min(batchSize, n - start);
                 var batchIndices = new int[count];
                 Array.Copy(order, start, batchIndices, 0, count);
+                var selector = new Tensor<int>(batchIndices, new[] { count });
 
-                var (pmfs, cache) = ForwardPass(x, batchIndices, training: true);
-                var (loss, logitGradients) = ComputeLossAndGradients(pmfs, timeBinIndices, events, batchIndices);
+                var (pmf, cache) = ForwardPass(x, batchIndices, training: true);
+                var (loss, logitGradients) = ComputeLossAndGradients(
+                    pmf,
+                    Engine.TensorIndexSelect(binTensor, selector, 0).ToVector(),
+                    Engine.TensorIndexSelect(codeTensor, selector, 0).ToVector());
 
-                var (gradW, gradB) = AllocateLike(weights, biases);
-                Backpropagate(cache, logitGradients, gradW, gradB);
+                var (gradW, gradB) = Backpropagate(cache, logitGradients, count, weights.Count);
 
                 adamStep++;
                 ApplyAdam(weights, biases, gradW, gradB, mW, mB, vW, vB, adamStep);
 
-                epochLoss += NumOps.ToDouble(loss);
-                batches++;
+                batchLosses.Add(loss);
             }
 
-            if (batches == 0)
+            if (batchLosses.Count == 0)
             {
                 continue;
             }
 
-            double meanLoss = epochLoss / batches;
+            T meanLoss = Engine.Mean(new Vector<T>(batchLosses));
 
-            if (meanLoss < bestLoss - 1e-7)
+            if (IsImprovement(meanLoss, bestLoss))
             {
                 bestLoss = meanLoss;
                 epochsWithoutImprovement = 0;
@@ -1333,145 +1080,97 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
+    /// Whether an epoch's mean loss beats the best so far by more than 1e-7.
+    /// </summary>
+    private bool IsImprovement(T meanLoss, T bestLoss)
+    {
+        return NumOps.LessThan(meanLoss, NumOps.Subtract(bestLoss, NumOps.FromDouble(1e-7)));
+    }
+
+    /// <summary>
     /// Propagates the logit gradients back through the output heads, the cause branches and the shared trunk.
     /// </summary>
     /// <param name="cache">Caches recorded by the forward pass.</param>
-    /// <param name="logitGradients">d(loss)/d(logit) per sample, cause and time bin.</param>
-    /// <param name="gradWeights">Accumulators in <see cref="FlattenParameters"/> order.</param>
-    /// <param name="gradBiases">Accumulators in <see cref="FlattenParameters"/> order.</param>
+    /// <param name="logitGradients">d(loss)/d(logit), [n, NumRisks * bins].</param>
+    /// <param name="n">Batch size.</param>
+    /// <param name="parameterCount">Number of layers in <see cref="FlattenParameters"/> order.</param>
+    /// <returns>Weight and bias gradients in <see cref="FlattenParameters"/> order.</returns>
     /// <remarks>
     /// The shared trunk feeds every cause branch, so its delta is the SUM of what each branch sends back.
     /// Overwriting rather than summing there would train the trunk on one cause only.
     /// </remarks>
-    private void Backpropagate(DeepHitForwardCache cache, Vector<T>[][] logitGradients,
-        List<Matrix<T>> gradWeights, List<Vector<T>> gradBiases)
+    private (List<Matrix<T>> Weights, List<Vector<T>> Biases) Backpropagate(
+        DeepHitForwardCache cache, Tensor<T> logitGradients, int n, int parameterCount)
     {
-        int n = logitGradients.Length;
         int sharedCount = _sharedWeights.Count;
         int causeLayersPerRisk = _options.NumRisks > 0 ? _causeWeights[0].Count : 0;
+        int bins = NumTimeBins;
+        var weightGradients = new Matrix<T>[parameterCount];
+        var biasGradients = new Vector<T>[parameterCount];
 
         // Delta arriving at the shared trunk's output, summed over causes.
-        int sharedOutputSize = sharedCount > 0
-            ? _sharedWeights[sharedCount - 1].Columns
-            : _numFeatures;
-
-        var sharedDelta = new Vector<T>[n];
-        for (int i = 0; i < n; i++)
-        {
-            sharedDelta[i] = new Vector<T>(sharedOutputSize);
-        }
+        Tensor<T>? sharedDelta = null;
 
         for (int k = 0; k < _options.NumRisks; k++)
         {
             // d(loss)/d(logit) for this cause.
-            var delta = new Vector<T>[n];
-            for (int i = 0; i < n; i++)
-            {
-                delta[i] = logitGradients[i][k];
-            }
+            var delta = Engine.TensorSlice(logitGradients, new[] { 0, k * bins }, new[] { n, bins });
 
             int outputParamIndex = sharedCount + _options.NumRisks * causeLayersPerRisk + k;
-            delta = BackwardLayer(cache.Output[k], delta, _outputWeights[k],
-                gradWeights[outputParamIndex], gradBiases[outputParamIndex]);
+            var (outputWeightGradient, outputBiasGradient, outputDelta) =
+                BackwardLayer(cache.Output[k], delta, _outputWeights[k]);
+            weightGradients[outputParamIndex] = outputWeightGradient;
+            biasGradients[outputParamIndex] = outputBiasGradient;
+            delta = outputDelta;
 
             for (int layer = causeLayersPerRisk - 1; layer >= 0; layer--)
             {
                 int paramIndex = sharedCount + k * causeLayersPerRisk + layer;
-                delta = BackwardLayer(cache.Cause[k][layer], delta, _causeWeights[k][layer],
-                    gradWeights[paramIndex], gradBiases[paramIndex]);
+                var (weightGradient, biasGradient, inputDelta) =
+                    BackwardLayer(cache.Cause[k][layer], delta, _causeWeights[k][layer]);
+                weightGradients[paramIndex] = weightGradient;
+                biasGradients[paramIndex] = biasGradient;
+                delta = inputDelta;
             }
 
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < sharedOutputSize && j < delta[i].Length; j++)
-                {
-                    sharedDelta[i][j] = NumOps.Add(sharedDelta[i][j], delta[i][j]);
-                }
-            }
+            sharedDelta = sharedDelta is null ? delta : Engine.TensorAdd(sharedDelta, delta);
         }
 
-        var trunkDelta = sharedDelta;
-        for (int layer = sharedCount - 1; layer >= 0; layer--)
+        if (sharedDelta is not null)
         {
-            trunkDelta = BackwardLayer(cache.Shared[layer], trunkDelta, _sharedWeights[layer],
-                gradWeights[layer], gradBiases[layer]);
+            var trunkDelta = sharedDelta;
+            for (int layer = sharedCount - 1; layer >= 0; layer--)
+            {
+                var (weightGradient, biasGradient, inputDelta) =
+                    BackwardLayer(cache.Shared[layer], trunkDelta, _sharedWeights[layer]);
+                weightGradients[layer] = weightGradient;
+                biasGradients[layer] = biasGradient;
+                trunkDelta = inputDelta;
+            }
         }
+
+        return (weightGradients.ToList(), biasGradients.ToList());
     }
 
     /// <summary>
-    /// Applies one Adam step with decoupled L2 decay to every parameter, in place.
+    /// Applies one Adam step to every parameter, in place.
     /// </summary>
     /// <remarks>
-    /// Weight decay applies to the weight matrices only; biases are left undecayed, which is the standard
-    /// convention because shrinking them removes the layer's ability to shift its output.
+    /// The L2 penalty applies to the weight matrices only; biases are left unpenalized, which is the
+    /// standard convention because shrinking them removes the layer's ability to shift its output.
     /// </remarks>
     private void ApplyAdam(List<Matrix<T>> weights, List<Vector<T>> biases,
         List<Matrix<T>> gradWeights, List<Vector<T>> gradBiases,
         List<Matrix<T>> mW, List<Vector<T>> mB, List<Matrix<T>> vW, List<Vector<T>> vB, int step)
     {
-        double lr = _options.LearningRate;
-        const double beta1 = 0.9;
-        const double beta2 = 0.999;
-        const double eps = 1e-8;
-        double decay = _options.L2Regularization;
-        double correction1 = 1.0 - Math.Pow(beta1, step);
-        double correction2 = 1.0 - Math.Pow(beta2, step);
+        var coefficients = new SurvivalNetworkOps.AdamCoefficients<T>(
+            _options.LearningRate, _options.L2Regularization, step);
 
         for (int p = 0; p < weights.Count; p++)
         {
-            var w = weights[p];
-            var g = gradWeights[p];
-            var m = mW[p];
-            var v = vW[p];
-
-            for (int i = 0; i < w.Rows; i++)
-            {
-                for (int j = 0; j < w.Columns; j++)
-                {
-                    double grad = NumOps.ToDouble(g[i, j]) + decay * NumOps.ToDouble(w[i, j]);
-                    double mv = beta1 * NumOps.ToDouble(m[i, j]) + (1 - beta1) * grad;
-                    double vv = beta2 * NumOps.ToDouble(v[i, j]) + (1 - beta2) * grad * grad;
-                    m[i, j] = NumOps.FromDouble(mv);
-                    v[i, j] = NumOps.FromDouble(vv);
-
-                    double stepSize = lr * (mv / correction1) / (Math.Sqrt(vv / correction2) + eps);
-                    w[i, j] = NumOps.FromDouble(NumOps.ToDouble(w[i, j]) - stepSize);
-                }
-            }
-
-            var b = biases[p];
-            var gbv = gradBiases[p];
-            var mb = mB[p];
-            var vb = vB[p];
-
-            for (int i = 0; i < b.Length; i++)
-            {
-                double grad = NumOps.ToDouble(gbv[i]);
-                double mv = beta1 * NumOps.ToDouble(mb[i]) + (1 - beta1) * grad;
-                double vv = beta2 * NumOps.ToDouble(vb[i]) + (1 - beta2) * grad * grad;
-                mb[i] = NumOps.FromDouble(mv);
-                vb[i] = NumOps.FromDouble(vv);
-
-                double stepSize = lr * (mv / correction1) / (Math.Sqrt(vv / correction2) + eps);
-                b[i] = NumOps.FromDouble(NumOps.ToDouble(b[i]) - stepSize);
-            }
+            SurvivalNetworkOps.AdamStep(weights[p], gradWeights[p], mW[p], vW[p], coefficients, applyL2: true);
+            SurvivalNetworkOps.AdamStep(biases[p], gradBiases[p], mB[p], vB[p], coefficients, applyL2: false);
         }
-    }
-
-   private Vector<T>[] CloneArray(Vector<T>[] arr)
-    {
-        var result = new Vector<T>[arr.Length];
-        for (int i = 0; i < arr.Length; i++)
-        {
-            var src = arr[i];
-            var dst = new Vector<T>(src.Length);
-            for (int j = 0; j < src.Length; j++)
-            {
-                dst[j] = src[j];
-            }
-            result[i] = dst;
-        }
-        return result;
     }
 
     private int[] ShuffleArray(int[] array)
@@ -1509,36 +1208,8 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new Vector<T>(_numFeatures);
-
-        if (_sharedWeights.Count > 0)
-        {
-            var firstLayerWeights = _sharedWeights[0];
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                T sumAbsWeight = NumOps.Zero;
-                for (int j = 0; j < firstLayerWeights.Columns; j++)
-                {
-                    sumAbsWeight = NumOps.Add(sumAbsWeight, NumOps.Abs(firstLayerWeights[f, j]));
-                }
-                importances[f] = sumAbsWeight;
-            }
-        }
-
-        T sum = NumOps.Zero;
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            sum = NumOps.Add(sum, importances[f]);
-        }
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                importances[f] = NumOps.Divide(importances[f], sum);
-            }
-        }
-
-        FeatureImportances = importances;
+        FeatureImportances = SurvivalNetworkOps.FirstLayerImportances(
+            _sharedWeights.Count > 0 ? _sharedWeights[0] : null, _numFeatures);
         return Task.CompletedTask;
     }
 
@@ -1558,82 +1229,5 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
                 { "NumberOfFeatures", _numFeatures }
             }
         };
-    }
-
-    private void SerializeLayerList(BinaryWriter writer, List<Matrix<T>> weights, List<Vector<T>> biases)
-    {
-        writer.Write(weights.Count);
-        for (int i = 0; i < weights.Count; i++)
-        {
-            SerializeWeights(writer, weights[i]);
-            SerializeBiases(writer, biases[i]);
-        }
-    }
-
-    private void SerializeWeights(BinaryWriter writer, Matrix<T> w)
-    {
-        writer.Write(w.Rows);
-        writer.Write(w.Columns);
-        for (int i = 0; i < w.Rows; i++)
-        {
-            for (int j = 0; j < w.Columns; j++)
-            {
-                writer.Write(NumOps.ToDouble(w[i, j]));
-            }
-        }
-    }
-
-    private void SerializeBiases(BinaryWriter writer, Vector<T> b)
-    {
-        writer.Write(b.Length);
-        for (int i = 0; i < b.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(b[i]));
-        }
-    }
-
-    private (List<Matrix<T>>, List<Vector<T>>) DeserializeLayerList(BinaryReader reader)
-    {
-        int count = reader.ReadInt32();
-        var weights = new List<Matrix<T>>();
-        var biases = new List<Vector<T>>();
-
-        for (int i = 0; i < count; i++)
-        {
-            weights.Add(DeserializeWeights(reader));
-            biases.Add(DeserializeBiases(reader));
-        }
-
-        return (weights, biases);
-    }
-
-    private Matrix<T> DeserializeWeights(BinaryReader reader)
-    {
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        var w = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                w[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        return w;
-    }
-
-    private Vector<T> DeserializeBiases(BinaryReader reader)
-    {
-        int len = reader.ReadInt32();
-        var b = new Vector<T>(len);
-
-        for (int i = 0; i < len; i++)
-        {
-            b[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        return b;
     }
 }

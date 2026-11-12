@@ -149,6 +149,7 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
+        var engine = AiDotNetEngine.Current;
 
         // Initialize parameters
         Coefficients = new Vector<T>(p);
@@ -156,114 +157,56 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
         Scale = NumOps.One;
 
         // Convert times to log scale
-        var logTimes = new double[n];
-        for (int i = 0; i < n; i++)
-            logTimes[i] = Math.Log(Math.Max(1e-10, NumOps.ToDouble(times[i])));
+        var logTimes = engine.TensorLog(engine.TensorClampMin(times.AsTensor(), NumOps.FromDouble(1e-10)));
 
         // Initial intercept = mean of log times (location estimate).
         // Initial scale uses the moment-matching estimate for the Gumbel
         // distribution of z = (logT - η)/σ in the Weibull AFT family:
         // Var(z) = π²/6 ⇒ σ ≈ sqrt(6/π²) * sd(log times). Clamped away from
         // zero so the first gradient evaluation doesn't blow up.
-        double mean = logTimes.Average();
-        Intercept = NumOps.FromDouble(mean);
-        double sumSq = 0.0;
-        for (int i = 0; i < n; i++) { double d = logTimes[i] - mean; sumSq += d * d; }
-        double sdLogTimes = Math.Sqrt(sumSq / Math.Max(1, n - 1));
-        Scale = NumOps.FromDouble(Math.Max(0.1, sdLogTimes * Math.Sqrt(6.0) / Math.PI));
+        T mean = engine.TensorMean(logTimes);
+        Intercept = mean;
+        var centered = engine.TensorAddScalar(logTimes, NumOps.Negate(mean));
+        T sumSq = engine.TensorSum(engine.TensorMultiply(centered, centered));
+        T sdLogTimes = NumOps.Sqrt(NumOps.Divide(sumSq, NumOps.FromDouble(Math.Max(1, n - 1))));
+        Scale = MathHelper.Max(NumOps.FromDouble(0.1), NumOps.Multiply(sdLogTimes, NumOps.FromDouble(Math.Sqrt(6.0) / Math.PI)));
 
-        double prevLogLik = ComputeLogLikelihood(x, logTimes, events, NumOps.ToDouble(Intercept), NumOps.ToDouble(Scale), Coefficients);
+        var design = Tensor<T>.FromMatrix(x);
+        var eventMask = engine.TensorEquals(events.AsTensor().Cast<T>(), NumOps.One);
+        T prevLogLik = ComputeLogLikelihood(design, logTimes, eventMask, Intercept, Scale, Coefficients);
 
         for (int iter = 0; iter < MaxIterations; iter++)
         {
-            double scale = NumOps.ToDouble(Scale);
-            double intercept = NumOps.ToDouble(Intercept);
-
-            // Compute gradients at the current parameters.
-            var gradBeta = new double[p];
-            double gradIntercept = 0;
-            double gradScale = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                double eta = intercept;
-                for (int j = 0; j < p; j++)
-                    eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
-
-                // Clip z to [-30, 30] so exp(z) stays in [1e-13, 1e13] and the
-                // gradient terms don't overflow on extreme outliers.
-                double z = Math.Max(-30.0, Math.Min(30.0, (logTimes[i] - eta) / scale));
-                double expZ = Math.Exp(z);
-
-                if (events[i] == 1)
-                {
-                    double dLogLik_dZ = 1 - expZ;
-                    gradIntercept -= dLogLik_dZ / scale;
-                    gradScale -= (z * (1 - expZ) + 1) / scale;
-
-                    for (int j = 0; j < p; j++)
-                        gradBeta[j] -= dLogLik_dZ * NumOps.ToDouble(x[i, j]) / scale;
-                }
-                else
-                {
-                    gradIntercept += expZ / scale;
-                    gradScale += z * expZ / scale;
-
-                    for (int j = 0; j < p; j++)
-                        gradBeta[j] += expZ * NumOps.ToDouble(x[i, j]) / scale;
-                }
-            }
-
-            // Average per-sample so step sizes don't scale with n.
-            gradIntercept /= n;
-            gradScale /= n;
-            for (int j = 0; j < p; j++) gradBeta[j] /= n;
+            // Compute gradients at the current parameters, averaged per sample so step sizes don't
+            // scale with n.
+            var (gradIntercept, gradScale, gradBeta) = ComputeGradient(design, logTimes, eventMask);
 
             // Armijo backtracking line search: start at step=1, halve until
             // the new log-likelihood is strictly greater than the current one
             // (or step underflows). Guarantees monotonic improvement on a
             // concave objective.
-            double gradNormSq = gradIntercept * gradIntercept + gradScale * gradScale;
-            for (int j = 0; j < p; j++) gradNormSq += gradBeta[j] * gradBeta[j];
-            if (gradNormSq < Tolerance * Tolerance) break;
+            if (GradientIsNegligible(gradIntercept, gradScale, gradBeta)) break;
 
             double step = 1.0;
-            double newLogLik = prevLogLik;
-            double newIntercept = intercept;
-            double newScale = scale;
-            var newBeta = new double[p];
-            bool accepted = false;
-            for (int backtrack = 0; backtrack < 30; backtrack++)
+            var trial = TryStep(design, logTimes, eventMask, step, gradIntercept, gradScale, gradBeta, prevLogLik);
+            for (int backtrack = 1; backtrack < 30 && !trial.Improves; backtrack++)
             {
-                newIntercept = intercept + step * gradIntercept;
-                newScale = Math.Max(0.01, scale + step * gradScale);
-                for (int j = 0; j < p; j++)
-                    newBeta[j] = NumOps.ToDouble(Coefficients[j]) + step * gradBeta[j];
-
-                var trialCoeffs = new Vector<T>(p);
-                for (int j = 0; j < p; j++) trialCoeffs[j] = NumOps.FromDouble(newBeta[j]);
-                newLogLik = ComputeLogLikelihood(x, logTimes, events, newIntercept, newScale, trialCoeffs);
-
-                if (newLogLik > prevLogLik + 1e-12 * Math.Abs(prevLogLik))
-                {
-                    accepted = true;
-                    break;
-                }
                 step *= 0.5;
+                trial = TryStep(design, logTimes, eventMask, step, gradIntercept, gradScale, gradBeta, prevLogLik);
             }
 
-            if (!accepted) break;
+            if (!trial.Improves) break;
 
-            Intercept = NumOps.FromDouble(newIntercept);
-            Scale = NumOps.FromDouble(newScale);
-            for (int j = 0; j < p; j++) Coefficients[j] = NumOps.FromDouble(newBeta[j]);
+            Intercept = trial.Intercept;
+            Scale = trial.Scale;
+            Coefficients = trial.Coefficients;
 
-            if (Math.Abs(newLogLik - prevLogLik) < Tolerance)
+            bool converged = HasConverged(trial.LogLik, prevLogLik);
+            prevLogLik = trial.LogLik;
+            if (converged)
             {
-                prevLogLik = newLogLik;
                 break;
             }
-            prevLogLik = newLogLik;
         }
 
         // Store event times for prediction
@@ -272,38 +215,112 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
         // Compute baseline survival
         if (TrainedEventTimes.Length > 0)
         {
-            BaselineSurvivalFunction = new Vector<T>(TrainedEventTimes.Length);
-            double shape = 1.0 / NumOps.ToDouble(Scale);
-            double baselineScale = Math.Exp(NumOps.ToDouble(Intercept));
-
-            for (int t = 0; t < TrainedEventTimes.Length; t++)
-            {
-                double time = NumOps.ToDouble(TrainedEventTimes[t]);
-                // Weibull survival: S(t) = exp(-(t/λ)^κ)
-                double survival = Math.Exp(-Math.Pow(time / baselineScale, shape));
-                BaselineSurvivalFunction[t] = NumOps.FromDouble(survival);
-            }
+            BaselineSurvivalFunction = WeibullSurvival(TrainedEventTimes.AsTensor(), NumOps.Exp(Intercept)).ToVector();
         }
     }
 
-    private double ComputeLogLikelihood(Matrix<T> x, double[] logTimes, Vector<int> events, double intercept, double scale, Vector<T> coeffs)
+    private T ComputeLogLikelihood(Tensor<T> design, Tensor<T> logTimes, Tensor<T> eventMask, T intercept, T scale, Vector<T> coeffs)
     {
-        int n = x.Rows;
-        int p = x.Columns;
-        double logLik = 0.0;
-        double logScale = Math.Log(scale);
-        for (int i = 0; i < n; i++)
-        {
-            double eta = intercept;
-            for (int j = 0; j < p; j++)
-                eta += NumOps.ToDouble(coeffs[j]) * NumOps.ToDouble(x[i, j]);
-            double z = Math.Max(-30.0, Math.Min(30.0, (logTimes[i] - eta) / scale));
-            double expZ = Math.Exp(z);
-            logLik += events[i] == 1
-                ? z - logScale - expZ      // log density (event)
-                : -expZ;                    // log survival (censored)
-        }
-        return logLik;
+        var engine = AiDotNetEngine.Current;
+        var z = ClippedResidual(design, logTimes, intercept, scale, coeffs);
+        var expZ = engine.TensorExp(z);
+
+        // log density (event): z - log(sigma) - exp(z); log survival (censored): -exp(z)
+        var eventTerms = engine.TensorAddScalar(engine.TensorSubtract(z, expZ), NumOps.Negate(NumOps.Log(scale)));
+        return engine.TensorSum(engine.TensorWhere(eventMask, eventTerms, engine.TensorNegate(expZ)));
+    }
+
+    /// <summary>
+    /// Computes z = (log t - eta) / sigma clipped to [-30, 30] so exp(z) stays in [1e-13, 1e13] and the
+    /// gradient terms don't overflow on extreme outliers.
+    /// </summary>
+    private Tensor<T> ClippedResidual(Tensor<T> design, Tensor<T> logTimes, T intercept, T scale, Vector<T> coeffs)
+    {
+        var engine = AiDotNetEngine.Current;
+        var eta = LinearPredictor(design, coeffs, intercept);
+        return engine.TensorClamp(engine.TensorDivideScalar(engine.TensorSubtract(logTimes, eta), scale),
+            NumOps.FromDouble(-30.0), NumOps.FromDouble(30.0));
+    }
+
+    /// <summary>
+    /// Computes the per-sample average gradient of the log-likelihood with respect to the intercept, the
+    /// scale and the coefficients.
+    /// </summary>
+    private (T GradIntercept, T GradScale, Vector<T> GradBeta) ComputeGradient(
+        Tensor<T> design, Tensor<T> logTimes, Tensor<T> eventMask)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = design.Shape[0];
+        var coefficients = Coefficients ?? new Vector<T>(design.Shape[1]);
+        var z = ClippedResidual(design, logTimes, Intercept, Scale, coefficients);
+        var expZ = engine.TensorExp(z);
+
+        // Event: d/d(eta) = -(1 - exp z)/sigma, d/d(sigma) = -(z (1 - exp z) + 1)/sigma.
+        // Censored: d/d(eta) = exp z/sigma, d/d(sigma) = z exp z/sigma.
+        var zExpZ = engine.TensorMultiply(z, expZ);
+        var muTerms = engine.TensorWhere(eventMask, engine.TensorAddScalar(expZ, NumOps.Negate(NumOps.One)), expZ);
+        var scaleTerms = engine.TensorWhere(eventMask,
+            engine.TensorSubtract(zExpZ, engine.TensorAddScalar(z, NumOps.One)),
+            zExpZ);
+
+        // Average per-sample so step sizes don't scale with n.
+        T denominator = NumOps.Multiply(Scale, NumOps.FromDouble(n));
+        T gradIntercept = NumOps.Divide(engine.TensorSum(muTerms), denominator);
+        T gradScale = NumOps.Divide(engine.TensorSum(scaleTerms), denominator);
+        var gradBeta = engine.TensorDivideScalar(
+            engine.TensorMatMul(muTerms.Reshape(new[] { 1, n }), design), denominator).ToVector();
+
+        return (gradIntercept, gradScale, gradBeta);
+    }
+
+    /// <summary>
+    /// True when the squared gradient norm is below Tolerance squared.
+    /// </summary>
+    private bool GradientIsNegligible(T gradIntercept, T gradScale, Vector<T> gradBeta)
+    {
+        T gradNormSq = NumOps.Add(
+            NumOps.Add(NumOps.Multiply(gradIntercept, gradIntercept), NumOps.Multiply(gradScale, gradScale)),
+            AiDotNetEngine.Current.DotProduct(gradBeta, gradBeta));
+        return NumOps.LessThan(gradNormSq, NumOps.FromDouble(Tolerance * Tolerance));
+    }
+
+    /// <summary>
+    /// True when the log-likelihood moved by less than the tolerance.
+    /// </summary>
+    private bool HasConverged(T logLik, T prevLogLik)
+    {
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(logLik, prevLogLik)), NumOps.FromDouble(Tolerance));
+    }
+
+    /// <summary>
+    /// Evaluates the parameters one gradient step of the given size away, and whether they improve the
+    /// log-likelihood by more than 1e-12 relative.
+    /// </summary>
+    private (T Intercept, T Scale, Vector<T> Coefficients, T LogLik, bool Improves) TryStep(
+        Tensor<T> design, Tensor<T> logTimes, Tensor<T> eventMask, double step,
+        T gradIntercept, T gradScale, Vector<T> gradBeta, T prevLogLik)
+    {
+        var engine = AiDotNetEngine.Current;
+        T stepT = NumOps.FromDouble(step);
+        var coefficients = Coefficients ?? new Vector<T>(gradBeta.Length);
+
+        T newIntercept = NumOps.Add(Intercept, NumOps.Multiply(stepT, gradIntercept));
+        T newScale = MathHelper.Max(NumOps.FromDouble(0.01), NumOps.Add(Scale, NumOps.Multiply(stepT, gradScale)));
+        var newBeta = engine.Add(coefficients, engine.Multiply(gradBeta, stepT));
+        T newLogLik = ComputeLogLikelihood(design, logTimes, eventMask, newIntercept, newScale, newBeta);
+
+        T threshold = NumOps.Add(prevLogLik, NumOps.Multiply(NumOps.FromDouble(1e-12), NumOps.Abs(prevLogLik)));
+        return (newIntercept, newScale, newBeta, newLogLik, NumOps.GreaterThan(newLogLik, threshold));
+    }
+
+    /// <summary>
+    /// Weibull survival S(t) = exp(-(t/lambda)^kappa) with kappa = 1/Scale, for one lambda.
+    /// </summary>
+    private Tensor<T> WeibullSurvival(Tensor<T> times, T lambda)
+    {
+        var engine = AiDotNetEngine.Current;
+        T shape = NumOps.Divide(NumOps.One, Scale);
+        return engine.TensorExp(engine.TensorNegate(engine.TensorPower(engine.TensorDivideScalar(times, lambda), shape)));
     }
 
     /// <summary>
@@ -316,31 +333,20 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
         // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
         x = ExtractCovariates(x);
 
-        int numSubjects = x.Rows;
-        var result = new Matrix<T>(numSubjects, times.Length);
-        double shape = 1.0 / NumOps.ToDouble(Scale);
-
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
+        var engine = AiDotNetEngine.Current;
+        var grid = new[] { x.Rows, times.Length };
+        T shape = NumOps.Divide(NumOps.One, Scale);
 
-        for (int i = 0; i < numSubjects; i++)
-        {
-            // Compute linear predictor
-            double eta = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < coefficients.Length; j++)
-                eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
+        // Compute linear predictor and the subject's scale exp(η)
+        var subjectScale = engine.TensorExp(LinearPredictor(Tensor<T>.FromMatrix(x), coefficients, Intercept))
+            .Reshape(new[] { x.Rows, 1 });
 
-            double scale = Math.Exp(eta);
-
-            for (int t = 0; t < times.Length; t++)
-            {
-                double time = NumOps.ToDouble(times[t]);
-                // Weibull survival: S(t|X) = exp(-(t/exp(η))^κ)
-                double survival = Math.Exp(-Math.Pow(time / scale, shape));
-                result[i, t] = NumOps.FromDouble(survival);
-            }
-        }
-
-        return result;
+        // Weibull survival: S(t|X) = exp(-(t/exp(η))^κ)
+        var ratio = engine.TensorDivide(
+            engine.TensorBroadcastTo(times.AsTensor().Reshape(new[] { 1, times.Length }), grid),
+            engine.TensorBroadcastTo(subjectScale, grid));
+        return engine.TensorExp(engine.TensorNegate(engine.TensorPower(ratio, shape))).ToMatrix();
     }
 
     /// <summary>
@@ -354,21 +360,13 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
         x = ExtractCovariates(x);
 
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
-        var result = new Vector<T>(x.Rows);
-        double shape = 1.0 / NumOps.ToDouble(Scale);
+        var engine = AiDotNetEngine.Current;
+        T shape = NumOps.Divide(NumOps.One, Scale);
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            double eta = 0;
-            for (int j = 0; j < coefficients.Length; j++)
-                eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
-
-            // AFT acceleration factor: exp(-κ * Σβⱼxⱼ)
-            // This is equivalent to hazard ratio for Weibull
-            result[i] = NumOps.FromDouble(Math.Exp(-shape * eta));
-        }
-
-        return result;
+        // AFT acceleration factor: exp(-κ * Σβⱼxⱼ)
+        // This is equivalent to hazard ratio for Weibull
+        var eta = LinearPredictor(Tensor<T>.FromMatrix(x), coefficients, NumOps.Zero);
+        return engine.TensorExp(engine.TensorMultiplyScalar(eta, NumOps.Negate(shape))).ToVector();
     }
 
     /// <summary>
@@ -378,18 +376,7 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
-        var result = new Vector<T>(times.Length);
-        double shape = 1.0 / NumOps.ToDouble(Scale);
-        double baselineScale = Math.Exp(NumOps.ToDouble(Intercept));
-
-        for (int t = 0; t < times.Length; t++)
-        {
-            double time = NumOps.ToDouble(times[t]);
-            double survival = Math.Exp(-Math.Pow(time / baselineScale, shape));
-            result[t] = NumOps.FromDouble(survival);
-        }
-
-        return result;
+        return WeibullSurvival(times.AsTensor(), NumOps.Exp(Intercept)).ToVector();
     }
 
     /// <summary>
@@ -403,22 +390,13 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
         input = ExtractCovariates(input);
 
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
-        var result = new Vector<T>(input.Rows);
-        double shape = 1.0 / NumOps.ToDouble(Scale);
+        var engine = AiDotNetEngine.Current;
+        T shape = NumOps.Divide(NumOps.One, Scale);
 
-        for (int i = 0; i < input.Rows; i++)
-        {
-            double eta = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < coefficients.Length; j++)
-                eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(input[i, j]);
-
-            double scale = Math.Exp(eta);
-            // Median survival time: t_median = scale * (ln(2))^(1/shape)
-            double median = scale * Math.Pow(Math.Log(2), 1.0 / shape);
-            result[i] = NumOps.FromDouble(median);
-        }
-
-        return result;
+        // Median survival time: t_median = scale * (ln(2))^(1/shape)
+        T medianFactor = NumOps.Power(NumOps.FromDouble(Math.Log(2)), NumOps.Divide(NumOps.One, shape));
+        var scale = engine.TensorExp(LinearPredictor(Tensor<T>.FromMatrix(input), coefficients, Intercept));
+        return engine.TensorMultiplyScalar(scale, medianFactor).ToVector();
     }
 
     /// <inheritdoc />

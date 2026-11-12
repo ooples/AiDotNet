@@ -249,7 +249,7 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         if (samples <= 0)
             throw new ArgumentException(
                 "PANNsModel audio preprocessing requires non-empty audio input.", nameof(rawAudio));
-        var flat = rawAudio.ToVector();
+        var flat = AudioEngineOps.Flatten(Engine, rawAudio);
 
         // CNN14 applies AvgPool(2x2) in all but its final block, whose paper-canonical
         // pool is 1x1. Both spectrogram axes must therefore survive /2^(blocks-1).
@@ -270,11 +270,13 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
             throw new InvalidOperationException("The configured PANNs depth and hop length require an audio tensor larger than Int32.MaxValue.");
         int minSamples = (int)minSamplesLong;
         int tiledSamples = System.Math.Max(samples, minSamples);
-        var tiled = new T[batchSize * tiledSamples];
-        for (int b = 0; b < batchSize; b++)
-            for (int s = 0; s < tiledSamples; s++)
-                tiled[b * tiledSamples + s] = flat[b * samples + (samples > 0 ? s % samples : 0)];
-        var waveform = new Tensor<T>(tiled, new[] { batchSize, tiledSamples });
+        var clips = Engine.Reshape(
+            flat.Length == batchSize * samples ? flat : Engine.TensorSlice(flat, [0], [batchSize * samples]),
+            [batchSize, samples]);
+        int repeats = (tiledSamples + samples - 1) / samples;
+        var waveform = repeats == 1
+            ? clips
+            : Engine.TensorSlice(Engine.TensorTile(clips, [1, repeats]), [0, 0], [batchSize, tiledSamples]);
 
         _hannWindow ??= BuildHannWindow(nFft);
 
@@ -329,23 +331,9 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var probabilities = new Tensor<T>(modelOutput._shape);
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            double logit = NumOps.ToDouble(modelOutput[i]);
-            double probability;
-            if (logit >= 0.0)
-            {
-                probability = 1.0 / (1.0 + Math.Exp(-logit));
-            }
-            else
-            {
-                double exp = Math.Exp(logit);
-                probability = exp / (1.0 + exp);
-            }
-            probabilities[i] = NumOps.FromDouble(probability);
-        }
-        return probabilities;
+        // Logistic sigmoid of the logits, as a fresh (detached) tensor.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.Sigmoid(modelOutput);
     }
 
     /// <summary>
@@ -355,13 +343,10 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     /// </summary>
     private Tensor<T> BuildHannWindow(int windowSize)
     {
-        var window = new Tensor<T>([windowSize]);
-        for (int n = 0; n < windowSize; n++)
-        {
-            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / windowSize));
-            window[n] = NumOps.FromDouble(w);
-        }
-        return window;
+        // Periodic Hann: 0.5 * (1 - cos(2 pi n / N))
+        if (windowSize < 0) throw new OverflowException("Window size must be non-negative.");
+        if (windowSize == 0) return new Tensor<T>([0]);
+        return Engine.TensorHannWindow<T>(windowSize, periodic: true);
     }
 
     #endregion
@@ -425,14 +410,22 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
                 $"but got shape [{string.Join(", ", probs.Shape)}].");
         int classCount = probs.Shape[^1];
         var results = new Dictionary<string, double>();
+        double[] firstRow = FirstRowAsDoubles(probs, classCount);
         for (int i = 0; i < classCount; i++)
         {
-            double p = Convert.ToDouble(probs[0, i]);
+            double p = firstRow[i];
             if (p >= threshold)
                 results[$"class_{i}"] = p;
         }
         return results.OrderByDescending(kv => kv.Value)
                       .ToDictionary(kv => kv.Key, kv => kv.Value);
+    }
+
+    /// <summary>The first row of a <c>[batch, classes]</c> output in the double result contract.</summary>
+    private double[] FirstRowAsDoubles(Tensor<T> probs, int classCount)
+    {
+        if (classCount == 0) return new double[0];
+        return Engine.TensorSlice(probs, [0, 0], [1, classCount]).Cast<double>().ToArray();
     }
 
     /// <summary>Returns the top-K class predictions sorted descending.</summary>
@@ -451,15 +444,16 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
                 $"but got shape [{string.Join(", ", probs.Shape)}].");
 
         int classCount = probs.Shape[^1];
-        var indexed = new (double prob, int idx)[classCount];
-        for (int i = 0; i < classCount; i++)
-            indexed[i] = (Convert.ToDouble(probs[0, i]), i);
-        Array.Sort(indexed, (a, b) => b.prob.CompareTo(a.prob));
-
         int take = Math.Min(k, classCount);
         var result = new List<(string, double)>(take);
+        if (take == 0) return result;
+
+        // Descending probability (NaN last); equal probabilities keep class order
+        var firstRow = Engine.TensorSlice(probs, [0, 0], [1, classCount]);
+        int[] order = AudioEngineOps.StableDescendingOrder(Engine, firstRow);
+        double[] values = firstRow.Cast<double>().ToArray();
         for (int i = 0; i < take; i++)
-            result.Add(($"class_{indexed[i].idx}", indexed[i].prob));
+            result.Add(($"class_{order[i]}", values[order[i]]));
         return result;
     }
 
@@ -505,9 +499,7 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
                 "head exists — otherwise this would return the 527-class logits instead of " +
                 "the 2048-d embedding (silently wrong fingerprint).");
 
-        var flat = hidden.ToVector();
-        var data = new T[flat.Length];
-        for (int i = 0; i < flat.Length; i++) data[i] = flat[i];
+        var data = hidden.ToArray();
         return new AudioFingerprint<T>
         {
             Data = data,

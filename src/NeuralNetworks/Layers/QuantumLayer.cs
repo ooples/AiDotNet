@@ -4,6 +4,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -329,20 +330,19 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         var scaledGradients = Engine.TensorMultiplyScalar(_angleGradients, learningRate);
         Engine.TensorSubtractInPlace(_rotationAngles, scaledGradients);
 
-        // Reconstruct from identity. Applying the complete new angle set to the already-rotated
-        // circuit would compound every previous angle, so even a zero-learning-rate update would
-        // change the layer's behavior.
-        ResetQuantumCircuit();
-
-        // Ensure angles stay within [0, 2π] and apply rotations
-        for (int i = 0; i < _numQubits; i++)
+        using (new NoGradScope<T>())
         {
-            _rotationAngles[i] = MathHelper.Modulo(
-                NumOps.Add(_rotationAngles[i], NumOps.FromDouble(2 * Math.PI)),
-                NumOps.FromDouble(2 * Math.PI));
+            // Ensure angles stay within [0, 2π]: floor-modulo of (angle + 2π) by 2π, as MathHelper.Modulo.
+            var twoPi = new Tensor<T>([_numQubits]);
+            twoPi.Fill(NumOps.FromDouble(2 * Math.PI));
+            var wrapped = Engine.TensorRemainder(Engine.TensorAdd(_rotationAngles, twoPi), twoPi);
+            Engine.TensorCopy(wrapped, _rotationAngles);
 
-            // Apply updated rotation
-            ApplyRotation(i, _rotationAngles[i]);
+            // Reconstruct from identity. Applying the complete new angle set to the already-rotated
+            // circuit would compound every previous angle, so even a zero-learning-rate update would
+            // change the layer's behavior.
+            ResetQuantumCircuit();
+            ApplyAllRotations();
         }
 
         SynchronizeCircuitTensors();
@@ -370,17 +370,17 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     /// when implementing stateful networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs from previous calculations are cleared
     /// - Angle gradients are reset to zero
     /// - The layer forgets any information from previous batches
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated batch of data
     /// - Preventing information from one batch affecting another
     /// - Starting a new training episode
-    /// 
+    ///
     /// The quantum circuit itself (with its learned rotation angles) is not reset,
     /// only the temporary state information.
     /// </para>
@@ -404,20 +404,8 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private void InitializeQuantumCircuit()
     {
-        int dimension = 1 << _numQubits;
-
         // Initialize quantum circuit as identity matrix
-        for (int i = 0; i < dimension; i++)
-        {
-            for (int j = 0; j < dimension; j++)
-            {
-                _quantumCircuit[i, j] = i == j ?
-                    new Complex<T>(NumOps.One, NumOps.Zero) :
-                    new Complex<T>(NumOps.Zero, NumOps.Zero);
-                _circuitReal[i, j] = _quantumCircuit[i, j].Real;
-                _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
-            }
-        }
+        ResetQuantumCircuit();
 
         // Honor the per-layer seed assigned by LayerInitializationSeedScope before this derived
         // constructor runs. Falling through to the shared RNG is intentional only for unseeded
@@ -426,123 +414,74 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : Random;
 
-        // Initialize rotation angles randomly
+        // Initialize rotation angles randomly (master's draw order; needs TensorUniformFromRng).
         for (int i = 0; i < _numQubits; i++)
         {
             _rotationAngles[i] = NumOps.FromDouble(random.NextDouble() * 2 * Math.PI);
-            ApplyRotation(i, _rotationAngles[i]);
+        }
+
+        // The rotations draw nothing from the RNG, so applying them after the draws is equivalent.
+        using (new NoGradScope<T>())
+        {
+            ApplyAllRotations();
         }
 
         SynchronizeCircuitTensors();
     }
 
-    /// <summary>Keeps the real-valued CPU/GPU parameter views aligned with the complex circuit.</summary>
+    /// <summary>Keeps the complex circuit aligned with the real-valued CPU/GPU parameter views.</summary>
     private void SynchronizeCircuitTensors()
     {
-        int dimension = 1 << _numQubits;
-        for (int i = 0; i < dimension; i++)
+        using (new NoGradScope<T>())
         {
-            for (int j = 0; j < dimension; j++)
-            {
-                _circuitReal[i, j] = _quantumCircuit[i, j].Real;
-                _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
-            }
+            Engine.TensorCopy(Engine.TensorComplex(_circuitReal, _circuitImag), _quantumCircuit);
         }
 
         Engine.InvalidatePersistentTensor(_circuitReal);
         Engine.InvalidatePersistentTensor(_circuitImag);
     }
 
-    /// <summary>
-    /// Applies a rotation operation to a specific qubit in the quantum circuit.
-    /// </summary>
-    /// <param name="qubit">The index of the qubit to rotate.</param>
-    /// <param name="angle">The rotation angle in radians.</param>
-    /// <remarks>
-    /// This private method applies a rotation operation to a specific qubit in the quantum circuit.
-    /// It calculates the rotation matrix elements based on the angle and applies the transformation
-    /// to the quantum circuit.
-    /// </remarks>
-    private void ApplyRotation(int qubit, T angle)
+    /// <summary>Applies every qubit's rotation, in qubit order, to the circuit.</summary>
+    private void ApplyAllRotations()
     {
-        int dimension = 1 << _numQubits;
-
-        // Calculate rotation parameters
-        var halfAngle = NumOps.Divide(angle, NumOps.FromDouble(2.0));
-        var cos = MathHelper.Cos(halfAngle);
-        var sin = MathHelper.Sin(halfAngle);
-
-        // Create complex values for the rotation
-        var cosComplex = new Complex<T>(cos, NumOps.Zero);
-        var sinComplex = new Complex<T>(sin, NumOps.Zero);
-        var negativeImaginary = new Complex<T>(NumOps.Zero, NumOps.Negate(NumOps.One));
-
-        // Create a temporary copy of the circuit for the transformation
-        var tempCircuit = _quantumCircuit.Clone();
-
-        for (int i = 0; i < dimension; i++)
+        for (int qubit = 0; qubit < _numQubits; qubit++)
         {
-            if ((i & (1 << qubit)) == 0)
-            {
-                int j = i | (1 << qubit);
-                for (int k = 0; k < dimension; k++)
-                {
-                    var temp = tempCircuit[k, i];
-
-                    // Apply rotation matrix
-                    _quantumCircuit[k, i] = _complexOps.Add(
-                        _complexOps.Multiply(cosComplex, temp),
-                        _complexOps.Multiply(negativeImaginary, _complexOps.Multiply(sinComplex, tempCircuit[k, j]))
-                    );
-
-                    _quantumCircuit[k, j] = _complexOps.Add(
-                        // Rx has -i*sin(theta/2) in BOTH off-diagonal entries. Using +i here
-                        // makes the two columns non-orthogonal and lets a "quantum" gate change
-                        // the state norm, so its measured probabilities no longer sum to one.
-                        _complexOps.Multiply(negativeImaginary, _complexOps.Multiply(sinComplex, temp)),
-                        _complexOps.Multiply(cosComplex, tempCircuit[k, j])
-                    );
-                }
-            }
+            ApplyRotation(qubit, Engine.TensorNarrow(_rotationAngles, 0, qubit, 1));
         }
     }
 
     /// <summary>
-    /// Updates the gradients of the rotation angles based on the output gradient.
+    /// Applies a rotation operation to a specific qubit in the quantum circuit.
     /// </summary>
-    /// <param name="gradientState">The gradient of the loss with respect to the layer's output in complex form.</param>
-    /// <param name="batchIndex">The index of the current batch item.</param>
+    /// <param name="qubit">The index of the qubit to rotate.</param>
+    /// <param name="angle">The rotation angle in radians, as a one-element tensor.</param>
     /// <remarks>
-    /// This private method calculates the gradients of the rotation angles based on the output gradient.
-    /// These gradients are accumulated across all items in a batch and used to update the parameters
-    /// during the UpdateParameters method.
+    /// The circuit U = A + iB is right-multiplied by Rx(angle) on <paramref name="qubit"/>:
+    /// G = cos(angle/2) I - i sin(angle/2) P, where P swaps the basis states that differ only in that
+    /// qubit's bit. Rx has -i*sin(theta/2) in BOTH off-diagonal entries; using +i would make the two
+    /// columns non-orthogonal and let a "quantum" gate change the state norm. With U P the column
+    /// permutation of U, U G = (c A + s B P) + i (c B - s A P).
     /// </remarks>
-    private void UpdateAngleGradients(Tensor<Complex<T>> gradientState, int batchIndex)
+    private void ApplyRotation(int qubit, Tensor<T> angle)
     {
         int dimension = 1 << _numQubits;
 
-        for (int qubit = 0; qubit < _numQubits; qubit++)
-        {
-            T qubitGradient = NumOps.Zero;
+        // Calculate rotation parameters as [1, 1] tensors that broadcast over the circuit.
+        var halfAngle = Engine.Reshape(Engine.TensorMultiplyScalar(angle, NumOps.FromDouble(0.5)), [1, 1]);
+        var cos = Engine.TensorCos(halfAngle);
+        var sin = Engine.TensorSin(halfAngle);
 
-            for (int i = 0; i < dimension; i++)
-            {
-                if ((i & (1 << qubit)) == 0)
-                {
-                    int j = i | (1 << qubit);
+        // Column permutation k -> k XOR (1 << qubit)
+        var qubitBit = new Tensor<int>([dimension]);
+        qubitBit.Fill(1 << qubit);
+        var partner = Engine.TensorBitwiseXor(Engine.TensorArange<int>(0, dimension, 1), qubitBit);
+        var realPermuted = Engine.TensorIndexSelect(_circuitReal, partner, 1);
+        var imagPermuted = Engine.TensorIndexSelect(_circuitImag, partner, 1);
 
-                    // Calculate gradient contribution for this qubit
-                    var gradDiff = gradientState[j] * _quantumCircuit[j, i].Conjugate() -
-                                   gradientState[i] * _quantumCircuit[i, j].Conjugate();
-
-                    // Extract the real part of the complex number
-                    qubitGradient = NumOps.Add(qubitGradient, gradDiff.Real);
-                }
-            }
-
-            // Accumulate gradients across batches
-            _angleGradients[qubit] = NumOps.Add(_angleGradients[qubit], qubitGradient);
-        }
+        var newReal = Engine.TensorAdd(Engine.TensorMultiply(_circuitReal, cos), Engine.TensorMultiply(imagPermuted, sin));
+        var newImag = Engine.TensorSubtract(Engine.TensorMultiply(_circuitImag, cos), Engine.TensorMultiply(realPermuted, sin));
+        Engine.TensorCopy(newReal, _circuitReal);
+        Engine.TensorCopy(newImag, _circuitImag);
     }
 
     /// <summary>
@@ -558,15 +497,11 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         int dimension = 1 << _numQubits;
 
         // Reset quantum circuit to identity matrix
-        for (int i = 0; i < dimension; i++)
+        using (new NoGradScope<T>())
         {
-            for (int j = 0; j < dimension; j++)
-            {
-                _quantumCircuit[i, j] = i == j ?
-                    new Complex<T>(NumOps.One, NumOps.Zero) :
-                    new Complex<T>(NumOps.Zero, NumOps.Zero);
-            }
+            Engine.TensorCopy(Engine.TensorEye<T>(dimension), _circuitReal);
         }
-    }
 
+        _circuitImag.Fill(NumOps.Zero);
+    }
 }

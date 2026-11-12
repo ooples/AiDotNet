@@ -52,8 +52,7 @@ public partial class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
         {
             // Create a default single-element vector with weight 1
             // Note: The actual weights will be recreated in CalculateLoss if the length doesn't match
-            _weights = new Vector<T>(1);
-            _weights[0] = NumOps.One;
+            _weights = Vector<T>.FromArray(new[] { NumOps.One });
         }
     }
 
@@ -67,31 +66,20 @@ public partial class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        // If weights are not provided, use uniform weights
-        Vector<T> weights = _weights;
-        if (weights == null || weights.Length != predicted.Length)
-        {
-            weights = new Vector<T>(predicted.Length);
-            for (int i = 0; i < predicted.Length; i++)
-            {
-                weights[i] = NumOps.One;
-            }
-        }
+        // y*log(p) + (1-y)*log(1-p), with SafeLog's floor on both logs
+        var p = predicted.AsTensor();
+        var y = actual.AsTensor();
+        var logP = SafeLogTensor(p, NumericalStabilityHelper.SmallEpsilon);
+        var logOneMinusP = SafeLogTensor(Engine.ScalarMinusTensor(NumOps.One, p), NumericalStabilityHelper.SmallEpsilon);
+        var logLikelihood = Engine.TensorAdd(
+            Engine.TensorMultiply(y, logP),
+            Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, y), logOneMinusP));
 
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // -weight * [y*log(p) + (1-y)*log(1-p)]
-            loss = NumOps.Add(loss, NumOps.Multiply(weights[i],
-                NumOps.Add(
-                    NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(predicted[i], NumericalStabilityHelper.SmallEpsilon)),
-                    NumOps.Multiply(
-                        NumOps.Subtract(NumOps.One, actual[i]),
-                        NumericalStabilityHelper.SafeLog(NumOps.Subtract(NumOps.One, predicted[i]), NumericalStabilityHelper.SmallEpsilon)
-                    )
-                )
-            ));
-        }
+        // -weight * [...]; weights that are missing or do not match the length are uniform (1)
+        Vector<T> weights = _weights;
+        T loss = weights == null || weights.Length != predicted.Length
+            ? Engine.TensorSum(logLikelihood)
+            : Engine.TensorSum(Engine.TensorMultiply(weights.AsTensor(), logLikelihood));
 
         // Return the average loss (consistent with BinaryCrossEntropyLoss)
         return NumOps.Negate(NumOps.Divide(loss, NumOps.FromDouble(predicted.Length)));

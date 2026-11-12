@@ -48,6 +48,11 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ResearchPaper("Concave Penalized Estimation of Sparse Gaussian Bayesian Networks", "https://jmlr.org/papers/v16/aragam15a.html", Year = 2015, Authors = "Bryon Aragam, Qing Zhou")]
 public class CCDrAlgorithm<T> : FunctionalBase<T>
 {
+    /// <summary>
+    /// Magnitude below which a weight is treated as no edge, in the coordinate updates and the cycle check.
+    /// </summary>
+    private const double EdgeTolerance = 1e-15;
+
     private readonly double _lambda;
     private readonly double _gamma;
     private readonly double _threshold;
@@ -128,7 +133,7 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
                     {
                         if (k == i || k == j) continue;
                         double wkj = NumOps.ToDouble(W[k, j]);
-                        if (Math.Abs(wkj) > 1e-15)
+                        if (Math.Abs(wkj) > EdgeTolerance)
                         {
                             partialResidual -= wkj * NumOps.ToDouble(S[i, k]);
                         }
@@ -139,7 +144,7 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
                     double newW = MCPProximal(partialResidual, sii, _lambda, _gamma);
 
                     // Check acyclicity: would setting W[i,j] = newW create a cycle?
-                    if (Math.Abs(newW) > 1e-15 && Math.Abs(oldW) < 1e-15)
+                    if (Math.Abs(newW) > EdgeTolerance && Math.Abs(oldW) < EdgeTolerance)
                     {
                         // New edge i -> j: check if j already reaches i
                         W[i, j] = NumOps.FromDouble(newW);
@@ -198,28 +203,36 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
     /// </summary>
     private bool HasCycle(Matrix<T> W, int d)
     {
+        // Edge lists of the entries whose |W| is not below EdgeTolerance (NaN counts as an edge), row-major,
+        // so the DFS visits children in index order.
+        var magnitude = Engine.TensorAbs(Tensor<T>.FromMatrix(W));
+        var edgeMask = Engine.TensorSubtract(Engine.TensorOnesLike(magnitude),
+            Engine.TensorLessThan(magnitude, NumOps.FromDouble(EdgeTolerance)));
+        var children = new List<int>[d];
+        for (int i = 0; i < d; i++) children[i] = new List<int>();
+        foreach (int position in Engine.TensorNonzero(edgeMask.Reshape(new[] { d * d })).ToArray())
+            children[position / d].Add(position % d);
+
         // 0 = unvisited, 1 = in-progress, 2 = done
         var state = new int[d];
 
         for (int i = 0; i < d; i++)
         {
-            if (state[i] == 0 && DFSHasCycle(W, d, i, state))
+            if (state[i] == 0 && DFSHasCycle(children, i, state))
                 return true;
         }
 
         return false;
     }
 
-    private bool DFSHasCycle(Matrix<T> W, int d, int node, int[] state)
+    private static bool DFSHasCycle(List<int>[] children, int node, int[] state)
     {
         state[node] = 1;
 
-        for (int j = 0; j < d; j++)
+        foreach (int j in children[node])
         {
-            if (Math.Abs(NumOps.ToDouble(W[node, j])) < 1e-15) continue;
-
             if (state[j] == 1) return true; // Back edge = cycle
-            if (state[j] == 0 && DFSHasCycle(W, d, j, state)) return true;
+            if (state[j] == 0 && DFSHasCycle(children, j, state)) return true;
         }
 
         state[node] = 2;

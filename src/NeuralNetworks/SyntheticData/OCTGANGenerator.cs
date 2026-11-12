@@ -97,6 +97,12 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     [TrainableParameter]
     private Tensor<T> _timePoints;
 
+    // Real rows as a tensor, cached per transformed matrix for batch gathering.
+    [Scratch]
+    private Matrix<T>? _realDataSource;
+    [Scratch]
+    private Tensor<T>? _realDataTensor;
+
     /// <summary>Gets the OCT-GAN-specific options.</summary>
     public new OCTGANOptions<T> Options => _options;
 
@@ -107,7 +113,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     public bool IsFitted { get; private set; }
 
     /// <summary>The discriminator's current interior time points t_1..t_{m-1}.</summary>
-    internal double[] TimePointValues => Enumerable.Range(0, _timePoints.Length).Select(i => NumOps.ToDouble(_timePoints[i])).ToArray();
+    internal double[] TimePointValues => _timePoints.Cast<double>().ToArray();
 
     /// <summary>Width of the discriminator input, a row with its condition vector.</summary>
     internal int DiscriminatorInputWidth => _dataWidth + _condWidth;
@@ -124,8 +130,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         double Score()
         {
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var s = DiscriminatorForward(rows, training: false);
-            return Enumerable.Range(0, s.Length).Average(i => NumOps.ToDouble(s[i]));
+            return NumOps.ToDouble(Engine.TensorMean(DiscriminatorForward(rows, training: false)));
         }
 
         double analytic;
@@ -198,11 +203,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     // The interior points t_1..t_{m-1}; t_0 = 0 and t_m = 1 are fixed. OCT-GAN(fixed)'s t_i = i/m is also the
     // initialization of the learned points.
     private Tensor<T> EvenlySpacedTimePoints(int m)
-    {
-        var t = new Tensor<T>(new[] { m - 1 });
-        for (int i = 0; i < m - 1; i++) t[i] = NumOps.FromDouble((i + 1.0) / m);
-        return t;
-    }
+        => Engine.TensorDivideScalar(Engine.TensorArange<T>(1, m, 1), NumOps.FromDouble(m));
 
     #region Layer Initialization
 
@@ -283,6 +284,21 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// <inheritdoc />
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        try
+        {
+            FitCore(data, columns, epochs);
+        }
+        finally
+        {
+            // The cached training rows only serve the training loop: a fitted generator, or one whose Fit failed,
+            // does not keep a copy of its training data.
+            _realDataSource = null;
+            _realDataTensor = null;
+        }
+    }
+
+    private void FitCore(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs)
+    {
         if (data is null) throw new ArgumentNullException(nameof(data));
         if (columns is null) throw new ArgumentNullException(nameof(columns));
         if (data.Rows == 0) throw new ArgumentException("OCT-GAN needs at least one training row.", nameof(data));
@@ -360,27 +376,33 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         if (numSamples <= 0)
             throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
 
-        var rows = new Matrix<T>(numSamples, _dataWidth);
+        var requestedColumns = conditionColumn is not null && conditionValue is not null
+            ? SyntheticTensorOps<T>.TruncateToInt(conditionColumn) : Array.Empty<int>();
+        var requestedValues = conditionColumn is not null && conditionValue is not null
+            ? SyntheticTensorOps<T>.TruncateToInt(conditionValue) : Array.Empty<int>();
+        var generated = new Tensor<T>(new[] { numSamples, _dataWidth });
         int chunk = Math.Max(1, _options.BatchSize);
         SetTrainingMode(false);
         for (int start = 0; start < numSamples; start += chunk)
         {
             int count = Math.Min(chunk, numSamples - start);
-            var cond = new Tensor<T>(new[] { count, _condWidth });
+            var condRows = new List<Vector<T>>(count);
             for (int b = 0; b < count; b++)
             {
                 int i = start + b;
-                var cv = conditionColumn is not null && conditionValue is not null && i < conditionColumn.Length && i < conditionValue.Length
-                    ? _sampler.CreateConditionVector((int)NumOps.ToDouble(conditionColumn[i]), (int)NumOps.ToDouble(conditionValue[i]))
-                    : _sampler.SampleRandomConditionVector();
-                for (int j = 0; j < _condWidth && j < cv.Length; j++) cond[b, j] = cv[j];
+                condRows.Add(i < requestedColumns.Length && i < requestedValues.Length
+                    ? _sampler.CreateConditionVector(requestedColumns[i], requestedValues[i])
+                    : _sampler.SampleRandomConditionVector());
             }
+            var cond = SyntheticTensorOps<T>.StackRows(condRows, _condWidth);
             var input = _condWidth > 0 ? Engine.TensorConcatenate(new[] { Noise(count), cond }, axis: 1) : Noise(count);
             var fake = GeneratorForward(input, gumbel: true);
-            for (int b = 0; b < count; b++)
-                for (int j = 0; j < _dataWidth; j++) rows[start + b, j] = fake[b, j];
+            // Each batch is copied into the one result buffer, so no generated batch outlives its iteration.
+            Engine.TensorSlice(fake, new[] { 0, 0 }, new[] { count, _dataWidth })
+                .CopyTo(generated.AsWritableSpan().Slice(start * _dataWidth, count * _dataWidth));
         }
-        return _transformer.InverseTransform(rows);
+        TabularDataTransformer<T> transformer = _transformer;
+        return SyntheticTensorOps<T>.DecodeInBlocks(generated, block => transformer.InverseTransform(block.ToMatrix()));
     }
 
     #endregion
@@ -426,11 +448,12 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private Tensor<T> GeneratorOdeFunction(Tensor<T> p, Tensor<T> timeColumn)
     {
         int width = p.Shape[1];
+        var slope = NumOps.FromDouble(LeakySlope);
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(
             Engine.ReduceSum(Engine.TensorSquare(p), new[] { 1 }, keepDims: true), NumOps.FromDouble(1e-12)));
         var x = Engine.TensorConcatenate(new[] { Engine.TensorDivide(p, Engine.TensorTile(norm, new[] { 1, width })), timeColumn }, axis: 1);
         for (int i = 0; i < GeneratorOdeDepth; i++)
-            x = Engine.TensorLeakyReLU(Layers[i].Forward(x), NumOps.FromDouble(LeakySlope));
+            x = Engine.TensorLeakyReLU(Layers[i].Forward(x), slope);
         return x;
     }
 
@@ -442,12 +465,13 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         foreach (var drop in _discDropoutLayers) drop.SetTrainingMode(training);
         foreach (var bn in _discOdeNormLayers) bn.SetTrainingMode(batchStatistics ?? training);
         int hidden = _discDropoutLayers.Count;
+        var slope = NumOps.FromDouble(LeakySlope);
 
         // Eq. 2.
         var h = input;
         for (int i = 0; i < hidden; i++)
         {
-            h = Engine.TensorLeakyReLU(_discLayers[i].Forward(h), NumOps.FromDouble(LeakySlope));
+            h = Engine.TensorLeakyReLU(_discLayers[i].Forward(h), slope);
             if (training) h = _discDropoutLayers[i].Forward(h);
         }
 
@@ -467,7 +491,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         for (int i = hidden; i < _discLayers.Count; i++)
         {
             score = _discLayers[i].Forward(score);
-            if (i < _discLayers.Count - 1) score = Engine.TensorLeakyReLU(score, NumOps.FromDouble(LeakySlope));
+            if (i < _discLayers.Count - 1) score = Engine.TensorLeakyReLU(score, slope);
         }
         return score;
     }
@@ -492,19 +516,22 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         var dtState = Engine.TensorTile(Engine.Reshape(dt, new[] { 1, 1 }), new[] { batch, width });
         var halfDtState = Engine.TensorMultiplyScalar(dtState, NumOps.FromDouble(0.5));
         Tensor<T> Column(Tensor<T> time) => Engine.TensorTile(Engine.Reshape(time, new[] { 1, 1 }), new[] { batch, 1 });
+        var half = NumOps.FromDouble(0.5);
+        var two = NumOps.FromDouble(2.0);
+        var sixth = NumOps.FromDouble(1.0 / 6.0);
 
         var t = t0;
         for (int s = 0; s < steps; s++)
         {
-            var tHalf = Engine.TensorAdd(t, Engine.TensorMultiplyScalar(dt, NumOps.FromDouble(0.5)));
+            var tHalf = Engine.TensorAdd(t, Engine.TensorMultiplyScalar(dt, half));
             var tNext = Engine.TensorAdd(t, dt);
             var k1 = field(state, Column(t));
             var k2 = field(Engine.TensorAdd(state, Engine.TensorMultiply(halfDtState, k1)), Column(tHalf));
             var k3 = field(Engine.TensorAdd(state, Engine.TensorMultiply(halfDtState, k2)), Column(tHalf));
             var k4 = field(Engine.TensorAdd(state, Engine.TensorMultiply(dtState, k3)), Column(tNext));
             var sum = Engine.TensorAdd(Engine.TensorAdd(k1, k4),
-                Engine.TensorMultiplyScalar(Engine.TensorAdd(k2, k3), NumOps.FromDouble(2.0)));
-            state = Engine.TensorAdd(state, Engine.TensorMultiplyScalar(Engine.TensorMultiply(dtState, sum), NumOps.FromDouble(1.0 / 6.0)));
+                Engine.TensorMultiplyScalar(Engine.TensorAdd(k2, k3), two));
+            state = Engine.TensorAdd(state, Engine.TensorMultiplyScalar(Engine.TensorMultiply(dtState, sum), sixth));
             t = tNext;
         }
         return state;
@@ -563,9 +590,12 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private void TrainDiscriminatorStep(Matrix<T> transformed, int batchSize)
     {
         var (cond, _, rows) = SampleConditions(batchSize);
-        var real = new Tensor<T>(new[] { batchSize, _dataWidth });
-        for (int b = 0; b < batchSize; b++)
-            for (int j = 0; j < _dataWidth; j++) real[b, j] = transformed[rows[b], j];
+        if (_realDataTensor is null || !ReferenceEquals(_realDataSource, transformed))
+        {
+            _realDataTensor = Tensor<T>.FromMatrix(transformed);
+            _realDataSource = transformed;
+        }
+        var real = SyntheticTensorOps<T>.GatherRows(_realDataTensor, rows, _dataWidth);
         Tensor<T> fake;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             fake = GeneratorForward(GeneratorInput(cond), gumbel: true);
@@ -676,17 +706,19 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     // drawn from those holding that category.
     private (Tensor<T> Cond, Tensor<T> Mask, int[] Rows) SampleConditions(int batchSize)
     {
-        var cond = new Tensor<T>(new[] { batchSize, _condWidth });
-        var mask = new Tensor<T>(new[] { batchSize, _condWidth });
         var rows = new int[batchSize];
-        if (_sampler is null) return (cond, mask, rows);
+        if (_sampler is null)
+            return (new Tensor<T>(new[] { batchSize, _condWidth }), new Tensor<T>(new[] { batchSize, _condWidth }), rows);
+        var condRows = new List<Vector<T>>(batchSize);
+        var maskRows = new List<Vector<T>>(batchSize);
         for (int b = 0; b < batchSize; b++)
         {
             var (cv, mv, _, _, row) = _sampler.SampleCondVecWithMask();
-            for (int j = 0; j < _condWidth; j++) { cond[b, j] = cv[j]; mask[b, j] = mv[j]; }
+            condRows.Add(cv);
+            maskRows.Add(mv);
             rows[b] = row;
         }
-        return (cond, mask, rows);
+        return (SyntheticTensorOps<T>.StackRows(condRows, _condWidth), SyntheticTensorOps<T>.StackRows(maskRows, _condWidth), rows);
     }
 
     private Tensor<T> GeneratorInput(Tensor<T> cond)

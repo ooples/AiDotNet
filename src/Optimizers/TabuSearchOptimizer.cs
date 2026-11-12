@@ -266,9 +266,10 @@ public partial class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var genes = new List<ModelParameterGene<T>>();
 
-        for (int i = 0; i < parameters.Length; i++)
+        int geneIndex = 0;
+        foreach (T value in parameters.AsSpan())
         {
-            genes.Add(new ModelParameterGene<T>(i, parameters[i]));
+            genes.Add(new ModelParameterGene<T>(geneIndex++, value));
         }
 
         // Create an individual from the current solution
@@ -446,14 +447,8 @@ public partial class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
 
         foreach (var visited in tabu)
         {
-            double distance = 0.0;
-            for (int i = 0; i < candidate.Length; i++)
-            {
-                double delta = Convert.ToDouble(NumOps.Subtract(candidate[i], visited[i]));
-                distance += delta * delta;
-            }
-
-            if (Math.Sqrt(distance) < threshold) return true;
+            // Euclidean distance as one engine reduction.
+            if (Convert.ToDouble(Engine.Norm(Engine.Subtract(candidate, visited))) < threshold) return true;
         }
 
         return false;
