@@ -281,11 +281,8 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
     // Channel mixing forward caches
     [Scratch]
-    private Tensor<T>? _cachedChannelRGate;   // [batch, seqLen, modelDim] sigmoid(W_r * rInput)
     [Scratch]
-    private Tensor<T>? _cachedChannelSiLU;    // [batch, seqLen, ffnDim] SiLU(W_k * kInput)
     [Scratch]
-    private Tensor<T>? _cachedChannelVProj;   // [batch, seqLen, modelDim] W_v * SiLU(k)
 
     // ============ Gradients ============
 
@@ -1362,9 +1359,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     {
         _originalInputShape = null;
         _cachedWkvOut = null;
-        _cachedChannelRGate = null;
-        _cachedChannelSiLU = null;
-        _cachedChannelVProj = null;
         _recurrentState = null;
         _prevToken = null;
         _prevChannelToken = null;

@@ -135,9 +135,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastHiddenStatesReal;
     [Scratch]
-    private Tensor<T>? _lastHiddenStatesImag;
     [Scratch]
     private Tensor<T>? _lastLambdaReal;
     [Scratch]
@@ -457,8 +455,6 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastHiddenStatesReal = null;
-        _lastHiddenStatesImag = null;
         _lastLambdaReal = null;
         _lastLambdaImag = null;
         _originalInputShape = null;

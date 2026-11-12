@@ -132,7 +132,6 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastInnerWeights; // All W_t snapshots: [batch, seqLen+1, numHeads, headDim, headDim]
     private int[]? _originalInputShape;
 
     // Gradients
@@ -516,7 +515,6 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInnerWeights = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _queryBiasGradient = null;

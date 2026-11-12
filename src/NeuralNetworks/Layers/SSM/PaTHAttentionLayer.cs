@@ -114,7 +114,6 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastAttentionWeights;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -403,7 +402,6 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastAttentionWeights = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

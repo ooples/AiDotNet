@@ -138,7 +138,6 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
     [Scratch]
     private Tensor<T>? _lastEmaInput;
     [Scratch]
-    private Tensor<T>? _lastEmaStates;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -493,7 +492,6 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         _lastEmaInput = null;
-        _lastEmaStates = null;
         _originalInputShape = null;
         _emaAlphaLogitGradient = null;
         _emaProjectInWeightsGradient = null;

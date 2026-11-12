@@ -139,9 +139,7 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastDecayMasks;
     [Scratch]
-    private Tensor<T>? _lastRetentionScores;
     [Scratch]
     private Tensor<T>? _lastGroupNormMean;
     [Scratch]
@@ -473,8 +471,6 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastDecayMasks = null;
-        _lastRetentionScores = null;
         _lastGroupNormMean = null;
         _lastGroupNormVar = null;
         _originalInputShape = null;

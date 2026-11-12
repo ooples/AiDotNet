@@ -149,8 +149,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    private Tensor<T>? _lastEmaStatesReal;
-    private Tensor<T>? _lastEmaStatesImag;
     private Tensor<T>? _lastEmaOutputPreNorm;
     private Tensor<T>? _lastEmaStdInv;
     private int[]? _originalInputShape;
@@ -530,8 +528,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastEmaStatesReal = null;
-        _lastEmaStatesImag = null;
         _lastEmaOutputPreNorm = null;
         _lastEmaStdInv = null;
         _originalInputShape = null;

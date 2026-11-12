@@ -112,15 +112,10 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
     [Scratch]
     private Tensor<T>? _lastValue;
     [Scratch]
-    private Tensor<T>? _lastPhiQ;
     [Scratch]
-    private Tensor<T>? _lastPhiK;
     [Scratch]
-    private Tensor<T>? _lastPhiQNorm;
     [Scratch]
-    private Tensor<T>? _lastPhiKNorm;
     [Scratch]
-    private Tensor<T>? _lastDenominators;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -371,11 +366,6 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
         _lastQuery = null;
         _lastKey = null;
         _lastValue = null;
-        _lastPhiQ = null;
-        _lastPhiK = null;
-        _lastPhiQNorm = null;
-        _lastPhiKNorm = null;
-        _lastDenominators = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

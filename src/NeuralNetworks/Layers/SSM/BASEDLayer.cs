@@ -131,11 +131,8 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached forward pass values
     [Scratch]
-    private Tensor<T>? _lastLinearFeatureQ;
     [Scratch]
-    private Tensor<T>? _lastLinearFeatureK;
     [Scratch]
-    private Tensor<T>? _lastWindowScores;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -490,9 +487,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastLinearFeatureQ = null;
-        _lastLinearFeatureK = null;
-        _lastWindowScores = null;
         _originalInputShape = null;
         _linearQueryWeightsGradient = null;
         _linearKeyWeightsGradient = null;

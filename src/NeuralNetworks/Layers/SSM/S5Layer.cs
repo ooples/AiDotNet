@@ -132,9 +132,7 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastHiddenStatesReal;
     [Scratch]
-    private Tensor<T>? _lastHiddenStatesImag;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -497,8 +495,6 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastHiddenStatesReal = null;
-        _lastHiddenStatesImag = null;
         _originalInputShape = null;
         _aRealGradient = null;
         _aImagGradient = null;
