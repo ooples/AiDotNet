@@ -66,68 +66,38 @@ public class ModalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        _modalityCounts = new int[p];
+        // Create histograms of every feature
+        var binCounts = FeatureSelectionTensorOps.RangeBinCounts(X, _nBins, out var constant);
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+        // Smooth histogram with simple moving average (window of 3, shrunk at the edges)
+        var zeroColumn = new Tensor<T>(new[] { p, 1 });
+        var left = engine.TensorConcatenate(new[] { zeroColumn, engine.TensorSlice(binCounts, new[] { 0, 0 }, new[] { p, _nBins - 1 }) }, 1);
+        var right = engine.TensorConcatenate(new[] { engine.TensorSlice(binCounts, new[] { 0, 1 }, new[] { p, _nBins - 1 }), zeroColumn }, 1);
+        var window = Enumerable.Repeat(3, _nBins).ToArray();
+        window[0] = 2;
+        window[_nBins - 1] = 2;
+        var smoothed = engine.TensorDivide(
+            engine.TensorAdd(engine.TensorAdd(left, binCounts), right),
+            engine.TensorBroadcastTo(new Tensor<int>(window, new[] { 1, _nBins }).Cast<T>(), new[] { p, _nBins }));
 
-            double min = col.Min();
-            double max = col.Max();
-            double range = max - min;
+        // Count peaks (local maxima)
+        int interior = _nBins - 2;
+        var center = engine.TensorSlice(smoothed, new[] { 0, 1 }, new[] { p, interior });
+        var isPeak = engine.TensorMultiply(engine.TensorMultiply(
+            engine.TensorGreaterThan(center, engine.TensorSlice(smoothed, new[] { 0, 0 }, new[] { p, interior })),
+            engine.TensorGreaterThan(center, engine.TensorSlice(smoothed, new[] { 0, 2 }, new[] { p, interior }))),
+            engine.TensorGreaterThan(center, NumOps.Zero));
+        var peaks = engine.ReduceSum(isPeak, new[] { 1 }, false);
 
-            if (range < 1e-10)
-            {
-                _modalityCounts[j] = 1; // Constant = unimodal
-                continue;
-            }
-
-            // Create histogram
-            var binCounts = new double[_nBins];
-            foreach (var val in col)
-            {
-                int bin = (int)((val - min) / range * (_nBins - 1));
-                bin = Math.Min(bin, _nBins - 1);
-                binCounts[bin]++;
-            }
-
-            // Smooth histogram with simple moving average
-            var smoothed = new double[_nBins];
-            for (int b = 0; b < _nBins; b++)
-            {
-                int count = 0;
-                double sum = 0;
-                for (int k = Math.Max(0, b - 1); k <= Math.Min(_nBins - 1, b + 1); k++)
-                {
-                    sum += binCounts[k];
-                    count++;
-                }
-                smoothed[b] = sum / count;
-            }
-
-            // Count peaks (local maxima)
-            int peaks = 0;
-            for (int b = 1; b < _nBins - 1; b++)
-            {
-                if (smoothed[b] > smoothed[b - 1] && smoothed[b] > smoothed[b + 1] && smoothed[b] > 0)
-                {
-                    peaks++;
-                }
-            }
-
-            // Handle edge cases
-            if (peaks == 0 && smoothed.Max() > 0)
-                peaks = 1;
-
-            _modalityCounts[j] = peaks;
-        }
+        // Handle edge cases: no peak in a non-empty histogram counts as one; constant = unimodal
+        var nonEmpty = engine.TensorGreaterThan(engine.ReduceMax(smoothed, new[] { 1 }, false), NumOps.Zero);
+        var one = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
+        peaks = engine.TensorWhere(engine.TensorMultiply(engine.TensorEquals(peaks, NumOps.Zero), nonEmpty), one, peaks);
+        peaks = engine.TensorWhere(constant, one, peaks);
+        _modalityCounts = peaks.Cast<int>().AsSpan().ToArray();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 

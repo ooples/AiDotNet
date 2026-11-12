@@ -318,4 +318,30 @@ internal static class FeatureSelectionTensorOps
             PreprocessingTensorOps.ColumnOrderStatistic(x, mid - 1), PreprocessingTensorOps.ColumnOrderStatistic(x, mid)),
             ops.FromDouble(2));
     }
+
+    /// <summary>
+    /// Range-scaled histogram counts of every column of <paramref name="x"/> ([n, p]):
+    /// <c>bin = min(trunc((x - min) / (max - min) * (bins - 1)), bins - 1)</c>. Returns [p, bins];
+    /// <paramref name="constant"/> is the [p] 0/1 mask of columns whose range is below 1e-10 (their counts are all
+    /// in bin 0 and should be ignored).
+    /// </summary>
+    public static Tensor<T> RangeBinCounts<T>(Tensor<T> x, int bins, out Tensor<T> constant)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var shape = new[] { n, p };
+        var min = PreprocessingTensorOps.ColumnMin(x);
+        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min);
+        constant = engine.TensorLessThan(range, ops.FromDouble(1e-10));
+        var safeRange = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, ops.One), range);
+        var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(
+            engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.Reshape(min, new[] { 1, p }), shape)),
+            engine.TensorBroadcastTo(engine.Reshape(safeRange, new[] { 1, p }), shape)), ops.FromDouble(bins - 1));
+        var binIndex = engine.TensorMin(engine.TensorTrunc(scaled), ops.FromDouble(bins - 1));
+        binIndex = engine.TensorWhere(engine.TensorBroadcastTo(engine.Reshape(constant, new[] { 1, p }), shape),
+            new Tensor<T>(shape), binIndex);
+        return BinCounts(PreprocessingTensorOps.OneHotBins(binIndex, bins), bins);
+    }
 }
