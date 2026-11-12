@@ -49,18 +49,20 @@ public static class MatrixHelper<T>
             return matrix[0, 0];
         }
 
-        T determinant = _numOps.Zero;
-
-        for (var i = 0; i < rows; i++)
+        if (rows == 0)
         {
-            var subMatrix = CreateSubMatrix(matrix, 0, i);
-            T subDeterminant = CalculateDeterminantRecursive(subMatrix);
-            T sign = _numOps.FromDouble(i % 2 == 0 ? 1 : -1);
-            T product = _numOps.Multiply(_numOps.Multiply(sign, matrix[0, i]), subDeterminant);
-            determinant = _numOps.Add(determinant, product);
+            return _numOps.Zero;
         }
 
-        return determinant;
+        // Laplace expansion along row 0: sum_i (-1)^i * a[0, i] * det(minor(0, i)).
+        T plus = _numOps.One;
+        T minus = _numOps.FromDouble(-1);
+        var signs = new Vector<T>(Enumerable.Range(0, rows).Select(i => i % 2 == 0 ? plus : minus));
+        var minors = new Vector<T>(Enumerable.Range(0, rows)
+            .Select(i => CalculateDeterminantRecursive(CreateSubMatrix(matrix, 0, i))));
+
+        var engine = AiDotNetEngine.Current;
+        return engine.DotProduct(engine.Multiply(signs, matrix.GetRow(0)), minors);
     }
 
     /// <summary>
@@ -78,33 +80,7 @@ public static class MatrixHelper<T>
     /// </remarks>
     private static Matrix<T> CreateSubMatrix(Matrix<T> matrix, int excludeRowIndex, int excludeColumnIndex)
     {
-        var rows = matrix.Rows;
-        var subMatrix = new Matrix<T>(rows - 1, rows - 1);
-
-        var r = 0;
-        for (var i = 0; i < rows; i++)
-        {
-            if (i == excludeRowIndex)
-            {
-                continue;
-            }
-
-            var c = 0;
-            for (var j = 0; j < rows; j++)
-            {
-                if (j == excludeColumnIndex)
-                {
-                    continue;
-                }
-
-                subMatrix[r, c] = matrix[i, j];
-                c++;
-            }
-
-            r++;
-        }
-
-        return subMatrix;
+        return matrix.RemoveRow(excludeRowIndex).RemoveColumn(excludeColumnIndex);
     }
 
     /// <summary>
@@ -130,11 +106,7 @@ public static class MatrixHelper<T>
 
         for (int k = 0; k < rows - 2; k++)
         {
-            var xVector = new Vector<T>(rows - k - 1);
-            for (int i = 0; i < rows - k - 1; i++)
-            {
-                xVector[i] = matrix[k + 1 + i, k];
-            }
+            var xVector = matrix.GetColumnSegment(k, k + 1, rows - k - 1);
 
             var hVector = CreateHouseholderVector(xVector);
             matrix = ApplyHouseholderTransformation(matrix, hVector, k);
@@ -158,13 +130,14 @@ public static class MatrixHelper<T>
     public static Vector<T> ExtractDiagonal(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Vector<T> diagonal = new(n);
-        for (int i = 0; i < n; i++)
+        if (matrix.Columns < n)
         {
-            diagonal[i] = matrix[i, i];
+            throw new ArgumentOutOfRangeException(nameof(matrix),
+                $"The diagonal of a {n}x{matrix.Columns} matrix has no entry ({n - 1}, {n - 1}).");
         }
 
-        return diagonal;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AiDotNetEngine.Current.TensorDiagonal(Tensor<T>.FromMatrix(matrix)).ToVector();
     }
 
     /// <summary>
@@ -184,16 +157,14 @@ public static class MatrixHelper<T>
     public static Matrix<T> OuterProduct(Vector<T> v1, Vector<T> v2)
     {
         int n = v1.Length;
-        Matrix<T> result = new(n, n);
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            for (int j = 0; j < n; j++)
-            {
-                result[i, j] = _numOps.Multiply(v1[i], v2[j]);
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return result;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AiDotNetEngine.Current.TensorOuter(Tensor<T>.FromVector(v1), Tensor<T>.FromVector(v2.GetSubVector(0, n)))
+            .ToMatrix();
     }
 
     /// <summary>
@@ -254,9 +225,10 @@ public static class MatrixHelper<T>
     public static T Hypotenuse(params T[] values)
     {
         T _sum = _numOps.Zero;
-        foreach (var value in values)
+        if (values.Length > 0)
         {
-            _sum = _numOps.Add(_sum, _numOps.Multiply(value, value));
+            var vector = Vector<T>.FromSpan(values);
+            _sum = AiDotNetEngine.Current.DotProduct(vector, vector);
         }
 
         return _numOps.Sqrt(_sum);
@@ -277,18 +249,16 @@ public static class MatrixHelper<T>
     /// </remarks>
     public static bool IsUpperHessenberg(Matrix<T> matrix, T tolerance)
     {
-        for (int i = 2; i < matrix.Rows; i++)
+        if (matrix.Rows < 3)
         {
-            for (int j = 0; j < i - 1; j++)
-            {
-                if (_numOps.GreaterThan(_numOps.Abs(matrix[i, j]), tolerance))
-                {
-                    return false;
-                }
-            }
+            return true;
         }
 
-        return true;
+        // Entries below the first subdiagonal (column - row <= -2) must not exceed the tolerance.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var exceeds = engine.TensorGreaterThan(engine.TensorAbs(Tensor<T>.FromMatrix(matrix)), tolerance);
+        return engine.TensorCountNonzero(engine.TensorTril(exceeds, -2)) == 0;
     }
 
     /// <summary>
@@ -377,13 +347,20 @@ public static class MatrixHelper<T>
     /// </remarks>
     public static void ApplyGivensRotation(Matrix<T> H, T c, T s, int i, int j, int kStart, int kEnd)
     {
-        for (int k = kStart; k < kEnd; k++)
+        int length = kEnd - kStart;
+        if (length <= 0)
         {
-            var temp1 = H[i, k];
-            var temp2 = H[j, k];
-            H[i, k] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-            H[j, k] = _numOps.Add(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
+            return;
         }
+
+        // Rows i and j over columns [kStart, kEnd): (c*ri + s*rj, -s*ri + c*rj)
+        var engine = AiDotNetEngine.Current;
+        var rowI = H.GetRowSegment(i, kStart, length);
+        var rowJ = H.GetRowSegment(j, kStart, length);
+        var newI = engine.Add(engine.Multiply(rowI, c), engine.Multiply(rowJ, s));
+        var newJ = engine.Add(engine.Multiply(rowI, _numOps.Negate(s)), engine.Multiply(rowJ, c));
+        newI.AsSpan().CopyTo(H.GetRowSpan(i).Slice(kStart, length));
+        newJ.AsSpan().CopyTo(H.GetRowSpan(j).Slice(kStart, length));
     }
 
     /// <summary>
@@ -403,38 +380,39 @@ public static class MatrixHelper<T>
     public static Matrix<T> ApplyHouseholderTransformation(Matrix<T> matrix, Vector<T> vector, int k)
     {
         var rows = matrix.Rows;
+        int span = rows - k - 1;
+        if (span <= 0 || k >= rows)
+        {
+            return matrix;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var v = vector.GetSubVector(0, span);
+        var twoV = engine.Multiply(v, _numOps.FromDouble(2));
 
         // Apply Householder reflector from the left: H * A
         // This modifies columns k to n-1 (must include column k to zero out elements below subdiagonal!)
-        for (int i = k; i < rows; i++)  // Start from column k, not k+1
-        {
-            T sum = _numOps.Zero;
-            for (int j = k + 1; j < rows; j++)
-            {
-                sum = _numOps.Add(sum, _numOps.Multiply(vector[j - k - 1], matrix[j, i]));
-            }
-            for (int j = k + 1; j < rows; j++)
-            {
-                matrix[j, i] = _numOps.Subtract(matrix[j, i], _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2), vector[j - k - 1]), sum));
-            }
-        }
+        // Block B = A[k+1.., k..]: B -= (2v) (v^T B)
+        var left = matrix.GetSubMatrix(k + 1, k, span, rows - k);
+        var leftSums = engine.MatrixVectorMultiply(left.Transpose(), v);
+        matrix.SetSubMatrix(k + 1, k, engine.MatrixSubtract(left, OuterProduct(twoV, leftSums, span, rows - k)));
 
         // Apply Householder reflector from the right: A * H
         // This modifies all rows to preserve similarity transformation
-        for (int i = 0; i < rows; i++)
-        {
-            T sum = _numOps.Zero;
-            for (int j = k + 1; j < rows; j++)
-            {
-                sum = _numOps.Add(sum, _numOps.Multiply(vector[j - k - 1], matrix[i, j]));
-            }
-            for (int j = k + 1; j < rows; j++)
-            {
-                matrix[i, j] = _numOps.Subtract(matrix[i, j], _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2), vector[j - k - 1]), sum));
-            }
-        }
+        // Block C = A[.., k+1..]: C -= (C v) (2v)^T
+        var right = matrix.GetSubMatrix(0, k + 1, rows, span);
+        var rightSums = engine.MatrixVectorMultiply(right, v);
+        matrix.SetSubMatrix(0, k + 1, engine.MatrixSubtract(right, OuterProduct(rightSums, twoV, rows, span)));
 
         return matrix;
+    }
+
+    /// <summary>The [rows, columns] outer product a * b^T of two vectors.</summary>
+    private static Matrix<T> OuterProduct(Vector<T> a, Vector<T> b, int rows, int columns)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AiDotNetEngine.Current.TensorOuter(Tensor<T>.FromVector(a), Tensor<T>.FromVector(b))
+            .Reshape(new[] { rows, columns }).ToMatrix();
     }
 
     /// <summary>
@@ -451,24 +429,14 @@ public static class MatrixHelper<T>
     /// </remarks>
     public static Vector<T> CreateHouseholderVector(Vector<T> xVector)
     {
-        var result = new Vector<T>(xVector.Length);
-        T norm = _numOps.Zero;
-
-        for (int i = 0; i < xVector.Length; i++)
-        {
-            norm = _numOps.Add(norm, _numOps.Multiply(xVector[i], xVector[i]));
-        }
-        norm = _numOps.Sqrt(norm);
+        var engine = AiDotNetEngine.Current;
+        T norm = xVector.Length == 0 ? _numOps.Zero : _numOps.Sqrt(engine.DotProduct(xVector, xVector));
 
         // If the input vector is near-zero, return a zero vector (identity transformation)
         // This works because: P = I - 2*v*v^T, and if v = 0, then P = I
         if (_numOps.LessThan(norm, _numOps.FromDouble(1e-14)))
         {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = _numOps.Zero;
-            }
-            return result;
+            return new Vector<T>(xVector.Length);
         }
 
         // Use OPPOSITE sign for numerical stability (avoid cancellation)
@@ -476,35 +444,18 @@ public static class MatrixHelper<T>
             ? norm
             : _numOps.Negate(norm);
 
+        var result = xVector.Clone();
         result[0] = _numOps.Subtract(xVector[0], alpha);
-        for (int i = 1; i < xVector.Length; i++)
-        {
-            result[i] = xVector[i];
-        }
 
-        T vNorm = _numOps.Zero;
-        for (int i = 0; i < result.Length; i++)
-        {
-            vNorm = _numOps.Add(vNorm, _numOps.Multiply(result[i], result[i]));
-        }
-        vNorm = _numOps.Sqrt(vNorm);
+        T vNorm = _numOps.Sqrt(engine.DotProduct(result, result));
 
         // Handle the case where vNorm is near-zero (return zero vector for identity)
         if (_numOps.LessThan(vNorm, _numOps.FromDouble(1e-14)))
         {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = _numOps.Zero;
-            }
-            return result;
+            return new Vector<T>(xVector.Length);
         }
 
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = _numOps.Divide(result[i], vNorm);
-        }
-
-        return result;
+        return engine.Divide(result, vNorm);
     }
 
     /// <summary>
@@ -531,42 +482,21 @@ public static class MatrixHelper<T>
         T eigenvalue = _numOps.Zero;
 
         // Initial guess for the eigenvector
-        for (int i = 0; i < rows; i++)
-        {
-            bVector[i] = _numOps.One;
-        }
+        bVector.Fill(_numOps.One);
+        var engine = AiDotNetEngine.Current;
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
             // Multiply A by the vector b
-            for (int i = 0; i < rows; i++)
-            {
-                b2Vector[i] = _numOps.Zero;
-                for (int j = 0; j < rows; j++)
-                {
-                    b2Vector[i] = _numOps.Add(b2Vector[i], _numOps.Multiply(aMatrix[i, j], bVector[j]));
-                }
-            }
+            b2Vector = engine.MatrixVectorMultiply(aMatrix, bVector);
 
             // Estimate the eigenvalue using Rayleigh quotient: b^T * Ab / (b^T * b)
             // Since bVector is normalized (b^T * b = 1), this simplifies to b^T * Ab
-            T newEigenvalue = _numOps.Zero;
-            for (int i = 0; i < rows; i++)
-            {
-                newEigenvalue = _numOps.Add(newEigenvalue, _numOps.Multiply(bVector[i], b2Vector[i]));
-            }
+            T newEigenvalue = engine.DotProduct(bVector, b2Vector);
 
             // Normalize the vector
-            T norm = _numOps.Zero;
-            for (int i = 0; i < rows; i++)
-            {
-                norm = _numOps.Add(norm, _numOps.Multiply(b2Vector[i], b2Vector[i]));
-            }
-            norm = _numOps.Sqrt(norm);
-            for (int i = 0; i < rows; i++)
-            {
-                b2Vector[i] = _numOps.Divide(b2Vector[i], norm);
-            }
+            T norm = _numOps.Sqrt(engine.DotProduct(b2Vector, b2Vector));
+            b2Vector = engine.Divide(b2Vector, norm);
 
             // Check for convergence
             if (_numOps.LessThan(_numOps.Abs(_numOps.Subtract(newEigenvalue, eigenvalue)), tolerance))
@@ -574,10 +504,7 @@ public static class MatrixHelper<T>
                 break;
             }
             eigenvalue = newEigenvalue;
-            for (int i = 0; i < rows; i++)
-            {
-                bVector[i] = b2Vector[i];
-            }
+            bVector = b2Vector;
         }
 
         return (eigenvalue, b2Vector);
@@ -666,20 +593,14 @@ public static class MatrixHelper<T>
     public static Matrix<T> InvertUsingDecomposition(IMatrixDecomposition<T> decomposition)
     {
         int n = decomposition.A.Rows;
-        var inverse = new Matrix<T>(n, n);
-
-        for (int j = 0; j < n; j++)
+        if (n == 0)
         {
-            var ej = Vector<T>.CreateStandardBasis(n, j);
-            var xj = decomposition.Solve(ej);
-
-            for (int i = 0; i < n; i++)
-            {
-                inverse[i, j] = xj[i];
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return inverse;
+        // Column j of the inverse solves A x = e_j.
+        return Matrix<T>.FromColumnVectors(Enumerable.Range(0, n)
+            .Select(j => decomposition.Solve(Vector<T>.CreateStandardBasis(n, j)).GetSubVector(0, n)));
     }
 
     /// <summary>
@@ -758,17 +679,22 @@ public static class MatrixHelper<T>
     public static void BandDiagonalMultiply(int leftSide, int rightSide, Matrix<T> matrix, Vector<T> solutionVector, Vector<T> actualVector)
     {
         var size = matrix.Rows;
-
-        for (int i = 0; i < size; i++)
+        int bandWidth = leftSide + rightSide + 1;
+        if (size == 0 || bandWidth <= 0)
         {
-            var k = i - leftSide;
-            var temp = Math.Min(leftSide + rightSide + 1, size - k);
-            solutionVector[i] = _numOps.Zero;
-            for (int j = Math.Max(0, -k); j < temp; j++)
-            {
-                solutionVector[i] = _numOps.Add(solutionVector[i], _numOps.Multiply(matrix[i, j], actualVector[j + k]));
-            }
+            return;
         }
+
+        // Row i of the compact band matrix multiplies x[i - leftSide + j] for band column j; entries that
+        // fall outside x are skipped, which is the same as reading zero padding on both sides of x.
+        var engine = AiDotNetEngine.Current;
+        var padded = Vector<T>.Concatenate(new Vector<T>(leftSide), actualVector.GetSubVector(0, size), new Vector<T>(rightSide));
+        var windows = Matrix<T>.FromColumnVectors(Enumerable.Range(0, bandWidth).Select(j => padded.GetSubVector(j, size)));
+        var band = matrix.GetSubMatrix(0, 0, size, bandWidth);
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var products = engine.TensorMultiply(Tensor<T>.FromMatrix(band), Tensor<T>.FromMatrix(windows));
+        engine.ReduceSum(products, new[] { 1 }, false).AsSpan().CopyTo(solutionVector.AsWritableSpan());
     }
 
     /// <summary>
