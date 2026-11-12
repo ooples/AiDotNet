@@ -484,7 +484,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         else
         {
             // No point cloud provided → seed a small uniform-cube cloud so the
-            // model is trainable out of the box. Without this, _gaussians is
+            // model is trainable out of the box. Without this, the cloud is
             // empty and every operation (Predict, Train, GetParameters) is a
             // silent no-op — model-family invariant tests that check "training
             // changed parameters" or "loss decreased" fail because there are
@@ -2808,7 +2808,8 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         var sourceMask = engine.TensorIndexAdd(new Tensor<T>(new[] { count }), 0, sources, Full(new[] { splits }, ops.One));
         WriteRows(_positions, sources, sourceMask, engine.TensorAdd(sourcePositions, offset));
         WriteRows(_logScales, sources, sourceMask, splitScales);
-        WriteRows(_learningRateScales, sources, sourceMask, splitLr);
+        _learningRateScales = Select(sourceMask.Reshape(count, 1),
+            engine.TensorIndexAdd(engine.TensorZerosLike(_learningRateScales), 0, sources, splitLr), _learningRateScales).Clone();
         WriteInPlace(_opacityLogits, Select(sourceMask,
             engine.TensorIndexAdd(engine.TensorZerosLike(_opacityLogits), 0, sources, splitOpacity), _opacityLogits));
 
