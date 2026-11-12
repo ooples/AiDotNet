@@ -907,12 +907,6 @@ public partial class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         return new Kernels.GaussianKernel<T>(1.0);
     }
 
-    private static Dictionary<string, double> ExtractKernelParams(IKernelFunction<T> kernel)
-        => Kernels.KernelSerializationHelper<T>.ExtractKernelParams(kernel);
-
-    private static IKernelFunction<T>? CreateKernelByName(string kernelTypeName, Dictionary<string, double>? kernelParams = null)
-        => Kernels.KernelSerializationHelper<T>.CreateKernelByName(kernelTypeName, kernelParams);
-
     #endregion
 
     #region Serialization

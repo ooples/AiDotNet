@@ -40502,4 +40502,26 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+||||||| 0c06dc461c
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0},System.Double[][],System.Int32)</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0},System.Double[][],System.Int32)</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0},System.Double[][],System.Int32)</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32[][],System.Double[][])</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32[][],System.Double[][])</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32[][],System.Double[][])</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction{`0},System.ValueTuple{System.Double,System.Double}[],System.Int32,System.Int32)</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction{`0},System.ValueTuple{System.Double,System.Double}[],System.Int32,System.Int32)</Target>
+    <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction{`0},System.ValueTuple{System.Double,System.Double}[],System.Int32,System.Int32)</Target>
+    <Target>M:AiDotNet.SurvivalAnalysis.RandomSurvivalForest`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})</Target>
+    <Target>M:AiDotNet.SurvivalAnalysis.RandomSurvivalForest`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})</Target>
+    <Target>M:AiDotNet.SurvivalAnalysis.RandomSurvivalForest`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})</Target>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:AiDotNet.Metrics.PerceptualSpeechQuality`1</Target>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:AiDotNet.Metrics.PerceptualSpeechQuality`1</Target>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:AiDotNet.Metrics.PerceptualSpeechQuality`1</Target>
 </Suppressions>
