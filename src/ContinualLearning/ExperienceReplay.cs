@@ -67,6 +67,7 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
     }
 
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly List<(Tensor<T> input, Tensor<T> target, int taskId)> _buffer;
     private readonly int _maxBufferSize;
     private readonly BufferStrategy _strategy;
@@ -178,13 +179,8 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
         var outputs = network.Predict(inputs);
 
         // Compute MSE loss
-        var loss = _numOps.Zero;
-        for (int i = 0; i < outputs.Length; i++)
-        {
-            var diff = _numOps.Subtract(outputs[i], targets[i]);
-            var squared = _numOps.Multiply(diff, diff);
-            loss = _numOps.Add(loss, squared);
-        }
+        var diffs = Engine.TensorSubtract(outputs, targets.Reshape(outputs._shape));
+        var loss = Engine.TensorSumOfSquares(diffs);
 
         var n = _numOps.FromDouble(outputs.Length);
         loss = _numOps.Divide(loss, n);
@@ -426,10 +422,7 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
 
         var data = new Vector<T>(sampleSize);
         var startIdx = index * sampleSize;
-        for (int i = 0; i < sampleSize; i++)
-        {
-            data[i] = batch[startIdx + i];
-        }
+        batch.Contiguous().AsSpan().Slice(startIdx, sampleSize).CopyTo(data.AsWritableSpan());
 
         return new Tensor<T>(newShape, data);
     }
@@ -468,14 +461,10 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
         for (int i = 0; i < indices.Count; i++)
         {
             var sample = _buffer[indices[i]];
-            for (int j = 0; j < inputSampleSize; j++)
-            {
-                inputData[i * inputSampleSize + j] = sample.input[j];
-            }
-            for (int j = 0; j < targetSampleSize; j++)
-            {
-                targetData[i * targetSampleSize + j] = sample.target[j];
-            }
+            sample.input.Contiguous().AsSpan().Slice(0, inputSampleSize)
+                .CopyTo(inputData.AsWritableSpan().Slice(i * inputSampleSize, inputSampleSize));
+            sample.target.Contiguous().AsSpan().Slice(0, targetSampleSize)
+                .CopyTo(targetData.AsWritableSpan().Slice(i * targetSampleSize, targetSampleSize));
         }
 
         return (new Tensor<T>(inputShape, inputData), new Tensor<T>(targetShape, targetData));
@@ -518,14 +507,10 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
 
         for (int i = 0; i < inputs.Count; i++)
         {
-            for (int j = 0; j < inputSampleSize; j++)
-            {
-                inputData[i * inputSampleSize + j] = inputs[i][j];
-            }
-            for (int j = 0; j < targetSampleSize; j++)
-            {
-                targetData[i * targetSampleSize + j] = targets[i][j];
-            }
+            inputs[i].Contiguous().AsSpan().Slice(0, inputSampleSize)
+                .CopyTo(inputData.AsWritableSpan().Slice(i * inputSampleSize, inputSampleSize));
+            targets[i].Contiguous().AsSpan().Slice(0, targetSampleSize)
+                .CopyTo(targetData.AsWritableSpan().Slice(i * targetSampleSize, targetSampleSize));
         }
 
         return (new Tensor<T>(inputShape, inputData), new Tensor<T>(targetShape, targetData));
