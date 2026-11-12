@@ -326,10 +326,10 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             InitializeTensor(_basisMatrices, scale);
 
             // Initialize coefficients for each edge type [numBases]
+            T coeffScale = NumOps.FromDouble(1.0 / _numBases);
             foreach (var edgeType in _metadata.EdgeTypes)
             {
                 var coeffs = new Tensor<T>([_numBases]);
-                T coeffScale = NumOps.FromDouble(1.0 / _numBases);
                 InitializeTensor(coeffs, coeffScale);
                 _basisCoefficients[edgeType] = coeffs;
             }
@@ -343,8 +343,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
                 int inFeatures = _metadata.NodeTypeFeatures[sourceType];
 
                 var weights = new Tensor<T>([inFeatures, _outputFeatures]);
-                T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (inFeatures + _outputFeatures)));
-                InitializeTensor(weights, scale);
+                InitializeGlorotTensor(weights, 2.0 / (inFeatures + _outputFeatures));
 
                 _edgeTypeWeights[edgeType] = weights;
             }
@@ -356,8 +355,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             int inFeatures = _metadata.NodeTypeFeatures[nodeType];
 
             var selfWeights = new Tensor<T>([inFeatures, _outputFeatures]);
-            T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (inFeatures + _outputFeatures)));
-            InitializeTensor(selfWeights, scale);
+            InitializeGlorotTensor(selfWeights, 2.0 / (inFeatures + _outputFeatures));
             _selfLoopWeights[nodeType] = selfWeights;
 
             var bias = new Tensor<T>([_outputFeatures]);
@@ -393,10 +391,13 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled.GetFlat(i);
-        }
+        scaled.CopyTo(tensor.AsWritableSpan());
+    }
+
+    /// <summary>Initializes a tensor with scale sqrt(variance), the scale computed in T as before.</summary>
+    private void InitializeGlorotTensor(Tensor<T> tensor, double variance)
+    {
+        InitializeTensor(tensor, NumOps.Sqrt(NumOps.FromDouble(variance)));
     }
 
     /// <inheritdoc/>
@@ -499,16 +500,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             {
                 // Reconstruct weights from basis decomposition: W_r = sum_b (a_rb * V_b)
                 var coeffs = _basisCoefficients[edgeType]; // [numBases]
-                weights = new Tensor<T>([InputFeatures, _outputFeatures]);
-                weights.Fill(NumOps.Zero);
-
-                for (int b = 0; b < _numBases; b++)
-                {
-                    // Extract basis matrix [inputFeatures, outputFeatures]
-                    var basisSlice = ExtractBasisMatrix(_basisMatrices, b, InputFeatures, _outputFeatures);
-                    var scaledBasis = Engine.TensorMultiplyScalar(basisSlice, coeffs[b]);
-                    weights = Engine.TensorAdd(weights, scaledBasis);
-                }
+                weights = ReconstructBasisWeights(_basisMatrices, coeffs);
             }
             else
             {
@@ -590,30 +582,26 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// </summary>
     private (float[] Values, int[] ColIndices, int[] RowPointers) ConvertToCSR(Tensor<T> adjacency, int numNodes)
     {
-        var values = new List<float>();
-        var colIndices = new List<int>();
-        var rowPointers = new List<int> { 0 };
+        if (numNodes == 0)
+            return (Array.Empty<float>(), Array.Empty<int>(), new[] { 0 });
 
         bool is2D = adjacency.Shape.Length == 2;
+        var graph = is2D
+            ? Engine.TensorSlice(adjacency, [0, 0], [numNodes, numNodes])
+            : Engine.Reshape(Engine.TensorSlice(adjacency, [0, 0, 0], [1, numNodes, numNodes]), [numNodes, numNodes]);
 
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = 0; j < numNodes; j++)
-            {
-                float val = is2D
-                    ? (float)NumOps.ToDouble(adjacency[i, j])
-                    : (float)NumOps.ToDouble(adjacency[0, i, j]);
+        // Entries with |value| > 1e-6 in float (NaN is not), row-major, as CSR.
+        var floats = Engine.Reshape(graph.Cast<float>(), [numNodes * numNodes]);
+        var kept = Engine.TensorGreaterThan(Engine.TensorAbs(floats), 1e-6f);
+        var nonzero = Engine.TensorNonzero(kept);   // [count, 1]
+        int count = nonzero.Shape[0];
+        var flatIndices = Engine.Reshape(nonzero, [count]);
+        var values = count == 0 ? Array.Empty<float>() : Engine.TensorGather(floats, flatIndices, axis: 0).ToVector().ToArray();
+        var colIndices = count == 0 ? Array.Empty<int>() : flatIndices.ToVector().ToArray().Select(flat => flat % numNodes).ToArray();
+        var rowCounts = Engine.ReduceSum(Engine.Reshape(kept, [numNodes, numNodes]), new[] { 1 }, keepDims: false).Cast<int>();
+        var rowPointers = new[] { 0 }.Concat(Engine.TensorCumSum(rowCounts, 0).ToVector().ToArray()).ToArray();
 
-                if (MathF.Abs(val) > 1e-6f)
-                {
-                    values.Add(val);
-                    colIndices.Add(j);
-                }
-            }
-            rowPointers.Add(values.Count);
-        }
-
-        return (values.ToArray(), colIndices.ToArray(), rowPointers.ToArray());
+        return (values, colIndices, rowPointers);
     }
 
     /// <summary>
@@ -621,15 +609,36 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// </summary>
     private Tensor<T> ExtractBasisMatrix(Tensor<T> basisMatrices, int basisIndex, int rows, int cols)
     {
-        var result = TensorAllocator.Rent<T>([rows, cols]);
-        for (int i = 0; i < rows; i++)
+        if (rows == 0 || cols == 0) return new Tensor<T>([rows, cols]);
+
+        // A plain copy of basis basisIndex (off the tape, as the element-wise copy was).
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < cols; j++)
-            {
-                result[i, j] = basisMatrices[basisIndex, i, j];
-            }
+            return Engine.Reshape(
+                Engine.TensorSlice(basisMatrices, [basisIndex, 0, 0], [1, rows, cols]), [rows, cols]).Clone();
         }
-        return result;
+    }
+
+    /// <summary>
+    /// W_r = sum_b a_rb * V_b over the [numBases, InputFeatures, outputFeatures] basis, as a plain value
+    /// (off the tape), as the copied-basis accumulation was.
+    /// </summary>
+    private Tensor<T> ReconstructBasisWeights(Tensor<T> basisMatrices, Tensor<T> coefficients)
+    {
+        int width = InputFeatures * _outputFeatures;
+        if (_numBases == 0 || width == 0) return new Tensor<T>([InputFeatures, _outputFeatures]);
+
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var bases = Engine.Reshape(
+                Engine.TensorSlice(basisMatrices, [0, 0, 0], [_numBases, InputFeatures, _outputFeatures]),
+                [_numBases, width]);
+            var coefficientColumn = Engine.Reshape(
+                Engine.TensorSlice(Engine.Reshape(coefficients, [coefficients.Length]), [0], [_numBases]), [_numBases, 1]);
+            return Engine.Reshape(
+                Engine.ReduceSum(Engine.TensorMultiply(bases, coefficientColumn), new[] { 0 }, keepDims: false),
+                [InputFeatures, _outputFeatures]);
+        }
     }
 
     /// <summary>
@@ -637,18 +646,17 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// </summary>
     private Tensor<T> ExtractInputFeatures(Tensor<T> input, int batchSize, int numNodes, int inFeatures)
     {
-        var result = TensorAllocator.Rent<T>([batchSize, numNodes, inFeatures]);
-        for (int b = 0; b < batchSize; b++)
+        // The first min(inFeatures, available) features, zero-padded to inFeatures; a plain copy (off the tape).
+        int kept = Math.Min(inFeatures, input.Shape[2]);
+        if (batchSize == 0 || numNodes == 0 || kept <= 0) return new Tensor<T>([batchSize, numNodes, inFeatures]);
+
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int f = 0; f < inFeatures && f < input.Shape[2]; f++)
-                {
-                    result[b, n, f] = input[b, n, f];
-                }
-            }
+            var head = Engine.TensorSlice(input, [0, 0, 0], [batchSize, numNodes, kept]);
+            return kept == inFeatures
+                ? head.Clone()
+                : Engine.TensorConcatenate(new[] { head, new Tensor<T>([batchSize, numNodes, inFeatures - kept]) }, 2);
         }
-        return result;
     }
 
     /// <summary>
@@ -656,69 +664,50 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// </summary>
     private Tensor<T> NormalizeAdjacency(Tensor<T> adjacency, int batchSize, int numNodes)
     {
-        // Handle both 2D [N, N] and 3D [B, N, N] adjacency matrices
+        // Handle both 2D [N, N] and 3D [B, N, N] adjacency matrices (2D is tiled over the batch).
         bool is2D = adjacency.Shape.Length == 2;
-        Tensor<T> adj3D;
-        if (is2D)
+        int[] adjacencyShape = is2D
+            ? [batchSize > 1 ? batchSize : 1, adjacency.Shape[0], adjacency.Shape[1]]
+            : adjacency.Shape.ToArray();
+        if (adjacencyShape.Length != 3)
+            throw new ArgumentOutOfRangeException(nameof(adjacency), "Adjacency matrix must be rank 2 or 3.");
+        if ((batchSize > 0 && numNodes > 0)
+            && (adjacencyShape[0] < batchSize || adjacencyShape[1] < numNodes || adjacencyShape[2] < numNodes))
+            throw new ArgumentOutOfRangeException(nameof(adjacency),
+                $"Adjacency matrix of shape [{string.Join(", ", adjacencyShape)}] does not cover {batchSize} samples of {numNodes} nodes.");
+        if (batchSize == 0 || numNodes == 0)
+            return new Tensor<T>(adjacencyShape);
+
+        // Row normalisation by degree (the count of non-zero entries; NaN counts), zero rows stay zero.
+        // Entries outside [batchSize, numNodes, numNodes] stay zero. A plain value, off the tape.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            // Reshape 2D to 3D for processing
-            adj3D = adjacency.Reshape([1, adjacency.Shape[0], adjacency.Shape[1]]);
-            // Tile for batch if needed
-            if (batchSize > 1)
-            {
-                var tiled = new Tensor<T>([batchSize, adjacency.Shape[0], adjacency.Shape[1]]);
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int i = 0; i < adjacency.Shape[0]; i++)
-                    {
-                        for (int j = 0; j < adjacency.Shape[1]; j++)
-                        {
-                            tiled[new int[] { b, i, j }] = adjacency[new int[] { i, j }];
-                        }
-                    }
-                }
-                adj3D = tiled;
-            }
+            var adj3D = is2D
+                ? Engine.TensorBroadcastTo(
+                    Engine.Reshape(adjacency, [1, adjacency.Shape[0], adjacency.Shape[1]]), adjacencyShape)
+                : adjacency;
+            var core = Engine.TensorSlice(adj3D, [0, 0, 0], [batchSize, numNodes, numNodes]);
+            var degree = Engine.ReduceSum(Engine.TensorNotEquals(core, NumOps.Zero), new[] { 2 }, keepDims: true);
+            var isolated = Engine.TensorEquals(degree, NumOps.Zero);
+            var ones = new Tensor<T>([batchSize, numNodes, 1]);
+            ones.Fill(NumOps.One);
+            var normalization = Engine.TensorDivide(ones, Engine.TensorWhere(isolated, ones, degree));
+            var normalized = Engine.TensorWhere(
+                Engine.TensorBroadcastTo(isolated, [batchSize, numNodes, numNodes]),
+                new Tensor<T>([batchSize, numNodes, numNodes]),
+                Engine.TensorMultiply(core, normalization));
+
+            if (adjacencyShape[2] > numNodes)
+                normalized = Engine.TensorConcatenate(
+                    new[] { normalized, new Tensor<T>([batchSize, numNodes, adjacencyShape[2] - numNodes]) }, 2);
+            if (adjacencyShape[1] > numNodes)
+                normalized = Engine.TensorConcatenate(
+                    new[] { normalized, new Tensor<T>([batchSize, adjacencyShape[1] - numNodes, adjacencyShape[2]]) }, 1);
+            if (adjacencyShape[0] > batchSize)
+                normalized = Engine.TensorConcatenate(
+                    new[] { normalized, new Tensor<T>([adjacencyShape[0] - batchSize, adjacencyShape[1], adjacencyShape[2]]) }, 0);
+            return normalized.Clone();
         }
-        else
-        {
-            adj3D = adjacency;
-        }
-
-        var normalized = new Tensor<T>(adj3D._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < numNodes; i++)
-            {
-                // Count degree
-                int degree = 0;
-                for (int j = 0; j < numNodes; j++)
-                {
-                    if (!NumOps.Equals(adj3D[new int[] { b, i, j }], NumOps.Zero))
-                        degree++;
-                }
-
-                if (degree == 0)
-                {
-                    // No neighbors, copy zeros
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        normalized[new int[] { b, i, j }] = NumOps.Zero;
-                    }
-                }
-                else
-                {
-                    T normalization = NumOps.Divide(NumOps.One, NumOps.FromDouble(degree));
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        normalized[new int[] { b, i, j }] = NumOps.Multiply(adj3D[new int[] { b, i, j }], normalization);
-                    }
-                }
-            }
-        }
-
-        return normalized;
     }
 
     /// <summary>
@@ -726,15 +715,18 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// </summary>
     private Tensor<T> ExtractNodeInput(Tensor<T> input, int batchSize, int nodeIndex, int inFeatures)
     {
-        var result = TensorAllocator.Rent<T>([batchSize, inFeatures]);
-        for (int b = 0; b < batchSize; b++)
+        // Node nodeIndex's first min(inFeatures, available) features per sample, zero-padded; a plain copy.
+        int kept = Math.Min(inFeatures, input.Shape[2]);
+        if (batchSize == 0 || kept <= 0) return new Tensor<T>([batchSize, inFeatures]);
+
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int f = 0; f < inFeatures && f < input.Shape[2]; f++)
-            {
-                result[b, f] = input[b, nodeIndex, f];
-            }
+            var head = Engine.Reshape(
+                Engine.TensorSlice(input, [0, nodeIndex, 0], [batchSize, 1, kept]), [batchSize, kept]);
+            return kept == inFeatures
+                ? head.Clone()
+                : Engine.TensorConcatenate(new[] { head, new Tensor<T>([batchSize, inFeatures - kept]) }, 1);
         }
-        return result;
     }
 
     /// <summary>
@@ -752,13 +744,18 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     private Tensor<T> AddNodeOutput(Tensor<T> output, Tensor<T> nodeOutput, Tensor<T> bias,
         int batchSize, int nodeIndex, int outputFeatures)
     {
-        for (int b = 0; b < batchSize; b++)
+        if (batchSize == 0 || outputFeatures == 0) return output;
+
+        // output[:, nodeIndex, :] += nodeOutput + bias, written in place (not recorded on the tape),
+        // as the element-wise update was.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int f = 0; f < outputFeatures; f++)
-            {
-                T value = NumOps.Add(nodeOutput[b, f], bias[b, f]);
-                output[b, nodeIndex, f] = NumOps.Add(output[b, nodeIndex, f], value);
-            }
+            var value = Engine.TensorAdd(
+                Engine.TensorSlice(nodeOutput, [0, 0], [batchSize, outputFeatures]),
+                Engine.TensorSlice(bias, [0, 0], [batchSize, outputFeatures]));
+            var current = Engine.Reshape(
+                Engine.TensorSlice(output, [0, nodeIndex, 0], [batchSize, 1, outputFeatures]), [batchSize, outputFeatures]);
+            output.SetSlice(1, nodeIndex, Engine.TensorAdd(current, value));
         }
         return output;
     }
@@ -788,15 +785,13 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             return tensor;
         }
 
-        var result = TensorAllocator.Rent<T>([rows, cols]);
-        for (int i = 0; i < rows; i++)
+        if (rows == 0 || cols == 0) return new Tensor<T>([rows, cols]);
+
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < cols; j++)
-            {
-                result[i, j] = tensor[batchIndex, i, j];
-            }
+            return Engine.Reshape(
+                Engine.TensorSlice(tensor, [batchIndex, 0, 0], [1, rows, cols]), [rows, cols]).Clone();
         }
-        return result;
     }
 
     /// <summary>
