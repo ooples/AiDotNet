@@ -27,14 +27,14 @@ public class InformationGainRatioSelector<T> : TransformerBase<T, Matrix<T>, Mat
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _gainRatios;
+    private Vector<T>? _gainRatios;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? GainRatios => _gainRatios;
+    public Vector<T>? GainRatios => _gainRatios;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,134 +72,18 @@ public class InformationGainRatioSelector<T> : TransformerBase<T, Matrix<T>, Mat
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _gainRatios = new double[p];
-
-        // Entropy of target
-        var yBins = Discretize(y, _nBins);
-        double hY = ComputeEntropy(yBins, n);
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            var xBins = Discretize(col, _nBins);
-
-            // Intrinsic information (entropy of X)
-            double intrinsicInfo = ComputeEntropy(xBins, n);
-
-            // Conditional entropy H(Y|X)
-            double hYGivenX = ComputeConditionalEntropy(xBins, yBins, n);
-
-            // Information gain = H(Y) - H(Y|X)
-            double gain = hY - hYGivenX;
-
-            // Gain ratio = gain / intrinsic info
-            _gainRatios[j] = intrinsicInfo > 1e-10 ? gain / intrinsicInfo : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _gainRatios[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // the target is binned on the same grid as the features; the ratio is the same in bits or nats, and the
+        // intrinsic-information floor of 1e-10 bits is 1e-10 ln 2 nats
+        var targetCodes = FeatureSelectionTensorOps.RangeBins(
+            Engine.Reshape(FilterStatisticTensorOps.AsTensor(target), new[] { n, 1 }), _nBins);
+        var info = new DiscreteInformation<T>(
+            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            Engine.Reshape(FeatureSelectionTensorOps.OneHot<T>(targetCodes, _nBins), new[] { n, _nBins }));
+        var ratios = FilterStatisticTensorOps.GuardedDivide(
+            info.Relevance(), info.FeatureEntropy(), 1e-10 * Math.Log(2), NumOps.Zero);
+        _gainRatios = ratios.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(ratios, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private int[] Discretize(double[] data, int nBins)
-    {
-        int n = data.Length;
-        var result = new int[n];
-
-        double min = data.Min();
-        double max = data.Max();
-        double range = max - min;
-
-        if (range < 1e-10)
-        {
-            for (int i = 0; i < n; i++)
-                result[i] = 0;
-        }
-        else
-        {
-            for (int i = 0; i < n; i++)
-            {
-                int bin = (int)((data[i] - min) / range * (nBins - 1));
-                result[i] = Math.Min(bin, nBins - 1);
-            }
-        }
-
-        return result;
-    }
-
-    private double ComputeEntropy(int[] bins, int n)
-    {
-        var counts = new Dictionary<int, int>();
-        foreach (var b in bins)
-        {
-            if (!counts.ContainsKey(b))
-                counts[b] = 0;
-            counts[b]++;
-        }
-
-        double entropy = 0;
-        foreach (var count in counts.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0)
-                entropy -= p * Math.Log(p) / Math.Log(2);
-        }
-
-        return entropy;
-    }
-
-    private double ComputeConditionalEntropy(int[] xBins, int[] yBins, int n)
-    {
-        var xCounts = new Dictionary<int, int>();
-        var jointCounts = new Dictionary<(int, int), int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (!xCounts.ContainsKey(xBins[i]))
-                xCounts[xBins[i]] = 0;
-            xCounts[xBins[i]]++;
-
-            var key = (xBins[i], yBins[i]);
-            if (!jointCounts.ContainsKey(key))
-                jointCounts[key] = 0;
-            jointCounts[key]++;
-        }
-
-        double condEntropy = 0;
-        foreach (var xVal in xCounts.Keys)
-        {
-            double pX = (double)xCounts[xVal] / n;
-
-            // Entropy of Y given X = xVal
-            double hYGivenXVal = 0;
-            foreach (var joint in jointCounts.Where(kv => kv.Key.Item1 == xVal))
-            {
-                double pYGivenX = (double)joint.Value / xCounts[xVal];
-                if (pYGivenX > 0)
-                    hYGivenXVal -= pYGivenX * Math.Log(pYGivenX) / Math.Log(2);
-            }
-
-            condEntropy += pX * hYGivenXVal;
-        }
-
-        return condEntropy;
     }
 
     /// <inheritdoc />

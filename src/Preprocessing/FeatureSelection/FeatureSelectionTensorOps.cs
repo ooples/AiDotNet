@@ -859,4 +859,64 @@ internal static class FeatureSelectionTensorOps
                 engine.TensorLgamma(engine.TensorAddScalar(k, one)),
                 engine.TensorLgamma(engine.TensorAddScalar(engine.TensorSubtract(m, k), one))));
     }
+
+    /// <summary>
+    /// Best Gini impurity reduction of a single threshold split per column of an [n, p] tensor: the thresholds are
+    /// <c>min + range * b / bins</c> for <c>b = 1 .. bins - 1</c> (range 1 for a column whose range is below
+    /// 1e-10), a row goes left when its value is at or below the threshold, splits leaving a side empty are skipped,
+    /// and a column with no useful split scores 0. <paramref name="classOneHot"/> is the [n, k] class membership.
+    /// Returns [p].
+    /// </summary>
+    public static Tensor<T> BestGiniReduction<T>(Tensor<T> x, Tensor<T> classOneHot, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        T total = ops.FromDouble(n);
+        T binCount = ops.FromDouble(bins);
+        T zero = ops.Zero;
+        var best = new Tensor<T>(new[] { p });
+        if (n == 0)
+            return best;
+
+        // parent Gini impurity 1 - sum q_c^2
+        var classCounts = engine.ReduceSum(classOneHot, new[] { 0 }, false);
+        T parentGini = ops.Subtract(ops.One, engine.TensorSumOfSquares(engine.TensorDivideScalar(classCounts, total)));
+        var allCounts = FilterStatisticTensorOps.RowBroadcast(classCounts, p);
+
+        var min = ColumnMin(x);
+        var range = engine.TensorSubtract(ColumnMax(x), min);
+        range = engine.TensorWhere(engine.TensorLessThan(range, ops.FromDouble(1e-10)),
+            FilterStatisticTensorOps.FilledLike(range, ops.One), range);
+        foreach (T step in engine.TensorArange<T>(1, bins, 1).ToArray())
+        {
+            var threshold = engine.TensorAdd(min, engine.TensorDivideScalar(engine.TensorMultiplyScalar(range, step), binCount));
+            var left = FilterStatisticTensorOps.OneMinus(
+                engine.TensorGreaterThan(x, FilterStatisticTensorOps.RowBroadcast(threshold, n)));
+            var leftCounts = engine.TensorMatMul(engine.TensorTranspose(left), classOneHot);
+            var rightCounts = engine.TensorSubtract(allCounts, leftCounts);
+            var leftTotal = engine.ReduceSum(leftCounts, new[] { 1 }, false);
+            var rightTotal = engine.ReduceSum(rightCounts, new[] { 1 }, false);
+
+            // weighted child impurity: sum over sides of (side total - sum count^2 / side total) / n
+            var weighted = engine.TensorDivideScalar(engine.TensorAdd(
+                SideImpurity(leftCounts, leftTotal), SideImpurity(rightCounts, rightTotal)), total);
+            var reduction = engine.TensorNegate(engine.TensorSubtractScalar(weighted, parentGini));
+            var bothSides = engine.TensorMultiply(
+                engine.TensorGreaterThan(leftTotal, zero), engine.TensorGreaterThan(rightTotal, zero));
+            best = engine.TensorMax(best, KeepOrFill(reduction, bothSides, zero));
+        }
+
+        return best;
+    }
+
+    // side total * Gini impurity = total - sum count^2 / total for every row of [p, k] class counts
+    private static Tensor<T> SideImpurity<T>(Tensor<T> counts, Tensor<T> totals)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSubtract(totals, FilterStatisticTensorOps.GuardedDivide(
+            engine.ReduceSum(engine.TensorSquare(counts), new[] { 1 }, false), totals, 0,
+            MathHelper.GetNumericOperations<T>().Zero));
+    }
 }

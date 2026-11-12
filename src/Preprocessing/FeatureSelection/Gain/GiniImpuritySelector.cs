@@ -26,14 +26,14 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _giniReductions;
+    private Vector<T>? _giniReductions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? GiniReductions => _giniReductions;
+    public Vector<T>? GiniReductions => _giniReductions;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,102 +68,13 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _giniReductions = new double[p];
-
-        // Base Gini impurity
-        double baseGini = ComputeGini(y);
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Find best split threshold
-            double bestReduction = 0;
-
-            double min = col.Min();
-            double max = col.Max();
-            double range = max - min;
-
-            if (range < 1e-10)
-            {
-                _giniReductions[j] = 0;
-                continue;
-            }
-
-            for (int b = 1; b < _nBins; b++)
-            {
-                double threshold = min + (range * b / _nBins);
-
-                var leftY = new List<int>();
-                var rightY = new List<int>();
-
-                for (int i = 0; i < n; i++)
-                {
-                    if (col[i] <= threshold)
-                        leftY.Add(y[i]);
-                    else
-                        rightY.Add(y[i]);
-                }
-
-                if (leftY.Count == 0 || rightY.Count == 0)
-                    continue;
-
-                double leftGini = ComputeGini([.. leftY]);
-                double rightGini = ComputeGini([.. rightY]);
-
-                double weightedGini = (leftY.Count * leftGini + rightY.Count * rightGini) / n;
-                double reduction = baseGini - weightedGini;
-
-                bestReduction = Math.Max(bestReduction, reduction);
-            }
-
-            _giniReductions[j] = bestReduction;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _giniReductions[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        var reductions = FeatureSelectionTensorOps.BestGiniReduction(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount), _nBins);
+        _giniReductions = reductions.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(reductions, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private double ComputeGini(int[] labels)
-    {
-        if (labels.Length == 0) return 0;
-
-        var counts = new Dictionary<int, int>();
-        foreach (var label in labels)
-        {
-            if (!counts.ContainsKey(label))
-                counts[label] = 0;
-            counts[label]++;
-        }
-
-        double gini = 1;
-        foreach (var count in counts.Values)
-        {
-            double p = (double)count / labels.Length;
-            gini -= p * p;
-        }
-
-        return gini;
     }
 
     /// <inheritdoc />

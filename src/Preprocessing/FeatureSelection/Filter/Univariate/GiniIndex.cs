@@ -65,54 +65,15 @@ public class GiniIndex<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-        var x = FilterStatisticTensorOps.AsTensor(data);
-        var classOneHot = StatisticalTestHelper.ClassOneHot(target, out _);
-        T total = NumOps.FromDouble(n);
-        T bins = NumOps.FromDouble(_nBins);
-        T zero = NumOps.Zero;
 
-        // parent Gini impurity 1 - sum q_c^2
-        var classCounts = Engine.ReduceSum(classOneHot, new[] { 0 }, false);
-        T parentGini = NumOps.Subtract(NumOps.One,
-            Engine.TensorSumOfSquares(Engine.TensorDivideScalar(classCounts, total)));
-
-        // split thresholds min + b * range / nBins (range 1 for a constant column), left side x <= threshold
-        var min = FeatureSelectionTensorOps.ColumnMin(x);
-        var range = Engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(x), min);
-        range = Engine.TensorWhere(Engine.TensorLessThan(range, NumOps.FromDouble(1e-10)),
-            FilterStatisticTensorOps.FilledLike(range, NumOps.One), range);
-        var steps = Engine.TensorArange<T>(1, _nBins, 1).ToArray();
-        var best = FilterStatisticTensorOps.FilledLike(min, zero);
-        foreach (T step in steps)
-        {
-            var threshold = Engine.TensorAdd(min, Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(range, step), bins));
-            var left = FilterStatisticTensorOps.OneMinus(
-                Engine.TensorGreaterThan(x, FilterStatisticTensorOps.RowBroadcast(threshold, n)));
-            var leftCounts = Engine.TensorMatMul(Engine.TensorTranspose(left), classOneHot);
-            var rightCounts = Engine.TensorSubtract(FilterStatisticTensorOps.RowBroadcast(classCounts, p), leftCounts);
-            var leftTotal = Engine.ReduceSum(leftCounts, new[] { 1 }, false);
-            var rightTotal = Engine.ReduceSum(rightCounts, new[] { 1 }, false);
-
-            // weighted child impurity: sum over sides of (total - sum count^2 / total) / n
-            var weighted = Engine.TensorDivideScalar(Engine.TensorAdd(
-                SideImpurity(leftCounts, leftTotal), SideImpurity(rightCounts, rightTotal)), total);
-            var reduction = Engine.TensorNegate(Engine.TensorSubtractScalar(weighted, parentGini));
-            var bothSides = Engine.TensorMultiply(
-                Engine.TensorGreaterThan(leftTotal, zero), Engine.TensorGreaterThan(rightTotal, zero));
-            best = Engine.TensorMax(best, FeatureSelectionTensorOps.KeepOrFill(reduction, bothSides, zero));
-        }
-
-        _giniGains = best.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(best, Math.Min(_nFeaturesToSelect, p));
+        // the target's distinct values are its classes
+        var gains = FeatureSelectionTensorOps.BestGiniReduction(
+            FilterStatisticTensorOps.AsTensor(data), StatisticalTestHelper.ClassOneHot(target, out _), _nBins);
+        _giniGains = gains.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(gains, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
-
-    // total * Gini impurity = total - sum count^2 / total for every row of [p, k] class counts (0 for an empty side)
-    private Tensor<T> SideImpurity(Tensor<T> counts, Tensor<T> totals) =>
-        Engine.TensorSubtract(totals, FilterStatisticTensorOps.GuardedDivide(
-            Engine.ReduceSum(Engine.TensorSquare(counts), new[] { 1 }, false), totals, 0, NumOps.Zero));
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
