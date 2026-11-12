@@ -118,27 +118,9 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
     {
         var probabilities = PredictProbabilities(features);
         int batchSize = probabilities.Shape[0];
-        var predictions = new Vector<int>(batchSize);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        // Per-row argmax over the classes (first index wins ties, as before).
+        return Engine.TensorArgMax(Engine.Reshape(probabilities, new[] { batchSize, _numClasses }), 1).ToVector();
     }
 
     /// <summary>
@@ -147,17 +129,13 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, Vector<int> targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProb = NumOps.Add(prob, epsilon);
-            var loss = NumOps.Negate(NumOps.Log(safeProb));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
+        // -mean_b log(p[b, target_b] + eps): gather each row's target probability, then reduce.
+        var targetProb = Engine.TensorTakeAlongDim(
+            Engine.Reshape(probabilities, new[] { batchSize, _numClasses }),
+            Tensor<int>.FromVector(targets.GetSubVector(0, batchSize), new[] { batchSize, 1 }), 1);
+        var totalLoss = NumOps.Negate(Engine.TensorSum(Engine.TensorLog(Engine.TensorAddScalar(targetProb, epsilon))));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -171,12 +149,24 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, Vector<int> targets, T learningRate)
     {
-        var probabilities = PredictProbabilities(features);
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        // Mean cross-entropy from selected log-softmax values, differentiated on the
+        // tape through the head, the trees and the gating network. (This step used to compute the
+        // loss and call UpdateParameters with no gradients, so nothing ever trained.)
+        int batchSize = features.Shape[0];
+        if (batchSize == 0 || targets.Length != batchSize)
+            throw new ArgumentException("Targets must match a nonempty input batch.", nameof(targets));
+        var targetIndex = Tensor<int>.FromVector(targets, new[] { batchSize });
+        if (Engine.TensorMinValue(targetIndex) < 0 || Engine.TensorMaxValue(targetIndex) >= _numClasses)
+            throw new ArgumentOutOfRangeException(nameof(targets), "Target class is out of range.");
+        return TrainWithTape(() =>
+        {
+            // Logit-space cross entropy avoids underflow and 0 * log(0) in low precision.
+            var logProbabilities = Engine.TensorLogSoftmax(Forward(features), 1);
+            var selected = Engine.TensorTakeAlongDim(logProbabilities,
+                Engine.Reshape(targetIndex, new[] { batchSize, 1 }), 1);
+            var sum = Engine.ReduceSum(selected, new[] { 0, 1 }, keepDims: false);
+            return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(-1.0 / batchSize));
+        }, learningRate);
     }
 
     /// <summary>
@@ -185,13 +175,10 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
     public T ComputeAccuracy(Tensor<T> features, Vector<int> targets)
     {
         var predictions = Predict(features);
-        int correct = 0;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (predictions[i] == targets[i])
-                correct++;
-        }
+        int n = predictions.Length;
+        int correct = Engine.TensorSum(Engine.TensorEquals(
+            Tensor<int>.FromVector(predictions, new[] { n }),
+            Tensor<int>.FromVector(targets.GetSubVector(0, n), new[] { n })));
 
         return NumOps.FromDouble((double)correct / predictions.Length);
     }

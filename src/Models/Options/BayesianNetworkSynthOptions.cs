@@ -8,10 +8,12 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
 /// <para>
-/// Bayesian Network Synthesis operates in three phases:
-/// - <b>Structure learning</b>: Discovers a DAG using greedy hill-climbing with BIC scoring
-/// - <b>Parameter estimation</b>: Estimates conditional probability tables (CPTs) from the data
+/// With differential privacy enabled (the default) this is PrivBayes (Zhang et al. 2017):
+/// - <b>Structure learning</b>: GreedyBayes picks each attribute's parents with the exponential mechanism
+/// - <b>Parameter estimation</b>: d - k joint distributions get Laplace noise; conditionals derive from them
 /// - <b>Ancestral sampling</b>: Generates data by sampling from root nodes down through the DAG
+/// With it disabled, the structure is learned by greedy BIC hill-climbing and the conditional tables are
+/// Laplace-smoothed maximum-likelihood estimates (no privacy guarantee).
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> This method creates a probabilistic model of your data:
@@ -43,10 +45,56 @@ namespace AiDotNet.Models.Options;
 public class BayesianNetworkSynthOptions<T> : RiskModelOptions<T>
 {
     /// <summary>
-    /// Gets or sets the maximum number of parents per node in the DAG.
+    /// Gets or sets the maximum number of parents per node in the DAG (the upper bound on PrivBayes' degree k).
     /// </summary>
     /// <value>Maximum parents, defaulting to 3. Higher values allow more complex dependencies but increase computation.</value>
+    /// <remarks>
+    /// With differential privacy enabled, the degree actually used is the largest k up to this bound that
+    /// keeps the network theta-useful (see <see cref="UsefulnessThreshold"/>), and every attribute after the
+    /// first k gets exactly k parents, as in the paper's GreedyBayes.
+    /// </remarks>
     public int MaxParents { get; set; } = 3;
+
+    /// <summary>
+    /// Gets or sets PrivBayes' usefulness threshold theta, used to choose the network degree k.
+    /// </summary>
+    /// <value>Defaults to 4, the value the paper recommends and uses in its experiments.</value>
+    /// <remarks>
+    /// k is the largest value up to <see cref="MaxParents"/> with
+    /// <c>n * eps2 / (2 * (d - k) * m^(k+1)) &gt;= theta</c>, where eps2 is the phase-2 budget and m the
+    /// largest attribute domain. A larger theta favours fewer parents with less noise per cell. Zero or a
+    /// negative value disables the rule and uses <see cref="MaxParents"/> as k.
+    /// </remarks>
+    public double UsefulnessThreshold { get; set; } = 4.0;
+
+    /// <summary>
+    /// Gets or sets the public lower bound of each column's domain, used for the equal-width bins.
+    /// </summary>
+    /// <value>Defaults to <c>null</c>, which takes the observed column minimum.</value>
+    /// <remarks>
+    /// PrivBayes assumes attribute domains are public. Without bounds the observed minimum and maximum of
+    /// each numeric column define the bins, and those values are released without noise, outside the
+    /// differential-privacy guarantee. Supply both bounds (one entry per column) for the full guarantee;
+    /// values outside them fall into the end bins. Entries for categorical columns are ignored.
+    /// Supplying only one of the two bounds, or an upper bound below its lower bound for a numeric column,
+    /// throws <see cref="System.ArgumentException"/>.
+    /// <para>
+    /// A categorical column's domain is its <see cref="AiDotNet.NeuralNetworks.SyntheticData.ColumnMetadata.Categories"/>
+    /// list, which is public: cells hold a category index (or a category name that is a number), and a
+    /// declared category that never occurs in the data is still part of the domain. A categorical column
+    /// that declares no categories falls back to the distinct values observed in the data. That fallback
+    /// releases which values occur without noise and is outside the differential-privacy guarantee of
+    /// PrivBayes; declare the categories for the full guarantee.
+    /// </para>
+    /// </remarks>
+    public Vector<T>? DomainLowerBounds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the public upper bound of each column's domain, used for the equal-width bins.
+    /// </summary>
+    /// <value>Defaults to <c>null</c>, which takes the observed column maximum.</value>
+    /// <remarks>See <see cref="DomainLowerBounds"/>.</remarks>
+    public Vector<T>? DomainUpperBounds { get; set; }
 
     /// <summary>
     /// Gets or sets the number of discretization bins for continuous features.

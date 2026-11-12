@@ -117,13 +117,8 @@ public class AutoIntRegression<T> : AutoIntBase<T>
                 $"Predictions shape [{string.Join(", ", predictions._shape)}] must match targets shape [{string.Join(", ", targets._shape)}].");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
-        }
+        var diff = Engine.TensorSubtract(predictions, targets);
+        var totalLoss = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
     }
@@ -139,13 +134,7 @@ public class AutoIntRegression<T> : AutoIntBase<T>
                 $"Predictions shape [{string.Join(", ", predictions._shape)}] must match targets shape [{string.Join(", ", targets._shape)}].");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Abs(diff));
-        }
+        var totalLoss = Engine.TensorSum(Engine.TensorAbs(Engine.TensorSubtract(predictions, targets)));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
     }
@@ -179,24 +168,12 @@ public class AutoIntRegression<T> : AutoIntBase<T>
                 $"Predictions shape [{string.Join(", ", predictions._shape)}] must match targets shape [{string.Join(", ", targets._shape)}].");
         }
 
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
+        var targetMean = NumOps.Divide(Engine.TensorSum(targets), NumOps.FromDouble(targets.Length));
 
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
+        var residual = Engine.TensorSubtract(targets, predictions);
+        var ssRes = Engine.TensorSum(Engine.TensorMultiply(residual, residual));
+        var deviation = Engine.TensorSubtractScalar(targets, targetMean);
+        var ssTot = Engine.TensorSum(Engine.TensorMultiply(deviation, deviation));
 
         if (NumOps.Compare(ssTot, NumOps.Zero) == 0)
         {
