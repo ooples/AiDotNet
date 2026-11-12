@@ -49,6 +49,7 @@ namespace AiDotNet.ContinualLearning;
 public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private Vector<T> _omega;                    // Consolidated importance
     private Vector<T> _previousParameters;       // Parameters at start of task
     private Vector<T> _pathIntegral;            // Running sum of gradient * parameter change
@@ -130,19 +131,18 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
 
         // Compute importance and consolidate into omega
         // Ω_i += ω_i / (Δθ_i² + ξ)
-        for (int i = 0; i < _omega.Length; i++)
-        {
-            var delta = _numOps.Subtract(currentParams[i], _previousParameters[i]);
-            var deltaSquared = _numOps.Multiply(delta, delta);
-            var denominator = _numOps.Add(deltaSquared, dampingT);
-            var importance = _numOps.Divide(_pathIntegral[i], denominator);
+        int n = _omega.Length;
+        var omega = _omega.AsTensor();
+        var delta = Engine.TensorSubtract(Head(currentParams, n), Head(_previousParameters, n));
+        var denominator = Engine.TensorAddScalar(Engine.TensorMultiply(delta, delta), dampingT);
+        var importance = Engine.TensorDivide(Head(_pathIntegral, n), denominator);
 
-            // Only add positive importance (contributed to loss reduction)
-            if (_numOps.GreaterThan(importance, _numOps.Zero))
-            {
-                _omega[i] = _numOps.Add(_omega[i], importance);
-            }
-        }
+        // Only add positive importance (contributed to loss reduction); written back in place
+        var consolidated = Engine.TensorWhere(
+            Engine.TensorGreaterThan(importance, _numOps.Zero),
+            Engine.TensorAdd(omega, importance),
+            omega);
+        consolidated.AsSpan().CopyTo(_omega.AsWritableSpan());
 
         // Store current parameters as reference for next task
         _previousParameters = currentParams.Clone();
@@ -160,16 +160,12 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
         }
 
         var currentParams = network.GetParameters();
-        var loss = _numOps.Zero;
+        int n = currentParams.Length;
 
         // SI loss: λ/2 * Σ Ω_i * (θ_i - θ*_i)²
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var diff = _numOps.Subtract(currentParams[i], _previousParameters[i]);
-            var squaredDiff = _numOps.Multiply(diff, diff);
-            var penalty = _numOps.Multiply(_omega[i], squaredDiff);
-            loss = _numOps.Add(loss, penalty);
-        }
+        var diff = Engine.TensorSubtract(currentParams.AsTensor(), Head(_previousParameters, n));
+        var penalty = Engine.TensorMultiply(Head(_omega, n), Engine.TensorMultiply(diff, diff));
+        var loss = Engine.TensorSum(penalty);
 
         var halfLambda = _numOps.FromDouble(_lambda / 2.0);
         return _numOps.Multiply(halfLambda, loss);
@@ -199,13 +195,10 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
         var currentParams2 = network.GetParameters();
         var lambdaT = _numOps.FromDouble(_lambda);
 
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            var diff = _numOps.Subtract(currentParams2[i], _previousParameters[i]);
-            var siGrad = _numOps.Multiply(_omega[i], diff);
-            siGrad = _numOps.Multiply(lambdaT, siGrad);
-            gradients[i] = _numOps.Add(gradients[i], siGrad);
-        }
+        int n = gradients.Length;
+        var diff = Engine.TensorSubtract(Head(currentParams2, n), Head(_previousParameters, n));
+        var siGrad = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Head(_omega, n), diff), lambdaT);
+        Engine.TensorAddInPlace(gradients.AsTensor(), siGrad);
 
         return gradients;
     }
@@ -227,13 +220,10 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
     {
         // ω_i += -g_i * Δθ_i
         // The negative gradient times parameter change approximates contribution to loss reduction
-        for (int i = 0; i < _pathIntegral.Length; i++)
-        {
-            var paramChange = _numOps.Subtract(currentParams[i], _previousParameters[i]);
-            var negGrad = _numOps.Negate(gradients[i]);
-            var contribution = _numOps.Multiply(negGrad, paramChange);
-            _pathIntegral[i] = _numOps.Add(_pathIntegral[i], contribution);
-        }
+        int n = _pathIntegral.Length;
+        var paramChange = Engine.TensorSubtract(Head(currentParams, n), Head(_previousParameters, n));
+        var contribution = Engine.TensorMultiply(Engine.TensorNegate(Head(gradients, n)), paramChange);
+        Engine.TensorAddInPlace(_pathIntegral.AsTensor(), contribution);
     }
 
     /// <summary>
@@ -241,13 +231,17 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
     /// </summary>
     private bool HasPreviousTasks()
     {
-        for (int i = 0; i < _omega.Length; i++)
-        {
-            if (_numOps.GreaterThan(_omega[i], _numOps.Zero))
-            {
-                return true;
-            }
-        }
-        return false;
+        return _omega.Length > 0
+            && Engine.TensorCountNonzero(Engine.TensorGreaterThan(_omega.AsTensor(), _numOps.Zero)) > 0;
+    }
+
+    /// <summary>
+    /// Zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector.
+    /// </summary>
+    private static Tensor<T> Head(Vector<T> vector, int count)
+    {
+        return count == vector.Length
+            ? vector.AsTensor()
+            : Tensor<T>.FromMemory(vector.AsWritableMemory().Slice(0, count), new[] { count });
     }
 }
