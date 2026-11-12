@@ -4,25 +4,30 @@ using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Compression;
 
 /// <summary>
-/// Implements FedKD — Knowledge Distillation-based communication for federated learning.
+/// Implements FedKD — communication-efficient federated learning via adaptive mutual knowledge
+/// distillation and dynamic SVD gradient compression.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> Instead of sending model parameters (which can be huge for LLMs),
-/// clients send soft predictions (logits) on a shared public dataset. The server trains a global
-/// model by distilling knowledge from these aggregated soft labels. This enables FL even when
-/// clients have different model architectures (heterogeneous FL), since predictions are
-/// architecture-agnostic.</para>
+/// <para><b>For Beginners:</b> Every client keeps a large private "mentor" (teacher) model and trains it
+/// together with a small shared "mentee" (student) model; only the mentee's updates are sent to the server.
+/// The two models teach each other (mutual distillation), and the mentee's gradients are compressed with a
+/// truncated SVD before upload and download.</para>
 ///
-/// <para>Algorithm:</para>
-/// <list type="number">
-/// <item>Server broadcasts a small public unlabeled dataset to all clients</item>
-/// <item>Each client runs inference on the public data and sends logits</item>
-/// <item>Server aggregates logits (weighted average)</item>
-/// <item>Server trains global model on aggregated soft labels (KD loss)</item>
-/// </list>
+/// <para>Adaptive mutual distillation (per client, for labelled data):</para>
+/// <code>
+/// L_t^t, L_t^s = cross-entropy task losses of the teacher and the student
+/// scale        = 1 / (L_t^t + L_t^s)                       // adaptive: trust distillation more when both are good
+/// L_d^t = KL(y^s || y^t) * scale,  L_d^s = KL(y^t || y^s) * scale
+/// L_h   = (MSE(H^t, H^s W_h) + MSE(A^t, A^s)) * scale       // hidden states and attention heatmaps
+/// L^t = L_t^t + L_d^t + L_h,  L^s = L_t^s + L_d^s + L_h
+/// </code>
 ///
-/// <para>Reference: Wu, C., et al. (2022). "Communication-Efficient Federated Learning via
-/// Knowledge Distillation." NeurIPS 2022.</para>
+/// <para>Dynamic gradient approximation: a gradient matrix g ≈ U Σ V keeps the K largest singular values,
+/// the fewest whose energy sum_{j &lt;= K} σ_j² / sum_j σ_j² reaches T(t), where the threshold grows
+/// linearly from T_start to T_end over the rounds (paper defaults 0.95 and 0.98).</para>
+///
+/// <para>Reference: Wu, C., Wu, F., Lyu, L., Huang, Y., and Xie, X. (2022). "Communication-efficient
+/// federated learning via knowledge distillation." Nature Communications 13, 2032.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ComponentType(ComponentType.FederatedAggregator)]
@@ -30,320 +35,369 @@ namespace AiDotNet.FederatedLearning.Compression;
 public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _temperature;
-    private readonly double _kdWeight;
+    private readonly double _startEnergyThreshold;
+    private readonly double _endEnergyThreshold;
 
     /// <summary>
     /// Creates a new FedKD compressor.
     /// </summary>
-    /// <param name="temperature">Softmax temperature for knowledge distillation. Default: 3.0.</param>
-    /// <param name="kdWeight">Weight of KD loss vs. hard label loss. Default: 0.7.</param>
-    public FedKDCompressor(double temperature = 3.0, double kdWeight = 0.7)
+    /// <param name="temperature">Softmax temperature for the distillation terms. The paper distills plain
+    /// probabilities, i.e. temperature 1; with T &gt; 1 the KL terms are scaled by T² (Hinton et al.). Default: 1.0.</param>
+    /// <param name="startEnergyThreshold">SVD energy threshold T_start at the first round. Default: 0.95.</param>
+    /// <param name="endEnergyThreshold">SVD energy threshold T_end at the last round. Default: 0.98.</param>
+    public FedKDCompressor(double temperature = 1.0, double startEnergyThreshold = 0.95, double endEnergyThreshold = 0.98)
     {
         if (temperature <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");
         }
 
-        if (kdWeight < 0 || kdWeight > 1)
+        if (startEnergyThreshold <= 0 || startEnergyThreshold > 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(kdWeight), "KD weight must be in [0, 1].");
+            throw new ArgumentOutOfRangeException(nameof(startEnergyThreshold), "Energy threshold must be in (0, 1].");
+        }
+
+        if (endEnergyThreshold < startEnergyThreshold || endEnergyThreshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endEnergyThreshold),
+                "End energy threshold must be in [startEnergyThreshold, 1].");
         }
 
         _temperature = temperature;
-        _kdWeight = kdWeight;
+        _startEnergyThreshold = startEnergyThreshold;
+        _endEnergyThreshold = endEnergyThreshold;
     }
 
     /// <summary>
-    /// Aggregates soft predictions from multiple clients.
+    /// Computes the adaptive mutual distillation losses of a teacher (mentor) and student (mentee) pair.
     /// </summary>
-    /// <param name="clientLogits">Client logits: clientId → array of prediction vectors per sample.</param>
-    /// <param name="clientWeights">Per-client weights.</param>
-    /// <returns>Aggregated soft labels per sample.</returns>
-    public T[][] AggregateLogits(
-        Dictionary<int, T[][]> clientLogits,
-        Dictionary<int, double> clientWeights)
+    /// <param name="teacherLogits">Teacher logits [samples, classes].</param>
+    /// <param name="studentLogits">Student logits [samples, classes].</param>
+    /// <param name="labels">Class label of each sample.</param>
+    /// <param name="teacherHidden">Teacher hidden states [samples, teacherDim].</param>
+    /// <param name="studentHidden">Student hidden states [samples, studentDim].</param>
+    /// <param name="hiddenProjection">Learnable projection W_h [studentDim, teacherDim] that maps student hidden
+    /// states into the teacher's space; may be null when both dimensions are equal (identity).</param>
+    /// <param name="teacherAttention">Optional teacher attention heatmaps (any shape).</param>
+    /// <param name="studentAttention">Optional student attention heatmaps (same shape as the teacher's).</param>
+    /// <returns>The task, distillation and hidden losses and the two totals, each averaged over samples.</returns>
+    public FedKDLosses<T> ComputeMutualDistillationLosses(
+        Tensor<T> teacherLogits,
+        Tensor<T> studentLogits,
+        int[] labels,
+        Tensor<T> teacherHidden,
+        Tensor<T> studentHidden,
+        Tensor<T>? hiddenProjection = null,
+        Tensor<T>? teacherAttention = null,
+        Tensor<T>? studentAttention = null)
     {
-        Guard.NotNull(clientLogits);
-        Guard.NotNull(clientWeights);
-        if (clientLogits.Count == 0)
-        {
-            throw new ArgumentException("No client logits provided.", nameof(clientLogits));
-        }
-
-        var firstClient = clientLogits.First().Value;
-        if (firstClient == null || firstClient.Length == 0)
-        {
-            throw new ArgumentException("First client has null or empty logits.", nameof(clientLogits));
-        }
-
-        int numSamples = firstClient.Length;
-        int numClasses = firstClient[0].Length;
-
-        // Validate all clients have matching shapes.
-        foreach (var (clientId, logits) in clientLogits)
-        {
-            if (logits == null || logits.Length != numSamples)
-            {
-                throw new ArgumentException(
-                    $"Client {clientId} has mismatched sample count: {logits?.Length} vs expected {numSamples}.", nameof(clientLogits));
-            }
-
-            for (int s = 0; s < logits.Length; s++)
-            {
-                if (logits[s] == null || logits[s].Length != numClasses)
-                {
-                    throw new ArgumentException(
-                        $"Client {clientId} sample {s} has mismatched class count: {logits[s]?.Length} vs expected {numClasses}.", nameof(clientLogits));
-                }
-            }
-        }
-
-        double totalWeight = clientWeights.Values.Sum();
-        if (totalWeight <= 0)
-        {
-            totalWeight = clientLogits.Count;
-        }
-
-        var aggregated = new T[numSamples][];
-        for (int s = 0; s < numSamples; s++)
-        {
-            aggregated[s] = new T[numClasses];
-            for (int c = 0; c < numClasses; c++)
-            {
-                aggregated[s][c] = NumOps.Zero;
-            }
-
-            foreach (var (clientId, logits) in clientLogits)
-            {
-                double w = clientWeights.GetValueOrDefault(clientId, 1.0) / totalWeight;
-                var wT = NumOps.FromDouble(w);
-
-                for (int c = 0; c < numClasses; c++)
-                {
-                    aggregated[s][c] = NumOps.Add(
-                        aggregated[s][c],
-                        NumOps.Multiply(logits[s][c], wT));
-                }
-            }
-        }
-
-        return aggregated;
-    }
-
-    /// <summary>
-    /// Computes KD loss between student logits and teacher soft labels.
-    /// </summary>
-    /// <param name="studentLogits">Student model's logits.</param>
-    /// <param name="teacherLogits">Aggregated teacher soft labels.</param>
-    /// <returns>KL divergence loss scaled by T².</returns>
-    public T ComputeKDLoss(T[] studentLogits, T[] teacherLogits)
-    {
-        Guard.NotNull(studentLogits);
         Guard.NotNull(teacherLogits);
-        if (studentLogits.Length != teacherLogits.Length)
+        Guard.NotNull(studentLogits);
+        Guard.NotNull(labels);
+        Guard.NotNull(teacherHidden);
+        Guard.NotNull(studentHidden);
+        if (teacherLogits.Rank != 2 || !teacherLogits.Shape.Equals(studentLogits.Shape))
+        {
+            throw new ArgumentException("Teacher and student logits must both be [samples, classes].", nameof(studentLogits));
+        }
+
+        int samples = teacherLogits.Shape[0];
+        int classes = teacherLogits.Shape[1];
+        if (samples == 0 || labels.Length != samples)
+        {
+            throw new ArgumentException($"Expected {samples} labels for a non-empty batch.", nameof(labels));
+        }
+
+        // One-hot labels via a single index-copy.
+        var flatLabelIndex = new int[samples];
+        for (int i = 0; i < samples; i++)
+        {
+            int label = labels[i];
+            if (label < 0 || label >= classes)
+            {
+                throw new ArgumentOutOfRangeException(nameof(labels), $"Label {label} of sample {i} is outside [0, {classes}).");
+            }
+
+            flatLabelIndex[i] = i * classes + label;
+        }
+
+        var oneHot = Engine.TensorIndexCopy(
+            new Tensor<T>(new[] { samples * classes }), 0,
+            new Tensor<int>(flatLabelIndex, new[] { samples }),
+            Engine.TensorOnesLike(new Tensor<T>(new[] { samples })))
+            .Reshape(new[] { samples, classes });
+
+        var invSamples = NumOps.FromDouble(1.0 / samples);
+
+        // Task losses: cross-entropy with the labels.
+        var teacherLogProbs = Engine.TensorLogSoftmax(teacherLogits, 1);
+        var studentLogProbs = Engine.TensorLogSoftmax(studentLogits, 1);
+        T teacherTask = NumOps.Negate(NumOps.Multiply(Engine.TensorSum(Engine.TensorMultiply(oneHot, teacherLogProbs)), invSamples));
+        T studentTask = NumOps.Negate(NumOps.Multiply(Engine.TensorSum(Engine.TensorMultiply(oneHot, studentLogProbs)), invSamples));
+        T adaptiveScale = NumOps.Divide(NumOps.One, NumOps.Add(teacherTask, studentTask));
+
+        // Distillation: KL(y^t || y^s) teaches the student, KL(y^s || y^t) teaches the teacher.
+        var temperatureT = NumOps.FromDouble(_temperature);
+        var teacherSoftLog = Engine.TensorLogSoftmax(Engine.TensorDivideScalar(teacherLogits, temperatureT), 1);
+        var studentSoftLog = Engine.TensorLogSoftmax(Engine.TensorDivideScalar(studentLogits, temperatureT), 1);
+        var logRatio = Engine.TensorSubtract(teacherSoftLog, studentSoftLog);
+        var kdScale = NumOps.Multiply(invSamples, NumOps.FromDouble(_temperature * _temperature));
+        T klTeacherToStudent = NumOps.Multiply(
+            Engine.TensorSum(Engine.TensorMultiply(Engine.TensorExp(teacherSoftLog), logRatio)), kdScale);
+        T klStudentToTeacher = NumOps.Multiply(
+            NumOps.Negate(Engine.TensorSum(Engine.TensorMultiply(Engine.TensorExp(studentSoftLog), logRatio))), kdScale);
+
+        // Hidden loss: MSE(H^t, H^s W_h) + MSE(A^t, A^s).
+        Tensor<T> projectedStudent;
+        if (hiddenProjection is not null)
+        {
+            projectedStudent = Engine.TensorMatMul(studentHidden, hiddenProjection);
+        }
+        else if (studentHidden.Shape.Equals(teacherHidden.Shape))
+        {
+            projectedStudent = studentHidden;
+        }
+        else
         {
             throw new ArgumentException(
-                $"Logit arrays must have equal length. Got student={studentLogits.Length}, teacher={teacherLogits.Length}.");
+                "A hidden projection is required when teacher and student hidden sizes differ.", nameof(hiddenProjection));
         }
 
-        int n = studentLogits.Length;
-        var studentSoft = Softmax(studentLogits, _temperature);
-        var teacherSoft = Softmax(teacherLogits, _temperature);
-
-        double kl = 0;
-        for (int i = 0; i < n; i++)
+        T hiddenMse = Engine.TensorMean(Engine.TensorSquare(Engine.TensorSubtract(teacherHidden, projectedStudent)));
+        if (teacherAttention is not null || studentAttention is not null)
         {
-            if (teacherSoft[i] > 1e-10)
+            if (teacherAttention is null || studentAttention is null || !teacherAttention.Shape.Equals(studentAttention.Shape))
             {
-                kl += teacherSoft[i] * Math.Log(teacherSoft[i] / Math.Max(studentSoft[i], 1e-10));
+                throw new ArgumentException("Teacher and student attention heatmaps must both be given with the same shape.",
+                    nameof(studentAttention));
             }
+
+            hiddenMse = NumOps.Add(hiddenMse, Engine.TensorMean(Engine.TensorSquare(Engine.TensorSubtract(teacherAttention, studentAttention))));
         }
 
-        return NumOps.FromDouble(kl * _temperature * _temperature * _kdWeight);
-    }
-
-    private double[] Softmax(T[] logits, double temperature)
-    {
-        double max = double.NegativeInfinity;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > max) max = v;
-        }
-
-        var exps = new double[logits.Length];
-        double sum = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            exps[i] = Math.Exp((NumOps.ToDouble(logits[i]) - max) / temperature);
-            sum += exps[i];
-        }
-
-        for (int i = 0; i < exps.Length; i++)
-        {
-            exps[i] /= sum;
-        }
-
-        return exps;
+        return new FedKDLosses<T>(
+            teacherTask,
+            studentTask,
+            NumOps.Multiply(klStudentToTeacher, adaptiveScale),
+            NumOps.Multiply(klTeacherToStudent, adaptiveScale),
+            NumOps.Multiply(hiddenMse, adaptiveScale));
     }
 
     /// <summary>
-    /// Performs one server-side distillation step: updates the student model parameters
-    /// to match the aggregated ensemble soft labels via gradient descent on the KD loss.
+    /// Gets the dynamic SVD energy threshold T(t) = T_start + (T_end - T_start) * t / totalRounds.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> After collecting logits from all clients, the server has
-    /// "soft labels" — probability distributions that capture the collective knowledge of all
-    /// client models. The server then trains its own model to match these soft labels using
-    /// gradient descent. This is how the global model learns without ever seeing the raw data.</para>
-    /// <para><b>Implementation Note:</b> Gradients are currently approximated via finite differences
-    /// (perturbing each sampled parameter by epsilon and measuring loss change). This is a
-    /// reference implementation suitable for small models and testing. Production systems should
-    /// replace this with backpropagation through the student model for O(1) gradient computation
-    /// per parameter instead of the current O(n) forward passes per sampled parameter.</para>
-    /// </remarks>
-    /// <param name="studentParams">Current student model parameters (will be updated).</param>
-    /// <param name="aggregatedSoftLabels">Soft labels from AggregateLogits.</param>
-    /// <param name="studentLogitsFn">Function that computes student logits from parameters and sample index.</param>
-    /// <param name="learningRate">Server-side learning rate. Default: 0.01.</param>
-    /// <param name="steps">Number of gradient descent steps. Default: 10.</param>
-    /// <returns>Updated student parameters and the final average KD loss.</returns>
-    public (T[] UpdatedParams, double FinalLoss) ServerDistillationStep(
-        T[] studentParams,
-        T[][] aggregatedSoftLabels,
-        Func<T[], int, T[]> studentLogitsFn,
-        double learningRate = 0.01,
-        int steps = 10)
+    /// <param name="round">The current round t (0-based).</param>
+    /// <param name="totalRounds">The total number of rounds.</param>
+    /// <returns>The energy threshold for this round.</returns>
+    public double GetEnergyThreshold(int round, int totalRounds)
     {
-        Guard.NotNull(studentParams);
-        Guard.NotNull(aggregatedSoftLabels);
-        Guard.NotNull(studentLogitsFn);
-        if (studentParams.Length == 0)
+        if (totalRounds <= 0)
         {
-            throw new ArgumentException("Student parameters cannot be empty.", nameof(studentParams));
+            throw new ArgumentOutOfRangeException(nameof(totalRounds), "Total rounds must be positive.");
         }
 
-        if (aggregatedSoftLabels.Length == 0)
-        {
-            throw new ArgumentException("Aggregated soft labels cannot be empty.", nameof(aggregatedSoftLabels));
-        }
-
-        if (learningRate <= 0 || double.IsNaN(learningRate) || double.IsInfinity(learningRate))
-        {
-            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be a positive finite value.");
-        }
-
-        if (steps < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(steps), "Steps must be at least 1.");
-        }
-
-        var currentParams = (T[])studentParams.Clone();
-        double lastLoss = 0;
-
-        for (int step = 0; step < steps; step++)
-        {
-            var totalGrad = new double[currentParams.Length];
-            double totalLoss = 0;
-
-            for (int s = 0; s < aggregatedSoftLabels.Length; s++)
-            {
-                var studentLogits = studentLogitsFn(currentParams, s);
-                var loss = ComputeKDLoss(studentLogits, aggregatedSoftLabels[s]);
-                totalLoss += NumOps.ToDouble(loss);
-
-                // Approximate gradient via finite differences on each parameter.
-                // In a real system, this would use backpropagation.
-                double epsilon = 1e-5;
-                int gradSamples = Math.Min(currentParams.Length, 50); // Subsample for efficiency.
-                var rng = RandomHelper.CreateSeededRandom(step * aggregatedSoftLabels.Length + s);
-
-                for (int g = 0; g < gradSamples; g++)
-                {
-                    int idx = rng.Next(currentParams.Length);
-                    var saved = currentParams[idx];
-
-                    currentParams[idx] = NumOps.Add(saved, NumOps.FromDouble(epsilon));
-                    var lossPlus = NumOps.ToDouble(ComputeKDLoss(studentLogitsFn(currentParams, s), aggregatedSoftLabels[s]));
-
-                    currentParams[idx] = saved;
-                    totalGrad[idx] += (lossPlus - NumOps.ToDouble(loss)) / epsilon;
-                }
-            }
-
-            // Apply gradient descent.
-            double invSamples = 1.0 / aggregatedSoftLabels.Length;
-            for (int i = 0; i < currentParams.Length; i++)
-            {
-                double grad = totalGrad[i] * invSamples;
-                currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.FromDouble(learningRate * grad));
-            }
-
-            lastLoss = totalLoss / aggregatedSoftLabels.Length;
-        }
-
-        return (currentParams, lastLoss);
+        double progress = Math.Min(Math.Max((double)round / totalRounds, 0.0), 1.0);
+        return _startEnergyThreshold + (_endEnergyThreshold - _startEnergyThreshold) * progress;
     }
 
     /// <summary>
-    /// Handles heterogeneous client architectures by padding/truncating logits to a common dimension.
+    /// Compresses a gradient matrix g ≈ U Σ V by keeping the fewest singular values whose energy reaches
+    /// the threshold.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When clients have different model architectures, they may produce
-    /// different numbers of output classes. This method normalizes all client logits to the same
-    /// dimension by padding smaller outputs with zeros or truncating larger ones.</para>
-    /// </remarks>
-    /// <param name="clientLogits">Raw logits from heterogeneous clients (may have different class counts).</param>
-    /// <param name="targetClasses">Target number of output classes for aggregation.</param>
-    /// <returns>Normalized logits with uniform dimensions.</returns>
-    public Dictionary<int, T[][]> NormalizeHeterogeneousLogits(
-        Dictionary<int, T[][]> clientLogits,
-        int targetClasses)
+    /// <param name="gradient">The gradient matrix [P x Q].</param>
+    /// <param name="energyThreshold">Energy fraction to keep, e.g. from <see cref="GetEnergyThreshold"/>.</param>
+    /// <returns>The truncated factors.</returns>
+    public FedKDCompressedGradient<T> CompressGradient(Matrix<T> gradient, double energyThreshold)
     {
-        Guard.NotNull(clientLogits);
-        if (targetClasses <= 0)
+        Guard.NotNull(gradient);
+        if (energyThreshold <= 0 || energyThreshold > 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(targetClasses), "Target classes must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(energyThreshold), "Energy threshold must be in (0, 1].");
         }
 
-        var normalized = new Dictionary<int, T[][]>();
-
-        foreach (var (clientId, logits) in clientLogits)
+        if (gradient.Rows == 0 || gradient.Columns == 0)
         {
-            if (logits == null)
-            {
-                throw new ArgumentException($"Client {clientId} has null logits.", nameof(clientLogits));
-            }
-
-            var clientNorm = new T[logits.Length][];
-            for (int s = 0; s < logits.Length; s++)
-            {
-                if (logits[s] == null)
-                {
-                    throw new ArgumentException(
-                        $"Client {clientId} sample {s} has null logit array.", nameof(clientLogits));
-                }
-
-                var sample = new T[targetClasses];
-                int copyLen = Math.Min(logits[s].Length, targetClasses);
-                for (int c = 0; c < copyLen; c++)
-                {
-                    sample[c] = logits[s][c];
-                }
-
-                // Remaining positions are zero (default).
-                clientNorm[s] = sample;
-            }
-
-            normalized[clientId] = clientNorm;
+            throw new ArgumentException("Gradient matrix must be non-empty.", nameof(gradient));
         }
 
-        return normalized;
+        var (u, s, vh) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(gradient), fullMatrices: false);
+        int available = s.Length;
+
+        // Energy ratios of the leading singular values, normalized by sigma_1 first so the squares stay in
+        // range for narrow T. K = 1 + the number of prefixes still below the threshold.
+        int keep = 1;
+        T largest = s[0];
+        if (NumOps.GreaterThan(largest, NumOps.Zero))
+        {
+            var energy = Engine.TensorSquare(Engine.TensorDivideScalar(s, largest));
+            var cumulative = Engine.TensorCumSum(energy, 0);
+            var ratios = Engine.TensorDivideScalar(cumulative, cumulative[available - 1]);
+            keep = Math.Min(available, 1 + Engine.TensorCountNonzero(Engine.TensorLessThan(ratios, NumOps.FromDouble(energyThreshold))));
+        }
+
+        int rows = gradient.Rows;
+        int cols = gradient.Columns;
+        var uK = Engine.TensorSlice(u, new[] { 0, 0 }, new[] { rows, keep });
+        var sK = Engine.TensorSlice(s, new[] { 0 }, new[] { keep });
+        var vK = Engine.TensorSlice(vh, new[] { 0, 0 }, new[] { keep, cols });
+        return new FedKDCompressedGradient<T>(uK.ToMatrix(), sK.ToVector(), vK.ToMatrix());
     }
 
-    /// <summary>Gets the KD temperature.</summary>
+    /// <summary>
+    /// Reconstructs a gradient matrix U Σ V from its compressed factors.
+    /// </summary>
+    /// <param name="compressed">The compressed gradient.</param>
+    /// <returns>The approximated gradient matrix.</returns>
+    public Matrix<T> DecompressGradient(FedKDCompressedGradient<T> compressed)
+    {
+        Guard.NotNull(compressed);
+        var u = Tensor<T>.FromMatrix(compressed.U);
+        var scaled = Engine.TensorMultiply(u, compressed.SingularValues.AsTensor().Reshape(new[] { 1, compressed.Rank }));
+        return Engine.TensorMatMul(scaled, Tensor<T>.FromMatrix(compressed.V)).ToMatrix();
+    }
+
+    /// <summary>
+    /// Server step: reconstructs every client's compressed gradient and returns their weighted average,
+    /// which the server compresses again (with <see cref="CompressGradient"/>) before distributing it.
+    /// </summary>
+    /// <param name="clientGradients">Compressed gradients by client.</param>
+    /// <param name="clientWeights">Optional per-client weights (default 1).</param>
+    /// <returns>The aggregated gradient matrix.</returns>
+    public Matrix<T> AggregateCompressedGradients(
+        Dictionary<int, FedKDCompressedGradient<T>> clientGradients,
+        Dictionary<int, double>? clientWeights = null)
+    {
+        Guard.NotNull(clientGradients);
+        if (clientGradients.Count == 0)
+        {
+            throw new ArgumentException("No client gradients provided.", nameof(clientGradients));
+        }
+
+        double totalWeight = 0;
+        foreach (var clientId in clientGradients.Keys)
+        {
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+        }
+
+        if (totalWeight <= 0)
+        {
+            throw new ArgumentException("Total client weight must be positive.", nameof(clientWeights));
+        }
+
+        Tensor<T>? sum = null;
+        foreach (var (clientId, compressed) in clientGradients)
+        {
+            var p = NumOps.FromDouble((clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) / totalWeight);
+            var weighted = Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(DecompressGradient(compressed)), p);
+            if (sum is null)
+            {
+                sum = weighted;
+            }
+            else if (!sum.Shape.Equals(weighted.Shape))
+            {
+                throw new ArgumentException($"Client {clientId} gradient shape differs from the others.", nameof(clientGradients));
+            }
+            else
+            {
+                sum = Engine.TensorAdd(sum, weighted);
+            }
+        }
+
+        return (sum ?? new Tensor<T>(new[] { 0, 0 })).ToMatrix();
+    }
+
+    /// <summary>Gets the distillation temperature.</summary>
     public double Temperature => _temperature;
 
-    /// <summary>Gets the KD loss weight.</summary>
-    public double KDWeight => _kdWeight;
+    /// <summary>Gets the first-round SVD energy threshold.</summary>
+    public double StartEnergyThreshold => _startEnergyThreshold;
+
+    /// <summary>Gets the last-round SVD energy threshold.</summary>
+    public double EndEnergyThreshold => _endEnergyThreshold;
+}
+
+/// <summary>
+/// The losses of one FedKD adaptive mutual distillation step, averaged over the batch.
+/// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
+public sealed class FedKDLosses<T>
+{
+    private static readonly AiDotNet.Tensors.Interfaces.INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Creates the loss breakdown.</summary>
+    /// <param name="teacherTaskLoss">Teacher cross-entropy L_t^t.</param>
+    /// <param name="studentTaskLoss">Student cross-entropy L_t^s.</param>
+    /// <param name="teacherDistillationLoss">KL(y^s || y^t) / (L_t^t + L_t^s).</param>
+    /// <param name="studentDistillationLoss">KL(y^t || y^s) / (L_t^t + L_t^s).</param>
+    /// <param name="hiddenLoss">(MSE(H^t, H^s W_h) + MSE(A^t, A^s)) / (L_t^t + L_t^s).</param>
+    public FedKDLosses(T teacherTaskLoss, T studentTaskLoss, T teacherDistillationLoss, T studentDistillationLoss, T hiddenLoss)
+    {
+        TeacherTaskLoss = teacherTaskLoss;
+        StudentTaskLoss = studentTaskLoss;
+        TeacherDistillationLoss = teacherDistillationLoss;
+        StudentDistillationLoss = studentDistillationLoss;
+        HiddenLoss = hiddenLoss;
+    }
+
+    /// <summary>Teacher (mentor) cross-entropy task loss.</summary>
+    public T TeacherTaskLoss { get; }
+
+    /// <summary>Student (mentee) cross-entropy task loss.</summary>
+    public T StudentTaskLoss { get; }
+
+    /// <summary>Adaptive distillation loss of the teacher, KL(y^s || y^t) / (L_t^t + L_t^s).</summary>
+    public T TeacherDistillationLoss { get; }
+
+    /// <summary>Adaptive distillation loss of the student, KL(y^t || y^s) / (L_t^t + L_t^s).</summary>
+    public T StudentDistillationLoss { get; }
+
+    /// <summary>Adaptive hidden-state and attention loss shared by both models.</summary>
+    public T HiddenLoss { get; }
+
+    /// <summary>Total teacher loss L^t = L_t^t + L_d^t + L_h.</summary>
+    public T TeacherTotalLoss => Ops.Add(Ops.Add(TeacherTaskLoss, TeacherDistillationLoss), HiddenLoss);
+
+    /// <summary>Total student loss L^s = L_t^s + L_d^s + L_h.</summary>
+    public T StudentTotalLoss => Ops.Add(Ops.Add(StudentTaskLoss, StudentDistillationLoss), HiddenLoss);
+}
+
+/// <summary>
+/// A gradient matrix compressed by FedKD's truncated SVD: g ≈ U diag(S) V.
+/// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
+public sealed class FedKDCompressedGradient<T>
+{
+    /// <summary>Creates a compressed gradient.</summary>
+    /// <param name="u">Left singular vectors [P x K].</param>
+    /// <param name="singularValues">The K kept singular values.</param>
+    /// <param name="v">Right singular vectors [K x Q].</param>
+    public FedKDCompressedGradient(Matrix<T> u, Vector<T> singularValues, Matrix<T> v)
+    {
+        Guard.NotNull(u);
+        Guard.NotNull(singularValues);
+        Guard.NotNull(v);
+        if (u.Columns != singularValues.Length || v.Rows != singularValues.Length)
+        {
+            throw new ArgumentException("U columns, singular value count and V rows must all equal the rank.");
+        }
+
+        U = u;
+        SingularValues = singularValues;
+        V = v;
+    }
+
+    /// <summary>Left singular vectors [P x K].</summary>
+    public Matrix<T> U { get; }
+
+    /// <summary>The kept singular values.</summary>
+    public Vector<T> SingularValues { get; }
+
+    /// <summary>Right singular vectors [K x Q].</summary>
+    public Matrix<T> V { get; }
+
+    /// <summary>The kept rank K.</summary>
+    public int Rank => SingularValues.Length;
+
+    /// <summary>Number of values transmitted: K * (P + Q + 1).</summary>
+    public int TransmittedValues => Rank * (U.Rows + V.Columns + 1);
 }

@@ -304,4 +304,69 @@ public class FederatedElementwiseSweep29bReferenceTests
             fetch.MergeSketches(new[] { fetch.Sketch(gradient), fetch.Sketch(new[] { 9.0, 3.0 }) }), gradient.Length);
         Assert.Equal(6.0, mean[0], Precision);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedKD_AdaptiveMutualDistillationScalesByInverseTaskLossSum()
+    {
+        await Task.Yield();
+
+        // Wu et al. 2022 (FedKD). One sample, label 0. Teacher logits [0, 0] -> y^t = [0.5, 0.5];
+        // student logits [ln 3, 0] -> y^s = [0.75, 0.25].
+        // L_t^t = -ln 0.5, L_t^s = -ln 0.75; scale = 1 / (L_t^t + L_t^s).
+        // L_d^s = KL(y^t || y^s) * scale, L_d^t = KL(y^s || y^t) * scale.
+        // Hidden: H^t = [1, 2], H^s = [1, 1] (identity projection), MSE = 0.5, L_h = 0.5 * scale.
+        var fedKd = new FedKDCompressor<double>();
+        var teacher = new Tensor<double>(new[] { 0.0, 0.0 }, new[] { 1, 2 });
+        var student = new Tensor<double>(new[] { Math.Log(3.0), 0.0 }, new[] { 1, 2 });
+        var teacherHidden = new Tensor<double>(new[] { 1.0, 2.0 }, new[] { 1, 2 });
+        var studentHidden = new Tensor<double>(new[] { 1.0, 1.0 }, new[] { 1, 2 });
+
+        var losses = fedKd.ComputeMutualDistillationLosses(teacher, student, new[] { 0 }, teacherHidden, studentHidden);
+
+        double teacherTask = -Math.Log(0.5);
+        double studentTask = -Math.Log(0.75);
+        double scale = 1.0 / (teacherTask + studentTask);
+        double klTeacherStudent = 0.5 * Math.Log(0.5 / 0.75) + 0.5 * Math.Log(0.5 / 0.25);
+        double klStudentTeacher = 0.75 * Math.Log(0.75 / 0.5) + 0.25 * Math.Log(0.25 / 0.5);
+
+        Assert.Equal(teacherTask, losses.TeacherTaskLoss, Precision);
+        Assert.Equal(studentTask, losses.StudentTaskLoss, Precision);
+        Assert.Equal(klTeacherStudent * scale, losses.StudentDistillationLoss, Precision);
+        Assert.Equal(klStudentTeacher * scale, losses.TeacherDistillationLoss, Precision);
+        Assert.Equal(0.5 * scale, losses.HiddenLoss, Precision);
+        Assert.Equal(studentTask + (klTeacherStudent + 0.5) * scale, losses.StudentTotalLoss, Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedKD_SvdCompressionKeepsFewestSingularValuesReachingEnergyThreshold()
+    {
+        await Task.Yield();
+
+        // g = diag(3, 1): energies 9 and 1, cumulative ratios 0.9 and 1.0.
+        // T(t) grows linearly from 0.95 to 0.98: T(0) = 0.95, T(5 of 10) = 0.965, T(10) = 0.98.
+        var fedKd = new FedKDCompressor<double>();
+        Assert.Equal(0.95, fedKd.GetEnergyThreshold(0, 10), Precision);
+        Assert.Equal(0.965, fedKd.GetEnergyThreshold(5, 10), Precision);
+        Assert.Equal(0.98, fedKd.GetEnergyThreshold(10, 10), Precision);
+
+        var gradient = new Matrix<double>(new[,] { { 3.0, 0.0 }, { 0.0, 1.0 } });
+        Assert.Equal(2, fedKd.CompressGradient(gradient, 0.95).Rank);
+
+        var rankOne = fedKd.CompressGradient(gradient, 0.85);
+        Assert.Equal(1, rankOne.Rank);
+        var reconstructed = fedKd.DecompressGradient(rankOne);
+        Assert.Equal(3.0, reconstructed[0, 0], Precision);
+        Assert.Equal(0.0, reconstructed[0, 1], Precision);
+        Assert.Equal(0.0, reconstructed[1, 0], Precision);
+        Assert.Equal(0.0, reconstructed[1, 1], Precision);
+
+        // The server averages the reconstructed client gradients.
+        var average = fedKd.AggregateCompressedGradients(new Dictionary<int, FedKDCompressedGradient<double>>
+        {
+            [0] = rankOne,
+            [1] = fedKd.CompressGradient(gradient, 0.95),
+        });
+        Assert.Equal(3.0, average[0, 0], Precision);
+        Assert.Equal(0.5, average[1, 1], Precision);
+    }
 }
