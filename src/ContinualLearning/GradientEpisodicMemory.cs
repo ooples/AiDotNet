@@ -144,16 +144,12 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         }
 
         // Check if gradient violates any constraint
-        var violations = new List<int>();
-        for (int i = 0; i < _referenceGradients.Count; i++)
-        {
-            var dotProduct = VectorHelper.DotProduct(gradients, _referenceGradients[i]);
-            var marginT = _numOps.FromDouble(-_margin);
-            if (_numOps.LessThan(dotProduct, marginT))
-            {
-                violations.Add(i);
-            }
-        }
+        // dots[k] = <g, g_ref_k> for every stored task at once; a task is violated when dots[k] < -margin.
+        var marginT = _numOps.FromDouble(-_margin);
+        var referenceRows = Engine.TensorStack(_referenceGradients.Select(r => r.AsTensor()).ToArray(), 0);
+        var dots = Engine.TensorMatMul(referenceRows, gradients.AsTensor().Reshape(gradients.Length, 1));
+        var violated = Engine.TensorLessThan(dots.Reshape(_referenceGradients.Count), marginT);
+        var violations = new List<int>(Engine.TensorNonzero(violated).ToArray());
 
         if (violations.Count == 0)
         {
@@ -214,18 +210,9 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
             sampleSize *= tensor.Shape[i];
         }
 
-        var data = new Vector<T>(indices.Length * sampleSize);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            var srcStart = indices[i] * sampleSize;
-            var dstStart = i * sampleSize;
-            for (int j = 0; j < sampleSize; j++)
-            {
-                data[dstStart + j] = tensor[srcStart + j];
-            }
-        }
-
-        return new Tensor<T>(newShape, data);
+        var rows = tensor.Reshape(tensor.Shape[0], sampleSize);
+        var gathered = Engine.TensorIndexSelect(rows, new Tensor<int>(indices, new[] { indices.Length }), 0);
+        return gathered.Reshape(newShape);
     }
 
     /// <summary>
@@ -245,23 +232,27 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
     private Vector<T> ProjectGradient(Vector<T> gradient, List<int> violations)
     {
         // Simplified projection: subtract component along violating reference gradients
-        var projected = gradient.Clone();
+        var projected = gradient.AsTensor().Clone();
+        var zero = _numOps.Zero;
+        var noScale = new Tensor<T>(new[] { 1 });
+        var axis0 = new[] { 0 };
 
         foreach (var taskIdx in violations)
         {
-            var refGrad = _referenceGradients[taskIdx];
-            var dot = VectorHelper.DotProduct(projected, refGrad);
-            var refNormSq = VectorHelper.DotProduct(refGrad, refGrad);
+            var refGrad = _referenceGradients[taskIdx].AsTensor();
+            var dot = Engine.ReduceSum(Engine.TensorMultiply(projected, refGrad), axis0, keepDims: true);
+            var refNormSq = Engine.ReduceSum(Engine.TensorMultiply(refGrad, refGrad), axis0, keepDims: true);
 
-            // Project out the component that violates the constraint
-            if (_numOps.GreaterThan(refNormSq, _numOps.Zero))
-            {
-                var scale = _numOps.Divide(dot, refNormSq);
-                projected = Engine.Subtract(projected, Engine.Multiply(refGrad, scale));
-            }
+            // Project out the component that violates the constraint. A zero-norm reference
+            // gradient is all zeros, so scale 0 leaves the gradient unchanged, as master's skip does.
+            var scale = Engine.TensorWhere(
+                Engine.TensorGreaterThan(refNormSq, zero),
+                Engine.TensorDivide(dot, refNormSq),
+                noScale);
+            projected = Engine.TensorSubtract(projected, Engine.TensorMultiply(refGrad, scale));
         }
 
-        return projected;
+        return projected.AsVector();
     }
 
 
@@ -270,11 +261,6 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
     /// </summary>
     private Tensor<T> ComputeLossGradient(Tensor<T> output, Tensor<T> target)
     {
-        var gradData = new Vector<T>(output.Length);
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradData[i] = _numOps.Subtract(output[i], target[i]);
-        }
-        return new Tensor<T>(output._shape, gradData);
+        return Engine.TensorSubtract(output, target.Reshape(output._shape));
     }
 }
