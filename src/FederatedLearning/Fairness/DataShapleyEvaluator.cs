@@ -72,8 +72,10 @@ public class DataShapleyEvaluator<T> : FederatedLearningComponentBase<T>, IClien
         var rng = RandomHelper.CreateSecureRandom();
         var performanceCache = _options.UsePerformanceCache ? new Dictionary<long, double>() : null;
 
+        int completedRounds = 0;
         for (int round = 0; round < _options.SamplingRounds; round++)
         {
+            completedRounds = round + 1;
             // Generate random permutation using Fisher-Yates
             var perm = new List<int>(clientIds);
             for (int i = perm.Count - 1; i > 0; i--)
@@ -94,13 +96,7 @@ public class DataShapleyEvaluator<T> : FederatedLearningComponentBase<T>, IClien
 
                 // Add client to coalition (incremental weighted average)
                 coalitionCount++;
-                for (int j = 0; j < modelSize && j < clientModel.Shape[0]; j++)
-                {
-                    double current = NumOps.ToDouble(coalitionModel[j]);
-                    double clientVal = NumOps.ToDouble(clientModel[j]);
-                    // Running average: new_avg = old_avg + (new_val - old_avg) / count
-                    coalitionModel[j] = NumOps.FromDouble(current + (clientVal - current) / coalitionCount);
-                }
+                coalitionModel = AddToRunningAverage(coalitionModel, clientModel, coalitionCount);
 
                 // Evaluate coalition performance
                 double currentPerformance;
@@ -148,8 +144,8 @@ public class DataShapleyEvaluator<T> : FederatedLearningComponentBase<T>, IClien
             }
         }
 
-        // Average over rounds
-        int effectiveRounds = Math.Max(1, _options.SamplingRounds);
+        // Average over the rounds actually sampled (the loop can stop early on convergence).
+        int effectiveRounds = Math.Max(1, completedRounds);
         var keys = new List<int>(shapleyValues.Keys);
         foreach (int key in keys)
         {
@@ -191,15 +187,51 @@ public class DataShapleyEvaluator<T> : FederatedLearningComponentBase<T>, IClien
     private double EvaluateModel(Tensor<T> candidateModel, Tensor<T> referenceModel)
     {
         int size = Math.Min(candidateModel.Shape[0], referenceModel.Shape[0]);
-        double sumSq = 0;
-
-        for (int i = 0; i < size; i++)
+        if (size == 0)
         {
-            double diff = NumOps.ToDouble(candidateModel[i]) - NumOps.ToDouble(referenceModel[i]);
-            sumSq += diff * diff;
+            return 0;
         }
 
-        return -Math.Sqrt(sumSq);
+        var diff = Engine.TensorSubtract(
+            Engine.TensorSlice(candidateModel, new[] { 0 }, new[] { size }),
+            Engine.TensorSlice(referenceModel, new[] { 0 }, new[] { size }));
+
+        // ‖diff‖ = m · ‖diff / m‖ with m = max |diff|, so the sum of squares cannot overflow narrow T.
+        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(diff));
+        if (!NumOps.GreaterThan(maxAbs, NumOps.Zero))
+        {
+            return 0;
+        }
+
+        T sumSq = Engine.TensorSum(Engine.TensorSquare(Engine.TensorDivideScalar(diff, maxAbs)));
+        return -NumOps.ToDouble(maxAbs) * Math.Sqrt(NumOps.ToDouble(sumSq));
+    }
+
+    /// <summary>
+    /// Running average new_avg = old_avg + (new_val - old_avg) / count over the entries the client model
+    /// covers; entries past the client's length keep the old average.
+    /// </summary>
+    private Tensor<T> AddToRunningAverage(Tensor<T> average, Tensor<T> clientModel, int count)
+    {
+        int modelSize = average.Shape[0];
+        int covered = Math.Min(modelSize, clientModel.Shape[0]);
+        if (covered == 0)
+        {
+            return average;
+        }
+
+        var head = Engine.TensorSlice(average, new[] { 0 }, new[] { covered });
+        var delta = Engine.TensorDivideScalar(
+            Engine.TensorSubtract(Engine.TensorSlice(clientModel, new[] { 0 }, new[] { covered }), head),
+            NumOps.FromDouble(count));
+        var updatedHead = Engine.TensorAdd(head, delta);
+        if (covered == modelSize)
+        {
+            return updatedHead;
+        }
+
+        var tail = Engine.TensorSlice(average, new[] { covered }, new[] { modelSize - covered });
+        return Engine.TensorConcatenate(new[] { updatedHead, tail }, 0);
     }
 
     private static long ComputeCoalitionHash(List<int> permutation, int count)

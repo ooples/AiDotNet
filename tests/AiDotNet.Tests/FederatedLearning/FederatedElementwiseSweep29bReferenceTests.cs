@@ -588,4 +588,19 @@ public class FederatedElementwiseSweep29bReferenceTests
         }, new Dictionary<int, double> { [0] = 1.0, [1] = 3.0 });
         Assert.Equal(5.0, consensus[0, 0], Precision);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task DataShapley_AveragesOverRoundsActuallySampledWhenConvergingEarly()
+    {
+        await Task.Yield();
+
+        // One client [3, 4] against global [0, 0]: every permutation gives marginal -||[3, 4]|| = -5. The
+        // estimate converges at the round-30 check, so the mean over the 31 sampled rounds is -5; dividing by
+        // the configured 100 rounds gave -1.55. A single score has zero range, so it is not min-max scaled.
+        var options = new AiDotNet.Models.Options.ContributionEvaluationOptions { SamplingRounds = 100 };
+        var evaluator = new AiDotNet.FederatedLearning.Fairness.DataShapleyEvaluator<double>(options);
+        var clients = new Dictionary<int, Tensor<double>> { [7] = new Tensor<double>(new[] { 3.0, 4.0 }, new[] { 2 }) };
+        var scores = evaluator.EvaluateContributions(clients, new Tensor<double>(new[] { 2 }), new Dictionary<int, List<Tensor<double>>>());
+        Assert.Equal(-5.0, scores[7], Precision);
+    }
 }
