@@ -310,12 +310,11 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
     /// </summary>
     private Tensor<T> CreateWeightTensor(int rows, int cols, double stddev, Random random)
     {
-        var data = new T[rows * cols];
-        for (int i = 0; i < data.Length; i++)
-        {
-            data[i] = NumOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
-        }
-        return new Tensor<T>(new[] { rows, cols }, new Vector<T>(data));
+        // u · stddev · 2 - stddev with u uniform in [0, 1), drawn in row-major order
+        T scale = NumOps.FromDouble(stddev);
+        var scaled = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, rows, cols), scale), NumOps.FromDouble(2.0));
+        return Engine.TensorSubtractScalar(scaled, scale);
     }
 
     /// <summary>
@@ -323,11 +322,7 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
     /// </summary>
     private Tensor<T> CreateBiasTensor(int size, double initValue)
     {
-        var data = new T[size];
-        for (int i = 0; i < size; i++)
-        {
-            data[i] = NumOps.FromDouble(initValue);
-        }
+        T[] data = Engine.Fill(size, NumOps.FromDouble(initValue)).ToArray();
         // Store column-shaped [size, 1] up-front so ForwardTape can feed the bias
         // straight into TensorAdd ([hidden, B] + [hidden, 1]) without an
         // Engine.Reshape on every forward pass (re-profile #4: the per-forward
@@ -521,19 +516,12 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
             // Linear transformation: y = Wx + b using tensor operations
             var xCol = new Tensor<T>(new[] { x.Length, 1 }, x);
             var wxResult = Engine.TensorMatMul(_fcWeights[layer], xCol);
-            Vector<T> linear = new Vector<T>(_hiddenLayerSize);
             var biasVec = _fcBiases[layer].ToVector();
-            for (int i = 0; i < _hiddenLayerSize; i++)
-            {
-                linear[i] = NumOps.Add(biasVec[i], wxResult[i, 0]);
-            }
+            Vector<T> linear = Engine.Add(biasVec.GetSubVector(0, _hiddenLayerSize), wxResult.ToVector().GetSubVector(0, _hiddenLayerSize));
 
-            // ReLU activation
-            x = new Vector<T>(linear.Length);
-            for (int i = 0; i < linear.Length; i++)
-            {
-                x[i] = NumOps.GreaterThan(linear[i], NumOps.Zero) ? linear[i] : NumOps.Zero;
-            }
+            // ReLU activation (NaN → 0)
+            var linearT = Tensor<T>.FromVector(linear);
+            x = Engine.TensorWhere(Engine.TensorGreaterThan(linearT, NumOps.Zero), linearT, Engine.TensorZerosLike(linearT)).ToVector();
         }
 
         // Compute theta for backcast
@@ -541,21 +529,13 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
         var xColTheta = new Tensor<T>(new[] { x.Length, 1 }, x);
         var bcWx = Engine.TensorMatMul(_fcWeights[backcastLayerIdx], xColTheta);
         var bcBiasVec = _fcBiases[backcastLayerIdx].ToVector();
-        Vector<T> thetaBackcast = new Vector<T>(_thetaSizeBackcast);
-        for (int i = 0; i < _thetaSizeBackcast; i++)
-        {
-            thetaBackcast[i] = NumOps.Add(bcBiasVec[i], bcWx[i, 0]);
-        }
+        Vector<T> thetaBackcast = Engine.Add(bcBiasVec.GetSubVector(0, _thetaSizeBackcast), bcWx.ToVector().GetSubVector(0, _thetaSizeBackcast));
 
         // Compute theta for forecast
         int forecastLayerIdx = _numHiddenLayers + 1;
         var fcWx = Engine.TensorMatMul(_fcWeights[forecastLayerIdx], xColTheta);
         var fcBiasVec = _fcBiases[forecastLayerIdx].ToVector();
-        Vector<T> thetaForecast = new Vector<T>(_thetaSizeForecast);
-        for (int i = 0; i < _thetaSizeForecast; i++)
-        {
-            thetaForecast[i] = NumOps.Add(fcBiasVec[i], fcWx[i, 0]);
-        }
+        Vector<T> thetaForecast = Engine.Add(fcBiasVec.GetSubVector(0, _thetaSizeForecast), fcWx.ToVector().GetSubVector(0, _thetaSizeForecast));
 
         // Apply basis expansion. Pass the matching basis tensor so generic
         // blocks multiply by their learned V_b / V_f matrices (keeping this
@@ -651,27 +631,31 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
     /// <param name="outputLength">Length of the expanded output vector.</param>
     private Vector<T> ApplyBasisExpansion(Vector<T> theta, Tensor<T> basis, int outputLength)
     {
-        Vector<T> output = new Vector<T>(outputLength);
+        if (outputLength <= 0)
+        {
+            return new Vector<T>(outputLength);
+        }
 
         if (_useInterpretableBasis)
         {
-            for (int t = 0; t < outputLength; t++)
+            // output[t] = Σ_p θ_p · τ_t^p with τ_t = t / outputLength and τ^p built by repeated multiplication
+            int degrees = Math.Max(0, Math.Min(theta.Length, _polynomialDegree + 1));
+            if (degrees == 0)
             {
-                T value = NumOps.Zero;
-                T tNormalized = NumOps.FromDouble((double)t / outputLength);
-
-                for (int p = 0; p < Math.Min(theta.Length, _polynomialDegree + 1); p++)
-                {
-                    T power = NumOps.One;
-                    for (int k = 0; k < p; k++)
-                    {
-                        power = NumOps.Multiply(power, tNormalized);
-                    }
-                    value = NumOps.Add(value, NumOps.Multiply(theta[p], power));
-                }
-
-                output[t] = value;
+                return new Vector<T>(outputLength);
             }
+
+            var tau = Engine.TensorDivideScalar(Engine.TensorArange<T>(0, outputLength, 1), NumOps.FromDouble(outputLength));
+            var ones = Engine.TensorOnesLike(new Tensor<T>(new[] { outputLength, 1 }));
+            var factors = degrees > 1
+                ? Engine.TensorConcatenate(new[]
+                {
+                    ones,
+                    Engine.TensorBroadcastTo(Engine.Reshape(tau, new[] { outputLength, 1 }), new[] { outputLength, degrees - 1 })
+                }, 1)
+                : ones;
+            var powers = Engine.TensorCumProd(factors, 1).ToMatrix();
+            return Engine.MatrixVectorMultiply(powers, theta.GetSubVector(0, degrees));
         }
         else
         {
@@ -681,18 +665,9 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
             // Forward path multiplies by the same tensors. Returning theta directly
             // here (as the pre-fix code did) made PredictSingle diverge from both
             // training and model-load state.
-            for (int t = 0; t < outputLength; t++)
-            {
-                T value = NumOps.Zero;
-                for (int k = 0; k < theta.Length; k++)
-                {
-                    value = NumOps.Add(value, NumOps.Multiply(basis[t, k], theta[k]));
-                }
-                output[t] = value;
-            }
+            return Engine.MatrixVectorMultiply(
+                basis.ToMatrix().GetSubMatrix(0, 0, outputLength, theta.Length), theta);
         }
-
-        return output;
     }
 
     /// <summary>

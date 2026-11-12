@@ -166,17 +166,13 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
         int r = _tfOptions.InputLagOrder;
         int s = _tfOptions.OutputLagOrder;
 
-        _arParameters = new Vector<T>(p);
-        _maParameters = new Vector<T>(q);
-        _inputLags = new Vector<T>(r);
-        _outputLags = new Vector<T>(s);
-
-        // Initialize with small random values
+        // Initialize with small random values in [0, 0.1), drawn in AR, MA, input-lag, output-lag order
         Random rand = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < p; i++) _arParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
-        for (int i = 0; i < q; i++) _maParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
-        for (int i = 0; i < r; i++) _inputLags[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
-        for (int i = 0; i < s; i++) _outputLags[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
+        T scale = NumOps.FromDouble(0.1);
+        _arParameters = Engine.Multiply(Vector<T>.CreateRandom(rand, p), scale);
+        _maParameters = Engine.Multiply(Vector<T>.CreateRandom(rand, q), scale);
+        _inputLags = Engine.Multiply(Vector<T>.CreateRandom(rand, r), scale);
+        _outputLags = Engine.Multiply(Vector<T>.CreateRandom(rand, s), scale);
     }
 
     /// <summary>
@@ -253,28 +249,11 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     {
         int paramIndex = 0;
 
-        // Update AR parameters
-        for (int i = 0; i < _arParameters.Length; i++)
+        // Update AR, MA, input lag and output lag parameters in place, in that order
+        foreach (var parameters in new[] { _arParameters, _maParameters, _inputLags, _outputLags })
         {
-            _arParameters[i] = optimizedParameters[paramIndex++];
-        }
-
-        // Update MA parameters
-        for (int i = 0; i < _maParameters.Length; i++)
-        {
-            _maParameters[i] = optimizedParameters[paramIndex++];
-        }
-
-        // Update input lag parameters
-        for (int i = 0; i < _inputLags.Length; i++)
-        {
-            _inputLags[i] = optimizedParameters[paramIndex++];
-        }
-
-        // Update output lag parameters
-        for (int i = 0; i < _outputLags.Length; i++)
-        {
-            _outputLags[i] = optimizedParameters[paramIndex++];
+            optimizedParameters.GetSubVector(paramIndex, parameters.Length).CopyTo(parameters.AsWritableSpan());
+            paramIndex += parameters.Length;
         }
     }
 
@@ -385,40 +364,36 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     {
         T prediction = NumOps.Zero;
 
-        // Add AR terms
-        for (int i = 0; i < _arParameters.Length; i++)
+        // Add AR terms: φ_i · predictions[index - i - 1]
+        int arTerms = Math.Max(0, Math.Min(_arParameters.Length, index));
+        if (arTerms > 0)
         {
-            if (index - i - 1 >= 0)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_arParameters[i], predictions[index - i - 1]));
-            }
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_arParameters.GetSubVector(0, arTerms),
+                TimeSeriesEngineOps<T>.NewestFirst(predictions.GetSubVector(0, index), arTerms)));
         }
 
-        // Add MA terms
-        for (int i = 0; i < _maParameters.Length; i++)
+        // Add MA terms: θ_i · residuals[index - i - 1]
+        int maTerms = Math.Max(0, Math.Min(_maParameters.Length, index));
+        if (maTerms > 0 && _residuals != null)
         {
-            if (index - i - 1 >= 0 && _residuals != null)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_maParameters[i], _residuals[index - i - 1]));
-            }
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_maParameters.GetSubVector(0, maTerms),
+                TimeSeriesEngineOps<T>.NewestFirst(_residuals.GetSubVector(0, index), maTerms)));
         }
 
-        // Add input lag terms
-        for (int i = 0; i < _inputLags.Length; i++)
+        // Add input lag terms: ω_i · x[index - i, 0]
+        int inputTerms = Math.Max(0, Math.Min(_inputLags.Length, index + 1));
+        if (inputTerms > 0)
         {
-            if (index - i >= 0)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_inputLags[i], x[index - i, 0]));
-            }
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_inputLags.GetSubVector(0, inputTerms),
+                TimeSeriesEngineOps<T>.NewestFirst(x.GetColumn(0).GetSubVector(0, index + 1), inputTerms)));
         }
 
-        // Add output lag terms
-        for (int i = 0; i < _outputLags.Length; i++)
+        // Add output lag terms: δ_i · y[index - i - 1]
+        int outputTerms = Math.Max(0, Math.Min(_outputLags.Length, index));
+        if (outputTerms > 0)
         {
-            if (index - i - 1 >= 0)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_outputLags[i], _y[index - i - 1]));
-            }
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_outputLags.GetSubVector(0, outputTerms),
+                TimeSeriesEngineOps<T>.NewestFirst(_y.GetSubVector(0, index), outputTerms)));
         }
 
         return prediction;
@@ -578,11 +553,7 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
         ComputeResiduals(x, y);
 
         // Populate ModelParameters for GetParameters()
-        int arLen = _arParameters.Length;
-        int maLen = _maParameters.Length;
-        ModelParameters = new Vector<T>(arLen + maLen);
-        for (int i = 0; i < arLen; i++) ModelParameters[i] = _arParameters[i];
-        for (int i = 0; i < maLen; i++) ModelParameters[arLen + i] = _maParameters[i];
+        ModelParameters = Vector<T>.Concatenate(_arParameters, _maParameters);
     }
 
     /// <summary>
@@ -622,11 +593,7 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
         }
 
         // Create a matrix with a single row from the input vector
-        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputMatrix[0, i] = input[i];
-        }
+        Matrix<T> inputMatrix = Matrix<T>.CreateFromVector(input);
 
         // Create an empty vector to store the single prediction
         Vector<T> predictions = new Vector<T>(1);

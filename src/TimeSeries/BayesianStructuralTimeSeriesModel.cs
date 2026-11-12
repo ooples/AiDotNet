@@ -261,11 +261,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         {
             // If matrix is singular or near-singular, use ridge regression
             T ridgeParameter = NumOps.FromDouble(_bayesianOptions.RidgeParameter);
-            Vector<T> ridgeDiagonal = new Vector<T>(x.Columns);
-            for (int i = 0; i < x.Columns; i++)
-            {
-                ridgeDiagonal[i] = ridgeParameter;
-            }
+            Vector<T> ridgeDiagonal = Engine.Fill(x.Columns, ridgeParameter);
             Matrix<T> ridgeMatrix = Matrix<T>.CreateDiagonal(ridgeDiagonal);
             Matrix<T> regularizedXTX = xTx.Add(ridgeMatrix);
             Vector<T> ridgeCoefficients = MatrixSolutionHelper.SolveLinearSystem(regularizedXTX, xTy, _bayesianOptions.RegressionDecompositionType);
@@ -298,41 +294,59 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// </remarks>
     private Vector<T> PredictState(Vector<T> x)
     {
-        int stateSize = GetStateSize();
-        Vector<T> predictedState = new Vector<T>(stateSize);
-        int index = 0;
+        // [level, level + trend (if included), seasonal components..., regression coefficients (not products)]
+        T trendEntry = _bayesianOptions.IncludeTrend ? NumOps.Add(_level, _trend) : NumOps.Zero;
+        return PackState(_level, trendEntry);
+    }
 
-        // Level
-        predictedState[index] = _level;
-        index++;
-
-        // Trend
+    /// <summary>
+    /// The state vector [level, trend entry (if the trend is included), seasonal components...,
+    /// regression coefficients (if included)] of <see cref="GetStateSize"/> elements.
+    /// </summary>
+    private Vector<T> PackState(T level, T trendEntry)
+    {
+        var parts = new List<Vector<T>> { new Vector<T>(new[] { level }) };
         if (_bayesianOptions.IncludeTrend)
         {
-            predictedState[index] = NumOps.Add(_level, _trend);
-            index++;
+            parts.Add(new Vector<T>(new[] { trendEntry }));
         }
 
-        // Seasonal components
+        parts.AddRange(_seasonalComponents);
+        if (_bayesianOptions.IncludeRegression && _regression != null)
+        {
+            parts.Add(_regression);
+        }
+
+        return Vector<T>.Concatenate(parts.ToArray());
+    }
+
+    /// <summary>
+    /// Reads level, trend (if included), the seasonal components and the regression coefficients (if
+    /// included) from <paramref name="state"/>, writing the vectors in place. Returns the number of
+    /// elements read.
+    /// </summary>
+    private int UnpackState(Vector<T> state)
+    {
+        int index = 0;
+        _level = state[index++];
+        if (_bayesianOptions.IncludeTrend)
+        {
+            _trend = state[index++];
+        }
+
         foreach (var seasonalComponent in _seasonalComponents)
         {
-            for (int i = 0; i < seasonalComponent.Length; i++)
-            {
-                predictedState[index + i] = seasonalComponent[i];
-            }
+            state.AsSpan().Slice(index, seasonalComponent.Length).CopyTo(seasonalComponent.AsWritableSpan());
             index += seasonalComponent.Length;
         }
 
-        // Regression component - store coefficients (not products)
         if (_bayesianOptions.IncludeRegression && _regression != null)
         {
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                predictedState[index + i] = _regression[i];
-            }
+            state.AsSpan().Slice(index, _regression.Length).CopyTo(_regression.AsWritableSpan());
+            index += _regression.Length;
         }
 
-        return predictedState;
+        return index;
     }
 
     /// <summary>
@@ -455,34 +469,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         Vector<T> updatedState = predictedState.Add(update);
 
         // Update individual components
-        int index = 0;
-
-        // Update level
-        _level = updatedState[index++];
-
-        // Update trend if included
-        if (_bayesianOptions.IncludeTrend)
-        {
-            _trend = updatedState[index++];
-        }
-
-        // Update seasonal components
-        for (int i = 0; i < _seasonalComponents.Count; i++)
-        {
-            for (int j = 0; j < _seasonalComponents[i].Length; j++)
-            {
-                _seasonalComponents[i][j] = updatedState[index++];
-            }
-        }
-
-        // Update regression components if included
-        if (_bayesianOptions.IncludeRegression && _regression != null)
-        {
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                _regression[i] = updatedState[index++];
-            }
-        }
+        int index = UnpackState(updatedState);
 
         // Sanity check
         if (index != updatedState.Length)
@@ -541,30 +528,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// </remarks>
     private Vector<T> GetCurrentState()
     {
-        int stateSize = GetStateSize();
-        Vector<T> currentState = new Vector<T>(stateSize);
-        int index = 0;
-
-        currentState[index++] = _level;
-        if (_bayesianOptions.IncludeTrend) currentState[index++] = _trend;
-
-        foreach (var seasonalComponent in _seasonalComponents)
-        {
-            for (int i = 0; i < seasonalComponent.Length; i++)
-            {
-                currentState[index++] = seasonalComponent[i];
-            }
-        }
-
-        if (_bayesianOptions.IncludeRegression && _regression != null)
-        {
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                currentState[index++] = _regression[i];
-            }
-        }
-
-        return currentState;
+        return PackState(_level, _trend);
     }
 
     /// <summary>
@@ -740,64 +704,72 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// </remarks>
     private T UpdateModelParameters(Matrix<T> x, Vector<T> y, Matrix<T> smoothedStates)
     {
-        T logLikelihood = NumOps.Zero;
         int n = y.Length;
-        int stateSize = GetStateSize();
+        int steps = n - 1;
 
-        // Update level and trend variances
-        T levelVariance = NumOps.Zero;
-        T trendVariance = NumOps.Zero;
-        for (int t = 1; t < n; t++)
-        {
-            Vector<T> prevState = smoothedStates.GetRow(t - 1);
-            Vector<T> currState = smoothedStates.GetRow(t);
-            levelVariance = NumOps.Add(levelVariance, NumOps.Square(NumOps.Subtract(currState[0], prevState[0])));
-            if (_bayesianOptions.IncludeTrend)
-            {
-                trendVariance = NumOps.Add(trendVariance, NumOps.Square(NumOps.Subtract(currState[1], prevState[1])));
-            }
-        }
-        levelVariance = NumOps.Divide(levelVariance, NumOps.FromDouble(n - 1));
-        _stateCovariance[0, 0] = levelVariance;
+        // Diagonal entries of the state covariance to overwrite, with their new values
+        var positions = new List<int>();
+        var variances = new List<T>();
+
+        // Update level and trend variances: Σ_t (s[t] - s[t - 1])² / (n - 1) per column
+        T levelVariance = NumOps.Divide(SquaredStepSum(smoothedStates, 0, 1, steps), NumOps.FromDouble(n - 1));
+        positions.Add(0);
+        variances.Add(levelVariance);
         if (_bayesianOptions.IncludeTrend)
         {
-            trendVariance = NumOps.Divide(trendVariance, NumOps.FromDouble(n - 1));
-            _stateCovariance[1, 1] = trendVariance;
+            T trendVariance = NumOps.Divide(SquaredStepSum(smoothedStates, 1, 1, steps), NumOps.FromDouble(n - 1));
+            positions.Add(1);
+            variances.Add(trendVariance);
         }
 
-        // Update seasonal variances
+        // Update seasonal variances: one shared variance per seasonal block
         int seasonalIndex = _bayesianOptions.IncludeTrend ? 2 : 1;
         foreach (var seasonalComponent in _seasonalComponents)
         {
-            T seasonalVariance = NumOps.Zero;
-            for (int t = 1; t < n; t++)
-            {
-                Vector<T> prevSeasonalSlice = smoothedStates.GetRow(t - 1).Slice(seasonalIndex, seasonalComponent.Length);
-                Vector<T> currSeasonalSlice = smoothedStates.GetRow(t).Slice(seasonalIndex, seasonalComponent.Length);
-                var diff = (Vector<T>)Engine.Subtract(currSeasonalSlice, prevSeasonalSlice);
-                T sumSquares = Engine.DotProduct(diff, diff);
-                seasonalVariance = NumOps.Add(seasonalVariance, sumSquares);
-            }
-            seasonalVariance = NumOps.Divide(seasonalVariance, NumOps.FromDouble((n - 1) * seasonalComponent.Length));
-            for (int i = 0; i < seasonalComponent.Length; i++)
-            {
-                _stateCovariance[seasonalIndex + i, seasonalIndex + i] = seasonalVariance;
-            }
+            T seasonalVariance = NumOps.Divide(
+                SquaredStepSum(smoothedStates, seasonalIndex, seasonalComponent.Length, steps),
+                NumOps.FromDouble((n - 1) * seasonalComponent.Length));
+            positions.AddRange(Enumerable.Range(seasonalIndex, seasonalComponent.Length));
+            variances.AddRange(Enumerable.Repeat(seasonalVariance, seasonalComponent.Length));
             seasonalIndex += seasonalComponent.Length;
         }
 
-        // Update observation variance
+        var covariance = Tensor<T>.FromMatrix(_stateCovariance);
+        var diagonal = new Tensor<int>(new[] { positions.Count }, new Vector<int>(positions.ToArray()));
+        Engine.TensorIndexPutInPlace(covariance, new[] { diagonal, diagonal },
+            Tensor<T>.FromVector(new Vector<T>(variances.ToArray())));
+        _stateCovariance = covariance.ToMatrix();
+
+        // Update observation variance: Σ e² / n, log-likelihood Σ log|e|
         T totalVariance = NumOps.Zero;
-        for (int t = 0; t < n; t++)
+        T logLikelihood = NumOps.Zero;
+        if (n > 0)
         {
-            T prediction = CalculatePrediction(smoothedStates.GetRow(t));
-            T error = NumOps.Subtract(y[t], prediction);
-            totalVariance = NumOps.Add(totalVariance, NumOps.Square(error));
-            logLikelihood = NumOps.Add(logLikelihood, NumOps.Log(NumOps.Abs(error)));
+            Vector<T> predictions = TimeSeriesEngineOps<T>.PredictRows(
+                smoothedStates.GetSubMatrix(0, 0, n, smoothedStates.Columns), CalculatePrediction);
+            Vector<T> errors = Engine.Subtract(y, predictions);
+            totalVariance = Engine.DotProduct(errors, errors);
+            logLikelihood = Engine.Sum(Engine.Log(Engine.Abs(errors)));
         }
+
         _observationVariance = NumOps.Divide(totalVariance, NumOps.FromDouble(n));
 
         return logLikelihood;
+    }
+
+    /// <summary>
+    /// <c>Σ_{t=1..steps} ‖s[t, c..c+w) - s[t-1, c..c+w)‖²</c> over the state rows (zero when there are no steps).
+    /// </summary>
+    private T SquaredStepSum(Matrix<T> states, int column, int width, int steps)
+    {
+        if (steps <= 0 || width <= 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var current = states.GetSubMatrix(1, column, steps, width);
+        var previous = states.GetSubMatrix(0, column, steps, width);
+        return Engine.TensorSumOfSquares(Tensor<T>.FromMatrix(Engine.MatrixSubtract(current, previous)));
     }
 
     /// <summary>
@@ -857,19 +829,39 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
             transitionMatrix[0, 1] = NumOps.FromDouble(1.0);
         }
 
-        // Add seasonal components
+        // Add seasonal components: ones on the block superdiagonal, then -1 at [last, first] of each block
+        var rows = new List<int>();
+        var columns = new List<int>();
+        var values = new List<T>();
+        T one = NumOps.FromDouble(1.0);
+        T minusOne = NumOps.FromDouble(-1.0);
         int index = _bayesianOptions.IncludeTrend ? 2 : 1;
         foreach (var seasonalComponent in _seasonalComponents)
         {
-            for (int i = 0; i < seasonalComponent.Length - 1; i++)
-            {
-                transitionMatrix[index + i, index + i + 1] = NumOps.FromDouble(1.0);
-            }
-            transitionMatrix[index + seasonalComponent.Length - 1, index] = NumOps.FromDouble(-1.0);
-            index += seasonalComponent.Length;
+            int length = seasonalComponent.Length;
+            rows.AddRange(Enumerable.Range(index, Math.Max(0, length - 1)));
+            columns.AddRange(Enumerable.Range(index + 1, Math.Max(0, length - 1)));
+            values.AddRange(Enumerable.Repeat(one, Math.Max(0, length - 1)));
+            rows.Add(index + length - 1);
+            columns.Add(index);
+            values.Add(minusOne);
+            index += length;
         }
 
-        return transitionMatrix;
+        if (rows.Count == 0)
+        {
+            return transitionMatrix;
+        }
+
+        var transition = Tensor<T>.FromMatrix(transitionMatrix);
+        Engine.TensorIndexPutInPlace(transition,
+            new[]
+            {
+                new Tensor<int>(new[] { rows.Count }, new Vector<int>(rows.ToArray())),
+                new Tensor<int>(new[] { columns.Count }, new Vector<int>(columns.ToArray()))
+            },
+            Tensor<T>.FromVector(new Vector<T>(values.ToArray())));
+        return transition.ToMatrix();
     }
 
     /// <summary>
@@ -907,12 +899,16 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
 
         // Set variances for seasonal components
         int index = _bayesianOptions.IncludeTrend ? 2 : 1;
+        T seasonalPrior = NumOps.FromDouble(_bayesianOptions.SeasonalSmoothingPrior);
         foreach (var seasonalComponent in _seasonalComponents)
         {
-            for (int i = 0; i < seasonalComponent.Length; i++)
+            // Diagonal block with the prior on its diagonal (the block starts as zeros)
+            if (seasonalComponent.Length > 0)
             {
-                processNoiseMatrix[index + i, index + i] = NumOps.FromDouble(_bayesianOptions.SeasonalSmoothingPrior);
+                processNoiseMatrix.SetSubMatrix(index, index,
+                    Matrix<T>.CreateDiagonal(Engine.Fill(seasonalComponent.Length, seasonalPrior)));
             }
+
             index += seasonalComponent.Length;
         }
 
@@ -942,33 +938,34 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     private Vector<T> CreateObservationVector()
     {
         int stateSize = GetStateSize();
-        Vector<T> observationVector = new Vector<T>(stateSize);
-        observationVector[0] = NumOps.FromDouble(1.0); // Level component
 
+        // Ones at the level, the trend, the first element of each seasonal component and every regression entry
+        var positions = new List<int> { 0 }; // Level component
         int index = 1;
         if (_bayesianOptions.IncludeTrend)
         {
-            observationVector[index] = NumOps.FromDouble(1.0); // Trend component
+            positions.Add(index); // Trend component
             index++;
         }
 
         // Seasonal components
         foreach (var seasonalComponent in _seasonalComponents)
         {
-            observationVector[index] = NumOps.FromDouble(1.0);
+            positions.Add(index);
             index += seasonalComponent.Length;
         }
 
         // Regression components
         if (_bayesianOptions.IncludeRegression && _regression != null)
         {
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                observationVector[index + i] = NumOps.FromDouble(1.0);
-            }
+            positions.AddRange(Enumerable.Range(index, _regression.Length));
         }
 
-        return observationVector;
+        var observation = new Tensor<T>(new[] { stateSize });
+        Engine.TensorIndexPutInPlace(observation,
+            new[] { new Tensor<int>(new[] { positions.Count }, new Vector<int>(positions.ToArray())) },
+            Tensor<T>.FromVector(Engine.Fill(positions.Count, NumOps.FromDouble(1.0))));
+        return observation.ToVector();
     }
 
     /// <summary>
@@ -993,26 +990,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     private void UpdateModelComponentsFromSmoothedStates(Matrix<T> smoothedStates)
     {
         Vector<T> lastState = smoothedStates.GetRow(smoothedStates.Rows - 1);
-        int index = 0;
-
-        _level = lastState[index++];
-        if (_bayesianOptions.IncludeTrend) _trend = lastState[index++];
-
-        for (int i = 0; i < _seasonalComponents.Count; i++)
-        {
-            for (int j = 0; j < _seasonalComponents[i].Length; j++)
-            {
-                _seasonalComponents[i][j] = lastState[index++];
-            }
-        }
-
-        if (_bayesianOptions.IncludeRegression && _regression != null)
-        {
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                _regression[i] = lastState[index++];
-            }
-        }
+        UnpackState(lastState);
     }
 
     /// <summary>
@@ -1044,24 +1022,20 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     {
         int horizon = input.Rows;
         int n = _trainingSeries.Length;
-        Vector<T> predictions = new Vector<T>(horizon);
 
-        for (int t = 0; t < horizon; t++)
+        // In-sample: return training values (fitted values approach)
+        int fitted = n > 0 ? Math.Min(horizon, n) : 0;
+        Vector<T> inSample = _trainingSeries.GetSubVector(0, fitted);
+        if (horizon <= fitted)
         {
-            if (t < n && n > 0)
-            {
-                // In-sample: return training values (fitted values approach)
-                predictions[t] = _trainingSeries[t];
-            }
-            else
-            {
-                // Out-of-sample: use structural components for forecasting
-                Vector<T> state = PredictState(input.GetRow(t));
-                predictions[t] = CalculatePrediction(state);
-            }
+            return inSample;
         }
 
-        return predictions;
+        // Out-of-sample: use structural components for forecasting
+        var outOfSample = TimeSeriesEngineOps<T>.PredictRows(
+            input.GetSubMatrix(fitted, 0, horizon - fitted, input.Columns),
+            row => CalculatePrediction(PredictState(row)));
+        return Vector<T>.Concatenate(inSample, outOfSample);
     }
 
     /// <summary>
@@ -1101,20 +1075,23 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
             index++;
         }
 
-        // Add seasonal components
+        // Add seasonal components: the first element of each
+        var starts = new List<int>(_seasonalComponents.Count);
         foreach (var seasonalComponent in _seasonalComponents)
         {
-            prediction = NumOps.Add(prediction, state[index]);
+            starts.Add(index);
             index += seasonalComponent.Length;
         }
 
-        // Add regression component if present
-        if (_bayesianOptions.IncludeRegression && _regression != null)
+        if (starts.Count > 0)
         {
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(state[index + i], _regression[i]));
-            }
+            prediction = NumOps.Add(prediction, Engine.Sum(TimeSeriesEngineOps<T>.Gather(state, starts)));
+        }
+
+        // Add regression component if present
+        if (_bayesianOptions.IncludeRegression && _regression != null && _regression.Length > 0)
+        {
+            prediction = NumOps.Add(prediction, Engine.DotProduct(state.GetSubVector(index, _regression.Length), _regression));
         }
 
         return prediction;
@@ -1365,9 +1342,6 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
             throw new ArgumentException("Forecast horizon must be greater than zero.", nameof(horizon));
         }
 
-        // Create the forecast vector
-        Vector<T> forecast = new Vector<T>(horizon);
-
         // Create default exogenous variables if not provided and needed
         Matrix<T>? futureExog = exogenousVariables;
         if (_bayesianOptions.IncludeRegression && _regression != null)
@@ -1379,48 +1353,27 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
             }
         }
 
-        // Track the seasonal position
-        List<int> seasonalPositions = new List<int>();
-        foreach (var seasonComponent in _seasonalComponents)
+        // Start with the level; with a trend, step t predicts level + (t + 1) · trend, accumulated one
+        // trend step at a time.
+        Vector<T> forecast = _bayesianOptions.IncludeTrend
+            ? TimeSeriesEngineOps<T>.Integrate(Engine.Fill(horizon, _trend), _level)
+            : Engine.Fill(horizon, _level);
+
+        // Add seasonal components: component i contributes s_i[t mod length], starting at position 0
+        foreach (var seasonalComponent in _seasonalComponents)
         {
-            seasonalPositions.Add(0); // Start at position 0 for each seasonal component
+            if (seasonalComponent.Length == 0)
+            {
+                throw new ArgumentOutOfRangeException("index"); // no value at position 0
+            }
+
+            forecast = Engine.Add(forecast, TimeSeriesEngineOps<T>.RepeatPeriodic(seasonalComponent, horizon));
         }
 
-        // Make predictions
-        T currentLevel = _level;
-        T currentTrend = _bayesianOptions.IncludeTrend ? _trend : NumOps.Zero;
-
-        for (int t = 0; t < horizon; t++)
+        // Add regression component if included
+        if (_bayesianOptions.IncludeRegression && _regression != null && futureExog != null)
         {
-            // Start with the level
-            T prediction = currentLevel;
-
-            // Add trend if included
-            if (_bayesianOptions.IncludeTrend)
-            {
-                prediction = NumOps.Add(prediction, currentTrend);
-                // Update level for next period
-                currentLevel = NumOps.Add(currentLevel, currentTrend);
-            }
-
-            // Add seasonal components
-            for (int i = 0; i < _seasonalComponents.Count; i++)
-            {
-                int seasonLength = _seasonalComponents[i].Length;
-                prediction = NumOps.Add(prediction, _seasonalComponents[i][seasonalPositions[i]]);
-
-                // Update seasonal position for next period
-                seasonalPositions[i] = (seasonalPositions[i] + 1) % seasonLength;
-            }
-
-            // Add regression component if included
-            if (_bayesianOptions.IncludeRegression && _regression != null && futureExog != null)
-            {
-                Vector<T> exogRow = futureExog.GetRow(t);
-                prediction = NumOps.Add(prediction, Engine.DotProduct(exogRow, _regression));
-            }
-
-            forecast[t] = prediction;
+            forecast = Engine.Add(forecast, Engine.MatrixVectorMultiply(futureExog.GetSubMatrix(0, 0, horizon, futureExog.Columns), _regression));
         }
 
         return forecast;

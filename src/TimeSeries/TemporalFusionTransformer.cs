@@ -354,10 +354,11 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         emb = Engine.TensorAdd(emb, Engine.Reshape(_inputEmbeddingBias, [1, d]));
         var posData = new Vector<T>(batch * seq * d);
         var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
+        // The first seq positional rows, repeated for every batch row (bulk copies of a constant)
+        var peRows = peHost.AsSpan(0, seq * d);
+        var posSpan = posData.AsWritableSpan();
         for (int bi = 0; bi < batch; bi++)
-            for (int t = 0; t < seq; t++)
-                for (int j = 0; j < d; j++)
-                    posData[(bi * seq + t) * d + j] = peHost[t * d + j];
+            peRows.CopyTo(posSpan.Slice(bi * seq * d, seq * d));
         emb = Engine.TensorAdd(emb, new Tensor<T>([batch * seq, d], posData));
 
         // 2. Variable selection: softmax-gated combination of processed features.
@@ -396,16 +397,12 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         int outDim = horizon * numQuantiles;
         int seqLen = Math.Min(input.Length, _options.LookbackWindow);
         if (seqLen <= 0) return new Tensor<T>([outDim]);
-        var inData = new T[seqLen];
-        for (int t = 0; t < seqLen; t++)
-            inData[t] = NumOps.Divide(NumOps.Subtract(input[input.Length - seqLen + t], _normMean), _normStd);
-        var batchInput = new Tensor<T>([1, seqLen], new Vector<T>(inData));
+        var inData = TimeSeriesEngineOps<T>.Standardize(input.GetSubVector(input.Length - seqLen, seqLen), _normMean, _normStd);
+        var batchInput = new Tensor<T>([1, seqLen], inData);
         var outBHQ = ForwardBatch(batchInput, 1, seqLen); // [1, H*Q]
 
-        var result = new Tensor<T>([outDim]);
-        for (int i = 0; i < outDim; i++)
-            result[i] = NumOps.Add(NumOps.Multiply(outBHQ[i], _normStd), _normMean);
-        return result;
+        return Tensor<T>.FromVector(
+            TimeSeriesEngineOps<T>.Destandardize(outBHQ.Contiguous().ToVector().GetSubVector(0, outDim), _normStd, _normMean));
     }
 
     // Point forecast = the median (closest-to-0.5) quantile's H-step forecast.
@@ -414,10 +411,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         int horizon = _options.ForecastHorizon;
         var all = ForwardEngineQuantiles(input); // [H*Q]
         int medQi = MedianQuantileIndex();
-        var result = new Tensor<T>([horizon]);
-        for (int h = 0; h < horizon; h++)
-            result[h] = all[medQi * horizon + h];
-        return result;
+        return Tensor<T>.FromVector(all.ToVector().GetSubVector(medQi * horizon, horizon));
     }
 
     // Index of the quantile level nearest 0.5 — used as the point forecast.
@@ -448,21 +442,11 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         // In-sample: forecast each position from its proper lookback window of the observed
         // series (a genuine one-step forecast, not a memorized target).
         bool inSample = _trainingSeries.Length == n && n > 0;
-        var windows = new Vector<T>[n];
-        for (int i = 0; i < n; i++)
-        {
-            int w = inSample ? Math.Min(lookback, i) : 0;
-            if (w > 0)
-            {
-                var window = new Vector<T>(w);
-                for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
-                windows[i] = window;
-            }
-            else
-            {
-                windows[i] = input.GetRow(i);
-            }
-        }
+        var windows = Enumerable.Range(0, n)
+            .Select(i => inSample && Math.Min(lookback, i) > 0
+                ? _trainingSeries.GetSubVector(i - Math.Min(lookback, i), Math.Min(lookback, i))
+                : input.GetRow(i))
+            .ToArray();
 
         // One batched forward per (effective window length, chunk) instead of one ForwardEngine call per row:
         // AiModelBuilder predicts the whole dataset after fitting, which made per-row inference a large share of a
@@ -484,23 +468,22 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
                 // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena
                 // the caller has open (whose tensors may still be live).
                 using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-                var data = new T[rows * len];
-                for (int r = 0; r < rows; r++)
-                {
-                    var window = windows[all[c0 + r]];
-                    int off = window.Length - len;
-                    for (int t = 0; t < len; t++)
-                        data[r * len + t] = NumOps.Divide(NumOps.Subtract(window[off + t], _normMean), _normStd);
-                }
-                var outBHQ = ForwardBatch(new Tensor<T>([rows, len], new Vector<T>(data)), rows, len); // [rows, H*Q]
-                var outSpan = outBHQ.IsContiguous ? outBHQ.AsSpan() : outBHQ.Contiguous().AsSpan();
-                for (int r = 0; r < rows; r++)
-                    predictions[all[c0 + r]] = NumOps.Add(NumOps.Multiply(outSpan[r * outDim + pointCol], _normStd), _normMean);
+                int[] chunkRows = all.Skip(c0).Take(rows).ToArray();
+                // The last len values of each window
+                var data = TimeSeriesEngineOps<T>.Standardize(
+                    Vector<T>.Concatenate(chunkRows.Select(r => windows[r].GetSubVector(windows[r].Length - len, len)).ToArray()),
+                    _normMean, _normStd);
+                var outBHQ = ForwardBatch(new Tensor<T>([rows, len], data), rows, len); // [rows, H*Q]
+                var pointForecast = Engine.StridedGather(outBHQ.Contiguous().ToVector(), pointCol, outDim, rows);
+                predictions = TimeSeriesEngineOps<T>.Scatter(
+                    predictions, chunkRows, TimeSeriesEngineOps<T>.Destandardize(pointForecast, _normStd, _normMean));
             }
         }
-        for (int i = 0; i < n; i++)
-            if (windows[i].Length == 0) predictions[i] = PredictSingle(windows[i]);
-        return predictions;
+
+        // Empty windows keep the per-row path (ascending row order)
+        int[] emptyRows = Enumerable.Range(0, n).Where(i => windows[i].Length == 0).ToArray();
+        var emptyPredictions = new Vector<T>(emptyRows.Select(i => PredictSingle(windows[i])).ToArray());
+        return TimeSeriesEngineOps<T>.Scatter(predictions, emptyRows, emptyPredictions);
     }
 
     // Rows per batched predict forward; bounds activation memory (rows x length x HiddenSize per GRN).
@@ -519,9 +502,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     public Vector<T> ForecastHorizon(Vector<T> input)
     {
         var output = ForwardEngine(input);
-        var result = new Vector<T>(output.Length);
-        for (int i = 0; i < output.Length; i++) result[i] = output[i];
-        return result;
+        return new Vector<T>(output.ToArray());
     }
 
     /// <summary>
@@ -533,25 +514,17 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     public Vector<T> PredictQuantiles(Vector<T> input)
     {
         var all = ForwardEngineQuantiles(input); // [H*Q] denormalized, index = qi*H + h
-        var result = new Vector<T>(all.Length);
-        for (int i = 0; i < all.Length; i++)
-            result[i] = all[i];
-        return result;
+        return new Vector<T>(all.ToArray());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────
     private void ComputeNormStats(Vector<T> y)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++) sum = NumOps.Add(sum, y[i]);
+        T sum = Engine.Sum(y);
         _normMean = NumOps.Divide(sum, NumOps.FromDouble(y.Length));
 
-        T sumSq = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            T diff = NumOps.Subtract(y[i], _normMean);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-        }
+        var diff = Engine.TensorSubtractScalar(Tensor<T>.FromVector(y), _normMean).ToVector();
+        T sumSq = Engine.DotProduct(diff, diff);
         T variance = NumOps.Divide(sumSq, NumOps.FromDouble(y.Length));
         _normStd = NumOps.FromDouble(Math.Max(Math.Sqrt(NumOps.ToDouble(variance)), 1e-8));
     }
@@ -595,8 +568,8 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         writer.Write(_options.NumLayers);
 
         writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(NumOps.ToDouble(_trainingSeries[i]));
+        foreach (double value in Array.ConvertAll(_trainingSeries.ToArray(), NumOps.ToDouble))
+            writer.Write(value);
 
         writer.Write(NumOps.ToDouble(_normMean));
         writer.Write(NumOps.ToDouble(_normStd));
@@ -615,9 +588,9 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         _options.NumLayers = reader.ReadInt32();
 
         int seriesLen = reader.ReadInt32();
+        double[] storedSeries = Enumerable.Range(0, Math.Max(seriesLen, 0)).Select(_ => reader.ReadDouble()).ToArray();
         _trainingSeries = new Vector<T>(seriesLen);
-        for (int i = 0; i < seriesLen; i++)
-            _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        Array.ConvertAll(storedSeries, NumOps.FromDouble).AsSpan().CopyTo(_trainingSeries.AsWritableSpan());
 
         _normMean = NumOps.FromDouble(reader.ReadDouble());
         _normStd = NumOps.FromDouble(reader.ReadDouble());
@@ -626,7 +599,8 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         foreach (var p in CollectAllTrainableParameters())
         {
             var loaded = DeserializeTensor(reader);
-            for (int k = 0; k < Math.Min(loaded.Length, p.Length); k++) p[k] = loaded[k];
+            int count = Math.Min(loaded.Length, p.Length);
+            loaded.Data.Span.Slice(0, count).CopyTo(p.Data.Span);
         }
     }
 
@@ -635,7 +609,8 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         writer.Write(tensor._shape.Length);
         foreach (var dim in tensor._shape) writer.Write(dim);
         var span = tensor.Data.Span;
-        for (int i = 0; i < span.Length; i++) writer.Write(NumOps.ToDouble(span[i]));
+        foreach (double value in Array.ConvertAll(span.ToArray(), NumOps.ToDouble))
+            writer.Write(value);
     }
 
     private Tensor<T> DeserializeTensor(BinaryReader reader)
@@ -645,8 +620,8 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
         int size = 1;
         foreach (var s in shape) size *= s;
-        var data = new T[size];
-        for (int i = 0; i < size; i++) data[i] = NumOps.FromDouble(reader.ReadDouble());
+        double[] storedValues = Enumerable.Range(0, Math.Max(size, 0)).Select(_ => reader.ReadDouble()).ToArray();
+        T[] data = Array.ConvertAll(storedValues, NumOps.FromDouble);
         return new Tensor<T>(shape, new Vector<T>(data));
     }
 

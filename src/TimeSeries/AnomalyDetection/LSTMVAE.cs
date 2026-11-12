@@ -270,9 +270,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         }
 
         // Store training series for in-sample predictions
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
 
         // Populate ModelParameters
         ModelParameters = new Vector<T>(1);
@@ -283,13 +281,13 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
     {
         // Span access bypasses the deferred-materializer monitor; previously
         // the loop's reconstruction[i] hit it once per element.
+        // Σ (x - x_hat)² / len over the overlapping elements
         int len = Math.Min(input.Length, reconstruction.Length);
         T error = _numOps.Zero;
-        var rSpan = reconstruction.Data.Span;
-        for (int i = 0; i < len; i++)
+        if (len > 0)
         {
-            T diff = _numOps.Subtract(input[i], rSpan[i]);
-            error = _numOps.Add(error, _numOps.Multiply(diff, diff));
+            var diff = Engine.Subtract(input.GetSubVector(0, len), reconstruction.ToVector().GetSubVector(0, len));
+            error = _numOps.Add(error, Engine.DotProduct(diff, diff));
         }
         return _numOps.Divide(error, _numOps.FromDouble(len > 0 ? len : 1));
     }
@@ -302,17 +300,9 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
             return calibratedPredictions;
         }
 
-        int n = input.Rows;
-        var predictions = new Vector<T>(n);
-
         // Reconstruct every row from its own input window (see DeepARModel.Predict: the prior
         // i < _trainingSeries.Length shortcut returned memorized training values for OOS rows).
-        for (int i = 0; i < n; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-
-        return predictions;
+        return TimeSeriesEngineOps<T>.PredictRows(input, PredictSingle);
     }
 
     /// <inheritdoc />
@@ -322,15 +312,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         var (mean, _) = _encoder.Encode(input);
         var reconstruction = _decoder.Decode(mean);
 
-        T error = _numOps.Zero;
-        int len = Math.Min(input.Length, reconstruction.Length);
-        for (int i = 0; i < len; i++)
-        {
-            T diff = _numOps.Subtract(input[i], reconstruction[i]);
-            error = _numOps.Add(error, _numOps.Multiply(diff, diff));
-        }
-
-        return _numOps.Divide(error, _numOps.FromDouble(len > 0 ? len : 1));
+        return ComputeReconstructionError(input, reconstruction);
     }
 
     /// <summary>
@@ -338,17 +320,8 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
     /// </summary>
     public bool[] DetectAnomalies(Matrix<T> data)
     {
-        bool[] anomalies = new bool[data.Rows];
-
-        for (int i = 0; i < data.Rows; i++)
-        {
-            Vector<T> window = data.GetRow(i);
-            T reconstructionError = PredictSingle(window);
-
-            anomalies[i] = _numOps.GreaterThan(reconstructionError, _reconstructionThreshold);
-        }
-
-        return anomalies;
+        var reconstructionErrors = TimeSeriesEngineOps<T>.PredictRows(data, PredictSingle);
+        return TimeSeriesEngineOps<T>.GreaterThan(reconstructionErrors, _reconstructionThreshold);
     }
 
     /// <summary>
@@ -356,15 +329,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
     /// </summary>
     public Vector<T> ComputeAnomalyScores(Matrix<T> data)
     {
-        var scores = new Vector<T>(data.Rows);
-
-        for (int i = 0; i < data.Rows; i++)
-        {
-            Vector<T> window = data.GetRow(i);
-            scores[i] = PredictSingle(window);
-        }
-
-        return scores;
+        return TimeSeriesEngineOps<T>.PredictRows(data, PredictSingle);
     }
 
 
@@ -401,10 +366,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
     {
         var encoderGrads = _encoder.GetParameterGradients();
         var decoderGrads = _decoder.GetParameterGradients();
-        var combined = new Vector<T>(encoderGrads.Length + decoderGrads.Length);
-        for (int i = 0; i < encoderGrads.Length; i++) combined[i] = encoderGrads[i];
-        for (int i = 0; i < decoderGrads.Length; i++) combined[encoderGrads.Length + i] = decoderGrads[i];
-        return combined;
+        return Vector<T>.Concatenate(encoderGrads, decoderGrads);
     }
 }
 
@@ -565,10 +527,12 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     public (Tensor<T> mean, Tensor<T> logVar) Encode(Vector<T> input)
@@ -593,10 +557,7 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
         int effectiveInput = Math.Min(input.Length, _inputSize);
         var inputCol = new Tensor<T>(new[] { _inputSize, 1 });
-        {
-            var span = inputCol.Data.Span;
-            for (int j = 0; j < effectiveInput; j++) span[j] = input[j];
-        }
+        input.AsSpan().Slice(0, effectiveInput).CopyTo(inputCol.Data.Span);
 
         var hiddenCol = Engine.TensorMatMul(_weights, inputCol);                   // [H, 1]
         var hiddenPreAct = Engine.TensorAdd(hiddenCol.Reshape(new[] { _hiddenSize }), _bias);
@@ -674,11 +635,8 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
         // Input projection. The forward pads or truncates x to _inputSize, so mirror that here.
         using var inputRow = new Tensor<T>(new[] { 1, _inputSize });
-        {
-            var span = inputRow.Data.Span;
-            int effective = Math.Min(input.Length, _inputSize);
-            for (int j = 0; j < effective; j++) span[j] = input[j];
-        }
+        int effective = Math.Min(input.Length, _inputSize);
+        input.AsSpan().Slice(0, effective).CopyTo(inputRow.Data.Span);
 
         _weightsGrad = Engine.TensorAdd(
             _weightsGrad, Engine.TensorMatMul(dPre.Reshape(new[] { _hiddenSize, 1 }), inputRow));
@@ -729,8 +687,8 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
-        for (int i = 0; i < tensor.Length; i++)
-            writer.Write(NumOps.ToDouble(tensor[i]));
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), NumOps.ToDouble))
+            writer.Write(value);
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -741,12 +699,11 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < length; i++)
-        {
-            double v = reader.ReadDouble();
-            if (i < tensor.Length)
-                tensor[i] = NumOps.FromDouble(v);
-        }
+
+        // Every stored value is read; the first tensor.Length of them fill the tensor (the rest stays zero)
+        double[] stored = Enumerable.Range(0, Math.Max(0, length)).Select(_ => reader.ReadDouble()).ToArray();
+        int used = Math.Min(stored.Length, tensor.Length);
+        Array.ConvertAll(stored, NumOps.FromDouble).AsSpan(0, used).CopyTo(tensor.Data.Span);
         return tensor;
     }
 }
@@ -847,10 +804,12 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     public Tensor<T> Decode(Tensor<T> latent)
@@ -997,8 +956,8 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
-        for (int i = 0; i < tensor.Length; i++)
-            writer.Write(NumOps.ToDouble(tensor[i]));
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), NumOps.ToDouble))
+            writer.Write(value);
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -1009,12 +968,11 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < length; i++)
-        {
-            double v = reader.ReadDouble();
-            if (i < tensor.Length)
-                tensor[i] = NumOps.FromDouble(v);
-        }
+
+        // Every stored value is read; the first tensor.Length of them fill the tensor (the rest stays zero)
+        double[] stored = Enumerable.Range(0, Math.Max(0, length)).Select(_ => reader.ReadDouble()).ToArray();
+        int used = Math.Min(stored.Length, tensor.Length);
+        Array.ConvertAll(stored, NumOps.FromDouble).AsSpan(0, used).CopyTo(tensor.Data.Span);
         return tensor;
     }
 

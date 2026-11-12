@@ -77,10 +77,13 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
     /// <summary>Creates + registers a linear projection: weight <c>[outDim, H]</c> and bias <c>[outDim]</c>.</summary>
     protected (Tensor<T> w, Tensor<T> b) AddProjection(int outDim, Random random)
     {
-        double stddev = Math.Sqrt(2.0 / Hidden);
-        var w = new Tensor<T>(new[] { outDim, Hidden });
-        for (int i = 0; i < w.Length; i++)
-            w[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+        T stddev = NumOps.FromDouble(Math.Sqrt(2.0 / Hidden));
+        // Uniform(-1, 1) * stddev, drawn in row-major order from the seeded stream.
+        var w = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, outDim, Hidden), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            stddev);
         var b = new Tensor<T>(new[] { outDim });
 
         RegisterTrainableParameter(w, PersistentTensorRole.Weights);
@@ -127,27 +130,16 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
+    // Rank, dims, then the elements as doubles: the shared tensor serialization format.
     protected static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
-    {
-        writer.Write(tensor.Shape.Length);
-        for (int d = 0; d < tensor.Shape.Length; d++)
-            writer.Write(tensor.Shape[d]);
-        for (int i = 0; i < tensor.Length; i++)
-            writer.Write(Convert.ToDouble(tensor[i]));
-    }
+        => SerializationHelper<T>.SerializeTensor(writer, tensor);
 
+    // Reads a tensor written by WriteTensor and copies as many leading elements as fit into the target.
     protected void ReadTensorInto(BinaryReader reader, Tensor<T> tensor)
     {
-        int rank = reader.ReadInt32();
-        int total = 1;
-        for (int d = 0; d < rank; d++)
-            total *= reader.ReadInt32();
-        for (int i = 0; i < total; i++)
-        {
-            double v = reader.ReadDouble();
-            if (i < tensor.Length)
-                tensor[i] = NumOps.FromDouble(v);
-        }
+        var stored = SerializationHelper<T>.DeserializeTensor(reader);
+        int count = Math.Min(stored.Length, tensor.Length);
+        stored.AsSpan().Slice(0, count).CopyTo(tensor.AsWritableSpan());
     }
 }
 
@@ -402,6 +394,9 @@ internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, I
     private readonly Tensor<T> _knotW, _knotB; // projects hidden → [K] raw knot params
     private readonly int _k = Grid.Length;
 
+    // The probability grid in T, converted once from the literal table.
+    private static readonly T[] GridValues = Array.ConvertAll(Grid, MathHelper.GetNumericOperations<T>().FromDouble);
+
     public override string LikelihoodName => "Spline";
 
     /// <inheritdoc />
@@ -473,6 +468,7 @@ internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, I
         var knots = BuildKnotsBL(hiddenSteps, obsSteps);
         var allAxes = Enumerable.Range(0, target.Shape.Length).ToArray();
         var half = NumOps.FromDouble(0.5);
+        var taus = GridValues;
 
         Tensor<T>? loss = null;
         for (int k = 0; k < _k; k++)
@@ -482,7 +478,7 @@ internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, I
             var negE = Engine.TensorSubtract(knots[k], target);              // q − y
             var reluNegE = Engine.TensorMultiplyScalar(
                 Engine.TensorAdd(Engine.TensorAbs(negE), negE), half);
-            var pinball = Engine.TensorAdd(Engine.TensorMultiplyScalar(e, NumOps.FromDouble(Grid[k])), reluNegE);
+            var pinball = Engine.TensorAdd(Engine.TensorMultiplyScalar(e, taus[k]), reluNegE);
             var term = Engine.ReduceMean(pinball, allAxes, keepDims: false);
             loss = loss is null ? term : Engine.TensorAdd(loss, term);
         }
@@ -493,40 +489,56 @@ internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, I
 
     public override DeepARPredictiveDist<T> PredictNorm(Tensor<T> hLast, T lastObsNorm)
     {
-        var raw = Linear(_knotW, _knotB, hLast); // [K, 1]
-        var q = new double[_k];
-        q[0] = Convert.ToDouble(lastObsNorm) + Convert.ToDouble(raw[0, 0]);
-        for (int k = 1; k < _k; k++)
-            q[k] = q[k - 1] + Convert.ToDouble(Softplus(raw[k, 0]));
+        var raw = Engine.Reshape(Linear(_knotW, _knotB, hLast), new[] { _k }); // [K]
 
-        double median = q[MedianIndex];
+        // q[0] = obs + raw[0]; q[k] = q[k-1] + softplus(raw[k]): a cumulative sum of the increments.
+        var first = Engine.TensorAddScalar(Engine.TensorSlice(raw, new[] { 0 }, new[] { 1 }), lastObsNorm);
+        var increments = StableSoftplus(Engine.TensorSlice(raw, new[] { 1 }, new[] { _k - 1 }));
+        var q = Engine.TensorCumSum(Engine.TensorConcatenate(new[] { first, increments }, 0), 0);
+
+        T qFirst = q[0];
+        T qLast = q[_k - 1];
+        T median = q[MedianIndex];
         // Robust spread proxy: (q95 − q05) / (2·1.645) ≈ σ for a Gaussian, but honest about the fitted tails.
-        double scale = Math.Max((q[_k - 1] - q[0]) / (2.0 * 1.645), 1e-6);
+        T spread = NumOps.Divide(NumOps.Subtract(qLast, qFirst), NumOps.FromDouble(2.0 * 1.645));
+        T floor = NumOps.FromDouble(1e-6);
+        T scale = NumOps.GreaterThan(spread, floor) ? spread : floor;
 
-        double InterpQuantile(double p)
+        T InterpQuantile(double p)
         {
-            if (p <= Grid[0]) return q[0];
-            if (p >= Grid[_k - 1]) return q[_k - 1];
-            for (int k = 1; k < _k; k++)
+            if (p <= Grid[0]) return qFirst;
+            if (p >= Grid[_k - 1]) return qLast;
+            int upper = 1;
+            while (upper < _k && !(p <= Grid[upper]))
             {
-                if (p <= Grid[k])
-                {
-                    double w = (p - Grid[k - 1]) / (Grid[k] - Grid[k - 1]);
-                    return q[k - 1] + w * (q[k] - q[k - 1]);
-                }
+                upper++;
             }
 
-            return q[_k - 1];
+            if (upper >= _k) return qLast; // NaN p
+
+            T lower = q[upper - 1];
+            T w = NumOps.FromDouble((p - Grid[upper - 1]) / (Grid[upper] - Grid[upper - 1]));
+            return NumOps.Add(lower, NumOps.Multiply(w, NumOps.Subtract(q[upper], lower)));
         }
 
         return new DeepARPredictiveDist<T>
         {
-            MeanNorm = NumOps.FromDouble(median),
-            ScaleNorm = NumOps.FromDouble(scale),
+            MeanNorm = median,
+            ScaleNorm = scale,
             // Inverse-CDF sampling through the piecewise-linear quantile function → respects the fitted skew.
-            SampleNorm = rng => NumOps.FromDouble(InterpQuantile(rng.NextDouble())),
-            QuantileNorm = p => NumOps.FromDouble(InterpQuantile(p)),
+            SampleNorm = rng => InterpQuantile(rng.NextDouble()),
+            QuantileNorm = p => InterpQuantile(p),
         };
+    }
+
+    // Element-wise form of the base Softplus: v above 20 → v, below -20 → exp(v), else log(1 + exp(v)).
+    private Tensor<T> StableSoftplus(Tensor<T> v)
+    {
+        var exp = Engine.TensorExp(v);
+        var mid = Engine.TensorLog(Engine.TensorAddScalar(exp, NumOps.One));
+        var lowOrMid = Engine.TensorWhere(Engine.TensorLessThan(v, NumOps.FromDouble(-20.0)), exp, mid);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(v, NumOps.FromDouble(20.0)), v, lowOrMid);
+    }
     }
 }
 
