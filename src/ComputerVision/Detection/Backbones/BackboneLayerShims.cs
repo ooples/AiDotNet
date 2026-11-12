@@ -31,6 +31,10 @@ internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParam
     {
         yield return _layer;
     }
+
+    /// <summary>The wrapped convolution, for loaders that copy a checkpoint into its kernel.</summary>
+    internal ConvolutionalLayer<T> Layer => _layer;
+
     private readonly int _inChannels;
     private readonly int _outChannels;
     private readonly int _kernelSize;
@@ -497,6 +501,9 @@ internal class BatchNorm2D<T> : IParameterSource<T>, IParameterChunkSource<T>, I
         _channels = channels;
         _layer = new BatchNormalizationLayer<T>(channels);
     }
+
+    /// <summary>The wrapped layer.</summary>
+    internal BatchNormalizationLayer<T> Layer => _layer;
 
     // Live views, so pretrained batch-norm state (PyTorch weight, bias, running_mean, running_var) can be
     // copied in place.

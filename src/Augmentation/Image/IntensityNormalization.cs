@@ -23,53 +23,34 @@ public class IntensityNormalization<T> : ImageAugmenterBase<T>
         var result = data.Clone();
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
 
-        for (int c = 0; c < data.Channels; c++)
+        // Per-channel statistics over all pixels
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var mean = engine.ReduceMean(image, [1, 2], true);
+
+        if (Method == IntensityNormMethod.ZScore)
         {
-            double mean = 0, min = double.MaxValue, max = double.MinValue;
-            int count = data.Height * data.Width;
+            var centered = engine.TensorSubtract(image, mean);
+            var variance = engine.ReduceMean(engine.TensorMultiply(centered, centered), [1, 2], true);
+            var std = engine.TensorSqrt(engine.TensorAddScalar(variance, NumOps.FromDouble(1e-8)));
 
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    mean += val;
-                    if (val < min) min = val;
-                    if (val > max) max = val;
-                }
-            mean /= count;
-
-            if (Method == IntensityNormMethod.ZScore)
-            {
-                double variance = 0;
-                for (int y = 0; y < data.Height; y++)
-                    for (int x = 0; x < data.Width; x++)
-                    {
-                        double d = NumOps.ToDouble(data.GetPixel(y, x, c)) - mean;
-                        variance += d * d;
-                    }
-                double std = Math.Sqrt(variance / count + 1e-8);
-
-                for (int y = 0; y < data.Height; y++)
-                    for (int x = 0; x < data.Width; x++)
-                    {
-                        double val = (NumOps.ToDouble(data.GetPixel(y, x, c)) - mean) / std;
-                        val = Math.Max(ClipMin, Math.Min(ClipMax, val));
-                        // Map back to [0, maxVal]
-                        val = (val - ClipMin) / (ClipMax - ClipMin) * maxVal;
-                        result.SetPixel(y, x, c, NumOps.FromDouble(val));
-                    }
-            }
-            else // MinMax
-            {
-                double range = max - min;
-                if (range < 1e-10) range = 1;
-                for (int y = 0; y < data.Height; y++)
-                    for (int x = 0; x < data.Width; x++)
-                    {
-                        double val = (NumOps.ToDouble(data.GetPixel(y, x, c)) - min) / range * maxVal;
-                        result.SetPixel(y, x, c, NumOps.FromDouble(val));
-                    }
-            }
+            var z = engine.TensorClamp(engine.TensorDivide(centered, std), NumOps.FromDouble(ClipMin), NumOps.FromDouble(ClipMax));
+            // Map back to [0, maxVal]
+            var mapped = engine.TensorMultiplyScalar(
+                engine.TensorDivideScalar(engine.TensorSubtractScalar(z, NumOps.FromDouble(ClipMin)), NumOps.FromDouble(ClipMax - ClipMin)),
+                NumOps.FromDouble(maxVal));
+            result.SetFromPlanarTensor(mapped);
+        }
+        else // MinMax
+        {
+            var min = engine.TensorAmin(image, [1, 2], true);
+            var max = engine.ReduceMax(image, [1, 2], true);
+            var range = engine.TensorSubtract(max, min);
+            var flat = engine.TensorLessThan(range, NumOps.FromDouble(1e-10));
+            range = engine.TensorWhere(flat, ImageTensor<T>.Constant(range, 1.0), range);
+            var mapped = engine.TensorMultiplyScalar(
+                engine.TensorDivide(engine.TensorSubtract(image, min), range), NumOps.FromDouble(maxVal));
+            result.SetFromPlanarTensor(mapped);
         }
 
         return result;

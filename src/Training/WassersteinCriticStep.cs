@@ -41,6 +41,7 @@ internal static class WassersteinCriticStep<T>
     /// <param name="optimizer">The critic's optimizer.</param>
     /// <param name="random">The model's generator, for the per-sample interpolation weights.</param>
     /// <param name="fusedPrimitive">The owner's GPU-resident primitive, created on first use.</param>
+    /// <param name="maxGradNorm">Global gradient-norm clipping threshold; zero disables model clipping.</param>
     public static T Step(
         object owner,
         IReadOnlyList<ILayer<T>> criticLayers,
@@ -50,7 +51,8 @@ internal static class WassersteinCriticStep<T>
         double gradientPenaltyWeight,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         Random random,
-        ref WganGpFusedStep<T>? fusedPrimitive)
+        ref WganGpFusedStep<T>? fusedPrimitive,
+        double maxGradNorm = 0.0)
     {
         Guard.NotNull(owner);
         Guard.NotNull(criticLayers);
@@ -70,7 +72,8 @@ internal static class WassersteinCriticStep<T>
         var parameters = TapeTrainingStep<T>.CollectParameters(criticLayers);
 
         // GPU-resident primitive: real, fake and epsilon are persistent slots it refreshes per step (#1845).
-        if (parameters.Count > 0
+        // Its optimizer contract has no model clipping setting; use the shared step when clipping is requested.
+        if (maxGradNorm <= 0 && parameters.Count > 0
             && FusedTrainingSession<T>.TryMapToFusedOptimizerConfig(optimizer, out var config))
         {
             var primitive = fusedPrimitive ??= new WganGpFusedStep<T>();
@@ -133,6 +136,7 @@ internal static class WassersteinCriticStep<T>
             Forward,
             Loss,
             optimizer,
+            maxGradNorm: maxGradNorm,
             extraTensors: parameters);
     }
 

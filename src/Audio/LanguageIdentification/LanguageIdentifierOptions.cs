@@ -263,6 +263,11 @@ public class Wav2Vec2LidOptions : LanguageIdentifierOptions
     /// </summary>
     /// <value>Default is 0.1.</value>
     public double HiddenDropout { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets the width of the projector before mean pooling (transformers' <c>classifier_proj_size</c>, 256).
+    /// </summary>
+    public int ClassifierProjectionSize { get; set; } = 256;
 }
 
 /// <summary>

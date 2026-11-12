@@ -117,42 +117,25 @@ public class Saturation<T> : AugmentationBase<T, ImageTensor<T>>
         const double gWeight = 0.587;
         const double bWeight = 0.114;
 
-        for (int y = 0; y < height; y++)
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+
+        // Luminance (grayscale equivalent), then interpolate between grayscale and original color:
+        // factor = 0: fully grayscale, factor = 1: original color, factor > 1: enhanced saturation
+        var gray = ImageTensor<T>.MixChannels(image, rWeight, gWeight, bWeight);
+        T f = NumOps.FromDouble(factor);
+        T min = NumOps.FromDouble(minValue);
+        T max = NumOps.FromDouble(maxValue);
+        var planes = new Tensor<T>[3];
+        for (int c = 0; c < 3; c++)
         {
-            for (int x = 0; x < width; x++)
-            {
-                // Get RGB values
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
-
-                // Calculate luminance (grayscale equivalent)
-                double gray = rWeight * r + gWeight * g + bWeight * b;
-
-                // Interpolate between grayscale and original color based on factor
-                // factor = 0: fully grayscale
-                // factor = 1: original color
-                // factor > 1: enhanced saturation
-                double newR = gray + (r - gray) * factor;
-                double newG = gray + (g - gray) * factor;
-                double newB = gray + (b - gray) * factor;
-
-                // Clamp to valid range
-                newR = Math.Max(minValue, Math.Min(maxValue, newR));
-                newG = Math.Max(minValue, Math.Min(maxValue, newG));
-                newB = Math.Max(minValue, Math.Min(maxValue, newB));
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(newR));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(newG));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(newB));
-
-                // Keep alpha channel unchanged if present
-                for (int c = 3; c < channels; c++)
-                {
-                    result.SetPixel(y, x, c, data.GetPixel(y, x, c));
-                }
-            }
+            var channel = engine.TensorSliceAxis(image, 0, c);
+            planes[c] = engine.TensorClamp(
+                engine.TensorAdd(gray, engine.TensorMultiplyScalar(engine.TensorSubtract(channel, gray), f)), min, max);
         }
+
+        // Alpha and other extra channels are kept unchanged
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image, planes));
 
         return result;
     }

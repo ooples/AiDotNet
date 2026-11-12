@@ -35,23 +35,24 @@ public class GridDropout<T> : ImageAugmenterBase<T>
         int offsetY = RandomOffset ? context.GetRandomInt(0, cellH) : 0;
         int offsetX = RandomOffset ? context.GetRandomInt(0, cellW) : 0;
 
+        var image = data.ToPlanarTensor();
+        T fill = NumOps.FromDouble(FillValue);
         for (int gy = 0; gy < GridSize + 1; gy++)
         {
             for (int gx = 0; gx < GridSize + 1; gx++)
             {
                 int startY = gy * cellH + offsetY;
                 int startX = gx * cellW + offsetX;
-
-                for (int y = startY; y < startY + dropH && y < data.Height; y++)
-                    for (int x = startX; x < startX + dropW && x < data.Width; x++)
-                    {
-                        if (y < 0) continue;
-                        if (x < 0) continue;
-                        for (int c = 0; c < data.Channels; c++)
-                            result.SetPixel(y, x, c, NumOps.FromDouble(FillValue));
-                    }
+                int endY = Math.Min(startY + dropH, data.Height);
+                int endX = Math.Min(startX + dropW, data.Width);
+                if (endY > startY && endX > startX)
+                {
+                    image = ImageTensor<T>.FillRect(image, startY, startX, endY - startY, endX - startX, fill);
+                }
             }
         }
+
+        result.SetFromPlanarTensor(image);
 
         return result;
     }
