@@ -22579,3 +22579,10 @@ AiDotNet.Models.Options.DPCTGANOptions<T>.GumbelTemperature.get -> double
 AiDotNet.Models.Options.DPCTGANOptions<T>.GumbelTemperature.set -> void
 AiDotNet.Models.Options.CTABGANPlusOptions<T>.GumbelTemperature.get -> double
 AiDotNet.Models.Options.CTABGANPlusOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.CTGANOptions<T>.CTGANOptions(AiDotNet.Models.Options.CTGANOptions<T>! other) -> void
+AiDotNet.Models.Options.CopulaGANOptions<T>.CopulaGANOptions(AiDotNet.Models.Options.CopulaGANOptions<T>! other) -> void
+AiDotNet.Models.Options.CTABGANPlusOptions<T>.CTABGANPlusOptions(AiDotNet.Models.Options.CTABGANPlusOptions<T>! other) -> void
+AiDotNet.Models.Options.DPCTGANOptions<T>.DPCTGANOptions(AiDotNet.Models.Options.DPCTGANOptions<T>! other) -> void
+AiDotNet.Models.Options.FinancialNeuralNetworkOptions.FinancialNeuralNetworkOptions(AiDotNet.Models.Options.FinancialNeuralNetworkOptions! other) -> void
+AiDotNet.Models.Options.RiskModelOptions<T>.RiskModelOptions(AiDotNet.Models.Options.RiskModelOptions<T>! other) -> void
+AiDotNet.Models.Options.SyntheticDataGeneratorOptions<T>.SyntheticDataGeneratorOptions(AiDotNet.Models.Options.SyntheticDataGeneratorOptions<T>! other) -> void

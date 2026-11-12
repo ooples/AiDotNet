@@ -40,6 +40,35 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class DPCTGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
+    /// <summary>Initializes a new instance with the default settings.</summary>
+    public DPCTGANOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by copying every setting of another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public DPCTGANOptions(DPCTGANOptions<T> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        Epsilon = other.Epsilon;
+        Delta = other.Delta;
+        ClipNorm = other.ClipNorm;
+        NoiseMultiplier = other.NoiseMultiplier;
+        EmbeddingDimension = other.EmbeddingDimension;
+        GeneratorDimensions = (int[])other.GeneratorDimensions.Clone();
+        DiscriminatorDimensions = (int[])other.DiscriminatorDimensions.Clone();
+        BatchSize = other.BatchSize;
+        Epochs = other.Epochs;
+        LearningRate = other.LearningRate;
+        GradientPenaltyWeight = other.GradientPenaltyWeight;
+        PacSize = other.PacSize;
+        VGMModes = other.VGMModes;
+        DiscriminatorDropout = other.DiscriminatorDropout;
+        GumbelTemperature = other.GumbelTemperature;
+        DiscriminatorSteps = other.DiscriminatorSteps;
+    }
+
     /// <summary>
     /// Gets or sets the total privacy budget (epsilon) for the training process.
     /// </summary>

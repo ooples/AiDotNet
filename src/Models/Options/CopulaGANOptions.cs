@@ -45,6 +45,31 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class CopulaGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
+    /// <summary>Initializes a new instance with the default settings.</summary>
+    public CopulaGANOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by copying every setting of another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public CopulaGANOptions(CopulaGANOptions<T> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        EmbeddingDimension = other.EmbeddingDimension;
+        GeneratorDimensions = (int[])other.GeneratorDimensions.Clone();
+        DiscriminatorDimensions = (int[])other.DiscriminatorDimensions.Clone();
+        BatchSize = other.BatchSize;
+        Epochs = other.Epochs;
+        DiscriminatorSteps = other.DiscriminatorSteps;
+        LearningRate = other.LearningRate;
+        GradientPenaltyWeight = other.GradientPenaltyWeight;
+        PacSize = other.PacSize;
+        VGMModes = other.VGMModes;
+        DiscriminatorDropout = other.DiscriminatorDropout;
+        GumbelTemperature = other.GumbelTemperature;
+    }
+
     /// <summary>
     /// Gets or sets the dimension of the random noise vector fed to the generator.
     /// </summary>
