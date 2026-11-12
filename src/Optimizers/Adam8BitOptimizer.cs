@@ -540,10 +540,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         T biasCorrection2 = NumOps.FromDouble(bc2Double);
         double weightDecay = _options.WeightDecay;
         bool decoupledWeightDecay = _options.UseDecoupledWeightDecay;
-        T decoupledDecayFactor = weightDecay != 0.0 && decoupledWeightDecay
+        T decoupledDecayFactor = weightDecay > 0.0 && decoupledWeightDecay
             ? NumOps.FromDouble(1.0 - lrDouble * weightDecay)
             : NumOps.One;
-        T coupledDecayScalar = weightDecay != 0.0 && !decoupledWeightDecay
+        T coupledDecayScalar = weightDecay > 0.0 && !decoupledWeightDecay
             ? NumOps.FromDouble(weightDecay)
             : NumOps.Zero;
         DirectGpuTensorEngine? gpuEngine = typeof(T) == typeof(float) ? Engine as DirectGpuTensorEngine : null;
@@ -650,7 +650,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 SyncGpuStateToHost(state);
             }
 
-            if (weightDecay != 0.0)
+            if (weightDecay > 0.0)
             {
                 if (decoupledWeightDecay)
                 {

@@ -8653,7 +8653,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             Tensor<T> segmentOutput;
             using (var segmentGpuScope = TensorScope.Begin())
-            using (var segmentArena = AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
+            using (AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
             using (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.NoGrad())
             {
                 segmentOutput = segmentInput;
@@ -8688,7 +8688,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 var reInput = inputs[0];
                 List<(Tensor<T> Key, Tensor<T> Gradient)> detachedGradients;
                 using (var recomputeGpuScope = TensorScope.Begin())
-                using (var recomputeArena = AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
+                using (AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
                 using (var recomputeTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(
                     new AiDotNet.Tensors.Engines.Autodiff.GradientTapeOptions { Persistent = false, SuppressArenaScope = true }))
                 {

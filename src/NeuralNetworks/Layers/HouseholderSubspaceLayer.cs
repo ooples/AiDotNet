@@ -42,7 +42,7 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
     private readonly bool _transpose;
 
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _reflectors;
+    private readonly Tensor<T> _reflectors;
 
     /// <summary>Gets the feature dimension <c>D</c> rotated by this layer.</summary>
     public int Dimension => _dimension;
