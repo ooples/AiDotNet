@@ -517,4 +517,55 @@ internal static class FeatureSelectionTensorOps
         var projected = engine.TensorMultiply(engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(u), rhs), new[] { p }), inverse);
         return engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(vh), engine.Reshape(projected, new[] { p, 1 })), new[] { p });
     }
+
+    /// <summary>
+    /// Best Gini impurity reduction of a single-threshold split (decision stump) on every column of
+    /// <paramref name="x"/> ([m, q]) for the class positions <paramref name="classIndex"/> (one per row): thresholds
+    /// lie between consecutive sorted values that differ by at least 1e-10; the result is floored at 0, and is 0
+    /// for fewer than two rows.
+    /// </summary>
+    public static Tensor<T> BestGiniSplitReduction<T>(Tensor<T> x, int[] classIndex, int classCount)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = x.Shape[0];
+        int q = x.Shape[1];
+        if (m < 2)
+            return new Tensor<T>(new[] { q });
+
+        var sorted = engine.TensorSort(x, 0, false).Item1;
+        var order = engine.TensorArgsort(x, 0, false);
+        var oneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classCount);
+        var flatOrder = engine.Reshape(engine.TensorTranspose(order), new[] { q * m });
+        var sortedClasses = engine.Reshape(engine.TensorIndexSelect(oneHot, flatOrder, 0), new[] { q, m, classCount });
+        var left = engine.TensorSlice(engine.TensorCumSum(sortedClasses, 1), new[] { 0, 0, 0 }, new[] { q, m - 1, classCount });
+        var totals = engine.ReduceSum(oneHot, new[] { 0 }, true);
+        var splitShape = new[] { q, m - 1, classCount };
+        var right = engine.TensorSubtract(engine.TensorBroadcastTo(engine.Reshape(totals, new[] { 1, 1, classCount }), splitShape), left);
+
+        // Left sizes 1..m-1 and right sizes m-1..1 for split positions i = 1..m-1
+        var leftSizes = engine.TensorAddScalar(PreprocessingTensorOps.Range<T>(m - 1), ops.One);
+        var rightSizes = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { m - 1 }, ops.FromDouble(m)), leftSizes);
+        var sizeShape = new[] { q, m - 1 };
+        var leftSize3 = engine.TensorBroadcastTo(engine.Reshape(leftSizes, new[] { 1, m - 1, 1 }), splitShape);
+        var rightSize3 = engine.TensorBroadcastTo(engine.Reshape(rightSizes, new[] { 1, m - 1, 1 }), splitShape);
+        var one = PreprocessingTensorOps.Filled(sizeShape, ops.One);
+        var leftGini = engine.TensorSubtract(one, engine.ReduceSum(engine.TensorSquare(engine.TensorDivide(left, leftSize3)), new[] { 2 }, false));
+        var rightGini = engine.TensorSubtract(one, engine.ReduceSum(engine.TensorSquare(engine.TensorDivide(right, rightSize3)), new[] { 2 }, false));
+        var weighted = engine.TensorDivideScalar(engine.TensorAdd(
+            engine.TensorMultiply(leftGini, engine.TensorBroadcastTo(engine.Reshape(leftSizes, new[] { 1, m - 1 }), sizeShape)),
+            engine.TensorMultiply(rightGini, engine.TensorBroadcastTo(engine.Reshape(rightSizes, new[] { 1, m - 1 }), sizeShape))),
+            ops.FromDouble(m));
+        T overall = ops.Subtract(ops.One, engine.TensorSumOfSquares(engine.TensorDivideScalar(totals, ops.FromDouble(m))));
+        var reduction = engine.TensorAddScalar(engine.TensorNegate(weighted), overall);
+
+        // Valid thresholds: consecutive sorted values at least 1e-10 apart
+        var sortedT = engine.TensorTranspose(sorted);
+        var gaps = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorSlice(sortedT, new[] { 0, 1 }, new[] { q, m - 1 }),
+            engine.TensorSlice(sortedT, new[] { 0, 0 }, new[] { q, m - 1 })));
+        var valid = PreprocessingTensorOps.Not(engine.TensorLessThan(gaps, ops.FromDouble(1e-10)));
+        var candidates = engine.TensorWhere(valid, reduction, new Tensor<T>(sizeShape));
+        return engine.TensorMax(engine.ReduceMax(candidates, new[] { 1 }, false), ops.Zero);
+    }
 }
