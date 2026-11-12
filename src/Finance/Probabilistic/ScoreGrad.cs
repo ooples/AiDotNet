@@ -1111,10 +1111,22 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
+        int contextLen = ContextLength * _numFeatures;
+        int shift = Math.Min(prediction.Length, contextLen);
+        if (contextLen > 0 && input.Length >= contextLen)
+        {
+            // [input after the first shift values, up to contextLen | leading predictions], detached.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>(2);
+            if (contextLen - shift > 0)
+                parts.Add(Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { input.Length }), 0, shift, contextLen - shift).Contiguous());
+            if (shift > 0)
+                parts.Add(Engine.TensorNarrow(Engine.Reshape(prediction.Contiguous(), new[] { prediction.Length }), 0, 0, shift).Contiguous());
+            return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
+        }
+
         var inputVec = input.ToVector();
         var predVec = prediction.ToVector();
-
-        int contextLen = ContextLength * _numFeatures;
         var shifted = new T[contextLen];
 
         int shiftAmount = Math.Min(predVec.Length, contextLen);
