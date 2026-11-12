@@ -113,10 +113,11 @@ internal static class WaveletEngineOps<T>
 
     /// <summary>
     /// Periodic correlation with a stride:
-    /// <c>result[i] = sum_j filter[j] * input[(stride * i + j + shift) mod input.Length]</c> for
+    /// <c>result[i] = sum_j filter[j] * input[(stride * i + dilation * j + shift) mod input.Length]</c> for
     /// <c>i &lt; count</c>.
     /// </summary>
-    internal static Vector<T> PeriodicCorrelate(Vector<T> input, Vector<T> filter, int stride, int count, int shift = 0)
+    internal static Vector<T> PeriodicCorrelate(
+        Vector<T> input, Vector<T> filter, int stride, int count, int shift = 0, int dilation = 1)
     {
         if (count <= 0)
         {
@@ -132,7 +133,7 @@ internal static class WaveletEngineOps<T>
 
         int n = input.Length;
         int length = filter.Length;
-        int extendedLength = stride * (count - 1) + length;
+        int extendedLength = stride * (count - 1) + dilation * (length - 1) + 1;
 
         // Rotate so the window of output 0 starts at index 0, then wrap the signal periodically far enough
         // for the last window.
@@ -155,7 +156,7 @@ internal static class WaveletEngineOps<T>
             Tensor<T>.FromVector(filter).Reshape(1, 1, length),
             stride,
             0,
-            1);
+            dilation);
         return output.Reshape(count).ToVector();
     }
 
