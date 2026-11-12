@@ -104,38 +104,12 @@ public partial class MCDDetector<T> : AnomalyDetectorBase<T>
         // Compute h and ensure it's at least d + 1 for valid covariance estimation
         int h = Math.Max(_nFeatures + 1, (int)(n * _supportFraction));
 
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_nFeatures];
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
         // Run Fast-MCD algorithm (simplified)
-        var (robustMeanDouble, robustCov) = FastMCD(data, h);
+        var (robustMean, robustCov) = FastMCD(AnomalyTensorOps.ToTensor(X), h);
 
         // Compute precision matrix (inverse of covariance)
-        var robustPrecisionDouble = InvertMatrix(robustCov);
-
-        // Convert to generic types for storage
-        _robustMean = new Vector<T>(_nFeatures);
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            _robustMean[j] = NumOps.FromDouble(robustMeanDouble[j]);
-        }
-
-        _robustPrecision = new Matrix<T>(_nFeatures, _nFeatures);
-        for (int j1 = 0; j1 < _nFeatures; j1++)
-        {
-            for (int j2 = 0; j2 < _nFeatures; j2++)
-            {
-                _robustPrecision[j1, j2] = NumOps.FromDouble(robustPrecisionDouble[j1, j2]);
-            }
-        }
+        _robustMean = robustMean.ToVector();
+        _robustPrecision = LinalgDispatch<T>.Inv(robustCov).ToMatrix();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -144,14 +118,14 @@ public partial class MCDDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private (double[] mean, double[,] covariance) FastMCD(double[][] data, int h)
+    private (Tensor<T> mean, Tensor<T> covariance) FastMCD(Tensor<T> data, int h)
     {
-        int n = data.Length;
+        var engine = Engine;
+        int n = data.Shape[0];
         int nTrials = 10;
-
-        double[]? bestMean = null;
-        double[,]? bestCov = null;
-        double bestDet = double.MaxValue;
+        var means = new Tensor<T>[nTrials];
+        var covariances = new Tensor<T>[nTrials];
+        var determinants = new Tensor<T>[nTrials];
 
         for (int trial = 0; trial < nTrials; trial++)
         {
@@ -162,238 +136,71 @@ public partial class MCDDetector<T> : AnomalyDetectorBase<T>
                 .ToArray();
 
             // Compute mean and covariance of subset
-            var (mean, cov) = ComputeMeanCovariance(data, indices);
+            var (mean, cov) = ComputeMeanCovariance(data, Tensor<int>.FromVector(Vector<int>.Wrap(indices), new[] { h }));
 
-            // C-step iterations
+            // C-step iterations: keep the h points with the smallest Mahalanobis distances (by index on ties)
             for (int iter = 0; iter < 10; iter++)
             {
-                // Compute Mahalanobis distances
-                var precision = InvertMatrix(cov);
-                var distances = new (double dist, int idx)[n];
-
-                for (int i = 0; i < n; i++)
-                {
-                    distances[i] = (MahalanobisDistanceDouble(data[i], mean, precision), i);
-                }
-
-                // Select h points with smallest distances
-                indices = distances
-                    .OrderBy(d => d.dist)
-                    .Take(h)
-                    .Select(d => d.idx)
-                    .ToArray();
-
-                // Recompute mean and covariance
-                (mean, cov) = ComputeMeanCovariance(data, indices);
+                var distances = MahalanobisDistances(data, mean, LinalgDispatch<T>.Inv(cov));
+                var selected = engine.TensorSlice(AnomalyTensorOps.StableOrder(distances, descending: false), new[] { 0 }, new[] { h });
+                (mean, cov) = ComputeMeanCovariance(data, selected);
             }
 
-            // Check if this is the best solution
-            double det = Determinant(cov);
-            if (det < bestDet && det > 1e-10)
-            {
-                bestDet = det;
-                bestMean = mean;
-                bestCov = cov;
-            }
+            means[trial] = mean;
+            covariances[trial] = cov;
+            determinants[trial] = Determinant(cov);
         }
 
-        // Fallback to sample mean/cov if MCD failed
-        if (bestMean == null || bestCov == null)
+        // The solution with the smallest determinant above 1e-10 (the first on ties); fall back to the
+        // sample mean/cov if MCD failed
+        var dets = engine.TensorConcatenate(determinants, 0);
+        var valid = engine.TensorGreaterThan(dets, NumOps.FromDouble(1e-10));
+        if (!NumOps.GreaterThan(engine.TensorSum(valid), NumOps.Zero))
         {
-            var allIndices = Enumerable.Range(0, n).ToArray();
-            (bestMean, bestCov) = ComputeMeanCovariance(data, allIndices);
+            return ComputeMeanCovariance(data, AnomalyTensorOps.Range(n));
         }
 
-        return (bestMean, bestCov);
+        var candidates = engine.TensorWhere(valid, dets, engine.Fill(nTrials, NumOps.MaxValue).AsTensor());
+        int best = AnomalyTensorOps.FirstArgMin(candidates);
+        return (means[best], covariances[best]);
     }
 
-    private (double[] mean, double[,] covariance) ComputeMeanCovariance(double[][] data, int[] indices)
+    // Mean and covariance (divisor h - 1, plus 1e-6 on the diagonal) of the selected rows. Where T cannot
+    // represent c_jj + 1e-6 (the ridge would round away, e.g. float with c_jj = 350), the ridge is scaled
+    // to 1e-6 * c_jj instead so the regularized covariance stays invertible.
+    private (Tensor<T> mean, Tensor<T> covariance) ComputeMeanCovariance(Tensor<T> data, Tensor<int> indices)
     {
+        var engine = Engine;
         int h = indices.Length;
-        var mean = new double[_nFeatures];
-
-        // Compute mean
-        foreach (int i in indices)
-        {
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                mean[j] += data[i][j];
-            }
-        }
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            mean[j] /= h;
-        }
-
-        // Compute covariance
-        var cov = new double[_nFeatures, _nFeatures];
-        foreach (int i in indices)
-        {
-            for (int j1 = 0; j1 < _nFeatures; j1++)
-            {
-                for (int j2 = 0; j2 < _nFeatures; j2++)
-                {
-                    cov[j1, j2] += (data[i][j1] - mean[j1]) * (data[i][j2] - mean[j2]);
-                }
-            }
-        }
-
-        for (int j1 = 0; j1 < _nFeatures; j1++)
-        {
-            for (int j2 = 0; j2 < _nFeatures; j2++)
-            {
-                cov[j1, j2] /= (h - 1);
-            }
-            // Add small regularization
-            cov[j1, j1] += 1e-6;
-        }
-
-        return (mean, cov);
+        var subset = engine.TensorGather(data, indices, 0);
+        var mean = engine.ReduceMean(subset, new[] { 0 }, false);
+        var cov = AnomalyTensorOps.Covariance(AnomalyTensorOps.SubtractRow(subset, mean), NumOps.FromDouble(h - 1));
+        T ridge = NumOps.FromDouble(1e-6);
+        var identity = AnomalyTensorOps.ScaledIdentity(_nFeatures, NumOps.One);
+        var diagonal = engine.ReduceSum(engine.TensorMultiply(cov, identity), new[] { 1 }, false);
+        var absorbed = engine.TensorEquals(engine.TensorAddScalar(diagonal, ridge), diagonal);
+        var ridges = engine.TensorWhere(absorbed, engine.TensorMultiplyScalar(diagonal, ridge),
+            engine.Fill(_nFeatures, ridge).AsTensor());
+        return (mean, engine.TensorAdd(cov, AnomalyTensorOps.MultiplyRow(identity, ridges)));
     }
 
-    private double MahalanobisDistanceDouble(double[] point, double[] mean, double[,] precision)
+    // sqrt(max(0, (x - mean)' P (x - mean))) for every row.
+    private Tensor<T> MahalanobisDistances(Tensor<T> data, Tensor<T> mean, Tensor<T> precision)
     {
-        double dist = 0;
-        for (int i = 0; i < _nFeatures; i++)
-        {
-            double diff1 = point[i] - mean[i];
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                double diff2 = point[j] - mean[j];
-                dist += diff1 * precision[i, j] * diff2;
-            }
-        }
-        return Math.Sqrt(Math.Max(0, dist));
+        var engine = Engine;
+        var squared = AnomalyTensorOps.MahalanobisSquared(AnomalyTensorOps.SubtractRow(data, mean), precision);
+        return engine.TensorSqrt(engine.TensorMax(squared, NumOps.Zero));
     }
 
-    private T MahalanobisDistance(double[] point, Vector<T> mean, Matrix<T> precision)
+    // Determinant as a [1] tensor, 0 when an LU pivot (partial pivoting) is below 1e-10 in magnitude.
+    private Tensor<T> Determinant(Tensor<T> matrix)
     {
-        T dist = NumOps.Zero;
-        for (int i = 0; i < _nFeatures; i++)
-        {
-            T diff1 = NumOps.Subtract(NumOps.FromDouble(point[i]), mean[i]);
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                T diff2 = NumOps.Subtract(NumOps.FromDouble(point[j]), mean[j]);
-                T contrib = NumOps.Multiply(diff1, NumOps.Multiply(precision[i, j], diff2));
-                dist = NumOps.Add(dist, contrib);
-            }
-        }
-        double distDouble = NumOps.ToDouble(dist);
-        return NumOps.FromDouble(Math.Sqrt(Math.Max(0, distDouble)));
-    }
-
-    private double[,] InvertMatrix(double[,] matrix)
-    {
-        int n = matrix.GetLength(0);
-        var result = new double[n, n];
-        var temp = new double[n, n];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                temp[i, j] = matrix[i, j];
-                result[i, j] = (i == j) ? 1.0 : 0.0;
-            }
-        }
-
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (Math.Abs(temp[row, col]) > Math.Abs(temp[maxRow, col]))
-                {
-                    maxRow = row;
-                }
-            }
-
-            if (maxRow != col)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    double tmpVal = temp[col, j];
-                    temp[col, j] = temp[maxRow, j];
-                    temp[maxRow, j] = tmpVal;
-
-                    tmpVal = result[col, j];
-                    result[col, j] = result[maxRow, j];
-                    result[maxRow, j] = tmpVal;
-                }
-            }
-
-            double pivot = temp[col, col];
-            if (Math.Abs(pivot) < 1e-10) pivot = 1e-10;
-
-            for (int j = 0; j < n; j++)
-            {
-                temp[col, j] /= pivot;
-                result[col, j] /= pivot;
-            }
-
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    double factor = temp[row, col];
-                    for (int j = 0; j < n; j++)
-                    {
-                        temp[row, j] -= factor * temp[col, j];
-                        result[row, j] -= factor * result[col, j];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private double Determinant(double[,] matrix)
-    {
-        int n = matrix.GetLength(0);
-        var temp = new double[n, n];
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                temp[i, j] = matrix[i, j];
-
-        double det = 1;
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (Math.Abs(temp[row, col]) > Math.Abs(temp[maxRow, col]))
-                    maxRow = row;
-            }
-
-            if (maxRow != col)
-            {
-                det *= -1;
-                for (int j = col; j < n; j++)
-                {
-                    double tmp = temp[col, j];
-                    temp[col, j] = temp[maxRow, j];
-                    temp[maxRow, j] = tmp;
-                }
-            }
-
-            if (Math.Abs(temp[col, col]) < 1e-10) return 0;
-
-            det *= temp[col, col];
-
-            for (int row = col + 1; row < n; row++)
-            {
-                double factor = temp[row, col] / temp[col, col];
-                for (int j = col + 1; j < n; j++)
-                {
-                    temp[row, j] -= factor * temp[col, j];
-                }
-            }
-        }
-
-        return det;
+        var engine = Engine;
+        var (_, _, U) = LinalgDispatch<T>.LU(matrix);
+        var minPivot = engine.TensorAmin(engine.TensorAbs(LinalgDispatch<T>.Diagonal(U)), new[] { 0 }, true);
+        var det = engine.Reshape(LinalgDispatch<T>.Det(matrix), new[] { 1 });
+        return engine.TensorWhere(engine.TensorLessThan(minPivot, NumOps.FromDouble(1e-10)),
+            Tensor<T>.CreateZeros(new[] { 1 }), det);
     }
 
     /// <inheritdoc/>
@@ -422,24 +229,8 @@ public partial class MCDDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Compute Mahalanobis distance in T-space
-            T dist = NumOps.Zero;
-            for (int j1 = 0; j1 < _nFeatures; j1++)
-            {
-                T diff1 = NumOps.Subtract(X[i, j1], robustMean[j1]);
-                for (int j2 = 0; j2 < _nFeatures; j2++)
-                {
-                    T diff2 = NumOps.Subtract(X[i, j2], robustMean[j2]);
-                    dist = NumOps.Add(dist, NumOps.Multiply(NumOps.Multiply(diff1, robustPrecision[j1, j2]), diff2));
-                }
-            }
-            scores[i] = NumOps.Sqrt(NumOps.GreaterThan(dist, NumOps.Zero) ? dist : NumOps.Zero);
-        }
-
-        return scores;
+        // Mahalanobis distance in T-space
+        return MahalanobisDistances(AnomalyTensorOps.ToTensor(X), robustMean.AsTensor(),
+            AnomalyTensorOps.ToTensor(robustPrecision)).ToVector();
     }
 }
