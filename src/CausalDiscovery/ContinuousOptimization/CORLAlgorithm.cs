@@ -106,6 +106,9 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
         // Compute sample covariance using base class utility
         var S = ComputeCovarianceMatrix(data);
 
+        // One tensor copy of the data shared by every candidate regression.
+        var source = Tensor<T>.FromMatrix(data);
+
         // Initialize position scores: scores[i,j] = preference for variable i at position j
         var scores = new Matrix<T>(d, d);
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
@@ -122,7 +125,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
 
             // Compute the DAG from this ordering and get BIC reward
             // Use the same maxParents and threshold as BuildDAGFromOrdering
-            double reward = ComputeOrderingReward(data, ordering, d, n, S);
+            double reward = ComputeOrderingReward(source, ordering, d, n, S);
 
             // Update baseline (running average)
             validEpisodes++;
@@ -141,7 +144,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
         }
 
         // Build the DAG from the best ordering using the SAME criteria used in scoring
-        return BuildDAGFromOrdering(data, bestOrdering, d, n, S);
+        return BuildDAGFromOrdering(source, bestOrdering, d, n, S);
     }
 
     /// <summary>
@@ -223,14 +226,14 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Selects parents for a target from predecessors in the ordering using BIC-based forward selection.
     /// </summary>
-    private List<int> SelectParentsBIC(Matrix<T> data, int target, int[] ordering, int idx, int n)
+    private List<int> SelectParentsBIC(Tensor<T> source, int target, int[] ordering, int idx, int n)
     {
         var parents = new List<int>();
         var candidates = new List<int>();
         for (int predIdx = 0; predIdx < idx; predIdx++)
             candidates.Add(ordering[predIdx]);
 
-        double bestBIC = ComputeBICForParents(data, target, parents, n);
+        double bestBIC = ComputeBICForParents(source, target, parents, n);
 
         // Greedy forward selection up to _maxParents
         while (parents.Count < _maxParents && candidates.Count > 0)
@@ -241,7 +244,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
             foreach (int c in candidates)
             {
                 var trial = new List<int>(parents) { c };
-                double trialBIC = ComputeBICForParents(data, target, trial, n);
+                double trialBIC = ComputeBICForParents(source, target, trial, n);
                 if (trialBIC > bestCandidateBIC)
                 {
                     bestCandidateBIC = trialBIC;
@@ -261,9 +264,9 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Computes BIC score for a target with given parents using multivariate OLS.
     /// </summary>
-    private double ComputeBICForParents(Matrix<T> data, int target, List<int> parents, int n)
+    private double ComputeBICForParents(Tensor<T> source, int target, List<int> parents, int n)
     {
-        double rss = ComputeRSS(data, target, parents, n);
+        double rss = ComputeRSS(source, target, parents, n);
         int k = parents.Count + 1; // +1 for intercept
         return -n * Math.Log(rss / n + 1e-10) - k * Math.Log(n);
     }
@@ -272,14 +275,14 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     /// Computes the total BIC reward for a given ordering.
     /// Uses the same parent selection as BuildDAGFromOrdering.
     /// </summary>
-    private double ComputeOrderingReward(Matrix<T> data, int[] ordering, int d, int n, Matrix<T> S)
+    private double ComputeOrderingReward(Tensor<T> source, int[] ordering, int d, int n, Matrix<T> S)
     {
         double totalBIC = 0;
         for (int idx = 0; idx < d; idx++)
         {
             int target = ordering[idx];
-            var parents = SelectParentsBIC(data, target, ordering, idx, n);
-            double rss = ComputeRSS(data, target, parents, n);
+            var parents = SelectParentsBIC(source, target, ordering, idx, n);
+            double rss = ComputeRSS(source, target, parents, n);
             double bic = -n * Math.Log(rss / n + 1e-10) - (parents.Count + 1) * Math.Log(n);
             totalBIC += bic;
         }
@@ -289,9 +292,8 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Computes residual sum of squares for target given parents via multivariate OLS.
     /// </summary>
-    private double ComputeRSS(Matrix<T> data, int target, List<int> parents, int n)
+    private double ComputeRSS(Tensor<T> source, int target, List<int> parents, int n)
     {
-        var source = Tensor<T>.FromMatrix(data);
         if (parents.Count == 0)
         {
             // Residuals around the target mean
@@ -308,16 +310,15 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Builds the final DAG from the best ordering using the same parent selection as scoring.
     /// </summary>
-    private Matrix<T> BuildDAGFromOrdering(Matrix<T> data, int[] ordering, int d, int n, Matrix<T> S)
+    private Matrix<T> BuildDAGFromOrdering(Tensor<T> source, int[] ordering, int d, int n, Matrix<T> S)
     {
         var W = new Matrix<T>(d, d);
-        var source = Tensor<T>.FromMatrix(data);
         T threshold = NumOps.FromDouble(WThreshold);
 
         for (int idx = 1; idx < d; idx++)
         {
             int target = ordering[idx];
-            var parents = SelectParentsBIC(data, target, ordering, idx, n);
+            var parents = SelectParentsBIC(source, target, ordering, idx, n);
 
             if (parents.Count == 0) continue;
 
