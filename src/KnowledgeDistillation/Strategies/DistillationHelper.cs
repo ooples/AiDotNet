@@ -72,6 +72,53 @@ internal static class DistillationHelper<T>
     }
 
     /// <summary>
+    /// Per-sample response-distillation loss at a fixed temperature: T² KL(teacher_soft || student_soft),
+    /// blended as α × CE(student_probs, labels) + (1 - α) × soft when labels are provided.
+    /// </summary>
+    public static Vector<T> StandardSampleLosses(
+        Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch, double temperature, double alpha)
+    {
+        Matrix<T> studentSoft = SoftmaxRows(studentBatchOutput, temperature);
+        Matrix<T> teacherSoft = SoftmaxRows(teacherBatchOutput, temperature);
+        Vector<T> losses = Engine.Multiply(
+            KLDivergenceRows(teacherSoft, studentSoft), NumOps.FromDouble(temperature * temperature));
+
+        if (trueLabelsBatch != null)
+        {
+            Matrix<T> studentProbs = SoftmaxRows(studentBatchOutput, 1.0);
+            Vector<T> hardLosses = CrossEntropyRows(studentProbs, trueLabelsBatch);
+            losses = Engine.Add(
+                Engine.Multiply(hardLosses, NumOps.FromDouble(alpha)),
+                Engine.Multiply(losses, NumOps.FromDouble(1.0 - alpha)));
+        }
+
+        return losses;
+    }
+
+    /// <summary>
+    /// Per-sample (not batch-averaged) gradient of <see cref="StandardSampleLosses"/> w.r.t. student logits:
+    /// (student_soft - teacher_soft) × T, blended as α × (student_probs - labels) + (1 - α) × soft.
+    /// </summary>
+    public static Matrix<T> StandardSampleGradients(
+        Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch, double temperature, double alpha)
+    {
+        Matrix<T> studentSoft = SoftmaxRows(studentBatchOutput, temperature);
+        Matrix<T> teacherSoft = SoftmaxRows(teacherBatchOutput, temperature);
+        Matrix<T> gradient = Engine.MatrixMultiplyScalar(
+            Engine.MatrixSubtract(studentSoft, teacherSoft), NumOps.FromDouble(temperature));
+
+        if (trueLabelsBatch != null)
+        {
+            Matrix<T> studentProbs = SoftmaxRows(studentBatchOutput, 1.0);
+            gradient = Engine.MatrixAdd(
+                Engine.MatrixMultiplyScalar(Engine.MatrixSubtract(studentProbs, trueLabelsBatch), NumOps.FromDouble(alpha)),
+                Engine.MatrixMultiplyScalar(gradient, NumOps.FromDouble(1.0 - alpha)));
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
     /// Index of the largest element, matching a left-to-right scan that only moves on a strictly
     /// greater value: ties keep the first index, NaN entries never win, and a NaN first element
     /// yields 0. Throws for an empty vector, like reading its first element.

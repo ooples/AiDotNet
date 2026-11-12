@@ -82,36 +82,10 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            // Standard distillation loss (weighted)
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T sampleLoss;
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-                sampleLoss = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            }
-            else
-            {
-                sampleLoss = softLoss;
-            }
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        // Standard distillation loss per sample (soft T²·KL, blended with hard CE when labels are given)
+        T totalLoss = Engine.Sum(DistillationHelper<T>.StandardSampleLosses(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -123,48 +97,14 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            var gradient = new Vector<T>(outputDim);
-
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            // Soft gradient: T² from loss scaling × 1/T from softmax chain rule = net factor T
-            for (int i = 0; i < outputDim; i++)
-            {
-                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
-            }
-
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                    gradient[i] = NumOps.Add(
-                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[i]));
-                }
-            }
-
-            gradientBatch.SetRow(r, gradient);
-        }
+        // Soft gradient: T² from loss scaling × 1/T from softmax chain rule = net factor T
+        var gradientBatch = DistillationHelper<T>.StandardSampleGradients(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
 
         // Average gradients over the batch
         T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r = 0; r < batchSize; r++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r, c] = NumOps.Multiply(gradientBatch[r, c], oneOverBatch);
+        gradientBatch = Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
 
         return gradientBatch;
     }
@@ -214,17 +154,18 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
             throw new ArgumentException("Batch sizes must match");
 
         int batchSize = studentMeans.Length;
-        T totalLoss = NumOps.Zero;
 
+        var sampleLosses = new List<T>(batchSize);
         for (int i = 0; i < batchSize; i++)
         {
-            T sampleLoss = ComputeVariationalLoss(
+            sampleLosses.Add(ComputeVariationalLoss(
                 studentMeans[i],
                 studentLogVars[i],
                 teacherMeans[i],
-                teacherLogVars[i]);
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+                teacherLogVars[i]));
         }
+
+        T totalLoss = Engine.Sum(new Vector<T>(sampleLosses));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -242,12 +183,8 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
         int dim = studentMean.Length;
 
         // Reconstruction term: MSE between means
-        T reconstructionLoss = NumOps.Zero;
-        for (int i = 0; i < dim; i++)
-        {
-            double diff = Convert.ToDouble(NumOps.Subtract(studentMean[i], teacherMean[i]));
-            reconstructionLoss = NumOps.Add(reconstructionLoss, NumOps.FromDouble(diff * diff));
-        }
+        Vector<T> meanDiff = Engine.Subtract(studentMean, teacherMean);
+        T reconstructionLoss = Engine.DotProduct(meanDiff, meanDiff);
         reconstructionLoss = NumOps.Divide(reconstructionLoss, NumOps.FromDouble(dim));
 
         // KL divergence term between the two Gaussian distributions
@@ -308,27 +245,15 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
         // Using log variance: log(σ²) = logVar, so σ² = exp(logVar)
         // KL = 0.5 * [logVar_q - logVar_p + (exp(logVar_p) + (μ_p - μ_q)²)/exp(logVar_q) - 1]
 
-        int dim = muP.Length;
-        T kl = NumOps.Zero;
-
-        for (int i = 0; i < dim; i++)
-        {
-            double muPVal = Convert.ToDouble(muP[i]);
-            double muQVal = Convert.ToDouble(muQ[i]);
-            double logVarPVal = Convert.ToDouble(logVarP[i]);
-            double logVarQVal = Convert.ToDouble(logVarQ[i]);
-
-            double varP = Math.Exp(logVarPVal);
-            double varQ = Math.Exp(logVarQVal);
-            double muDiff = muPVal - muQVal;
-
-            double klDim = 0.5 * (
-                logVarQVal - logVarPVal +
-                (varP + muDiff * muDiff) / (varQ + Epsilon) - 1.0
-            );
-
-            kl = NumOps.Add(kl, NumOps.FromDouble(klDim));
-        }
+        // Per-dimension 0.5 * [logVar_q - logVar_p + (var_p + (mu_p - mu_q)^2) / (var_q + eps) - 1], summed
+        Vector<T> muDiff = Engine.Subtract(muP, muQ);
+        Vector<T> ratio = Engine.Divide(
+            Engine.Add(Engine.Exp(logVarP), Engine.Multiply(muDiff, muDiff)),
+            Engine.Add(Engine.Exp(logVarQ), Vector<T>.CreateDefault(logVarQ.Length, NumOps.FromDouble(Epsilon))));
+        Vector<T> inner = Engine.Add(Engine.Subtract(logVarQ, logVarP), ratio);
+        T kl = NumOps.Multiply(
+            NumOps.FromDouble(0.5),
+            NumOps.Subtract(Engine.Sum(inner), NumOps.FromDouble(muP.Length)));
 
         return kl;
     }
@@ -337,18 +262,10 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
     {
         // KL(N(μ,σ²) || N(0,1)) = 0.5 * Σ(μ² + σ² - log(σ²) - 1)
 
-        int dim = mu.Length;
-        T kl = NumOps.Zero;
-
-        for (int i = 0; i < dim; i++)
-        {
-            double muVal = Convert.ToDouble(mu[i]);
-            double logVarVal = Convert.ToDouble(logVar[i]);
-            double varVal = Math.Exp(logVarVal);
-
-            double klDim = 0.5 * (muVal * muVal + varVal - logVarVal - 1.0);
-            kl = NumOps.Add(kl, NumOps.FromDouble(klDim));
-        }
+        Vector<T> inner = Engine.Subtract(Engine.Add(Engine.Multiply(mu, mu), Engine.Exp(logVar)), logVar);
+        T kl = NumOps.Multiply(
+            NumOps.FromDouble(0.5),
+            NumOps.Subtract(Engine.Sum(inner), NumOps.FromDouble(mu.Length)));
 
         return kl;
     }
@@ -362,20 +279,9 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <returns>Sample z = μ + σ * ε</returns>
     public Vector<T> Reparameterize(Vector<T> mean, Vector<T> logVar, Vector<T> epsilon)
     {
-        int dim = mean.Length;
-        var sample = new Vector<T>(dim);
-
-        for (int i = 0; i < dim; i++)
-        {
-            // z = μ + σ * ε, where σ = exp(0.5 * logVar)
-            double muVal = Convert.ToDouble(mean[i]);
-            double logVarVal = Convert.ToDouble(logVar[i]);
-            double sigma = Math.Exp(0.5 * logVarVal);
-            double epsVal = Convert.ToDouble(epsilon[i]);
-
-            double sampleVal = muVal + sigma * epsVal;
-            sample[i] = NumOps.FromDouble(sampleVal);
-        }
+        // z = μ + σ * ε, where σ = exp(0.5 * logVar)
+        Vector<T> sigma = Engine.Exp(Engine.Multiply(logVar, NumOps.FromDouble(0.5)));
+        var sample = Engine.Add(mean, Engine.Multiply(sigma, epsilon));
 
         return sample;
     }
