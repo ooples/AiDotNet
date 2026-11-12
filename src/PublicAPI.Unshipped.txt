@@ -67,14 +67,12 @@ override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.HopSize.get -> in
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.HopSize.set -> void
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.NumDecoderLayers.get -> int
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.NumDecoderLayers.set -> void
-
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.get -> bool
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.set -> void
 virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.get -> bool
 virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.set -> void
 override AiDotNet.TextToSpeech.EndToEnd.PiperOptions.AddBlank.get -> bool
 override AiDotNet.TextToSpeech.EndToEnd.PiperOptions.AddBlank.set -> void
-
 override AiDotNet.TextToSpeech.Classic.GradTTSOptions.EncoderDim.get -> int
 override AiDotNet.TextToSpeech.Classic.GradTTSOptions.EncoderDim.set -> void
 override AiDotNet.TextToSpeech.Classic.GradTTSOptions.NumDecoderLayers.get -> int
@@ -86,7 +84,6 @@ override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.DecoderDim.set -> void
 override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.NumDecoderLayers.get -> int
 override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.NumDecoderLayers.set -> void
 override AiDotNet.TextToSpeech.Classic.GlowTTS<T>.GradientValueClip.get -> double
-
 override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.get -> int
 override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.set -> void
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.get -> int
@@ -226,10 +223,8 @@ AiDotNet.TextToSpeech.CodecBased.ZonosOptions.ModelPath.get -> string?
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.ModelPath.set -> void
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.OnnxOptions.set -> void
-
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.DiscriminatorWidthDivisor.get -> int
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.DiscriminatorWidthDivisor.set -> void
-
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.MelChannels.get -> int
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.MelChannels.set -> void
@@ -247,9 +242,7 @@ AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.OnnxOptions.get -> AiDotNet.On
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.OnnxOptions.set -> void
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.WeightDecay.get -> double
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.WeightDecay.set -> void
-
 override AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
-
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.VallEModelOptions() -> void
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.VallEModelOptions(AiDotNet.TextToSpeech.CodecBased.VallEModelOptions! other) -> void
@@ -277,7 +270,6 @@ AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.ModelPath.get -> string?
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.ModelPath.set -> void
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.OnnxOptions.set -> void
-
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.DropoutRate.get -> double
@@ -5009,7 +5001,6 @@ override AiDotNet.TextToSpeech.Classic.PortaSpeechOptions.DecoderDim.get -> int
 override AiDotNet.TextToSpeech.Classic.PortaSpeechOptions.DecoderDim.set -> void
 override AiDotNet.TextToSpeech.Classic.PortaSpeechOptions.NumDecoderLayers.get -> int
 override AiDotNet.TextToSpeech.Classic.PortaSpeechOptions.NumDecoderLayers.set -> void
-
 AiDotNet.TextToSpeech.Classic.PortaSpeechOptions.NumWordEncoderLayers.get -> int
 AiDotNet.TextToSpeech.Classic.PortaSpeechOptions.NumWordEncoderLayers.set -> void
 AiDotNet.TextToSpeech.Classic.PortaSpeechOptions.FilterChannels.get -> int
@@ -20967,7 +20958,6 @@ AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.init -> void
 AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options) -> void
 *REMOVED*AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.TRPOAgent(AiDotNet.Models.Options.TRPOOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
 AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.TRPOAgent(AiDotNet.Models.Options.TRPOOptions<T>! options) -> void
-
 override AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 AiDotNet.Enums.AbmeTrainingStage
 AiDotNet.Enums.AbmeTrainingStage.AsymmetricMotion = 1 -> AiDotNet.Enums.AbmeTrainingStage
@@ -21885,7 +21875,6 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Init
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
-AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
 AiDotNet.Interfaces.IFeatureSelector<T>
 AiDotNet.Interfaces.IFeatureSelector<T>.GetSupportMask() -> bool[]!
 AiDotNet.Interfaces.IFeatureSelector<T>.SelectedIndices.get -> int[]?
@@ -22570,7 +22559,6 @@ static AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.OutputFrames(int f
 override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ForwardTraced(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.UpdateParameters(T learningRate) -> void
 override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ResetState() -> void
-*REMOVED*static AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.WithInputDepth(int inputDepth, int outputDepth, int kernelSize, int stride = 1, int padding = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, AiDotNet.Initialization.IInitializationStrategy<T>? initializationStrategy = null, AiDotNet.Interfaces.IActivationFunction<T>? nonlinearityForInit = null, int groups = 1) -> AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>!
 AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.TrainableParameterCount.get -> long
 AiDotNet.Models.ModelBase<T, TInput, TOutput>.TrainableParameterCount.get -> long
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null) -> void
@@ -22587,6 +22575,29 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
+AiDotNet.Interfaces.LocalObjectiveStep<T>.ReadoutLossDetached.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Layers.TiedEmbeddingHeadLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.DetachReadoutOnHiddenLayers.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.LayerStride.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.DetachReadoutOnHiddenLayers.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.LayerStride.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.MaxCandidates.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.SampledTiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenLayers = true, int layerStride = 1, bool useDepthProgressiveWeight = false, int? seed = null) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
+static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.TiedReadoutLocalError<T>(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> AiDotNet.Interfaces.ICreditRule<T>!
+static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.SampledTiedReadoutLocalError<T>(int readoutLayerCount = 2, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenLayers = true, int layerStride = 1, bool useDepthProgressiveWeight = false, int? seed = null) -> AiDotNet.Interfaces.ICreditRule<T>!
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.WeightDecay.get -> double
@@ -22607,7 +22618,6 @@ override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.SetTrainable
 override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.SupportsTraining.get -> bool
 override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.UpdateParameters(T learningRate) -> void
 override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.ZeroGrad() -> void
-static AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.ApplyChain(AiDotNet.Tensors.Engines.IEngine! engine, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reflectors, bool transpose = false) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>
 AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.AnchorStride.get -> int
 AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
