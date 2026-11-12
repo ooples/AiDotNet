@@ -149,12 +149,8 @@ public sealed class StockformerAttention<T>
 
     private static Tensor<T> BuildCausalBias(int positions)
     {
-        var bias = new Tensor<T>(new[] { positions, positions });
-        var blocked = Ops.FromDouble(-1e9);
-        for (int i = 0; i < positions; i++)
-        {
-            for (int j = i + 1; j < positions; j++) bias[(i * positions) + j] = blocked;
-        }
-        return bias;
+        // -1e9 strictly above the diagonal (a position never attends to a later one), zero elsewhere.
+        var blocked = Engine.TensorFullLike(new Tensor<T>(new[] { positions, positions }), Ops.FromDouble(-1e9));
+        return Engine.TensorTriu(blocked, 1);
     }
 }
