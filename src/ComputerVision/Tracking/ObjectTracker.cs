@@ -1,6 +1,7 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.Helpers;
+using AiDotNet.Solvers.Assignment;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Tracking;
@@ -34,12 +35,12 @@ public class Track<T>
     /// <summary>
     /// Velocity in x direction (pixels/frame).
     /// </summary>
-    public double VelocityX { get; set; }
+    public T VelocityX { get; set; }
 
     /// <summary>
     /// Velocity in y direction (pixels/frame).
     /// </summary>
-    public double VelocityY { get; set; }
+    public T VelocityY { get; set; }
 
     /// <summary>
     /// Number of consecutive frames without detection.
@@ -75,6 +76,9 @@ public class Track<T>
         Box = box;
         ClassId = classId;
         Confidence = confidence;
+        var numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        VelocityX = numOps.Zero;
+        VelocityY = numOps.Zero;
         State = TrackState.Tentative;
         Hits = 1;
         Age = 1;
@@ -153,14 +157,16 @@ public class TrackingOptions<T>
     public bool UseAppearance { get; set; } = false;
 
     /// <summary>
-    /// Weight for appearance similarity in cost matrix.
+    /// Weight of the appearance (cosine) distance in DeepSORT's association cost; the motion
+    /// (Mahalanobis) distance gets the rest. This is <c>1 - lambda</c> in Wojke et al. (2017), Eq. 5.
     /// </summary>
-    public double AppearanceWeight { get; set; } = 0.5;
+    /// <remarks>The paper's experiments and the official code use lambda = 0, an appearance weight of 1.</remarks>
+    public T AppearanceWeight { get; set; } = NumOps.One;
 
     /// <summary>
-    /// Maximum cosine distance for appearance matching.
+    /// Maximum cosine distance for appearance matching (the official deep_sort default is 0.2).
     /// </summary>
-    public double MaxCosineDistance { get; set; } = 0.3;
+    public T MaxCosineDistance { get; set; } = NumOps.FromDouble(0.2);
 }
 
 /// <summary>
@@ -229,78 +235,35 @@ public abstract class ObjectTrackerBase<T>
     }
 
     /// <summary>
-    /// Computes IoU between two bounding boxes.
+    /// Computes IoU between two bounding boxes given as (x1, y1, x2, y2).
     /// </summary>
-    protected double ComputeIoU(BoundingBox<T> a, BoundingBox<T> b)
+    protected T ComputeIoU(BoundingBox<T> a, BoundingBox<T> b)
     {
-        double x1 = Math.Max(NumOps.ToDouble(a.X1), NumOps.ToDouble(b.X1));
-        double y1 = Math.Max(NumOps.ToDouble(a.Y1), NumOps.ToDouble(b.Y1));
-        double x2 = Math.Min(NumOps.ToDouble(a.X2), NumOps.ToDouble(b.X2));
-        double y2 = Math.Min(NumOps.ToDouble(a.Y2), NumOps.ToDouble(b.Y2));
-
-        double intersection = Math.Max(0, x2 - x1) * Math.Max(0, y2 - y1);
-
-        double areaA = (NumOps.ToDouble(a.X2) - NumOps.ToDouble(a.X1)) *
-                       (NumOps.ToDouble(a.Y2) - NumOps.ToDouble(a.Y1));
-        double areaB = (NumOps.ToDouble(b.X2) - NumOps.ToDouble(b.X1)) *
-                       (NumOps.ToDouble(b.Y2) - NumOps.ToDouble(b.Y1));
-
-        double union = areaA + areaB - intersection;
-
-        return union > 0 ? intersection / union : 0;
+        var iou = AiDotNetEngine.Current.BoxIou(
+            TrackingAssociation<T>.BoxesToTensor(new[] { a }),
+            TrackingAssociation<T>.BoxesToTensor(new[] { b }));
+        return iou[0, 0];
     }
 
     /// <summary>
-    /// Computes cosine similarity between two feature vectors.
+    /// Computes cosine similarity between two feature vectors (0 when their lengths differ).
     /// </summary>
-    protected double ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
+    protected T ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
         if (a.Length != b.Length)
-            return 0;
+            return NumOps.Zero;
 
-        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
+        return AiDotNetEngine.Current.CosineSimilarity(a.ToVector(), b.ToVector());
     }
 
     /// <summary>
-    /// Solves linear assignment problem (Hungarian algorithm).
+    /// Solves the linear assignment problem exactly (Hungarian algorithm): the returned array gives
+    /// the column assigned to each row of <paramref name="costMatrix"/>, or -1 when the row is left
+    /// unmatched (only possible when there are more rows than columns).
     /// </summary>
-    protected int[] HungarianAssignment(double[,] costMatrix)
+    protected int[] HungarianAssignment(Matrix<T> costMatrix)
     {
-        int n = costMatrix.GetLength(0);
-        int m = costMatrix.GetLength(1);
-
-        if (n == 0 || m == 0)
-            return Array.Empty<int>();
-
-        // Simple greedy assignment (approximate Hungarian)
-        var assignment = new int[n];
-        for (int i = 0; i < n; i++)
-            assignment[i] = -1;
-
-        var usedCols = new bool[m];
-
-        for (int i = 0; i < n; i++)
-        {
-            int bestCol = -1;
-            double bestCost = double.MaxValue;
-
-            for (int j = 0; j < m; j++)
-            {
-                if (!usedCols[j] && costMatrix[i, j] < bestCost)
-                {
-                    bestCost = costMatrix[i, j];
-                    bestCol = j;
-                }
-            }
-
-            if (bestCol >= 0 && bestCost < 1.0) // Cost threshold
-            {
-                assignment[i] = bestCol;
-                usedCols[bestCol] = true;
-            }
-        }
-
-        return assignment;
+        return TrackingAssociation<T>.SolveAssignment(Tensor<T>.FromMatrix(costMatrix));
     }
 
     /// <summary>
@@ -317,14 +280,19 @@ public abstract class ObjectTrackerBase<T>
     /// </summary>
     protected void UpdateTrack(Track<T> track, Detection<T> detection)
     {
-        // Update velocity
-        double oldCx = (NumOps.ToDouble(track.Box.X1) + NumOps.ToDouble(track.Box.X2)) / 2;
-        double oldCy = (NumOps.ToDouble(track.Box.Y1) + NumOps.ToDouble(track.Box.Y2)) / 2;
-        double newCx = (NumOps.ToDouble(detection.Box.X1) + NumOps.ToDouble(detection.Box.X2)) / 2;
-        double newCy = (NumOps.ToDouble(detection.Box.Y1) + NumOps.ToDouble(detection.Box.Y2)) / 2;
+        // Velocity: an exponential average (0.7 / 0.3) of the centre displacement.
+        T half = NumOps.FromDouble(0.5);
+        T keep = NumOps.FromDouble(0.7);
+        T blend = NumOps.FromDouble(0.3);
+        T oldCx = NumOps.Multiply(NumOps.Add(track.Box.X1, track.Box.X2), half);
+        T oldCy = NumOps.Multiply(NumOps.Add(track.Box.Y1, track.Box.Y2), half);
+        T newCx = NumOps.Multiply(NumOps.Add(detection.Box.X1, detection.Box.X2), half);
+        T newCy = NumOps.Multiply(NumOps.Add(detection.Box.Y1, detection.Box.Y2), half);
 
-        track.VelocityX = 0.7 * track.VelocityX + 0.3 * (newCx - oldCx);
-        track.VelocityY = 0.7 * track.VelocityY + 0.3 * (newCy - oldCy);
+        track.VelocityX = NumOps.Add(NumOps.Multiply(keep, track.VelocityX),
+            NumOps.Multiply(blend, NumOps.Subtract(newCx, oldCx)));
+        track.VelocityY = NumOps.Add(NumOps.Multiply(keep, track.VelocityY),
+            NumOps.Multiply(blend, NumOps.Subtract(newCy, oldCy)));
 
         // Update box and confidence
         track.Box = detection.Box;
@@ -345,14 +313,9 @@ public abstract class ObjectTrackerBase<T>
     /// </summary>
     protected BoundingBox<T> PredictNextPosition(Track<T> track)
     {
-        double x1 = NumOps.ToDouble(track.Box.X1) + track.VelocityX;
-        double y1 = NumOps.ToDouble(track.Box.Y1) + track.VelocityY;
-        double x2 = NumOps.ToDouble(track.Box.X2) + track.VelocityX;
-        double y2 = NumOps.ToDouble(track.Box.Y2) + track.VelocityY;
-
         return new BoundingBox<T>(
-            NumOps.FromDouble(x1), NumOps.FromDouble(y1),
-            NumOps.FromDouble(x2), NumOps.FromDouble(y2),
+            NumOps.Add(track.Box.X1, track.VelocityX), NumOps.Add(track.Box.Y1, track.VelocityY),
+            NumOps.Add(track.Box.X2, track.VelocityX), NumOps.Add(track.Box.Y2, track.VelocityY),
             BoundingBoxFormat.XYXY);
     }
 }

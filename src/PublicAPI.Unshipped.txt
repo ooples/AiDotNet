@@ -22565,3 +22565,34 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.ComputeCosineSimilarity(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.ComputeIoU(AiDotNet.Augmentation.Image.BoundingBox<T>! a, AiDotNet.Augmentation.Image.BoundingBox<T>! b) -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.HungarianAssignment(double[,]! costMatrix) -> int[]!
+*REMOVED*AiDotNet.ComputerVision.Tracking.Track<T>.VelocityX.get -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.Track<T>.VelocityY.get -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.AppearanceWeight.get -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.MaxCosineDistance.get -> double
+AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.ComputeCosineSimilarity(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> T
+AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.ComputeIoU(AiDotNet.Augmentation.Image.BoundingBox<T>! a, AiDotNet.Augmentation.Image.BoundingBox<T>! b) -> T
+AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.HungarianAssignment(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! costMatrix) -> int[]!
+AiDotNet.ComputerVision.Tracking.Track<T>.VelocityX.get -> T
+AiDotNet.ComputerVision.Tracking.Track<T>.VelocityY.get -> T
+AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.AppearanceWeight.get -> T
+AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.MaxCosineDistance.get -> T
+AiDotNet.ComputerVision.Tracking.DeepSORT<T>.DeepSORT(AiDotNet.ComputerVision.Tracking.TrackingOptions<T>! options, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? appearanceEncoder) -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.ByteTrackOptions() -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.DuplicateIouDistance.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.DuplicateIouDistance.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.FuseScore.get -> bool
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.FuseScore.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.LowScoreThreshold.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.LowScoreThreshold.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.MatchThreshold.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.MatchThreshold.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.NewTrackScoreMargin.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.NewTrackScoreMargin.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.SecondMatchThreshold.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.SecondMatchThreshold.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.UnconfirmedMatchThreshold.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.UnconfirmedMatchThreshold.set -> void
