@@ -4,6 +4,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -209,35 +210,33 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         var output = new Tensor<T>(new[] { n, _hidden });
         output.Fill(Ops.Zero);
 
+        T zero = Ops.Zero;
         for (int e = 0; e < _numExperts; e++)
         {
-            // Gather the tokens routed to expert e (with their weights).
-            var rows = new List<int>();
-            var w = new List<T>();
-            for (int tok = 0; tok < n; tok++)
+            // Gather the tokens routed to expert e (with their weights), in token order.
+            Tensor<T> column;
+            Tensor<int> rows;
+            using (new NoGradScope<T>())
             {
-                var wt = weightPerExpert[tok, e];
-                if (Ops.GreaterThan(wt, Ops.Zero)) { rows.Add(tok); w.Add(wt); }
+                column = Engine.Reshape(Engine.TensorNarrow(weightPerExpert, 1, e, 1), new[] { n });
+                var selected = Engine.TensorNonzero(Engine.TensorGreaterThan(column, zero)); // [m, 1]
+                rows = Engine.Reshape(selected, new[] { selected.Shape[0] });
             }
-            if (rows.Count == 0) continue;
+            int m = rows.Shape[0];
+            if (m == 0) continue;
 
-            int m = rows.Count;
-            var gathered = new Tensor<T>(new[] { m, _hidden });
-            for (int r = 0; r < m; r++)
-                for (int j = 0; j < _hidden; j++)
-                    gathered[r, j] = flat[rows[r], j];
+            var gathered = Engine.TensorIndexSelect(flat, rows, 0); // [m, hidden]
 
             var g = _gate[e].Forward(gathered);          // act(gate(x)) : [m, ffn]
             var u = _up[e].Forward(gathered);            // up(x)        : [m, ffn]
             var prod = Engine.TensorMultiply(g, u);      // gated hidden : [m, ffn]
             var d = _down[e].Forward(prod);              // down(...)    : [m, hidden]
 
-            for (int r = 0; r < m; r++)
+            // Scatter-add the weighted expert output back onto its tokens.
+            using (new NoGradScope<T>())
             {
-                int tok = rows[r];
-                var weight = w[r];
-                for (int j = 0; j < _hidden; j++)
-                    output[tok, j] = Ops.Add(output[tok, j], Ops.Multiply(weight, d[r, j]));
+                var weight = Engine.Reshape(Engine.TensorIndexSelect(column, rows, 0), new[] { m, 1 });
+                output = Engine.TensorIndexAdd(output, 0, rows, Engine.TensorMultiply(d, weight));
             }
         }
 
@@ -248,12 +247,9 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
             var su = _sharedUp.Forward(flat);
             var sh = _sharedDown.Forward(Engine.TensorMultiply(sg, su)); // [n, hidden]
             var gateLogit = _sharedGateLogit.Forward(flat);             // [n, 1]
-            for (int tok = 0; tok < n; tok++)
+            using (new NoGradScope<T>())
             {
-                double sig = 1.0 / (1.0 + Math.Exp(-Convert.ToDouble(gateLogit[tok, 0])));
-                var sigT = Ops.FromDouble(sig);
-                for (int j = 0; j < _hidden; j++)
-                    output[tok, j] = Ops.Add(output[tok, j], Ops.Multiply(sigT, sh[tok, j]));
+                output = Engine.TensorAdd(output, Engine.TensorMultiply(Engine.Sigmoid(gateLogit), sh));
             }
         }
 
@@ -263,40 +259,28 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
     // For each token: softmax over experts, keep the top-k, renormalize their weights (Mixtral convention).
     private Tensor<T> ComputeRouting(Tensor<T> routerOut, int n)
     {
-        var weights = new Tensor<T>(new[] { n, _numExperts });
-        weights.Fill(Ops.Zero);
+        // Routing weights are a fresh constant table, built off the tape.
+        using var noGrad = new NoGradScope<T>();
+        int experts = _numExperts;
+        var probs = Engine.Softmax(routerOut, 1); // [n, E]
 
-        var logits = new double[_numExperts];
-        for (int tok = 0; tok < n; tok++)
-        {
-            double max = double.NegativeInfinity;
-            for (int e = 0; e < _numExperts; e++)
-            {
-                logits[e] = Convert.ToDouble(routerOut[tok, e]);
-                if (logits[e] > max) max = logits[e];
-            }
-            double sumExp = 0.0;
-            var probs = new double[_numExperts];
-            for (int e = 0; e < _numExperts; e++) { probs[e] = Math.Exp(logits[e] - max); sumExp += probs[e]; }
-            for (int e = 0; e < _numExperts; e++) probs[e] /= sumExp;
+        // Select top-k experts by probability with an exact (probability desc, index asc) key: expert e
+        // is kept when fewer than k experts f rank ahead of it, where f ranks ahead if p_f > p_e, or
+        // p_f == p_e and f < e. That is the lowest-index tie order of a first-max selection.
+        var pe = Engine.TensorBroadcastTo(Engine.Reshape(probs, new[] { n, experts, 1 }), new[] { n, experts, experts });
+        var pf = Engine.TensorBroadcastTo(Engine.Reshape(probs, new[] { n, 1, experts }), new[] { n, experts, experts });
+        var ones = new Tensor<T>(new[] { experts, experts });
+        ones.Fill(Ops.One);
+        var lowerIndex = Engine.Reshape(Engine.TensorTril(ones, -1), new[] { 1, experts, experts }); // f < e
+        var ahead = Engine.TensorAdd(
+            Engine.TensorGreaterThan(pf, pe),
+            Engine.TensorMultiply(Engine.TensorEquals(pf, pe), lowerIndex));
+        var rank = Engine.ReduceSum(ahead, new[] { 2 });                          // [n, E]
+        var chosen = Engine.TensorLessThan(rank, Ops.FromDouble(_topK));
 
-            // Select top-k experts by probability.
-            var chosen = new int[_topK];
-            var chosenProb = new double[_topK];
-            var used = new bool[_numExperts];
-            double topSum = 0.0;
-            for (int k = 0; k < _topK; k++)
-            {
-                int best = -1; double bestP = double.NegativeInfinity;
-                for (int e = 0; e < _numExperts; e++)
-                    if (!used[e] && probs[e] > bestP) { bestP = probs[e]; best = e; }
-                used[best] = true;
-                chosen[k] = best; chosenProb[k] = bestP; topSum += bestP;
-            }
-            for (int k = 0; k < _topK; k++)
-                weights[tok, chosen[k]] = Ops.FromDouble(chosenProb[k] / topSum); // renormalize
-        }
-        return weights;
+        var kept = Engine.TensorMultiply(probs, chosen);
+        var topSum = Engine.ReduceSum(kept, new[] { 1 }, keepDims: true);
+        return Engine.TensorDivide(kept, topSum); // renormalize
     }
 
     private IEnumerable<LayerBase<T>> SubLayers()
