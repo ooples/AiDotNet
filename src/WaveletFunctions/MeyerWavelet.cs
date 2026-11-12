@@ -133,45 +133,32 @@ public class MeyerWavelet<T> : WaveletFunctionBase<T>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
+        var engine = AiDotNetEngine.Current;
 
-        // Perform FFT on the input
-        Vector<Complex<T>> spectrum = _fft.Forward(input);
+        // Perform FFT
+        var spectrum = Tensor<Complex<T>>.FromVector(_fft.Forward(input));
+        var spectrumReal = engine.TensorReal(spectrum);
+        var spectrumImag = engine.TensorImag(spectrum);
 
-        // Apply Meyer wavelet in frequency domain
-        var lowPass = new Vector<Complex<T>>(size);
-        var highPass = new Vector<Complex<T>>(size);
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+        // Low pass keeps f <= 1/3 and tapers by psi up to 2/3; high pass tapers by sqrt(1 - psi^2) up to 2/3
+        // and by sin(pi/2 * Vf(pi(3f/2 - 1))) up to 4/3. The tapers are real, so they scale both planes.
+        var (freq, firstBand, secondBand, thirdBand) = FrequencyBands(size);
+        var zeros = engine.TensorZerosLike(freq);
+        var psi = Transition(freq, NumOps.FromDouble(3), sine: false);
+        var complement = engine.TensorSqrt(engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiply(psi, psi)));
+        var upper = Transition(freq, NumOps.FromDouble(3.0 / 2), sine: true);
 
-        for (int i = 0; i < size; i++)
-        {
-            T freq = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(size));
-            if (NumOps.LessThanOrEquals(freq, NumOps.FromDouble(1.0 / 3)))
-            {
-                lowPass[i] = spectrum[i];
-            }
-            else if (NumOps.LessThanOrEquals(freq, NumOps.FromDouble(2.0 / 3)))
-            {
-                T v = NumOps.Multiply(NumOps.FromDouble(Math.PI), NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(3), freq), NumOps.One));
-                T psi = NumOps.FromDouble(Math.Cos(Math.PI / 2 * Vf(Convert.ToDouble(v))));
-                Complex<T> complexPsi = new Complex<T>(psi, NumOps.Zero);
-                lowPass[i] = complexOps.Multiply(spectrum[i], complexPsi);
-                T sqrtTerm = NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Multiply(psi, psi)));
-                Complex<T> complexSqrtTerm = new Complex<T>(sqrtTerm, NumOps.Zero);
-                highPass[i] = complexOps.Multiply(spectrum[i], complexSqrtTerm);
-            }
-            else if (NumOps.LessThanOrEquals(freq, NumOps.FromDouble(4.0 / 3)))
-            {
-                T v = NumOps.Multiply(NumOps.FromDouble(Math.PI), NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(3.0 / 2), freq), NumOps.One));
-                T psi = NumOps.FromDouble(Math.Sin(Math.PI / 2 * Vf(Convert.ToDouble(v))));
-                Complex<T> complexPsi = new Complex<T>(psi, NumOps.Zero);
-                highPass[i] = complexOps.Multiply(spectrum[i], complexPsi);
-            }
-        }
+        var lowGain = engine.TensorWhere(firstBand, engine.TensorOnesLike(freq), engine.TensorWhere(secondBand, psi, zeros));
+        var highGain = engine.TensorWhere(secondBand, complement, engine.TensorWhere(thirdBand, upper, zeros));
+
+        var lowPass = engine.TensorComplex(
+            engine.TensorMultiply(spectrumReal, lowGain), engine.TensorMultiply(spectrumImag, lowGain));
+        var highPass = engine.TensorComplex(
+            engine.TensorMultiply(spectrumReal, highGain), engine.TensorMultiply(spectrumImag, highGain));
 
         // Perform inverse FFT
-        Vector<T> approximation = _fft.Inverse(lowPass);
-        Vector<T> detail = _fft.Inverse(highPass);
-
+        Vector<T> approximation = _fft.Inverse(lowPass.ToVector());
+        Vector<T> detail = _fft.Inverse(highPass.ToVector());
         return (approximation, detail);
     }
 
@@ -197,21 +184,14 @@ public class MeyerWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        int size = approximation.Length;
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-
-        // Transform both to frequency domain
+        // Perform FFT on both approximation and detail
         Vector<Complex<T>> approxSpectrum = _fft.Forward(approximation);
         Vector<Complex<T>> detailSpectrum = _fft.Forward(detail);
 
-        // Add them together in frequency domain
-        var combined = new Vector<Complex<T>>(size);
-        for (int i = 0; i < size; i++)
-        {
-            combined[i] = complexOps.Add(approxSpectrum[i], detailSpectrum[i]);
-        }
+        // Combine the spectra
+        var combined = ComplexWaveletEngineOps<T>.AddTruncated(approxSpectrum, detailSpectrum);
 
-        // Transform back to time domain
+        // Perform inverse FFT
         return _fft.Inverse(combined);
     }
 
@@ -241,28 +221,13 @@ public class MeyerWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
-        var coefficients = new Vector<T>(size);
+        var engine = AiDotNetEngine.Current;
+        var (freq, firstBand, secondBand, _) = FrequencyBands(size);
 
-        for (int i = 0; i < size; i++)
-        {
-            double freq = (double)i / size;
-            if (freq <= 1.0 / 3)
-            {
-                coefficients[i] = NumOps.FromDouble(1);
-            }
-            else if (freq <= 2.0 / 3)
-            {
-                double v = Math.PI * (3 * freq - 1);
-                double psi = Math.Cos(Math.PI / 2 * Vf(v));
-                coefficients[i] = NumOps.FromDouble(psi);
-            }
-            else
-            {
-                coefficients[i] = NumOps.FromDouble(0);
-            }
-        }
-
-        return coefficients;
+        // 1 below 1/3, cos(pi/2 * Vf(pi(3f - 1))) up to 2/3, then 0
+        var transition = Transition(freq, NumOps.FromDouble(3), sine: false);
+        return engine.TensorWhere(firstBand, engine.TensorOnesLike(freq),
+            engine.TensorWhere(secondBand, transition, engine.TensorZerosLike(freq))).ToVector();
     }
 
     /// <summary>
@@ -293,34 +258,44 @@ public class MeyerWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
-        var coefficients = new Vector<T>(size);
+        var engine = AiDotNetEngine.Current;
+        var (freq, _, secondBand, thirdBand) = FrequencyBands(size);
+        var zeros = engine.TensorZerosLike(freq);
 
-        for (int i = 0; i < size; i++)
-        {
-            double freq = (double)i / size;
-            if (freq <= 1.0 / 3)
-            {
-                coefficients[i] = NumOps.FromDouble(0);
-            }
-            else if (freq <= 2.0 / 3)
-            {
-                double v = Math.PI * (3 * freq - 1);
-                double psi = Math.Sin(Math.PI / 2 * Vf(v));
-                coefficients[i] = NumOps.FromDouble(psi);
-            }
-            else if (freq <= 4.0 / 3)
-            {
-                double v = Math.PI * (3.0 / 2 * freq - 1);
-                double psi = Math.Sin(Math.PI / 2 * Vf(v));
-                coefficients[i] = NumOps.FromDouble(psi);
-            }
-            else
-            {
-                coefficients[i] = NumOps.FromDouble(0);
-            }
-        }
+        // 0 below 1/3, sin(pi/2 * Vf(pi(3f - 1))) up to 2/3, sin(pi/2 * Vf(pi(3f/2 - 1))) up to 4/3, then 0
+        var transition = Transition(freq, NumOps.FromDouble(3), sine: true);
+        var upper = Transition(freq, NumOps.FromDouble(3.0 / 2), sine: true);
+        return engine.TensorWhere(secondBand, transition, engine.TensorWhere(thirdBand, upper, zeros)).ToVector();
+    }
 
-        return coefficients;
+    /// <summary>
+    /// The normalized frequencies <c>i / size</c> and 0/1 masks of the Meyer bands
+    /// <c>f &lt;= 1/3</c>, <c>1/3 &lt; f &lt;= 2/3</c> and <c>2/3 &lt; f &lt;= 4/3</c>.
+    /// </summary>
+    private static (Tensor<T> freq, Tensor<T> firstBand, Tensor<T> secondBand, Tensor<T> thirdBand) FrequencyBands(int size)
+    {
+        var engine = AiDotNetEngine.Current;
+        var freq = engine.TensorDivideScalar(engine.TensorArange<T>(0, size, 1), NumOps.FromDouble(size));
+        var upToFirst = engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(freq, NumOps.FromDouble(1.0 / 3)));
+        var upToSecond = engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(freq, NumOps.FromDouble(2.0 / 3)));
+        var upToThird = engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(freq, NumOps.FromDouble(4.0 / 3)));
+        return (freq, upToFirst, engine.TensorSubtract(upToSecond, upToFirst), engine.TensorSubtract(upToThird, upToSecond));
+    }
+
+    /// <summary>
+    /// The Meyer transition <c>cos</c> or <c>sin</c> of <c>pi/2 * Vf(pi * (scale * f - 1))</c>.
+    /// </summary>
+    private static Tensor<T> Transition(Tensor<T> freq, T scale, bool sine)
+    {
+        var engine = AiDotNetEngine.Current;
+        var v = engine.TensorMultiplyScalar(
+            engine.TensorSubtractScalar(engine.TensorMultiplyScalar(freq, scale), NumOps.One), NumOps.FromDouble(Math.PI));
+
+        // Vf(v) = v^2 (3 - 2v)
+        var vf = engine.TensorMultiply(engine.TensorMultiply(v, v),
+            engine.ScalarMinusTensor(NumOps.FromDouble(3), engine.TensorMultiplyScalar(v, NumOps.FromDouble(2))));
+        var angle = engine.TensorMultiplyScalar(vf, NumOps.FromDouble(Math.PI / 2));
+        return sine ? engine.TensorSin(angle) : engine.TensorCos(angle);
     }
 
     /// <summary>
