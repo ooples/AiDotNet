@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.CausalDiscovery;
 
 /// <summary>
@@ -94,6 +96,114 @@ internal static class CausalTensorHelpers
         }
 
         return order;
+    }
+
+    /// <summary>
+    /// Pearson correlation of two columns: sum(dx dy) / sqrt(sum(dx^2) sum(dy^2)) over the centered
+    /// columns, or 0 unless both centered sums of squares are above 1e-10.
+    /// </summary>
+    internal static T PearsonCorrelation<T>(Matrix<T> data, int col1, int col2)
+    {
+        var engine = AiDotNetEngine.Current;
+        return PearsonCorrelation(engine.GetColumn(data, col1).AsTensor(), engine.GetColumn(data, col2).AsTensor());
+    }
+
+    /// <summary>
+    /// Pearson correlation of two 1-D tensors: sum(dx dy) / sqrt(sum(dx^2) sum(dy^2)) over the centered
+    /// values, or 0 unless both centered sums of squares are above 1e-10.
+    /// </summary>
+    internal static T PearsonCorrelation<T>(Tensor<T> x, Tensor<T> y)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var dx = engine.TensorSubtractScalar(x, engine.TensorMean(x));
+        var dy = engine.TensorSubtractScalar(y, engine.TensorMean(y));
+        T sxy = engine.TensorSum(engine.TensorMultiply(dx, dy));
+        T sxx = engine.TensorSum(engine.TensorSquare(dx));
+        T syy = engine.TensorSum(engine.TensorSquare(dy));
+        T tiny = ops.FromDouble(1e-10);
+        return ops.GreaterThan(sxx, tiny) && ops.GreaterThan(syy, tiny)
+            ? ops.Divide(sxy, ops.Sqrt(ops.Multiply(sxx, syy)))
+            : ops.Zero;
+    }
+
+    /// <summary>
+    /// Sum of squared deviations of a column from its mean.
+    /// </summary>
+    internal static T CenteredSumOfSquares<T>(Matrix<T> data, int column)
+    {
+        var engine = AiDotNetEngine.Current;
+        var x = engine.GetColumn(data, column).AsTensor();
+        return engine.TensorSum(engine.TensorSquare(engine.TensorSubtractScalar(x, engine.TensorMean(x))));
+    }
+
+    /// <summary>
+    /// Residual sum of squares of the least-squares fit of <paramref name="target"/> on an intercept and
+    /// <paramref name="predictors"/>: normal equations (Z'Z + ridge I) beta = Z'y over Z = [1 | X], solved by LU.
+    /// </summary>
+    internal static T InterceptOlsRss<T>(Matrix<T> data, int target, IReadOnlyList<int> predictors, double ridge)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = data.Rows;
+        int dim = predictors.Count + 1;
+        var x = Tensor<T>.FromMatrix(data);
+        var y = engine.TensorSliceAxis(x, 1, target).Reshape(new[] { n, 1 });
+        var z = engine.TensorConcatenate(new[] { engine.TensorOnesLike(y), SelectColumns(x, predictors) }, 1);
+        var zt = engine.TensorTranspose(z);
+        var gram = Symmetrize(engine.TensorMatMul(zt, z));
+        gram = engine.TensorAdd(gram, engine.TensorMultiplyScalar(engine.TensorEye<T>(dim), ops.FromDouble(ridge)));
+        var zty = engine.TensorMatMul(zt, y).Reshape(new[] { dim }).ToVector();
+
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(gram.ToMatrix(), zty, MatrixDecompositionType.Lu);
+        var prediction = engine.TensorMatMul(z, beta.AsTensor().Reshape(new[] { dim, 1 }));
+        return engine.TensorSum(engine.TensorSquare(engine.TensorSubtract(y, prediction)));
+    }
+
+    /// <summary>
+    /// Residual sum of squares of the least-squares fit of <paramref name="target"/> on the centered
+    /// <paramref name="predictors"/> with an implicit intercept: (Xc'Xc + ridge I) beta = Xc'yc solved by LU,
+    /// prediction mean(y) + Xc beta.
+    /// </summary>
+    internal static T CenteredOlsRss<T>(Matrix<T> data, int target, IReadOnlyList<int> predictors, double ridge)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = data.Rows;
+        int k = predictors.Count;
+        var x = Tensor<T>.FromMatrix(data);
+        var y = engine.TensorSliceAxis(x, 1, target).Reshape(new[] { n, 1 });
+        var yc = engine.TensorSubtractScalar(y, engine.TensorMean(y));
+        var predictorColumns = SelectColumns(x, predictors);
+        var xc = engine.TensorSubtract(predictorColumns,
+            engine.TensorBroadcastTo(engine.ReduceMean(predictorColumns, new[] { 0 }, true), new[] { n, k }));
+        var xct = engine.TensorTranspose(xc);
+        var gram = Symmetrize(engine.TensorMatMul(xct, xc));
+        gram = engine.TensorAdd(gram, engine.TensorMultiplyScalar(engine.TensorEye<T>(k), ops.FromDouble(ridge)));
+        var xty = engine.TensorMatMul(xct, yc).Reshape(new[] { k }).ToVector();
+
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(gram.ToMatrix(), xty, MatrixDecompositionType.Lu);
+        var residual = engine.TensorSubtract(yc, engine.TensorMatMul(xc, beta.AsTensor().Reshape(new[] { k, 1 })));
+        return engine.TensorSum(engine.TensorSquare(residual));
+    }
+
+    /// <summary>
+    /// Gathers the given columns of an [n x d] tensor into an [n x k] tensor.
+    /// </summary>
+    internal static Tensor<T> SelectColumns<T>(Tensor<T> source, IReadOnlyList<int> columns)
+    {
+        var index = columns.ToArray();
+        return AiDotNetEngine.Current.TensorIndexSelect(source, new Tensor<int>(index, new[] { index.Length }), 1);
+    }
+
+    /// <summary>
+    /// The square matrix with its strict lower triangle replaced by the mirrored upper triangle, so a Gram
+    /// matrix is exactly symmetric.
+    /// </summary>
+    internal static Tensor<T> Symmetrize<T>(Tensor<T> matrix)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAdd(engine.TensorTriu(matrix, 0), engine.TensorTranspose(engine.TensorTriu(matrix, 1)));
     }
 
     /// <summary>
