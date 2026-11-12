@@ -757,12 +757,9 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
     /// </summary>
     private class SurvivalTree
     {
-        [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-        public SurvivalTree() { }
-
         public bool IsLeaf { get; set; }
         public int SplitFeature { get; set; }
-        public required T SplitThreshold { get; set; }
+        public T SplitThreshold { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
         public SurvivalTree? Left { get; set; }
         public SurvivalTree? Right { get; set; }
         public int LeafIndex { get; set; }

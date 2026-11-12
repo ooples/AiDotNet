@@ -20,29 +20,20 @@ public class NeuralArchitectureSearch<T>
     public Architecture<T>? BestArchitecture { get; private set; }
     public T BestScore { get; private set; }
 
-    public NeuralArchitectureSearch(
-        NeuralArchitectureSearchStrategy strategy = NeuralArchitectureSearchStrategy.GradientBased,
-        int maxEpochs = 50)
-        : this(strategy, maxEpochs, new DartsOptimizerOptions())
-    {
-    }
-
     /// <summary>
     /// Creates a search whose DARTS optimizers use <paramref name="optimizerOptions"/> (the defaults are those of
     /// Liu et al. 2019, Sec. 5.1).
     /// </summary>
     /// <param name="strategy">The search strategy.</param>
     /// <param name="maxEpochs">The number of search epochs.</param>
-    /// <param name="optimizerOptions">The architecture (Adam) and weight (SGD) optimizer settings.</param>
+    /// <param name="optimizerOptions">The architecture (Adam) and weight (SGD) optimizer settings; null uses
+    /// the paper defaults.</param>
     public NeuralArchitectureSearch(
-        NeuralArchitectureSearchStrategy strategy,
-        int maxEpochs,
-        DartsOptimizerOptions optimizerOptions)
+        NeuralArchitectureSearchStrategy strategy = NeuralArchitectureSearchStrategy.GradientBased,
+        int maxEpochs = 50,
+        DartsOptimizerOptions? optimizerOptions = null)
     {
-        if (optimizerOptions is null)
-        {
-            throw new ArgumentNullException(nameof(optimizerOptions));
-        }
+        optimizerOptions ??= new DartsOptimizerOptions();
 
         if (optimizerOptions.ArchitectureLearningRate <= 0.0 || optimizerOptions.WeightMinLearningRate < 0.0
             || optimizerOptions.WeightMaxLearningRate < optimizerOptions.WeightMinLearningRate)

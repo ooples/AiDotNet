@@ -432,9 +432,9 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
 
         // MetaAdaptationResult constructor: queryAccuracy, queryLoss, supportAccuracy, supportLoss, adaptationSteps, adaptationTimeMs
         return new MetaAdaptationResult<T>(
-            queryAccuracy: NumOps.FromDouble(queryAccuracy),
+            queryAccuracy: queryAccuracy,
             queryLoss: queryLoss,
-            supportAccuracy: NumOps.FromDouble(supportAccuracy),
+            supportAccuracy: supportAccuracy,
             supportLoss: supportLoss,
             adaptationSteps: _options.AdaptationSteps,
             adaptationTimeMs: stopwatch.Elapsed.TotalMilliseconds
@@ -1099,10 +1099,13 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
                 ? layerLr
                 : defaultLearningRate;
 
+            // Offsets were bounds-checked against the int-sized vectors above.
+            int offset = checked((int)info.ParameterOffset);
+            int count = checked((int)info.ParameterCount);
             var layerStep = Engine.Subtract(
-                parameters.GetSubVector(info.ParameterOffset, info.ParameterCount),
-                ScaleVector(gradients.GetSubVector(info.ParameterOffset, info.ParameterCount), lr));
-            layerStep.AsSpan().CopyTo(updated.AsWritableSpan().Slice(info.ParameterOffset, info.ParameterCount));
+                parameters.GetSubVector(offset, count),
+                ScaleVector(gradients.GetSubVector(offset, count), lr));
+            layerStep.AsSpan().CopyTo(updated.AsWritableSpan().Slice(offset, count));
         }
 
         return updated;

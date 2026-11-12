@@ -23101,7 +23101,8 @@ AiDotNet.AutoML.DartsOptimizerOptions.WeightDecay.get -> double
 AiDotNet.AutoML.DartsOptimizerOptions.WeightDecay.set -> void
 AiDotNet.AutoML.DartsOptimizerOptions.GradientClipNorm.get -> double
 AiDotNet.AutoML.DartsOptimizerOptions.GradientClipNorm.set -> void
-AiDotNet.AutoML.NeuralArchitectureSearch<T>.NeuralArchitectureSearch(AiDotNet.Enums.NeuralArchitectureSearchStrategy strategy, int maxEpochs, AiDotNet.AutoML.DartsOptimizerOptions! optimizerOptions) -> void
+AiDotNet.AutoML.NeuralArchitectureSearch<T>.NeuralArchitectureSearch(AiDotNet.Enums.NeuralArchitectureSearchStrategy strategy = AiDotNet.Enums.NeuralArchitectureSearchStrategy.GradientBased, int maxEpochs = 50, AiDotNet.AutoML.DartsOptimizerOptions? optimizerOptions = null) -> void
+*REMOVED*AiDotNet.AutoML.NeuralArchitectureSearch<T>.NeuralArchitectureSearch(AiDotNet.Enums.NeuralArchitectureSearchStrategy strategy = AiDotNet.Enums.NeuralArchitectureSearchStrategy.GradientBased, int maxEpochs = 50) -> void
 AiDotNet.AutoML.NeuralArchitectureSearch<T>.OptimizerOptions.get -> AiDotNet.AutoML.DartsOptimizerOptions!
 AiDotNet.AutoML.NAS.PCDARTS<T>.GetEdgeParameters() -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
 AiDotNet.AutoML.NAS.PCDARTS<T>.GetEdgeGradients() -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
@@ -23300,5 +23301,9 @@ AiDotNet.AutoML.NAS.PCDARTSOptions.BatchSize.get -> int
 AiDotNet.AutoML.NAS.PCDARTSOptions.BatchSize.set -> void
 AiDotNet.AutoML.NAS.PCDARTSOptions.PartialChannelK.get -> int
 AiDotNet.AutoML.NAS.PCDARTSOptions.PartialChannelK.set -> void
-AiDotNet.AutoML.NAS.PCDARTS<T>.PCDARTS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.PCDARTSOptions! options, int numNodes = 4, bool useEdgeNormalization = true) -> void
+AiDotNet.AutoML.NAS.PCDARTS<T>.PCDARTS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.PCDARTSOptions! options) -> void
+AiDotNet.AutoML.NAS.PCDARTS<T>.PCDARTS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.PCDARTSOptions! options, int numNodes, bool useEdgeNormalization) -> void
 AiDotNet.AutoML.NAS.PCDARTS<T>.SearchOptions.get -> AiDotNet.AutoML.NAS.PCDARTSOptions!
+override AiDotNet.MetaLearning.Algorithms.MANNAlgorithm<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+override AiDotNet.MetaLearning.Algorithms.PMFAlgorithm<T, TInput, TOutput>.ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput) -> T
+override AiDotNet.MetaLearning.Algorithms.PMFAlgorithm<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void

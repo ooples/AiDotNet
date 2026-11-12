@@ -213,13 +213,10 @@ internal sealed class DomainDiscretizer<T>
         if (named.Count > 0)
         {
             named.Sort((a, b) => a.Key.CompareTo(b.Key));
-            var nameValues = new Tensor<T>(new[] { named.Count });
-            var nameIndices = new Tensor<int>(new[] { named.Count });
-            for (int m = 0; m < named.Count; m++)
-            {
-                nameValues.SetFlat(m, NumOps.FromDouble(named[m].Key));
-                nameIndices.SetFlat(m, named[m].Value);
-            }
+            // The category names are parsed decimal strings, so their values exist only as doubles.
+            var nameValues = Tensor<double>.FromVector(new Vector<double>(named.Select(pair => pair.Key).ToArray()))
+                .Cast<T>();
+            var nameIndices = Tensor<int>.FromVector(new Vector<int>(named.Select(pair => pair.Value).ToArray()));
 
             var position = engine.TensorClamp(engine.TensorSearchSorted(nameValues, column, false), 0, named.Count - 1);
             var nameMatch = engine.TensorEquals(engine.TensorIndexSelect(nameValues, position, 0), column);

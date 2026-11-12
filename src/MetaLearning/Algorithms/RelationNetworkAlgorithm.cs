@@ -596,10 +596,10 @@ internal sealed class RelationScorer<T>
             {
                 var predicted = Tensor<T>.FromVector(
                     compared == predictedClasses.Length ? predictedClasses : predictedClasses.GetSubVector(0, compared));
-                var expected = engine.Reshape(labels, new[] { n });
-                if (compared < n) expected = engine.TensorSlice(expected, new[] { 0 }, new[] { compared });
+                var target = engine.Reshape(labels, new[] { n });
+                if (compared < n) target = engine.TensorSlice(target, new[] { 0 }, new[] { compared });
                 var misses = engine.TensorGreaterThan(
-                    engine.TensorAbs(engine.TensorSubtract(predicted, expected)), Ops.FromDouble(0.5));
+                    engine.TensorAbs(engine.TensorSubtract(predicted, target)), Ops.FromDouble(0.5));
                 wrong = Ops.Add(wrong, engine.TensorSum(misses));
             }
 

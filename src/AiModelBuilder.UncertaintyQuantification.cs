@@ -545,7 +545,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var p1 = engine.TensorClamp(
             Tensor<T>.FromVector(probabilities.ToVector(), new[] { batch, 2 }).Slice(1, 1, 2).Reshape(new[] { batch }),
             low, high);
-        return engine.TensorLog(engine.TensorDivide(p1, engine.TensorAddScalar(engine.TensorNegate(p1), numOps.One)));
+        return engine.TensorLog(engine.TensorDivide(p1, engine.TensorAddScalar(engine.TensorNegate(p1), MathHelper.GetNumericOperations<T>().One)));
     }
 
     private static Tensor<T> ApplyPlattScalingToProbabilitiesBinary(Tensor<T> probabilities, T a, T b, int batch)

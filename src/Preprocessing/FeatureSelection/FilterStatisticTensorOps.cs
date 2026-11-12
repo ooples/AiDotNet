@@ -186,6 +186,7 @@ internal static class FilterStatisticTensorOps
         var sampleIndex = engine.Reshape(engine.TensorArange<T>(0, n, 1), new[] { 1, n });
         int block = Math.Max(1, Math.Min(kCount, DftBlockElements / n));
         var blocks = new List<Tensor<T>>();
+        T angleScale = ops.FromDouble(2.0 * Math.PI / n);
         for (int start = 1; start <= kCount; start += block)
         {
             int count = Math.Min(block, kCount - start + 1);
@@ -193,7 +194,7 @@ internal static class FilterStatisticTensorOps
 
             // angle[k, i] = 2 pi k i / n
             var angle = engine.TensorMultiplyScalar(
-                engine.TensorMatMul(frequency, sampleIndex), ops.FromDouble(2.0 * Math.PI / n));
+                engine.TensorMatMul(frequency, sampleIndex), angleScale);
             var real = engine.TensorMatMul(engine.TensorCos(angle), x);
             var imaginary = engine.TensorMatMul(engine.TensorSin(angle), x);
             blocks.Add(engine.TensorAdd(engine.TensorSquare(real), engine.TensorSquare(imaginary)));
