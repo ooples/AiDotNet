@@ -188,6 +188,9 @@ public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
             AnomalyTensorOps.BroadcastRow(labels, k));
     }
 
+    // Upper bound on the elements of one [rows, n] block of within-cluster distances.
+    private const int DensityBlockElements = 1 << 22;
+
     private Vector<T> ComputeClusterDensities()
     {
         var clusterCenters = _clusterCenters;
@@ -221,13 +224,30 @@ public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
             hasNeighbors[i] = effectiveK > 0 ? 1 : 0;
         }
 
+        // Within-cluster k-distances in bounded row blocks (only [block, n] tensors are live). Row r of the
+        // block starting at first is point first + r, so its self entry is the diagonal j - r = first.
         var points = AnomalyTensorOps.ToTensor(trainingData);
-        var sameCluster = engine.TensorMatMul(engine.TensorTranspose(membership), membership);
-        var other = engine.TensorEqScalar(engine.TensorSubtract(sameCluster, engine.TensorEye<T>(n)), NumOps.Zero);
-        var withinCluster = engine.TensorMaskedFill(AnomalyTensorOps.PairwiseDistances(points, points), other, NumOps.MaxValue);
-        var (sorted, _) = engine.TensorSort(withinCluster, 1, false);
-        var kDistances = engine.Reshape(engine.TensorTakeAlongDim(sorted,
-            Tensor<int>.FromVector(Vector<int>.Wrap(kthPosition), new[] { n, 1 }), 1), new[] { n });
+        int d = points.Shape[1];
+        int rowsPerBlock = Math.Max(1, Math.Min(n, DensityBlockElements / Math.Max(1, n)));
+        var kParts = new List<Tensor<T>>();
+        for (int first = 0; first < n; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, n - first);
+            var block = engine.TensorSlice(points, new[] { first, 0 }, new[] { count, d });
+            var blockMembership = engine.TensorSlice(membership, new[] { 0, first }, new[] { k, count });
+            var sameCluster = engine.TensorMatMul(engine.TensorTranspose(blockMembership), membership);
+            var ones = Tensor<T>.CreateOnes(new[] { count, n });
+            var self = engine.TensorSubtract(engine.TensorTril(ones, first), engine.TensorTril(ones, first - 1));
+            var other = engine.TensorEqScalar(engine.TensorSubtract(sameCluster, self), NumOps.Zero);
+            var withinCluster = engine.TensorMaskedFill(AnomalyTensorOps.PairwiseDistances(block, points), other, NumOps.MaxValue);
+            var (sorted, _) = engine.TensorSort(withinCluster, 1, false);
+            var blockPositions = new int[count];
+            Array.Copy(kthPosition, first, blockPositions, 0, count);
+            kParts.Add(engine.Reshape(engine.TensorTakeAlongDim(sorted,
+                Tensor<int>.FromVector(Vector<int>.Wrap(blockPositions), new[] { count, 1 }), 1), new[] { count }));
+        }
+
+        var kDistances = kParts.Count == 1 ? kParts[0] : engine.TensorConcatenate(kParts.ToArray(), 0);
         kDistances = engine.TensorMultiply(kDistances,
             Tensor<int>.FromVector(Vector<int>.Wrap(hasNeighbors), new[] { n }).Cast<T>());
 
@@ -271,8 +291,11 @@ public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
 
         // Local density 1 / (k-distance + eps), the k-distance being the effectiveK-th smallest distance to the
         // training points (the largest when effectiveK is 0)
-        var (sorted, _) = engine.TensorSort(AnomalyTensorOps.PairwiseDistances(points, AnomalyTensorOps.ToTensor(trainingData)), 1, false);
-        var kDist = engine.TensorSliceAxis(sorted, 1, effectiveK > 0 ? effectiveK - 1 : nTraining - 1);
+        // (bounded blocks of query rows; only a [block, nTraining] distance matrix is live)
+        var training = AnomalyTensorOps.ToTensor(trainingData);
+        int kthColumn = effectiveK > 0 ? effectiveK - 1 : nTraining - 1;
+        var kDist = AnomalyTensorOps.MapRowBlocks(points, nTraining, block =>
+            engine.TensorSliceAxis(engine.TensorSort(AnomalyTensorOps.PairwiseDistances(block, training), 1, false).Item1, 1, kthColumn));
         var localDensity = engine.TensorReciprocal(engine.TensorAddScalar(kDist, eps));
 
         // LDCOF score: ratio of cluster density to local density

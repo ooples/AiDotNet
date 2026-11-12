@@ -202,6 +202,7 @@ public class ProbabilisticAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task ECOD_MatchesPyodTailAndSkewnessRule()
     {
+        await Task.Yield();
         // PyOD ECOD: O = max(U_left, U_right, U_skew) per feature, summed
         var data = EcdfReferenceData();
         var detector = new ECODDetector<double>();
@@ -218,6 +219,7 @@ public class ProbabilisticAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task COPOD_MatchesPyodTailAndSkewnessRule()
     {
+        await Task.Yield();
         // PyOD COPOD: O = max(U_skew, (U_left + U_right) / 2) per feature, summed
         var data = EcdfReferenceData();
         var detector = new COPODDetector<double>();
@@ -237,6 +239,7 @@ public class ProbabilisticAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task COPOD_LeftSkewedFeatureUsesTheLeftTail()
     {
+        await Task.Yield();
         // Mirror image -1, -2, -3, -4, -10: m3 < 0 (left-skewed), U_skew = U_left, and the max per point is
         // the mirror of the right-skewed case: ln 5, ln 2.5, ln(5/3), ln 2.5, ln 5 for -10, -4, -3, -2, -1.
         var data = new Matrix<double>(new double[,] { { -1 }, { -2 }, { -3 }, { -4 }, { -10 } });

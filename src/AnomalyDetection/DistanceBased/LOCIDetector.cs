@@ -148,12 +148,6 @@ public partial class LOCIDetector<T> : AnomalyDetectorBase<T>
         int m = X.Rows;
         int nTraining = trainingData.Rows;
         var training = AnomalyTensorOps.ToTensor(trainingData);
-        var queryDistances = AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), training);
-        var trainingDistances = AnomalyTensorOps.PairwiseDistances(training, training);
-        var positiveDistance = engine.TensorGreaterThan(queryDistances, NumOps.Zero);
-        var zeros = Tensor<T>.CreateZeros(new[] { m });
-        var ones = Tensor<T>.CreateOnes(new[] { m });
-        T isolatedScore = NumOps.FromDouble(IsolatedPointScore);
 
         // Radii r = maxRadius * overshoot * step / steps (slightly beyond maxRadius to handle floating-point
         // edge cases) and the sampling radii alpha * r
@@ -163,6 +157,57 @@ public partial class LOCIDetector<T> : AnomalyDetectorBase<T>
             NumOps.FromDouble(NumRadiiSteps));
         var samplingRadii = engine.TensorMultiplyScalar(radii, NumOps.FromDouble(_alpha));
 
+        // Counting neighbourhood sizes n(q, r) of every training point for every radius, from bounded
+        // blocks of training rows (only a [block, nTraining] distance matrix is live)
+        var trainingParts = new List<Tensor<T>>[NumRadiiSteps];
+        for (int ri = 0; ri < NumRadiiSteps; ri++)
+        {
+            trainingParts[ri] = new List<Tensor<T>>();
+        }
+
+        int rowsPerBlock = Math.Max(1, Math.Min(nTraining, LociBlockElements / Math.Max(1, nTraining)));
+        for (int first = 0; first < nTraining; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, nTraining - first);
+            var blockDistances = AnomalyTensorOps.PairwiseDistances(
+                engine.TensorSlice(training, new[] { first, 0 }, new[] { count, training.Shape[1] }), training);
+            for (int ri = 0; ri < NumRadiiSteps; ri++)
+            {
+                trainingParts[ri].Add(engine.ReduceSum(
+                    WithinRadius(blockDistances, engine.TensorSlice(radii, new[] { ri }, new[] { 1 })), new[] { 1 }, false));
+            }
+        }
+
+        var trainingNRs = new Tensor<T>[NumRadiiSteps];
+        for (int ri = 0; ri < NumRadiiSteps; ri++)
+        {
+            trainingNRs[ri] = trainingParts[ri].Count == 1
+                ? trainingParts[ri][0]
+                : engine.TensorConcatenate(trainingParts[ri].ToArray(), 0);
+        }
+
+        // Query rows are scored in bounded blocks: only a [block, nTraining] distance matrix is live
+        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), nTraining,
+            query => ScoreBlock(query, training, trainingNRs, radii, samplingRadii)).ToVector();
+    }
+
+    // Upper bound on the elements of one [rows, nTraining] block of distances.
+    private const int LociBlockElements = 1 << 22;
+
+    // LOCI scores of one block of query rows, given n(q, r) of every training point for every radius.
+    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T>[] trainingNRs, Tensor<T> radii,
+        Tensor<T> samplingRadii)
+    {
+        var engine = Engine;
+        int m = query.Shape[0];
+        int nTraining = training.Shape[0];
+        var queryDistances = AnomalyTensorOps.PairwiseDistances(query, training);
+        var positiveDistance = engine.TensorGreaterThan(queryDistances, NumOps.Zero);
+        var zeros = Tensor<T>.CreateZeros(new[] { m });
+        var ones = Tensor<T>.CreateOnes(new[] { m });
+        T isolatedScore = NumOps.FromDouble(IsolatedPointScore);
+        T countedFloor = NumOps.FromDouble(1.5);
+
         var maxMdef = zeros;
         var hadNeighbors = zeros;
         for (int ri = 0; ri < NumRadiiSteps; ri++)
@@ -170,8 +215,8 @@ public partial class LOCIDetector<T> : AnomalyDetectorBase<T>
             // Counting neighbourhood sizes n(p, r) of the points and of every training point
             var r = engine.TensorSlice(radii, new[] { ri }, new[] { 1 });
             var nR = engine.ReduceSum(WithinRadius(queryDistances, r), new[] { 1 }, false);
-            var trainingNR = engine.ReduceSum(WithinRadius(trainingDistances, r), new[] { 1 }, false);
-            var counted = engine.TensorGreaterThan(nR, NumOps.FromDouble(1.5));
+            var trainingNR = trainingNRs[ri];
+            var counted = engine.TensorGreaterThan(nR, countedFloor);
             hadNeighbors = engine.TensorMax(hadNeighbors, counted);
 
             // Sampling neighbourhood: training points at a positive distance within alpha * r
@@ -211,7 +256,7 @@ public partial class LOCIDetector<T> : AnomalyDetectorBase<T>
 
         // A point with no neighbours at ANY tested radius is an extreme isolate
         return engine.TensorWhere(hadNeighbors, maxMdef,
-            engine.TensorAddScalar(zeros, NumOps.FromDouble(NoNeighborScore))).ToVector();
+            engine.TensorAddScalar(zeros, NumOps.FromDouble(NoNeighborScore)));
     }
 
     // 1 where distance <= radius (a [1] tensor), else 0; not-greater-than, so NaN distances count as within.
