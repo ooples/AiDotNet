@@ -40502,26 +40502,130 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
-||||||| 0c06dc461c
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0},System.Double[][],System.Int32)</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0},System.Double[][],System.Int32)</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0},System.Double[][],System.Int32)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32[][],System.Double[][])</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32[][],System.Double[][])</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32[][],System.Double[][])</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction{`0},System.ValueTuple{System.Double,System.Double}[],System.Int32,System.Int32)</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction{`0},System.ValueTuple{System.Double,System.Double}[],System.Int32,System.Int32)</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Kernels.GridInterpolationKernel`1.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction{`0},System.ValueTuple{System.Double,System.Double}[],System.Int32,System.Int32)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.SurvivalAnalysis.RandomSurvivalForest`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.SurvivalAnalysis.RandomSurvivalForest`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.SurvivalAnalysis.RandomSurvivalForest`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>
     <Target>T:AiDotNet.Metrics.PerceptualSpeechQuality`1</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>
     <Target>T:AiDotNet.Metrics.PerceptualSpeechQuality`1</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>
     <Target>T:AiDotNet.Metrics.PerceptualSpeechQuality`1</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>
