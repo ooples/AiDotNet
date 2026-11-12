@@ -184,7 +184,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (index < 0) index = 0;
         if (index >= n) index = n - 1;
 
-        return SelectKthInPlace(residuals, index);
+        return KthSmallest(residuals, index);
     }
 
     /// <summary>
@@ -365,7 +365,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private static T FitTemperatureFromProbabilities(Tensor<T> probabilities, Vector<int> labels, int batch, int classes)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var eps = numOps.FromDouble(1e-12);
+        var eps = ProbabilityFloor();
         var sumTolerance = numOps.FromDouble(1e-3);
         var uniformProbability = numOps.Divide(numOps.One, numOps.FromDouble(classes));
         var engine = AiDotNetEngine.Current;
@@ -411,7 +411,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
-        var eps = numOps.FromDouble(1e-12);
+        var eps = ProbabilityFloor();
         var shape = new[] { batch, classes };
         var rows = Tensor<T>.FromVector(probabilities.ToVector(), shape);
 
@@ -448,7 +448,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             : ProbabilityCalibrationMethod.None;
     }
 
-    private static (T a, T b) FitPlattScalingBinary(Tensor<T> probabilities, Vector<int> labels, int batch)
+    internal static (T a, T b) FitPlattScalingBinary(Tensor<T> probabilities, Vector<int> labels, int batch)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
@@ -499,16 +499,50 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// logit(p1) of the positive-class column of a [batch, 2] probability tensor, with p1 clipped to
-    /// [1e-12, 1 - 1e-12].
+    /// The smallest probability floor, starting at 1e-12, that is still positive in <typeparamref name="T"/>.
+    /// 1e-12 underflows to 0 in Half, so a fixed 1e-12 floor would leave log(0) = -infinity there.
     /// </summary>
-    private static Tensor<T> PositiveClassLogit(Tensor<T> probabilities, int batch)
+    internal static T ProbabilityFloor()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        double eps = 1e-12;
+        while (!numOps.GreaterThan(numOps.FromDouble(eps), numOps.Zero))
+        {
+            eps *= 2.0;
+        }
+
+        return numOps.FromDouble(eps);
+    }
+
+    /// <summary>
+    /// The smallest clip margin, starting at 1e-12, for which both eps and 1 - eps are representable in
+    /// <typeparamref name="T"/> as values strictly inside (0, 1). 1 - 1e-12 rounds to 1 in float (and 1e-12 to 0
+    /// in Half), which would make logit(p) infinite; the margin grows to about the type's machine epsilon there.
+    /// </summary>
+    internal static (T Low, T High) ProbabilityClipBounds()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double eps = 1e-12;
+        while (!(numOps.GreaterThan(numOps.FromDouble(eps), numOps.Zero)
+            && numOps.LessThan(numOps.FromDouble(1.0 - eps), numOps.One)))
+        {
+            eps *= 2.0;
+        }
+
+        return (numOps.FromDouble(eps), numOps.FromDouble(1.0 - eps));
+    }
+
+    /// <summary>
+    /// logit(p1) of the positive-class column of a [batch, 2] probability tensor, with p1 clipped to
+    /// [eps, 1 - eps] (<see cref="ProbabilityClipBounds"/>), so the logit stays finite in every T.
+    /// </summary>
+    internal static Tensor<T> PositiveClassLogit(Tensor<T> probabilities, int batch)
+    {
         var engine = AiDotNetEngine.Current;
+        var (low, high) = ProbabilityClipBounds();
         var p1 = engine.TensorClamp(
             Tensor<T>.FromVector(probabilities.ToVector(), new[] { batch, 2 }).Slice(1, 1, 2).Reshape(new[] { batch }),
-            numOps.FromDouble(1e-12), numOps.FromDouble(1.0 - 1e-12));
+            low, high);
         return engine.TensorLog(engine.TensorDivide(p1, engine.TensorAddScalar(engine.TensorNegate(p1), numOps.One)));
     }
 
@@ -587,9 +621,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
+        var (low, high) = ProbabilityClipBounds();
         var p1 = engine.TensorClamp(
             Tensor<T>.FromVector(probabilities.ToVector(), new[] { batch, 2 }).Slice(1, 1, 2).Reshape(new[] { batch }),
-            numOps.FromDouble(1e-12), numOps.FromDouble(1.0 - 1e-12));
+            low, high);
 
         // Step function of the isotonic fit: y at the first knot x >= p, the last y beyond the last knot, and the
         // identity when there is no fit.
@@ -648,7 +683,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         var usable = Vector<T>.FromArray(thresholds.ToArray());
         var medianIndex = usable.Length / 2;
-        return SelectKthInPlace(usable, medianIndex);
+        return KthSmallest(usable, medianIndex);
     }
 
     private static (double[] edges, Vector<T> thresholds) ComputeAdaptiveConformalClassificationThresholds(
@@ -1158,7 +1193,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         object sample = value switch
         {
-            Tensor<T> tensor when tensor.Rank >= 2 => tensor.Slice(0, index, index + 1).Contiguous(),
+            // A rank-1 [N] target (one scalar per sample) slices to [1], like a Vector target.
+            Tensor<T> tensor when tensor.Rank >= 1 => tensor.Slice(0, index, index + 1).Contiguous(),
             Matrix<T> matrix => Matrix<T>.FromRowVectors(new[] { matrix.GetRow(index) }),
             Vector<T> vector => vector.GetSubVector(index, 1),
             _ => throw new NotSupportedException($"Per-sample gradients need a Tensor, Matrix or Vector batch, not {typeof(TValue).Name}.")
@@ -1253,17 +1289,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Computes the conformal score threshold for classification prediction sets.
-    /// </summary>
-    /// <param name="scores">Scores for the true labels (order does not matter).</param>
-    /// <param name="confidenceLevel">Desired coverage probability (e.g., 0.9).</param>
-    /// <returns>The score threshold.</returns>
-    /// <summary>
     /// Split-conformal threshold on the true-class probability (LAC; Sadinle et al. 2019): with nonconformity
     /// 1 - p, the conformal quantile is the ceil((n + 1)(1 - alpha))-th smallest nonconformity, i.e. the
     /// floor((n + 1) alpha)-th smallest true-class probability. The set {c : p_c >= threshold} then covers the
     /// true class with probability at least 1 - alpha. When floor((n + 1) alpha) is 0 every class is kept.
     /// </summary>
+    /// <param name="scores">Scores for the true labels (order does not matter).</param>
+    /// <param name="confidenceLevel">Desired coverage probability (e.g., 0.9).</param>
+    /// <returns>The score threshold.</returns>
     internal static T ComputeConformalClassificationThreshold(Vector<T> scores, double confidenceLevel)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -1282,13 +1315,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return numOps.Zero;
         }
 
-        return SelectKthInPlace(scores, Math.Min(rank, n) - 1);
+        return KthSmallest(scores, Math.Min(rank, n) - 1);
     }
 
     /// <summary>
     /// The k-th smallest value (0-based) of <paramref name="values"/>; the vector is left unchanged.
     /// </summary>
-    private static T SelectKthInPlace(Vector<T> values, int k)
+    private static T KthSmallest(Vector<T> values, int k)
     {
         var (sorted, _) = AiDotNetEngine.Current.TensorSort(values.AsTensor(), 0, false);
         return sorted.ToVector()[k];
