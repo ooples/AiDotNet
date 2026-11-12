@@ -291,27 +291,29 @@ internal static class PreprocessingTensorOps
         Tensor<T> oneHotA, Tensor<T> oneHotB, int bins, bool bits = true, double logEpsilon = 1e-10, bool clampAtZero = true)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int n = oneHotA.Shape[0];
         int pa = oneHotA.Shape[1] / bins;
         int pb = oneHotB.Shape[1] / bins;
-        T count = ops.FromDouble(n);
+        double count = n;
 
-        var joint = engine.TensorMatMul(engine.TensorTranspose(oneHotA), oneHotB);
-        // Bin occupancies counted in int: 0/1 sums in a narrow T (Half) stop growing at 2048
-        var marginalA = engine.ReduceSum(oneHotA.Cast<int>(), new[] { 0 }, false).Cast<T>();
-        var marginalB = engine.ReduceSum(oneHotB.Cast<int>(), new[] { 0 }, false).Cast<T>();
+        // Joint and marginal bin counts in double (exact up to 2^53): 0/1 sums in a narrow T such as Half stop
+        // growing at 2048, and the marginal product overflows Half. Only the finished scores are converted to T.
+        var a = oneHotA.Cast<double>();
+        var b = oneHotB.Cast<double>();
+        var joint = engine.TensorMatMul(engine.TensorTranspose(a), b);
+        var marginalA = engine.ReduceSum(a, new[] { 0 }, false);
+        var marginalB = engine.ReduceSum(b, new[] { 0 }, false);
         var pxy = engine.TensorDivideScalar(joint, count);
-        var pxpy = engine.TensorDivideScalar(engine.TensorOuter(marginalA, marginalB), ops.Multiply(count, count));
+        var pxpy = engine.TensorDivideScalar(engine.TensorOuter(marginalA, marginalB), count * count);
         var ratio = engine.TensorDivide(pxy, pxpy);
         if (logEpsilon != 0)
-            ratio = engine.TensorAddScalar(ratio, ops.FromDouble(logEpsilon));
+            ratio = engine.TensorAddScalar(ratio, logEpsilon);
         var terms = engine.TensorMultiply(pxy, engine.TensorLog(ratio));
         if (bits)
-            terms = engine.TensorDivideScalar(terms, ops.FromDouble(Math.Log(2)));
-        var cells = engine.TensorWhere(engine.TensorGreaterThan(joint, ops.Zero), terms, new Tensor<T>(joint.Shape.ToArray()));
+            terms = engine.TensorDivideScalar(terms, Math.Log(2));
+        var cells = engine.TensorWhere(engine.TensorGreaterThan(joint, 0.0), terms, new Tensor<double>(joint.Shape.ToArray()));
         var mi = engine.ReduceSum(engine.Reshape(cells, new[] { pa, bins, pb, bins }), new[] { 1, 3 }, false);
-        return clampAtZero ? engine.TensorMax(mi, ops.Zero) : mi;
+        return (clampAtZero ? engine.TensorMax(mi, 0.0) : mi).Cast<T>();
     }
 
     /// <summary>
