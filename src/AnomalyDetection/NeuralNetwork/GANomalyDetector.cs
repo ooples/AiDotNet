@@ -176,44 +176,14 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-
-        var means = new Vector<T>(d);
-        var stds = new Vector<T>(d);
-
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
-            T eps = NumOps.FromDouble(1e-10);
-            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
-            stds[j] = stdVal;
-        }
-
-        var normalized = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                normalized[i, j] = NumOps.Divide(diff, stds[j]);
-            }
-        }
-
-        return (normalized, means, stds);
+        // Per-feature mean and population std (std below 1e-10 replaced by 1), then (x - mean) / std
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var (std, mean) = engine.TensorStdMean(values, new[] { 0 }, 0, false);
+        var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var stds = engine.TensorWhere(tiny, Tensor<T>.CreateOnes(new[] { data.Columns }), std);
+        var normalized = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(values, mean), stds);
+        return (normalized.ToMatrix(), mean.ToVector(), stds.ToVector());
     }
 
     private void InitializeWeights()
@@ -225,21 +195,21 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
 
         // Encoder: input -> hidden -> latent
         _encW1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
-        _encB1 = InitializeVector(_hiddenDim);
+        _encB1 = new Vector<T>(_hiddenDim);
         _encW2 = InitializeMatrix(_hiddenDim, _latentDim, scale2);
-        _encB2 = InitializeVector(_latentDim);
+        _encB2 = new Vector<T>(_latentDim);
 
         // Decoder: latent -> hidden -> input
         _decW1 = InitializeMatrix(_latentDim, _hiddenDim, scale3);
-        _decB1 = InitializeVector(_hiddenDim);
+        _decB1 = new Vector<T>(_hiddenDim);
         _decW2 = InitializeMatrix(_hiddenDim, _inputDim, scale4);
-        _decB2 = InitializeVector(_inputDim);
+        _decB2 = new Vector<T>(_inputDim);
 
         // Re-encoder: input -> hidden -> latent
         _reEncW1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
-        _reEncB1 = InitializeVector(_hiddenDim);
+        _reEncB1 = new Vector<T>(_hiddenDim);
         _reEncW2 = InitializeMatrix(_hiddenDim, _latentDim, scale2);
-        _reEncB2 = InitializeVector(_latentDim);
+        _reEncB2 = new Vector<T>(_latentDim);
     }
 
     private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
@@ -258,20 +228,11 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         return matrix;
     }
 
-    private Vector<T> InitializeVector(int size)
-    {
-        var vector = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            vector[i] = NumOps.Zero;
-        }
-        return vector;
-    }
-
     private void Train(Matrix<T> data)
     {
         int n = data.Rows;
         int batchSize = Math.Min(32, n);
+        var values = AnomalyTensorOps.ToTensor(data);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -280,352 +241,34 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
             for (int batch = 0; batch < n; batch += batchSize)
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
+                var batchRows = new int[actualBatchSize];
+                Array.Copy(indices, batch, batchRows, 0, actualBatchSize);
 
-                // Accumulate gradients (use double for intermediate computation)
-                var gradients = InitializeGradients();
-
-                for (int b = 0; b < actualBatchSize; b++)
-                {
-                    int idx = indices[batch + b];
-                    var x = data.GetRow(idx);
-
-                    // Forward pass
-                    var z = Encode(x);
-                    var xRecon = Decode(z);
-                    var zRecon = ReEncode(xRecon);
-
-                    // Compute gradients
-                    AccumulateGradients(x, z, xRecon, zRecon, gradients);
-                }
-
-                // Update weights
-                UpdateWeights(gradients, actualBatchSize);
+                // Forward pass, then gradients summed over the batch and a step of learningRate / batch size
+                var forward = Forward(AnomalyTensorOps.SelectRows(values, batchRows));
+                Backward(forward, NumOps.FromDouble(_learningRate / actualBatchSize));
             }
         }
     }
 
-    private Vector<T> Encode(Vector<T> x)
+    // Activations of a batched encode -> decode -> re-encode pass (pre-activations kept for the LeakyReLU slopes).
+    private sealed class ForwardResult
     {
-        var encW1 = _encW1;
-        var encB1 = _encB1;
-        var encW2 = _encW2;
-        var encB2 = _encB2;
-
-        if (encW1 == null || encB1 == null || encW2 == null || encB2 == null)
-        {
-            throw new InvalidOperationException("Encoder weights not initialized.");
-        }
-
-        // Layer 1: h = LeakyReLU(x @ W1 + b1)  (SIMD)
-        T leakyAlpha = NumOps.FromDouble(0.2);
-        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var hPre = Engine.TensorAdd(
-            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(encW1)),
-            Tensor<T>.FromVector(encB1).Reshape(1, _hiddenDim));
-        var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
-
-        // Layer 2: z = h @ W2 + b2  (SIMD, linear)
-        var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
-        var z = Engine.TensorAdd(
-            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encW2)),
-            Tensor<T>.FromVector(encB2).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
-
-        return z;
+        public required Tensor<T> X { get; init; }
+        public required Tensor<T> EncHiddenPre { get; init; }
+        public required Tensor<T> EncHidden { get; init; }
+        public required Tensor<T> Z { get; init; }
+        public required Tensor<T> DecHiddenPre { get; init; }
+        public required Tensor<T> DecHidden { get; init; }
+        public required Tensor<T> XRecon { get; init; }
+        public required Tensor<T> ReEncHiddenPre { get; init; }
+        public required Tensor<T> ReEncHidden { get; init; }
+        public required Tensor<T> ZRecon { get; init; }
     }
 
-    private Vector<T> Decode(Vector<T> z)
+    // Each sub-network is h = LeakyReLU(input W1 + b1, 0.2), output = h W2 + b2 (linear).
+    private ForwardResult Forward(Tensor<T> x)
     {
-        var decW1 = _decW1;
-        var decB1 = _decB1;
-        var decW2 = _decW2;
-        var decB2 = _decB2;
-
-        if (decW1 == null || decB1 == null || decW2 == null || decB2 == null)
-        {
-            throw new InvalidOperationException("Decoder weights not initialized.");
-        }
-
-        // Layer 1: h = LeakyReLU(z @ W1 + b1)  (SIMD)
-        T leakyAlpha = NumOps.FromDouble(0.2);
-        var zT = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
-        var hPre = Engine.TensorAdd(
-            Engine.TensorMatMul(zT, Tensor<T>.FromMatrix(decW1)),
-            Tensor<T>.FromVector(decB1).Reshape(1, _hiddenDim));
-        var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
-
-        // Layer 2: xRecon = h @ W2 + b2  (SIMD, linear)
-        var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
-        var xRecon = Engine.TensorAdd(
-            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(decW2)),
-            Tensor<T>.FromVector(decB2).Reshape(1, _inputDim)).Reshape(_inputDim).ToVector();
-
-        return xRecon;
-    }
-
-    private Vector<T> ReEncode(Vector<T> xRecon)
-    {
-        var reEncW1 = _reEncW1;
-        var reEncB1 = _reEncB1;
-        var reEncW2 = _reEncW2;
-        var reEncB2 = _reEncB2;
-
-        if (reEncW1 == null || reEncB1 == null || reEncW2 == null || reEncB2 == null)
-        {
-            throw new InvalidOperationException("Re-encoder weights not initialized.");
-        }
-
-        // Layer 1: h = LeakyReLU(xRecon @ W1 + b1)  (SIMD)
-        T leakyAlpha = NumOps.FromDouble(0.2);
-        var xRT = Tensor<T>.FromVector(xRecon).Reshape(1, _inputDim);
-        var hPre = Engine.TensorAdd(
-            Engine.TensorMatMul(xRT, Tensor<T>.FromMatrix(reEncW1)),
-            Tensor<T>.FromVector(reEncB1).Reshape(1, _hiddenDim));
-        var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
-
-        // Layer 2: zRecon = h @ W2 + b2  (SIMD, linear)
-        var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
-        var zRecon = Engine.TensorAdd(
-            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(reEncW2)),
-            Tensor<T>.FromVector(reEncB2).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
-
-        return zRecon;
-    }
-
-    private GradientAccumulators InitializeGradients()
-    {
-        return new GradientAccumulators
-        {
-            encW1 = new double[_inputDim, _hiddenDim],
-            encB1 = new double[_hiddenDim],
-            encW2 = new double[_hiddenDim, _latentDim],
-            encB2 = new double[_latentDim],
-            decW1 = new double[_latentDim, _hiddenDim],
-            decB1 = new double[_hiddenDim],
-            decW2 = new double[_hiddenDim, _inputDim],
-            decB2 = new double[_inputDim],
-            reEncW1 = new double[_inputDim, _hiddenDim],
-            reEncB1 = new double[_hiddenDim],
-            reEncW2 = new double[_hiddenDim, _latentDim],
-            reEncB2 = new double[_latentDim]
-        };
-    }
-
-    private class GradientAccumulators
-    {
-        public required double[,] encW1 { get; init; }
-        public required double[] encB1 { get; init; }
-        public required double[,] encW2 { get; init; }
-        public required double[] encB2 { get; init; }
-        public required double[,] decW1 { get; init; }
-        public required double[] decB1 { get; init; }
-        public required double[,] decW2 { get; init; }
-        public required double[] decB2 { get; init; }
-        public required double[,] reEncW1 { get; init; }
-        public required double[] reEncB1 { get; init; }
-        public required double[,] reEncW2 { get; init; }
-        public required double[] reEncB2 { get; init; }
-    }
-
-    private void AccumulateGradients(Vector<T> x, Vector<T> z, Vector<T> xRecon, Vector<T> zRecon,
-        GradientAccumulators gradients)
-    {
-        var encW1 = _encW1;
-        var encB1 = _encB1;
-        var encW2 = _encW2;
-        var decW1 = _decW1;
-        var decB1 = _decB1;
-        var decW2 = _decW2;
-        var reEncW1 = _reEncW1;
-        var reEncB1 = _reEncB1;
-        var reEncW2 = _reEncW2;
-
-        if (encW1 == null || encB1 == null || encW2 == null ||
-            decW1 == null || decB1 == null || decW2 == null ||
-            reEncW1 == null || reEncB1 == null || reEncW2 == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        // Weights for the two losses
-        double reconWeight = 1.0;
-        double latentWeight = 1.0;
-
-        // === Forward pass with caching ===
-        // Encoder layer 1
-        var encH1Pre = new double[_hiddenDim];
-        var encH1 = new double[_hiddenDim];
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            encH1Pre[j] = NumOps.ToDouble(encB1[j]);
-            for (int i = 0; i < _inputDim; i++)
-            {
-                encH1Pre[j] += NumOps.ToDouble(x[i]) * NumOps.ToDouble(encW1[i, j]);
-            }
-            encH1[j] = (encH1Pre[j] >= 0 ? encH1Pre[j] : 0.2 * encH1Pre[j]);
-        }
-
-        // Decoder layer 1
-        var decH1Pre = new double[_hiddenDim];
-        var decH1 = new double[_hiddenDim];
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            decH1Pre[j] = NumOps.ToDouble(decB1[j]);
-            for (int i = 0; i < _latentDim; i++)
-            {
-                decH1Pre[j] += NumOps.ToDouble(z[i]) * NumOps.ToDouble(decW1[i, j]);
-            }
-            decH1[j] = (decH1Pre[j] >= 0 ? decH1Pre[j] : 0.2 * decH1Pre[j]);
-        }
-
-        // Re-encoder layer 1
-        var reEncH1Pre = new double[_hiddenDim];
-        var reEncH1 = new double[_hiddenDim];
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            reEncH1Pre[j] = NumOps.ToDouble(reEncB1[j]);
-            for (int i = 0; i < _inputDim; i++)
-            {
-                reEncH1Pre[j] += NumOps.ToDouble(xRecon[i]) * NumOps.ToDouble(reEncW1[i, j]);
-            }
-            reEncH1[j] = (reEncH1Pre[j] >= 0 ? reEncH1Pre[j] : 0.2 * reEncH1Pre[j]);
-        }
-
-        // === Backprop for reconstruction loss: ||x - xRecon||^2 ===
-        var dXRecon = new double[_inputDim];
-        for (int j = 0; j < _inputDim; j++)
-        {
-            dXRecon[j] = reconWeight * 2 * (NumOps.ToDouble(xRecon[j]) - NumOps.ToDouble(x[j]));
-        }
-
-        // Backprop through decoder layer 2
-        var dDecH1 = new double[_hiddenDim];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                gradients.decW2[i, j] += decH1[i] * dXRecon[j];
-                dDecH1[i] += NumOps.ToDouble(decW2[i, j]) * dXRecon[j];
-            }
-        }
-        for (int j = 0; j < _inputDim; j++)
-        {
-            gradients.decB2[j] += dXRecon[j];
-        }
-
-        // LeakyReLU derivative for decoder h1
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (decH1Pre[i] < 0) dDecH1[i] *= 0.2;
-        }
-
-        // Backprop through decoder layer 1
-        var dZ_fromRecon = new double[_latentDim];
-        for (int i = 0; i < _latentDim; i++)
-        {
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                gradients.decW1[i, j] += NumOps.ToDouble(z[i]) * dDecH1[j];
-                dZ_fromRecon[i] += NumOps.ToDouble(decW1[i, j]) * dDecH1[j];
-            }
-        }
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            gradients.decB1[j] += dDecH1[j];
-        }
-
-        // === Backprop for latent consistency loss: ||z - zRecon||^2 ===
-        var dZ_fromLatent = new double[_latentDim];
-        for (int j = 0; j < _latentDim; j++)
-        {
-            dZ_fromLatent[j] = latentWeight * 2 * (NumOps.ToDouble(z[j]) - NumOps.ToDouble(zRecon[j]));
-        }
-
-        var dZRecon = new double[_latentDim];
-        for (int j = 0; j < _latentDim; j++)
-        {
-            dZRecon[j] = latentWeight * 2 * (NumOps.ToDouble(zRecon[j]) - NumOps.ToDouble(z[j]));
-        }
-
-        // Backprop through re-encoder layer 2
-        var dReEncH1 = new double[_hiddenDim];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            for (int j = 0; j < _latentDim; j++)
-            {
-                gradients.reEncW2[i, j] += reEncH1[i] * dZRecon[j];
-                dReEncH1[i] += NumOps.ToDouble(reEncW2[i, j]) * dZRecon[j];
-            }
-        }
-        for (int j = 0; j < _latentDim; j++)
-        {
-            gradients.reEncB2[j] += dZRecon[j];
-        }
-
-        // LeakyReLU derivative for re-encoder h1
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (reEncH1Pre[i] < 0) dReEncH1[i] *= 0.2;
-        }
-
-        // Backprop through re-encoder layer 1
-        for (int i = 0; i < _inputDim; i++)
-        {
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                gradients.reEncW1[i, j] += NumOps.ToDouble(xRecon[i]) * dReEncH1[j];
-            }
-        }
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            gradients.reEncB1[j] += dReEncH1[j];
-        }
-
-        // === Backprop through encoder ===
-        var dZ = new double[_latentDim];
-        for (int j = 0; j < _latentDim; j++)
-        {
-            dZ[j] = dZ_fromRecon[j] + dZ_fromLatent[j];
-        }
-
-        // Backprop through encoder layer 2
-        var dEncH1 = new double[_hiddenDim];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            for (int j = 0; j < _latentDim; j++)
-            {
-                gradients.encW2[i, j] += encH1[i] * dZ[j];
-                dEncH1[i] += NumOps.ToDouble(encW2[i, j]) * dZ[j];
-            }
-        }
-        for (int j = 0; j < _latentDim; j++)
-        {
-            gradients.encB2[j] += dZ[j];
-        }
-
-        // LeakyReLU derivative for encoder h1
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (encH1Pre[i] < 0) dEncH1[i] *= 0.2;
-        }
-
-        // Backprop through encoder layer 1
-        for (int i = 0; i < _inputDim; i++)
-        {
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                gradients.encW1[i, j] += NumOps.ToDouble(x[i]) * dEncH1[j];
-            }
-        }
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            gradients.encB1[j] += dEncH1[j];
-        }
-    }
-
-    private void UpdateWeights(GradientAccumulators gradients, int batchSize)
-    {
-        double lr = _learningRate / batchSize;
-
         var encW1 = _encW1;
         var encB1 = _encB1;
         var encW2 = _encW2;
@@ -646,38 +289,123 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        UpdateMatrixWeights(encW1, gradients.encW1, lr);
-        UpdateVectorWeights(encB1, gradients.encB1, lr);
-        UpdateMatrixWeights(encW2, gradients.encW2, lr);
-        UpdateVectorWeights(encB2, gradients.encB2, lr);
-        UpdateMatrixWeights(decW1, gradients.decW1, lr);
-        UpdateVectorWeights(decB1, gradients.decB1, lr);
-        UpdateMatrixWeights(decW2, gradients.decW2, lr);
-        UpdateVectorWeights(decB2, gradients.decB2, lr);
-        UpdateMatrixWeights(reEncW1, gradients.reEncW1, lr);
-        UpdateVectorWeights(reEncB1, gradients.reEncB1, lr);
-        UpdateMatrixWeights(reEncW2, gradients.reEncW2, lr);
-        UpdateVectorWeights(reEncB2, gradients.reEncB2, lr);
+        var engine = Engine;
+        T leakyAlpha = NumOps.FromDouble(0.2);
+        var encHiddenPre = Affine(x, encW1, encB1);
+        var encHidden = engine.LeakyReLU(encHiddenPre, leakyAlpha);
+        var z = Affine(encHidden, encW2, encB2);
+        var decHiddenPre = Affine(z, decW1, decB1);
+        var decHidden = engine.LeakyReLU(decHiddenPre, leakyAlpha);
+        var xRecon = Affine(decHidden, decW2, decB2);
+        var reEncHiddenPre = Affine(xRecon, reEncW1, reEncB1);
+        var reEncHidden = engine.LeakyReLU(reEncHiddenPre, leakyAlpha);
+        var zRecon = Affine(reEncHidden, reEncW2, reEncB2);
+
+        return new ForwardResult
+        {
+            X = x,
+            EncHiddenPre = encHiddenPre,
+            EncHidden = encHidden,
+            Z = z,
+            DecHiddenPre = decHiddenPre,
+            DecHidden = decHidden,
+            XRecon = xRecon,
+            ReEncHiddenPre = reEncHiddenPre,
+            ReEncHidden = reEncHidden,
+            ZRecon = zRecon
+        };
     }
 
-    private void UpdateMatrixWeights(Matrix<T> w, double[,] grad, double lr)
+    // input W + b (bias broadcast over the rows)
+    private Tensor<T> Affine(Tensor<T> input, Matrix<T> weights, Vector<T> bias)
+        => Engine.TensorAdd(Engine.TensorMatMul(input, Tensor<T>.FromMatrix(weights)),
+            AnomalyTensorOps.BroadcastRow(bias.AsTensor(), input.Shape[0]));
+
+    // LeakyReLU derivative: 0.2 where the pre-activation is negative, 1 elsewhere.
+    private Tensor<T> LeakySlope(Tensor<T> preActivation)
+        => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(
+            Engine.TensorLessThan(preActivation, NumOps.Zero), NumOps.FromDouble(-0.8)), NumOps.One);
+
+    // Back-propagates the batch sum of the reconstruction loss ||x - xRecon||^2 and the latent consistency
+    // loss ||z - zRecon||^2 (both with weight 1) and applies w = w - lr * g to every weight. The re-encoder
+    // learns zRecon -> z; the encoder receives the reconstruction gradient through the decoder plus the
+    // latent consistency gradient on z (the re-encoder path does not feed back into the decoder).
+    private void Backward(ForwardResult forward, T lr)
     {
-        for (int i = 0; i < w.Rows; i++)
+        var encW1 = _encW1;
+        var encB1 = _encB1;
+        var encW2 = _encW2;
+        var encB2 = _encB2;
+        var decW1 = _decW1;
+        var decB1 = _decB1;
+        var decW2 = _decW2;
+        var decB2 = _decB2;
+        var reEncW1 = _reEncW1;
+        var reEncB1 = _reEncB1;
+        var reEncW2 = _reEncW2;
+        var reEncB2 = _reEncB2;
+
+        if (encW1 == null || encB1 == null || encW2 == null || encB2 == null ||
+            decW1 == null || decB1 == null || decW2 == null || decB2 == null ||
+            reEncW1 == null || reEncB1 == null || reEncW2 == null || reEncB2 == null)
         {
-            for (int j = 0; j < w.Columns; j++)
-            {
-                w[i, j] = NumOps.Subtract(w[i, j], NumOps.FromDouble(lr * grad[i, j]));
-            }
+            throw new InvalidOperationException("Weights not initialized.");
         }
+
+        var engine = Engine;
+        T two = NumOps.FromDouble(2);
+        var axis0 = new[] { 0 };
+        var encW2Tensor = Tensor<T>.FromMatrix(encW2);
+        var decW1Tensor = Tensor<T>.FromMatrix(decW1);
+        var decW2Tensor = Tensor<T>.FromMatrix(decW2);
+        var reEncW2Tensor = Tensor<T>.FromMatrix(reEncW2);
+
+        // === Backprop for reconstruction loss: ||x - xRecon||^2 ===
+        var dXRecon = engine.TensorMultiplyScalar(engine.TensorSubtract(forward.XRecon, forward.X), two);
+        var gDecW2 = engine.TensorMatMul(engine.TensorTranspose(forward.DecHidden), dXRecon);
+        var gDecB2 = engine.ReduceSum(dXRecon, axis0, false);
+        var dDecH1 = engine.TensorMultiply(engine.TensorMatMul(dXRecon, engine.TensorTranspose(decW2Tensor)),
+            LeakySlope(forward.DecHiddenPre));
+        var gDecW1 = engine.TensorMatMul(engine.TensorTranspose(forward.Z), dDecH1);
+        var gDecB1 = engine.ReduceSum(dDecH1, axis0, false);
+        var dZFromRecon = engine.TensorMatMul(dDecH1, engine.TensorTranspose(decW1Tensor));
+
+        // === Backprop for latent consistency loss: ||z - zRecon||^2 ===
+        var dZRecon = engine.TensorMultiplyScalar(engine.TensorSubtract(forward.ZRecon, forward.Z), two);
+        var dZFromLatent = engine.TensorNegate(dZRecon);
+        var gReEncW2 = engine.TensorMatMul(engine.TensorTranspose(forward.ReEncHidden), dZRecon);
+        var gReEncB2 = engine.ReduceSum(dZRecon, axis0, false);
+        var dReEncH1 = engine.TensorMultiply(engine.TensorMatMul(dZRecon, engine.TensorTranspose(reEncW2Tensor)),
+            LeakySlope(forward.ReEncHiddenPre));
+        var gReEncW1 = engine.TensorMatMul(engine.TensorTranspose(forward.XRecon), dReEncH1);
+        var gReEncB1 = engine.ReduceSum(dReEncH1, axis0, false);
+
+        // === Backprop through encoder ===
+        var dZ = engine.TensorAdd(dZFromRecon, dZFromLatent);
+        var gEncW2 = engine.TensorMatMul(engine.TensorTranspose(forward.EncHidden), dZ);
+        var gEncB2 = engine.ReduceSum(dZ, axis0, false);
+        var dEncH1 = engine.TensorMultiply(engine.TensorMatMul(dZ, engine.TensorTranspose(encW2Tensor)),
+            LeakySlope(forward.EncHiddenPre));
+        var gEncW1 = engine.TensorMatMul(engine.TensorTranspose(forward.X), dEncH1);
+        var gEncB1 = engine.ReduceSum(dEncH1, axis0, false);
+
+        _encW1 = Step(Tensor<T>.FromMatrix(encW1), gEncW1, lr).ToMatrix();
+        _encB1 = Step(encB1.AsTensor(), gEncB1, lr).ToVector();
+        _encW2 = Step(encW2Tensor, gEncW2, lr).ToMatrix();
+        _encB2 = Step(encB2.AsTensor(), gEncB2, lr).ToVector();
+        _decW1 = Step(decW1Tensor, gDecW1, lr).ToMatrix();
+        _decB1 = Step(decB1.AsTensor(), gDecB1, lr).ToVector();
+        _decW2 = Step(decW2Tensor, gDecW2, lr).ToMatrix();
+        _decB2 = Step(decB2.AsTensor(), gDecB2, lr).ToVector();
+        _reEncW1 = Step(Tensor<T>.FromMatrix(reEncW1), gReEncW1, lr).ToMatrix();
+        _reEncB1 = Step(reEncB1.AsTensor(), gReEncB1, lr).ToVector();
+        _reEncW2 = Step(reEncW2Tensor, gReEncW2, lr).ToMatrix();
+        _reEncB2 = Step(reEncB2.AsTensor(), gReEncB2, lr).ToVector();
     }
 
-    private void UpdateVectorWeights(Vector<T> w, double[] grad, double lr)
-    {
-        for (int i = 0; i < w.Length; i++)
-        {
-            w[i] = NumOps.Subtract(w[i], NumOps.FromDouble(lr * grad[i]));
-        }
-    }
+    // weights - lr * gradients
+    private Tensor<T> Step(Tensor<T> weights, Tensor<T> gradients, T lr)
+        => Engine.TensorSubtract(weights, Engine.TensorMultiplyScalar(gradients, lr));
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
@@ -697,34 +425,12 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Normalize
-            var x = new Vector<T>(_inputDim);
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
-                x[j] = NumOps.Divide(diff, dataStds[j]);
-            }
-
-            // Encode, decode, re-encode
-            var z = Encode(x);
-            var xRecon = Decode(z);
-            var zRecon = ReEncode(xRecon);
-
-            // Anomaly score: ||z - zRecon||^2 (latent consistency)
-            T score = NumOps.Zero;
-            for (int j = 0; j < _latentDim; j++)
-            {
-                T diff = NumOps.Subtract(z[j], zRecon[j]);
-                score = NumOps.Add(score, NumOps.Multiply(diff, diff));
-            }
-
-            scores[i] = score;
-        }
-
-        return scores;
+        // Anomaly score: ||z - zRecon||^2 (latent consistency) after encode, decode, re-encode of the normalized rows
+        var engine = Engine;
+        var normalized = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
+        var forward = Forward(normalized);
+        return engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(forward.Z, forward.ZRecon)),
+            new[] { 1 }, false).ToVector();
     }
 }
