@@ -22565,3 +22565,12 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.AutoML.NAS.FBNet<T>.LatencyExponent.get -> double
+AiDotNet.AutoML.NAS.FBNet<T>.LatencyExponent.set -> void
+AiDotNet.AutoML.NAS.AttentiveNAS<T>.CandidatePoolSize.get -> int
+AiDotNet.AutoML.NAS.AttentiveNAS<T>.CandidatePoolSize.set -> void
+AiDotNet.AutoML.NAS.AttentiveNAS<T>.SamplingStrategy.get -> AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
+AiDotNet.AutoML.NAS.AttentiveNAS<T>.SamplingStrategy.set -> void
+AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
+AiDotNet.AutoML.NAS.AttentiveSamplingStrategy.BestUp = 0 -> AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
+AiDotNet.AutoML.NAS.AttentiveSamplingStrategy.WorstUp = 1 -> AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
