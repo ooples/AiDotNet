@@ -397,7 +397,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// - PerLayer: Averages gradient norms across layer parameters
     /// </para>
     /// </remarks>
-    private Vector<T> ComputeAdaptiveLearningRates(Vector<T> gradients, ref Vector<T>? runningSquaredGrads)
+    internal Vector<T> ComputeAdaptiveLearningRates(Vector<T> gradients, ref Vector<T>? runningSquaredGrads)
     {
         T epsilon = NumOps.FromDouble(_sealOptions.AdaptiveLearningRateEpsilon);
         T baseLr = NumOps.FromDouble(_sealOptions.InnerLearningRate);
@@ -405,32 +405,45 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         switch (_sealOptions.AdaptiveLearningRateMode)
         {
             case SEALAdaptiveLearningRateMode.GradientNorm:
-                // AdaGrad-like: lr = base_lr / (sqrt(grad^2) + epsilon)
-                return ScaledInverseRoot(Engine.Multiply(gradients, gradients), baseLr, epsilon);
+                // AdaGrad-like: lr = base_lr / (sqrt(grad^2) + epsilon). sqrt(max(grad^2, 1e-16)) = max(|grad|, 1e-8),
+                // taken without squaring so a gradient past sqrt(MaxValue) (256 in Half) does not overflow to inf.
+                var magnitude = Engine.TensorMax(Engine.TensorAbs(Tensor<T>.FromVector(gradients)), NumOps.FromDouble(1e-8));
+                return ScaledInverse(magnitude, baseLr, epsilon);
 
             case SEALAdaptiveLearningRateMode.RunningMean:
                 // RMSprop-like: running = decay * running + (1 - decay) * grad^2, lr = base_lr / (sqrt(running) + epsilon)
                 var previous = runningSquaredGrads ?? Engine.Fill(gradients.Length, NumOps.Zero);
                 runningSquaredGrads = Engine.Lerp(
                     Engine.Multiply(gradients, gradients), previous, NumOps.FromDouble(_sealOptions.AdaptiveLearningRateDecay));
-                return ScaledInverseRoot(runningSquaredGrads, baseLr, epsilon);
+                return ScaledInverse(
+                    Engine.TensorSqrt(Engine.TensorMax(Tensor<T>.FromVector(runningSquaredGrads), NumOps.FromDouble(1e-16))),
+                    baseLr, epsilon);
 
             case SEALAdaptiveLearningRateMode.PerLayer:
-                // One shared rate from the mean squared gradient across all parameters.
-                T avgSquared = NumOps.Divide(Engine.DotProduct(gradients, gradients), NumOps.FromDouble(gradients.Length));
-                T avgSqrt = NumOps.FromDouble(Math.Sqrt(Math.Max(NumOps.ToDouble(avgSquared), 1e-16)));
-                return Engine.Fill(gradients.Length, NumOps.Divide(baseLr, NumOps.Add(avgSqrt, epsilon)));
+                // One shared rate from the root-mean-square gradient across all parameters. The statistic is taken in
+                // double (one conversion of the gradient), so neither the squares, their sum nor the parameter count
+                // overflow a narrow T, and the 1e-8 floor and epsilon do not round to zero.
+                if (gradients.Length == 0) return new Vector<T>(0);
+                var wide = Tensor<T>.FromVector(gradients).Cast<double>();
+                double rms = Math.Sqrt(Engine.TensorMean(Engine.TensorMultiply(wide, wide)));
+
+                double sharedRate = _sealOptions.InnerLearningRate / (Math.Max(rms, 1e-8) + _sealOptions.AdaptiveLearningRateEpsilon);
+                return Engine.Fill(gradients.Length, NumOps.FromDouble(Math.Min(sharedRate, NumOps.ToDouble(NumOps.MaxValue))));
 
             default:
                 return new Vector<T>(gradients.Length);
         }
     }
 
-    /// <summary><c>base_lr / (sqrt(max(squared, 1e-16)) + epsilon)</c>, elementwise.</summary>
-    private Vector<T> ScaledInverseRoot(Vector<T> squared, T baseLr, T epsilon)
+    /// <summary>
+    /// <c>base_lr / (root + epsilon)</c>, elementwise, capped at the largest finite T. In double the cap never binds
+    /// (base_lr / 1e-8 is far below double.MaxValue); in Half the 1e-8 floor and epsilon round to 0, so a zero
+    /// gradient would give 1 / 0 = inf and the update inf * 0 = NaN. The cap keeps that update at exactly 0.
+    /// </summary>
+    private Vector<T> ScaledInverse(Tensor<T> root, T baseLr, T epsilon)
     {
-        var root = Engine.TensorSqrt(Engine.TensorMax(Tensor<T>.FromVector(squared), NumOps.FromDouble(1e-16)));
-        return Engine.Multiply(Engine.Reciprocal(Engine.TensorAddScalar(root, epsilon).ToVector()), baseLr);
+        var rates = Engine.TensorMultiplyScalar(Engine.TensorReciprocal(Engine.TensorAddScalar(root, epsilon)), baseLr);
+        return Engine.TensorClamp(rates, NumOps.Zero, NumOps.MaxValue).ToVector();
     }
 
     /// <summary>
@@ -516,7 +529,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// which helps it adapt better to new tasks.
     /// </para>
     /// </remarks>
-    private T ComputeEntropyRegularization(TOutput predictions)
+    internal T ComputeEntropyRegularization(TOutput predictions)
     {
         Vector<T> probabilities;
         try
@@ -535,8 +548,10 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             Tensor<T>.FromVector(probabilities), NumOps.FromDouble(_sealOptions.AdaptiveLearningRateEpsilon));
         var p = Engine.TensorDivideScalar(shifted, Engine.TensorSum(shifted));
 
-        // H = -sum(p' * log(p'))
-        return NumOps.Negate(Engine.TensorSum(Engine.TensorMultiply(p, Engine.TensorLog(p))));
+        // H = -sum(p' * log(p')) with 0 log 0 = 0. In double the epsilon shift keeps every p' > 0; in Half epsilon
+        // rounds to 0, an underflowed p' is exactly 0, and log is taken of 1 there so the term is 0 instead of NaN.
+        var safe = Engine.TensorWhere(Engine.TensorGreaterThan(p, NumOps.Zero), p, Engine.TensorOnesLike(p));
+        return NumOps.Negate(Engine.TensorSum(Engine.TensorMultiply(p, Engine.TensorLog(safe))));
     }
 
     /// <summary>
