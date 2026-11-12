@@ -456,6 +456,7 @@ internal static class AudioEngineOps
         var r = engine.Reshape(engine.TensorSlice(new Tensor<T>(reference, new[] { reference.Length }), new[] { 0 }, new[] { refFrames * embDim }), new[] { refFrames, embDim });
         var qNorm = engine.ReduceSum(engine.TensorSquare(q), new[] { 1 }, keepDims: false);
         var rNorm = engine.ReduceSum(engine.TensorSquare(r), new[] { 1 }, keepDims: false);
+        T cosineFloor = numOps.FromDouble(1e-8);
         long perStart = (long)queryFrames * embDim;
         int block = (int)Math.Max(1L, Math.Min(starts, AlignedBlockBudget / perStart));
 
@@ -498,7 +499,7 @@ internal static class AudioEngineOps
             var normR = engine.ReduceSum(Gather(rNorm, rIdx), new[] { 1 }, keepDims: false);
             var denom = engine.TensorMultiply(engine.TensorSqrt(normQ), engine.TensorSqrt(normR));
             var cosine = engine.TensorWhere(
-                engine.TensorGreaterThan(denom, numOps.FromDouble(1e-8)),
+                engine.TensorGreaterThan(denom, cosineFloor),
                 engine.TensorDivide(sim, denom),
                 new Tensor<T>(new[] { count }));
             Array.Copy(cosine.Cast<double>().ToArray(), 0, result, blockStart, count);
