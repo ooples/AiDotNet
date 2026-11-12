@@ -130,13 +130,14 @@ public class GreyWolfOptimizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         int m = positions.Shape[0];
         int p = positions.Shape[1];
         var shape = new[] { m, p };
+        T two = ops.FromDouble(2);
         Tensor<T>? sum = null;
         for (int leader = 0; leader < 3; leader++)
         {
             var r1 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 2 * leader }, new[] { m, p, 1 }), shape);
             var r2 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 2 * leader + 1 }, new[] { m, p, 1 }), shape);
             var coefficientA = PopulationSearchOps.Affine(r1, 2 * a, -a);
-            var coefficientC = engine.TensorMultiplyScalar(r2, ops.FromDouble(2));
+            var coefficientC = engine.TensorMultiplyScalar(r2, two);
             var position = engine.TensorBroadcastTo(
                 engine.Reshape(PopulationSearchOps.Row(leaders, leader), new[] { 1, p }), shape);
             var distance = engine.TensorAbs(engine.TensorSubtract(engine.TensorMultiply(coefficientC, position), positions));
