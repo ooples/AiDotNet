@@ -367,6 +367,29 @@ internal static class TimeSeriesEngineOps<T>
                 Engine.ReduceSum(ones, new[] { 0 }, keepDims: false).ToVector());
     }
 
+    /// <summary>Element-wise <c>(v[i] - mean) / scale</c>.</summary>
+    public static Vector<T> Standardize(Vector<T> v, T mean, T scale)
+        => Engine.TensorDivideScalar(Engine.TensorSubtractScalar(Tensor<T>.FromVector(v), mean), scale).ToVector();
+
+    /// <summary>Element-wise <c>v[i] · scale + mean</c>.</summary>
+    public static Vector<T> Destandardize(Vector<T> v, T scale, T mean)
+        => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Tensor<T>.FromVector(v), scale), mean).ToVector();
+
+    /// <summary>
+    /// The <paramref name="length"/> values of <paramref name="y"/> ending just before index <paramref name="end"/>:
+    /// element j is <c>y[end - length + j]</c>, or zero where that index is negative.
+    /// </summary>
+    public static Vector<T> PrecedingWindow(Vector<T> y, int end, int length)
+    {
+        int available = Math.Max(0, Math.Min(length, end));
+        if (available == 0)
+        {
+            return new Vector<T>(Math.Max(length, 0));
+        }
+
+        return Vector<T>.Concatenate(new Vector<T>(length - available), y.GetSubVector(end - available, available));
+    }
+
     private static string FormatValue(T value)
         => value is IFormattable formattable
             ? formattable.ToString("F4", System.Globalization.CultureInfo.CurrentCulture)
