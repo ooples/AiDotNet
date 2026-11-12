@@ -454,6 +454,62 @@ internal static class FeatureSelectionTensorOps
         return engine.TensorStack(columns, 1);
     }
 
+    /// <summary>The tie term <c>sum (t^3 - t)</c> of every column of an [n, p] tensor ([p]).</summary>
+    public static Tensor<T> ColumnTieCubeSums<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (n == 0 || p == 0)
+            return new Tensor<T>(new[] { p });
+
+        var sums = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+        {
+            var (_, _, counts) = engine.TensorUniqueWithInfo(Column(x, j), true, false, true);
+            if (counts is null)
+                throw new InvalidOperationException("The engine returned no counts for the tied values.");
+            var t = counts.Cast<T>();
+            sums[j] = engine.ReduceSum(engine.TensorSubtract(engine.TensorMultiply(engine.TensorSquare(t), t), t), new[] { 0 }, true);
+        }
+
+        return engine.TensorConcatenate(sums, 0);
+    }
+
+    /// <summary>
+    /// The Kruskal-Wallis H test of every column of <paramref name="x"/> ([n, p]) across the classes of
+    /// <paramref name="classOneHot"/> ([n, k]), as scipy.stats.kruskal: tie-averaged ranks,
+    /// <c>H = 12 / (n (n + 1)) sum_c R_c^2 / n_c - 3 (n + 1)</c> divided by the tie correction
+    /// <c>1 - sum (t^3 - t) / (n^3 - n)</c>, p-value from the chi-squared distribution with k - 1 degrees of freedom.
+    /// Fewer than two classes give H = 0 and p = 1; a column of equal values gives H = 0.
+    /// </summary>
+    public static (Tensor<T> H, Tensor<T> PValues) KruskalWallis<T>(Tensor<T> x, Tensor<T> classOneHot)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        int k = classOneHot.Shape[1];
+        if (k < 2 || n < 2)
+            return (new Tensor<T>(new[] { p }), FilterStatisticTensorOps.Filled(new[] { p }, ops.One));
+
+        var ranks = ColumnAverageRanks(x);
+        var rankSums = engine.TensorMatMul(engine.TensorTranspose(classOneHot), ranks);
+        var counts = engine.ReduceSum(classOneHot, new[] { 0 }, false);
+        var weighted = engine.ReduceSum(
+            engine.TensorDivide(engine.TensorSquare(rankSums), FilterStatisticTensorOps.ColumnBroadcast(counts, p)),
+            new[] { 0 }, false);
+        double nd = n;
+        var h = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(weighted, ops.FromDouble(12.0 / (nd * (nd + 1)))), ops.FromDouble(-3.0 * (nd + 1)));
+
+        var correction = FilterStatisticTensorOps.OneMinus(
+            engine.TensorDivideScalar(ColumnTieCubeSums(x), ops.FromDouble(nd * nd * nd - nd)));
+        // rounding can leave H a hair below 0 when the classes do not differ at all
+        h = engine.TensorMax(FilterStatisticTensorOps.GuardedDivide(h, correction, 0.0, ops.Zero), ops.Zero);
+        return (h, FilterStatisticTensorOps.ChiSquareSurvival(h, k - 1));
+    }
+
     /// <summary>
     /// The tie correction term <c>sum (t^3 - t)</c> over the groups of tied values of a 1-D tensor (t = group size),
     /// as used by the Kruskal-Wallis and Mann-Whitney tie corrections.

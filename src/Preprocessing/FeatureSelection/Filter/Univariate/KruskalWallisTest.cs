@@ -28,15 +28,15 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     private readonly int _nFeaturesToSelect;
     private readonly double _pValueThreshold;
 
-    private double[]? _hStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _hStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? HStatistics => _hStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? HStatistics => _hStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,179 +69,21 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Group samples by class
-        var classGroups = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classGroups.ContainsKey(label))
-                classGroups[label] = new List<int>();
-            classGroups[label].Add(i);
-        }
+        // Kruskal-Wallis H of every feature across the (integer) classes, tie-corrected, with chi-squared
+        // p-values (scipy.stats.kruskal)
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        var (h, pValues) = FeatureSelectionTensorOps.KruskalWallis(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount));
+        _hStatistics = h.ToVector();
+        _pValues = pValues.ToVector();
 
-        int k = classGroups.Count;
-        if (k < 2)
-            throw new ArgumentException("At least 2 classes are required.");
-
-        _hStatistics = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Get all values and compute ranks
-            var valuesWithIndices = new List<(double Value, int Index)>();
-            for (int i = 0; i < n; i++)
-                valuesWithIndices.Add((NumOps.ToDouble(data[i, j]), i));
-
-            // Sort and assign ranks (handling ties with average rank)
-            var sorted = valuesWithIndices.OrderBy(x => x.Value).ToList();
-            var ranks = new double[n];
-
-            int i2 = 0;
-            while (i2 < n)
-            {
-                int j2 = i2;
-                while (j2 < n && Math.Abs(sorted[j2].Value - sorted[i2].Value) < 1e-10)
-                    j2++;
-
-                // Average rank for ties
-                double avgRank = (i2 + j2 + 1) / 2.0;
-                for (int m = i2; m < j2; m++)
-                    ranks[sorted[m].Index] = avgRank;
-
-                i2 = j2;
-            }
-
-            // Compute H statistic
-            double sumRankSq = 0;
-            foreach (var group in classGroups.Values)
-            {
-                double groupRankSum = group.Sum(idx => ranks[idx]);
-                sumRankSq += (groupRankSum * groupRankSum) / group.Count;
-            }
-
-            double H = (12.0 / ((double)n * (n + 1))) * sumRankSq - 3.0 * (n + 1);
-
-            // Tie correction
-            var tieGroups = new Dictionary<double, int>();
-            for (int m = 0; m < n; m++)
-            {
-                double val = NumOps.ToDouble(data[m, j]);
-                if (!tieGroups.ContainsKey(val))
-                    tieGroups[val] = 0;
-                tieGroups[val]++;
-            }
-
-            double tieCorrection = 0;
-            foreach (var count in tieGroups.Values.Where(c => c > 1))
-                tieCorrection += (double)count * count * count - count;
-
-            if (tieCorrection > 0)
-                H /= (1 - tieCorrection / ((double)n * n * n - n));
-
-            _hStatistics[j] = H;
-
-            // P-value using chi-square approximation with k-1 degrees of freedom
-            int df = k - 1;
-            _pValues[j] = ChiSquarePValue(H, df);
-        }
-
-        // Select significant features
-        var significant = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_pValues[j] < _pValueThreshold)
-                significant.Add(j);
-
-        if (significant.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = significant
-                .OrderBy(j => _pValues[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _hStatistics
-                .Select((h, idx) => (H: h, Index: idx))
-                .OrderByDescending(x => x.H)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        // The significant features with the smallest p-values when there are enough, otherwise the largest H
+        _selectedIndices = FilterStatisticTensorOps.SignificantOrTopK(
+            pValues, NumOps.FromDouble(_pValueThreshold), h, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double ChiSquarePValue(double chi2, int df)
-    {
-        if (chi2 <= 0 || df <= 0) return 1;
-        return 1 - IncompleteGamma(df / 2.0, chi2 / 2.0);
-    }
-
-    private double IncompleteGamma(double a, double x)
-    {
-        if (x < 0 || a <= 0) return 0;
-        if (x == 0) return 0;
-
-        if (x < a + 1)
-            return GammaSeries(a, x);
-        else
-            return 1 - GammaCF(a, x);
-    }
-
-    private double GammaSeries(double a, double x)
-    {
-        double sum = 1 / a;
-        double del = 1 / a;
-        for (int i = 1; i <= 100; i++)
-        {
-            del *= x / (a + i);
-            sum += del;
-            if (Math.Abs(del) < Math.Abs(sum) * 1e-10) break;
-        }
-        return sum * Math.Exp(-x + a * Math.Log(x) - LogGamma(a));
-    }
-
-    private double GammaCF(double a, double x)
-    {
-        double b = x + 1 - a;
-        double c = 1e30;
-        double d = 1 / b;
-        double h = d;
-
-        for (int i = 1; i <= 100; i++)
-        {
-            double an = -i * (i - a);
-            b += 2;
-            d = an * d + b;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = b + an / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            double del = d * c;
-            h *= del;
-            if (Math.Abs(del - 1) < 1e-10) break;
-        }
-
-        return h * Math.Exp(-x + a * Math.Log(x) - LogGamma(a));
-    }
-
-    private double LogGamma(double x)
-    {
-        double[] cof = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-                        -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
-        double y = x;
-        double tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-        double ser = 1.000000000190015;
-        for (int j = 0; j < 6; j++)
-            ser += cof[j] / ++y;
-        return -tmp + Math.Log(2.5066282746310005 * ser / x);
     }
 
     /// <inheritdoc />

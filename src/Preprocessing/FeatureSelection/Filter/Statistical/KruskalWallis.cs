@@ -27,15 +27,15 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _hStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _hStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? HStatistics => _hStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? HStatistics => _hStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,105 +66,20 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Group samples by class
-        var groups = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int classLabel = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!groups.ContainsKey(classLabel))
-                groups[classLabel] = [];
-            groups[classLabel].Add(i);
-        }
-
-        int numGroups = groups.Count;
-        var groupSizes = groups.Values.Select(g => g.Count).ToArray();
-
-        _hStatistics = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Get all values and compute ranks
-            var allValues = new List<(double Value, int Group)>();
-            int groupIdx = 0;
-            foreach (var group in groups.Values)
-            {
-                foreach (int i in group)
-                    allValues.Add((NumOps.ToDouble(data[i, j]), groupIdx));
-                groupIdx++;
-            }
-
-            // Sort and assign ranks
-            var sorted = allValues.OrderBy(x => x.Value).ToList();
-            var ranks = new double[sorted.Count];
-
-            int i2 = 0;
-            while (i2 < sorted.Count)
-            {
-                int start = i2;
-                while (i2 < sorted.Count && Math.Abs(sorted[i2].Value - sorted[start].Value) < 1e-10)
-                    i2++;
-
-                double avgRank = (start + i2 + 1) / 2.0;
-                for (int k = start; k < i2; k++)
-                    ranks[k] = avgRank;
-            }
-
-            // Compute sum of ranks for each group
-            var rankSums = new double[numGroups];
-            for (int k = 0; k < sorted.Count; k++)
-                rankSums[sorted[k].Group] += ranks[k];
-
-            // Compute H statistic
-            double sumSquaredRankSums = 0;
-            for (int g = 0; g < numGroups; g++)
-                sumSquaredRankSums += rankSums[g] * rankSums[g] / groupSizes[g];
-
-            double H = 12.0 / ((double)n * (n + 1)) * sumSquaredRankSums - 3.0 * (n + 1);
-
-            // Tie correction
-            // (simplified - full correction would count ties)
-            _hStatistics[j] = H;
-
-            // P-value from chi-squared distribution approximation
-            int df = numGroups - 1;
-            _pValues[j] = 1 - ChiSquaredCDF(H, df);
-        }
+        // Kruskal-Wallis H of every feature across the (integer) classes, tie-corrected, with chi-squared
+        // p-values (scipy.stats.kruskal)
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        var (h, pValues) = FeatureSelectionTensorOps.KruskalWallis(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount));
+        _hStatistics = h.ToVector();
+        _pValues = pValues.ToVector();
 
         // Select features with smallest p-values
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _pValues
-            .Select((pval, idx) => (PValue: pval, Index: idx))
-            .OrderBy(x => x.PValue)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double ChiSquaredCDF(double x, int df)
-    {
-        // Approximation using Wilson-Hilferty transformation
-        if (x <= 0) return 0;
-        if (df <= 0) return 1;
-
-        double z = Math.Pow(x / df, 1.0 / 3) - (1 - 2.0 / (9.0 * df));
-        z /= Math.Sqrt(2.0 / (9.0 * df));
-
-        return NormalCDF(z);
-    }
-
-    private double NormalCDF(double x)
-    {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return x > 0 ? 1 - p : p;
     }
 
     /// <inheritdoc />
