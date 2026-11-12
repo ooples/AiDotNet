@@ -224,6 +224,49 @@ internal static class FilterStatisticTensorOps
         AiDotNetEngine.Current.TensorDivideScalar(
             ColumnSumOfSquaredDeviations(x), MathHelper.GetNumericOperations<T>().FromDouble(x.Shape[0]));
 
+    // Upper bound on the elements of one block of the DFT basis built by ColumnDftPower.
+    private const int DftBlockElements = 1 << 22;
+
+    /// <summary>
+    /// Squared DFT magnitudes <c>|sum_i x[i, j] exp(-2 pi i k i / n)|^2</c> of every column of an [n, p] tensor at the
+    /// frequencies <c>k = 1 .. kCount</c> ([kCount, p]), evaluated as cos/sin basis matrix products built in blocks of
+    /// frequencies so the basis never holds more than a few million elements.
+    /// </summary>
+    public static Tensor<T> ColumnDftPower<T>(Tensor<T> x, int kCount)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (kCount <= 0 || n == 0)
+            return new Tensor<T>(new[] { Math.Max(kCount, 0), p });
+
+        var sampleIndex = engine.Reshape(engine.TensorArange<T>(0, n, 1), new[] { 1, n });
+        int block = Math.Max(1, Math.Min(kCount, DftBlockElements / n));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 1; start <= kCount; start += block)
+        {
+            int count = Math.Min(block, kCount - start + 1);
+            var frequency = engine.Reshape(engine.TensorArange<T>(start, start + count, 1), new[] { count, 1 });
+
+            // angle[k, i] = 2 pi k i / n
+            var angle = engine.TensorMultiplyScalar(
+                engine.TensorMatMul(frequency, sampleIndex), ops.FromDouble(2.0 * Math.PI / n));
+            var real = engine.TensorMatMul(engine.TensorCos(angle), x);
+            var imaginary = engine.TensorMatMul(engine.TensorSin(angle), x);
+            blocks.Add(engine.TensorAdd(engine.TensorSquare(real), engine.TensorSquare(imaginary)));
+        }
+
+        return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// The number of positive frequencies below the Nyquist frequency for <paramref name="n"/> samples,
+    /// <c>ceil(n / 2) - 1</c>: the bins <c>numpy.fft.rfft</c> returns after the DC term, without the Nyquist bin
+    /// of an even length.
+    /// </summary>
+    public static int PositiveFrequencyCount(int n) => Math.Max(0, (n + 1) / 2 - 1);
+
     /// <summary>Every column of an [n, p] tensor minus its mean.</summary>
     public static Tensor<T> CenterColumns<T>(Tensor<T> x)
     {
