@@ -752,13 +752,18 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     {
         if (a.Length != b.Length)
         {
+            // Add over the shared prefix, keep a's tail; a detached result shaped like a, as before.
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a._shape);
-            for (int i = 0; i < minLen; i++)
-                result[i] = NumOps.Add(a[i], b[i]);
-            for (int i = minLen; i < a.Length; i++)
-                result[i] = a[i];
-            return result;
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (minLen == 0)
+                return a.Clone();
+            var aFlat = Engine.Reshape(a.Contiguous(), new[] { a.Length });
+            var bFlat = Engine.Reshape(b.Contiguous(), new[] { b.Length });
+            var head = Engine.TensorAdd(Engine.TensorNarrow(aFlat, 0, 0, minLen), Engine.TensorNarrow(bFlat, 0, 0, minLen));
+            var summed = minLen == a.Length
+                ? head
+                : Engine.TensorConcatenate(new[] { head, Engine.TensorNarrow(aFlat, 0, minLen, a.Length - minLen) }, 0);
+            return Engine.Reshape(summed, a._shape);
         }
 
         return Engine.TensorAdd(a, b);
