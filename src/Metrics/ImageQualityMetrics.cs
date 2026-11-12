@@ -406,6 +406,11 @@ public class MeanIntersectionOverUnion<T> where T : struct
         if (predicted == null) throw new ArgumentNullException(nameof(predicted));
         if (groundTruth == null) throw new ArgumentNullException(nameof(groundTruth));
 
+        // Accumulate counts in float for low-precision storage; a valid image can exceed Half's finite range.
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
+            return _numOps.FromDouble(new MeanIntersectionOverUnion<float>(_numClasses, _ignoreBackground)
+                .Compute(predicted.Cast<float>(), groundTruth.Cast<float>()));
+
         var engine = AiDotNetEngine.Current;
         var (intersection, union) = ComputeIntersectionAndUnion(predicted, groundTruth);
 
@@ -436,6 +441,10 @@ public class MeanIntersectionOverUnion<T> where T : struct
     /// <returns>Array of IoU values, one per class.</returns>
     public T[] ComputePerClass(Tensor<T> predicted, Tensor<T> groundTruth)
     {
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
+            return Tensor<float>.FromVector(new Vector<float>(new MeanIntersectionOverUnion<float>(_numClasses, _ignoreBackground)
+                .ComputePerClass(predicted.Cast<float>(), groundTruth.Cast<float>()))).Cast<T>().ToArray();
+
         var (intersection, union) = ComputeIntersectionAndUnion(predicted, groundTruth);
         return PerClassIoU(intersection, union).ToArray();
     }
