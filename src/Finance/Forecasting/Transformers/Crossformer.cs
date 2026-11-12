@@ -770,13 +770,18 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     {
         if (input.Length != processed.Length)
         {
+            // Add over the shared prefix, keep input's tail; a detached result shaped like input, as before.
             int minLen = Math.Min(input.Length, processed.Length);
-            var result = new Tensor<T>(input._shape);
-            for (int i = 0; i < minLen; i++)
-                result[i] = NumOps.Add(input[i], processed[i]);
-            for (int i = minLen; i < input.Length; i++)
-                result[i] = input[i];
-            return result;
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (minLen == 0)
+                return input.Clone();
+            var aFlat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+            var bFlat = Engine.Reshape(processed.Contiguous(), new[] { processed.Length });
+            var head = Engine.TensorAdd(Engine.TensorNarrow(aFlat, 0, 0, minLen), Engine.TensorNarrow(bFlat, 0, 0, minLen));
+            var combined = minLen == input.Length
+                ? head
+                : Engine.TensorConcatenate(new[] { head, Engine.TensorNarrow(aFlat, 0, minLen, input.Length - minLen) }, 0);
+            return Engine.Reshape(combined, input._shape);
         }
 
         return Engine.TensorAdd(input, processed);
