@@ -174,7 +174,7 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
         // Apply softmax over section dimension (the max skips NaN); a trailing partial frame stays 0
-        int numSections = _options.NumSections;
+        int numSections = ValidatedNumSections();
         int numFrames = output.Length / numSections;
         if (numFrames <= 0)
             return new Tensor<T>([output.Length]);
@@ -258,66 +258,70 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
     private IReadOnlyList<MusicSegment<T>> DecodeSegments(Tensor<T> output, int audioLength)
     {
         var segments = new List<MusicSegment<T>>();
-        int numSections = _options.NumSections;
+        int numSections = ValidatedNumSections();
         int numFrames = Math.Max(1, output.Length / numSections);
         double frameTimeSec = (double)_options.HopLength / _options.SampleRate;
         double duration = (double)audioLength / _options.SampleRate;
-        T confidence = NumOps.FromDouble(0.8);
 
-        // Best section for each frame
-        int[] bestSections = FrameBestSections(output, numSections, numFrames);
+        // Best section for each frame, and its softmax probability over the frame's section scores
+        var scores = FrameSectionScores(output, numSections, numFrames);
+        int[] bestSections = AudioEngineOps.RowFirstArgMax(Engine, scores);
+        var chosenIndex = new int[numFrames];
+        for (int f = 0; f < numFrames; f++)
+            chosenIndex[f] = f * numSections + bestSections[f];
+        var chosenProbability = Engine.TensorIndexSelect(
+            AudioEngineOps.Flatten(Engine, SectionSoftmax(scores)), new Tensor<int>(chosenIndex, [numFrames]), 0);
 
-        int currentLabel = -1;
-        double segmentStart = 0;
-
+        // Runs of frames sharing a best section become segments
+        var runStarts = new List<int>();
+        var runOfFrame = new int[numFrames];
         for (int f = 0; f < numFrames; f++)
         {
-            int bestSection = bestSections[f];
-
-            if (bestSection != currentLabel)
-            {
-                if (currentLabel >= 0)
-                {
-                    double endTime = f * frameTimeSec;
-                    string label = currentLabel < _options.SectionLabels.Length ? _options.SectionLabels[currentLabel] : "other";
-                    segments.Add(new MusicSegment<T>
-                    {
-                        Label = label,
-                        SectionIndex = currentLabel,
-                        StartTime = segmentStart,
-                        EndTime = endTime,
-                        Confidence = confidence
-                    });
-                }
-                currentLabel = bestSection;
-                segmentStart = f * frameTimeSec;
-            }
+            if (f == 0 || bestSections[f] != bestSections[f - 1])
+                runStarts.Add(f);
+            runOfFrame[f] = runStarts.Count - 1;
         }
 
-        // Add final segment
-        if (currentLabel >= 0)
+        // Segment confidence: mean probability of its section over the segment's frames
+        int numRuns = runStarts.Count;
+        var runLength = new int[numRuns];
+        for (int r = 0; r < numRuns; r++)
+            runLength[r] = (r + 1 < numRuns ? runStarts[r + 1] : numFrames) - runStarts[r];
+        var runSums = Engine.ScatterAdd(chosenProbability, new Tensor<int>(runOfFrame, [numFrames]), 0, numRuns);
+        T[] runConfidence = Engine.TensorDivide(runSums, new Tensor<int>(runLength, [numRuns]).Cast<T>()).ToArray();
+
+        for (int r = 0; r < numRuns; r++)
         {
-            string label = currentLabel < _options.SectionLabels.Length ? _options.SectionLabels[currentLabel] : "other";
+            int section = bestSections[runStarts[r]];
             segments.Add(new MusicSegment<T>
             {
-                Label = label,
-                SectionIndex = currentLabel,
-                StartTime = segmentStart,
-                EndTime = duration,
-                Confidence = confidence
+                Label = section < _options.SectionLabels.Length ? _options.SectionLabels[section] : "other",
+                SectionIndex = section,
+                StartTime = runStarts[r] * frameTimeSec,
+                EndTime = r + 1 < numRuns ? runStarts[r + 1] * frameTimeSec : duration,
+                Confidence = runConfidence[r]
             });
         }
 
         return segments;
     }
 
-    /// <summary>
-    /// For each frame, the first section holding the frame's largest score (scores
-    /// <c>output[f * numSections + s]</c> that exist; NaN never wins; section 0 when none beats -inf).
-    /// </summary>
-    private int[] FrameBestSections(Tensor<T> output, int numSections, int numFrames)
+    /// <summary>The configured section count, rejected when it is not positive.</summary>
+    private int ValidatedNumSections()
     {
-        if (numSections <= 0) return new int[numFrames];
+        int numSections = _options.NumSections;
+        if (numSections <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MusicStructureAnalyzerOptions.NumSections), numSections,
+                "NumSections must be positive.");
+        return numSections;
+    }
+
+    /// <summary>
+    /// The <c>[numFrames, numSections]</c> scores <c>output[f * numSections + s]</c>, with -inf where
+    /// the output does not reach.
+    /// </summary>
+    private Tensor<T> FrameSectionScores(Tensor<T> output, int numSections, int numFrames)
+    {
         int total = numFrames * numSections;
         int available = Math.Min(output.Length, total);
         T negativeInfinity = AudioEngineOps.NegativeInfinityOrMin<T>();
@@ -326,7 +330,25 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
             : Engine.TensorSlice(AudioEngineOps.Flatten(Engine, output), [0], [available]);
         if (available > 0 && available < total)
             scores = Engine.Concat(new[] { scores, Tensor<T>.CreateDefault([total - available], negativeInfinity) }, 0);
-        return AudioEngineOps.RowFirstArgMax(Engine, Engine.Reshape(scores, [numFrames, numSections]));
+        return Engine.Reshape(scores, [numFrames, numSections]);
+    }
+
+    /// <summary>
+    /// Softmax of each row of <c>[frames, sections]</c> scores (the max skips NaN); a row with no
+    /// finite score has probability 0 everywhere.
+    /// </summary>
+    private Tensor<T> SectionSoftmax(Tensor<T> scores)
+    {
+        var shape = new[] { scores.Shape[0], scores.Shape[1] };
+        var ranked = Engine.TensorWhere(
+            Engine.TensorIsNan(scores), Tensor<T>.CreateDefault(shape, AudioEngineOps.NegativeInfinityOrMin<T>()), scores);
+        var maxVal = Engine.TensorBroadcastTo(Engine.ReduceMax(ranked, [1], keepDims: true), shape);
+        var exp = Engine.TensorExp(Engine.TensorSubtract(scores, maxVal));
+        var sumExp = Engine.TensorBroadcastTo(Engine.ReduceSum(exp, [1], keepDims: true), shape);
+        var probs = Engine.TensorDivide(exp, sumExp);
+        // -inf - -inf leaves NaN only for rows without a finite score (unreached frames)
+        var noScore = Engine.TensorEquals(maxVal, AudioEngineOps.NegativeInfinityOrMin<T>());
+        return Engine.TensorWhere(noScore, new Tensor<T>(shape), probs);
     }
 
     #endregion
