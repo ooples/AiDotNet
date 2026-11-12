@@ -130,11 +130,11 @@ public sealed class EulerAncestralDiscreteScheduler<T> : NoiseSchedulerBase<T>
                 break;
 
             case DiffusionPredictionType.VPrediction:
-                T alphaCumprod = AlphasCumulativeProduct[timestep];
-                T sqrtAlpha = NumOps.Sqrt(alphaCumprod);
-                T sqrtOneMinusAlpha = NumOps.Sqrt(NumOps.Subtract(NumOps.One, alphaCumprod));
-                var vX0 = Engine.Multiply(sample, sqrtAlpha);
-                var vEps = Engine.Multiply(modelOutput, sqrtOneMinusAlpha);
+                // The sample lives in sigma space (x_t / sqrt(alpha_cumprod)), so as in diffusers
+                // x0 = sample / (sigma^2 + 1) - v * sigma / sqrt(sigma^2 + 1).
+                T sigmaSqPlusOne = NumOps.Add(NumOps.Multiply(sigma, sigma), NumOps.One);
+                var vX0 = Engine.Divide(sample, sigmaSqPlusOne);
+                var vEps = Engine.Multiply(modelOutput, NumOps.Divide(sigma, NumOps.Sqrt(sigmaSqPlusOne)));
                 predOriginal = Engine.Subtract(vX0, vEps);
                 break;
 
