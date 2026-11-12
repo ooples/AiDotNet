@@ -22576,7 +22576,6 @@ AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Complexity.LyapunovSelector<T>.LyapunovValues.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Compression.CompressionRatioSelector<T>.EntropyScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Compression.NormalizedCompressionSelector<T>.NCDScores.get -> double[]?
-*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Constraint.ConstraintBasedSelector<T>.FeatureScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.CrossValidation.BootstrapSelector<T>.StabilityScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.CrossValidation.CrossValidatedSelector<T>.CVScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Density.KDEBasedSelector<T>.KDESeparationScores.get -> double[]?
@@ -22708,7 +22707,6 @@ AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector<T>.Complexi
 AiDotNet.Preprocessing.FeatureSelection.Complexity.LyapunovSelector<T>.LyapunovValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Compression.CompressionRatioSelector<T>.EntropyScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Compression.NormalizedCompressionSelector<T>.NCDScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
-AiDotNet.Preprocessing.FeatureSelection.Constraint.ConstraintBasedSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.CrossValidation.BootstrapSelector<T>.StabilityScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.CrossValidation.CrossValidatedSelector<T>.CVScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Density.KDEBasedSelector<T>.KDESeparationScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
