@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
@@ -40,6 +41,7 @@ namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 public class TransferBenchmark<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly INeuralNetwork<T> _encoder;
     private readonly int _encoderOutputDim;
@@ -197,17 +199,6 @@ public class TransferBenchmark<T>
 
     private Tensor<T> SubsetData(Tensor<T> data, int[] indices)
     {
-        var dim = data.Shape[1];
-        var subset = new T[indices.Length * dim];
-
-        for (int i = 0; i < indices.Length; i++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                subset[i * dim + d] = data[indices[i], d];
-            }
-        }
-
-        return new Tensor<T>(subset, [indices.Length, dim]);
+        return Engine.TensorIndexSelect(data, new Tensor<int>(indices, new[] { indices.Length }), 0);
     }
 }
