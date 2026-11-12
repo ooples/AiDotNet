@@ -23,11 +23,10 @@ public sealed class FedAdamServerOptimizer<T> : FederatedServerOptimizerBase<T>
     private readonly double _beta2;
     private readonly double _epsilon;
 
-    private double[]? _m;
-    private double[]? _v;
-    private int _t;
+    private Vector<T>? _m;
+    private Vector<T>? _v;
 
-    public FedAdamServerOptimizer(double learningRate = 1.0, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8)
+    public FedAdamServerOptimizer(double learningRate = 1.0, double beta1 = 0.9, double beta2 = 0.99, double epsilon = 1e-3)
     {
         if (learningRate <= 0.0)
         {
@@ -61,31 +60,19 @@ public sealed class FedAdamServerOptimizer<T> : FederatedServerOptimizerBase<T>
         ValidateVectors(currentGlobalParameters, aggregatedTargetParameters);
 
         int n = currentGlobalParameters.Length;
-        _m ??= new double[n];
-        _v ??= new double[n];
-        _t++;
+        _m ??= new Vector<T>(n);
+        _v ??= new Vector<T>(n);
 
-        double bias1 = 1.0 - Math.Pow(_beta1, _t);
-        double bias2 = 1.0 - Math.Pow(_beta2, _t);
+        // Reddi et al. 2021, Algorithm 2 (FedAdam): no bias correction.
+        var g = Engine.Subtract(aggregatedTargetParameters, currentGlobalParameters);
+        _m = Engine.Add(Engine.Multiply(_m, NumOps.FromDouble(_beta1)), Engine.Multiply(g, NumOps.FromDouble(1.0 - _beta1)));
+        _v = Engine.Add(
+            Engine.Multiply(_v, NumOps.FromDouble(_beta2)),
+            Engine.Multiply(Engine.Multiply(g, g), NumOps.FromDouble(1.0 - _beta2)));
 
-        var updated = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            double current = NumOps.ToDouble(currentGlobalParameters[i]);
-            double target = NumOps.ToDouble(aggregatedTargetParameters[i]);
-            double g = target - current;
-
-            _m[i] = (_beta1 * _m[i]) + ((1.0 - _beta1) * g);
-            _v[i] = (_beta2 * _v[i]) + ((1.0 - _beta2) * g * g);
-
-            double mHat = _m[i] / bias1;
-            double vHat = _v[i] / bias2;
-
-            double step = _learningRate * mHat / (Math.Sqrt(vHat) + _epsilon);
-            updated[i] = NumOps.FromDouble(current + step);
-        }
-
-        return updated;
+        var denominator = Engine.TensorAddScalar(Engine.Sqrt(_v).AsTensor(), NumOps.FromDouble(_epsilon)).ToVector();
+        var step = Engine.Multiply(Engine.Divide(_m, denominator), NumOps.FromDouble(_learningRate));
+        return Engine.Add(currentGlobalParameters, step);
     }
 
     /// <inheritdoc />

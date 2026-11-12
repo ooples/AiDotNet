@@ -85,6 +85,34 @@ public class FederatedElementwiseSweepReferenceTests
         Assert.Equal(1.0, calibrated[1], 12);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task FedAdam_FirstStepHasNoBiasCorrection()
+    {
+        await Task.Yield();
+
+        // Reddi et al. ICLR 2021, Algorithm 2 (FedAdam), defaults beta1 = 0.9, beta2 = 0.99, tau = 1e-3:
+        // delta = 1 -> m = 0.1, v = 0.01, x = 0 + 1 * 0.1 / (0.1 + 0.001) = 0.990099...
+        var optimizer = new AiDotNet.FederatedLearning.ServerOptimizers.FedAdamServerOptimizer<double>();
+
+        var updated = optimizer.Step(new Vector<double>(new[] { 0.0 }), new Vector<double>(new[] { 1.0 }));
+
+        Assert.Equal(0.1 / 0.101, updated[0], 12);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedAdagrad_UsesFirstMomentOverAccumulatedSquares()
+    {
+        await Task.Yield();
+
+        // Reddi et al. ICLR 2021, Algorithm 2 (FedAdagrad), beta1 = 0.9, tau = 1e-3:
+        // delta = 1 -> m = 0.1, v = 1, x = 0 + 1 * 0.1 / (1 + 0.001).
+        var optimizer = new AiDotNet.FederatedLearning.ServerOptimizers.FedAdagradServerOptimizer<double>();
+
+        var updated = optimizer.Step(new Vector<double>(new[] { 0.0 }), new Vector<double>(new[] { 1.0 }));
+
+        Assert.Equal(0.1 / 1.001, updated[0], 12);
+    }
+
     private static Vector<double> Parameters(IFullModel<double, Matrix<double>, Vector<double>> model)
         => ((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters();
 

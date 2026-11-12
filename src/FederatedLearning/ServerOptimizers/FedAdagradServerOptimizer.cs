@@ -19,14 +19,21 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;
+    private readonly double _beta1;
     private readonly double _epsilon;
-    private double[]? _accumulator;
+    private Vector<T>? _momentum;
+    private Vector<T>? _accumulator;
 
-    public FedAdagradServerOptimizer(double learningRate = 1.0, double epsilon = 1e-8)
+    public FedAdagradServerOptimizer(double learningRate = 1.0, double epsilon = 1e-3, double beta1 = 0.9)
     {
         if (learningRate <= 0.0)
         {
             throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
+        }
+
+        if (beta1 < 0.0 || beta1 >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(beta1), "Beta1 must be in [0, 1).");
         }
 
         if (epsilon <= 0.0)
@@ -35,6 +42,7 @@ public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<
         }
 
         _learningRate = learningRate;
+        _beta1 = beta1;
         _epsilon = epsilon;
     }
 
@@ -44,21 +52,19 @@ public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<
         ValidateVectors(currentGlobalParameters, aggregatedTargetParameters);
 
         int n = currentGlobalParameters.Length;
-        _accumulator ??= new double[n];
+        _momentum ??= new Vector<T>(n);
+        _accumulator ??= new Vector<T>(n);
 
-        var updated = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            double current = NumOps.ToDouble(currentGlobalParameters[i]);
-            double target = NumOps.ToDouble(aggregatedTargetParameters[i]);
-            double g = target - current;
+        // Reddi et al. 2021, Algorithm 2 (FedAdagrad): m_t = b1 m + (1 - b1) d, v_t = v + d^2,
+        // x = x + lr * m_t / (sqrt(v_t) + tau).
+        var g = Engine.Subtract(aggregatedTargetParameters, currentGlobalParameters);
+        _momentum = Engine.Add(
+            Engine.Multiply(_momentum, NumOps.FromDouble(_beta1)), Engine.Multiply(g, NumOps.FromDouble(1.0 - _beta1)));
+        _accumulator = Engine.Add(_accumulator, Engine.Multiply(g, g));
 
-            _accumulator[i] += g * g;
-            double step = _learningRate * g / (Math.Sqrt(_accumulator[i]) + _epsilon);
-            updated[i] = NumOps.FromDouble(current + step);
-        }
-
-        return updated;
+        var denominator = Engine.TensorAddScalar(Engine.Sqrt(_accumulator).AsTensor(), NumOps.FromDouble(_epsilon)).ToVector();
+        var step = Engine.Multiply(Engine.Divide(_momentum, denominator), NumOps.FromDouble(_learningRate));
+        return Engine.Add(currentGlobalParameters, step);
     }
 
     /// <inheritdoc />

@@ -21,7 +21,7 @@ public sealed class FedAvgMServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;
     private readonly double _momentum;
-    private double[]? _velocity;
+    private Vector<T>? _velocity;
 
     public FedAvgMServerOptimizer(double learningRate = 1.0, double momentum = 0.9)
     {
@@ -45,21 +45,11 @@ public sealed class FedAvgMServerOptimizer<T> : FederatedServerOptimizerBase<T>
         ValidateVectors(currentGlobalParameters, aggregatedTargetParameters);
 
         int n = currentGlobalParameters.Length;
-        _velocity ??= new double[n];
+        _velocity ??= new Vector<T>(n);
 
-        var updated = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            double current = NumOps.ToDouble(currentGlobalParameters[i]);
-            double target = NumOps.ToDouble(aggregatedTargetParameters[i]);
-            double delta = target - current;
-
-            _velocity[i] = (_momentum * _velocity[i]) + delta;
-            double next = current + (_learningRate * _velocity[i]);
-            updated[i] = NumOps.FromDouble(next);
-        }
-
-        return updated;
+        var delta = Engine.Subtract(aggregatedTargetParameters, currentGlobalParameters);
+        _velocity = Engine.Add(Engine.Multiply(_velocity, NumOps.FromDouble(_momentum)), delta);
+        return Engine.Add(currentGlobalParameters, Engine.Multiply(_velocity, NumOps.FromDouble(_learningRate)));
     }
 
     /// <inheritdoc />
