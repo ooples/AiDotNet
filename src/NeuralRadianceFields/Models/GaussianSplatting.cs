@@ -234,6 +234,27 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     private const int OpacityResetInterval = 3000;
     private const double OpacityResetCeiling = 0.01;
 
+    /// <summary>
+    /// Kerbl et al. 2023 section 5.2 (reference percent_dense): a densification candidate whose largest scale is at
+    /// most this fraction of the scene extent is cloned; larger ones are split.
+    /// </summary>
+    private const double PercentDense = 0.01;
+
+    /// <summary>
+    /// Densification statistics over the current accumulation window: the summed world-space position gradient
+    /// [N, 3], the summed gradient magnitude [N] and the number of steps each Gaussian was visible [N].
+    /// </summary>
+    [Scratch]
+    private Tensor<T> _densifyGradientSum = new Tensor<T>(new[] { 0, 3 });
+
+    [Scratch]
+    private Tensor<T> _densifyNormSum = new Tensor<T>(new[] { 0 });
+
+    [Scratch]
+    private Tensor<T> _densifyVisibleCount = new Tensor<T>(new[] { 0 });
+
+    private int _densifyAccumulatedSteps;
+
     // Element budgets for the dense pairwise passes (point x Gaussian, pixel x splat), processed in chunks.
     private const int PairBudget = 1 << 22;
     private const int RasterBudget = 1 << 16;
@@ -1859,6 +1880,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             lossGradient);
 
         _trainingStep++;
+        AccumulateDensificationStats(gradients);
 
         // #1835 excellence goal #2: swappable densification schedule strategy. Fall back to
         // the fixed-interval schedule (reference-impl behavior) when the caller didn't
@@ -2738,7 +2760,76 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             synthetic.Add(new GaussianGradient(indices, gradient));
         }
 
+        AccumulateDensificationStats(synthetic);
         DensifyAndPrune(synthetic);
+    }
+
+    /// <summary>
+    /// Test-only hook: adds one step of world-space position gradients [N, 3] (every Gaussian visible) to the
+    /// densification statistics, as a training step does.
+    /// </summary>
+    internal void AccumulateGradientsForTest(Tensor<T> gradients)
+    {
+        Guard.NotNull(gradients);
+        int n = GaussianCount;
+        if (gradients.Rank != 2 || gradients.Shape[0] != n || gradients.Shape[1] != 3)
+        {
+            throw new ArgumentException("Gradients must be [N, 3].", nameof(gradients));
+        }
+
+        var indices = Engine.TensorArange<T>(0, n, 1).Cast<int>();
+        AccumulateDensificationStats(new List<GaussianGradient> { new GaussianGradient(indices, gradients) });
+    }
+
+    /// <summary>Test-only hook: densifies and prunes from the accumulated statistics at the given iteration.</summary>
+    internal void RunDensifyFromAccumulatedForTest(int iteration)
+    {
+        _trainingStep = iteration;
+        DensifyAndPrune(new List<GaussianGradient>());
+    }
+
+    /// <summary>
+    /// Kerbl et al. 2023 section 5.2 (reference add_densification_stats): densification decides on the position
+    /// gradient magnitude averaged over the steps each Gaussian was visible in, not on the last step alone. The
+    /// statistics restart after each densification and whenever the accumulation window is full.
+    /// </summary>
+    private void AccumulateDensificationStats(List<GaussianGradient> gradients)
+    {
+        if (!EnableDensification || _trainingStep > EffectiveDensificationEndIteration)
+        {
+            return;
+        }
+
+        var engine = Engine;
+        int n = GaussianCount;
+        if (_densifyVisibleCount._shape[0] != n || _densifyAccumulatedSteps >= Math.Max(1, EffectiveGradientAccumulationWindow))
+        {
+            ResetDensificationStats();
+        }
+
+        foreach (var batch in gradients)
+        {
+            if (batch.Count == 0)
+            {
+                continue;
+            }
+
+            var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(batch.Gradients, batch.Gradients), new[] { 1 }, false));
+            _densifyGradientSum = engine.TensorIndexAdd(_densifyGradientSum, 0, batch.Indices, batch.Gradients);
+            _densifyNormSum = engine.TensorIndexAdd(_densifyNormSum, 0, batch.Indices, norms);
+            _densifyVisibleCount = engine.TensorIndexAdd(_densifyVisibleCount, 0, batch.Indices, Full(new[] { batch.Count }, NumOps.One));
+        }
+
+        _densifyAccumulatedSteps++;
+    }
+
+    private void ResetDensificationStats()
+    {
+        int n = GaussianCount;
+        _densifyGradientSum = new Tensor<T>(new[] { n, 3 });
+        _densifyNormSum = new Tensor<T>(new[] { n });
+        _densifyVisibleCount = new Tensor<T>(new[] { n });
+        _densifyAccumulatedSteps = 0;
     }
 
     /// <summary>
@@ -2805,6 +2896,9 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
 
     private void DensifyAndPrune(List<GaussianGradient> gradients)
     {
+        // The step's own gradients are already in the accumulated statistics the decision is made from.
+        Guard.NotNull(gradients);
+
         // #1835 schedule window: skip densification before the start iteration (let the
         // random cloud stabilize) and after the end iteration (freeze the cloud for final
         // convergence). Paper: [500, 15000]. Callers override via GaussianSplattingOptions.
@@ -2819,6 +2913,20 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         int n = GaussianCount;
         int basisCount = GetShBasisCount();
         var lrScales = EnsureLearningRateScales();
+
+        // Candidates: every Gaussian visible in the window, with its mean gradient magnitude and summed direction.
+        if (_densifyVisibleCount._shape[0] != n)
+        {
+            ResetDensificationStats();
+        }
+
+        var visibleRows = engine.TensorNonzero(Gt(_densifyVisibleCount, ops.Zero));
+        int visibleCount = visibleRows._shape[0];
+        var sourceRows = visibleRows.Reshape(visibleCount);
+        var meanNorms = engine.TensorDivide(
+            engine.TensorIndexSelect(_densifyNormSum, sourceRows, 0),
+            engine.TensorIndexSelect(_densifyVisibleCount, sourceRows, 0));
+        var sourceGrads = engine.TensorIndexSelect(_densifyGradientSum, sourceRows, 0);
 
         // Prune first: Gaussians whose opacity is below the threshold (NaN opacities stay).
         T pruneThreshold = ops.FromDouble(Math.Max(0.0, EffectiveOpacityPruneThreshold));
@@ -2837,30 +2945,18 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         }
 
         int cap = EffectiveMaxGaussianCount;
-        var indexParts = new List<Tensor<int>>();
-        var gradientParts = new List<Tensor<T>>();
-        foreach (var batch in gradients)
-        {
-            if (batch.Count > 0)
-            {
-                indexParts.Add(batch.Indices);
-                gradientParts.Add(batch.Gradients);
-            }
-        }
-
-        if (count >= cap || indexParts.Count == 0 || count == 0)
+        if (count >= cap || visibleCount == 0 || count == 0)
         {
             // Pruning may have changed the parameter surface even though no split can be added.
+            ResetDensificationStats();
             InvalidateParameterCountCache();
             return;
         }
 
-        // Candidates in descending gradient magnitude (stable; NaN magnitudes last, as LINQ orders them). The run
-        // stops at the first magnitude below the threshold, pruned sources are skipped, and at most cap - count
-        // splits are made.
-        var sourceRows = engine.TensorConcatenate(indexParts.ToArray(), 0);
-        var sourceGrads = engine.TensorConcatenate(gradientParts.ToArray(), 0);
-        var magnitude = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(sourceGrads, sourceGrads), new[] { 1 }, false));
+        // Candidates in descending mean gradient magnitude (stable; NaN magnitudes last, as LINQ orders them). The
+        // run stops at the first magnitude below the threshold, pruned sources are skipped, and at most cap - count
+        // Gaussians are added.
+        var magnitude = meanNorms;
         var order = engine.TensorArgsort(engine.TensorNegate(magnitude), 0, false);
         var sortedRows = engine.TensorIndexSelect(sourceRows, order, 0);
         var sortedGrads = engine.TensorIndexSelect(sourceGrads, order, 0);
@@ -2870,86 +2966,129 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         var candidate = engine.TensorMultiply(aboveThreshold, alive);
         var taken = engine.TensorMultiply(candidate, Le(engine.TensorCumSum(candidate, 0), ops.FromDouble(cap - count)));
         var takenRows = engine.TensorNonzero(taken);
-        int splits = takenRows._shape[0];
-        if (splits == 0)
+        int densified = takenRows._shape[0];
+        if (densified == 0)
         {
+            ResetDensificationStats();
             InvalidateParameterCountCache();
             return;
         }
 
-        var picked = takenRows.Reshape(splits);
+        var picked = takenRows.Reshape(densified);
 
-        // Rows of the split sources after pruning: the number of kept rows before each.
+        // Rows of the densified sources after pruning: the number of kept rows before each.
         var newIndex = engine.TensorSubtractScalar(engine.TensorCumSum(kept, 0), ops.One);
-        var sources = engine.TensorIndexSelect(newIndex, engine.TensorIndexSelect(sortedRows, picked, 0), 0).Cast<int>();
+        var sourceIndex = engine.TensorIndexSelect(newIndex, engine.TensorIndexSelect(sortedRows, picked, 0), 0);
 
-        // Split direction: the normalised position gradient, or a seeded random direction when it is zero.
-        var direction = NormalizeRows(engine.TensorIndexSelect(sortedGrads, picked, 0));
-        var isZero = engine.TensorEquals(engine.ReduceSum(engine.TensorAbs(direction), new[] { 1 }, false), ops.Zero);
-        var zeroRows = engine.TensorNonzero(isZero);
-        int zeroCount = zeroRows._shape[0];
-        if (zeroCount > 0)
+        // Kerbl et al. 2023 section 5.2: under-reconstructed regions (small Gaussians) are covered by cloning, large
+        // Gaussians in over-reconstructed regions are split. The scene extent is the radius of the cloud around its
+        // centroid, times 1.1 (the reference uses the camera positions, which the model does not keep).
+        var centroid = engine.TensorDivideScalar(engine.ReduceSum(_positions, new[] { 0 }, true), ops.FromDouble(count));
+        var fromCentroid = engine.TensorSubtract(_positions, centroid);
+        T sceneExtent = ops.Multiply(ops.FromDouble(1.1), engine.TensorMaxValue(
+            engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(fromCentroid, fromCentroid), new[] { 1 }, false))));
+        var largestScale = engine.ReduceMax(engine.TensorExp(engine.TensorIndexSelect(_logScales, sourceIndex.Cast<int>(), 0)), new[] { 1 }, false);
+        var small = Le(largestScale, ops.Multiply(ops.FromDouble(PercentDense), sceneExtent));
+        var cloneSelection = engine.TensorNonzero(small);
+        int clones = cloneSelection._shape[0];
+        var splitSelection = engine.TensorNonzero(Not(small));
+        int splits = splitSelection._shape[0];
+
+        // Clones are exact copies of their source (reference densify_and_clone); taken before the splits move rows.
+        Tensor<int>? cloneSources = null;
+        Tensor<T>? cloneLearningRates = null;
+        if (clones > 0)
         {
-            // The draws keep master's order (three per zero-gradient split, in split order); no engine op draws a
-            // tensor from a caller-owned Random.
-            var random = new Tensor<T>(new[] { zeroCount, 3 });
-            for (int i = 0; i < zeroCount; i++)
-            {
-                random[i, 0] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
-                random[i, 1] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
-                random[i, 2] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
-            }
-
-            var scattered = engine.TensorIndexAdd(engine.TensorZerosLike(direction), 0, zeroRows.Reshape(zeroCount), NormalizeRows(random));
-            direction = Select(isZero.Reshape(splits, 1), scattered, direction);
+            cloneSources = engine.TensorIndexSelect(sourceIndex, cloneSelection.Reshape(clones), 0).Cast<int>();
+            cloneLearningRates = engine.TensorIndexSelect(_learningRateScales, cloneSources, 0);
         }
 
-        // #1835 excellence goal #4 -- SplitChildLearningRateScales. Position jitter shrinks by the position
-        // multiplier and the scale factor grows by the scale multiplier; both children inherit the compounded
-        // per-attribute multipliers (each generation layers its multiplier on its parent's).
-        var childScales = _options.SplitChildLearningRateScales ?? new AiDotNet.Models.Options.SplitChildLearningRateScales();
-        T jitter = ops.FromDouble(SplitPositionJitter * childScales.Position);
-        T scaleFactor = ops.FromDouble(SplitScaleFactor / childScales.Scale);
-        var offset = engine.TensorMultiplyScalar(direction, jitter);
-
-        var sourcePositions = engine.TensorIndexSelect(_positions, sources, 0);
-        var splitScales = engine.TensorLog(MaxScalar(
-            engine.TensorMultiplyScalar(engine.TensorExp(engine.TensorIndexSelect(_logScales, sources, 0)), scaleFactor),
-            ops.FromDouble(MinScale)));
-        var splitAlpha = MinScalar(
-            engine.TensorMultiplyScalar(engine.TensorSigmoid(engine.TensorIndexSelect(_opacityLogits, sources, 0)), ops.FromDouble(SplitOpacityFactor)),
-            ops.FromDouble(SplitOpacityMax));
-        var splitOpacity = Logit(splitAlpha);
-        var multipliers = Tensor<T>.FromVector(new Vector<T>(new[]
+        if (splits > 0)
         {
-            ops.FromDouble(childScales.Position),
-            ops.FromDouble(childScales.Scale),
-            ops.FromDouble(childScales.Opacity),
-            ops.FromDouble(childScales.Rotation),
-            ops.FromDouble(childScales.Color),
-        })).Reshape(1, LearningRateScaleColumns);
-        var splitLr = Mul(engine.TensorIndexSelect(_learningRateScales, sources, 0), multipliers);
+            var splitSelected = splitSelection.Reshape(splits);
+            var sources = engine.TensorIndexSelect(sourceIndex, splitSelected, 0).Cast<int>();
 
-        // Sources move along +direction, clones along -direction; both get the reduced scale and opacity.
-        var sourceMask = engine.TensorIndexAdd(new Tensor<T>(new[] { count }), 0, sources, Full(new[] { splits }, ops.One));
-        WriteRows(_positions, sources, sourceMask, engine.TensorAdd(sourcePositions, offset));
-        WriteRows(_logScales, sources, sourceMask, splitScales);
-        _learningRateScales = Select(sourceMask.Reshape(count, 1),
-            engine.TensorIndexAdd(engine.TensorZerosLike(_learningRateScales), 0, sources, splitLr), _learningRateScales).Clone();
-        WriteInPlace(_opacityLogits, Select(sourceMask,
-            engine.TensorIndexAdd(engine.TensorZerosLike(_opacityLogits), 0, sources, splitOpacity), _opacityLogits));
+            // Split direction: the normalised position gradient, or a seeded random direction when it is zero.
+            var direction = NormalizeRows(engine.TensorIndexSelect(engine.TensorIndexSelect(sortedGrads, picked, 0), splitSelected, 0));
+            var isZero = engine.TensorEquals(engine.ReduceSum(engine.TensorAbs(direction), new[] { 1 }, false), ops.Zero);
+            var zeroRows = engine.TensorNonzero(isZero);
+            int zeroCount = zeroRows._shape[0];
+            if (zeroCount > 0)
+            {
+                // The draws keep master's order (three per zero-gradient split, in split order); no engine op draws a
+                // tensor from a caller-owned Random.
+                var random = new Tensor<T>(new[] { zeroCount, 3 });
+                for (int i = 0; i < zeroCount; i++)
+                {
+                    random[i, 0] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
+                    random[i, 1] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
+                    random[i, 2] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
+                }
 
-        var clonePositions = engine.TensorSubtract(sourcePositions, offset);
-        var cloneRotations = engine.TensorIndexSelect(_rotations, sources, 0);
-        var cloneSh = engine.TensorIndexSelect(_shCoefficients, sources, 0);
-        _positions = AppendRows(_positions, clonePositions);
-        _rotations = AppendRows(_rotations, cloneRotations);
-        _logScales = AppendRows(_logScales, splitScales);
-        _opacityLogits = AppendRows(_opacityLogits, splitOpacity);
-        _shCoefficients = AppendRows(_shCoefficients, cloneSh.Reshape(splits, basisCount, 3));
-        _learningRateScales = AppendRows(_learningRateScales, splitLr);
+                var scattered = engine.TensorIndexAdd(engine.TensorZerosLike(direction), 0, zeroRows.Reshape(zeroCount), NormalizeRows(random));
+                direction = Select(isZero.Reshape(splits, 1), scattered, direction);
+            }
 
-        // Densification is a STRUCTURAL parameter change: the per-Gaussian tensors are the model's parameters, so
+            // #1835 excellence goal #4 -- SplitChildLearningRateScales. Position jitter shrinks by the position
+            // multiplier and the scale factor grows by the scale multiplier; both children inherit the compounded
+            // per-attribute multipliers (each generation layers its multiplier on its parent's).
+            var childScales = _options.SplitChildLearningRateScales ?? new AiDotNet.Models.Options.SplitChildLearningRateScales();
+            T jitter = ops.FromDouble(SplitPositionJitter * childScales.Position);
+            T scaleFactor = ops.FromDouble(SplitScaleFactor / childScales.Scale);
+            var offset = engine.TensorMultiplyScalar(direction, jitter);
+
+            var sourcePositions = engine.TensorIndexSelect(_positions, sources, 0);
+            var splitScales = engine.TensorLog(MaxScalar(
+                engine.TensorMultiplyScalar(engine.TensorExp(engine.TensorIndexSelect(_logScales, sources, 0)), scaleFactor),
+                ops.FromDouble(MinScale)));
+            var splitAlpha = MinScalar(
+                engine.TensorMultiplyScalar(engine.TensorSigmoid(engine.TensorIndexSelect(_opacityLogits, sources, 0)), ops.FromDouble(SplitOpacityFactor)),
+                ops.FromDouble(SplitOpacityMax));
+            var splitOpacity = Logit(splitAlpha);
+            var multipliers = Tensor<T>.FromVector(new Vector<T>(new[]
+            {
+                ops.FromDouble(childScales.Position),
+                ops.FromDouble(childScales.Scale),
+                ops.FromDouble(childScales.Opacity),
+                ops.FromDouble(childScales.Rotation),
+                ops.FromDouble(childScales.Color),
+            })).Reshape(1, LearningRateScaleColumns);
+            var splitLr = Mul(engine.TensorIndexSelect(_learningRateScales, sources, 0), multipliers);
+
+            // Sources move along +direction, clones along -direction; both get the reduced scale and opacity.
+            var sourceMask = engine.TensorIndexAdd(new Tensor<T>(new[] { count }), 0, sources, Full(new[] { splits }, ops.One));
+            WriteRows(_positions, sources, sourceMask, engine.TensorAdd(sourcePositions, offset));
+            WriteRows(_logScales, sources, sourceMask, splitScales);
+            _learningRateScales = Select(sourceMask.Reshape(count, 1),
+                engine.TensorIndexAdd(engine.TensorZerosLike(_learningRateScales), 0, sources, splitLr), _learningRateScales).Clone();
+            WriteInPlace(_opacityLogits, Select(sourceMask,
+                engine.TensorIndexAdd(engine.TensorZerosLike(_opacityLogits), 0, sources, splitOpacity), _opacityLogits));
+
+            var clonePositions = engine.TensorSubtract(sourcePositions, offset);
+            var cloneRotations = engine.TensorIndexSelect(_rotations, sources, 0);
+            var cloneSh = engine.TensorIndexSelect(_shCoefficients, sources, 0);
+            _positions = AppendRows(_positions, clonePositions);
+            _rotations = AppendRows(_rotations, cloneRotations);
+            _logScales = AppendRows(_logScales, splitScales);
+            _opacityLogits = AppendRows(_opacityLogits, splitOpacity);
+            _shCoefficients = AppendRows(_shCoefficients, cloneSh.Reshape(splits, basisCount, 3));
+            _learningRateScales = AppendRows(_learningRateScales, splitLr);
+        }
+
+        if (cloneSources is not null && cloneLearningRates is not null)
+        {
+            _positions = AppendRows(_positions, engine.TensorIndexSelect(_positions, cloneSources, 0));
+            _rotations = AppendRows(_rotations, engine.TensorIndexSelect(_rotations, cloneSources, 0));
+            _logScales = AppendRows(_logScales, engine.TensorIndexSelect(_logScales, cloneSources, 0));
+            _opacityLogits = AppendRows(_opacityLogits, engine.TensorIndexSelect(_opacityLogits, cloneSources, 0));
+            _shCoefficients = AppendRows(_shCoefficients, engine.TensorIndexSelect(_shCoefficients, cloneSources, 0));
+            _learningRateScales = AppendRows(_learningRateScales, cloneLearningRates);
+        }
+
+        ResetDensificationStats();
+
+        // Densification is a STRUCTURAL
+ parameter change: the per-Gaussian tensors are the model's parameters, so
         // pruning or splitting resizes the parameter surface exactly the way adding or removing a layer does.
         // Without this the cached ParameterLayoutSnapshot keeps describing the previous cloud and the next
         // PublishFlatParameterGradients call fails its length check.

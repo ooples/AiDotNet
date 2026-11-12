@@ -344,6 +344,115 @@ public class GaussianSplattingPaperGradientTests
         Assert.All(late.GetGaussianDiagnostics(), d => Assert.Equal(0.5, d.Opacity, 12));
     }
 
+    private static GaussianSplatting<double> BuildDensifyModel(double[,] positions, double[] scales, int? accumulationWindow = null)
+    {
+        int n = scales.Length;
+        var options = new GaussianSplattingOptions
+        {
+            UseSphericalHarmonics = false,
+            ShDegree = 0,
+            EnableSpatialIndex = false,
+            EnableDensification = true,
+            DensificationStartIteration = 1,
+            DensificationEndIteration = 100,
+            GradientNormThreshold = 0.2,
+            GradientAccumulationWindow = accumulationWindow,
+            MaxGaussians = 16,
+        };
+        var cloud = new Matrix<double>(n, 3);
+        var model = new GaussianSplatting<double>(options, cloud, cloud);
+        var position = new Tensor<double>(new[] { n, 3 });
+        var rotation = new Tensor<double>(new[] { n, 4 });
+        var logScale = new Tensor<double>(new[] { n, 3 });
+        var opacity = new Tensor<double>(new[] { n });
+        var sh = new Tensor<double>(new[] { n, 1, 3 });
+        for (int i = 0; i < n; i++)
+        {
+            rotation[i, 0] = 1.0;
+            for (int j = 0; j < 3; j++)
+            {
+                position[i, j] = positions[i, j];
+                logScale[i, j] = Math.Log(scales[i]);
+                sh[i, 0, j] = 0.5;
+            }
+        }
+
+        model.SetGaussianStateForTest(position, rotation, logScale, opacity, sh);
+        return model;
+    }
+
+    private static Tensor<double> XGradients(params double[] values)
+    {
+        var gradients = new Tensor<double>(new[] { values.Length, 3 });
+        for (int i = 0; i < values.Length; i++) gradients[i, 0] = values[i];
+        return gradients;
+    }
+
+    [Fact]
+    public void Densification_ClonesSmallGaussiansAndSplitsLargeOnes()
+    {
+        // Kerbl et al. 2023 section 5.2: Gaussians no larger than 1% of the scene extent are cloned unchanged,
+        // larger ones are split. A and B are tiny; C is large and far away, so the extent is about 7.3.
+        var model = BuildDensifyModel(
+            new[,] { { 0.0, 0.0, 0.0 }, { 0.001, 0.0, 0.0 }, { 10.0, 0.0, 0.0 } },
+            new[] { 0.001, 0.001, 1.0 });
+
+        model.RunDensifyAndPruneForTest(10, 1.0);
+
+        var d = model.GetGaussianDiagnostics();
+        Assert.Equal(6, d.Count);
+
+        // Clone sources and clones are identical to the original small Gaussians.
+        foreach (var (row, x) in new[] { (0, 0.0), (1, 0.001), (4, 0.0), (5, 0.001) })
+        {
+            Assert.Equal(x, d[row].PosX, 12);
+            Assert.Equal(0.0, d[row].PosY, 12);
+            Assert.Equal(0.0, d[row].PosZ, 12);
+            Assert.Equal(0.001, d[row].MaxScale, 12);
+            Assert.Equal(0.5, d[row].Opacity, 12);
+        }
+
+        // The large Gaussian is split: both children move apart along the gradient and shrink.
+        Assert.True(d[2].PosX > 10.0, $"split source should move along +x (x = {d[2].PosX})");
+        Assert.True(d[3].PosX < 10.0, $"split child should move along -x (x = {d[3].PosX})");
+        Assert.Equal(d[2].MaxScale, d[3].MaxScale, 12);
+        Assert.True(d[2].MaxScale < 1.0, "split children shrink");
+    }
+
+    [Fact]
+    public void Densification_AveragesTheGradientOverTheAccumulationWindow()
+    {
+        var positions = new[,] { { 0.0, 0.0, 0.0 }, { 1.0, 0.0, 0.0 } };
+        var scales = new[] { 0.5, 0.5 };
+
+        // Averages 0.15 and 0.15 are below the 0.2 threshold although the last step alone would split Gaussian 1.
+        var averaged = BuildDensifyModel(positions, scales);
+        averaged.AccumulateGradientsForTest(XGradients(0.3, 0.0));
+        averaged.AccumulateGradientsForTest(XGradients(0.0, 0.3));
+        averaged.RunDensifyFromAccumulatedForTest(10);
+        Assert.Equal(2, averaged.GaussianCount);
+
+        // Averages 0.3 and 0.15: only Gaussian 0 is split, although the first step alone would split both.
+        var mixed = BuildDensifyModel(positions, scales);
+        mixed.AccumulateGradientsForTest(XGradients(0.3, 0.3));
+        mixed.AccumulateGradientsForTest(XGradients(0.3, 0.0));
+        mixed.RunDensifyFromAccumulatedForTest(10);
+        var d = mixed.GetGaussianDiagnostics();
+        Assert.Equal(3, d.Count);
+        Assert.True(Math.Abs(d[2].PosX) < 0.5, $"the split child belongs to Gaussian 0 (x = {d[2].PosX})");
+        Assert.Equal(1.0, d[1].PosX, 12);
+
+        // A one-step window restarts the statistics every step, so only the last step counts.
+        var windowed = BuildDensifyModel(positions, scales, accumulationWindow: 1);
+        windowed.AccumulateGradientsForTest(XGradients(0.3, 0.0));
+        windowed.AccumulateGradientsForTest(XGradients(0.0, 0.3));
+        windowed.RunDensifyFromAccumulatedForTest(10);
+        var w = windowed.GetGaussianDiagnostics();
+        Assert.Equal(3, w.Count);
+        Assert.True(Math.Abs(w[2].PosX - 1.0) < 0.5, $"the split child belongs to Gaussian 1 (x = {w[2].PosX})");
+        Assert.Equal(0.0, w[0].PosX, 12);
+    }
+
     private static void AssertClose(double expected, double actual, string what)
     {
         double tolerance = 1e-6 + 1e-4 * Math.Abs(expected);
