@@ -146,11 +146,8 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
             if (_numOps.GreaterThan(refNormSq, _numOps.Zero))
             {
                 var scale = _numOps.Divide(dotProduct, refNormSq);
-                for (int i = 0; i < gradients.Length; i++)
-                {
-                    var adjustment = _numOps.Multiply(scale, refGradient[i]);
-                    gradients[i] = _numOps.Subtract(gradients[i], adjustment);
-                }
+                // In place, like master: g <- g - scale * g_ref.
+                Engine.TensorSubtractInPlace(gradients.AsTensor(), Engine.TensorMultiplyScalar(refGradient.AsTensor(), scale));
             }
         }
 
@@ -221,14 +218,10 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
             var dstInputStart = i * inputSampleSize;
             var dstTargetStart = i * targetSampleSize;
 
-            for (int j = 0; j < inputSampleSize; j++)
-            {
-                inputData[dstInputStart + j] = taskInputs[srcInputStart + j];
-            }
-            for (int j = 0; j < targetSampleSize; j++)
-            {
-                targetData[dstTargetStart + j] = taskTargets[srcTargetStart + j];
-            }
+            taskInputs.AsSpan().Slice(srcInputStart, inputSampleSize)
+                .CopyTo(inputData.AsWritableSpan().Slice(dstInputStart, inputSampleSize));
+            taskTargets.AsSpan().Slice(srcTargetStart, targetSampleSize)
+                .CopyTo(targetData.AsWritableSpan().Slice(dstTargetStart, targetSampleSize));
         }
 
         return (new Tensor<T>(inputShape, inputData), new Tensor<T>(targetShape, targetData));
@@ -273,18 +266,9 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
             sampleSize *= tensor.Shape[i];
         }
 
-        var data = new Vector<T>(indices.Length * sampleSize);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            var srcStart = indices[i] * sampleSize;
-            var dstStart = i * sampleSize;
-            for (int j = 0; j < sampleSize; j++)
-            {
-                data[dstStart + j] = tensor[srcStart + j];
-            }
-        }
-
-        return new Tensor<T>(newShape, data);
+        var rows = tensor.Reshape(tensor.Shape[0], sampleSize);
+        var gathered = Engine.TensorIndexSelect(rows, new Tensor<int>(indices, new[] { indices.Length }), 0);
+        return gathered.Reshape(newShape);
     }
 
 
@@ -293,11 +277,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
     /// </summary>
     private Tensor<T> ComputeLossGradient(Tensor<T> output, Tensor<T> target)
     {
-        var gradData = new Vector<T>(output.Length);
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradData[i] = _numOps.Subtract(output[i], target[i]);
-        }
-        return new Tensor<T>(output._shape, gradData);
+        return Engine.TensorSubtract(output, target.Reshape(output._shape));
     }
 }
