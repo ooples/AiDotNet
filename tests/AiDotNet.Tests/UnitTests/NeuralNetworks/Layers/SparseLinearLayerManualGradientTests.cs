@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
@@ -62,6 +63,57 @@ public sealed class SparseLinearLayerManualGradientTests
 
         Assert.Equal(before[6] - 0.1, after[6], precision: 12);
         Assert.Equal(before[7] - 0.1, after[7], precision: 12);
+    }
+
+    [Fact]
+    public void ComputeGradients_SparsePattern_MatchesTheDenseReferenceAtEveryStoredWeight()
+    {
+        // With identity activation: dW[o, i] = sum_b g[b, o] x[b, i] sampled at each stored (o, i), and
+        // dX[b, i] = sum_o g[b, o] W[o, i] over the stored weights only.
+        var layer = new SparseLinearLayer<double>(4, 3, sparsity: 0.5, activationFunction: new IdentityActivation<double>());
+        var x = new Tensor<double>([0.5, -1.0, 2.0, 0.25, 1.5, 0.75, -0.5, -2.0, -1.25, 0.1, 0.6, 3.0], [3, 4]);
+        var g = new Tensor<double>([1.0, -2.0, 0.5, 0.3, 0.7, -1.1, -0.4, 2.2, 1.6], [3, 3]);
+
+        layer.SetTrainingMode(true);
+        layer.Forward(x);
+        var inputGradient = layer.ComputeGradients(g);
+
+        var weights = typeof(SparseLinearLayer<double>)
+            .GetField("_weights", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?
+            .GetValue(layer) as SparseTensor<double>
+            ?? throw new Xunit.Sdk.XunitException("SparseLinearLayer has no sparse _weights field.");
+        var weightGradient = typeof(SparseLinearLayer<double>)
+            .GetField("_weightsGradient", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?
+            .GetValue(layer) as Tensor<double>
+            ?? throw new Xunit.Sdk.XunitException("ComputeGradients stored no weight gradient.");
+
+        int[] rows = weights.RowIndices;
+        int[] columns = weights.ColumnIndices;
+        double[] values = weights.Values;
+        Assert.True(values.Length > 0 && values.Length < 12, "The layer should store a strict subset of weights.");
+        Assert.Equal(values.Length, weightGradient.Length);
+
+        var expectedInputGradient = new double[3, 4];
+        for (int k = 0; k < values.Length; k++)
+        {
+            double expectedWeightGradient = 0;
+            for (int b = 0; b < 3; b++)
+            {
+                expectedWeightGradient += g[b, rows[k]] * x[b, columns[k]];
+                expectedInputGradient[b, columns[k]] += g[b, rows[k]] * values[k];
+            }
+
+            Assert.Equal(expectedWeightGradient, weightGradient.GetFlat(k), precision: 12);
+        }
+
+        Assert.Equal(new[] { 3, 4 }, inputGradient.Shape.ToArray());
+        for (int b = 0; b < 3; b++)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                Assert.Equal(expectedInputGradient[b, i], inputGradient[b, i], precision: 12);
+            }
+        }
     }
 
     private static double Sum(Tensor<double> tensor)
