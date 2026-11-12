@@ -347,10 +347,18 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// </summary>
     /// <param name="tokenIds">Token ids (non-negative).</param>
     /// <returns>Colours of shape [tokenIds.Length, 3].</returns>
-    protected Tensor<T> HashTokenColors(int[] tokenIds)
+    protected Tensor<T> HashTokenColors(int[] tokenIds) =>
+        HashTokenColors(new Tensor<int>(new[] { tokenIds.Length }, Vector<int>.FromArray(tokenIds)).Cast<T>());
+
+    /// <summary>
+    /// Placeholder VQ palette for integer-valued token ids held as <typeparamref name="T"/>.
+    /// </summary>
+    /// <param name="tokenIds">Integer-valued, non-negative token ids.</param>
+    /// <returns>Colours of shape [tokenIds.Length, 3].</returns>
+    protected Tensor<T> HashTokenColors(Tensor<T> tokenIds)
     {
         int count = tokenIds.Length;
-        var ids = new Tensor<int>(new[] { count }, Vector<int>.FromArray(tokenIds)).Cast<T>();
+        var ids = tokenIds.Reshape([count]);
         var modulus = Tensor<T>.CreateDefault([count], NumOps.FromDouble(256));
         T inv255 = NumOps.FromDouble(1.0 / 255.0);
         Tensor<T> Channel(double multiplier, double offset) => Engine.TensorMultiplyScalar(
@@ -372,6 +380,98 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
             Engine.TensorArange<T>(0, patchSize, 1), NumOps.FromDouble(Math.PI / patchSize)));
         return Engine.TensorAddScalar(
             Engine.TensorMultiplyScalar(Engine.TensorOuter(wave, wave), NumOps.FromDouble(0.1)), NumOps.FromDouble(0.9));
+    }
+
+    /// <summary>
+    /// Shifts a flat sequence: result[t] = values[t + offset] when 0 &lt;= t + offset &lt; n, otherwise 0.
+    /// </summary>
+    /// <param name="values">Values to shift (read flattened).</param>
+    /// <param name="offset">Position offset to read from.</param>
+    /// <returns>The shifted sequence of shape [n].</returns>
+    protected Tensor<T> ShiftFlat(Tensor<T> values, int offset)
+    {
+        int n = values.Length;
+        var flat = values.Reshape([n]);
+        if (offset == 0)
+            return flat;
+        if (Math.Abs(offset) >= n)
+            return new Tensor<T>([n]);
+        return offset > 0
+            ? Engine.TensorConcatenate([Engine.TensorSlice(flat, [offset], [n - offset]), new Tensor<T>([offset])], 0)
+            : Engine.TensorConcatenate([new Tensor<T>([-offset]), Engine.TensorSlice(flat, [0], [n + offset])], 0);
+    }
+
+    /// <summary>
+    /// Selects the <paramref name="k"/> highest-scoring eligible positions as a 1/0 mask: the same set a
+    /// repeated "first strictly greater than -infinity" scan picks one at a time (higher scores first, ties
+    /// broken by the lower position). NaN and -infinity scores are never selected.
+    /// </summary>
+    /// <param name="scores">Scores, shape [n].</param>
+    /// <param name="eligible">Non-zero where a position may be selected, shape [n].</param>
+    /// <param name="k">Maximum number of positions to select.</param>
+    /// <returns>A [n] mask with 1 at selected positions.</returns>
+    protected Tensor<T> SelectTopKFirstIndex(Tensor<T> scores, Tensor<T> eligible, int k)
+    {
+        int n = scores.Length;
+        var flat = scores.Reshape([n]);
+        T negInfValue = NumOps.FromDouble(double.NegativeInfinity);
+        var negInf = Tensor<T>.CreateDefault([n], negInfValue);
+        var comparable = Engine.TensorWhere(Engine.TensorIsNan(flat), negInf, flat);
+        comparable = Engine.TensorWhere(eligible.Reshape([n]), comparable, negInf);
+        int available = NumOps.ToInt(Engine.TensorSum(Engine.TensorGreaterThan(comparable, negInfValue)));
+        int take = Math.Min(k, available);
+        if (take <= 0)
+            return new Tensor<T>([n]);
+
+        // tau = take-th largest score; everything above it is selected, then the lowest positions
+        // holding exactly tau fill the remaining slots.
+        T tau = Engine.TensorKthvalue(comparable, n - take + 1).Item1;
+        var above = Engine.TensorGreaterThan(comparable, tau);
+        int remaining = take - NumOps.ToInt(Engine.TensorSum(above));
+        var atTau = Engine.TensorEquals(comparable, tau);
+        var tieRank = Engine.TensorCumSum(atTau, 0);
+        var tiesTaken = Engine.TensorMultiply(atTau, Engine.TensorLessThan(tieRank, NumOps.FromDouble(remaining + 0.5)));
+        return Engine.TensorAdd(above, tiesTaken);
+    }
+
+    /// <summary>
+    /// Maps logits to token ids as <c>max(0, min(V - 1, (int)((tanh(x) + 1) / 2 * (V - 1))))</c>, with NaN
+    /// mapping to 0 (the C# cast of NaN saturates below zero and is clamped up).
+    /// </summary>
+    /// <param name="logits">Logits.</param>
+    /// <param name="vocabularySize">Number of visual tokens V.</param>
+    /// <returns>Integer-valued token ids held as <typeparamref name="T"/>.</returns>
+    protected Tensor<T> QuantizeTanhTokens(Tensor<T> logits, int vocabularySize)
+    {
+        T half = NumOps.FromDouble(0.5);
+        var unit = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorTanh(logits), half), half);
+        var scaled = Engine.TensorMultiplyScalar(unit, NumOps.FromDouble(vocabularySize - 1));
+        var zeros = new Tensor<T>(logits._shape);
+        var truncated = Engine.TensorTrunc(Engine.TensorWhere(Engine.TensorIsNan(scaled), zeros, scaled));
+        return Engine.TensorMax(Engine.TensorMin(truncated, NumOps.FromDouble(vocabularySize - 1)), NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Projects the leading <paramref name="taps"/> hidden values onto a bank of sinusoids:
+    /// result[g] = sum_h hidden[h] * wave((g + 1) * (h + 1) * frequency) / divisor, h &lt; taps.
+    /// </summary>
+    /// <param name="hidden">Hidden state (read flattened); must hold at least <paramref name="taps"/> values.</param>
+    /// <param name="outputs">Number of outputs.</param>
+    /// <param name="taps">Number of leading hidden values used.</param>
+    /// <param name="frequency">Angular step of the sinusoid bank.</param>
+    /// <param name="useCosine">True for cosine waves, false for sine waves.</param>
+    /// <param name="divisor">Normaliser applied to every output.</param>
+    /// <returns>Projection of shape [outputs] (zeros when <paramref name="taps"/> is 0).</returns>
+    protected Tensor<T> WaveProjection(Tensor<T> hidden, int outputs, int taps, double frequency, bool useCosine, double divisor)
+    {
+        if (taps <= 0 || outputs <= 0)
+            return new Tensor<T>([Math.Max(0, outputs)]);
+        var phase = Engine.TensorMultiplyScalar(
+            Engine.TensorOuter(Engine.TensorArange<T>(1, outputs + 1, 1), Engine.TensorArange<T>(1, taps + 1, 1)),
+            NumOps.FromDouble(frequency));
+        var basis = useCosine ? Engine.TensorCos(phase) : Engine.TensorSin(phase);
+        var leading = Engine.TensorSlice(hidden.Reshape([hidden.Length]), [0], [taps]).Reshape([taps, 1]);
+        return Engine.TensorDivideScalar(Engine.TensorMatMul(basis, leading).Reshape([outputs]), NumOps.FromDouble(divisor));
     }
 
     /// <summary>
