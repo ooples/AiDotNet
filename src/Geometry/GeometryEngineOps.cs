@@ -164,4 +164,69 @@ internal static class GeometryEngineOps<T>
         var min = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(masked), new[] { 1 }, false));
         return Engine.TensorMin(min, NumOps.MaxValue);
     }
+
+    /// <summary>
+    /// Returns order-preserving integer keys for every entry of a [rows, columns] tensor, row-major: within a row
+    /// equal values share a key and smaller values get smaller keys; NaN entries get -1. Comparing the keys gives
+    /// the same outcome as comparing the values, so scalar selection and sort logic can run on integers.
+    /// </summary>
+    internal static int[] DenseRowRanks(Tensor<T> table)
+    {
+        int rows = table.Shape[0];
+        int columns = table.Shape[1];
+        var ranks = new int[rows * columns];
+        if (rows == 0 || columns == 0)
+        {
+            return ranks;
+        }
+
+        var (sorted, order) = Engine.TensorSort(table, 1, false);
+        var opensGroup = Engine.TensorOnesLike(Engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { rows, 1 }));
+        if (columns > 1)
+        {
+            var right = Engine.TensorSlice(sorted, new[] { 0, 1 }, new[] { rows, columns - 1 });
+            var left = Engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { rows, columns - 1 });
+            opensGroup = Engine.TensorConcatenate(new[] { opensGroup, Engine.TensorNotEquals(right, left) }, 1);
+        }
+
+        var isStart = new bool[rows * columns];
+        var starts = Engine.TensorNonzero(opensGroup).ToArray();
+        for (int s = 0; s + 1 < starts.Length; s += 2)
+        {
+            isStart[starts[s] * columns + starts[s + 1]] = true;
+        }
+
+        var positions = order.ToArray();
+        for (int row = 0; row < rows; row++)
+        {
+            int rank = -1;
+            int rowOffset = row * columns;
+            for (int p = 0; p < columns; p++)
+            {
+                if (isStart[rowOffset + p])
+                {
+                    rank++;
+                }
+
+                ranks[rowOffset + positions[rowOffset + p]] = rank;
+            }
+        }
+
+        var nanFlags = Engine.TensorWhere(Engine.TensorIsNan(table), Engine.TensorOnesLike(table), Engine.TensorZerosLike(table));
+        var nanCoordinates = Engine.TensorNonzero(nanFlags).ToArray();
+        for (int c = 0; c + 1 < nanCoordinates.Length; c += 2)
+        {
+            ranks[nanCoordinates[c] * columns + nanCoordinates[c + 1]] = -1;
+        }
+
+        return ranks;
+    }
+
+    /// <summary>
+    /// Returns the (row, column) pairs, row-major, where <paramref name="mask"/> is nonzero, as a flat int array.
+    /// </summary>
+    internal static int[] NonzeroPairs(Tensor<T> mask)
+    {
+        return Engine.TensorNonzero(mask).ToArray();
+    }
 }

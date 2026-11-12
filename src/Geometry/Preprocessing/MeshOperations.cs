@@ -51,7 +51,7 @@ public static class MeshOperations<T>
             adjacency[v] = [];
         }
 
-        var faces = mesh.Faces.Data.ToArray();
+        var faces = mesh.Faces.ToArray();
         for (int offset = 0; offset + 2 < faces.Length; offset += 3)
         {
             int v0 = faces[offset];
@@ -230,7 +230,7 @@ public static class MeshOperations<T>
     private static int CountEdges(TriangleMeshData<T> mesh)
     {
         var edges = new HashSet<(int, int)>();
-        var faces = mesh.Faces.Data.ToArray();
+        var faces = mesh.Faces.ToArray();
 
         for (int offset = 0; offset + 2 < faces.Length; offset += 3)
         {
