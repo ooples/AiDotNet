@@ -92,6 +92,33 @@ public static class StatisticsHelper<T>
     private static Tensor<T> RankDiscounts(int count)
         => Engine.TensorDivide(Filled(new[] { count }, _numOps.One), Engine.TensorLog(Engine.TensorArange<T>(2, count + 2, 1)));
 
+    /// <summary>
+    /// The running maximum "max = max &gt; s ? max : s" started at zero over non-negative (or NaN) sums: a NaN
+    /// sum replaces the maximum and the fold restarts from the entry after the last NaN.
+    /// </summary>
+    private static T FoldMaxOfNonNegative(Tensor<T> sums)
+    {
+        int length = sums.Length;
+        if (length == 0)
+        {
+            return _numOps.Zero;
+        }
+
+        var nanMask = Engine.TensorWhere(Engine.TensorIsNan(sums), Filled(sums._shape, _numOps.One), new Tensor<T>(sums._shape));
+        var nanAt = Engine.TensorNonzero(nanMask);
+        int start = 0;
+        if (nanAt.Shape[0] > 0)
+        {
+            start = nanAt.GetFlat(nanAt.Shape[0] - 1) + 1;
+            if (start == length)
+            {
+                return sums.GetFlat(length - 1);
+            }
+        }
+
+        return Engine.TensorMaxValue(Engine.TensorNarrow(sums, 0, start, length - start));
+    }
+
     /// <summary>Gathers <paramref name="values"/> at <paramref name="indices"/> into a rank-1 tensor.</summary>
     private static Tensor<T> Gather(Tensor<T> values, List<int> indices)
         => Engine.TensorIndexSelect(values, new Tensor<int>(indices.ToArray(), new[] { indices.Count }), 0);
@@ -2653,15 +2680,10 @@ public static class StatisticsHelper<T>
             return (_numOps.Zero, _numOps.Zero);
         }
 
-        T sum = _numOps.Zero;
-        T sumOfSquares = _numOps.Zero;
+        var tensor = AsTensor(values);
+        T sum = Engine.TensorSum(tensor);
+        T sumOfSquares = Engine.TensorSum(Engine.TensorMultiply(tensor, tensor));
         int count = values.Length;
-
-        for (int i = 0; i < count; i++)
-        {
-            sum = _numOps.Add(sum, values[i]);
-            sumOfSquares = _numOps.Add(sumOfSquares, _numOps.Square(values[i]));
-        }
 
         T mean = _numOps.Divide(sum, _numOps.FromDouble(count));
         T variance = _numOps.Subtract(
@@ -3100,12 +3122,10 @@ public static class StatisticsHelper<T>
         int covered = 0;
         int n = actual.Length;
 
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            if (_numOps.GreaterThanOrEquals(actual[i], lowerInterval) && _numOps.LessThanOrEquals(actual[i], upperInterval))
-            {
-                covered++;
-            }
+            var a = AsTensor(actual);
+            covered = Engine.TensorCountNonzero(And(AtLeast(a, lowerInterval), AtMost(a, Filled(a._shape, upperInterval))));
         }
 
         return _numOps.Divide(_numOps.FromDouble(covered), _numOps.FromDouble(n));
@@ -3133,12 +3153,7 @@ public static class StatisticsHelper<T>
     public static T CalculateMeanPredictionError(Vector<T> actual, Vector<T> predicted)
     {
         int n = actual.Length;
-        T sumError = _numOps.Zero;
-
-        for (int i = 0; i < n; i++)
-        {
-            sumError = _numOps.Add(sumError, _numOps.Abs(_numOps.Subtract(actual[i], predicted[i])));
-        }
+        T sumError = n == 0 ? _numOps.Zero : SumOfAbsoluteDifferences(AsTensor(actual), Prefix(predicted, n));
 
         return _numOps.Divide(sumError, _numOps.FromDouble(n));
     }
@@ -4409,18 +4424,13 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T MatrixL1Norm(Matrix<T> matrix)
     {
-        T maxColumnSum = _numOps.Zero;
-        for (int j = 0; j < matrix.Columns; j++)
+        if (matrix.Rows == 0)
         {
-            T columnSum = _numOps.Zero;
-            for (int i = 0; i < matrix.Rows; i++)
-            {
-                columnSum = _numOps.Add(columnSum, _numOps.Abs(matrix[i, j]));
-            }
-            maxColumnSum = _numOps.GreaterThan(maxColumnSum, columnSum) ? maxColumnSum : columnSum;
+            return _numOps.Zero;
         }
 
-        return maxColumnSum;
+        var columnSums = Engine.ReduceSum(Engine.TensorAbs(Tensor<T>.FromMatrix(matrix)), new[] { 0 }, false);
+        return FoldMaxOfNonNegative(columnSums);
     }
 
     /// <summary>
@@ -4443,18 +4453,13 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T MatrixInfinityNorm(Matrix<T> matrix)
     {
-        T maxRowSum = _numOps.Zero;
-        for (int i = 0; i < matrix.Rows; i++)
+        if (matrix.Columns == 0)
         {
-            T rowSum = _numOps.Zero;
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                rowSum = _numOps.Add(rowSum, _numOps.Abs(matrix[i, j]));
-            }
-            maxRowSum = _numOps.GreaterThan(maxRowSum, rowSum) ? maxRowSum : rowSum;
+            return _numOps.Zero;
         }
 
-        return maxRowSum;
+        var rowSums = Engine.ReduceSum(Engine.TensorAbs(Tensor<T>.FromMatrix(matrix)), new[] { 1 }, false);
+        return FoldMaxOfNonNegative(rowSums);
     }
 
     /// <summary>
@@ -5450,13 +5455,13 @@ public static class StatisticsHelper<T>
         T sumX2 = _numOps.Zero;
         T sumY2 = _numOps.Zero;
 
-        for (int i = 0; i < x.Length; i++)
+        if (x.Length > 0)
         {
-            T xDiff = _numOps.Subtract(x[i], meanX);
-            T yDiff = _numOps.Subtract(y[i], meanY);
-            sumXY = _numOps.Add(sumXY, _numOps.Multiply(xDiff, yDiff));
-            sumX2 = _numOps.Add(sumX2, _numOps.Multiply(xDiff, xDiff));
-            sumY2 = _numOps.Add(sumY2, _numOps.Multiply(yDiff, yDiff));
+            var xDiff = Engine.TensorSubtractScalar(AsTensor(x), meanX);
+            var yDiff = Engine.TensorSubtractScalar(AsTensor(y), meanY);
+            sumXY = Engine.TensorSum(Engine.TensorMultiply(xDiff, yDiff));
+            sumX2 = Engine.TensorSum(Engine.TensorMultiply(xDiff, xDiff));
+            sumY2 = Engine.TensorSum(Engine.TensorMultiply(yDiff, yDiff));
         }
 
         return _numOps.Divide(sumXY, _numOps.Sqrt(_numOps.Multiply(sumX2, sumY2)));
@@ -5681,13 +5686,15 @@ public static class StatisticsHelper<T>
             return _numOps.FromDouble(0.5); // Return baseline AUC for invalid input
         }
 
-        T auc = _numOps.Zero;
-        for (int i = 1; i < fpr.Length; i++)
-        {
-            var width = _numOps.Subtract(fpr[i], fpr[i - 1]);
-            var height = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(tpr[i], tpr[i - 1]));
-            auc = _numOps.Add(auc, _numOps.Multiply(width, height));
-        }
+        // Trapezoids between consecutive points: (fpr[i] - fpr[i-1]) * 0.5 * (tpr[i] + tpr[i-1]).
+        int segments = fpr.Length - 1;
+        var f = AsTensor(fpr);
+        var t = AsTensor(tpr);
+        var width = Engine.TensorSubtract(Engine.TensorNarrow(f, 0, 1, segments), Engine.TensorNarrow(f, 0, 0, segments));
+        var height = Engine.TensorMultiplyScalar(
+            Engine.TensorAdd(Engine.TensorNarrow(t, 0, 1, segments), Engine.TensorNarrow(t, 0, 0, segments)),
+            _numOps.FromDouble(0.5));
+        T auc = Engine.TensorSum(Engine.TensorMultiply(width, height));
 
         // Clamp AUC to valid range [0, 1]
         // Negative AUC can occur with unsorted FPR values or poor data
