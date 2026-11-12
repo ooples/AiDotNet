@@ -6,9 +6,11 @@ namespace AiDotNet.AutoML.NAS
 {
     internal static class NasSamplingHelper
     {
-        private const double SoftmaxEpsilon = 1e-12;
-        private const double GumbelMinU = 0.005;
-        private const double GumbelRangeU = 0.99;
+        // Gumbel(0, 1) noise is -log(-log(u)) with u ~ U(0, 1) (Gumbel 1954; Jang et al. 2017, Eq. 1). u is only
+        // kept off the endpoints 0 and 1 where the transform is infinite; master clipped u to [0.005, 0.995],
+        // which truncated the noise to [-1.67, 5.30] and biased the categorical sample toward the argmax.
+        private const double GumbelMinU = 1e-10;
+        private const double GumbelRangeU = 1.0 - 2e-10;
 
         internal static Vector<T> Softmax<T>(Vector<T> logits, INumericOperations<T> ops)
         {
@@ -17,36 +19,8 @@ namespace AiDotNet.AutoML.NAS
                 return new Vector<T>(0);
             }
 
-            T maxVal = logits[0];
-            for (int i = 1; i < logits.Length; i++)
-            {
-                if (ops.GreaterThan(logits[i], maxVal))
-                {
-                    maxVal = logits[i];
-                }
-            }
-
-            var expValues = new Vector<T>(logits.Length);
-            T sumExp = ops.Zero;
-            for (int i = 0; i < logits.Length; i++)
-            {
-                expValues[i] = ops.Exp(ops.Subtract(logits[i], maxVal));
-                sumExp = ops.Add(sumExp, expValues[i]);
-            }
-
-            T eps = ops.FromDouble(SoftmaxEpsilon);
-            if (ops.LessThan(sumExp, eps))
-            {
-                sumExp = eps;
-            }
-
-            var result = new Vector<T>(logits.Length);
-            for (int i = 0; i < logits.Length; i++)
-            {
-                result[i] = ops.Divide(expValues[i], sumExp);
-            }
-
-            return result;
+            // Max-shifted softmax: the shift makes the denominator >= 1, so master's 1e-12 floor never applied.
+            return AiDotNetEngine.Current.Softmax(logits);
         }
 
         internal static Vector<T> SoftmaxWithTemperature<T>(Vector<T> logits, T temperature, INumericOperations<T> ops)
@@ -56,101 +30,29 @@ namespace AiDotNet.AutoML.NAS
                 return new Vector<T>(0);
             }
 
-            var scaled = new Vector<T>(logits.Length);
-            for (int i = 0; i < logits.Length; i++)
-            {
-                scaled[i] = ops.Divide(logits[i], temperature);
-            }
-
-            return Softmax(scaled, ops);
+            var engine = AiDotNetEngine.Current;
+            return engine.Softmax(engine.Divide(logits, temperature));
         }
 
         internal static Matrix<T> SoftmaxRowsWithTemperature<T>(Matrix<T> logits, T temperature, INumericOperations<T> ops)
         {
-            var result = new Matrix<T>(logits.Rows, logits.Columns);
-
             if (logits.Rows == 0 || logits.Columns == 0)
             {
-                return result;
+                return new Matrix<T>(logits.Rows, logits.Columns);
             }
 
-            for (int row = 0; row < logits.Rows; row++)
-            {
-                T maxVal = ops.Divide(logits[row, 0], temperature);
-                for (int col = 1; col < logits.Columns; col++)
-                {
-                    T scaled = ops.Divide(logits[row, col], temperature);
-                    if (ops.GreaterThan(scaled, maxVal))
-                    {
-                        maxVal = scaled;
-                    }
-                }
-
-                T sumExp = ops.Zero;
-                var expValues = new T[logits.Columns];
-                for (int col = 0; col < logits.Columns; col++)
-                {
-                    T scaled = ops.Divide(logits[row, col], temperature);
-                    expValues[col] = ops.Exp(ops.Subtract(scaled, maxVal));
-                    sumExp = ops.Add(sumExp, expValues[col]);
-                }
-
-                T eps = ops.FromDouble(SoftmaxEpsilon);
-                if (ops.LessThan(sumExp, eps))
-                {
-                    sumExp = eps;
-                }
-
-                for (int col = 0; col < logits.Columns; col++)
-                {
-                    result[row, col] = ops.Divide(expValues[col], sumExp);
-                }
-            }
-
-            return result;
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorSoftmax(engine.TensorDivideScalar(Tensor<T>.FromMatrix(logits), temperature), 1).ToMatrix();
         }
 
         internal static Matrix<T> SoftmaxRows<T>(Matrix<T> logits, INumericOperations<T> ops)
         {
-            var result = new Matrix<T>(logits.Rows, logits.Columns);
-
             if (logits.Rows == 0 || logits.Columns == 0)
             {
-                return result;
+                return new Matrix<T>(logits.Rows, logits.Columns);
             }
 
-            for (int row = 0; row < logits.Rows; row++)
-            {
-                T maxVal = logits[row, 0];
-                for (int col = 1; col < logits.Columns; col++)
-                {
-                    if (ops.GreaterThan(logits[row, col], maxVal))
-                    {
-                        maxVal = logits[row, col];
-                    }
-                }
-
-                T sumExp = ops.Zero;
-                var expValues = new T[logits.Columns];
-                for (int col = 0; col < logits.Columns; col++)
-                {
-                    expValues[col] = ops.Exp(ops.Subtract(logits[row, col], maxVal));
-                    sumExp = ops.Add(sumExp, expValues[col]);
-                }
-
-                T eps = ops.FromDouble(SoftmaxEpsilon);
-                if (ops.LessThan(sumExp, eps))
-                {
-                    sumExp = eps;
-                }
-
-                for (int col = 0; col < logits.Columns; col++)
-                {
-                    result[row, col] = ops.Divide(expValues[col], sumExp);
-                }
-            }
-
-            return result;
+            return AiDotNetEngine.Current.TensorSoftmax(Tensor<T>.FromMatrix(logits), 1).ToMatrix();
         }
 
         internal static Vector<T> GumbelSoftmax<T>(Vector<T> logits, T temperature, INumericOperations<T> ops, Random random, bool hard = false)
@@ -206,17 +108,8 @@ namespace AiDotNet.AutoML.NAS
 
             for (int row = 0; row < logits.Rows; row++)
             {
-                var rowLogits = new Vector<T>(logits.Columns);
-                for (int col = 0; col < logits.Columns; col++)
-                {
-                    rowLogits[col] = logits[row, col];
-                }
-
-                var rowResult = GumbelSoftmax(rowLogits, temperature, ops, random, hard);
-                for (int col = 0; col < logits.Columns; col++)
-                {
-                    result[row, col] = rowResult[col];
-                }
+                // Rows are drawn in order so the caller's Random stream matches the per-row scalar sampler.
+                result.SetRow(row, GumbelSoftmax(logits.GetRow(row), temperature, ops, random, hard));
             }
 
             return result;
