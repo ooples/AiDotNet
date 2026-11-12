@@ -207,7 +207,8 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             else
             {
                 T volT = NumOps.FromDouble(vol);
-                output = AudioEngineOps.AddScaledPrefix(Engine, output, kvp.Value, volT);
+                for (int i = 0; i < kvp.Value.Length && i < output.Length; i++)
+                    output[i] = NumOps.Add(output[i], NumOps.Multiply(kvp.Value[i], volT));
             }
         }
         return output;

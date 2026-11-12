@@ -321,7 +321,7 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         {
             int count = last - first + 1;
             if (first + count > logits.Length)
-                throw new IndexOutOfRangeException("The logits do not cover the frequency window.");
+                throw new ArgumentOutOfRangeException("flatIndex", "The logits do not cover the frequency window.");
             var weights = Engine.TensorExp(Engine.TensorSlice(AudioEngineOps.Flatten(Engine, logits), [first], [count]));
             var binCents = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(first, first + count, 1), NumOps.FromDouble(_options.CentsPerBin));
             double weightedSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(weights, binCents)));

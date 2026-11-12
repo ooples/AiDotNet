@@ -1109,7 +1109,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     {
         // CFG formula: guided = uncond + scale * (cond - uncond), over cond's elements (row-major)
         if (uncondLogits.Length < condLogits.Length)
-            throw new IndexOutOfRangeException("Unconditional logits are shorter than the conditional logits.");
+            throw new ArgumentOutOfRangeException("flatIndex", "Unconditional logits are shorter than the conditional logits.");
 
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var uncond = Engine.Reshape(AudioEngineOps.FitLength(Engine, uncondLogits, condLogits.Length), condLogits.Shape.ToArray());
@@ -1275,7 +1275,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         {
             codes = Engine.Reshape(AudioEngineOps.FitLength(Engine, audioCodes, _numCodebooks * numTokens), [_numCodebooks, numTokens]);
             if (audioCodes.Length < _numCodebooks * numTokens)
-                throw new IndexOutOfRangeException("Audio codes are shorter than numCodebooks * numTokens.");
+                throw new ArgumentOutOfRangeException("flatIndex", "Audio codes are shorter than numCodebooks * numTokens.");
         }
         var normalized = Engine.TensorMultiplyScalar(
             Engine.TensorSubtractScalar(Engine.TensorDivideScalar(codes, NumOps.FromDouble(_codebookSize)), NumOps.FromDouble(0.5)),

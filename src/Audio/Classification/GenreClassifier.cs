@@ -585,7 +585,7 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         T zero = NumOps.Zero;
         T[] values = ClassLabels.Select(label => probs.TryGetValue(label, out var prob) ? prob : zero).ToArray();
         if (values.Length > probs.Count)
-            throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+            throw new ArgumentOutOfRangeException("flatIndex", "Flat index is out of range.");
         return new Tensor<T>(values, [values.Length]);
     }
 

@@ -164,7 +164,8 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
             else
             {
                 T vT = NumOps.FromDouble(v);
-                o = AudioEngineOps.AddScaledPrefix(Engine, o, kvp.Value, vT);
+                for (int i = 0; i < kvp.Value.Length && i < o.Length; i++)
+                    o[i] = NumOps.Add(o[i], NumOps.Multiply(kvp.Value[i], vT));
             }
         }
         return o;

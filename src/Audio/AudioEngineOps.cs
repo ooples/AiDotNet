@@ -563,17 +563,6 @@ internal static class AudioEngineOps
     }
 
     /// <summary>
-    /// <c>x[i] + other[i] * scale</c> for <c>i &lt; min(|x|, |other|)</c> (row-major); the remaining
-    /// elements of <paramref name="x"/> are unchanged.
-    /// </summary>
-    internal static Tensor<T> AddScaledPrefix<T>(IEngine engine, Tensor<T> x, Tensor<T> other, T scale)
-    {
-        int count = Math.Min(x.Length, other.Length);
-        return MapPrefix(engine, x, count, head =>
-            engine.TensorAdd(head, engine.TensorMultiplyScalar(FitLength(engine, other, count), scale)));
-    }
-
-    /// <summary>
     /// A fresh <c>[frames, bins]</c> tensor holding <c>source[f * stride + offset + b]</c> (row-major).
     /// An element is read when that index is below <c>|source|</c>, or, with
     /// <paramref name="rowZeroBound"/>, when <c>offset + b</c> is (a later row then reading past the end
@@ -593,7 +582,7 @@ internal static class AudioEngineOps
                 int mi = f * stride + offset + b;
                 bool read = rowZeroBound ? offset + b < length : mi < length;
                 if (read && (mi < 0 || mi >= length))
-                    throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+                    throw new ArgumentOutOfRangeException("flatIndex", "Flat index is out of range.");
                 index[f * bins + b] = read ? mi : length;
             }
         }
