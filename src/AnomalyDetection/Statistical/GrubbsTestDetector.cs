@@ -102,9 +102,6 @@ public partial class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
 
         _nFeatures = nFeatures;
 
-        _means = new Vector<T>(nFeatures);
-        _stds = new Vector<T>(nFeatures);
-        _criticalValues = new Vector<T>(nFeatures);
 
         // Calculate critical value for Grubbs' test
         // G_critical = ((n-1) / sqrt(n)) * sqrt(t^2 / (n - 2 + t^2))
@@ -112,14 +109,8 @@ public partial class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
         double tCritical = GetTCritical(n);
         double gCritical = ((n - 1) / Math.Sqrt(n)) * Math.Sqrt(tCritical * tCritical / (n - 2 + tCritical * tCritical));
 
-        for (int j = 0; j < nFeatures; j++)
-        {
-            var column = X.GetColumn(j);
-            var (mean, std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
-            _means[j] = mean;
-            _stds[j] = std;
-            _criticalValues[j] = NumOps.FromDouble(gCritical);
-        }
+        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X);
+        _criticalValues = Engine.Fill(nFeatures, NumOps.FromDouble(gCritical));
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -146,35 +137,11 @@ public partial class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
+        var stds = _stds ?? throw new InvalidOperationException("_stds has not been initialized.");
+        var means = _means ?? throw new InvalidOperationException("_means has not been initialized.");
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T maxGrubbsStatistic = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                // Skip features with zero std
-                if (NumOps.Equals((_stds ?? throw new InvalidOperationException("_stds has not been initialized."))[j], NumOps.Zero))
-                {
-                    continue;
-                }
-
-                // G = |x - mean| / std
-                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], (_means ?? throw new InvalidOperationException("_means has not been initialized."))[j]));
-                T grubbsStatistic = NumOps.Divide(deviation, _stds[j]);
-
-                if (NumOps.GreaterThan(grubbsStatistic, maxGrubbsStatistic))
-                {
-                    maxGrubbsStatistic = grubbsStatistic;
-                }
-            }
-
-            // Use the maximum Grubbs statistic as the score
-            scores[i] = maxGrubbsStatistic;
-        }
-
-        return scores;
+        // Score: the maximum Grubbs statistic G = |x - mean| / std across features (zero-std features skipped)
+        return AnomalyTensorOps.MaxStandardizedDeviation(X, means, stds);
     }
 
     private double GetTCritical(int n)

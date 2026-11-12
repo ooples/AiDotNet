@@ -121,16 +121,7 @@ public partial class ESDDetector<T> : AnomalyDetectorBase<T>
 
         _nFeatures = X.Columns;
         _nSamples = X.Rows;
-        _means = new Vector<T>(_nFeatures);
-        _stds = new Vector<T>(_nFeatures);
-
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            var column = X.GetColumn(j);
-            var (mean, std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
-            _means[j] = mean;
-            _stds[j] = std;
-        }
+        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X);
 
         // Compute ESD critical value for the first iteration
         // lambda_1 = (n-1) * t_(alpha/(2n), n-2) / sqrt((n-2+t^2)*(n))
@@ -229,34 +220,7 @@ public partial class ESDDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Compute ESD statistic: max standardized residual across features
-            T maxESD = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                // Skip features with zero std
-                if (NumOps.Equals(stds[j], NumOps.Zero))
-                {
-                    continue;
-                }
-
-                // ESD = |x - mean| / std
-                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], means[j]));
-                T esdStatistic = NumOps.Divide(deviation, stds[j]);
-
-                if (NumOps.GreaterThan(esdStatistic, maxESD))
-                {
-                    maxESD = esdStatistic;
-                }
-            }
-
-            scores[i] = maxESD;
-        }
-
-        return scores;
+        // ESD statistic: max standardized residual |x - mean| / std across features (zero-std features skipped)
+        return AnomalyTensorOps.MaxStandardizedDeviation(X, means, stds);
     }
 }

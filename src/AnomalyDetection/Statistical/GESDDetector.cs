@@ -116,16 +116,7 @@ public partial class GESDDetector<T> : AnomalyDetectorBase<T>
         }
 
         _nFeatures = X.Columns;
-        _means = new Vector<T>(_nFeatures);
-        _stds = new Vector<T>(_nFeatures);
-
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            var column = X.GetColumn(j);
-            var (mean, std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
-            _means[j] = mean;
-            _stds[j] = std;
-        }
+        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X);
 
         // Precompute critical values for each iteration
         _criticalValues = new Vector<T>(_maxOutliers);
@@ -167,35 +158,8 @@ public partial class GESDDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Compute GESD statistic: max standardized residual across features
-            T maxR = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                // Skip features with zero std
-                if (NumOps.Equals(stds[j], NumOps.Zero))
-                {
-                    continue;
-                }
-
-                // R = |x - mean| / std
-                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], means[j]));
-                T r = NumOps.Divide(deviation, stds[j]);
-
-                if (NumOps.GreaterThan(r, maxR))
-                {
-                    maxR = r;
-                }
-            }
-
-            scores[i] = maxR;
-        }
-
-        return scores;
+        // GESD statistic: max standardized residual R = |x - mean| / std across features (zero-std features skipped)
+        return AnomalyTensorOps.MaxStandardizedDeviation(X, means, stds);
     }
 
     /// <summary>

@@ -158,6 +158,30 @@ internal static class AnomalyTensorOps
         return engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(a, b)), new[] { 1 }, false);
     }
 
+    /// <summary>Per-column mean and population (divide by n) standard deviation of a matrix.</summary>
+    internal static (Vector<T> Means, Vector<T> Stds) ColumnMeanStd<T>(Matrix<T> x)
+    {
+        var (std, mean) = Engine.TensorStdMean(ToTensor(x), new[] { 0 }, 0, false);
+        return (mean.ToVector(), std.ToVector());
+    }
+
+    /// <summary>
+    /// Per row, the largest |x_ij - mean_j| / std_j over the columns whose std is non-zero, or 0 when
+    /// there is none. A NaN ratio never wins the comparison.
+    /// </summary>
+    internal static Vector<T> MaxStandardizedDeviation<T>(Matrix<T> x, Vector<T> means, Vector<T> stds)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var stdTensor = stds.AsTensor();
+        var ratio = DivideRow(engine.TensorAbs(SubtractRow(ToTensor(x), means.AsTensor())), stdTensor);
+
+        // Zero-std columns are skipped: x/0 is +inf or NaN, times 0 is NaN, and NaN entries become 0.
+        ratio = MultiplyRow(ratio, engine.TensorNotEquals(stdTensor, numOps.Zero));
+        ratio = engine.TensorMaskedFill(ratio, engine.TensorIsNan(ratio), numOps.Zero);
+        return engine.ReduceMax(ratio, new[] { 1 }, false).ToVector();
+    }
+
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
     {
