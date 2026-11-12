@@ -197,13 +197,14 @@ public class MANNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public double UsageDecay { get; set; } = 0.95;
 
     /// <summary>
-    /// Gets or sets <c>alpha</c>, the logit of the LRUA write gate <c>sigmoid(alpha)</c>.
+    /// Gets or sets the initial value of <c>alpha</c>, the learned logit of the LRUA write gate <c>sigmoid(alpha)</c>.
     /// </summary>
     /// <value>Default is 0.0, a gate of 0.5.</value>
     /// <remarks>
     /// <para>Santoro et al. 2016: <c>w^w_t = sigmoid(alpha) * w^r_{t-1} + (1 - sigmoid(alpha)) * w^lu_{t-1}</c>, which
-    /// interpolates between rewriting the slot read last and writing to the least-used slot. The paper learns
-    /// alpha; here the controller is trained on the query loss alone, so alpha is a fixed hyperparameter.</para>
+    /// interpolates between rewriting the slot read last and writing to the least-used slot. As in the paper, alpha
+    /// is a trainable parameter: meta-training differentiates the query loss through every memory write and read
+    /// and updates alpha with the outer learning rate. This is only its starting value.</para>
     /// </remarks>
     public double WriteGateLogit { get; set; } = 0.0;
 
@@ -285,9 +286,10 @@ public class MANNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public bool UseValueProjection { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets whether to apply softmax to output.
+    /// Gets or sets whether predictions are the softmax of the output layer's logits (otherwise the raw logits).
     /// </summary>
     /// <value>Default is true.</value>
+    /// <remarks>Training always uses the cross-entropy of the softmax, Santoro et al. 2016's output layer.</remarks>
     public bool UseOutputSoftmax { get; set; } = true;
 
     /// <summary>
