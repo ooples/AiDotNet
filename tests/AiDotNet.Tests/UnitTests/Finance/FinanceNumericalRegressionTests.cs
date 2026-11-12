@@ -9,6 +9,25 @@ namespace AiDotNet.Tests.UnitTests.Finance;
 public class FinanceNumericalRegressionTests
 {
     [Fact]
+    public void HalfBootstrapStatistics_KeepMomentsAndCountsWide()
+    {
+        Assert.Equal((Half)1, BootstrapConfidenceInterval<Half>.MeanStatistic(
+            new Vector<Half>(Enumerable.Repeat((Half)1, 70000).ToArray())));
+        Assert.Equal((Half)(3 / Math.Sqrt(2)), BootstrapConfidenceInterval<Half>.SharpeStatistic(
+            new Vector<Half>(new[] { (Half)10000, (Half)20000 })));
+        Assert.Equal((Half)0, BootstrapConfidenceInterval<Half>.SharpeStatistic(new Vector<Half>(new[] { (Half)1, (Half)1 })));
+    }
+
+    [Fact]
+    public void HalfBootstrapPercentile_DoesNotOverflowBetweenFiniteEndpoints()
+    {
+        var percentile = typeof(BootstrapConfidenceInterval<Half>).GetMethod("Percentile",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var endpoints = new Tensor<Half>(new[] { (Half)(-60000), (Half)60000 }, new[] { 2 });
+        Assert.Equal((Half)0, Assert.IsType<Half>(percentile.Invoke(null, new object[] { endpoints, 50.0 })));
+    }
+
+    [Fact]
     public void HalfCvar_KeepsTailAndDualReductionsWide()
     {
         var objective = new CVaRPortfolioObjective<Half>(0.5);
