@@ -622,7 +622,6 @@ public class ExternalMemory<T>
     public ExternalMemory(int size, int keySize, int valueSize, INumericOperations<T> numOps,
         double usageDecay, double writeGate, int numReads)
     {
-        if (size <= 0) throw new ArgumentOutOfRangeException(nameof(size), "Memory size must be positive.");
         if (usageDecay < 0 || usageDecay > 1) throw new ArgumentOutOfRangeException(nameof(usageDecay));
         if (writeGate < 0 || writeGate > 1) throw new ArgumentOutOfRangeException(nameof(writeGate));
         if (numReads <= 0) throw new ArgumentOutOfRangeException(nameof(numReads));
