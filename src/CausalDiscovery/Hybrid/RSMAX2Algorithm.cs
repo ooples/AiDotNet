@@ -140,7 +140,7 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
         }
 
         // Build adjacency matrix with OLS edge weights
-        return BuildWeightedMatrix(data, parentSets, d, n);
+        return BuildWeightedMatrix(data, parentSets, d);
     }
 
     /// <summary>
@@ -200,14 +200,13 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
             return ComputeCorrelation(data, i, j);
 
         // Residualize both i and j on condSet
-        int n = data.Rows;
-        var residI = Residualize(data, i, condSet, n);
-        var residJ = Residualize(data, j, condSet, n);
+        var residI = Residualize(data, i, condSet);
+        var residJ = Residualize(data, j, condSet);
 
         return NumOps.ToDouble(CausalTensorHelpers.PearsonCorrelation(residI, residJ));
     }
 
-    private Tensor<T> Residualize(Matrix<T> data, int target, List<int> predictors, int n)
+    private Tensor<T> Residualize(Matrix<T> data, int target, List<int> predictors)
     {
         var y = Engine.GetColumn(data, target).AsTensor();
         var centeredY = Engine.TensorSubtractScalar(y, Engine.TensorMean(y));
@@ -244,7 +243,7 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
         return false;
     }
 
-    private Matrix<T> BuildWeightedMatrix(Matrix<T> data, HashSet<int>[] parentSets, int d, int n)
+    private Matrix<T> BuildWeightedMatrix(Matrix<T> data, HashSet<int>[] parentSets, int d)
     {
         var weights = new Dictionary<int, T>();
         for (int child = 0; child < d; child++)

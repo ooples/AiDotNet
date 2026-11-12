@@ -128,7 +128,7 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         {
             foreach (int parent in parentSets[child])
             {
-                weights[parent * d + child] = ComputeOLSWeight(data, parent, child, n);
+                weights[parent * d + child] = ComputeOLSWeight(data, parent, child);
             }
         }
 
@@ -247,7 +247,7 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         return NumOps.ToDouble(CausalTensorHelpers.PearsonCorrelation(residI, residJ));
     }
 
-    private double ComputeOLSWeight(Matrix<T> data, int parent, int child, int n)
+    private double ComputeOLSWeight(Matrix<T> data, int parent, int child)
     {
         return NumOps.ToDouble(CausalTensorHelpers.RegressionSlope(data, parent, child));
     }

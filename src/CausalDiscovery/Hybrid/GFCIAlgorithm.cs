@@ -220,7 +220,7 @@ public class GFCIAlgorithm<T> : HybridBase<T>
                 }
                 else if (oriented[i, j])
                 {
-                    weights[i * d + j] = ComputeOLSWeight(data, i, j, n);
+                    weights[i * d + j] = ComputeOLSWeight(data, i, j);
                 }
                 else if (!oriented[j, i] && !bidirected[j, i])
                 {
@@ -260,7 +260,7 @@ public class GFCIAlgorithm<T> : HybridBase<T>
 
     // SolveSmallSystem is inherited from CausalDiscoveryBase<T>
 
-    private double ComputeOLSWeight(Matrix<T> data, int parent, int child, int n)
+    private double ComputeOLSWeight(Matrix<T> data, int parent, int child)
     {
         return NumOps.ToDouble(CausalTensorHelpers.RegressionSlope(data, parent, child));
     }
