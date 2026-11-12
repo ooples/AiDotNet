@@ -209,16 +209,18 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
         for (int stage = 0, length = 2; stage < bits; stage++, length *= 2)
         {
             int half = length / 2;
-            // Twiddle angles 2*pi*j / length for j < half.
-            var angles = Engine.Reshape(
-                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, half, 1), NumOps.FromDouble(2.0 * Math.PI / length)),
-                [1, 1, 1, half]);
+            var angles = TwiddleAngles(half, length);
             _inverseFftCosines[stage] = Engine.TensorCos(angles);
             _inverseFftSines[stage] = Engine.TensorSin(angles);
             RegisterBuffer(_inverseFftCosines[stage], $"ifft_cos_{length}");
             RegisterBuffer(_inverseFftSines[stage], $"ifft_sin_{length}");
         }
     }
+
+    /// <summary>Twiddle angles 2*pi*j / length for j &lt; half, shaped [1, 1, 1, half].</summary>
+    private Tensor<T> TwiddleAngles(int half, int length) => Engine.Reshape(
+        Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, half, 1), NumOps.FromDouble(2.0 * Math.PI / length)),
+        [1, 1, 1, half]);
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;

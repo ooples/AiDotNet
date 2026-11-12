@@ -434,6 +434,8 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
         }
 
         var lossHistory = new List<T>();
+        // An empty training set averages to 0/0 = NaN, as the double average did.
+        T emptyEpochLoss = meshFeatures.Count == 0 ? NumOps.Divide(NumOps.Zero, NumOps.Zero) : NumOps.Zero;
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
@@ -454,7 +456,7 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
 
             // Mean sample loss of the epoch (0/0 = NaN for an empty set, as before).
             lossHistory.Add(sampleLosses.Length == 0
-                ? NumOps.Divide(NumOps.Zero, NumOps.Zero)
+                ? emptyEpochLoss
                 : Engine.TensorMean(new Tensor<T>(sampleLosses, new[] { sampleLosses.Length })));
         }
 
