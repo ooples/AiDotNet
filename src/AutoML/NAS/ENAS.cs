@@ -60,6 +60,9 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<Vector<T>> _controllerWeights;
         private readonly List<Vector<T>> _controllerGradients;
 
+        // d log pi(a) / d W for the most recently sampled architecture (the REINFORCE score function)
+        private readonly List<Vector<T>> _sampleLogProbGradients;
+
         // Shared weights for all child models
         private readonly Dictionary<string, Vector<T>> _sharedWeights;
         private readonly Dictionary<string, Vector<T>> _sharedGradients;
@@ -112,6 +115,8 @@ namespace AiDotNet.AutoML.NAS
                 _controllerGradients.Add(new Vector<T>(weight.Length));
             }
 
+            _sampleLogProbGradients = _controllerWeights.Select(w => new Vector<T>(w.Length)).ToList();
+
             // Initialize shared weights
             _sharedWeights = new Dictionary<string, Vector<T>>();
             _sharedGradients = new Dictionary<string, Vector<T>>();
@@ -127,9 +132,9 @@ namespace AiDotNet.AutoML.NAS
             T totalEntropy = _ops.Zero;
 
             var hiddenState = new Vector<T>(_controllerHiddenSize);
-            for (int i = 0; i < hiddenState.Length; i++)
+            foreach (var gradient in _sampleLogProbGradients)
             {
-                hiddenState[i] = _ops.Zero;
+                gradient.Fill(_ops.Zero);
             }
 
             for (int nodeIdx = 1; nodeIdx <= _numNodes; nodeIdx++)
@@ -170,29 +175,22 @@ namespace AiDotNet.AutoML.NAS
 
         private Vector<T> ComputeLogits(Vector<T> hiddenState, int numChoices, int decisionIdx)
         {
-            var weights = _controllerWeights[decisionIdx % _controllerWeights.Count];
-            var logits = new Vector<T>(numChoices);
+            // logits = W[:numChoices, :hiddenSize] h, with W stored row-major as [maxChoices, controllerHiddenSize].
+            var engine = AiDotNetEngine.Current;
+            var weights = ControllerWeightRows(_controllerWeights[decisionIdx % _controllerWeights.Count], numChoices);
             int hiddenSize = Math.Min(hiddenState.Length, _controllerHiddenSize);
-
-            for (int choiceIdx = 0; choiceIdx < numChoices; choiceIdx++)
+            var hidden = hiddenState.GetSubVector(0, hiddenSize).AsTensor().Reshape(new[] { hiddenSize, 1 });
+            if (hiddenSize < _controllerHiddenSize)
             {
-                logits[choiceIdx] = ComputeChoiceLogit(hiddenState, weights, choiceIdx, hiddenSize);
+                weights = weights.Slice(1, 0, hiddenSize);
             }
 
-            return logits;
+            return engine.TensorMatMul(weights, hidden).Reshape(new[] { numChoices }).ToVector();
         }
 
-        private T ComputeChoiceLogit(Vector<T> hiddenState, Vector<T> weights, int choiceIdx, int hiddenSize)
+        private Tensor<T> ControllerWeightRows(Vector<T> weights, int numChoices)
         {
-            T logit = _ops.Zero;
-
-            for (int j = 0; j < hiddenSize; j++)
-            {
-                int weightIdx = (choiceIdx * _controllerHiddenSize) + j;
-                logit = _ops.Add(logit, _ops.Multiply(hiddenState[j], weights[weightIdx]));
-            }
-
-            return logit;
+            return weights.AsTensor().Reshape(new[] { _controllerMaxChoices, _controllerHiddenSize }).Slice(0, 0, numChoices);
         }
 
         /// <summary>
@@ -217,12 +215,12 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         private T ComputeEntropy(List<T> probs)
         {
-            T entropy = _ops.Zero;
-            foreach (var p in probs.Where(p => _ops.GreaterThan(p, _ops.Zero)))
-            {
-                entropy = _ops.Subtract(entropy, _ops.Multiply(p, _ops.Log(p)));
-            }
-            return entropy;
+            // H = -sum p log p over the support (p > 0), so 0 log 0 contributes 0.
+            var engine = AiDotNetEngine.Current;
+            var p = new Vector<T>(probs).AsTensor();
+            var plogp = engine.TensorWhere(engine.TensorGreaterThan(p, _ops.Zero),
+                engine.TensorMultiply(p, engine.TensorLog(p)), new Tensor<T>(new[] { p.Length }));
+            return _ops.Negate(engine.TensorSum(plogp));
         }
 
         /// <summary>
@@ -231,12 +229,34 @@ namespace AiDotNet.AutoML.NAS
         private void UpdateHiddenState(Vector<T> hiddenState, int choice)
         {
             // Simplified update: add choice information to hidden state
-            T choiceValue = _ops.FromDouble(choice / 10.0);
-            for (int i = 0; i < hiddenState.Length; i++)
-            {
-                hiddenState[i] = _ops.Multiply(hiddenState[i], _ops.FromDouble(0.9));
-                hiddenState[i] = _ops.Add(hiddenState[i], choiceValue);
-            }
+            var engine = AiDotNetEngine.Current;
+            var updated = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(hiddenState.AsTensor(), _ops.FromDouble(0.9)), _ops.FromDouble(choice / 10.0));
+            updated.ToVector().AsSpan().CopyTo(hiddenState.AsWritableSpan());
+        }
+
+        /// <summary>
+        /// Adds d log softmax(W h)_a / d W = (onehot(a) - p) h^T for one controller decision to the sample's
+        /// score function.
+        /// </summary>
+        private void AccumulateLogProbGradient(Vector<T> hiddenState, List<T> probs, int selected, int decisionIdx)
+        {
+            var engine = AiDotNetEngine.Current;
+            int weightIdx = decisionIdx % _controllerWeights.Count;
+            int numChoices = probs.Count;
+            int hiddenSize = Math.Min(hiddenState.Length, _controllerHiddenSize);
+
+            var selectedIndex = new Tensor<int>(new[] { 1 });
+            selectedIndex.Fill(selected);
+            var oneHot = engine.TensorOneHot<T>(selectedIndex, numChoices).Reshape(new[] { numChoices });
+            var dLogits = engine.TensorSubtract(oneHot, new Vector<T>(probs).AsTensor());
+            var dWeights = engine.TensorOuter(dLogits, hiddenState.GetSubVector(0, hiddenSize).AsTensor());
+
+            // Place the [numChoices, hiddenSize] block in the [maxChoices, controllerHiddenSize] weight layout.
+            var full = new Tensor<T>(new[] { _controllerMaxChoices, _controllerHiddenSize });
+            full.SetSubTensor(new[] { 0, 0 }, dWeights);
+            var accumulated = engine.TensorAdd(_sampleLogProbGradients[weightIdx].AsTensor(), full.Reshape(new[] { full.Length }));
+            accumulated.ToVector().AsSpan().CopyTo(_sampleLogProbGradients[weightIdx].AsWritableSpan());
         }
 
         /// <summary>
@@ -251,6 +271,7 @@ namespace AiDotNet.AutoML.NAS
         {
             var probs = ComputeProbabilities(hiddenState, numChoices, decisionIdx);
             int selected = SampleFromDistribution(probs);
+            AccumulateLogProbGradient(hiddenState, probs, selected, decisionIdx);
 
             totalLogProb = _ops.Add(totalLogProb, _ops.Log(_ops.Add(probs[selected], _ops.FromDouble(1e-10))));
             totalEntropy = _ops.Add(totalEntropy, ComputeEntropy(probs));
@@ -276,27 +297,21 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         public void UpdateController(T reward, T logProb, T entropy)
         {
+            // ENAS (Pham et al. 2018) adds the entropy bonus to the reward, moves the baseline toward it, and
+            // minimises -(R - b) log pi(a): the gradient is -(R - b) times the score function of the sample.
+            T shapedReward = _ops.Add(reward, _ops.Multiply(_entropyWeight, entropy));
+
             // Update baseline using exponential moving average
             _baseline = _ops.Add(
                 _ops.Multiply(_baselineDecay, _baseline),
-                _ops.Multiply(_ops.Subtract(_ops.One, _baselineDecay), reward)
+                _ops.Multiply(_ops.Subtract(_ops.One, _baselineDecay), shapedReward)
             );
 
-            // REINFORCE gradient: (reward - baseline) * logProb + entropy_weight * entropy
-            T advantage = _ops.Subtract(reward, _baseline);
-            T loss = _ops.Subtract(
-                _ops.Multiply(advantage, logProb),
-                _ops.Multiply(_entropyWeight, entropy)
-            );
-
-            // Gradient is stored for optimizer to use
-            // In practice, this would use backpropagation through the controller
+            T scale = _ops.Negate(_ops.Subtract(shapedReward, _baseline));
+            var engine = AiDotNetEngine.Current;
             for (int i = 0; i < _controllerGradients.Count; i++)
             {
-                for (int j = 0; j < _controllerGradients[i].Length; j++)
-                {
-                    _controllerGradients[i][j] = _ops.Multiply(loss, _controllerWeights[i][j]);
-                }
+                engine.Multiply(_sampleLogProbGradients[i], scale).AsSpan().CopyTo(_controllerGradients[i].AsWritableSpan());
             }
         }
 
