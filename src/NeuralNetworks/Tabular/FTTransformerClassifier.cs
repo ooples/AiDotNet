@@ -378,30 +378,25 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     /// </remarks>
     public T ComputeF1Score(Tensor<T> numericalFeatures, int[] targets, Matrix<int>? categoricalIndices = null)
     {
-        var predictions = Predict(numericalFeatures, categoricalIndices);
+        return ComputeMacroF1(Predict(numericalFeatures, categoricalIndices), targets, _numClasses);
+    }
+
+    private static T ComputeMacroF1(int[] predictions, int[] targets, int classes)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         int n = predictions.Length;
-
-        // Macro F1 from one-hot count tables: per class, TP = sum(pred & target),
-        // TP + FP = predicted count, TP + FN = target count; empty denominators give 0.
-        var predicted = Engine.TensorOneHot<T>(Tensor<int>.FromVector(new Vector<int>(predictions), new[] { n }), _numClasses);
-        var actual = Engine.TensorOneHot<T>(
-            Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, n), new[] { n }), _numClasses);
-        var truePositives = Engine.ReduceSum(Engine.TensorMultiply(predicted, actual), new[] { 0 }, false);
-        var predictedCount = Engine.ReduceSum(predicted, new[] { 0 }, false);
-        var actualCount = Engine.ReduceSum(actual, new[] { 0 }, false);
-        var zeros = new Tensor<T>(new[] { _numClasses });
-
-        var precision = Engine.TensorWhere(Engine.TensorGreaterThan(predictedCount, NumOps.Zero),
-            Engine.TensorDivide(truePositives, predictedCount), zeros);
-        var recall = Engine.TensorWhere(Engine.TensorGreaterThan(actualCount, NumOps.Zero),
-            Engine.TensorDivide(truePositives, actualCount), zeros);
-        var precisionPlusRecall = Engine.TensorAdd(precision, recall);
-        var f1 = Engine.TensorWhere(Engine.TensorGreaterThan(precisionPlusRecall, NumOps.Zero),
-            Engine.TensorDivide(Engine.TensorMultiplyScalar(Engine.TensorMultiply(precision, recall), NumOps.FromDouble(2.0)),
-                precisionPlusRecall),
-            zeros);
-
-        return NumOps.Divide(Engine.TensorSum(f1), NumOps.FromDouble(_numClasses));
+        // Count in double regardless of model storage precision; Half cannot count a large batch.
+        var predicted = engine.TensorOneHot<double>(Tensor<int>.FromVector(new Vector<int>(predictions)), classes);
+        var actual = engine.TensorOneHot<double>(Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, n)), classes);
+        var truePositives = engine.ReduceSum(engine.TensorMultiply(predicted, actual), new[] { 0 }, false);
+        var denominator = engine.TensorAdd(engine.ReduceSum(predicted, new[] { 0 }, false),
+            engine.ReduceSum(actual, new[] { 0 }, false));
+        var present = engine.TensorGreaterThan(denominator, 0.0);
+        var safeDenominator = engine.TensorWhere(present, denominator, engine.TensorFullLike(denominator, 1.0));
+        var f1 = engine.TensorWhere(present,
+            engine.TensorDivide(engine.TensorMultiplyScalar(truePositives, 2.0), safeDenominator),
+            new Tensor<double>(new[] { classes }));
+        return MathHelper.GetNumericOperations<T>().FromDouble(engine.TensorSum(f1) / classes);
     }
 
     /// <summary>

@@ -240,10 +240,12 @@ public partial class ContrastivePretraining<T>
         var self = Engine.TensorOneHot<T>(Engine.TensorArange<int>(0, batchSize, 1), 2 * batchSize);
         var firstCorrupted = Engine.TensorBroadcastTo(
             Engine.TensorSlice(similarities, new[] { 0, batchSize }, new[] { batchSize, 1 }), rowShape);
-        var maxSim = Engine.ReduceMax(Engine.TensorWhere(self, firstCorrupted, similarities), new[] { 1 }, true);
+        var maskedSimilarities = Engine.TensorWhere(self, firstCorrupted, similarities);
+        var maxSim = Engine.ReduceMax(maskedSimilarities, new[] { 1 }, true);
 
         // Compute log-sum-exp (excluding self-similarity)
-        var shifted = Engine.TensorExp(Engine.TensorSubtract(similarities, Engine.TensorBroadcastTo(maxSim, rowShape)));
+        // Exclude self before exponentiation: an overflowing exp(self) times zero is still NaN.
+        var shifted = Engine.TensorExp(Engine.TensorSubtract(maskedSimilarities, Engine.TensorBroadcastTo(maxSim, rowShape)));
         var keep = Engine.TensorAddScalar(Engine.TensorNegate(self), NumOps.One);
         var sumExp = Engine.ReduceSum(Engine.TensorMultiply(shifted, keep), new[] { 1 }, true);
 

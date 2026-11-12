@@ -232,8 +232,8 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
         // Quantization error (distance to the BMU prototype) as the reported loss.
         var prototype = Engine.Reshape(
             Engine.TensorSlice(_weights, new[] { bmu, 0 }, new[] { 1, _inputDimension }), new[] { _inputDimension });
-        var diff = Engine.TensorSubtract(Engine.Reshape(flatInput, new[] { _inputDimension }), prototype);
-        LastLoss = NumOps.Sqrt(Engine.TensorSum(Engine.TensorMultiply(diff, diff)));
+        var diff = Engine.TensorSubtract(Engine.Reshape(flatInput, new[] { _inputDimension }).Cast<double>(), prototype.Cast<double>());
+        LastLoss = NumOps.FromDouble(Engine.Norm(diff.ToVector()));
         _currentEpoch++;
 
         return true;
