@@ -184,44 +184,14 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-
-        var means = new Vector<T>(d);
-        var stds = new Vector<T>(d);
-
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
-            T eps = NumOps.FromDouble(1e-10);
-            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
-            stds[j] = stdVal;
-        }
-
-        var normalized = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                normalized[i, j] = NumOps.Divide(diff, stds[j]);
-            }
-        }
-
-        return (normalized, means, stds);
+        // Per-feature mean and population std (std below 1e-10 replaced by 1), then (x - mean) / std
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var (std, mean) = engine.TensorStdMean(values, new[] { 0 }, 0, false);
+        var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var stds = engine.TensorWhere(tiny, Tensor<T>.CreateOnes(new[] { data.Columns }), std);
+        var normalized = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(values, mean), stds);
+        return (normalized.ToMatrix(), mean.ToVector(), stds.ToVector());
     }
 
     private void InitializeWeights()
@@ -235,17 +205,17 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
         {
             var block = new BlockWeights
             {
-                W1 = InitializeMatrix(inputSize, _hiddenDim),
-                B1 = InitializeVector(_hiddenDim),
-                W2 = InitializeMatrix(_hiddenDim, _hiddenDim),
-                B2 = InitializeVector(_hiddenDim),
-                W3 = InitializeMatrix(_hiddenDim, _hiddenDim),
-                B3 = InitializeVector(_hiddenDim),
-                W4 = InitializeMatrix(_hiddenDim, _hiddenDim),
-                B4 = InitializeVector(_hiddenDim),
+                W1 = Tensor<T>.FromMatrix(InitializeMatrix(inputSize, _hiddenDim)),
+                B1 = Tensor<T>.CreateZeros(new[] { _hiddenDim }),
+                W2 = Tensor<T>.FromMatrix(InitializeMatrix(_hiddenDim, _hiddenDim)),
+                B2 = Tensor<T>.CreateZeros(new[] { _hiddenDim }),
+                W3 = Tensor<T>.FromMatrix(InitializeMatrix(_hiddenDim, _hiddenDim)),
+                B3 = Tensor<T>.CreateZeros(new[] { _hiddenDim }),
+                W4 = Tensor<T>.FromMatrix(InitializeMatrix(_hiddenDim, _hiddenDim)),
+                B4 = Tensor<T>.CreateZeros(new[] { _hiddenDim }),
                 // Theta for backcast and forecast
-                WTheta_b = InitializeMatrix(_hiddenDim, inputSize),
-                WTheta_f = InitializeMatrix(_hiddenDim, _inputDim) // Forecast horizon = 1
+                WTheta_b = Tensor<T>.FromMatrix(InitializeMatrix(_hiddenDim, inputSize)),
+                WTheta_f = Tensor<T>.FromMatrix(InitializeMatrix(_hiddenDim, _inputDim)) // Forecast horizon = 1
             };
             _blocks.Add(block);
         }
@@ -268,60 +238,48 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
         return matrix;
     }
 
-    private Vector<T> InitializeVector(int size)
+    // Flattened lookback windows data[i .. i + lookback) ([count, lookback * features]) for i < count.
+    private Tensor<T> LookbackWindows(Tensor<T> data, int count)
     {
-        var vector = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
+        var engine = Engine;
+        int lookback = _lookback;
+        var rows = new int[count * lookback];
+        for (int i = 0; i < count; i++)
         {
-            vector[i] = NumOps.Zero;
-        }
-        return vector;
-    }
-
-    private Vector<T> CreateZeroVector(int size)
-    {
-        var v = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            v[i] = NumOps.Zero;
-        }
-        return v;
-    }
-
-    private (Vector<T>[] inputs, Vector<T>[] targets) CreateSequences(Matrix<T> data)
-    {
-        int n = data.Rows - _lookback;
-        var inputs = new Vector<T>[n];
-        var targets = new Vector<T>[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            // Flatten lookback window
-            inputs[i] = new Vector<T>(_lookback * _inputDim);
-            for (int t = 0; t < _lookback; t++)
+            for (int t = 0; t < lookback; t++)
             {
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    inputs[i][t * _inputDim + j] = data[i + t, j];
-                }
+                rows[i * lookback + t] = i + t;
             }
-            targets[i] = data.GetRow(i + _lookback);
         }
 
+        var gathered = engine.TensorGather(data, Tensor<int>.FromVector(Vector<int>.Wrap(rows), new[] { rows.Length }), 0);
+        return engine.Reshape(gathered, new[] { count, lookback * data.Shape[1] });
+    }
+
+    private (Tensor<T> inputs, Tensor<T> targets) CreateSequences(Matrix<T> data)
+    {
+        // Every flattened lookback window and the row that follows it
+        int n = data.Rows - _lookback;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var inputs = LookbackWindows(values, n);
+        var targets = Engine.TensorSlice(values, new[] { _lookback, 0 }, new[] { n, data.Columns });
         return (inputs, targets);
     }
 
-    private void Train(Vector<T>[] inputs, Vector<T>[] targets)
+    private void Train(Tensor<T> inputs, Tensor<T> targets)
     {
-        int n = inputs.Length;
+        var engine = Engine;
+        int n = inputs.Shape[0];
         int batchSize = Math.Min(32, n);
-        int inputSize = _lookback * _inputDim;
-
         var blocks = _blocks;
         if (blocks == null)
         {
             throw new InvalidOperationException("Model not initialized.");
         }
+
+        T two = NumOps.FromDouble(2.0);
+        T clipValue = NumOps.FromDouble(5.0);
+        T negClipValue = NumOps.Negate(clipValue);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -330,374 +288,108 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
             for (int batch = 0; batch < n; batch += batchSize)
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
+                var batchRows = new int[actualBatchSize];
+                Array.Copy(indices, batch, batchRows, 0, actualBatchSize);
+                var input = AnomalyTensorOps.SelectRows(inputs, batchRows);
+                var target = AnomalyTensorOps.SelectRows(targets, batchRows);
 
-                // Initialize gradient accumulators for all blocks (use double for intermediate computation)
-                var blockGradients = new List<BlockGradients>();
-                for (int b = 0; b < blocks.Count; b++)
+                // Forward pass with caching; MSE loss gradient 2 * (forecast - target), one row per sample
+                var (forecast, caches) = ForwardBatch(input);
+                var gradForecast = engine.TensorMultiplyScalar(engine.TensorSubtract(forecast, target), two);
+
+                // Backprop through all blocks (reverse order), summing the gradients over the batch
+                var gradients = new BlockGradients[blocks.Count];
+                for (int blockIdx = blocks.Count - 1; blockIdx >= 0; blockIdx--)
                 {
-                    blockGradients.Add(new BlockGradients
+                    var block = blocks[blockIdx];
+                    var cache = caches[blockIdx];
+
+                    // Gradient through WTheta_f (forecast theta), and through h from the forecast
+                    var dWThetaF = engine.TensorMatMul(engine.TensorTranspose(cache.H4), gradForecast);
+                    var dH = engine.TensorMatMul(gradForecast, engine.TensorTranspose(block.WTheta_f));
+
+                    // Gradient through WTheta_b (backcast theta)
+                    // The backcast affects residual learning: residual_next = residual - backcast
+                    // Gradient flows from subsequent blocks back through the residual chain
+                    // For the last block, backcast gradient is zero (no subsequent blocks)
+                    // For earlier blocks, gradient comes from how backcast affects next block's forecast:
+                    // dL/d(backcast) = -dL/d(residual_next) = -dH_next * W1_next^T (simplified)
+                    var dWThetaB = Tensor<T>.CreateZeros(new[] { block.WTheta_b.Shape[0], block.WTheta_b.Shape[1] });
+                    if (blockIdx < blocks.Count - 1)
                     {
-                        dW1 = new double[inputSize, _hiddenDim],
-                        dB1 = new double[_hiddenDim],
-                        dW2 = new double[_hiddenDim, _hiddenDim],
-                        dB2 = new double[_hiddenDim],
-                        dW3 = new double[_hiddenDim, _hiddenDim],
-                        dB3 = new double[_hiddenDim],
-                        dW4 = new double[_hiddenDim, _hiddenDim],
-                        dB4 = new double[_hiddenDim],
-                        dWTheta_b = new double[_hiddenDim, inputSize],
-                        dWTheta_f = new double[_hiddenDim, _inputDim]
-                    });
-                }
+                        var nextBlock = blocks[blockIdx + 1];
+                        var nextH = caches[blockIdx + 1].H4;
 
-                for (int b = 0; b < actualBatchSize; b++)
-                {
-                    int idx = indices[batch + b];
-                    var input = inputs[idx];
-                    var target = targets[idx];
+                        // dH for the next block from its forecast contribution, through its ReLU
+                        var dHNext = engine.TensorMultiply(
+                            engine.TensorMatMul(gradForecast, engine.TensorTranspose(nextBlock.WTheta_f)),
+                            engine.TensorGreaterThan(nextH, NumOps.Zero));
 
-                    // Forward pass with caching
-                    var (forecast, residuals, hValues) = ForwardWithCache(input);
+                        // Backprop through next block's first FC layer to get dResidual; the gradient for
+                        // WTheta_b is h * (-dResidual)^T (negative because residual = prev_residual - backcast)
+                        var negDResidual = engine.TensorNegate(
+                            engine.TensorMatMul(dHNext, engine.TensorTranspose(nextBlock.W1)));
+                        dWThetaB = engine.TensorMatMul(engine.TensorTranspose(cache.H4), negDResidual);
 
-                    // Compute loss gradient (MSE loss)
-                    var gradForecast = new Vector<T>(_inputDim);
-                    for (int j = 0; j < _inputDim; j++)
-                    {
-                        T diff = NumOps.Subtract(forecast[j], target[j]);
-                        gradForecast[j] = NumOps.Multiply(NumOps.FromDouble(2.0), diff);
+                        // Also add gradient through h from backcast path
+                        dH = engine.TensorAdd(dH, engine.TensorMatMul(negDResidual, engine.TensorTranspose(block.WTheta_b)));
                     }
 
-                    // Backprop through all blocks (reverse order)
-                    for (int blockIdx = blocks.Count - 1; blockIdx >= 0; blockIdx--)
+                    // ReLU derivative for h, then backprop through FC4 .. FC1 (each with ReLU)
+                    dH = engine.TensorMultiply(dH, engine.TensorGreaterThan(cache.H4, NumOps.Zero));
+                    var dH3 = engine.TensorMultiply(engine.TensorMatMul(dH, engine.TensorTranspose(block.W4)),
+                        engine.TensorGreaterThan(cache.H3, NumOps.Zero));
+                    var dH2 = engine.TensorMultiply(engine.TensorMatMul(dH3, engine.TensorTranspose(block.W3)),
+                        engine.TensorGreaterThan(cache.H2, NumOps.Zero));
+                    var dH1 = engine.TensorMultiply(engine.TensorMatMul(dH2, engine.TensorTranspose(block.W2)),
+                        engine.TensorGreaterThan(cache.H1, NumOps.Zero));
+
+                    gradients[blockIdx] = new BlockGradients
                     {
-                        var block = blocks[blockIdx];
-                        var grad = blockGradients[blockIdx];
-                        var h = hValues[blockIdx];
-                        var residual = residuals[blockIdx];
-
-                        // Capture weights with null checks
-                        var wThetaF = block.WTheta_f;
-                        var wThetaB = block.WTheta_b;
-                        var w1 = block.W1;
-                        var b1 = block.B1;
-                        var w2 = block.W2;
-                        var b2 = block.B2;
-                        var w3 = block.W3;
-                        var b3 = block.B3;
-                        var w4 = block.W4;
-                        var b4 = block.B4;
-
-                        if (wThetaF == null || wThetaB == null || w1 == null || b1 == null ||
-                            w2 == null || b2 == null || w3 == null || b3 == null || w4 == null || b4 == null)
-                        {
-                            throw new InvalidOperationException("Block weights not initialized.");
-                        }
-
-                        // Gradient through WTheta_f (forecast theta)
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            for (int j = 0; j < _inputDim; j++)
-                            {
-                                grad.dWTheta_f[i, j] += NumOps.ToDouble(h[i]) * NumOps.ToDouble(gradForecast[j]);
-                            }
-                        }
-
-                        // Gradient through h (from forecast)
-                        var dH = new Vector<T>(_hiddenDim);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            var wRow = new Vector<T>(_inputDim);
-                            for (int j = 0; j < _inputDim; j++) wRow[j] = wThetaF[i, j];
-                            dH[i] = Engine.DotProduct(wRow, gradForecast);
-                        }
-
-                        // Gradient through WTheta_b (backcast theta)
-                        // The backcast affects residual learning: residual_next = residual - backcast
-                        // Gradient flows from subsequent blocks back through the residual chain
-                        // For the last block, backcast gradient is zero (no subsequent blocks)
-                        // For earlier blocks, gradient comes from how backcast affects next block's forecast
-                        if (blockIdx < blocks.Count - 1)
-                        {
-                            // Compute gradient through backcast from subsequent block's residual dependency
-                            // The backcast subtracts from the residual, so gradient is negated
-                            // dL/d(backcast) = -dL/d(residual_next) = -dH_next * W1_next^T (simplified)
-                            var nextBlock = blocks[blockIdx + 1];
-                            var nextW1 = nextBlock.W1;
-                            var nextHVal = hValues[blockIdx + 1];
-
-                            if (nextW1 != null && nextHVal != null)
-                            {
-                                // Compute dH for next block from its forecast contribution
-                                var nextWThetaF = nextBlock.WTheta_f;
-                                if (nextWThetaF != null)
-                                {
-                                    var dHNext = new double[_hiddenDim];
-                                    for (int i = 0; i < _hiddenDim; i++)
-                                    {
-                                        for (int j = 0; j < _inputDim; j++)
-                                        {
-                                            dHNext[i] += NumOps.ToDouble(nextWThetaF[i, j]) * NumOps.ToDouble(gradForecast[j]);
-                                        }
-                                        // Apply ReLU derivative
-                                        if (!NumOps.GreaterThan(nextHVal[i], NumOps.Zero)) dHNext[i] = 0;
-                                    }
-
-                                    // Backprop through next block's first FC layer to get dResidual
-                                    var dResidual = new double[inputSize];
-                                    for (int i = 0; i < inputSize; i++)
-                                    {
-                                        for (int j = 0; j < _hiddenDim; j++)
-                                        {
-                                            dResidual[i] += NumOps.ToDouble(nextW1[i, j]) * dHNext[j];
-                                        }
-                                    }
-
-                                    // Gradient for WTheta_b: dL/dWTheta_b = h * (-dResidual)^T
-                                    // (negative because residual = prev_residual - backcast)
-                                    for (int i = 0; i < _hiddenDim; i++)
-                                    {
-                                        for (int j = 0; j < inputSize; j++)
-                                        {
-                                            grad.dWTheta_b[i, j] += NumOps.ToDouble(h[i]) * (-dResidual[j]);
-                                        }
-                                    }
-
-                                    // Also add gradient through h from backcast path
-                                    for (int i = 0; i < _hiddenDim; i++)
-                                    {
-                                        double backcastGrad = 0;
-                                        for (int j = 0; j < inputSize; j++)
-                                        {
-                                            backcastGrad += NumOps.ToDouble(wThetaB[i, j]) * (-dResidual[j]);
-                                        }
-                                        dH[i] = NumOps.Add(dH[i], NumOps.FromDouble(backcastGrad));
-                                    }
-                                }
-                            }
-                        }
-
-                        // Backprop through FC4 (ReLU)
-                        var h3 = ForwardFC(residual, w1, b1);
-                        h3 = ApplyReLU(h3);
-                        h3 = ForwardFC(h3, w2, b2);
-                        h3 = ApplyReLU(h3);
-                        h3 = ForwardFC(h3, w3, b3);
-                        h3 = ApplyReLU(h3);
-
-                        // ReLU derivative for h
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            if (!NumOps.GreaterThan(h[i], NumOps.Zero)) dH[i] = NumOps.Zero;
-                        }
-
-                        // Update W4, B4
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            double h3i = NumOps.ToDouble(h3[i]);
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                grad.dW4[i, j] += h3i * NumOps.ToDouble(dH[j]);
-                            }
-                            grad.dB4[i] += NumOps.ToDouble(dH[i]);
-                        }
-
-                        // Continue backprop through FC3
-                        var dH3 = new Vector<T>(_hiddenDim);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            T sum = NumOps.Zero;
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                sum = NumOps.Add(sum, NumOps.Multiply(w4[i, j], dH[j]));
-                            }
-                            double h3i = NumOps.ToDouble(h3[i]);
-                            dH3[i] = h3i <= 0 ? NumOps.Zero : sum;
-                        }
-
-                        var h2 = ForwardFC(residual, w1, b1);
-                        h2 = ApplyReLU(h2);
-                        h2 = ForwardFC(h2, w2, b2);
-                        h2 = ApplyReLU(h2);
-
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            double h2i = NumOps.ToDouble(h2[i]);
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                grad.dW3[i, j] += h2i * NumOps.ToDouble(dH3[j]);
-                            }
-                            grad.dB3[i] += NumOps.ToDouble(dH3[i]);
-                        }
-
-                        // Continue backprop through FC2
-                        var dH2 = new Vector<T>(_hiddenDim);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            T sum = NumOps.Zero;
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                sum = NumOps.Add(sum, NumOps.Multiply(w3[i, j], dH3[j]));
-                            }
-                            double h2i = NumOps.ToDouble(h2[i]);
-                            dH2[i] = h2i <= 0 ? NumOps.Zero : sum;
-                        }
-
-                        var h1 = ForwardFC(residual, w1, b1);
-                        h1 = ApplyReLU(h1);
-
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            double h1i = NumOps.ToDouble(h1[i]);
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                grad.dW2[i, j] += h1i * NumOps.ToDouble(dH2[j]);
-                            }
-                            grad.dB2[i] += NumOps.ToDouble(dH2[i]);
-                        }
-
-                        // Continue backprop through FC1
-                        var dH1 = new Vector<T>(_hiddenDim);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            T sum = NumOps.Zero;
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                sum = NumOps.Add(sum, NumOps.Multiply(w2[i, j], dH2[j]));
-                            }
-                            double h1i = NumOps.ToDouble(h1[i]);
-                            dH1[i] = h1i <= 0 ? NumOps.Zero : sum;
-                        }
-
-                        for (int i = 0; i < inputSize; i++)
-                        {
-                            double residualI = NumOps.ToDouble(residual[i]);
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                grad.dW1[i, j] += residualI * NumOps.ToDouble(dH1[j]);
-                            }
-                        }
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            grad.dB1[j] += NumOps.ToDouble(dH1[j]);
-                        }
-                    }
+                        dW1 = engine.TensorMatMul(engine.TensorTranspose(cache.Residual), dH1),
+                        dB1 = engine.ReduceSum(dH1, new[] { 0 }, false),
+                        dW2 = engine.TensorMatMul(engine.TensorTranspose(cache.H1), dH2),
+                        dB2 = engine.ReduceSum(dH2, new[] { 0 }, false),
+                        dW3 = engine.TensorMatMul(engine.TensorTranspose(cache.H2), dH3),
+                        dB3 = engine.ReduceSum(dH3, new[] { 0 }, false),
+                        dW4 = engine.TensorMatMul(engine.TensorTranspose(cache.H3), dH),
+                        dB4 = engine.ReduceSum(dH, new[] { 0 }, false),
+                        dWTheta_b = dWThetaB,
+                        dWTheta_f = dWThetaF
+                    };
                 }
 
-                // Apply gradients to all blocks using NumOps
-                double lr = _learningRate / actualBatchSize;
-                double clipValue = 5.0;
-
+                // Apply clipped gradients (clip to [-5, 5], step learningRate / batch size) to all blocks
+                T lr = NumOps.FromDouble(_learningRate / actualBatchSize);
                 for (int blockIdx = 0; blockIdx < blocks.Count; blockIdx++)
                 {
                     var block = blocks[blockIdx];
-                    var grad = blockGradients[blockIdx];
-
-                    // Capture weights with null checks
-                    var w1 = block.W1;
-                    var b1 = block.B1;
-                    var w2 = block.W2;
-                    var b2 = block.B2;
-                    var w3 = block.W3;
-                    var b3 = block.B3;
-                    var w4 = block.W4;
-                    var b4 = block.B4;
-                    var wThetaF = block.WTheta_f;
-
-                    if (w1 == null || b1 == null || w2 == null || b2 == null ||
-                        w3 == null || b3 == null || w4 == null || b4 == null || wThetaF == null)
-                    {
-                        throw new InvalidOperationException("Block weights not initialized.");
-                    }
-
-                    // Update W1, B1
-                    for (int i = 0; i < inputSize; i++)
-                    {
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dW1[i, j]));
-                            w1[i, j] = NumOps.Subtract(w1[i, j], NumOps.FromDouble(lr * clippedGrad));
-                        }
-                    }
-                    for (int j = 0; j < _hiddenDim; j++)
-                    {
-                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dB1[j]));
-                        b1[j] = NumOps.Subtract(b1[j], NumOps.FromDouble(lr * clippedGrad));
-                    }
-
-                    // Update W2, B2
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dW2[i, j]));
-                            w2[i, j] = NumOps.Subtract(w2[i, j], NumOps.FromDouble(lr * clippedGrad));
-                        }
-                    }
-                    for (int j = 0; j < _hiddenDim; j++)
-                    {
-                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dB2[j]));
-                        b2[j] = NumOps.Subtract(b2[j], NumOps.FromDouble(lr * clippedGrad));
-                    }
-
-                    // Update W3, B3
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dW3[i, j]));
-                            w3[i, j] = NumOps.Subtract(w3[i, j], NumOps.FromDouble(lr * clippedGrad));
-                        }
-                    }
-                    for (int j = 0; j < _hiddenDim; j++)
-                    {
-                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dB3[j]));
-                        b3[j] = NumOps.Subtract(b3[j], NumOps.FromDouble(lr * clippedGrad));
-                    }
-
-                    // Update W4, B4
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dW4[i, j]));
-                            w4[i, j] = NumOps.Subtract(w4[i, j], NumOps.FromDouble(lr * clippedGrad));
-                        }
-                    }
-                    for (int j = 0; j < _hiddenDim; j++)
-                    {
-                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dB4[j]));
-                        b4[j] = NumOps.Subtract(b4[j], NumOps.FromDouble(lr * clippedGrad));
-                    }
-
-                    // Update WTheta_f
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        for (int j = 0; j < _inputDim; j++)
-                        {
-                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dWTheta_f[i, j]));
-                            wThetaF[i, j] = NumOps.Subtract(wThetaF[i, j], NumOps.FromDouble(lr * clippedGrad));
-                        }
-                    }
-
-                    // Update WTheta_b (backcast weights)
-                    var wThetaB = block.WTheta_b;
-                    if (wThetaB != null)
-                    {
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            for (int j = 0; j < inputSize; j++)
-                            {
-                                double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dWTheta_b[i, j]));
-                                wThetaB[i, j] = NumOps.Subtract(wThetaB[i, j], NumOps.FromDouble(lr * clippedGrad));
-                            }
-                        }
-                    }
+                    var grad = gradients[blockIdx];
+                    block.W1 = Step(block.W1, grad.dW1, lr, negClipValue, clipValue);
+                    block.B1 = Step(block.B1, grad.dB1, lr, negClipValue, clipValue);
+                    block.W2 = Step(block.W2, grad.dW2, lr, negClipValue, clipValue);
+                    block.B2 = Step(block.B2, grad.dB2, lr, negClipValue, clipValue);
+                    block.W3 = Step(block.W3, grad.dW3, lr, negClipValue, clipValue);
+                    block.B3 = Step(block.B3, grad.dB3, lr, negClipValue, clipValue);
+                    block.W4 = Step(block.W4, grad.dW4, lr, negClipValue, clipValue);
+                    block.B4 = Step(block.B4, grad.dB4, lr, negClipValue, clipValue);
+                    block.WTheta_f = Step(block.WTheta_f, grad.dWTheta_f, lr, negClipValue, clipValue);
+                    block.WTheta_b = Step(block.WTheta_b, grad.dWTheta_b, lr, negClipValue, clipValue);
                 }
             }
         }
     }
 
-    private (Vector<T> forecast, Vector<T>[] residuals, Vector<T>[] hValues) ForwardWithCache(Vector<T> input)
+    // weights - lr * clamp(gradient, -clip, clip)
+    private Tensor<T> Step(Tensor<T> weights, Tensor<T> gradient, T lr, T negClip, T clip)
+    {
+        var engine = Engine;
+        return engine.TensorSubtract(weights, engine.TensorMultiplyScalar(engine.TensorClamp(gradient, negClip, clip), lr));
+    }
+
+    // Forward pass over a batch of flattened windows ([batch, lookback * features]): the summed forecast
+    // ([batch, features]) and, per block, its input residual and FC activations.
+    private (Tensor<T> forecast, BlockCache[] caches) ForwardBatch(Tensor<T> input)
     {
         var blocks = _blocks;
         if (blocks == null)
@@ -705,187 +397,39 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not initialized.");
         }
 
-        int inputSize = input.Length;
-
-        // Clone input for residual
-        var residual = new Vector<T>(inputSize);
-        for (int i = 0; i < inputSize; i++)
-        {
-            residual[i] = input[i];
-        }
-
-        var totalForecast = CreateZeroVector(_inputDim);
-
-        var residuals = new Vector<T>[blocks.Count];
-        var hValues = new Vector<T>[blocks.Count];
+        var engine = Engine;
+        int batch = input.Shape[0];
+        var residual = input;
+        var totalForecast = Tensor<T>.CreateZeros(new[] { batch, _inputDim });
+        var caches = new BlockCache[blocks.Count];
 
         for (int blockIdx = 0; blockIdx < blocks.Count; blockIdx++)
         {
             var block = blocks[blockIdx];
 
-            // Clone residual for caching
-            residuals[blockIdx] = new Vector<T>(inputSize);
-            for (int i = 0; i < inputSize; i++)
-            {
-                residuals[blockIdx][i] = residual[i];
-            }
-
-            // Capture weights with null checks
-            var w1 = block.W1;
-            var b1 = block.B1;
-            var w2 = block.W2;
-            var b2 = block.B2;
-            var w3 = block.W3;
-            var b3 = block.B3;
-            var w4 = block.W4;
-            var b4 = block.B4;
-            var wThetaB = block.WTheta_b;
-            var wThetaF = block.WTheta_f;
-
-            if (w1 == null || b1 == null || w2 == null || b2 == null ||
-                w3 == null || b3 == null || w4 == null || b4 == null ||
-                wThetaB == null || wThetaF == null)
-            {
-                throw new InvalidOperationException("Block weights not initialized.");
-            }
-
             // FC stack (4 layers with ReLU)
-            var h = ForwardFC(residual, w1, b1);
-            h = ApplyReLU(h);
-            h = ForwardFC(h, w2, b2);
-            h = ApplyReLU(h);
-            h = ForwardFC(h, w3, b3);
-            h = ApplyReLU(h);
-            h = ForwardFC(h, w4, b4);
-            h = ApplyReLU(h);
+            var h1 = ForwardFC(residual, block.W1, block.B1);
+            var h2 = ForwardFC(h1, block.W2, block.B2);
+            var h3 = ForwardFC(h2, block.W3, block.B3);
+            var h4 = ForwardFC(h3, block.W4, block.B4);
+            caches[blockIdx] = new BlockCache { Residual = residual, H1 = h1, H2 = h2, H3 = h3, H4 = h4 };
 
-            hValues[blockIdx] = h;
-
-            // Generate backcast and forecast
-            var backcast = ForwardFCNoOffset(h, wThetaB, inputSize);
-            var forecast = ForwardFCNoOffset(h, wThetaF, _inputDim);
-
-            // Update residual (subtract backcast) using Engine.Subtract
-            residual = Engine.Subtract(residual, backcast);
-
-            // Accumulate forecast using Engine.Add
-            totalForecast = Engine.Add(totalForecast, forecast);
+            // Generate backcast and forecast; subtract the backcast from the residual, accumulate the forecast
+            residual = engine.TensorSubtract(residual, engine.TensorMatMul(h4, block.WTheta_b));
+            totalForecast = engine.TensorAdd(totalForecast, engine.TensorMatMul(h4, block.WTheta_f));
         }
 
-        return (totalForecast, residuals, hValues);
+        return (totalForecast, caches);
     }
 
-    private class BlockGradients
+    // ReLU(input @ W + b) for a batch of rows.
+    private Tensor<T> ForwardFC(Tensor<T> input, Tensor<T> W, Tensor<T> b)
     {
-        public required double[,] dW1 { get; init; }
-        public required double[] dB1 { get; init; }
-        public required double[,] dW2 { get; init; }
-        public required double[] dB2 { get; init; }
-        public required double[,] dW3 { get; init; }
-        public required double[] dB3 { get; init; }
-        public required double[,] dW4 { get; init; }
-        public required double[] dB4 { get; init; }
-        public required double[,] dWTheta_b { get; init; }
-        public required double[,] dWTheta_f { get; init; }
+        var engine = Engine;
+        var linear = engine.TensorAdd(engine.TensorMatMul(input, W),
+            AnomalyTensorOps.BroadcastRow(b, input.Shape[0]));
+        return engine.TensorMax(linear, NumOps.Zero);
     }
-
-    private (Vector<T> forecast, Vector<T> backcast) Forward(Vector<T> input)
-    {
-        var blocks = _blocks;
-        if (blocks == null)
-        {
-            throw new InvalidOperationException("Model not initialized.");
-        }
-
-        int inputSize = input.Length;
-
-        // Clone input for residual
-        var residual = new Vector<T>(inputSize);
-        for (int i = 0; i < inputSize; i++)
-        {
-            residual[i] = input[i];
-        }
-
-        var totalForecast = CreateZeroVector(_inputDim);
-        var totalBackcast = CreateZeroVector(inputSize);
-
-        foreach (var block in blocks)
-        {
-            // Capture weights with null checks
-            var w1 = block.W1;
-            var b1 = block.B1;
-            var w2 = block.W2;
-            var b2 = block.B2;
-            var w3 = block.W3;
-            var b3 = block.B3;
-            var w4 = block.W4;
-            var b4 = block.B4;
-            var wThetaB = block.WTheta_b;
-            var wThetaF = block.WTheta_f;
-
-            if (w1 == null || b1 == null || w2 == null || b2 == null ||
-                w3 == null || b3 == null || w4 == null || b4 == null ||
-                wThetaB == null || wThetaF == null)
-            {
-                throw new InvalidOperationException("Block weights not initialized.");
-            }
-
-            // FC stack (4 layers with ReLU)
-            var h = ForwardFC(residual, w1, b1);
-            h = ApplyReLU(h);
-            h = ForwardFC(h, w2, b2);
-            h = ApplyReLU(h);
-            h = ForwardFC(h, w3, b3);
-            h = ApplyReLU(h);
-            h = ForwardFC(h, w4, b4);
-            h = ApplyReLU(h);
-
-            // Generate backcast and forecast
-            var backcast = ForwardFCNoOffset(h, wThetaB, inputSize);
-            var forecast = ForwardFCNoOffset(h, wThetaF, _inputDim);
-
-            // Update residual (subtract backcast) using Engine.Subtract
-            residual = Engine.Subtract(residual, backcast);
-
-            // Accumulate forecast using Engine.Add
-            totalForecast = Engine.Add(totalForecast, forecast);
-
-            // Accumulate backcast using Engine.Add
-            totalBackcast = Engine.Add(totalBackcast, backcast);
-        }
-
-        return (totalForecast, totalBackcast);
-    }
-
-    private Vector<T> ForwardFC(Vector<T> input, Matrix<T> W, Vector<T> b)
-    {
-        // SIMD: output = input @ W + b via Engine.TensorMatMul
-        int outputSize = W.Columns;
-        var inputTensor = Tensor<T>.FromVector(input).Reshape(1, input.Length);
-        var result = Engine.TensorAdd(
-            Engine.TensorMatMul(inputTensor, Tensor<T>.FromMatrix(W)),
-            Tensor<T>.FromVector(b).Reshape(1, outputSize));
-        return result.Reshape(outputSize).ToVector();
-    }
-
-    private Vector<T> ForwardFCNoOffset(Vector<T> input, Matrix<T> W, int outputSize)
-    {
-        var output = new Vector<T>(outputSize);
-
-        for (int j = 0; j < outputSize; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < input.Length; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(input[i], W[i, j]));
-            }
-            output[j] = sum;
-        }
-
-        return output;
-    }
-
-    private Vector<T> ApplyReLU(Vector<T> x) => (Vector<T>)Engine.ReLU(x);
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
@@ -905,71 +449,61 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
         }
 
+        var engine = Engine;
         int n = X.Rows;
-        var scores = new Vector<T>(n);
 
-        // Normalize data into Matrix<T>
-        var normalizedData = new Matrix<T>(n, _inputDim);
-        for (int i = 0; i < n; i++)
+        // Normalize data
+        var normalizedData = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
+
+        // Points without enough history for forecast-based scoring get the sentinel 0 (no anomaly score
+        // available); the others score the squared error of the forecast from their lookback window
+        int count = n - _lookback;
+        if (count < 1)
         {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
-                normalizedData[i, j] = NumOps.Divide(diff, dataStds[j]);
-            }
+            return new Vector<T>(n);
         }
 
-        // Score each point
-        for (int i = 0; i < n; i++)
-        {
-            T score;
+        var (forecast, _) = ForwardBatch(LookbackWindows(normalizedData, count));
+        var actual = engine.TensorSlice(normalizedData, new[] { _lookback, 0 }, new[] { count, _inputDim });
+        var errors = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(actual, forecast)), new[] { 1 }, false);
+        return engine.TensorConcatenate(new[] { Tensor<T>.CreateZeros(new[] { _lookback }), errors }, 0).ToVector();
+    }
 
-            if (i < _lookback)
-            {
-                // Not enough history for forecast-based scoring.
-                // Use sentinel value of 0 to indicate no anomaly score available.
-                // This ensures consistent scoring semantics (forecast error) across all samples.
-                score = NumOps.Zero;
-            }
-            else
-            {
-                // Build input from lookback window
-                var input = new Vector<T>(_lookback * _inputDim);
-                for (int t = 0; t < _lookback; t++)
-                {
-                    for (int j = 0; j < _inputDim; j++)
-                    {
-                        input[t * _inputDim + j] = normalizedData[i - _lookback + t, j];
-                    }
-                }
+    private class BlockCache
+    {
+        public required Tensor<T> Residual { get; init; }
+        public required Tensor<T> H1 { get; init; }
+        public required Tensor<T> H2 { get; init; }
+        public required Tensor<T> H3 { get; init; }
+        public required Tensor<T> H4 { get; init; }
+    }
 
-                // Predict and compute error
-                var (forecast, _) = Forward(input);
-                score = NumOps.Zero;
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    T diff = NumOps.Subtract(normalizedData[i, j], forecast[j]);
-                    score = NumOps.Add(score, NumOps.Multiply(diff, diff));
-                }
-            }
-
-            scores[i] = score;
-        }
-
-        return scores;
+    private class BlockGradients
+    {
+        public required Tensor<T> dW1 { get; init; }
+        public required Tensor<T> dB1 { get; init; }
+        public required Tensor<T> dW2 { get; init; }
+        public required Tensor<T> dB2 { get; init; }
+        public required Tensor<T> dW3 { get; init; }
+        public required Tensor<T> dB3 { get; init; }
+        public required Tensor<T> dW4 { get; init; }
+        public required Tensor<T> dB4 { get; init; }
+        public required Tensor<T> dWTheta_b { get; init; }
+        public required Tensor<T> dWTheta_f { get; init; }
     }
 
     private class BlockWeights
     {
-        public Matrix<T>? W1 { get; set; }
-        public Vector<T>? B1 { get; set; }
-        public Matrix<T>? W2 { get; set; }
-        public Vector<T>? B2 { get; set; }
-        public Matrix<T>? W3 { get; set; }
-        public Vector<T>? B3 { get; set; }
-        public Matrix<T>? W4 { get; set; }
-        public Vector<T>? B4 { get; set; }
-        public Matrix<T>? WTheta_b { get; set; }
-        public Matrix<T>? WTheta_f { get; set; }
+        public required Tensor<T> W1 { get; set; }
+        public required Tensor<T> B1 { get; set; }
+        public required Tensor<T> W2 { get; set; }
+        public required Tensor<T> B2 { get; set; }
+        public required Tensor<T> W3 { get; set; }
+        public required Tensor<T> B3 { get; set; }
+        public required Tensor<T> W4 { get; set; }
+        public required Tensor<T> B4 { get; set; }
+        public required Tensor<T> WTheta_b { get; set; }
+        public required Tensor<T> WTheta_f { get; set; }
     }
 }
