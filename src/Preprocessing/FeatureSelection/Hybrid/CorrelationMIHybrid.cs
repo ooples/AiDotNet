@@ -28,18 +28,18 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly double _correlationWeight;
     private readonly int _nBins;
 
-    private double[]? _correlationScores;
-    private double[]? _miScores;
-    private double[]? _hybridScores;
+    private Vector<T>? _correlationScores;
+    private Vector<T>? _miScores;
+    private Vector<T>? _hybridScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double CorrelationWeight => _correlationWeight;
-    public double[]? CorrelationScores => _correlationScores;
-    public double[]? MIScores => _miScores;
-    public double[]? HybridScores => _hybridScores;
+    public Vector<T>? CorrelationScores => _correlationScores;
+    public Vector<T>? MIScores => _miScores;
+    public Vector<T>? HybridScores => _hybridScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -78,123 +78,42 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
-        _correlationScores = ComputeCorrelationScores(data, target, n, p);
-        _miScores = ComputeMutualInfoScores(data, target, n, p);
+        // |Pearson r|, 0 when the feature or the target is (near) constant
+        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, FilterStatisticTensorOps.AsTensor(target));
+        T tolerance = NumOps.FromDouble(1e-10);
+        var correlation = NumOps.GreaterThan(syy, tolerance)
+            ? Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
+                sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 0, NumOps.Zero))
+            : FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
+        correlation = FeatureSelectionTensorOps.KeepOrFill(correlation, Engine.TensorGreaterThan(sxx, tolerance), NumOps.Zero);
 
-        var normalizedCorr = Normalize(_correlationScores);
-        var normalizedMI = Normalize(_miScores);
+        // plug-in mutual information of the binned feature with the target classes
+        var mi = DiscreteInformation<T>.ForTarget(FeatureSelectionTensorOps.RangeBins(x, _nBins), _nBins, target).Relevance();
+        _correlationScores = correlation.ToVector();
+        _miScores = mi.ToVector();
 
-        _hybridScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _hybridScores[j] = _correlationWeight * normalizedCorr[j] + (1 - _correlationWeight) * normalizedMI[j];
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _hybridScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        T weight = NumOps.FromDouble(_correlationWeight);
+        var hybrid = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(MinMaxScaled(correlation), weight),
+            Engine.TensorMultiplyScalar(MinMaxScaled(mi), NumOps.Subtract(NumOps.One, weight)));
+        _hybridScores = hybrid.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(hybrid, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
-    private double[] ComputeCorrelationScores(Matrix<T> data, Vector<T> target, int n, int p)
+    // (s - min) / (max - min), or 0.5 everywhere when the range is below 1e-10
+    private Tensor<T> MinMaxScaled(Tensor<T> scores)
     {
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeMutualInfoScores(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < minVal) minVal = val;
-                if (val > maxVal) maxVal = val;
-            }
-
-            double range = maxVal - minVal;
-            var jointCounts = new int[_nBins, 2];
-            var featureCounts = new int[_nBins];
-            var targetCounts = new int[2];
-
-            for (int i = 0; i < n; i++)
-            {
-                int fBin = range > 1e-10
-                    ? Math.Min(_nBins - 1, (int)((NumOps.ToDouble(data[i, j]) - minVal) / range * (_nBins - 1)))
-                    : 0;
-                int tBin = NumOps.Compare(target[i], NumOps.One) == 0 ? 1 : 0;
-
-                jointCounts[fBin, tBin]++;
-                featureCounts[fBin]++;
-                targetCounts[tBin]++;
-            }
-
-            double mi = 0;
-            for (int f = 0; f < _nBins; f++)
-            {
-                for (int t = 0; t < 2; t++)
-                {
-                    if (jointCounts[f, t] > 0 && featureCounts[f] > 0 && targetCounts[t] > 0)
-                    {
-                        double pJoint = (double)jointCounts[f, t] / n;
-                        double pFeature = (double)featureCounts[f] / n;
-                        double pTarget = (double)targetCounts[t] / n;
-                        mi += pJoint * Math.Log(pJoint / (pFeature * pTarget) + 1e-10);
-                    }
-                }
-            }
-
-            scores[j] = mi;
-        }
-
-        return scores;
-    }
-
-    private double[] Normalize(double[] scores)
-    {
-        double min = scores.Min();
-        double max = scores.Max();
-        double range = max - min;
-
-        if (range < 1e-10)
-            return scores.Select(_ => 0.5).ToArray();
-
-        return scores.Select(s => (s - min) / range).ToArray();
+        if (scores.Length == 0)
+            return scores;
+        var asColumn = Engine.Reshape(scores, new[] { scores.Length, 1 });
+        var range = Engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(asColumn), FeatureSelectionTensorOps.ColumnMin(asColumn));
+        if (NumOps.LessThan(range.ToArray()[0], NumOps.FromDouble(1e-10)))
+            return FilterStatisticTensorOps.FilledLike(scores, NumOps.FromDouble(0.5));
+        return Engine.Reshape(FeatureSelectionTensorOps.RangeScaled(asColumn), new[] { scores.Length });
     }
 
     /// <inheritdoc />
