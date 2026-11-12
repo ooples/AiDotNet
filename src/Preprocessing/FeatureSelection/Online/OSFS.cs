@@ -188,9 +188,13 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 
             var blocks = engine.Reshape(
                 engine.TensorIndexSelect(flat, new Tensor<int>(linear, new[] { linear.Length }), 0), new[] { count, order, order });
-            var partial = PartialCorrelations(blocks, out var defined);
+            var partial = PartialCorrelations(blocks, out var invertible, out var determined);
             var factor = engine.TensorSlice(factors, new[] { size }, new[] { 1 });
-            var independent = engine.TensorMultiply(engine.TensorGreaterThan(FisherPValues(partial, factor), alpha), defined);
+
+            // Ind(C, Y | S): the Fisher z test accepts independence, or S determines Y or C (LOFS osfs_z: isnan(dep))
+            var accepted = engine.TensorMultiply(
+                engine.TensorGreaterThan(FisherPValues(partial, factor), alpha), FeatureSelectionTensorOps.OneMinus(determined));
+            var independent = engine.TensorMultiply(engine.TensorAdd(accepted, determined), invertible);
             if (FeatureSelectionTensorOps.CountNonZero(independent) > 0)
                 return true;
         }
@@ -199,29 +203,65 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     }
 
     /// <summary>
-    /// The partial correlation of the first two variables given the rest, for every [order, order] correlation
-    /// block: <c>-P01 / sqrt(P00 P11)</c> with <c>P</c> the inverse of the block. <paramref name="defined"/> is 1
-    /// where the block could be inverted; a singular block counts as dependent.
+    /// The partial correlation of the first two variables (Y, C) given the rest (S), for every [order, order]
+    /// correlation block, from the Schur complement <c>R2 = R_XX - R_XS R_SS^-1 R_SX</c> of the conditioning block
+    /// as in LOFS <c>partial_corr_coef</c>: <c>r = R2[0, 1] / sqrt(R2[0, 0] R2[1, 1])</c>.
     /// </summary>
-    private Tensor<T> PartialCorrelations(Tensor<T> blocks, out Tensor<T> defined)
+    /// <remarks>
+    /// <paramref name="invertible"/> is 1 where <c>R_SS</c> could be inverted; a singular conditioning block only
+    /// repeats a smaller conditioning set, which is tested on its own. <paramref name="determined"/> is 1 where S
+    /// (almost) determines Y or C, i.e. a residual variance <c>R2[0, 0]</c> or <c>R2[1, 1]</c> is within the square
+    /// root of T's unit roundoff of 0: there Y adds nothing about C once S is known, so Y and C are independent given
+    /// S (LOFS gets r = 0/0 = NaN and treats it as independence). The partial correlation is 0 at such blocks.
+    /// </remarks>
+    private Tensor<T> PartialCorrelations(Tensor<T> blocks, out Tensor<T> invertible, out Tensor<T> determined)
     {
         var engine = Engine;
         int count = blocks.Shape[0];
         int order = blocks.Shape[1];
-        var unit = engine.TensorSlice(
-            engine.TensorBroadcastTo(engine.Reshape(engine.TensorEye<T>(order), new[] { 1, order, order }), new[] { count, order, order }),
-            new[] { 0, 0, 0 }, new[] { count, order, 2 });
-        var (inverse, info) = LinalgDispatch<T>.SolveEx(blocks, unit);
-        var solved = engine.TensorEquals(info, 0).Cast<T>();
+        int size = order - 2;
+        var pair = engine.TensorSlice(blocks, new[] { 0, 0, 0 }, new[] { count, 2, 2 });
+        var cross = engine.TensorSlice(blocks, new[] { 0, 0, 2 }, new[] { count, 2, size });
+        var crossTransposed = engine.TensorSlice(blocks, new[] { 0, 2, 0 }, new[] { count, size, 2 });
+        var conditioning = engine.TensorSlice(blocks, new[] { 0, 2, 2 }, new[] { count, size, size });
 
-        var p00 = engine.Reshape(engine.TensorSlice(inverse, new[] { 0, 0, 0 }, new[] { count, 1, 1 }), new[] { count });
-        var p10 = engine.Reshape(engine.TensorSlice(inverse, new[] { 0, 1, 0 }, new[] { count, 1, 1 }), new[] { count });
-        var p11 = engine.Reshape(engine.TensorSlice(inverse, new[] { 0, 1, 1 }, new[] { count, 1, 1 }), new[] { count });
-        var product = engine.TensorWhere(solved, engine.TensorMultiply(p00, p11), new Tensor<T>(new[] { count }));
-        defined = engine.TensorGreaterThan(product, NumOps.Zero);
-        var safeScale = engine.TensorSqrt(engine.TensorWhere(defined, product, FeatureSelectionTensorOps.Filled(new[] { count }, NumOps.One)));
-        var safeOffDiagonal = engine.TensorWhere(defined, p10, new Tensor<T>(new[] { count }));
-        return engine.TensorNegate(engine.TensorDivide(safeOffDiagonal, safeScale));
+        var (solved, info) = LinalgDispatch<T>.SolveEx(conditioning, crossTransposed);
+        invertible = engine.TensorEquals(info, 0).Cast<T>();
+        var residual = engine.TensorSubtract(pair, engine.TensorBatchMatMul(cross, solved)); // [count, 2, 2]
+
+        var r00 = engine.Reshape(engine.TensorSlice(residual, new[] { 0, 0, 0 }, new[] { count, 1, 1 }), new[] { count });
+        var r01 = engine.Reshape(engine.TensorSlice(residual, new[] { 0, 0, 1 }, new[] { count, 1, 1 }), new[] { count });
+        var r11 = engine.Reshape(engine.TensorSlice(residual, new[] { 0, 1, 1 }, new[] { count, 1, 1 }), new[] { count });
+
+        // A failed solve leaves no usable residual; those blocks are masked out by invertible
+        T tolerance = NumOps.Sqrt(UnitRoundoff());
+        var zeros = new Tensor<T>(new[] { count });
+        var ones = FeatureSelectionTensorOps.Filled(new[] { count }, NumOps.One);
+        var varies = engine.TensorMultiply(
+            engine.TensorMultiply(engine.TensorGreaterThan(r00, tolerance), engine.TensorGreaterThan(r11, tolerance)), invertible);
+        determined = engine.TensorMultiply(FeatureSelectionTensorOps.OneMinus(varies), invertible);
+
+        // sqrt(a) sqrt(b) rather than sqrt(a b), which can underflow in Half
+        var scale = engine.TensorMultiply(
+            engine.TensorSqrt(engine.TensorWhere(varies, r00, ones)), engine.TensorSqrt(engine.TensorWhere(varies, r11, ones)));
+        return engine.TensorDivide(engine.TensorWhere(varies, r01, zeros), scale);
+    }
+
+    /// <summary>
+    /// The unit roundoff of T (2^-52 for double, 2^-23 for float, 2^-10 for Half, 2^-7 for BFloat16), found by
+    /// checking which powers of two still change 1 when added to it.
+    /// </summary>
+    private static T UnitRoundoff()
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        T one = ops.One;
+        if (ops.GreaterThan(ops.Add(one, ops.FromDouble(Math.Pow(2, -30))), one))
+            return ops.FromDouble(Math.Pow(2, -52));
+        if (ops.GreaterThan(ops.Add(one, ops.FromDouble(Math.Pow(2, -16))), one))
+            return ops.FromDouble(Math.Pow(2, -23));
+        if (ops.GreaterThan(ops.Add(one, ops.FromDouble(Math.Pow(2, -9))), one))
+            return ops.FromDouble(Math.Pow(2, -10));
+        return ops.FromDouble(Math.Pow(2, -7));
     }
 
     /// <summary>
@@ -240,18 +280,32 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     /// Pearson correlation matrix of the columns of an [n, v] tensor, with an exact unit diagonal; a constant column
     /// is uncorrelated with every other.
     /// </summary>
+    /// <remarks>
+    /// Every column is first divided by its largest magnitude and, once centred, by sqrt(n), so no intermediate
+    /// square or sum leaves [0, 4]: squaring the raw data overflows float above about 1.8e19 and Half above 256.
+    /// The columns are then normalized to unit length, so <c>U'U</c> is the correlation matrix.
+    /// </remarks>
     private Tensor<T> CorrelationMatrix(Tensor<T> x)
     {
         var engine = Engine;
         int n = x.Shape[0];
         int v = x.Shape[1];
-        var centered = FeatureSelectionTensorOps.CenterColumns(x, out _, out var std);
-        var varying = engine.TensorGreaterThan(std, NumOps.Zero);
-        var safeStd = engine.Reshape(engine.TensorWhere(varying, std, FeatureSelectionTensorOps.Filled(new[] { v }, NumOps.One)), new[] { 1, v });
-        var standardized = engine.TensorMultiply(
-            engine.TensorDivide(centered, safeStd), engine.TensorBroadcastTo(engine.Reshape(varying, new[] { 1, v }), new[] { n, v }));
-        var correlations = engine.TensorDivideScalar(
-            engine.TensorMatMul(engine.TensorTranspose(standardized), standardized), NumOps.FromDouble(Math.Max(n, 1)));
+        var columnMax = FeatureSelectionTensorOps.ColumnMax(x);
+        var columnMin = FeatureSelectionTensorOps.ColumnMin(x);
+        var varying = engine.TensorGreaterThan(columnMax, columnMin);
+        var ones = FeatureSelectionTensorOps.Filled(new[] { v }, NumOps.One);
+        var magnitude = engine.TensorMax(engine.TensorAbs(columnMax), engine.TensorAbs(columnMin));
+        var scale = engine.TensorWhere(varying, magnitude, ones);
+        var scaled = engine.TensorDivide(x, engine.Reshape(scale, new[] { 1, v }));
+
+        var centered = engine.TensorDivideScalar(
+            engine.TensorSubtract(scaled, engine.ReduceMean(scaled, new[] { 0 }, true)), NumOps.Sqrt(NumOps.FromDouble(Math.Max(n, 1))));
+        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false));
+        var usable = engine.TensorMultiply(varying, engine.TensorGreaterThan(norms, NumOps.Zero));
+        var safeNorms = engine.Reshape(engine.TensorWhere(usable, norms, ones), new[] { 1, v });
+        var unit = engine.TensorMultiply(
+            engine.TensorDivide(centered, safeNorms), engine.TensorBroadcastTo(engine.Reshape(usable, new[] { 1, v }), new[] { n, v }));
+        var correlations = engine.TensorMatMul(engine.TensorTranspose(unit), unit);
         var eye = engine.TensorEye<T>(v);
         return engine.TensorAdd(engine.TensorMultiply(correlations, FeatureSelectionTensorOps.OneMinus(eye)), eye);
     }
