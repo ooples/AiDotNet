@@ -64,8 +64,14 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Performs the tridiagonal decomposition.
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown when the matrix is not symmetric.</exception>
+    /// <remarks>
+    /// An orthogonal similarity reduces a matrix to tridiagonal form only when it is symmetric; for
+    /// general input the reduction is upper Hessenberg, and dropping its upper band would lose data.
+    /// </remarks>
     protected override void Decompose()
     {
+        ValidateSymmetric(Tensor<T>.FromMatrix(A), "Tridiagonal decomposition", "matrix");
         ComputeDecomposition(_algorithm);
     }
 
@@ -116,13 +122,19 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Performs tridiagonal decomposition using the Givens algorithm.
+    /// Performs tridiagonal decomposition with a non-negative subdiagonal (the Givens option).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Givens algorithm uses a series of rotations to gradually transform
-    /// the matrix into tridiagonal form. Think of it like rotating parts of the matrix to
-    /// move unwanted values to zero, one element at a time.
+    /// Rotation-based reduction with Q e1 = e1 leaves r = sqrt(a^2 + b^2) &gt;= 0 on the subdiagonal. By the
+    /// implicit-Q theorem that result equals the Householder reduction rescaled to non-negative
+    /// subdiagonal signs, which is how it is computed: a dense O(n^3) Householder reduction, not one
+    /// rotation per element. <see cref="TridiagonalAlgorithmType.Givens"/> and
+    /// <see cref="TridiagonalAlgorithmType.Lanczos"/> are aliases and return the same factors.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Givens rotations turn the matrix into tridiagonal form; this option gives
+    /// the same Q and T those rotations would produce.
     /// </para>
     /// </remarks>
     private void DecomposeGivens()
@@ -136,14 +148,18 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Performs tridiagonal decomposition using the Lanczos algorithm.
+    /// Performs tridiagonal decomposition with a non-negative subdiagonal (the Lanczos option).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Lanczos algorithm is an iterative method that builds the tridiagonal
-    /// matrix step by step. It's particularly efficient for large, sparse matrices (matrices with
-    /// lots of zeros). Think of it like summarizing a large dataset by capturing only its most
-    /// important patterns.
+    /// Lanczos from q1 = e1 with full re-orthogonalization yields the same Q and T as the Givens
+    /// option (beta = ||w|| &gt;= 0 on the off-diagonals), so this option is an alias of
+    /// <see cref="TridiagonalAlgorithmType.Givens"/>. It runs the same dense O(n^3) Householder
+    /// reduction and gives no speed advantage for sparse matrices.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Lanczos builds the tridiagonal matrix step by step; this option returns
+    /// the result that process produces, computed with a dense reduction.
     /// </para>
     /// </remarks>
     private void DecomposeLanczos()

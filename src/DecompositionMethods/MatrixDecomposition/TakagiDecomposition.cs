@@ -111,28 +111,19 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         var a = Tensor<T>.FromMatrix(matrix);
-        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(a));
-        T relScale = NumOps.GreaterThan(maxAbs, NumOps.FromDouble(1.0)) ? maxAbs : NumOps.One;
-        double symmetryTolBase = typeof(T) == typeof(float) ? 1e-4 : 1e-10;
-        T symmetryTol = NumOps.Multiply(NumOps.FromDouble(symmetryTolBase), relScale);
-
-        var asymmetry = Engine.TensorAbs(Engine.TensorSubtract(a, Engine.TensorTranspose(a)));
-        if (NumOps.GreaterThan(Engine.TensorMaxValue(asymmetry), symmetryTol))
-        {
-            // First offending (i, j), j > i, in row-major order.
-            var violations = Engine.TensorTriu(Engine.TensorGreaterThan(asymmetry, symmetryTol), 1);
-            int flat = Engine.TensorArgMax(violations.Reshape(new[] { violations.Length }), 0)[0];
-            int i = flat / n;
-            int j = flat % n;
-            T diff = asymmetry[i, j];
-            throw new ArgumentException(
-                "Takagi Jacobi decomposition requires a symmetric matrix; " +
-                $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol} " +
-                $"(scaled by ‖A‖_∞ = {maxAbs}).",
-                nameof(matrix));
-        }
+        ValidateSymmetric(a, "Takagi Jacobi decomposition", nameof(matrix));
 
         var (values, vectors) = LinalgDispatch<T>.Eigh(a);
+        return TakagiFromEigen(values, vectors);
+    }
+
+    /// <summary>
+    /// Builds the Takagi factors of a real symmetric A = V diag(λ) V^T: Σ = |λ| and
+    /// u_j = v_j for λ_j &gt;= 0, u_j = i·v_j for λ_j &lt; 0, so that U Σ U^T = A.
+    /// </summary>
+    private (Matrix<T> S, Matrix<Complex<T>> U) TakagiFromEigen(Tensor<T> values, Tensor<T> vectors)
+    {
+        int n = values.Length;
 
         // Columns with a negative eigenvalue become purely imaginary.
         var nonNegative = Engine.TensorSubtract(Engine.TensorOnesLike(values), Engine.TensorLessThan(values, NumOps.Zero));
@@ -142,6 +133,22 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
 
         var sigma = Matrix<T>.CreateDiagonal(Engine.TensorAbs(values).ToVector());
         return (sigma, ComplexFromParts(realPart.ToMatrix(), imaginaryPart.ToMatrix()));
+    }
+
+    /// <summary>
+    /// Validates that <paramref name="matrix"/> is symmetric, runs the selected eigensolver and builds
+    /// the Takagi factors from its eigenpairs (dominant first for the QR and power options).
+    /// </summary>
+    private (Matrix<T> S, Matrix<Complex<T>> U) TakagiFromEigenSolver(Matrix<T> matrix, EigenAlgorithmType eigenAlgorithm, string algorithmName)
+    {
+        if (matrix.Rows == 0)
+        {
+            return (new Matrix<T>(0, 0), new Matrix<Complex<T>>(0, 0));
+        }
+
+        ValidateSymmetric(Tensor<T>.FromMatrix(matrix), algorithmName, nameof(matrix));
+        var eigen = new EigenDecomposition<T>(matrix, eigenAlgorithm);
+        return TakagiFromEigen(Tensor<T>.FromVector(eigen.EigenValues), Tensor<T>.FromMatrix(eigen.EigenVectors));
     }
 
     /// <summary>Builds re + i·im as a complex matrix with whole-matrix operations.</summary>
@@ -162,17 +169,6 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Eigenpairs in the order the QR / power / Lanczos iterations deliver them (dominant first),
-    /// returned as Σ = sqrt(|λ|) and the eigenvectors as a real-valued complex matrix.
-    /// </summary>
-    private static (Matrix<T> S, Matrix<Complex<T>> U) SqrtEigenvalueFactors(EigenDecomposition<T> eigen)
-    {
-        var engine = AiDotNetEngine.Current;
-        var sigma = engine.TensorSqrt(engine.TensorAbs(Tensor<T>.FromVector(eigen.EigenValues)));
-        return (Matrix<T>.CreateDiagonal(sigma.ToVector()), eigen.EigenVectors.ToComplexMatrix());
-    }
-
-    /// <summary>
     /// Computes the Takagi decomposition using the QR algorithm.
     /// </summary>
     /// <param name="matrix">The matrix to decompose</param>
@@ -186,14 +182,9 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> S, Matrix<Complex<T>> U) ComputeTakagiQR(Matrix<T> matrix)
     {
-        // The unshifted QR iteration A_k = R_k Q_k converges to diag(λ) (dominant first) with the
-        // accumulated Q as eigenvectors; Σ is taken as sqrt(|λ|).
-        if (matrix.Rows == 0)
-        {
-            return (new Matrix<T>(0, 0), new Matrix<Complex<T>>(0, 0));
-        }
-
-        return SqrtEigenvalueFactors(new EigenDecomposition<T>(matrix, EigenAlgorithmType.QR));
+        // The QR iteration delivers the eigenpairs of the symmetric A dominant first; the Takagi
+        // factors are Σ = |λ| and U = V with i·v_j for negative λ_j.
+        return TakagiFromEigenSolver(matrix, EigenAlgorithmType.QR, "Takagi QR decomposition");
     }
 
     /// <summary>
@@ -210,15 +201,8 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> S, Matrix<Complex<T>> U) ComputeTakagiEigenDecomposition(Matrix<T> matrix)
     {
-        if (matrix.Rows == 0)
-        {
-            return (new Matrix<T>(0, 0), new Matrix<Complex<T>>(0, 0));
-        }
-
-        // Σ = |λ| with the (real) eigenvectors as the columns of U.
-        var eigenDecomposition = new EigenDecomposition<T>(matrix);
-        var sigma = Engine.TensorAbs(Tensor<T>.FromVector(eigenDecomposition.EigenValues));
-        return (Matrix<T>.CreateDiagonal(sigma.ToVector()), eigenDecomposition.EigenVectors.ToComplexMatrix());
+        // Σ = |λ|; eigenvectors of negative eigenvalues are multiplied by i so that U Σ U^T = A.
+        return TakagiFromEigenSolver(matrix, EigenAlgorithmType.QR, "Takagi eigendecomposition");
     }
 
     /// <summary>
@@ -235,13 +219,8 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> S, Matrix<Complex<T>> U) ComputeTakagiPowerIteration(Matrix<T> matrix)
     {
-        // Power iteration with deflation yields the eigenpairs dominant first; Σ = sqrt(|λ|).
-        if (matrix.Rows == 0)
-        {
-            return (new Matrix<T>(0, 0), new Matrix<Complex<T>>(0, 0));
-        }
-
-        return SqrtEigenvalueFactors(new EigenDecomposition<T>(matrix, EigenAlgorithmType.PowerIteration));
+        // Power iteration with deflation yields the eigenpairs dominant first; Σ = |λ|.
+        return TakagiFromEigenSolver(matrix, EigenAlgorithmType.PowerIteration, "Takagi power iteration");
     }
 
     /// <summary>
@@ -261,13 +240,8 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     {
         // A full n-step Lanczos tridiagonalization followed by the eigen-decomposition of the
         // tridiagonal matrix gives the eigenpairs of A (Ritz pairs of the full Krylov space),
-        // dominant first; Σ = sqrt(|λ|).
-        if (matrix.Rows == 0)
-        {
-            return (new Matrix<T>(0, 0), new Matrix<Complex<T>>(0, 0));
-        }
-
-        return SqrtEigenvalueFactors(new EigenDecomposition<T>(matrix, EigenAlgorithmType.QR));
+        // dominant first; Σ = |λ|.
+        return TakagiFromEigenSolver(matrix, EigenAlgorithmType.QR, "Takagi Lanczos iteration");
     }
 
     /// <summary>
