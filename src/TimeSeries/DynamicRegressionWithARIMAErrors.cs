@@ -414,12 +414,8 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
         Vector<T> diffY = y;
         for (int d = 0; d < order; d++)
         {
-            Vector<T> temp = new Vector<T>(diffY.Length - 1);
-            for (int i = 0; i < temp.Length; i++)
-            {
-                temp[i] = NumOps.Subtract(diffY[i + 1], diffY[i]);
-            }
-            _differenced = new Vector<T>(diffY.Take(order));
+            Vector<T> temp = TimeSeriesEngineOps<T>.Difference(diffY, 1);
+            _differenced = diffY.GetSubVector(0, Math.Min(order, diffY.Length));
             diffY = temp;
         }
 
@@ -449,16 +445,12 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private Vector<T> InverseDifferenceTimeSeries(Vector<T> diffY, Vector<T> original)
     {
+        // Each level prepends its start value and continues with the running sum of the differences.
         Vector<T> y = diffY;
         for (int d = _arimaOptions.DifferenceOrder - 1; d >= 0; d--)
         {
-            Vector<T> temp = new Vector<T>(y.Length + 1);
-            temp[0] = original[d];
-            for (int i = 1; i < temp.Length; i++)
-            {
-                temp[i] = NumOps.Add(temp[i - 1], y[i - 1]);
-            }
-            y = temp;
+            var start = original.GetSubVector(d, 1);
+            y = Vector<T>.Concatenate(start, TimeSeriesEngineOps<T>.Integrate(y, start));
         }
 
         return y;
@@ -486,25 +478,23 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private void FitRegressionModel(Matrix<T> x, Vector<T> y)
     {
-        // Use OLS or other regression method to fit the model
         Matrix<T> xT = x.Transpose();
         Matrix<T> xTx = xT * x;
         Vector<T> xTy = xT * y;
 
         _regressionCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _arimaOptions.DecompositionType);
 
-        // Intercept = mean(y) - sum_i beta_i * mean(x_i), i.e. the mean of the regression residuals,
-        // so the ARIMA error term is zero-mean. Using mean(y) alone double-counts the level that the
-        // regression slope already explains (especially with a through-origin design that has no
-        // constant column), which biases every out-of-sample forecast upward by ~beta . mean(x).
+        // Intercept = mean(y) - Σ β_i · mean(x_i), so the regression passes through the centroid.
         T meanY = NumOps.Divide(Engine.Sum(y), NumOps.FromDouble(y.Length));
-        T betaDotMeanX = NumOps.Zero;
         int coeffCount = Math.Min(_regressionCoefficients.Length, x.Columns);
-        for (int i = 0; i < coeffCount; i++)
+        T betaDotMeanX = NumOps.Zero;
+        if (coeffCount > 0)
         {
-            T colMean = NumOps.Divide(Engine.Sum(x.GetColumn(i)), NumOps.FromDouble(x.Rows));
-            betaDotMeanX = NumOps.Add(betaDotMeanX, NumOps.Multiply(_regressionCoefficients[i], colMean));
+            var columnMeans = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Tensor<T>.FromMatrix(x), new[] { 0 }, keepDims: false), NumOps.FromDouble(x.Rows)).ToVector();
+            betaDotMeanX = TimeSeriesEngineOps<T>.DotPrefix(_regressionCoefficients, columnMeans, coeffCount);
         }
+
         _intercept = NumOps.Subtract(meanY, betaDotMeanX);
     }
 
@@ -530,15 +520,9 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private Vector<T> ExtractResiduals(Matrix<T> x, Vector<T> y)
     {
-        // The ARIMA error term is y minus the FULL regression mean (intercept + beta . x), so the
-        // residuals fed to the ARIMA fit — and reused to seed the forecast — are zero-mean.
+        // residual = y - Xβ - intercept
         Vector<T> predictions = x * _regressionCoefficients;
-        Vector<T> residuals = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            residuals[i] = NumOps.Subtract(NumOps.Subtract(y[i], predictions[i]), _intercept);
-        }
-        return residuals;
+        return Engine.Subtract(Engine.Subtract(y, predictions), Engine.Fill(y.Length, _intercept));
     }
 
     /// <summary>
@@ -566,7 +550,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
         int maxLag = Math.Max(p, q);
 
         // Calculate autocorrelations
-        T[] autocorrelations = CalculateAutocorrelations(residuals, maxLag);
+        Vector<T> autocorrelations = CalculateAutocorrelations(residuals, maxLag);
 
         // Estimate AR coefficients using Yule-Walker equations
         EstimateARCoefficients(autocorrelations, p);
@@ -599,19 +583,11 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// The method also includes error handling for cases where the equations can't be
     /// solved reliably (which can happen with certain data patterns).
     /// </remarks>
-    private void EstimateARCoefficients(T[] autocorrelations, int p)
+    private void EstimateARCoefficients(Vector<T> autocorrelations, int p)
     {
-        Matrix<T> R = new Matrix<T>(p, p);
-        Vector<T> r = new Vector<T>(p);
-
-        for (int i = 0; i < p; i++)
-        {
-            r[i] = autocorrelations[i + 1];
-            for (int j = 0; j < p; j++)
-            {
-                R[i, j] = autocorrelations[Math.Abs(i - j)];
-            }
-        }
+        // Yule-Walker: R φ = r with R[i, j] = ρ(|i - j|) and r[i] = ρ(i + 1)
+        Matrix<T> R = TimeSeriesEngineOps<T>.Toeplitz(autocorrelations, p);
+        Vector<T> r = autocorrelations.GetSubVector(1, p);
 
         try
         {
@@ -619,7 +595,6 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
         }
         catch (Exception ex)
         {
-            // Handle potential numerical instability
             System.Diagnostics.Trace.TraceWarning($"Error in AR coefficient estimation: {ex}");
             _arCoefficients = new Vector<T>(p); // Initialize with zeros
         }
@@ -696,11 +671,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
         int maxIterations = 100;
         T tolerance = NumOps.FromDouble(1e-6);
 
-        // Refine from the Yule-Walker / innovation estimates, but only KEEP a step when it stays
-        // finite and improves the log-likelihood. A poorly-scaled gradient step is rejected and the
-        // best-known coefficients restored, so the optimizer can never blow the coefficients up to
-        // NaN. This matters because the out-of-sample forecast actually uses these coefficients
-        // (in-sample prediction returns the stored fitted values and never exercised them).
+        // Track the best (highest-likelihood) coefficients so a worsening step can be rolled back.
         Vector<T> bestAr = _arCoefficients.Clone();
         Vector<T> bestMa = _maCoefficients.Clone();
         T bestLikelihood = ComputeLogLikelihood(ComputeModelResiduals(residuals));
@@ -718,22 +689,28 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
             EnforceErrorStationarity();
 
             T likelihood = ComputeLogLikelihood(ComputeModelResiduals(residuals));
-
-            // Reject a non-finite or non-improving step: restore the best coefficients and stop.
-            if (!IsFiniteValue(likelihood) || NumOps.LessThan(likelihood, bestLikelihood))
+            if (IsWorseLikelihood(likelihood, bestLikelihood))
             {
                 _arCoefficients = bestAr;
                 _maCoefficients = bestMa;
                 break;
             }
 
-            bool converged = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(likelihood, bestLikelihood)), tolerance);
+            bool converged = HasConverged(likelihood, bestLikelihood, tolerance);
             bestLikelihood = likelihood;
             bestAr = _arCoefficients.Clone();
             bestMa = _maCoefficients.Clone();
             if (converged) break;
         }
     }
+
+    /// <summary>A non-finite likelihood or one below the best so far is a worsening step.</summary>
+    private bool IsWorseLikelihood(T likelihood, T bestLikelihood)
+        => !IsFiniteValue(likelihood) || NumOps.LessThan(likelihood, bestLikelihood);
+
+    /// <summary>Whether the likelihood changed by less than the tolerance.</summary>
+    private bool HasConverged(T likelihood, T bestLikelihood, T tolerance)
+        => NumOps.LessThan(NumOps.Abs(NumOps.Subtract(likelihood, bestLikelihood)), tolerance);
 
     /// <summary>
     /// Clamps the AR and MA error-model coefficients into the stable/invertible region so the error
@@ -752,21 +729,9 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
 
     private void ClampToStableRegion(Vector<T> coefficients)
     {
-        T absSum = NumOps.Zero;
-        for (int i = 0; i < coefficients.Length; i++)
-        {
-            absSum = NumOps.Add(absSum, NumOps.Abs(coefficients[i]));
-        }
-
+        // Scale down in place when Σ|c| exceeds 0.99 (same cap as the other ARIMA-family models).
         T cap = NumOps.FromDouble(0.99);
-        if (NumOps.GreaterThan(absSum, cap))
-        {
-            T scale = NumOps.Divide(cap, absSum);
-            for (int i = 0; i < coefficients.Length; i++)
-            {
-                coefficients[i] = NumOps.Multiply(coefficients[i], scale);
-            }
-        }
+        TimeSeriesEngineOps<T>.ShrinkAbsSum(coefficients, cap, cap);
     }
 
     private static bool IsFiniteValue(T value)
@@ -875,13 +840,32 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private void UpdateARCoefficients(Vector<T> modelResiduals)
     {
-        // Implement a gradient descent step for AR coefficients
-        T learningRate = NumOps.FromDouble(0.01);
-        for (int i = 0; i < _arimaOptions.AROrder; i++)
+        // Gradient ascent step φ_i += lr · ∂ℓ/∂φ_i for every lag (the gradients do not depend on φ).
+        int p = _arimaOptions.AROrder;
+        if (p == 0)
         {
-            T gradient = ComputeARGradient(modelResiduals, i);
-            _arCoefficients[i] = NumOps.Add(_arCoefficients[i], NumOps.Multiply(learningRate, gradient));
+            return;
         }
+
+        T learningRate = NumOps.FromDouble(0.01);
+        var gradients = ARGradients(modelResiduals, p);
+        Engine.Add(_arCoefficients.GetSubVector(0, p), Engine.Multiply(gradients, learningRate))
+            .CopyTo(_arCoefficients.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// ∂ℓ/∂φ_i = -2 / (n - i - 1) · Σ_t r[t] r[t - i - 1] for lags i = 0..p-1 (zero when no pair exists).
+    /// </summary>
+    private Vector<T> ARGradients(Vector<T> modelResiduals, int p)
+    {
+        int n = modelResiduals.Length;
+        var sums = TimeSeriesEngineOps<T>.LagProductSums(modelResiduals, p).GetSubVector(1, p);
+        var counts = Engine.ScalarMinusTensor(NumOps.FromDouble(n - 1), Engine.TensorArange<T>(0, p, 1));
+        var scale = Engine.TensorWhere(
+            Engine.TensorGreaterThan(counts, NumOps.Zero),
+            Engine.TensorDivide(Engine.TensorFullLike(counts, NumOps.FromDouble(-2.0)), counts),
+            Engine.TensorZerosLike(counts));
+        return Engine.Multiply(scale.ToVector(), sums);
     }
 
     /// <summary>
@@ -906,12 +890,14 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private void UpdateMACoefficients(Vector<T> modelResiduals)
     {
-        // Implement a gradient descent step for MA coefficients
+        // Gauss-Seidel gradient ascent: each θ_i step uses the coefficients already updated before it.
         T learningRate = NumOps.FromDouble(0.01);
-        for (int i = 0; i < _arimaOptions.MAOrder; i++)
+        int q = _arimaOptions.MAOrder;
+        for (int i = 0; i < q; i++)
         {
             T gradient = ComputeMAGradient(modelResiduals, i);
-            _maCoefficients[i] = NumOps.Add(_maCoefficients[i], NumOps.Multiply(learningRate, gradient));
+            var step = Engine.Multiply(Engine.Multiply(Vector<T>.CreateStandardBasis(_maCoefficients.Length, i), gradient), learningRate);
+            Engine.Add(_maCoefficients, step).CopyTo(_maCoefficients.AsWritableSpan());
         }
     }
 
@@ -939,17 +925,11 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private T ComputeARGradient(Vector<T> modelResiduals, int lag)
     {
-        T gradient = NumOps.Zero;
+        // -2 / count · Σ_{t > lag} r[t] r[t - lag - 1]
         int count = modelResiduals.Length - (lag + 1);
-        for (int t = lag + 1; t < modelResiduals.Length; t++)
-        {
-            gradient = NumOps.Add(gradient, NumOps.Multiply(modelResiduals[t], modelResiduals[t - lag - 1]));
-        }
-
-        // Normalize by the number of summed terms so the step size is independent of series length.
-        // An unnormalized sum grows with N and, at a fixed learning rate, makes the gradient step
-        // overshoot wildly (coefficients diverge to NaN within a few iterations).
         if (count <= 0) return NumOps.Zero;
+
+        T gradient = Engine.DotProduct(modelResiduals.GetSubVector(lag + 1, count), modelResiduals.GetSubVector(0, count));
         return NumOps.Multiply(NumOps.FromDouble(-2.0 / count), gradient);
     }
 
@@ -976,20 +956,15 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private T ComputeMAGradient(Vector<T> modelResiduals, int lag)
     {
-        T gradient = NumOps.Zero;
+        // -2 / count · Σ_{t > lag} r[t] · Σ_i θ_i r[t - i - 1] (MA terms truncated at the series start)
         int count = modelResiduals.Length - (lag + 1);
-        for (int t = lag + 1; t < modelResiduals.Length; t++)
-        {
-            T prevError = NumOps.Zero;
-            for (int i = 0; i < _arimaOptions.MAOrder && t - i - 1 >= 0; i++)
-            {
-                prevError = NumOps.Add(prevError, NumOps.Multiply(_maCoefficients[i], modelResiduals[t - i - 1]));
-            }
-            gradient = NumOps.Add(gradient, NumOps.Multiply(modelResiduals[t], prevError));
-        }
-
-        // Normalize by the number of summed terms (see ComputeARGradient) to keep the step bounded.
         if (count <= 0) return NumOps.Zero;
+
+        int q = _arimaOptions.MAOrder;
+        var padded = Vector<T>.Concatenate(new Vector<T>(q), modelResiduals);
+        var lags = TimeSeriesEngineOps<T>.LagMatrix(padded, q, q + lag + 1, count);
+        var prevError = Engine.MatrixVectorMultiply(lags, _maCoefficients.GetSubVector(0, q));
+        T gradient = Engine.DotProduct(modelResiduals.GetSubVector(lag + 1, count), prevError);
         return NumOps.Multiply(NumOps.FromDouble(-2.0 / count), gradient);
     }
 
@@ -1017,28 +992,9 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// 
     /// These autocorrelations help determine the appropriate structure for the ARIMA model.
     /// </remarks>
-    private T[] CalculateAutocorrelations(Vector<T> y, int maxLag)
+    private Vector<T> CalculateAutocorrelations(Vector<T> y, int maxLag)
     {
-        T[] autocorrelations = new T[maxLag + 1];
-        T mean = StatisticsHelper<T>.CalculateMean(y);
-        T variance = StatisticsHelper<T>.CalculateVariance(y);
-
-        for (int lag = 0; lag <= maxLag; lag++)
-        {
-            T sum = NumOps.Zero;
-            int n = y.Length - lag;
-
-            for (int t = 0; t < n; t++)
-            {
-                T diff1 = NumOps.Subtract(y[t], mean);
-                T diff2 = NumOps.Subtract(y[t + lag], mean);
-                sum = NumOps.Add(sum, NumOps.Multiply(diff1, diff2));
-            }
-
-            autocorrelations[lag] = NumOps.Divide(sum, NumOps.Multiply(NumOps.FromDouble(n), variance));
-        }
-
-        return autocorrelations;
+        return TimeSeriesEngineOps<T>.Autocorrelations(y, maxLag);
     }
 
     /// <summary>
@@ -1134,22 +1090,8 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private void EnsureARStationarity()
     {
-        // Use the constraint that the roots of the AR polynomial should lie outside the unit circle
-        // A simple approximation: ensure the sum of absolute AR coefficients is less than 1
-        T sum = NumOps.Zero;
-        for (int i = 0; i < _arCoefficients.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Abs(_arCoefficients[i]));
-        }
-
-        if (NumOps.GreaterThan(sum, NumOps.One))
-        {
-            T scaleFactor = NumOps.Divide(NumOps.FromDouble(0.99), sum);
-            for (int i = 0; i < _arCoefficients.Length; i++)
-            {
-                _arCoefficients[i] = NumOps.Multiply(_arCoefficients[i], scaleFactor);
-            }
-        }
+        // When Σ|φ| > 1, scale in place so that Σ|φ| = 0.99
+        TimeSeriesEngineOps<T>.ShrinkAbsSum(_arCoefficients, NumOps.One, NumOps.FromDouble(0.99));
     }
 
     /// <summary>
@@ -1173,21 +1115,8 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private void EnsureMAInvertibility()
     {
-        // Similar to AR stationarity, ensure the sum of absolute MA coefficients is less than 1
-        T sum = NumOps.Zero;
-        for (int i = 0; i < _maCoefficients.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Abs(_maCoefficients[i]));
-        }
-
-        if (NumOps.GreaterThan(sum, NumOps.One))
-        {
-            T scaleFactor = NumOps.Divide(NumOps.FromDouble(0.99), sum);
-            for (int i = 0; i < _maCoefficients.Length; i++)
-            {
-                _maCoefficients[i] = NumOps.Multiply(_maCoefficients[i], scaleFactor);
-            }
-        }
+        // When Σ|θ| > 1, scale in place so that Σ|θ| = 0.99
+        TimeSeriesEngineOps<T>.ShrinkAbsSum(_maCoefficients, NumOps.One, NumOps.FromDouble(0.99));
     }
 
     /// <summary>
@@ -1210,14 +1139,10 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private void NormalizeRegressionCoefficients()
     {
-        // Normalize regression coefficients to have unit norm
         T norm = NumOps.Sqrt(_regressionCoefficients.DotProduct(_regressionCoefficients));
         if (!NumOps.Equals(norm, NumOps.Zero))
         {
-            for (int i = 0; i < _regressionCoefficients.Length; i++)
-            {
-                _regressionCoefficients[i] = NumOps.Divide(_regressionCoefficients[i], norm);
-            }
+            Engine.Divide(_regressionCoefficients, norm).CopyTo(_regressionCoefficients.AsWritableSpan());
         }
     }
 
@@ -1638,9 +1563,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         // Store training series for in-sample predictions
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
 
         // Step 1: Perform differencing if necessary
         Vector<T> diffY = DifferenceTimeSeries(y, _arimaOptions.DifferenceOrder);
@@ -1659,14 +1582,9 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
         UpdateModelParameters();
 
         // Populate ModelParameters for GetParameters()
-        int regLen = _regressionCoefficients.Length;
-        int arLen = _arCoefficients.Length;
-        int maLen = _maCoefficients.Length;
-        ModelParameters = new Vector<T>(1 + regLen + arLen + maLen);
-        ModelParameters[0] = _intercept;
-        for (int i = 0; i < regLen; i++) ModelParameters[1 + i] = _regressionCoefficients[i];
-        for (int i = 0; i < arLen; i++) ModelParameters[1 + regLen + i] = _arCoefficients[i];
-        for (int i = 0; i < maLen; i++) ModelParameters[1 + regLen + arLen + i] = _maCoefficients[i];
+        // [intercept, regression..., AR..., MA...]
+        ModelParameters = Vector<T>.Concatenate(
+            new Vector<T>(new[] { _intercept }), _regressionCoefficients, _arCoefficients, _maCoefficients);
     }
 
     /// <summary>
