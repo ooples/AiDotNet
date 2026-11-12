@@ -15,6 +15,12 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Spectral;
 /// scatter. Unlike Fisher Score which works per feature, Trace Ratio considers
 /// feature interactions through scatter matrices.
 /// </para>
+/// <para>
+/// The subset is found with the iterative algorithm of Nie, Xiang, Jia, Zhang and Yan (2008), "Trace Ratio
+/// Criterion for Feature Selection" (AAAI): with lambda the trace ratio of the current subset, the next subset is
+/// the k features with the largest <c>Sb - lambda Sw</c>, repeated until the subset stops changing. Every change
+/// raises lambda, and the loop ends at the k-subset with the globally largest trace ratio.
+/// </para>
 /// <para><b>For Beginners:</b> This extends Fisher Score to consider how features
 /// work together. Instead of scoring each feature independently, it evaluates
 /// how a set of features collectively separates classes.
@@ -25,6 +31,9 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Spectral;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class TraceRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
+    // Safety cap on the subset updates; each one strictly raises the trace ratio, so the loop ends long before.
+    private const int MaxIterations = 100;
+
     private readonly int _nFeaturesToSelect;
 
     private Vector<T>? _featureScores;
@@ -76,35 +85,49 @@ public class TraceRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var scores = FilterStatisticTensorOps.SeparationAwareRatio(sb, sw, 1e-10);
         _featureScores = scores.ToVector();
 
-        // Greedy selection to maximize the trace ratio sum(Sb) / sum(Sw) of the selected set (first feature on ties)
-        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
-        var taken = new Tensor<T>(new[] { p });
-        var sbSelected = new Tensor<T>(new[] { p });
-        var swSelected = new Tensor<T>(new[] { p });
-        var selected = new List<int>();
-        var bestRatio = new Tensor<T>(new[] { 1 });
-        while (selected.Count < _nFeaturesToSelect && selected.Count < p)
+        // Nie et al. (2008): start from the k best single-feature ratios, then repeat lambda = sum_S Sb / sum_S Sw and
+        // S = the k largest Sb - lambda Sw (ties to the lower index) until S stops changing or lambda stops rising.
+        // A greedy forward search (add the feature that raises the ratio most) misses the optimum, e.g. Sb = [3, 2,
+        // 1, 6], Sw = [7, 6, 5, 1], k = 3: greedy keeps {0, 2, 3} (10 / 13), the optimum is {0, 1, 3} (11 / 14).
+        int k = Math.Min(_nFeaturesToSelect, p);
+        var selected = PreprocessingTensorOps.TopKIndicesSorted(scores, k);
+        T lambda = SubsetRatio(sb, sw, selected);
+        T positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
+        for (int iteration = 0; iteration < MaxIterations && k > 0; iteration++)
         {
-            var ratio = FilterStatisticTensorOps.SeparationAwareRatio(
-                engine.TensorAdd(sbSelected, sb), engine.TensorAdd(swSelected, sw), 1e-10);
-            var candidates = FeatureSelectionTensorOps.KeepOrFill(ratio, PreprocessingTensorOps.OneMinus(taken), negativeInfinity);
-            int bestFeature = FilterStatisticTensorOps.FirstArgMax(candidates);
-            var chosen = new[] { bestFeature };
-            selected.Add(bestFeature);
-            bestRatio = FeatureSelectionTensorOps.Entries(candidates, chosen);
-            taken = engine.TensorAdd(taken, engine.Reshape(engine.TensorOneHot<T>(new Tensor<int>(chosen, new[] { 1 }), p), new[] { p }));
-            sbSelected = engine.TensorBroadcastTo(engine.TensorAdd(
-                FeatureSelectionTensorOps.Entries(sbSelected, chosen), FeatureSelectionTensorOps.Entries(sb, chosen)), new[] { p });
-            swSelected = engine.TensorBroadcastTo(engine.TensorAdd(
-                FeatureSelectionTensorOps.Entries(swSelected, chosen), FeatureSelectionTensorOps.Entries(sw, chosen)), new[] { p });
+            // an infinite ratio (no within-class scatter, some between-class scatter) cannot be beaten; NaN stops too
+            if (!NumOps.LessThan(lambda, positiveInfinity))
+                break;
+
+            var next = PreprocessingTensorOps.TopKIndicesSorted(
+                engine.TensorSubtract(sb, engine.TensorMultiplyScalar(sw, lambda)), k);
+            if (next.SequenceEqual(selected))
+                break;
+
+            T nextLambda = SubsetRatio(sb, sw, next);
+            if (!NumOps.GreaterThan(nextLambda, lambda))
+                break;
+
+            selected = next;
+            lambda = nextLambda;
         }
 
-        if (selected.Count > 0)
-            _traceRatioValue = engine.TensorSum(bestRatio);
+        if (k > 0)
+            _traceRatioValue = lambda;
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _selectedIndices = selected;
 
         IsFitted = true;
+    }
+
+    // The trace ratio sum(Sb) / sum(Sw) of a feature subset: +infinity when the subset has between-class scatter but
+    // no within-class scatter, 0 when it has neither.
+    private static T SubsetRatio(Tensor<T> sb, Tensor<T> sw, int[] subset)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numerator = engine.Reshape(engine.ReduceSum(FeatureSelectionTensorOps.Entries(sb, subset), new[] { 0 }, false), new[] { 1 });
+        var denominator = engine.Reshape(engine.ReduceSum(FeatureSelectionTensorOps.Entries(sw, subset), new[] { 0 }, false), new[] { 1 });
+        return FilterStatisticTensorOps.SeparationAwareRatio(numerator, denominator, 1e-10).ToArray()[0];
     }
 
     /// <inheritdoc />
