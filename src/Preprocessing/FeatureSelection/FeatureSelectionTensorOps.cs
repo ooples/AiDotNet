@@ -1158,6 +1158,74 @@ internal static class FeatureSelectionTensorOps
             engine.TensorMultiply(probabilities, engine.TensorLog(probabilities)), new Tensor<T>(probabilities.Shape.ToArray()));
         return ops.Negate(engine.TensorSum(terms));
     }
+
+    /// <summary>
+    /// Expected mutual information (nats) under the permutation model (Vinh, Epps and Bailey 2010; sklearn
+    /// <c>expected_mutual_information</c>) of every feature's bin counts (<paramref name="binCounts"/> [p, bins])
+    /// against the class counts (<paramref name="classCounts"/> [K]) over <paramref name="total"/> samples:
+    /// <c>sum_{i,j} sum_{n_ij} (n_ij / N) ln(N n_ij / (a_i b_j)) P(n_ij)</c> with the hypergeometric
+    /// <c>P(n_ij) = C(a_i, n_ij) C(N - a_i, b_j - n_ij) / C(N, b_j)</c> evaluated through lgamma. Returns [p].
+    /// </summary>
+    public static Tensor<T> ExpectedMutualInformation<T>(Tensor<T> binCounts, Tensor<T> classCounts, int total)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = binCounts.Shape[0];
+        int bins = binCounts.Shape[1];
+        int k = classCounts.Length;
+        if (p == 0 || total == 0)
+            return new Tensor<T>(new[] { p });
+
+        var shape = new[] { bins, k, total };
+        T count = ops.FromDouble(total);
+        T one = ops.One;
+        T negatedCount = ops.Negate(count);
+        var b = engine.TensorBroadcastTo(engine.Reshape(classCounts, new[] { 1, k, 1 }), shape);
+        var nij = engine.TensorBroadcastTo(engine.Reshape(
+            engine.TensorArange<T>(1, total + 1, 1), new[] { 1, 1, total }), shape);
+        var zeros = new Tensor<T>(shape);
+
+        // ln C(N, b_j) and the n_ij-only terms are shared by every feature
+        var lgammaN = engine.TensorLgamma(PreprocessingTensorOps.Filled(shape, ops.FromDouble(total + 1)));
+        var logChooseNb = engine.TensorSubtract(engine.TensorSubtract(lgammaN,
+            engine.TensorLgamma(engine.TensorAddScalar(b, one))),
+            engine.TensorLgamma(engine.TensorAddScalar(engine.TensorNegate(engine.TensorAddScalar(b, negatedCount)), one)));
+        var lgammaNij = engine.TensorLgamma(engine.TensorAddScalar(nij, one));
+        var lgammaBMinusNij = engine.TensorLgamma(engine.TensorAddScalar(engine.TensorSubtract(b, nij), one));
+
+        var results = new Tensor<T>[p];
+        for (int f = 0; f < p; f++)
+        {
+            var a = engine.TensorBroadcastTo(engine.Reshape(
+                engine.TensorSlice(binCounts, new[] { f, 0 }, new[] { 1, bins }), new[] { bins, 1, 1 }), shape);
+
+            // max(1, a + b - N) <= n_ij <= min(a, b)
+            var valid = engine.TensorMultiply(engine.TensorMultiply(
+                PreprocessingTensorOps.Not(engine.TensorLessThan(nij, engine.TensorAddScalar(engine.TensorAdd(a, b), negatedCount))),
+                PreprocessingTensorOps.Not(engine.TensorGreaterThan(nij, a))),
+                PreprocessingTensorOps.Not(engine.TensorGreaterThan(nij, b)));
+
+            var safeA = engine.TensorWhere(valid, a, PreprocessingTensorOps.Filled(shape, one));
+            var safeB = engine.TensorWhere(valid, b, PreprocessingTensorOps.Filled(shape, one));
+            var term = engine.TensorMultiply(engine.TensorDivideScalar(nij, count), engine.TensorLog(engine.TensorDivide(
+                engine.TensorMultiplyScalar(nij, count), engine.TensorMultiply(safeA, safeB))));
+
+            // ln P = ln C(a, n_ij) + ln C(N - a, b - n_ij) - ln C(N, b)
+            var nMinusA = engine.TensorAddScalar(engine.TensorNegate(engine.TensorAddScalar(safeA, negatedCount)), one);
+            var logProbability = engine.TensorSubtract(engine.TensorAdd(
+                engine.TensorSubtract(engine.TensorSubtract(engine.TensorLgamma(engine.TensorAddScalar(safeA, one)), lgammaNij),
+                    engine.TensorLgamma(engine.TensorAddScalar(engine.TensorSubtract(safeA, nij), one))),
+                engine.TensorSubtract(engine.TensorSubtract(engine.TensorLgamma(nMinusA), lgammaBMinusNij),
+                    engine.TensorLgamma(engine.TensorAdd(engine.TensorSubtract(nMinusA, b), nij)))),
+                logChooseNb);
+
+            var contributions = engine.TensorWhere(valid,
+                engine.TensorMultiply(term, engine.TensorExp(engine.TensorWhere(valid, logProbability, zeros))), zeros);
+            results[f] = engine.ReduceSum(engine.Reshape(contributions, new[] { bins * k * total }), new[] { 0 }, true);
+        }
+
+        return engine.TensorConcatenate(results, 0);
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>
