@@ -24,13 +24,13 @@ public class SilhouetteBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _silhouetteScores;
+    private Vector<T>? _silhouetteScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? SilhouetteScores => _silhouetteScores;
+    public Vector<T>? SilhouetteScores => _silhouetteScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,71 +64,58 @@ public class SilhouetteBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
+        // Class membership, class sizes and each sample's own-class size
+        var Y = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+        var counts = engine.ReduceSum(Y, new[] { 0 }, false);
+        var ownCount = engine.Reshape(engine.TensorMatMul(Y, engine.Reshape(counts, new[] { k, 1 })), new[] { n });
+        var inMultiMemberClass = engine.TensorGreaterThan(ownCount, NumOps.One);
+        var ownDenominator = engine.TensorMax(engine.TensorSubtractScalar(ownCount, NumOps.One), NumOps.One);
+        var classSizes = engine.TensorBroadcastTo(engine.Reshape(counts, new[] { 1, k }), new[] { n, k });
+        T maxValue = NumOps.MaxValue;
+        T zero = NumOps.Zero;
+        var blocked = PreprocessingTensorOps.Filled(new[] { n, k }, maxValue);
+        var zeros = new Tensor<T>(new[] { n });
+        var pairShape = new[] { n, n };
 
-        _silhouetteScores = new double[p];
-
+        var perFeature = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            double totalSilhouette = 0;
+            // Pairwise 1-D distances and their per-class sums
+            var column = PreprocessingTensorOps.ColumnVector(X, j);
+            var distances = engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.Reshape(column, new[] { n, 1 }), pairShape),
+                engine.TensorBroadcastTo(engine.Reshape(column, new[] { 1, n }), pairShape)));
+            var classSums = engine.TensorMatMul(distances, Y);
 
-            for (int i = 0; i < n; i++)
-            {
-                int ownClass = y[i];
-                var ownCluster = classIndices[ownClass];
+            // a(i) - average distance to own cluster (self excluded)
+            var a = engine.TensorWhere(inMultiMemberClass,
+                engine.TensorDivide(engine.ReduceSum(engine.TensorMultiply(classSums, Y), new[] { 1 }, false), ownDenominator),
+                zeros);
 
-                // Compute a(i) - average distance to own cluster
-                double a = 0;
-                if (ownCluster.Count > 1)
-                {
-                    foreach (int k in ownCluster)
-                    {
-                        if (k != i)
-                            a += Math.Abs(X[i, j] - X[k, j]);
-                    }
-                    a /= (ownCluster.Count - 1);
-                }
+            // b(i) - min average distance to other clusters (0 when there is no other cluster)
+            var otherAverages = engine.TensorWhere(Y, blocked, engine.TensorDivide(classSums, classSizes));
+            var b = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(otherAverages), new[] { 1 }, false));
+            b = engine.TensorWhere(engine.TensorEquals(b, maxValue), zeros, b);
 
-                // Compute b(i) - min average distance to other clusters
-                double b = double.MaxValue;
-                foreach (var c in classes)
-                {
-                    if (c == ownClass) continue;
-                    var otherCluster = classIndices[c];
-                    if (otherCluster.Count == 0) continue;
+            // s(i) = (b - a) / max(a, b); 0 for a sample alone in its cluster (Rousseeuw 1987)
+            var largest = engine.TensorMax(a, b);
+            var s = engine.TensorWhere(engine.TensorGreaterThan(largest, zero),
+                engine.TensorDivide(engine.TensorSubtract(b, a), largest), zeros);
+            s = engine.TensorWhere(inMultiMemberClass, s, zeros);
 
-                    double avgDist = otherCluster.Average(k => Math.Abs(X[i, j] - X[k, j]));
-                    b = Math.Min(b, avgDist);
-                }
-
-                if (b == double.MaxValue) b = 0;
-
-                double s = Math.Max(a, b) > 0 ? (b - a) / Math.Max(a, b) : 0;
-                totalSilhouette += s;
-            }
-
-            _silhouetteScores[j] = totalSilhouette / n;
+            perFeature[j] = engine.ReduceMean(s, new[] { 0 }, true);
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _silhouetteScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        var scores = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.Reshape(engine.TensorConcatenate(perFeature, 0), new[] { p });
+        _silhouetteScores = scores.ToVector();
 
+        int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
         IsFitted = true;
     }
 
@@ -145,15 +132,7 @@ public class SilhouetteBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("SilhouetteBasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
