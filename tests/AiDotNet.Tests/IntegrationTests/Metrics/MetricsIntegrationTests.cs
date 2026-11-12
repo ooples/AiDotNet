@@ -827,11 +827,13 @@ public class MetricsIntegrationTests
     {
         var pesq = new PerceptualSpeechQuality<double>(sampleRate: 16000);
 
-        var data = new double[1600];
+        // 1 s at 16 kHz: P.862 rejects signals under 0.25 s, and the STOI term of this approximation
+        // needs 384 ms segments (pystoi returns 1e-5 for the 100 ms signal used before).
+        var data = new double[16000];
         for (int i = 0; i < data.Length; i++) data[i] = Math.Sin(i * 0.1);
 
-        var degraded = new Tensor<double>(new[] { 1600 }, new Vector<double>(data));
-        var reference = new Tensor<double>(new[] { 1600 }, new Vector<double>(data));
+        var degraded = new Tensor<double>(new[] { 16000 }, new Vector<double>(data));
+        var reference = new Tensor<double>(new[] { 16000 }, new Vector<double>(data));
 
         var result = pesq.Compute(degraded, reference);
 
