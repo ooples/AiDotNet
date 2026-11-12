@@ -193,8 +193,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         _episodeConditioned = false;
         _episodeStep = 0;
         _stateMean = new Vector<T>(options.StateSize);
-        _stateStd = new Vector<T>(options.StateSize);
-        for (int i = 0; i < options.StateSize; i++) _stateStd[i] = NumOps.One;
+        _stateStd = Vector<T>.CreateDefault(options.StateSize, NumOps.One);
 
         _transformerNetwork = CreateTransformerNetwork();
 
@@ -589,16 +588,12 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         var tokens = new T[sequenceTokens * TokenFeatureCount];
         WriteTimestepTokens(tokens, 0, InitialReturnToGo(), state, null, 0);
 
-        var label = new Vector<T>(actionSize);
-        if (_options.IsContinuous)
-        {
-            int copy = Math.Min(target.Length, actionSize);
-            for (int i = 0; i < copy; i++) label[i] = target[i];
-        }
-        else
-        {
-            label[Math.Min(ArgMax(target), actionSize - 1)] = NumOps.One;
-        }
+        // Continuous: the target's first actionSize entries (zero-padded); discrete: one-hot of its arg max.
+        var label = _options.IsContinuous
+            ? (target.Length >= actionSize
+                ? target.GetSubVector(0, actionSize)
+                : RLTensorOps.Concat(target, new Vector<T>(actionSize - target.Length)))
+            : RLTensorOps.OneHot<T>(actionSize, Math.Min(ArgMax(target), actionSize - 1));
 
         var targets = new T[sequenceTokens * actionSize];
         WriteActionLabel(targets, StateToken, label);
@@ -635,21 +630,19 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             NumOps.Divide(returnToGo, NumOps.FromDouble(_options.ReturnScale));
 
         int stateBase = (firstRow + StateToken) * featureCount + StateFeatureOffset;
+        var stateFeatures = RLTensorOps.Head(state, _options.StateSize);
         if (_options.NormalizeStates)
         {
             // The reference implementation's (s - state_mean) / state_std, at training and at acting time alike.
-            for (int i = 0; i < _options.StateSize; i++)
-                tokens[stateBase + i] = NumOps.Divide(NumOps.Subtract(state[i], _stateMean[i]), _stateStd[i]);
+            var engine = AiDotNetEngine.Current;
+            stateFeatures = engine.Divide(engine.Subtract(stateFeatures, _stateMean), _stateStd);
         }
-        else
-        {
-            for (int i = 0; i < _options.StateSize; i++) tokens[stateBase + i] = state[i];
-        }
+        stateFeatures.AsSpan().CopyTo(tokens.AsSpan(stateBase, _options.StateSize));
 
         if (action is not null)
         {
             int actionBase = (firstRow + ActionToken) * featureCount + ActionFeatureOffset;
-            for (int i = 0; i < _options.ActionSize; i++) tokens[actionBase + i] = action[i];
+            RLTensorOps.Head(action, _options.ActionSize).AsSpan().CopyTo(tokens.AsSpan(actionBase, _options.ActionSize));
         }
     }
 
@@ -660,7 +653,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         int rowBase = row * actionSize;
         if (_options.IsContinuous)
         {
-            for (int i = 0; i < actionSize; i++) targets[rowBase + i] = action[i];
+            RLTensorOps.Head(action, actionSize).AsSpan().CopyTo(targets.AsSpan(rowBase, actionSize));
         }
         else
         {
@@ -676,9 +669,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
         int actionSize = _options.ActionSize;
         int row = stepSlot * TokensPerStep + StateToken;
-        var result = new Vector<T>(actionSize);
-        for (int i = 0; i < actionSize; i++) result[i] = output[row * actionSize + i];
-        return result;
+        return output.GetSubVector(row * actionSize, actionSize);
     }
 
     /// <summary>
@@ -706,15 +697,10 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         var output = _transformerNetwork.Predict(input).ToVector();
 
         int actionSize = _options.ActionSize;
-        var results = new Vector<T>[length];
-        for (int t = 0; t < length; t++)
-        {
-            int row = t * TokensPerStep + StateToken;
-            results[t] = new Vector<T>(actionSize);
-            for (int i = 0; i < actionSize; i++) results[t][i] = output[row * actionSize + i];
-        }
-
-        return results;
+        // Each timestep's action prediction is read off its state token's output row.
+        return Enumerable.Range(0, length)
+            .Select(t => output.GetSubVector((t * TokensPerStep + StateToken) * actionSize, actionSize))
+            .ToArray();
     }
 
     /// <summary>Turns the head output into an action: the tanh output itself, or a one-hot of the arg-max or a softmax draw.</summary>
@@ -730,14 +716,15 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
     private int SampleSoftmax(Vector<T> logits)
     {
+        var values = logits.Length == 0 ? System.Array.Empty<double>() : logits.AsTensor().Cast<double>().ToVector().ToArray();
         double max = double.NegativeInfinity;
-        for (int i = 0; i < logits.Length; i++) max = Math.Max(max, NumOps.ToDouble(logits[i]));
+        for (int i = 0; i < values.Length; i++) max = Math.Max(max, values[i]);
 
         var weights = new double[logits.Length];
         double sum = 0.0;
         for (int i = 0; i < logits.Length; i++)
         {
-            weights[i] = Math.Exp(NumOps.ToDouble(logits[i]) - max);
+            weights[i] = Math.Exp(values[i] - max);
             sum += weights[i];
         }
 
@@ -777,13 +764,11 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         if (count == 0) return;
 
         // R̂_t = r_t + R̂_{t+1}, undiscounted (Sec. 3).
-        var returnsToGo = new T[count];
-        T running = NumOps.Zero;
-        for (int t = count - 1; t >= 0; t--)
-        {
-            running = NumOps.Add(steps[t].Reward, running);
-            returnsToGo[t] = running;
-        }
+        // A suffix sum: reverse, running sum, reverse back.
+        var engine = AiDotNetEngine.Current;
+        var rewards = Vector<T>.FromEnumerable(steps.Select(step => step.Reward).ToList()).AsTensor();
+        var returnsToGo = engine.TensorFlip(engine.TensorCumSum(engine.TensorFlip(rewards, new[] { 0 }), 0), new[] { 0 })
+            .ToVector().ToArray();
 
         if (!_hasEpisodeReturn || NumOps.GreaterThan(returnsToGo[0], _bestEpisodeReturn))
         {
@@ -831,25 +816,13 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
         int size = _options.StateSize;
         T count = NumOps.FromDouble(_storedTransitions);
-        var mean = new Vector<T>(size);
-        foreach (var trajectory in _trajectories)
-            foreach (var state in trajectory.States)
-                for (int i = 0; i < size; i++) mean[i] = NumOps.Add(mean[i], state[i]);
-        for (int i = 0; i < size; i++) mean[i] = NumOps.Divide(mean[i], count);
-
-        var variance = new Vector<T>(size);
-        foreach (var trajectory in _trajectories)
-            foreach (var state in trajectory.States)
-                for (int i = 0; i < size; i++)
-                {
-                    T deviation = NumOps.Subtract(state[i], mean[i]);
-                    variance[i] = NumOps.Add(variance[i], NumOps.Multiply(deviation, deviation));
-                }
-
-        var std = new Vector<T>(size);
-        T epsilon = NumOps.FromDouble(1e-6);
-        for (int i = 0; i < size; i++)
-            std[i] = NumOps.Add(NumOps.Sqrt(NumOps.Divide(variance[i], count)), epsilon);
+        // Per-feature mean and population std (+1e-6) over every stored state.
+        var engine = AiDotNetEngine.Current;
+        var allStates = RLTensorOps.Batch(_trajectories.SelectMany(trajectory => trajectory.States), size);
+        var mean = engine.TensorDivideScalar(engine.ReduceSum(allStates, new[] { 0 }, keepDims: false), count).ToVector();
+        var deviations = engine.TensorSubtract(allStates, engine.TensorTile(engine.Reshape(mean.AsTensor(), new[] { 1, size }), new[] { allStates.Shape[0], 1 }));
+        var variance = engine.ReduceSum(engine.TensorMultiply(deviations, deviations), new[] { 0 }, keepDims: false);
+        var std = engine.TensorAddScalar(engine.TensorSqrt(engine.TensorDivideScalar(variance, count)), NumOps.FromDouble(1e-6)).ToVector();
 
         _stateMean = mean;
         _stateStd = std;
@@ -885,17 +858,16 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
     private static Vector<T> CopyVector(Vector<T> source)
     {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
-        return copy;
+        return source.Clone();
     }
 
     private bool VectorsEqual(Vector<T> left, Vector<T> right)
     {
         if (left.Length != right.Length) return false;
-        for (int i = 0; i < left.Length; i++)
-            if (!NumOps.Equals(left[i], right[i])) return false;
-        return true;
+        if (left.Length == 0) return true;
+        // Every element pair compares equal (a NaN never does).
+        var equal = AiDotNetEngine.Current.TensorEquals(left.AsTensor(), right.AsTensor());
+        return NumOps.Equals(AiDotNetEngine.Current.TensorSum(equal), NumOps.FromDouble(left.Length));
     }
 
     /// <inheritdoc />
