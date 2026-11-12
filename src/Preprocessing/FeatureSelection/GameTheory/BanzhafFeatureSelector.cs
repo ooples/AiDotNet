@@ -126,7 +126,7 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (!NumOps.GreaterThan(syy, tolerance))
             return FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
         var correlation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-            sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 0, NumOps.Zero));
+            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 0, NumOps.Zero));
         return FeatureSelectionTensorOps.KeepOrFill(correlation, Engine.TensorGreaterThan(sxx, tolerance), NumOps.Zero);
     }
 

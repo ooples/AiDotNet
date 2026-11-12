@@ -89,7 +89,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
             Engine.TensorSubtractScalar(new Tensor<T>(tieSums, new[] { p }), diagonal), half);
         var numerator = Engine.TensorMultiplyScalar(new Tensor<T>(signSums, new[] { p }), half);
         var untiedX = Engine.TensorNegate(Engine.TensorSubtractScalar(xTies, pairs));
-        var denominator = Engine.TensorSqrt(Engine.TensorMultiplyScalar(untiedX, NumOps.Subtract(pairs, yTies)));
+        var denominator = Engine.TensorMultiplyScalar(Engine.TensorSqrt(untiedX), NumOps.Sqrt(NumOps.Subtract(pairs, yTies)));
         var correlations = FilterStatisticTensorOps.GuardedDivide(numerator, denominator, 1e-10, NumOps.Zero);
         _correlations = correlations.ToVector();
         _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(

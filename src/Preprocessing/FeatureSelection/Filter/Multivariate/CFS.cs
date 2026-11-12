@@ -69,7 +69,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, FilterStatisticTensorOps.AsTensor(target));
         var norms = Engine.TensorSqrt(sxx);
         var classCorrelation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-            sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 1e-10, NumOps.Zero));
+            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 1e-10, NumOps.Zero));
         var centered = FilterStatisticTensorOps.CenterColumns(x);
         var interCorrelation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
             Engine.TensorMatMul(Engine.TensorTranspose(centered), centered), Engine.TensorOuter(norms, norms),

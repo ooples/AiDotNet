@@ -168,4 +168,26 @@ public class FeatureSelectionTensorOpsReviewTests
         Assert.Equal(wd[0], (double)wf[0], 3);
         Assert.Equal(pd[0], (double)pf[0], 5);
     }
+
+    // r = 1 for a feature equal to the target, 0 and 4 alternating over 300 rows: sxx = syy = 1200, and the
+    // product sxx * syy = 1.44e6 overflowed Half, which made sqrt(sxx syy) infinite and r 0.
+    [Fact(Timeout = 60000)]
+    public async Task PearsonCorrelation_Half_DoesNotOverflowTheNormaliser()
+    {
+        await Task.CompletedTask;
+        const int n = 300;
+        var data = new Half[n, 1];
+        var target = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = (Half)(4 * (i % 2));
+            target[i] = (Half)(4 * (i % 2));
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.PearsonCorrelation<Half>(nFeaturesToSelect: 1);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        Assert.NotNull(selector.Correlations);
+        Assert.Equal(1.0, (double)selector.Correlations[0], 2);
+    }
 }

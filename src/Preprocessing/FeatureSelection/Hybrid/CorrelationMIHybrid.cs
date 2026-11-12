@@ -86,7 +86,7 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         T tolerance = NumOps.FromDouble(1e-10);
         var correlation = NumOps.GreaterThan(syy, tolerance)
             ? Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-                sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 0, NumOps.Zero))
+                sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 0, NumOps.Zero))
             : FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
         correlation = FeatureSelectionTensorOps.KeepOrFill(correlation, Engine.TensorGreaterThan(sxx, tolerance), NumOps.Zero);
 

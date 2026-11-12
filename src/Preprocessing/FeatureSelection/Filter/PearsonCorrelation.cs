@@ -71,7 +71,7 @@ public class PearsonCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var y = FilterStatisticTensorOps.AsTensor(target);
         var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
         var correlations = FilterStatisticTensorOps.GuardedDivide(
-            sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 1e-10, NumOps.Zero);
+            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 1e-10, NumOps.Zero);
         _correlations = correlations.ToVector();
         _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
             Engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), Math.Min(_nFeaturesToSelect, p));

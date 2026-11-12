@@ -975,7 +975,7 @@ internal static class FeatureSelectionTensorOps
         if (!ops.GreaterThan(syy, tolerance))
             return FilterStatisticTensorOps.FilledLike(sxx, ops.Zero);
         var correlation = engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-            sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, syy)), 0, ops.Zero));
+            sxy, engine.TensorMultiplyScalar(engine.TensorSqrt(sxx), ops.Sqrt(syy)), 0, ops.Zero));
         return KeepOrFill(correlation, engine.TensorGreaterThan(sxx, tolerance), ops.Zero);
     }
 
