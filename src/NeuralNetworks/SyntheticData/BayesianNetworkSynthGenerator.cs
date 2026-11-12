@@ -66,14 +66,8 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     // Domain size of every attribute after discretization.
     private int[] _cardinality = Array.Empty<int>();
 
-    private bool[] _isCategorical = Array.Empty<bool>();
-
-    // Equal-width binning of the numeric columns: lower edge and bin width per column, shape [d].
-    private Tensor<T> _binLower = new Tensor<T>(new[] { 0 });
-    private Tensor<T> _binWidth = new Tensor<T>(new[] { 0 });
-
-    // Sorted category values of each categorical column (empty for numeric columns).
-    private Tensor<T>[] _categoryValues = Array.Empty<Tensor<T>>();
+    // Column domains (equal-width bins / category values) and the encoder/decoder for them.
+    private DomainDiscretizer<T>? _discretizer;
 
     // Conditional distribution of every attribute: [|dom(Pi)|, |dom(X)|], rows sum to one.
     private Tensor<T>[] _conditionals = Array.Empty<Tensor<T>>();
@@ -107,7 +101,10 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
         _numFeatures = data.Columns;
         int n = data.Rows;
 
-        var codes = DiscretizeData(data, columns);
+        var discretizer = DomainDiscretizer<T>.Fit(data, columns, _options.NumBins,
+            _options.DomainLowerBounds, _options.DomainUpperBounds, out var codes);
+        _discretizer = discretizer;
+        _cardinality = discretizer.Cardinality;
 
         if (_options.EnableDifferentialPrivacy)
         {
@@ -131,8 +128,7 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     protected override Matrix<T> GenerateInternal(int numSamples, Vector<T>? conditionColumn, Vector<T>? conditionValue)
     {
         var engine = AiDotNetEngine.Current;
-        int d = _numFeatures;
-        var codes = new Tensor<int>[d];
+        var codes = new Tensor<int>[_numFeatures];
 
         // Ancestral sampling, one attribute at a time for the whole batch: look up each row's
         // conditional distribution from its sampled parents, then draw one category per row.
@@ -144,103 +140,12 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
             codes[j] = engine.TensorArgMax(oneHot, 1).Reshape(new[] { numSamples });
         }
 
-        // Numeric columns: a uniform position inside the sampled bin.
-        var shape = new[] { numSamples, d };
-        var position = engine.TensorAdd(
-            engine.TensorStack(codes, 1).Cast<T>(),
-            engine.TensorRandomUniformRange(shape, NumOps.Zero, NumOps.One, Random.Next()));
-        var numeric = engine.TensorAdd(
-            engine.TensorMultiply(position, Broadcast(_binWidth, shape)),
-            Broadcast(_binLower, shape));
-
-        if (!_isCategorical.Any(c => c))
+        if (_discretizer is null)
         {
-            return numeric.ToMatrix();
+            throw new InvalidOperationException("Generator is not fitted.");
         }
 
-        // Categorical columns: the sampled category's own value.
-        var transposed = engine.TensorTranspose(numeric).Contiguous();
-        var columnsOut = new Tensor<T>[d];
-        for (int j = 0; j < d; j++)
-        {
-            columnsOut[j] = _isCategorical[j]
-                ? engine.TensorIndexSelect(_categoryValues[j], codes[j], 0)
-                : transposed.GetSlice(j);
-        }
-
-        return engine.TensorStack(columnsOut, 1).ToMatrix();
-    }
-
-    /// <summary>
-    /// Maps every value to its attribute domain: equal-width bins for numeric columns, the category
-    /// index for categorical columns.
-    /// </summary>
-    /// <remarks>
-    /// PrivBayes assumes each attribute's domain is public. Supply
-    /// <see cref="BayesianNetworkSynthOptions{T}.DomainLowerBounds"/> and
-    /// <see cref="BayesianNetworkSynthOptions{T}.DomainUpperBounds"/> so the bin edges do not depend on
-    /// the private data; values outside the bounds fall into the end bins. Without bounds the observed
-    /// minimum and maximum are used, and those two numbers per column are then released without noise.
-    /// </remarks>
-    private Tensor<int>[] DiscretizeData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
-    {
-        var engine = AiDotNetEngine.Current;
-        int n = data.Rows;
-        int d = _numFeatures;
-        int numBins = Math.Max(1, _options.NumBins);
-
-        var x = Tensor<T>.FromMatrix(data);
-        _binLower = ResolveBound(_options.DomainLowerBounds, nameof(_options.DomainLowerBounds), d,
-            () => engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(x), new[] { 0 }, false)));
-        var upper = ResolveBound(_options.DomainUpperBounds, nameof(_options.DomainUpperBounds), d,
-            () => engine.ReduceMax(x, new[] { 0 }, false));
-
-        // Width = (hi - lo) / bins, with master's 1e-10 floor replaced by 1 for a constant column.
-        var width = engine.TensorDivideScalar(engine.TensorSubtract(upper, _binLower), NumOps.FromDouble(numBins));
-        var ones = Filled(new[] { d }, NumOps.One);
-        _binWidth = engine.TensorWhere(engine.TensorGreaterThan(width, NumOps.FromDouble(1e-10)), width, ones);
-
-        var shape = new[] { n, d };
-        var scaled = engine.TensorDivide(engine.TensorSubtract(x, Broadcast(_binLower, shape)), Broadcast(_binWidth, shape));
-        var bins = engine.TensorClamp(engine.TensorFloor(scaled), NumOps.Zero, NumOps.FromDouble(numBins - 1));
-        var binsByColumn = engine.TensorTranspose(bins).Contiguous().Cast<int>();
-
-        var codes = new Tensor<int>[d];
-        _cardinality = new int[d];
-        _isCategorical = new bool[d];
-        _categoryValues = new Tensor<T>[d];
-        for (int j = 0; j < d; j++)
-        {
-            if (columns[j].IsCategorical)
-            {
-                var column = Tensor<T>.FromVector(data.GetColumn(j));
-                var values = engine.TensorUnique(column, true);
-                _isCategorical[j] = true;
-                _categoryValues[j] = values;
-                _cardinality[j] = values.Length;
-                codes[j] = engine.TensorSearchSorted(values, column, false);
-            }
-            else
-            {
-                _categoryValues[j] = new Tensor<T>(new[] { 0 });
-                _cardinality[j] = numBins;
-                codes[j] = binsByColumn.GetSlice(j);
-            }
-        }
-
-        return codes;
-    }
-
-    private static Tensor<T> ResolveBound(Vector<T>? bound, string name, int d, Func<Tensor<T>> fromData)
-    {
-        if (bound is null) return fromData();
-        if (bound.Length != d)
-        {
-            throw new ArgumentException(
-                $"{name} has {bound.Length} entries but the data has {d} columns.", name);
-        }
-
-        return Tensor<T>.FromVector(bound);
+        return _discretizer.Decode(codes, numSamples, Random);
     }
 
     /// <summary>
@@ -655,13 +560,5 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
         return conditionals;
     }
 
-    private static Tensor<T> Broadcast(Tensor<T> row, int[] shape)
-        => AiDotNetEngine.Current.TensorBroadcastTo(row.Reshape(new[] { 1, row.Length }), shape).Contiguous();
-
-    private static Tensor<T> Filled(int[] shape, T value)
-    {
-        var tensor = new Tensor<T>(shape);
-        AiDotNetEngine.Current.TensorFill(tensor, value);
-        return tensor;
-    }
+    private static Tensor<T> Filled(int[] shape, T value) => DomainDiscretizer<T>.Filled(shape, value);
 }
