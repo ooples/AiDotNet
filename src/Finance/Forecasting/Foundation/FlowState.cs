@@ -315,15 +315,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
-        T mse = NumOps.Zero, mae = NumOps.Zero;
-        int count = 0;
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
         if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); }
         return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) };
     }

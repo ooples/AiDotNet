@@ -751,17 +751,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
 
         // Calculate MSE and MAE for median prediction
         var medianPred = ExtractQuantilePrediction(predictions, 0.5);
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < medianPred.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(medianPred[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(medianPred, actuals);
 
         if (count > 0)
         {
