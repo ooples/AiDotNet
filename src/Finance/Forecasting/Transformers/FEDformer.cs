@@ -641,21 +641,15 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         var predictions = Forecast(inputs);
         var metrics = new Dictionary<string, T>();
 
-        T maeSum = NumOps.Zero;
         int count = predictions.Length;
-        for (int i = 0; i < count; i++)
+        if (targets.Length < count)
         {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
-            maeSum = NumOps.Add(maeSum, NumOps.Abs(diff));
+            // Every prediction is paired with a target; a short target buffer is an index error.
+            throw new IndexOutOfRangeException();
         }
-        metrics["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count));
 
-        T mseSum = NumOps.Zero;
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
-            mseSum = NumOps.Add(mseSum, NumOps.Multiply(diff, diff));
-        }
+        var (mseSum, maeSum, _) = SumSquaredAndAbsoluteError(predictions, targets);
+        metrics["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count));
         metrics["MSE"] = NumOps.Divide(mseSum, NumOps.FromDouble(count));
         metrics["RMSE"] = NumOps.Sqrt(metrics["MSE"]);
 
