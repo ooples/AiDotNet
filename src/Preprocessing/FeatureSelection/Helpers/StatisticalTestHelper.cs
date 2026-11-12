@@ -133,8 +133,10 @@ internal static class StatisticalTestHelper
             return Uninformative<T>(p);
 
         // r^2 = Sxy^2 / (Sxx Syy); a constant feature (Sxx = 0) has an undefined correlation, scored 0 with p = 1
-        var r2 = FilterStatisticTensorOps.GuardedDivide(
-            engine.TensorSquare(sxy), engine.TensorMultiplyScalar(sxx, syy), ZeroVariance, ops.Zero);
+        // r = Sxy / (sqrt(Sxx) sqrt(Syy)), squared after the division: Sxy^2 and Sxx Syy overflow Half once the sums
+        // pass 256 (r^2 came out inf / inf = NaN)
+        var r2 = engine.TensorSquare(FilterStatisticTensorOps.GuardedDivide(
+            sxy, engine.TensorMultiplyScalar(engine.TensorSqrt(sxx), ops.Sqrt(syy)), ZeroVariance, ops.Zero));
         var informative = engine.TensorGreaterThan(sxx, ops.FromDouble(ZeroVariance));
 
         // F = r^2 / (1 - r^2) (n - 2); a perfect fit (r^2 within numpy.isclose of 1) is the largest finite value
@@ -174,8 +176,10 @@ internal static class StatisticalTestHelper
         var expected = engine.TensorOuter(classProbability, featureTotal);
 
         // a feature that is zero everywhere has no expected mass: scored 0 with p = 1
-        var terms = FilterStatisticTensorOps.GuardedDivide(
-            engine.TensorSquare(engine.TensorSubtract(observed, expected)), expected, 0.0, ops.Zero);
+        // (O - E) * ((O - E) / E): (O - E)^2 overflows Half once |O - E| passes 256
+        var difference = engine.TensorSubtract(observed, expected);
+        var terms = engine.TensorMultiply(
+            difference, FilterStatisticTensorOps.GuardedDivide(difference, expected, 0.0, ops.Zero));
         var chi2 = engine.ReduceSum(terms, new[] { 0 }, false);
         var pValues = FilterStatisticTensorOps.ChiSquareSurvival(chi2, k - 1);
         var informative = engine.TensorGreaterThan(featureTotal, ops.Zero);
@@ -195,10 +199,7 @@ internal static class StatisticalTestHelper
         if (n <= neighbors)
             return new Vector<T>(p);
 
-        // digamma at the integers 1..n from the harmonic numbers: psi(m) = H(m - 1) - gamma
-        var harmonic = engine.TensorCumSum(engine.TensorReciprocal(engine.TensorArange<T>(1, n, 1)), 0);
-        var digammaTable = engine.TensorAddScalar(
-            engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), harmonic }, 0), ops.FromDouble(-EulerGamma));
+        var digammaTable = DigammaTable<T>(n);
         T constant = ops.Add(
             ops.Subtract(ops.FromDouble(HarmonicNumber(n - 1)), ops.FromDouble(EulerGamma)),
             ops.Subtract(ops.FromDouble(HarmonicNumber(neighbors - 1)), ops.FromDouble(EulerGamma)));
@@ -250,6 +251,23 @@ internal static class StatisticalTestHelper
         return ops.GreaterThan(std, ops.Zero) ? engine.TensorDivideScalar(values, std) : values;
     }
 
+    /// <summary>
+    /// <c>psi(m + 1) = H(m) - gamma</c> for <c>m = 0 .. n - 1</c> ([n]): the digamma function at the integers 1..n
+    /// from the harmonic numbers. The table depends on <paramref name="n"/> alone (no data), so it is summed in
+    /// double and returned in T: in Half the integers past 2048 are not exact and a running sum of 1 / m stops
+    /// growing once 1 / m is below half its spacing (near 6.8 by m = 512), so psi(3001) would read 6.2, not 8.0.
+    /// </summary>
+    internal static Tensor<T> DigammaTable<T>(int n)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (n <= 0)
+            return new Tensor<T>(new[] { 0 });
+
+        var harmonic = engine.TensorCumSum(engine.TensorReciprocal(engine.TensorArange<double>(1, n, 1)), 0);
+        return engine.TensorAddScalar(
+            engine.TensorConcatenate(new[] { new Tensor<double>(new[] { 1 }), harmonic }, 0), -EulerGamma).Cast<T>();
+    }
+
     // |v[i] - v[j]| for every pair ([n] to [n, n]).
     private static Tensor<T> AbsoluteDifferences<T>(Tensor<T> values)
     {
@@ -294,8 +312,13 @@ internal static class StatisticalTestHelper
         var sorted = engine.TensorGather(p, orderTensor, 0);
 
         // p_(r) n / r, then the running minimum from the largest rank down
-        var scaled = engine.TensorMultiplyScalar(
-            engine.TensorDivide(sorted, engine.TensorArange<T>(1, n + 1, 1)), ops.FromDouble(n));
+        // the factors n / r depend on the ranks alone, so they are formed in double (capped at T's largest value)
+        // and applied in one multiply: in Half the ranks past 2048 are not exact, and p_(r) / r underflows to 0 for a
+        // small p-value at a high rank (1e-5 / 3000) before the product with n can bring it back
+        var factors = engine.TensorClampMax(
+            engine.TensorMultiplyScalar(engine.TensorReciprocal(engine.TensorArange<double>(1, n + 1, 1)), (double)n),
+            ops.ToDouble(ops.MaxValue)).Cast<T>();
+        var scaled = engine.TensorMultiply(sorted, factors);
         var runningMin = engine.TensorFlip(engine.TensorCumMin(engine.TensorFlip(scaled, new[] { 0 }), 0), new[] { 0 });
         var adjustedSorted = engine.TensorMin(runningMin, ops.One);
 

@@ -843,8 +843,10 @@ internal static class FeatureSelectionTensorOps
         var total = engine.TensorBroadcastTo(engine.ReduceSum(observed, new[] { 1, 2 }, true), shape);
         // row * (column / n): the product row * column overflows Half past 65504
         var expected = engine.TensorMultiply(rows, FilterStatisticTensorOps.GuardedDivide(columns, total, 0, ops.Zero));
-        var cells = FilterStatisticTensorOps.GuardedDivide(
-            engine.TensorSquare(engine.TensorSubtract(observed, expected)), expected, 0, ops.Zero);
+        // (O - E) * ((O - E) / E): (O - E)^2 overflows Half once |O - E| passes 256
+        var difference = engine.TensorSubtract(observed, expected);
+        var cells = engine.TensorMultiply(
+            difference, FilterStatisticTensorOps.GuardedDivide(difference, expected, 0, ops.Zero));
         return engine.ReduceSum(cells, new[] { 1, 2 }, false);
     }
 
@@ -994,13 +996,15 @@ internal static class FeatureSelectionTensorOps
         return best;
     }
 
-    // side total * Gini impurity = total - sum count^2 / total for every row of [p, k] class counts
+    // side total * Gini impurity = total - sum count (count / total) for every row of [p, k] class counts; the
+    // count is divided before the product because count^2 overflows Half once a count passes 256
     private static Tensor<T> SideImpurity<T>(Tensor<T> counts, Tensor<T> totals)
     {
         var engine = AiDotNetEngine.Current;
-        return engine.TensorSubtract(totals, FilterStatisticTensorOps.GuardedDivide(
-            engine.ReduceSum(engine.TensorSquare(counts), new[] { 1 }, false), totals, 0,
-            MathHelper.GetNumericOperations<T>().Zero));
+        var shares = FilterStatisticTensorOps.GuardedDivide(
+            counts, FilterStatisticTensorOps.ColumnBroadcast(totals, counts.Shape[1]), 0,
+            MathHelper.GetNumericOperations<T>().Zero);
+        return engine.TensorSubtract(totals, engine.ReduceSum(engine.TensorMultiply(counts, shares), new[] { 1 }, false));
     }
 
     /// <summary>
