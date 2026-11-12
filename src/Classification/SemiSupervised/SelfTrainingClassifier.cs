@@ -225,32 +225,19 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     protected override void TrainSemiSupervisedCore(Matrix<T> labeledX, Vector<T> labeledY, Matrix<T> unlabeledX)
     {
-        // Create mutable copies of the data
-        var currentLabeledX = new List<Vector<T>>();
-        var currentLabeledY = new List<T>();
-
-        // Initialize with original labeled data
-        for (int i = 0; i < labeledX.Rows; i++)
-        {
-            currentLabeledX.Add(labeledX.GetRow(i));
-            currentLabeledY.Add(labeledY[i]);
-        }
+        // The growing training set: the labeled data plus every pseudo-labeled row added so far.
+        var engine = AiDotNetEngine.Current;
+        var unlabeled = Tensor<T>.FromMatrix(unlabeledX);
+        var trainX = Tensor<T>.FromMatrix(labeledX);
+        var trainY = Tensor<T>.FromVector(labeledY);
 
         // Track remaining unlabeled samples
-        var remainingUnlabeled = new List<int>();
-        for (int i = 0; i < unlabeledX.Rows; i++)
-        {
-            remainingUnlabeled.Add(i);
-        }
+        var remainingUnlabeled = Enumerable.Range(0, unlabeledX.Rows).ToList();
 
-        // Initialize pseudo-labels storage
-        PseudoLabels = new Vector<T>(unlabeledX.Rows);
-        PseudoLabelConfidences = new Vector<T>(unlabeledX.Rows);
-        for (int i = 0; i < unlabeledX.Rows; i++)
-        {
-            PseudoLabels[i] = NumOps.FromDouble(-1); // -1 indicates not yet labeled
-            PseudoLabelConfidences[i] = NumOps.Zero;
-        }
+        // Initialize pseudo-labels storage: -1 indicates not yet labeled.
+        var pseudoLabels = new Tensor<T>(new[] { unlabeledX.Rows });
+        engine.TensorFill(pseudoLabels, NumOps.FromDouble(-1));
+        var pseudoConfidences = new Tensor<T>(new[] { unlabeledX.Rows });
 
         IterationsPerformed = 0;
         SamplesAdded = 0;
@@ -259,12 +246,8 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
         {
             IterationsPerformed++;
 
-            // Convert lists to matrices for training
-            var trainX = ListToMatrix(currentLabeledX);
-            var trainY = new Vector<T>(currentLabeledY.ToArray());
-
             // Train the base classifier
-            _baseClassifier.Train(trainX, trainY);
+            _baseClassifier.Train(trainX.ToMatrix(), trainY.ToVector());
 
             // Get predictions and confidences for remaining unlabeled samples
             var (selectedIndices, predictedLabels, confidences) = SelectSamplesToAdd(unlabeledX, remainingUnlabeled);
@@ -274,20 +257,18 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
                 break; // No more samples meet criteria
             }
 
-            // Add selected samples to training set
-            // Note: selectedIndices contains indices into remainingUnlabeled
-            // predictedLabels and confidences are parallel lists aligned with selectedIndices
-            for (int i = 0; i < selectedIndices.Count; i++)
-            {
-                int idx = selectedIndices[i]; // Index into remainingUnlabeled
-                int originalIndex = remainingUnlabeled[idx];
-                currentLabeledX.Add(unlabeledX.GetRow(originalIndex));
-                currentLabeledY.Add(predictedLabels[i]); // Use i, not idx
+            // Add selected samples to training set. selectedIndices index into remainingUnlabeled;
+            // predictedLabels and confidences are parallel lists aligned with selectedIndices.
+            var originals = selectedIndices.Select(idx => remainingUnlabeled[idx]).ToArray();
+            var originalIndex = new Tensor<int>(originals, new[] { originals.Length });
+            var labels = new Tensor<T>(predictedLabels.ToArray(), new[] { originals.Length });
+            trainX = engine.TensorConcatenate(new[] { trainX, engine.TensorIndexSelect(unlabeled, originalIndex, 0) }, 0);
+            trainY = engine.TensorConcatenate(new[] { trainY, labels }, 0);
 
-                // Store pseudo-label info
-                PseudoLabels[originalIndex] = predictedLabels[i];
-                PseudoLabelConfidences[originalIndex] = confidences[i];
-            }
+            // Store pseudo-label info
+            pseudoLabels = engine.TensorIndexCopy(pseudoLabels, 0, originalIndex, labels);
+            pseudoConfidences = engine.TensorIndexCopy(
+                pseudoConfidences, 0, originalIndex, new Tensor<T>(confidences.ToArray(), new[] { originals.Length }));
 
             SamplesAdded += selectedIndices.Count;
 
@@ -299,10 +280,11 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
             }
         }
 
+        PseudoLabels = pseudoLabels.ToVector();
+        PseudoLabelConfidences = pseudoConfidences.ToVector();
+
         // Final training with all labeled data (original + pseudo-labeled)
-        var finalTrainX = ListToMatrix(currentLabeledX);
-        var finalTrainY = new Vector<T>(currentLabeledY.ToArray());
-        _baseClassifier.Train(finalTrainX, finalTrainY);
+        _baseClassifier.Train(trainX.ToMatrix(), trainY.ToVector());
     }
 
     /// <summary>
@@ -321,15 +303,10 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
         }
 
         // Build matrix of remaining unlabeled samples
-        var remainingX = new Matrix<T>(remainingIndices.Count, unlabeledX.Columns);
-        for (int i = 0; i < remainingIndices.Count; i++)
-        {
-            var row = unlabeledX.GetRow(remainingIndices[i]);
-            for (int j = 0; j < unlabeledX.Columns; j++)
-            {
-                remainingX[i, j] = row[j];
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var remainingX = engine.TensorIndexSelect(
+            Tensor<T>.FromMatrix(unlabeledX),
+            new Tensor<int>(remainingIndices.ToArray(), new[] { remainingIndices.Count }), 0).ToMatrix();
 
         // Get predictions
         var predictions = _baseClassifier.Predict(remainingX);
@@ -337,19 +314,17 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
         // Get confidence scores (using probability predictions if available)
         var confidenceScores = GetConfidenceScores(remainingX, predictions);
 
-        // Select samples based on criterion
-        var candidates = new List<(int index, T label, T confidence)>();
-        for (int i = 0; i < remainingIndices.Count; i++)
-        {
-            double conf = NumOps.ToDouble(confidenceScores[i]);
-            if (conf >= _confidenceThreshold)
-            {
-                candidates.Add((i, predictions[i], confidenceScores[i]));
-            }
-        }
-
-        // Sort by confidence (descending)
-        candidates = candidates.OrderByDescending(c => NumOps.ToDouble(c.confidence)).ToList();
+        // Candidates: confidence >= threshold, sorted by confidence descending (stable, as OrderByDescending).
+        var confidenceValues = Tensor<T>.FromVector(confidenceScores);
+        T threshold = NumOps.FromDouble(_confidenceThreshold);
+        var eligible = engine.TensorAdd(
+            engine.TensorGreaterThan(confidenceValues, threshold), engine.TensorEquals(confidenceValues, threshold));
+        var predictedValues = predictions.ToArray();
+        var confidenceArray = confidenceScores.ToArray();
+        var candidates = engine.TensorNonzero(eligible).ToArray()
+            .OrderByDescending(i => confidenceArray[i], Comparer<T>.Default)
+            .Select(i => (index: i, label: predictedValues[i], confidence: confidenceArray[i]))
+            .ToList();
 
         // Apply selection criterion
         int maxToAdd = _maxSamplesPerIteration > 0 ? _maxSamplesPerIteration : candidates.Count;
@@ -375,13 +350,12 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
                 break;
 
             case SelectionCriterion.TopKPerClass:
-                var perClassCounts = new Dictionary<double, int>();
+                var perClassCounts = new Dictionary<T, int>();
                 int perClassLimit = Math.Max(1, maxToAdd / NumClasses);
 
                 foreach (var (index, label, confidence) in candidates)
                 {
-                    double labelValue = NumOps.ToDouble(label);
-                    if (!perClassCounts.TryGetValue(labelValue, out int count))
+                    if (!perClassCounts.TryGetValue(label, out int count))
                     {
                         count = 0;
                     }
@@ -391,7 +365,7 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
                         selectedIndices.Add(index);
                         selectedLabels.Add(label);
                         selectedConfidences.Add(confidence);
-                        perClassCounts[labelValue] = count + 1;
+                        perClassCounts[label] = count + 1;
                     }
                 }
                 break;
@@ -405,62 +379,26 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     /// </summary>
     private Vector<T> GetConfidenceScores(Matrix<T> X, Vector<T> predictions)
     {
-        var confidences = new Vector<T>(X.Rows);
+        var engine = AiDotNetEngine.Current;
 
         // Try to get probabilities from the base classifier if it supports it
         if (_baseClassifier is IProbabilisticClassifier<T> probabilisticClassifier)
         {
-            var probabilities = probabilisticClassifier.PredictProbabilities(X);
-
-            // For each sample, confidence is the max probability
-            for (int i = 0; i < X.Rows; i++)
+            // For each sample, confidence is the max probability (floored at zero).
+            var probabilities = Tensor<T>.FromMatrix(probabilisticClassifier.PredictProbabilities(X));
+            if (probabilities.Shape[1] == 0)
             {
-                T maxProb = NumOps.Zero;
-                for (int j = 0; j < probabilities.Columns; j++)
-                {
-                    if (NumOps.GreaterThan(probabilities[i, j], maxProb))
-                    {
-                        maxProb = probabilities[i, j];
-                    }
-                }
-                confidences[i] = maxProb;
+                return new Vector<T>(X.Rows);
             }
-        }
-        else
-        {
-            // If no probabilities available, use a default confidence of 1.0 for all predictions
-            // This means all predictions will be considered equally confident
-            for (int i = 0; i < X.Rows; i++)
-            {
-                confidences[i] = NumOps.One;
-            }
+
+            return engine.TensorClampMin(engine.ReduceMax(probabilities, new[] { 1 }, keepDims: false), NumOps.Zero).ToVector();
         }
 
-        return confidences;
-    }
-
-    /// <summary>
-    /// Converts a list of vectors to a matrix.
-    /// </summary>
-    private Matrix<T> ListToMatrix(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0)
-        {
-            return new Matrix<T>(0, 0);
-        }
-
-        int numFeatures = vectors[0].Length;
-        var matrix = new Matrix<T>(vectors.Count, numFeatures);
-
-        for (int i = 0; i < vectors.Count; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                matrix[i, j] = vectors[i][j];
-            }
-        }
-
-        return matrix;
+        // If no probabilities available, use a default confidence of 1.0 for all predictions
+        // This means all predictions will be considered equally confident
+        var ones = new Tensor<T>(new[] { X.Rows });
+        engine.TensorFill(ones, NumOps.One);
+        return ones.ToVector();
     }
 
     /// <summary>
