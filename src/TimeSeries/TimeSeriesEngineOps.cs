@@ -41,6 +41,45 @@ internal static class TimeSeriesEngineOps<T>
         return Engine.TensorIndexSelect(windows, reversed, 1).ToMatrix();
     }
 
+    /// <summary>
+    /// The most recent <paramref name="count"/> values of <paramref name="history"/>, newest first
+    /// (<c>[y[n-1], ..., y[n-count]]</c>), zero-filled where the history is shorter.
+    /// </summary>
+    public static Vector<T> NewestFirst(Vector<T> history, int count)
+    {
+        int take = Math.Min(count, history.Length);
+        var recent = take > 0 ? Reverse(history.GetSubVector(history.Length - take, take)) : new Vector<T>(0);
+        return take < count ? Vector<T>.Concatenate(recent, new Vector<T>(count - take)) : recent;
+    }
+
+    /// <summary>
+    /// Applies <paramref name="predict"/> to every row of <paramref name="rows"/> in order and gathers the
+    /// results. Keeps per-sample (possibly overridden) prediction calls while the inputs move in bulk.
+    /// </summary>
+    public static Vector<T> PredictRows(Matrix<T> rows, Func<Vector<T>, T> predict)
+    {
+        var predictions = new List<T>(rows.Rows);
+        for (int r = 0; r < rows.Rows; r++)
+        {
+            predictions.Add(predict(rows.GetRow(r)));
+        }
+
+        return new Vector<T>(predictions);
+    }
+
+    /// <summary>Element-wise <c>v[i] &gt; threshold</c> as a bool mask (NaN compares false).</summary>
+    public static bool[] GreaterThan(Vector<T> v, T threshold)
+    {
+        if (v.Length == 0)
+        {
+            return Array.Empty<bool>();
+        }
+
+        var above = Engine.TensorGreaterThan(Tensor<T>.FromVector(v), threshold);
+        var bits = Engine.TensorEqScalar(above, NumOps.One);
+        return Array.ConvertAll(bits.ToArray(), bit => (bool)bit);
+    }
+
     /// <summary>Lag-<paramref name="lag"/> difference <c>y[t] - y[t-lag]</c> for t = lag .. n-1.</summary>
     public static Vector<T> Difference(Vector<T> y, int lag)
     {
@@ -77,17 +116,40 @@ internal static class TimeSeriesEngineOps<T>
     }
 
     /// <summary>
-    /// Inverse of one lag-1 difference: <c>out[i] = start + d[0] + ... + d[i]</c>.
+    /// Inverse of one lag-1 difference: <c>out[i] = ((start + d[0]) + d[1]) + ... + d[i]</c>, summed in that
+    /// order (a running sum seeded with <paramref name="start"/>).
     /// </summary>
     public static Vector<T> Integrate(Vector<T> differences, T start)
+        => Integrate(differences, new Vector<T>(new[] { start }));
+
+    /// <summary>
+    /// Inverse of one lag-1 difference seeded with the single value in <paramref name="start"/>.
+    /// </summary>
+    public static Vector<T> Integrate(Vector<T> differences, Vector<T> start)
     {
         if (differences.Length == 0)
         {
             return new Vector<T>(0);
         }
 
-        var sums = Engine.TensorCumSum(Tensor<T>.FromVector(differences), 0);
-        return Engine.TensorAddScalar(sums, start).ToVector();
+        var seeded = Tensor<T>.FromVector(Vector<T>.Concatenate(start.GetSubVector(0, 1), differences));
+        var sums = Engine.TensorCumSum(seeded, 0);
+        return Engine.TensorSlice(sums, new[] { 1 }, new[] { differences.Length }).ToVector();
+    }
+
+    /// <summary>
+    /// The (index, actual, predicted, score) entries whose <paramref name="flagged"/> bit is set, in order,
+    /// with indices offset by <paramref name="firstIndex"/>.
+    /// </summary>
+    public static List<(int Index, T Actual, T Predicted, T Score)> SelectFlagged(
+        Vector<T> actuals, Vector<T> predictions, Vector<T> scores, bool[] flagged, int firstIndex)
+    {
+        return actuals
+            .Zip(predictions, (actual, predicted) => (actual, predicted))
+            .Zip(scores, (pair, score) => (pair.actual, pair.predicted, score))
+            .Select((entry, offset) => (Index: firstIndex + offset, Actual: entry.actual, Predicted: entry.predicted, Score: entry.score))
+            .Where(entry => flagged[entry.Index - firstIndex])
+            .ToList();
     }
 
     /// <summary>
