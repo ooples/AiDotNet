@@ -269,4 +269,92 @@ public class FeatureSelectionMicOsfsReferenceTests
 
         Assert.Equal(new[] { 1 }, selector.SelectedIndices);
     }
+
+    // a: eight +1 then eight -1; y: a with entries 0 and 8 flipped (corr(a, y) = 0.75); b alternates and is
+    // uncorrelated with both. Every mean, norm and inner product of these +-1 columns is exact.
+    private static readonly double[] SignA = { 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    private static readonly double[] SignB = { 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1 };
+    private static readonly double[] SignY = { -1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1 };
+
+    [Fact]
+    public void OSFS_DropsAFeatureThatAnotherDetermines()
+    {
+        // Feature 1 is an exact copy of feature 0. When it arrives, R_SS = [1] and the residual variance of
+        // feature 0 given S = {1} is exactly 0, so C and feature 0 are independent given S (LOFS: r = 0/0, isnan,
+        // so the feature is removed). The old code inverted the singular (Y, C, S) block and counted it as
+        // dependent, keeping both copies.
+        var data = new double[16, 2];
+        for (int i = 0; i < 16; i++)
+        {
+            data[i, 0] = SignA[i];
+            data[i, 1] = SignA[i];
+        }
+
+        var selector = new OSFS<double>(nFeaturesToSelect: 10);
+        selector.Fit(new Matrix<double>(data), new Vector<double>(SignY));
+
+        Assert.Equal(new[] { 1 }, selector.SelectedIndices);
+    }
+
+    [Fact]
+    public void OSFS_CorrelatesLargeMagnitudeFloatData()
+    {
+        // Values of 1e20 square to 1e40, past float's range. The old code squared the raw centred data, got an
+        // infinite standard deviation and zero correlations, and so found no relevant feature.
+        var data = new float[16, 2];
+        var target = new float[16];
+        for (int i = 0; i < 16; i++)
+        {
+            data[i, 0] = (float)(SignA[i] * 1e20);
+            data[i, 1] = (float)(SignB[i] * 1e20);
+            target[i] = (float)(SignY[i] * 1e20);
+        }
+
+        var selector = new OSFS<float>(nFeaturesToSelect: 10);
+        selector.Fit(new Matrix<float>(data), new Vector<float>(target));
+
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+        var scores = selector.FeatureScores;
+        Assert.NotNull(scores);
+        Assert.Equal(0.75f, scores[0], 6);
+        Assert.Equal(0f, scores[1], 6);
+    }
+
+    [Fact]
+    public void Mic_CountsBeyond2048InHalfMatchDouble()
+    {
+        // 2048 tied points (x = 0, y = 0) form one clump, then x = 1 .. 100 alternate y = 1, 0, so every later
+        // clump holds one point. The old code summed the clump counts in T: in Half 2048 + 1 rounds back to 2048,
+        // the row of y = 0 stopped growing, and MIC came out near 0.19 instead of about 0.115.
+        const int tied = 2048;
+        const int singles = 100;
+        var halfData = new Half[tied + singles, 1];
+        var halfTarget = new Half[tied + singles];
+        var doubleData = new double[tied + singles, 1];
+        var doubleTarget = new double[tied + singles];
+        for (int k = 1; k <= singles; k++)
+        {
+            int row = tied + k - 1;
+            double label = k % 2 == 1 ? 1.0 : 0.0;
+            halfData[row, 0] = (Half)(float)k;
+            halfTarget[row] = (Half)(float)label;
+            doubleData[row, 0] = k;
+            doubleTarget[row] = label;
+        }
+
+        // alpha >= 4 fixes the grid budget B = 8; c = 30 keeps all 101 clumps on the 4-column grids
+        var reference = new NonparametricMic(nFeaturesToSelect: 1, alpha: 8, c: 30);
+        reference.Fit(new Matrix<double>(doubleData), new Vector<double>(doubleTarget));
+        var half = new AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<Half>(
+            nFeaturesToSelect: 1, alpha: 8, c: 30);
+        half.Fit(new Matrix<Half>(halfData), new Vector<Half>(halfTarget));
+
+        var expected = reference.MICScores;
+        var actual = half.MICScores;
+        Assert.NotNull(expected);
+        Assert.NotNull(actual);
+        Assert.InRange(expected[0], 0.10, 0.13);
+        double actualValue = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>().ToDouble(actual[0]);
+        Assert.True(Math.Abs(actualValue - expected[0]) <= 0.02, $"Half MIC {actualValue}, double MIC {expected[0]}.");
+    }
 }
