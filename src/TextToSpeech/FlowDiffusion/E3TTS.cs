@@ -134,7 +134,7 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         var target = TokenizeText(text);
         if (Voice?.ReferenceTokens is not { } reference || reference.Length < 2) return target;
-        var prompt = reference.ToArray().Select(v => (int)Math.Round(Ops.ToDouble(v))).ToArray();
+        var prompt = RoundedIds(reference);
         return prompt.Take(prompt.Length - 1).Concat(target.Skip(1)).Take(MaxTextLength).ToArray();
     }
 
@@ -160,9 +160,9 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (Voice?.ReferenceAudio is { } prompt)
         {
             int count = Math.Min(prompt.Length, _options.InferenceWaveformSamples - 1);
-            known = new Tensor<T>(new[] { _options.InferenceWaveformSamples });
-            knownMask = new Tensor<T>(new[] { _options.InferenceWaveformSamples });
-            for (int i = 0; i < count; i++) { known[i] = prompt.GetFlat(i); knownMask[i] = Ops.One; }
+            known = ZeroPadded(Engine.TensorSlice(Engine.Reshape(prompt, new[] { prompt.Length }), new[] { 0 }, new[] { count }),
+                _options.InferenceWaveformSamples);
+            knownMask = ZeroPadded(Tensor<T>.CreateDefault(new[] { count }, Ops.One), _options.InferenceWaveformSamples);
         }
         return TrimTrailingSilence(Sample(textFeatures, _options.InferenceWaveformSamples, known, knownMask, _options.DefaultSpeakerId));
     }
@@ -179,15 +179,47 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         int samples = Math.Min(waveform.Length, _options.InferenceWaveformSamples);
         if (startSample < 0 || endSample <= startSample || endSample > samples)
             throw new ArgumentOutOfRangeException(nameof(startSample), "The editing span must be inside the waveform.");
-        var known = new Tensor<T>(new[] { _options.InferenceWaveformSamples });
-        var mask = new Tensor<T>(new[] { _options.InferenceWaveformSamples });
-        for (int i = 0; i < samples; i++)
-        {
-            known[i] = waveform.GetFlat(i);
-            if (i < startSample || i >= endSample) mask[i] = Ops.One;
-        }
+        int total = _options.InferenceWaveformSamples;
+        var known = ZeroPadded(Engine.TensorSlice(Engine.Reshape(waveform, new[] { waveform.Length }), new[] { 0 }, new[] { samples }), total);
+        var keep = new int[total];
+        for (int i = 0; i < samples; i++) keep[i] = i < startSample || i >= endSample ? 1 : 0;
+        var mask = new Tensor<int>(keep, new[] { total }).Cast<T>();
         return TrimTrailingSilence(Sample(Encode(TokenizeText(text)), _options.InferenceWaveformSamples, known, mask,
             speakerId < 0 ? _options.DefaultSpeakerId : speakerId));
+    }
+
+    /// <summary>A <c>[n]</c> tensor followed by zeros up to <paramref name="length"/>.</summary>
+    private Tensor<T> ZeroPadded(Tensor<T> values, int length) => values.Length == length ? values
+        : Engine.TensorConcatenate(new[] { values, new Tensor<T>(new[] { length - values.Length }) }, 0);
+
+    /// <summary>
+    /// The per-step reverse-process coefficients of Eq. 7's schedule as T, indexed by step − 1:
+    /// √ᾱ_s, 1/√(1 − ᾱ_s), β_s/√(1 − ᾱ_s), 1/√α_s and the posterior std √(β_s (1 − ᾱ_{s−1}) / (1 − ᾱ_s)), with
+    /// α_s = ᾱ_s/ᾱ_{s−1}, β_s = 1 − α_s and 1 − ᾱ floored at 1e-12. log ᾱ = log(ᾱ_min) (2 sin²(φ/2))^1.5 (= (1 − cos φ)^1.5),
+    /// and 1 − exp(·) is taken as −expm1(·), so the small early-step β and 1 − ᾱ keep their precision in a narrow T.
+    /// </summary>
+    private (T[] SqrtAlphaBar, T[] InverseNoiseStd, T[] NoiseScale, T[] InverseSqrtAlpha, T[] PosteriorStd) ReverseCoefficients()
+    {
+        int n = _options.NumDiffusionSteps;
+        var half = Engine.TensorSin(Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, n + 1), Ops.FromDouble(Math.PI / (4.0 * n))));
+        var logAlphaBar = Engine.TensorMultiplyScalar(
+            Engine.TensorPower(Engine.TensorMultiplyScalar(Engine.TensorSquare(half), Ops.FromDouble(2.0)), Ops.FromDouble(1.5)),
+            Ops.FromDouble(Math.Log(_options.MinimumAlphaBar)));
+        var current = Engine.TensorSlice(logAlphaBar, new[] { 1 }, new[] { n });
+        var previous = Engine.TensorSlice(logAlphaBar, new[] { 0 }, new[] { n });
+        var floor = Ops.FromDouble(1e-12);
+        var noiseVariance = Engine.TensorMax(Engine.TensorNegate(Engine.TensorExpm1(current)), floor);              // 1 − ᾱ_s
+        var previousNoiseVariance = Engine.TensorNegate(Engine.TensorExpm1(previous));                              // 1 − ᾱ_{s−1}
+        var logAlpha = Engine.TensorSubtract(current, previous);
+        var beta = Engine.TensorNegate(Engine.TensorExpm1(logAlpha));
+        var inverseNoiseStd = Engine.TensorReciprocal(Engine.TensorSqrt(noiseVariance));
+        var half1 = Ops.FromDouble(0.5);
+        return (
+            Engine.TensorExp(Engine.TensorMultiplyScalar(current, half1)).ToArray(),
+            inverseNoiseStd.ToArray(),
+            Engine.TensorMultiply(beta, inverseNoiseStd).ToArray(),
+            Engine.TensorExp(Engine.TensorMultiplyScalar(logAlpha, Ops.FromDouble(-0.5))).ToArray(),
+            Engine.TensorSqrt(Engine.TensorDivide(Engine.TensorMultiply(beta, previousNoiseVariance), noiseVariance)).ToArray());
     }
 
     private Tensor<T> Encode(IReadOnlyList<int> ids)
@@ -203,29 +235,22 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         RequirePaperModel();
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         var waveform = Gaussian(sampleCount, random);
+        var (sqrtAlphaBar, inverseNoiseStd, noiseScale, inverseSqrtAlpha, posteriorStd) = ReverseCoefficients();
         for (int step = _options.NumDiffusionSteps; step > 0; step--)
         {
-            double alphaBar = AlphaBar(step);
-            double previousAlphaBar = AlphaBar(step - 1);
-            double alpha = alphaBar / previousAlphaBar;
-            double beta = 1 - alpha;
-            var (predicted, _) = WaveformUnet!.Forward(waveform, text, Math.Sqrt(alphaBar), speakerId);
+            int s = step - 1;
+            var (predicted, _) = WaveformUnet!.Forward(waveform, text, Math.Sqrt(AlphaBar(step)), speakerId);
             if (known is not null && knownMask is not null)
             {
                 var actual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(waveform,
-                    Engine.TensorMultiplyScalar(known, Ops.FromDouble(Math.Sqrt(alphaBar)))),
-                    Ops.FromDouble(1.0 / Math.Sqrt(Math.Max(1e-12, 1 - alphaBar))));
+                    Engine.TensorMultiplyScalar(known, sqrtAlphaBar[s])), inverseNoiseStd[s]);
                 predicted = Blend(predicted, actual, knownMask);
             }
             var mean = Engine.TensorMultiplyScalar(Engine.TensorSubtract(waveform,
-                Engine.TensorMultiplyScalar(predicted, Ops.FromDouble(beta / Math.Sqrt(Math.Max(1e-12, 1 - alphaBar))))),
-                Ops.FromDouble(1.0 / Math.Sqrt(alpha)));
+                Engine.TensorMultiplyScalar(predicted, noiseScale[s])), inverseSqrtAlpha[s]);
             if (step == 1) waveform = mean;
             else
-            {
-                double variance = beta * (1 - previousAlphaBar) / Math.Max(1e-12, 1 - alphaBar);
-                waveform = Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(Gaussian(sampleCount, random), Ops.FromDouble(Math.Sqrt(variance))));
-            }
+                waveform = Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(Gaussian(sampleCount, random), posteriorStd[s]));
         }
         return waveform;
     }
@@ -268,15 +293,24 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     internal Tensor<T> TrimTrailingSilence(Tensor<T> waveform)
     {
         int block = _options.SilenceBlockSize;
-        int last = Math.Min(block, waveform.Length);
-        for (int start = 0; start < waveform.Length; start += block)
+        int length = waveform.Length;
+        int last = Math.Min(block, length);
+        int blocks = (length + block - 1) / block;
+        if (blocks > 0)
         {
-            int count = Math.Min(block, waveform.Length - start);
-            double magnitude = 0;
-            for (int i = 0; i < count; i++) magnitude += Math.Abs(Ops.ToDouble(waveform[start + i]));
-            if (magnitude / count > _options.SilenceMagnitudeThreshold) last = start + count;
+            // The mean magnitude of each block (the last one may be short): zero-pad to whole blocks, sum each row,
+            // divide by the block's real sample count.
+            var magnitudes = Engine.TensorAbs(ZeroPadded(Engine.Reshape(waveform, new[] { length }), blocks * block));
+            var sums = Engine.ReduceSum(Engine.Reshape(magnitudes, new[] { blocks, block }), new[] { 1 }, keepDims: false);
+            var counts = new int[blocks];
+            for (int b = 0; b < blocks; b++) counts[b] = Math.Min(block, length - b * block);
+            var loud = Engine.TensorGreaterThan(Engine.TensorDivide(sums, new Tensor<int>(counts, new[] { blocks }).Cast<T>()),
+                Ops.FromDouble(_options.SilenceMagnitudeThreshold)).Cast<int>().ToArray();
+            for (int b = 0; b < blocks; b++)
+                if (loud[b] != 0) last = b * block + counts[b];
         }
-        return Engine.TensorSlice(waveform, new[] { 0 }, new[] { MathPolyfill.Clamp(last, 1, waveform.Length) });
+        return Engine.TensorSlice(waveform, new[] { 0 }, new[] { MathPolyfill.Clamp(last, 1, length) });
+
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
