@@ -22,56 +22,33 @@ public class ColorConstancy<T> : ImageAugmenterBase<T>
 
         var result = data.Clone();
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
-        int numPixels = data.Height * data.Width;
-
-        var gains = new double[3];
-
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var rgb = engine.TensorSlice(image, [0, 0, 0], [3, data.Height, data.Width]);
+        var ones = ImageTensor<T>.Constant(engine.ReduceMean(rgb, [1, 2], true), 1.0);
+        Tensor<T> gainTensor;
         if (Method == ColorConstancyMethod.GrayWorld)
         {
-            var channelMean = new double[3];
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                    for (int c = 0; c < 3; c++)
-                        channelMean[c] += NumOps.ToDouble(data.GetPixel(y, x, c));
-
-            double overallMean = 0;
-            for (int c = 0; c < 3; c++)
-            {
-                channelMean[c] /= numPixels;
-                overallMean += channelMean[c];
-            }
-            overallMean /= 3.0;
-
-            for (int c = 0; c < 3; c++)
-                gains[c] = channelMean[c] > 1e-10 ? overallMean / channelMean[c] : 1.0;
+            var channelMean = engine.ReduceMean(rgb, [1, 2], true);
+            T overallMean = engine.TensorMean(channelMean);
+            var valid = engine.TensorGreaterThan(channelMean, NumOps.FromDouble(1e-10));
+            gainTensor = engine.TensorWhere(valid, engine.TensorDivide(engine.TensorMultiplyScalar(ones, overallMean), channelMean), ones);
         }
         else // MaxRGB
         {
-            var channelMax = new double[3];
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                    for (int c = 0; c < 3; c++)
-                    {
-                        double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                        if (val > channelMax[c]) channelMax[c] = val;
-                    }
-
-            double overallMax = Math.Max(channelMax[0], Math.Max(channelMax[1], channelMax[2]));
-            for (int c = 0; c < 3; c++)
-                gains[c] = channelMax[c] > 1e-10 ? overallMax / channelMax[c] : 1.0;
+            var channelMax = engine.TensorMax(engine.ReduceMax(rgb, [1, 2], true), NumOps.Zero);
+            T overallMax = engine.TensorMaxValue(channelMax);
+            var valid = engine.TensorGreaterThan(channelMax, NumOps.FromDouble(1e-10));
+            gainTensor = engine.TensorWhere(valid, engine.TensorDivide(engine.TensorMultiplyScalar(ones, overallMax), channelMax), ones);
         }
 
         // Blend gains toward 1.0
-        for (int c = 0; c < 3; c++)
-            gains[c] = 1.0 + (gains[c] - 1.0) * BlendFactor;
+        gainTensor = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(gainTensor, NumOps.One), NumOps.FromDouble(BlendFactor)), NumOps.One);
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < 3; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c)) * gains[c];
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                }
+        var balanced = engine.TensorClamp(engine.TensorMultiply(rgb, gainTensor), NumOps.Zero, NumOps.FromDouble(maxVal));
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image,
+            engine.TensorSliceAxis(balanced, 0, 0), engine.TensorSliceAxis(balanced, 0, 1), engine.TensorSliceAxis(balanced, 0, 2)));
 
         return result;
     }

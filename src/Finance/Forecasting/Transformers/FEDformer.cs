@@ -455,15 +455,19 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     public IReadOnlyCollection<string> LoadReferenceWeights(Func<string, int[], double[]> read)
     {
         if (read is null) throw new ArgumentNullException(nameof(read));
+        return LoadReferenceWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Loads the official FEDformer's state dict straight from <paramref name="source"/> into the weights.</summary>
+    internal IReadOnlyCollection<string> LoadReferenceWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
         var network = _network ?? throw new InvalidOperationException(
             "Only FEDformer's own network loads reference weights; this one was built from custom layers.");
         var names = new List<string>();
         foreach (var (name, tensor) in network.NamedTensors)
         {
-            var values = read(name, tensor.Shape.ToArray());
-            if (values is null || values.Length != tensor.Length)
-                throw new ArgumentException($"'{name}' needs {tensor.Length} values; {values?.Length ?? 0} were given.", nameof(read));
-            for (int i = 0; i < values.Length; i++) tensor[i] = NumOps.FromDouble(values[i]);
+            source.CopyTo(name, tensor.Shape.ToArray(), tensor);
+            Engine.InvalidatePersistentTensor(tensor);
             names.Add(name);
         }
         return names;

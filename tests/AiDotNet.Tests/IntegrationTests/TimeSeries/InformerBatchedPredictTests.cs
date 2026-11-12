@@ -56,6 +56,13 @@ public class InformerBatchedPredictTests
                 for (int t = 0; t < w; t++) window[t] = y[i - w + t];
                 expected = model.PredictSingle(window);
             }
+            else if (inSample)
+            {
+                // The first observation has no history: its prediction is the training mean.
+                double mean = 0;
+                for (int t = 0; t < n; t++) mean += y[t];
+                expected = mean / n;
+            }
             else expected = model.PredictSingle(input.GetRow(i));
             Assert.True(Math.Abs(expected - batched[i]) <= 1e-10 * Math.Max(1, Math.Abs(expected)),
                 $"row {i}: batched {batched[i]:R} vs per-row {expected:R}");

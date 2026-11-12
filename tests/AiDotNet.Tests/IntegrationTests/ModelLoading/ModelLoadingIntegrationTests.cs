@@ -1,4 +1,5 @@
 using AiDotNet.ModelLoading;
+using System.Linq;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -321,6 +322,50 @@ public class ModelLoadingIntegrationTests
     {
         var importer = new ONNXImporter<double>(verbose: true);
         Assert.NotNull(importer);
+    }
+
+    // Protobuf wire format: a varint, a tag, a length-delimited field.
+    private static byte[] Varint(ulong value)
+    {
+        var bytes = new System.Collections.Generic.List<byte>();
+        do
+        {
+            byte b = (byte)(value & 0x7f);
+            value >>= 7;
+            bytes.Add(value != 0 ? (byte)(b | 0x80) : b);
+        }
+        while (value != 0);
+        return bytes.ToArray();
+    }
+
+    private static byte[] Field(int number, byte[] payload) =>
+        Varint((ulong)(number << 3 | 2)).Concat(Varint((ulong)payload.Length)).Concat(payload).ToArray();
+
+    [Fact(Timeout = 120000)]
+    public async Task ONNXImporter_LoadWeights_ReadsTheGraphsInitializers()
+    {
+        await Task.Yield();
+        // A ModelProto as exporters write it: ir_version (field 1, a varint) first, then the graph (field 7) holding one
+        // initializer: dims [2, 3] (field 1), data_type FLOAT (field 2), name (field 8), raw_data (field 9).
+        var raw = new[] { 1f, 2f, 3f, 4f, 5f, 6f }.SelectMany(System.BitConverter.GetBytes).ToArray();
+        var tensor = Varint(1 << 3).Concat(Varint(2)).Concat(Varint(1 << 3)).Concat(Varint(3))
+            .Concat(Varint(2 << 3)).Concat(Varint(1))
+            .Concat(Field(8, System.Text.Encoding.UTF8.GetBytes("w")))
+            .Concat(Field(9, raw)).ToArray();
+        var model = Varint(1 << 3).Concat(Varint(8)).Concat(Field(7, Field(5, tensor))).ToArray();
+        string path = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.IO.File.WriteAllBytes(path, model);
+            var weights = new ONNXImporter<double>().LoadWeights(path);
+            Assert.True(weights.ContainsKey("w"));
+            Assert.Equal(new[] { 2, 3 }, weights["w"].Shape.ToArray());
+            Assert.Equal(new[] { 1.0, 2, 3, 4, 5, 6 }, weights["w"].ToArray());
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
     }
 
     #endregion
