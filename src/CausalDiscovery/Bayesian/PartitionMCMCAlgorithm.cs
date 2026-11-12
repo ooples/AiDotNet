@@ -76,6 +76,11 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         var cov = ComputeCovarianceMatrix(data);
 
+        // Pairwise OLS weight of every edge, dropped when |weight| <= 1e-6; it depends only on the data,
+        // so it is computed once and each sampled DAG keeps the entries of its selected parent edges.
+        var weights = ComputePairwiseOLSWeights(cov);
+        var significant = KeepWhereAbove(Engine.TensorAbs(weights), 1e-6, weights).Reshape(new[] { d * d });
+
         // Initialize: each variable in its own partition element
         var partition = new List<List<int>>();
         var indices = Enumerable.Range(0, d).ToArray();
@@ -105,7 +110,7 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
 
             if (iter >= _burnIn)
             {
-                var dag = BuildDAGFromPartition(data, partition, d, cov);
+                var dag = BuildDAGFromPartition(data, partition, d, significant);
                 edgeCounts = AccumulateEdgeCounts(edgeCounts, dag);
                 sampleCount++;
             }
@@ -194,7 +199,7 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
         return [.. parents];
     }
 
-    private Matrix<T> BuildDAGFromPartition(Matrix<T> data, List<List<int>> partition, int d, Matrix<T> cov)
+    private Matrix<T> BuildDAGFromPartition(Matrix<T> data, List<List<int>> partition, int d, Tensor<T> significant)
     {
         var isParent = new bool[d * d];
         var predecessors = new HashSet<int>();
@@ -211,10 +216,8 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
                 predecessors.Add(v);
         }
 
-        // Pairwise OLS weight of each selected parent edge, dropped when |weight| <= 1e-6.
-        var weights = ComputePairwiseOLSWeights(cov);
-        var significant = KeepWhereAbove(Engine.TensorAbs(weights), 1e-6, weights);
-        return Engine.TensorWhere(isParent, significant.Reshape(new[] { d * d }), Engine.TensorZerosLike(significant.Reshape(new[] { d * d })))
+        // significant: the flattened [d * d] pairwise OLS weights with |weight| <= 1e-6 already zeroed.
+        return Engine.TensorWhere(isParent, significant, Engine.TensorZerosLike(significant))
             .Reshape(new[] { d, d }).ToMatrix();
     }
 }
