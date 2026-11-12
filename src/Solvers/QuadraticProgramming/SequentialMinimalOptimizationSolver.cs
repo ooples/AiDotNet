@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Solvers.QuadraticProgramming;
@@ -54,6 +55,8 @@ namespace AiDotNet.Solvers.QuadraticProgramming;
 public sealed class SequentialMinimalOptimizationSolver<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    private static IEngine Engine => SolverTensorOps<T>.Engine;
 
     private readonly SequentialMinimalOptimizationOptions _options;
 
@@ -119,13 +122,16 @@ public sealed class SequentialMinimalOptimizationSolver<T>
             throw new ArgumentException(
                 "labels, linear and upperBounds must all have the same length.", nameof(linear));
         }
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            if (!NumOps.Equals(labels[i], NumOps.One) &&
-                !NumOps.Equals(labels[i], NumOps.Negate(NumOps.One)))
+            var labelValues = SolverTensorOps<T>.AsTensor(labels);
+            var notPlusOne = Engine.TensorNotEquals(labelValues, NumOps.One);
+            var notMinusOne = Engine.TensorNotEquals(labelValues, NumOps.Negate(NumOps.One));
+            var invalid = SolverTensorOps<T>.First(Engine.TensorMultiply(notPlusOne, notMinusOne));
+            if (invalid is not null)
             {
                 throw new ArgumentException(
-                    $"labels[{i}] must be exactly +1 or -1.", nameof(labels));
+                    $"labels[{invalid[0]}] must be exactly +1 or -1.", nameof(labels));
             }
         }
 
@@ -140,7 +146,7 @@ public sealed class SequentialMinimalOptimizationSolver<T>
                     "initialAlphas must have the same length as labels.", nameof(initialAlphas));
             }
 
-            for (int i = 0; i < n; i++) alphas[i] = initialAlphas[i];
+            initialAlphas.AsSpan().CopyTo(alphas);
         }
 
         // Q_ij = y_i · y_j · K(point(i), point(j)).
@@ -150,16 +156,23 @@ public sealed class SequentialMinimalOptimizationSolver<T>
         // Gradient of the dual: G_i = Σ_j Q_ij·α_j + p_i. This is the quantity every decision
         // below is made from, and it is what generalizes the classification "error" to the other
         // formulations.
-        var gradient = new T[n];
-        for (int i = 0; i < n; i++) gradient[i] = linear[i];
+        var gradient = linear.ToArray();
 
-        for (int j = 0; j < n; j++)
+        // Columns are folded in one at a time, in column order, exactly as the per-entry update
+        // G_i += Q_ij * alpha_j did; columns whose multiplier is exactly zero are skipped.
+        if (n > 0)
         {
-            if (NumOps.Equals(alphas[j], NumOps.Zero)) continue;
-            for (int i = 0; i < n; i++)
+            var gradientTensor = new Tensor<T>(new[] { n }, new Vector<T>(gradient));
+            var startingAlphas = new Tensor<T>(new[] { n }, new Vector<T>(alphas));
+            foreach (int j in Engine.TensorNonzero(Engine.TensorNotEquals(startingAlphas, NumOps.Zero)).ToArray())
             {
-                gradient[i] = NumOps.Add(gradient[i], NumOps.Multiply(Q(i, j), alphas[j]));
+                var column = new T[n];
+                for (int i = 0; i < n; i++) column[i] = Q(i, j);
+                gradientTensor = Engine.TensorAdd(
+                    gradientTensor, Engine.TensorMultiplyScalar(new Tensor<T>(new[] { n }, new Vector<T>(column)), alphas[j]));
             }
+
+            gradientTensor.AsSpan().CopyTo(gradient);
         }
 
         var tolerance = NumOps.FromDouble(_options.Tolerance);
@@ -219,8 +232,7 @@ public sealed class SequentialMinimalOptimizationSolver<T>
             iterations++;
         }
 
-        var result = new Vector<T>(n);
-        for (int k = 0; k < n; k++) result[k] = alphas[k];
+        var result = new Vector<T>(alphas);
 
         return (result, ComputeBias(alphas, labels, gradient, upperBounds, n), iterations);
     }
@@ -241,39 +253,34 @@ public sealed class SequentialMinimalOptimizationSolver<T>
         T[] alphas, Vector<T> labels, T[] gradient, Vector<T> upperBounds, int n,
         bool restrictToLabel, T label)
     {
-        int up = -1, down = -1;
-        T maxUp = NumOps.Zero, minDown = NumOps.Zero;
+        if (n == 0) return (-1, -1, NumOps.Zero, false);
 
-        for (int k = 0; k < n; k++)
+        var y = SolverTensorOps<T>.AsTensor(labels);
+        var alpha = new Tensor<T>(new[] { n }, new Vector<T>(alphas));
+        var upper = SolverTensorOps<T>.AsTensor(upperBounds);
+        var violation = Violations(y, gradient, n);
+        var considered = restrictToLabel ? Engine.TensorEquals(y, label) : null;
+        var increasable = CanIncreaseAlongConstraint(y, alpha, upper);
+        var decreasable = CanDecreaseAlongConstraint(y, alpha, upper);
+        if (considered is not null)
         {
-            if (restrictToLabel && !NumOps.Equals(labels[k], label)) continue;
-
-            T violation = NumOps.Negate(NumOps.Multiply(labels[k], gradient[k]));
-
-            if (CanIncreaseAlongConstraint(labels[k], alphas[k], upperBounds[k])
-                && (up < 0 || NumOps.GreaterThan(violation, maxUp)))
-            {
-                up = k;
-                maxUp = violation;
-            }
-
-            if (CanDecreaseAlongConstraint(labels[k], alphas[k], upperBounds[k])
-                && (down < 0 || NumOps.LessThan(violation, minDown)))
-            {
-                down = k;
-                minDown = violation;
-            }
+            increasable = Engine.TensorMultiply(considered, increasable);
+            decreasable = Engine.TensorMultiply(considered, decreasable);
         }
+
+        // The scan took the first eligible index, then moved on a strictly larger (smaller) violation.
+        int up = SolverTensorOps<T>.ScanArgMin(Engine.TensorNegate(violation), increasable);
+        int down = SolverTensorOps<T>.ScanArgMin(violation, decreasable);
 
         if (up < 0 || down < 0) return (up, down, NumOps.Zero, false);
 
-        return (up, down, NumOps.Subtract(maxUp, minDown), true);
+        return (up, down, NumOps.Subtract(violation.GetFlat(up), violation.GetFlat(down)), true);
     }
 
-    /// <summary>
-    /// Optimizes one pair exactly and updates the gradient incrementally.
-    /// </summary>
-    /// <returns><c>false</c> when the step is too small to represent progress.</returns>
+    // -y_k * G_k for every k.
+    private static Tensor<T> Violations(Tensor<T> y, T[] gradient, int n)
+        => Engine.TensorNegate(Engine.TensorMultiply(y, new Tensor<T>(new[] { n }, new Vector<T>(gradient))));
+
     private bool TakeStep(
         int i,
         int j,
@@ -345,12 +352,19 @@ public sealed class SequentialMinimalOptimizationSolver<T>
         alphas[j] = newAlphaJ;
 
         // Incremental gradient update — the reason each iteration costs O(n) rather than O(n²).
+        // The kernel is read in the same order as before (column i then column j for each k).
+        var columnI = new T[n];
+        var columnJ = new T[n];
         for (int k = 0; k < n; k++)
         {
-            gradient[k] = NumOps.Add(gradient[k], NumOps.Add(
-                NumOps.Multiply(q(k, i), changeI),
-                NumOps.Multiply(q(k, j), changeJ)));
+            columnI[k] = q(k, i);
+            columnJ[k] = q(k, j);
         }
+
+        var change = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(new Tensor<T>(new[] { n }, new Vector<T>(columnI)), changeI),
+            Engine.TensorMultiplyScalar(new Tensor<T>(new[] { n }, new Vector<T>(columnJ)), changeJ));
+        Engine.TensorAdd(new Tensor<T>(new[] { n }, new Vector<T>(gradient)), change).AsSpan().CopyTo(gradient);
 
         return true;
     }
@@ -367,81 +381,53 @@ public sealed class SequentialMinimalOptimizationSolver<T>
     private static T ComputeBias(
         T[] alphas, Vector<T> labels, T[] gradient, Vector<T> upperBounds, int n)
     {
-        T sum = NumOps.Zero;
-        int freeCount = 0;
-        T upperCandidate = NumOps.Zero;
-        T lowerCandidate = NumOps.Zero;
-        bool hasUpper = false, hasLower = false;
+        if (n == 0) return NumOps.Zero;
 
-        for (int k = 0; k < n; k++)
-        {
-            T violation = NumOps.Negate(NumOps.Multiply(labels[k], gradient[k]));
+        var y = SolverTensorOps<T>.AsTensor(labels);
+        var alpha = new Tensor<T>(new[] { n }, new Vector<T>(alphas));
+        var upper = SolverTensorOps<T>.AsTensor(upperBounds);
+        var violation = Violations(y, gradient, n);
 
-            if (NumOps.GreaterThan(alphas[k], NumOps.Zero)
-                && NumOps.LessThan(alphas[k], upperBounds[k]))
-            {
-                sum = NumOps.Add(sum, violation);
-                freeCount++;
-                continue;
-            }
-
-            if (CanIncreaseAlongConstraint(labels[k], alphas[k], upperBounds[k]))
-            {
-                if (!hasUpper || NumOps.GreaterThan(violation, upperCandidate))
-                {
-                    upperCandidate = violation;
-                    hasUpper = true;
-                }
-            }
-
-            if (CanDecreaseAlongConstraint(labels[k], alphas[k], upperBounds[k]))
-            {
-                if (!hasLower || NumOps.LessThan(violation, lowerCandidate))
-                {
-                    lowerCandidate = violation;
-                    hasLower = true;
-                }
-            }
-        }
-
+        var free = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(alpha, NumOps.Zero), Engine.TensorLessThan(alpha, upper));
+        int freeCount = Engine.TensorNonzero(free).Shape[0];
         if (freeCount > 0)
         {
+            T sum = Engine.TensorSum(Engine.TensorWhere(free, violation, Tensor<T>.CreateDefault(new[] { n }, NumOps.Zero)));
             return NumOps.Divide(sum, NumOps.FromDouble(freeCount));
         }
+
+        // No free multiplier: the largest violation that can still increase and the smallest that can
+        // still decrease (first eligible taken, then strictly better).
+        int upperIndex = SolverTensorOps<T>.ScanArgMin(Engine.TensorNegate(violation), CanIncreaseAlongConstraint(y, alpha, upper));
+        int lowerIndex = SolverTensorOps<T>.ScanArgMin(violation, CanDecreaseAlongConstraint(y, alpha, upper));
+        bool hasUpper = upperIndex >= 0, hasLower = lowerIndex >= 0;
 
         if (hasUpper && hasLower)
         {
             return NumOps.Divide(
-                NumOps.Add(upperCandidate, lowerCandidate), NumOps.FromDouble(2.0));
+                NumOps.Add(violation.GetFlat(upperIndex), violation.GetFlat(lowerIndex)), NumOps.FromDouble(2.0));
         }
 
-        if (hasUpper) return upperCandidate;
-        if (hasLower) return lowerCandidate;
+        if (hasUpper) return violation.GetFlat(upperIndex);
+        if (hasLower) return violation.GetFlat(lowerIndex);
 
         return NumOps.Zero;
     }
 
-    /// <summary>
-    /// Whether the multiplier can move in the direction that increases <c>y_i·α_i</c> without
-    /// leaving its box.
-    /// </summary>
-    private static bool CanIncreaseAlongConstraint(T label, T alpha, T upperBound)
-    {
-        return NumOps.GreaterThan(label, NumOps.Zero)
-            ? NumOps.LessThan(alpha, upperBound)
-            : NumOps.GreaterThan(alpha, NumOps.Zero);
-    }
+    // 1 where alpha_k can move up along y^T alpha = const: below its bound for y > 0, above zero otherwise.
+    private static Tensor<T> CanIncreaseAlongConstraint(Tensor<T> label, Tensor<T> alpha, Tensor<T> upperBound)
+        => Engine.TensorWhere(
+            Engine.TensorGreaterThan(label, NumOps.Zero),
+            Engine.TensorLessThan(alpha, upperBound),
+            Engine.TensorGreaterThan(alpha, NumOps.Zero));
 
-    /// <summary>
-    /// Whether the multiplier can move in the direction that decreases <c>y_i·α_i</c> without
-    /// leaving its box.
-    /// </summary>
-    private static bool CanDecreaseAlongConstraint(T label, T alpha, T upperBound)
-    {
-        return NumOps.GreaterThan(label, NumOps.Zero)
-            ? NumOps.GreaterThan(alpha, NumOps.Zero)
-            : NumOps.LessThan(alpha, upperBound);
-    }
+    // 1 where alpha_k can move down: above zero for y > 0, below its bound otherwise.
+    private static Tensor<T> CanDecreaseAlongConstraint(Tensor<T> label, Tensor<T> alpha, Tensor<T> upperBound)
+        => Engine.TensorWhere(
+            Engine.TensorGreaterThan(label, NumOps.Zero),
+            Engine.TensorGreaterThan(alpha, NumOps.Zero),
+            Engine.TensorLessThan(alpha, upperBound));
 
     private static T Min(T left, T right) => NumOps.LessThan(left, right) ? left : right;
 

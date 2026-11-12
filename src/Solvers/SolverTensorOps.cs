@@ -66,6 +66,19 @@ internal static class SolverTensorOps<T>
         return First(Engine.TensorMultiply(valid, Engine.TensorEquals(candidates, smallest)))?[0] ?? -1;
     }
 
+    /// <summary>
+    /// The index the scan <c>if (best &lt; 0 || v &lt; values[best]) best = i</c> over the eligible entries ends
+    /// on: the first eligible entry is taken even when it is NaN (nothing compares below NaN), otherwise the
+    /// first index of the smallest non-NaN eligible entry. -1 when nothing is eligible.
+    /// </summary>
+    internal static int ScanArgMin(Tensor<T> values, Tensor<T> eligible)
+    {
+        var first = First(eligible);
+        if (first is null) return -1;
+        if (NumOps.IsNaN(values.GetFlat(first[0]))) return first[0];
+        return FirstMinIndex(values, eligible);
+    }
+
     /// <summary>1 where <c>x &lt;= limit</c>, 0 elsewhere (NaN gives 0).</summary>
     internal static Tensor<T> AtMost(Tensor<T> x, T limit)
         => Engine.TensorMax(Engine.TensorLessThan(x, limit), Engine.TensorEquals(x, limit));
