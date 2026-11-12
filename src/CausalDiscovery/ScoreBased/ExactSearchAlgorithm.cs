@@ -183,7 +183,7 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
             if (parents.Count == 0) continue;
 
             positions.AddRange(parents.Select(parent => parent * d + v));
-            weights.Add(EstimateMultivariateOLS(data, n, parents, v));
+            weights.Add(EstimateMultivariateOLS(data, parents, v));
         }
 
         return CausalTensorHelpers.FromTensorValues(d, d, positions, weights);
@@ -217,7 +217,7 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
     /// Multivariate OLS: regress child on all parents jointly.
     /// Returns coefficient vector (one per parent).
     /// </summary>
-    private Tensor<T> EstimateMultivariateOLS(Matrix<T> data, int n, List<int> parents, int child)
+    private Tensor<T> EstimateMultivariateOLS(Matrix<T> data, List<int> parents, int child)
     {
         int p = parents.Count;
         if (p == 0) return new Tensor<T>(new[] { 0 });

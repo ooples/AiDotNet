@@ -66,7 +66,7 @@ public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
         // Initialize ordering using marginal variance (low variance = likely exogenous)
-        var ordering = InitializeOrdering(data, d);
+        var ordering = InitializeOrdering(data);
 
         // Compute initial parent sets and edge count
         var parentSets = ComputeOptimalParents(data, ordering);
@@ -183,7 +183,7 @@ public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
     /// <summary>
     /// Initializes ordering based on marginal variance (ascending — low variance first).
     /// </summary>
-    private int[] InitializeOrdering(Matrix<T> data, int d)
+    private int[] InitializeOrdering(Matrix<T> data)
     {
         // Columns ascending by population variance; equal variances keep column order.
         var variances = Engine.ReduceMean(Engine.TensorSquare(CenterColumns(Tensor<T>.FromMatrix(data))), new[] { 0 }, false);

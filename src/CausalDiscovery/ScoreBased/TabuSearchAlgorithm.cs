@@ -31,6 +31,11 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
     [ResearchPaper("Tabu Search: A Tutorial", "https://doi.org/10.1287/ijoc.2.1.4")]
 public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
 {
+    /// <summary>
+    /// Smallest weight given to a selected edge, so an edge whose correlation is near zero stays in the graph.
+    /// </summary>
+    private const double MinimumEdgeWeight = 1e-10;
+
     private const int DEFAULT_TABU_SIZE = 100;
 
     /// <inheritdoc/>
@@ -155,7 +160,7 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
         var weights = new Dictionary<int, double>();
         for (int to = 0; to < d; to++)
             foreach (int from in bestParentSets[to])
-                weights[from * d + to] = Math.Max(1e-10, ComputeAbsCorrelation(data, from, to));
+                weights[from * d + to] = Math.Max(MinimumEdgeWeight, ComputeAbsCorrelation(data, from, to));
 
         return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
