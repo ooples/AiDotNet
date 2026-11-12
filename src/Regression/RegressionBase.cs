@@ -508,9 +508,11 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         }
 
         var coefficientsAsDoubles = coefficientsToken.ToObject<double[]>() ?? Array.Empty<double>();
-        var coefficients = coefficientsAsDoubles.Length == 0
-            ? new Vector<T>(0)
-            : new Tensor<double>(coefficientsAsDoubles, new[] { coefficientsAsDoubles.Length }).Cast<T>().ToVector();
+        var coefficients = new Vector<T>(coefficientsAsDoubles.Length);
+        for (int i = 0; i < coefficientsAsDoubles.Length; i++)
+        {
+            coefficients[i] = NumOps.FromDouble(coefficientsAsDoubles[i]);
+        }
 
         Coefficients = coefficients;
         Intercept = NumOps.FromDouble(interceptToken.ToObject<double>());
