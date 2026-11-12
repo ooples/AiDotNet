@@ -95,11 +95,11 @@ public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
+        var (decay, keep, protection, learningRate) = ProtectionConstants();
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             // Inner loop with importance-protected learning rates
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -108,22 +108,10 @@ public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Update importance: EMA of squared gradients
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double gVal = NumOps.ToDouble(grad[d]);
-                    double impD = NumOps.ToDouble(_importance[d]);
-                    _importance[d] = NumOps.FromDouble(_algoOptions.ImportanceDecay * impD
-                                   + (1.0 - _algoOptions.ImportanceDecay) * gVal * gVal);
-                }
+                _importance = Engine.Add(Engine.Multiply(_importance, decay), Engine.Multiply(Engine.Multiply(grad, grad), keep));
 
-                // Apply gradient with per-parameter protected learning rate
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double effectiveLR = _algoOptions.InnerLearningRate
-                                       / (1.0 + _algoOptions.ProtectionStrength * NumOps.ToDouble(_importance[d]));
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(effectiveLR * NumOps.ToDouble(grad[d])));
-                }
+                // Apply gradient with per-parameter protected learning rate lr / (1 + strength * importance)
+                adaptedParams = ProtectedStep(adaptedParams, grad, _importance, protection, learningRate);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -145,32 +133,34 @@ public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
+        var (decay, keep, protection, learningRate) = ProtectionConstants();
 
         // Use local copy of importance so Adapt doesn't mutate shared training state
-        var localImportance = new double[_paramDim];
-        Array.Copy(_importance, localImportance, _paramDim);
+        var localImportance = _importance.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double gVal = NumOps.ToDouble(grad[d]);
-                localImportance[d] = _algoOptions.ImportanceDecay * localImportance[d]
-                               + (1.0 - _algoOptions.ImportanceDecay) * gVal * gVal;
-
-                double effectiveLR = _algoOptions.InnerLearningRate
-                                   / (1.0 + _algoOptions.ProtectionStrength * localImportance[d]);
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(effectiveLR * gVal));
-            }
+            localImportance = Engine.Add(Engine.Multiply(localImportance, decay), Engine.Multiply(Engine.Multiply(grad, grad), keep));
+            adaptedParams = ProtectedStep(adaptedParams, grad, localImportance, protection, learningRate);
         }
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+    }
+
+    /// <summary>The importance EMA decay, its complement, the protection strength and the inner learning rate in T.</summary>
+    private (T Decay, T Keep, T Protection, T LearningRate) ProtectionConstants()
+        => (NumOps.FromDouble(_algoOptions.ImportanceDecay), NumOps.FromDouble(1.0 - _algoOptions.ImportanceDecay),
+            NumOps.FromDouble(_algoOptions.ProtectionStrength), NumOps.FromDouble(_algoOptions.InnerLearningRate));
+
+    /// <summary>theta - lr * g / (1 + strength * importance), element-wise.</summary>
+    private Vector<T> ProtectedStep(Vector<T> parameters, Vector<T> gradient, Vector<T> importance, T protection, T learningRate)
+    {
+        var denominator = Engine.Add(Engine.Fill(importance.Length, NumOps.One), Engine.Multiply(importance, protection));
+        return Engine.Subtract(parameters, Engine.Divide(Engine.Multiply(gradient, learningRate), denominator));
     }
 }
