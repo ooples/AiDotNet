@@ -288,7 +288,15 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public static FunctionTransformer<T> Sign()
     {
         return new FunctionTransformer<T>(
-            MapMatrix(t => AiDotNetEngine.Current.TensorSign(t)),
+            MapMatrix(t =>
+            {
+                // Math.Sign throws on NaN; keep that contract (NaN is the only value not equal to itself).
+                var engine = AiDotNetEngine.Current;
+                var ops = MathHelper.GetNumericOperations<T>();
+                if (t.Length > 0 && ops.LessThan(engine.TensorMinValue(engine.TensorEquals(t, t)), ops.One))
+                    throw new ArithmeticException("Function does not accept floating point Not-a-Number values.");
+                return engine.TensorSign(t);
+            }),
             null); // No inverse for sign function
     }
 
