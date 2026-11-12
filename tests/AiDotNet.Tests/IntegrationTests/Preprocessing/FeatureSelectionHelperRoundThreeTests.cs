@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Preprocessing.FeatureSelection.Neural;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -8,9 +7,8 @@ using Xunit;
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
 /// <summary>
-/// Reference tests for the third review round of the 08d feature-selection helpers and the sparse autoencoder:
-/// the KL sparsity derivative at saturated units in Half, and the pairwise squared distances where Half overflow
-/// met a mask multiply.
+/// Reference tests for the third review round of the 08d sparse autoencoder: the KL sparsity derivative at
+/// saturated units in Half (the pairwise squared distance test moved to FeatureSelectionTensorOpsTests).
 /// </summary>
 public class FeatureSelectionHelperRoundThreeTests
 {
@@ -50,22 +48,5 @@ public class FeatureSelectionHelperRoundThreeTests
     {
         await Task.CompletedTask;
         Assert.Equal(1e-10, SparseAutoencoderSelector<double>.ActivationEpsilon());
-    }
-
-    // Rows 300 and 0: the squared distance 300^2 = 90000 is past Half's 65504, so the off-diagonal entries are
-    // +infinity. The engine forms ||a||^2 + ||b||^2 - 2 a.b, so the diagonal of row 0 is inf + inf - inf = NaN, and
-    // the former mask multiply (1 - I) kept it NaN (0 * NaN); the diagonal must be exactly 0.
-    [Fact(Timeout = 60000)]
-    public async Task PairwiseSquaredDistances_Half_HasAnExactZeroDiagonalWhenDistancesOverflow()
-    {
-        await Task.CompletedTask;
-        var x = new Tensor<Half>(new[] { (Half)300, (Half)0 }, new[] { 2, 1 });
-
-        var squared = FeatureSelectionTensorOps.PairwiseSquaredDistances(x);
-
-        Assert.Equal(0.0, (double)squared[0, 0]);
-        Assert.Equal(0.0, (double)squared[1, 1]);
-        Assert.True(double.IsPositiveInfinity((double)squared[0, 1]));
-        Assert.True(double.IsPositiveInfinity((double)squared[1, 0]));
     }
 }

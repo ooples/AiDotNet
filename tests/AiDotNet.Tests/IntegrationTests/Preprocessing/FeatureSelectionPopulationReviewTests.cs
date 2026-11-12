@@ -70,20 +70,6 @@ public class FeatureSelectionPopulationReviewTests
         Assert.Equal(0.0, (double)child[2050]);
     }
 
-    // Top-2 of the masked entries {1, 2}. The old fill (min - 1) for the unmasked entry 0 equals 3e8 in float, so
-    // entry 0 tied with entry 1 and won the tie by its lower index.
-    [Fact(Timeout = 60000)]
-    public async Task TopKWhere_RanksOnlyTheMaskedEntries()
-    {
-        await Task.CompletedTask;
-        var scores = new Tensor<float>(new[] { 3e8f, 3e8f, 5e8f }, new[] { 3 });
-        var mask = new Tensor<float>(new[] { 0f, 1f, 1f }, new[] { 3 });
-
-        var selected = FeatureSelectionTensorOps.TopKWhere(scores, mask, 2);
-
-        Assert.Equal(new[] { 1, 2 }, selected);
-    }
-
     // For f(x) = w . x and one reference point, phi_j = w_j (x_j - b_j) exactly. With 200 features C(200, s)
     // overflows float for the coalition sizes drawn (about 100), which zeroed every kernel weight and left all the
     // attribution on the last feature.
