@@ -240,16 +240,41 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var coefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
+        // Coordinate descent is a Gauss-Seidel sweep (Wright, "Coordinate descent algorithms", 2015): each
+        // partial derivative is taken at the solution with the earlier coordinates already moved. Taking every
+        // derivative at the starting point instead is a full gradient step, which diverges on coupled
+        // objectives (f(x, y) = (x + y)^2 with learning rate 0.75) where the sequential sweep converges.
+        var coefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters().Clone();
+        var solution = currentSolution;
+        for (int index = 0; index < coefficients.Length; index++)
+        {
+            T derivative = CalculatePartialDerivative(solution, inputData, index);
+            ApplySingleCoordinateUpdate(coefficients, index, derivative);
+            solution = InterfaceGuard.Parameterizable(solution).WithParameters(coefficients.Clone());
+        }
 
-        // One central-difference model evaluation per coordinate. Every derivative is taken at the current
-        // solution, so they are independent of each other and the per-coordinate updates apply as one vector.
-        var gradient = Vector<T>.FromList(Enumerable.Range(0, coefficients.Length)
-            .Select(index => CalculatePartialDerivative(currentSolution, inputData, index))
-            .ToList());
-        var newCoefficients = ApplyCoordinateUpdates(coefficients, gradient);
+        return solution;
+    }
 
-        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
+    /// <summary>
+    /// Moves one coordinate: update = lr[i] * derivative + momentum[i] * previousUpdate[i], recorded as that
+    /// coordinate's previous update, and coefficients[i] -= update. One-element engine ops; the other
+    /// coordinates and their momentum state are untouched.
+    /// </summary>
+    private void ApplySingleCoordinateUpdate(Vector<T> coefficients, int index, T derivative)
+    {
+        var start = new[] { index };
+        var length = new[] { 1 };
+        var learningRate = Engine.TensorSlice(_learningRates.AsTensor(), start, length);
+        var momentum = Engine.TensorSlice(_momentums.AsTensor(), start, length);
+        var previous = Engine.TensorSlice(_previousUpdate.AsTensor(), start, length);
+        var update = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(learningRate, derivative),
+            Engine.TensorMultiply(momentum, previous));
+        var moved = Engine.TensorSubtract(Engine.TensorSlice(coefficients.AsTensor(), start, length), update);
+
+        update.AsSpan().CopyTo(_previousUpdate.AsWritableSpan().Slice(index, 1));
+        moved.AsSpan().CopyTo(coefficients.AsWritableSpan().Slice(index, 1));
     }
 
     /// <summary>
