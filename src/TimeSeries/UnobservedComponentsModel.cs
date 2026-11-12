@@ -631,7 +631,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// These technical parameters control how the Kalman filter works, balancing its
     /// responsiveness to new data against the smoothness of its component estimates.
     /// </remarks>
-    private void InitializeKalmanParameters()
+    internal void InitializeKalmanParameters()
     {
         int stateSize = 3; // trend, seasonal, cycle
         if (!_ucOptions.IncludeCycle) stateSize--;
@@ -671,42 +671,58 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// The result is stored in _filteredState and _filteredCovariance for later use
     /// in the smoothing step.
     /// </remarks>
-    private void KalmanFilter(Vector<T> y)
+    internal void KalmanFilter(Vector<T> y)
     {
+        var engine = AiDotNetEngine.Current;
         int n = y.Length;
-        var filteredState = new List<Vector<T>>();
-        var filteredCovariance = new List<Matrix<T>>();
+        int stateSize = _stateTransition.Rows;
+        var filteredState = new List<Vector<T>>(n);
+        var filteredCovariance = new List<Matrix<T>>(n);
 
+        var transition = Tensor<T>.FromMatrix(_stateTransition);
+        var transitionT = engine.TensorTranspose(transition);
+        var observation = Tensor<T>.FromMatrix(_observationModel);
+        var observationT = engine.TensorTranspose(observation);
+        var processNoise = Tensor<T>.FromMatrix(_processNoise);
+        var observations = engine.Reshape(y.AsTensor(), new[] { n, 1, 1 });
+        var state = engine.Reshape(_state.AsTensor(), new[] { stateSize, 1 });
+        var covariance = Tensor<T>.FromMatrix(_stateCovariance);
+
+        // The time recursion is sequential; each step is whole-matrix engine work.
         for (int t = 0; t < n; t++)
         {
-            // Predict
-            Vector<T> predictedState = _stateTransition * _state;
-            Matrix<T> predictedCovariance = _stateTransition * _stateCovariance * _stateTransition.Transpose() + _processNoise;
+            // Predict: a = T a, P = T P T' + Q
+            var predictedState = engine.TensorMatMul(transition, state);
+            var predictedCovariance = engine.TensorAdd(
+                engine.TensorMatMul(engine.TensorMatMul(transition, covariance), transitionT), processNoise);
 
-            // Update
-            T innovation = NumOps.Subtract(y[t], (_observationModel * predictedState)[0]);
-            T innovationCovariance = (_observationModel * predictedCovariance * _observationModel.Transpose())[0, 0];
-            innovationCovariance = NumOps.Add(innovationCovariance, _observationNoise);
+            // Update: v = y - Z a, F = Z P Z' + H, K = P Z' / F
+            var observed = engine.Reshape(engine.TensorSlice(observations, new[] { t, 0, 0 }, new[] { 1, 1, 1 }), new[] { 1, 1 });
+            var innovation = engine.TensorSubtract(observed, engine.TensorMatMul(observation, predictedState));
+            var gainNumerator = engine.TensorMatMul(predictedCovariance, observationT);
+            var innovationCovariance = engine.TensorAddScalar(engine.TensorMatMul(observation, gainNumerator), _observationNoise);
+            var kalmanGain = engine.TensorDivide(
+                gainNumerator, engine.TensorBroadcastTo(innovationCovariance, new[] { stateSize, 1 }));
 
-            // Calculate Kalman gain
-            Matrix<T> kalmanGainMatrix = predictedCovariance * _observationModel.Transpose();
-            Vector<T> kalmanGain = kalmanGainMatrix.GetColumn(0) * NumOps.Divide(NumOps.One, innovationCovariance);
+            // a = a + K v, P = P - K Z P
+            state = engine.TensorAdd(predictedState, engine.TensorMatMul(kalmanGain, innovation));
+            covariance = engine.TensorSubtract(
+                predictedCovariance, engine.TensorMatMul(engine.TensorMatMul(kalmanGain, observation), predictedCovariance));
 
-            // Update state
-            _state = predictedState + kalmanGain * innovation;
-
-            // Update state covariance
-            Matrix<T> temp = Matrix<T>.OuterProduct(kalmanGain, _observationModel.GetRow(0));
-            _stateCovariance = predictedCovariance - temp * predictedCovariance;
-
-            filteredState.Add(_state);
-            filteredCovariance.Add(_stateCovariance);
+            filteredState.Add(HeapVector(engine.Reshape(state, new[] { stateSize })));
+            filteredCovariance.Add(HeapMatrix(covariance));
         }
+
+        _state = HeapVector(engine.Reshape(state, new[] { stateSize }));
+        _stateCovariance = HeapMatrix(covariance);
 
         // Store filtered results
         _filteredState = filteredState;
         _filteredCovariance = filteredCovariance;
     }
+
+    /// <summary>The filtered state at every step of the last <see cref="KalmanFilter"/> run.</summary>
+    internal IReadOnlyList<Vector<T>> FilteredStates => _filteredState;
 
     /// <summary>
     /// Applies the Kalman smoother to refine state estimates using future information.

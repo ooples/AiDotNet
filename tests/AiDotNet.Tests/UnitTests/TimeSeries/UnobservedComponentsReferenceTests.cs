@@ -42,6 +42,43 @@ public class UnobservedComponentsReferenceTests
 
     [Fact]
     [Trait("category", "unit")]
+    public void Kalman_filter_matches_statsmodels()
+    {
+        // statsmodels KalmanFilter(k_endog=1, k_states=3): design ones, obs_cov 0.1, transition and state_cov I,
+        // initialize_known(0, 2I) (the first prediction of a zero state with unit covariance); filtered_state[0].
+        var model = new UnobservedComponentsModel<double, Matrix<double>, Vector<double>>(
+            new AiDotNet.Models.Options.UnobservedComponentsOptions<double, Matrix<double>, Vector<double>>
+            {
+                SeasonalPeriod = 4,
+                IncludeCycle = true
+            });
+        var y = new Vector<double>(8);
+        for (int t = 0; t < 8; t++)
+        {
+            y[t] = Math.Sin(0.8 * t) + (0.2 * t);
+        }
+
+        double[] expected =
+        {
+            0.0, 0.29622467312490997, 0.4611974587953153, 0.42628184140714753, 0.2528101326429333,
+            0.08643809568374902, 0.068523601019022, 0.2503724373833497
+        };
+
+        model.InitializeKalmanParameters();
+        model.KalmanFilter(y);
+        var states = model.FilteredStates;
+        Assert.Equal(expected.Length, states.Count);
+        for (int t = 0; t < expected.Length; t++)
+        {
+            for (int s = 0; s < 3; s++)
+            {
+                Assert.Equal(expected[t], states[t][s], Tolerance);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
     public void Band_pass_keeps_both_halves_of_the_spectrum_as_numpy()
     {
         // X = np.fft.fft(x); f = np.minimum(k, n - k) / n; np.real(np.fft.ifft(X * ((f >= 1/8) & (f <= 1/4)))).
