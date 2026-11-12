@@ -87,10 +87,21 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// var additive = new AdditiveStructureKernel&lt;double&gt;(kernels, groups);
     /// </para>
     /// </remarks>
+    public AdditiveStructureKernel(IKernelFunction<T>[] componentKernels, int[][] featureGroups)
+        : this(componentKernels, featureGroups, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes an additive kernel from component kernels, their feature groups and component weights.
+    /// </summary>
+    /// <param name="componentKernels">One kernel per feature group.</param>
+    /// <param name="featureGroups">The feature indices each component kernel sees.</param>
+    /// <param name="weights">Per-component weights; <c>null</c> weights every component equally.</param>
     public AdditiveStructureKernel(
         IKernelFunction<T>[] componentKernels,
         int[][] featureGroups,
-        Vector<T>? weights = null)
+        Vector<T>? weights)
     {
         if (componentKernels is null) throw new ArgumentNullException(nameof(componentKernels));
         if (featureGroups is null) throw new ArgumentNullException(nameof(featureGroups));
