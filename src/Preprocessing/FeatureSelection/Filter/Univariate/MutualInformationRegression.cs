@@ -27,13 +27,13 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _mutualInfoScores;
+    private Vector<T>? _mutualInfoScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MutualInfoScores => _mutualInfoScores;
+    public Vector<T>? MutualInfoScores => _mutualInfoScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,80 +71,15 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
         int n = data.Rows;
         int p = data.Columns;
 
-        // Bin the target variable
-        double yMin = double.MaxValue, yMax = double.MinValue;
-        for (int i = 0; i < n; i++)
-        {
-            double val = NumOps.ToDouble(target[i]);
-            yMin = Math.Min(yMin, val);
-            yMax = Math.Max(yMax, val);
-        }
-
-        double yRange = yMax - yMin;
-        if (yRange < 1e-10) yRange = 1;
-
-        var yBins = new int[n];
-        var yProb = new double[_nBins];
-        for (int i = 0; i < n; i++)
-        {
-            double val = NumOps.ToDouble(target[i]);
-            yBins[i] = Math.Min((int)(((val - yMin) / yRange) * _nBins), _nBins - 1);
-            yProb[yBins[i]] += 1.0 / n;
-        }
-
-        _mutualInfoScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Bin feature
-            double xMin = double.MaxValue, xMax = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                xMin = Math.Min(xMin, val);
-                xMax = Math.Max(xMax, val);
-            }
-
-            double xRange = xMax - xMin;
-            if (xRange < 1e-10) xRange = 1;
-
-            var xProb = new double[_nBins];
-            var jointProb = new double[_nBins, _nBins];
-
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                int xBin = Math.Min((int)(((val - xMin) / xRange) * _nBins), _nBins - 1);
-                xProb[xBin] += 1.0 / n;
-                jointProb[xBin, yBins[i]] += 1.0 / n;
-            }
-
-            // Compute mutual information
-            double mi = 0;
-            for (int xb = 0; xb < _nBins; xb++)
-            {
-                for (int yb = 0; yb < _nBins; yb++)
-                {
-                    if (jointProb[xb, yb] > 1e-10 && xProb[xb] > 1e-10 && yProb[yb] > 1e-10)
-                    {
-                        mi += jointProb[xb, yb] * Math.Log(jointProb[xb, yb] / (xProb[xb] * yProb[yb]));
-                    }
-                }
-            }
-
-            _mutualInfoScores[j] = Math.Max(0, mi);
-        }
-
-        // Select top features by MI
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _mutualInfoScores
-            .Select((mi, idx) => (MI: mi, Index: idx))
-            .OrderByDescending(x => x.MI)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // the target is binned on the same equal-width grid as the features
+        var targetCodes = FeatureSelectionTensorOps.ScaledBins(
+            Engine.Reshape(FilterStatisticTensorOps.AsTensor(target), new[] { n, 1 }), _nBins);
+        var info = new DiscreteInformation<T>(
+            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            Engine.Reshape(FeatureSelectionTensorOps.OneHot<T>(targetCodes, _nBins), new[] { n, _nBins }));
+        var scores = Engine.TensorMax(info.Relevance(), NumOps.Zero);
+        _mutualInfoScores = scores.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

@@ -743,4 +743,120 @@ internal static class FeatureSelectionTensorOps
         var t = counts.Cast<T>();
         return engine.TensorSum(engine.TensorSubtract(engine.TensorMultiply(engine.TensorSquare(t), t), t));
     }
+
+    /// <summary>
+    /// Pearson chi-square statistic <c>sum (O - E)^2 / E</c> of [p, A, B] contingency tables, with
+    /// <c>E = row total * column total / n</c>; cells with no expected count add nothing. Returns [p].
+    /// </summary>
+    public static Tensor<T> ContingencyChiSquare<T>(Tensor<T> observed)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = observed.Shape[0];
+        int a = observed.Shape[1];
+        int b = observed.Shape[2];
+        var shape = new[] { p, a, b };
+        var rows = engine.TensorBroadcastTo(engine.ReduceSum(observed, new[] { 2 }, true), shape);
+        var columns = engine.TensorBroadcastTo(engine.ReduceSum(observed, new[] { 1 }, true), shape);
+        var total = engine.TensorBroadcastTo(engine.ReduceSum(observed, new[] { 1, 2 }, true), shape);
+        var expected = FilterStatisticTensorOps.GuardedDivide(engine.TensorMultiply(rows, columns), total, 0, ops.Zero);
+        var cells = FilterStatisticTensorOps.GuardedDivide(
+            engine.TensorSquare(engine.TensorSubtract(observed, expected)), expected, 0, ops.Zero);
+        return engine.ReduceSum(cells, new[] { 1, 2 }, false);
+    }
+
+    /// <summary>
+    /// Codes of the distinct values of every column of an [n, p] tensor (the position of each value among its
+    /// column's sorted distinct values), and the largest number of distinct values in any column.
+    /// </summary>
+    public static Tensor<int> DistinctValueCodes<T>(Tensor<T> x, out int levels)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        levels = 1;
+        if (p == 0)
+            return new Tensor<int>(new[] { n, 0 });
+
+        var columns = new Tensor<int>[p];
+        for (int j = 0; j < p; j++)
+        {
+            var (values, inverse, _) = engine.TensorUniqueWithInfo(Column(x, j), true, true, false);
+            if (inverse is null)
+                throw new InvalidOperationException("The engine returned no inverse map for the distinct values.");
+            levels = Math.Max(levels, values.Length);
+            columns[j] = engine.Reshape(inverse, new[] { n, 1 });
+        }
+
+        return engine.TensorConcatenate(columns, 1);
+    }
+
+    /// <summary>
+    /// Two-sided Fisher exact test of 2x2 tables <c>[[a, b], [c, d]]</c> given per feature ([p] each), as
+    /// <c>scipy.stats.fisher_exact</c>: the p-value sums the hypergeometric probabilities of every table with the
+    /// same margins that is no more likely than the observed one (relative tolerance 1e-7), and the odds ratio is
+    /// <c>ad / bc</c> (infinite when <c>bc = 0</c>). A table with an empty row or column has odds ratio NaN and
+    /// p-value 1.
+    /// </summary>
+    public static (Tensor<T> PValues, Tensor<T> OddsRatios) FisherExact<T>(
+        Tensor<T> a, Tensor<T> b, Tensor<T> c, Tensor<T> d, int n)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = a.Length;
+        var grid = new[] { p, n + 1 };
+        T total = ops.FromDouble(n);
+        var row1 = engine.TensorAdd(a, b);
+        var column1 = engine.TensorAdd(a, c);
+        var column2 = engine.TensorAdd(b, d);
+        var k = FilterStatisticTensorOps.RowBroadcast(engine.TensorArange<T>(0, n + 1, 1), p);
+        var r1 = engine.TensorBroadcastTo(engine.Reshape(row1, new[] { p, 1 }), grid);
+        var c1 = engine.TensorBroadcastTo(engine.Reshape(column1, new[] { p, 1 }), grid);
+        var c2 = engine.TensorBroadcastTo(engine.Reshape(column2, new[] { p, 1 }), grid);
+
+        // P(X = k) = C(c1, k) C(c2, r1 - k) / C(n, r1) on the support max(0, r1 - c2) <= k <= min(r1, c1)
+        var rest = engine.TensorSubtract(r1, k);
+        var outside = engine.TensorAdd(
+            engine.TensorAdd(engine.TensorGreaterThan(k, c1), engine.TensorGreaterThan(k, r1)),
+            engine.TensorGreaterThan(rest, c2));
+        var inSupport = engine.TensorEquals(outside, ops.Zero);
+        var logPmf = engine.TensorSubtract(
+            engine.TensorAdd(
+                LogChoose(c1, engine.TensorMin(k, c1)),
+                LogChoose(c2, engine.TensorMin(engine.TensorMax(rest, ops.Zero), c2))),
+            LogChoose(FilterStatisticTensorOps.FilledLike(r1, total), r1));
+        var pmf = engine.TensorMultiply(engine.TensorExp(logPmf), inSupport);
+
+        var observedLog = engine.TensorSubtract(
+            engine.TensorAdd(LogChoose(column1, a), LogChoose(column2, b)),
+            LogChoose(FilterStatisticTensorOps.FilledLike(row1, total), row1));
+        var threshold = FilterStatisticTensorOps.ColumnBroadcast(
+            engine.TensorMultiplyScalar(engine.TensorExp(observedLog), ops.FromDouble(1 + 1e-7)), n + 1);
+        var asExtreme = FilterStatisticTensorOps.OneMinus(engine.TensorGreaterThan(pmf, threshold));
+        var pValues = engine.TensorMin(
+            engine.ReduceSum(engine.TensorMultiply(pmf, asExtreme), new[] { 1 }, false), ops.One);
+
+        var odds = FilterStatisticTensorOps.GuardedDivide(
+            engine.TensorMultiply(a, d), engine.TensorMultiply(b, c), 0, ops.FromDouble(double.PositiveInfinity));
+        var row2 = engine.TensorAdd(c, d);
+        var emptyMargins = engine.TensorAdd(
+            engine.TensorAdd(engine.TensorEquals(row1, ops.Zero), engine.TensorEquals(row2, ops.Zero)),
+            engine.TensorAdd(engine.TensorEquals(column1, ops.Zero), engine.TensorEquals(column2, ops.Zero)));
+        var degenerate = engine.TensorGreaterThan(emptyMargins, ops.Zero);
+        return (
+            engine.TensorWhere(degenerate, FilterStatisticTensorOps.FilledLike(pValues, ops.One), pValues),
+            engine.TensorWhere(degenerate, FilterStatisticTensorOps.FilledLike(odds, ops.FromDouble(double.NaN)), odds));
+    }
+
+    // log C(m, k) = lgamma(m + 1) - lgamma(k + 1) - lgamma(m - k + 1) for 0 <= k <= m
+    private static Tensor<T> LogChoose<T>(Tensor<T> m, Tensor<T> k)
+    {
+        var engine = AiDotNetEngine.Current;
+        T one = MathHelper.GetNumericOperations<T>().One;
+        return engine.TensorSubtract(
+            engine.TensorLgamma(engine.TensorAddScalar(m, one)),
+            engine.TensorAdd(
+                engine.TensorLgamma(engine.TensorAddScalar(k, one)),
+                engine.TensorLgamma(engine.TensorAddScalar(engine.TensorSubtract(m, k), one))));
+    }
 }

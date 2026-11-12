@@ -28,13 +28,13 @@ public class ChiSquare<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _chiSquareScores;
+    private Vector<T>? _chiSquareScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? ChiSquareScores => _chiSquareScores;
+    public Vector<T>? ChiSquareScores => _chiSquareScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -67,81 +67,14 @@ public class ChiSquare<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Get unique classes
-        var classSet = new HashSet<int>();
-        for (int i = 0; i < n; i++)
-            classSet.Add((int)Math.Round(NumOps.ToDouble(target[i])));
-        var classes = classSet.OrderBy(x => x).ToArray();
-        int nClasses = classes.Length;
-
-        _chiSquareScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Discretize feature into bins
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                minVal = Math.Min(minVal, val);
-                maxVal = Math.Max(maxVal, val);
-            }
-
-            double range = maxVal - minVal;
-            if (range < 1e-10) range = 1;
-
-            var bins = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                bins[i] = Math.Min((int)(((val - minVal) / range) * _nBins), _nBins - 1);
-            }
-
-            // Build contingency table
-            var observed = new int[_nBins, nClasses];
-            var rowTotals = new int[_nBins];
-            var colTotals = new int[nClasses];
-
-            for (int i = 0; i < n; i++)
-            {
-                int bin = bins[i];
-                int classIdx = Array.IndexOf(classes, (int)Math.Round(NumOps.ToDouble(target[i])));
-                observed[bin, classIdx]++;
-                rowTotals[bin]++;
-                colTotals[classIdx]++;
-            }
-
-            // Compute chi-square statistic
-            double chiSq = 0;
-            for (int b = 0; b < _nBins; b++)
-            {
-                for (int c = 0; c < nClasses; c++)
-                {
-                    double expected = (double)rowTotals[b] * colTotals[c] / n;
-                    if (expected > 0)
-                    {
-                        double diff = observed[b, c] - expected;
-                        chiSq += (diff * diff) / expected;
-                    }
-                }
-            }
-
-            _chiSquareScores[j] = chiSq;
-        }
-
-        // Select top features by chi-square score
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _chiSquareScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int nClasses);
+        var observed = FeatureSelectionTensorOps.JointCounts(
+            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            FilterStatisticTensorOps.ClassOneHot<T>(classIndex, nClasses));
+        var chiSquare = FeatureSelectionTensorOps.ContingencyChiSquare(observed);
+        _chiSquareScores = chiSquare.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(chiSquare, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

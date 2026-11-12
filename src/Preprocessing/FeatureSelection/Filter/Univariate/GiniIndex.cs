@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -26,13 +27,13 @@ public class GiniIndex<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _giniGains;
+    private Vector<T>? _giniGains;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? GiniGains => _giniGains;
+    public Vector<T>? GiniGains => _giniGains;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,101 +67,52 @@ public class GiniIndex<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var classOneHot = StatisticalTestHelper.ClassOneHot(target, out _);
+        T total = NumOps.FromDouble(n);
+        T bins = NumOps.FromDouble(_nBins);
+        T zero = NumOps.Zero;
 
-        // Count class frequencies
-        var classCounts = new Dictionary<double, int>();
-        for (int i = 0; i < n; i++)
+        // parent Gini impurity 1 - sum q_c^2
+        var classCounts = Engine.ReduceSum(classOneHot, new[] { 0 }, false);
+        T parentGini = NumOps.Subtract(NumOps.One,
+            Engine.TensorSumOfSquares(Engine.TensorDivideScalar(classCounts, total)));
+
+        // split thresholds min + b * range / nBins (range 1 for a constant column), left side x <= threshold
+        var min = FeatureSelectionTensorOps.ColumnMin(x);
+        var range = Engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(x), min);
+        range = Engine.TensorWhere(Engine.TensorLessThan(range, NumOps.FromDouble(1e-10)),
+            FilterStatisticTensorOps.FilledLike(range, NumOps.One), range);
+        var steps = Engine.TensorArange<T>(1, _nBins, 1).ToArray();
+        var best = FilterStatisticTensorOps.FilledLike(min, zero);
+        foreach (T step in steps)
         {
-            double y = NumOps.ToDouble(target[i]);
-            if (!classCounts.ContainsKey(y)) classCounts[y] = 0;
-            classCounts[y]++;
+            var threshold = Engine.TensorAdd(min, Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(range, step), bins));
+            var left = FilterStatisticTensorOps.OneMinus(
+                Engine.TensorGreaterThan(x, FilterStatisticTensorOps.RowBroadcast(threshold, n)));
+            var leftCounts = Engine.TensorMatMul(Engine.TensorTranspose(left), classOneHot);
+            var rightCounts = Engine.TensorSubtract(FilterStatisticTensorOps.RowBroadcast(classCounts, p), leftCounts);
+            var leftTotal = Engine.ReduceSum(leftCounts, new[] { 1 }, false);
+            var rightTotal = Engine.ReduceSum(rightCounts, new[] { 1 }, false);
+
+            // weighted child impurity: sum over sides of (total - sum count^2 / total) / n
+            var weighted = Engine.TensorDivideScalar(Engine.TensorAdd(
+                SideImpurity(leftCounts, leftTotal), SideImpurity(rightCounts, rightTotal)), total);
+            var reduction = Engine.TensorNegate(Engine.TensorSubtractScalar(weighted, parentGini));
+            var bothSides = Engine.TensorMultiply(
+                Engine.TensorGreaterThan(leftTotal, zero), Engine.TensorGreaterThan(rightTotal, zero));
+            best = Engine.TensorMax(best, FeatureSelectionTensorOps.KeepOrFill(reduction, bothSides, zero));
         }
 
-        // Compute parent Gini
-        double parentGini = ComputeGini(classCounts.Values.ToArray(), n);
-
-        _giniGains = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Extract and discretize feature
-            var values = new double[n];
-            for (int i = 0; i < n; i++)
-                values[i] = NumOps.ToDouble(data[i, j]);
-
-            double min = values.Min();
-            double max = values.Max();
-            double range = max - min;
-            if (range < 1e-10) range = 1;
-
-            // Find best split
-            double bestGiniReduction = 0;
-
-            for (int b = 1; b < _nBins; b++)
-            {
-                double threshold = min + b * range / _nBins;
-
-                // Count classes in left and right splits
-                var leftCounts = new Dictionary<double, int>();
-                var rightCounts = new Dictionary<double, int>();
-                int leftTotal = 0, rightTotal = 0;
-
-                for (int i = 0; i < n; i++)
-                {
-                    double y = NumOps.ToDouble(target[i]);
-                    if (values[i] <= threshold)
-                    {
-                        if (!leftCounts.ContainsKey(y)) leftCounts[y] = 0;
-                        leftCounts[y]++;
-                        leftTotal++;
-                    }
-                    else
-                    {
-                        if (!rightCounts.ContainsKey(y)) rightCounts[y] = 0;
-                        rightCounts[y]++;
-                        rightTotal++;
-                    }
-                }
-
-                if (leftTotal == 0 || rightTotal == 0) continue;
-
-                double leftGini = ComputeGini(leftCounts.Values.ToArray(), leftTotal);
-                double rightGini = ComputeGini(rightCounts.Values.ToArray(), rightTotal);
-
-                double weightedGini = (double)leftTotal / n * leftGini + (double)rightTotal / n * rightGini;
-                double giniReduction = parentGini - weightedGini;
-
-                if (giniReduction > bestGiniReduction)
-                    bestGiniReduction = giniReduction;
-            }
-
-            _giniGains[j] = bestGiniReduction;
-        }
-
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _giniGains
-            .Select((g, idx) => (Gain: g, Index: idx))
-            .OrderByDescending(x => x.Gain)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _giniGains = best.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(best, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
-    private double ComputeGini(int[] counts, int total)
-    {
-        if (total == 0) return 0;
-
-        double gini = 1.0;
-        foreach (int count in counts)
-        {
-            double p = (double)count / total;
-            gini -= p * p;
-        }
-        return gini;
-    }
+    // total * Gini impurity = total - sum count^2 / total for every row of [p, k] class counts (0 for an empty side)
+    private Tensor<T> SideImpurity(Tensor<T> counts, Tensor<T> totals) =>
+        Engine.TensorSubtract(totals, FilterStatisticTensorOps.GuardedDivide(
+            Engine.ReduceSum(Engine.TensorSquare(counts), new[] { 1 }, false), totals, 0, NumOps.Zero));
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
