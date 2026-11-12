@@ -120,12 +120,15 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int h = meanActivation.Length;
-        var eps = ops.FromDouble(1e-10);
+        // rho^ clamped to [eps, 1 - eps], as sparse-autoencoder implementations do, so the KL derivative stays
+        // finite when a unit saturates; with master's 1e-10 added to the denominators it was -target / 0 or
+        // (1 - target) / 0 in Half and float, where 1e-10 is 0 next to 1 and 1 - 1e-10 is 1
+        T eps = ActivationEpsilon();
+        var rhoHat = engine.TensorClamp(meanActivation, eps, ops.Subtract(ops.One, eps));
         var first = engine.TensorDivide(
-            PreprocessingTensorOps.Filled(new[] { h }, ops.FromDouble(-target)), engine.TensorAddScalar(meanActivation, eps));
+            PreprocessingTensorOps.Filled(new[] { h }, ops.FromDouble(-target)), rhoHat);
         var second = engine.TensorDivide(
-            PreprocessingTensorOps.Filled(new[] { h }, ops.FromDouble(1 - target)),
-            engine.TensorAddScalar(PreprocessingTensorOps.OneMinus(meanActivation), eps));
+            PreprocessingTensorOps.Filled(new[] { h }, ops.FromDouble(1 - target)), PreprocessingTensorOps.OneMinus(rhoHat));
         return engine.TensorMultiplyScalar(engine.TensorAdd(first, second), ops.FromDouble(weight));
     }
 
@@ -135,6 +138,19 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     /// and dW1 = x ((W2 e + sparsity) .* a .* (1 - a))^T, so the mean of the terms over the samples is the
     /// gradient of J. <paramref name="sparsity"/> is <see cref="SparsityDelta"/> at the current rho_hat.
     /// </summary>
+    /// <summary>
+    /// The clamp margin of the mean activation: 1e-10 (master's guard) doubled until it is non-zero in T and
+    /// <c>1 - eps</c> is below 1 in T, so 1e-10 in double, about 5e-8 in float and 4.2e-4 in Half.
+    /// </summary>
+    internal static T ActivationEpsilon()
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        double eps = 1e-10;
+        while (ops.Equals(ops.FromDouble(eps), ops.Zero) || !ops.LessThan(ops.Subtract(ops.One, ops.FromDouble(eps)), ops.One))
+            eps *= 2;
+        return ops.FromDouble(eps);
+    }
+
     internal static (Tensor<T> W1, Tensor<T> W2) SampleGradients(Tensor<T> x, Tensor<T> w1, Tensor<T> w2, Tensor<T> sparsity)
     {
         var engine = AiDotNetEngine.Current;
