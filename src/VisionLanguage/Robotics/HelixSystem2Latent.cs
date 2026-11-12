@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -58,14 +59,9 @@ public sealed class HelixSystem2Latent<T>
     /// <summary>
     /// Returns the L2-norm of the latent — useful for monitoring "S2 confidence" between invocations.
     /// </summary>
-    public double L2Norm()
+    public T L2Norm()
     {
-        double sum = 0.0;
-        for (int i = 0; i < Latent.Length; i++)
-        {
-            double v = _numOps.ToDouble(Latent[i]);
-            sum += v * v;
-        }
-        return Math.Sqrt(sum);
+        var engine = AiDotNetEngine.Current;
+        return _numOps.Sqrt(engine.TensorSum(engine.TensorMultiply(Latent, Latent)));
     }
 }

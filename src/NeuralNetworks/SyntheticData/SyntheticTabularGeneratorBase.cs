@@ -203,40 +203,57 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <summary>
     /// Computes min, max, mean, and standard deviation for a numerical column.
     /// </summary>
-    private static void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
+    internal static void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
     {
         int n = data.Rows;
-        double sum = 0;
-        double min = double.MaxValue;
-        double max = double.MinValue;
-
-        for (int row = 0; row < n; row++)
+        if (n == 0)
         {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            sum += val;
-            if (val < min) min = val;
-            if (val > max) max = val;
+            // An empty column keeps the empty-scan values: no min/max, mean 0/0, unit std.
+            meta.Min = double.MaxValue;
+            meta.Max = double.MinValue;
+            meta.Mean = 0.0 / n;
+            meta.Std = 1.0;
+            return;
         }
 
-        double mean = sum / n;
-        double sumSqDiff = 0;
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            double diff = val - mean;
-            sumSqDiff += diff * diff;
-        }
+        var engine = AiDotNetEngine.Current;
+        var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
+        T mean = engine.TensorMean(column);
 
-        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
-        if (std < 1e-10) std = 1e-10; // Prevent division by zero
+        // Sample standard deviation (n - 1), floored at 1e-10 to prevent division by zero. The deviations' L2 norm
+        // is taken scaled, so a column whose squared deviations exceed T's range still gets a finite std.
+        double std = n > 1
+            ? NumOps.ToDouble(ScaledL2Norm(engine.TensorSubtractScalar(column, mean))) / Math.Sqrt(n - 1)
+            : 1.0;
+        if (std < 1e-10) std = 1e-10;
 
-        meta.Min = min;
-        meta.Max = max;
-        meta.Mean = mean;
+        meta.Min = NumOps.ToDouble(engine.TensorMinValue(column));
+        meta.Max = NumOps.ToDouble(engine.TensorMaxValue(column));
+        meta.Mean = NumOps.ToDouble(mean);
         meta.Std = std;
     }
 
     #region Gradient Safety Utilities
+
+    /// <summary>
+    /// The L2 norm of <paramref name="x"/>, computed as m * sqrt(sum((x / m)^2)) with m = max |x| (as LAPACK's
+    /// nrm2 scales), so squares that would overflow T (e.g. a float entry of 1e20) do not make the norm infinite or
+    /// zero. A NaN entry gives a NaN norm and an infinite entry an infinite one.
+    /// </summary>
+    internal static T ScaledL2Norm(Tensor<T> x)
+    {
+        if (x.Length == 0) return NumOps.Zero;
+
+        var engine = AiDotNetEngine.Current;
+        T scale = engine.TensorMaxValue(engine.TensorAbs(x));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero) || NumOps.IsInfinity(scale))
+        {
+            // All zeros (norm 0), a NaN maximum or an infinite entry: the plain sum already gives the answer.
+            return NumOps.Sqrt(engine.TensorSumOfSquares(x));
+        }
+
+        return NumOps.Multiply(scale, NumOps.Sqrt(engine.TensorSumOfSquares(engine.TensorDivideScalar(x, scale))));
+    }
 
     /// <summary>
     /// Clips a gradient tensor to a maximum L2 norm, preventing exploding gradients.
@@ -255,23 +272,13 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     {
         if (maxNorm <= 0) return grad;
 
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            normSq += v * v;
-        }
+        var engine = AiDotNetEngine.Current;
+        T norm = ScaledL2Norm(grad);
+        T max = NumOps.FromDouble(maxNorm);
+        if (NumOps.LessThanOrEquals(norm, max)) return grad;
 
-        double norm = Math.Sqrt(normSq);
-        if (norm <= maxNorm) return grad;
-
-        double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad._shape);
-        for (int i = 0; i < grad.Length; i++)
-        {
-            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-        }
-        return clipped;
+        // A NaN norm falls through, as before, and yields a NaN-scaled copy.
+        return engine.TensorMultiplyScalar(grad, NumOps.Divide(max, norm));
     }
 
     /// <summary>
@@ -289,15 +296,12 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <returns>True if the tensor contains NaN or Infinity; false otherwise.</returns>
     protected static bool HasNaN(Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double v = NumOps.ToDouble(tensor[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                return true;
-            }
-        }
-        return false;
+        if (tensor.Length == 0) return false;
+
+        var engine = AiDotNetEngine.Current;
+        var nonFinite = engine.TensorWhere(engine.TensorIsFinite(tensor),
+            new Tensor<T>(tensor._shape), Tensor<T>.CreateDefault(tensor._shape, NumOps.One));
+        return NumOps.GreaterThan(engine.TensorSum(nonFinite), NumOps.Zero);
     }
 
     /// <summary>
@@ -313,14 +317,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <param name="tensor">The tensor to sanitize in-place.</param>
     protected static void SanitizeTensor(Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double v = NumOps.ToDouble(tensor[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                tensor[i] = NumOps.Zero;
-            }
-        }
+        AiDotNetEngine.Current.TensorNanToNumInPlace(tensor, 0.0, 0.0, 0.0);
     }
 
     /// <summary>
@@ -352,15 +349,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <returns>True if NaN or Infinity is found.</returns>
     protected static bool HasNaN(Vector<T> vector)
     {
-        for (int i = 0; i < vector.Length; i++)
-        {
-            double v = NumOps.ToDouble(vector[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                return true;
-            }
-        }
-        return false;
+        return HasNaN(vector.AsTensor());
     }
 
     /// <summary>
@@ -369,14 +358,8 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <param name="vector">The vector to sanitize.</param>
     protected static void SanitizeTensor(Vector<T> vector)
     {
-        for (int i = 0; i < vector.Length; i++)
-        {
-            double v = NumOps.ToDouble(vector[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                vector[i] = NumOps.Zero;
-            }
-        }
+        // AsTensor shares the vector's memory, so the in-place op writes through.
+        SanitizeTensor(vector.AsTensor());
     }
 
     /// <summary>
@@ -389,23 +372,13 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     {
         if (maxNorm <= 0) return grad;
 
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            normSq += v * v;
-        }
+        var engine = AiDotNetEngine.Current;
+        var gradTensor = grad.AsTensor();
+        T norm = ScaledL2Norm(gradTensor);
+        T max = NumOps.FromDouble(maxNorm);
+        if (NumOps.LessThanOrEquals(norm, max)) return grad;
 
-        double norm = Math.Sqrt(normSq);
-        if (norm <= maxNorm) return grad;
-
-        double scale = maxNorm / norm;
-        var clipped = new Vector<T>(grad.Length);
-        for (int i = 0; i < grad.Length; i++)
-        {
-            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-        }
-        return clipped;
+        return engine.TensorMultiplyScalar(gradTensor, NumOps.Divide(max, norm)).ToVector();
     }
 
     /// <summary>

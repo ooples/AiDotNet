@@ -134,6 +134,7 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
+        var engine = AiDotNetEngine.Current;
 
         // Initialize parameters
         Coefficients = new Vector<T>(p);
@@ -141,89 +142,36 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
         Scale = NumOps.One;
 
         // Convert times to log scale
-        var logTimes = new double[n];
-        for (int i = 0; i < n; i++)
-            logTimes[i] = Math.Log(Math.Max(1e-10, NumOps.ToDouble(times[i])));
+        var logTimes = engine.TensorLog(engine.TensorClampMin(times.AsTensor(), NumOps.FromDouble(1e-10)));
 
         // Initialize intercept as mean of log times
-        double meanLogTime = logTimes.Average();
-        double varLogTime = logTimes.Sum(t => (t - meanLogTime) * (t - meanLogTime)) / Math.Max(1, n - 1);
-        Intercept = NumOps.FromDouble(meanLogTime);
-        Scale = NumOps.FromDouble(Math.Sqrt(Math.Max(0.01, varLogTime)));
+        T meanLogTime = engine.TensorMean(logTimes);
+        var centered = engine.TensorAddScalar(logTimes, NumOps.Negate(meanLogTime));
+        T varLogTime = NumOps.Divide(engine.TensorSum(engine.TensorMultiply(centered, centered)),
+            NumOps.FromDouble(Math.Max(1, n - 1)));
+        Intercept = meanLogTime;
+        Scale = NumOps.Sqrt(MathHelper.Max(NumOps.FromDouble(0.01), varLogTime));
+
+        var design = Tensor<T>.FromMatrix(x);
+        var eventMask = engine.TensorEquals(events.AsTensor().Cast<T>(), NumOps.One);
 
         // Gradient descent optimization
-        double learningRate = 0.1;
-        double prevLogLik = double.NegativeInfinity;
+        T prevLogLik = NumOps.Zero;
+        bool hasPrevious = false;
 
         for (int iter = 0; iter < MaxIterations; iter++)
         {
-            double scale = NumOps.ToDouble(Scale);
-            double intercept = NumOps.ToDouble(Intercept);
-
             // Compute log-likelihood and gradients
-            double logLik = 0;
-            var gradBeta = new double[p];
-            double gradIntercept = 0;
-            double gradScale = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                // Compute linear predictor
-                double eta = intercept;
-                for (int j = 0; j < p; j++)
-                    eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
-
-                // Standardized residual
-                double z = (logTimes[i] - eta) / scale;
-                double phi = NormalPdf(z);
-                double Phi = NormalCdf(z);
-
-                if (events[i] == 1)
-                {
-                    // Event: add log density
-                    // f(t) = (1/(t*σ)) * φ((log(t)-μ)/σ)
-                    logLik += Math.Log(Math.Max(1e-300, phi)) - Math.Log(scale) - logTimes[i];
-
-                    // Gradients
-                    gradIntercept += z / scale;
-                    gradScale += (z * z - 1) / scale;
-
-                    for (int j = 0; j < p; j++)
-                        gradBeta[j] += z * NumOps.ToDouble(x[i, j]) / scale;
-                }
-                else
-                {
-                    // Censored: add log survival
-                    // S(t) = 1 - Φ((log(t)-μ)/σ)
-                    double survival = 1 - Phi;
-                    logLik += Math.Log(Math.Max(1e-300, survival));
-
-                    // Gradients using inverse Mills ratio φ/(1-Φ)
-                    // dlogL/dmu = +phi/((1-Phi)*sigma) because dz/dmu = -1/sigma
-                    // and d(log(1-Phi))/dz = -phi/(1-Phi), so product = +phi/((1-Phi)*sigma)
-                    double hazardRatio = phi / Math.Max(1e-300, survival);
-                    gradIntercept += hazardRatio / scale;
-                    gradScale += z * hazardRatio / scale;
-
-                    for (int j = 0; j < p; j++)
-                        gradBeta[j] += hazardRatio * NumOps.ToDouble(x[i, j]) / scale;
-                }
-            }
+            var (logLik, gradIntercept, gradScale, gradBeta) = ComputeLogLikelihoodAndGradient(design, logTimes, eventMask);
 
             // Check convergence
-            if (Math.Abs(logLik - prevLogLik) < Tolerance)
+            if (hasPrevious && HasConverged(logLik, prevLogLik))
                 break;
             prevLogLik = logLik;
+            hasPrevious = true;
 
             // Update parameters
-            Intercept = NumOps.FromDouble(intercept + learningRate * gradIntercept / n);
-            Scale = NumOps.FromDouble(Math.Max(0.01, scale + learningRate * gradScale / n));
-
-            for (int j = 0; j < p; j++)
-            {
-                Coefficients[j] = NumOps.FromDouble(
-                    NumOps.ToDouble(Coefficients[j]) + learningRate * gradBeta[j] / n);
-            }
+            ApplyGradientStep(gradIntercept, gradScale, gradBeta, n);
         }
 
         // Store event times for prediction
@@ -232,70 +180,152 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
         // Compute baseline survival
         if (TrainedEventTimes.Length > 0)
         {
-            BaselineSurvivalFunction = new Vector<T>(TrainedEventTimes.Length);
-            double mu = NumOps.ToDouble(Intercept);
-            double sigma = NumOps.ToDouble(Scale);
-
-            for (int t = 0; t < TrainedEventTimes.Length; t++)
-            {
-                double time = NumOps.ToDouble(TrainedEventTimes[t]);
-                double z = (Math.Log(time) - mu) / sigma;
-                double survival = 1 - NormalCdf(z);
-                BaselineSurvivalFunction[t] = NumOps.FromDouble(survival);
-            }
+            var z = StandardizedLogTimes(engine.TensorLog(TrainedEventTimes.AsTensor()),
+                Tensor<T>.CreateDefault(new[] { TrainedEventTimes.Length }, Intercept));
+            BaselineSurvivalFunction = NormalUpperTail(z).Survival.ToVector();
         }
     }
 
     /// <summary>
     /// Standard normal PDF.
     /// </summary>
-    private static double NormalPdf(double x)
+    /// <summary>
+    /// True when the log-likelihood moved by less than the tolerance.
+    /// </summary>
+    private bool HasConverged(T logLik, T prevLogLik)
     {
-        return Math.Exp(-0.5 * x * x) / Math.Sqrt(2 * Math.PI);
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(logLik, prevLogLik)), NumOps.FromDouble(Tolerance));
     }
 
     /// <summary>
-    /// Standard normal CDF using error function approximation.
+    /// Takes one gradient-ascent step of size 0.1 / n, keeping the scale at or above 0.01.
     /// </summary>
-    private static double NormalCdf(double x)
+    private void ApplyGradientStep(T gradIntercept, T gradScale, Vector<T> gradBeta, int n)
     {
-        // Use error function approximation
-        return 0.5 * (1 + Erf(x / Math.Sqrt(2)));
+        T learningRate = NumOps.FromDouble(0.1);
+        T count = NumOps.FromDouble(n);
+        Intercept = NumOps.Add(Intercept, NumOps.Divide(NumOps.Multiply(learningRate, gradIntercept), count));
+        Scale = MathHelper.Max(NumOps.FromDouble(0.01),
+            NumOps.Add(Scale, NumOps.Divide(NumOps.Multiply(learningRate, gradScale), count)));
+
+        var engine = AiDotNetEngine.Current;
+        var coefficients = Coefficients ?? new Vector<T>(gradBeta.Length);
+        Coefficients = engine.Add(coefficients, engine.Divide(engine.Multiply(gradBeta, learningRate), count));
     }
 
     /// <summary>
-    /// Error function approximation (Abramowitz and Stegun).
+    /// Computes z = (log t - mu) / sigma.
     /// </summary>
-    private static double Erf(double x)
+    private Tensor<T> StandardizedLogTimes(Tensor<T> logTimes, Tensor<T> mu)
     {
-        double sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
-
-        // Constants
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
-
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorDivideScalar(engine.TensorSubtract(logTimes, mu), Scale);
     }
 
     /// <summary>
-    /// Converts an exponent to the model's numeric type without turning a finite
-    /// double result into infinity when <typeparamref name="T"/> has a smaller range.
+    /// Computes the log-normal log-likelihood and its gradients with respect to the intercept, the scale
+    /// and the coefficients.
     /// </summary>
-    private T ExpAsFiniteNumeric(double exponent)
+    private (T LogLik, T GradIntercept, T GradScale, Vector<T> GradBeta) ComputeLogLikelihoodAndGradient(
+        Tensor<T> design, Tensor<T> logTimes, Tensor<T> eventMask)
     {
-        double maxValue = NumOps.ToDouble(NumOps.MaxValue);
-        if (exponent >= Math.Log(maxValue))
-            return NumOps.MaxValue;
+        var engine = AiDotNetEngine.Current;
+        int n = design.Shape[0];
+        var coefficients = Coefficients ?? new Vector<T>(design.Shape[1]);
 
-        return NumOps.FromDouble(Math.Exp(exponent));
+        // Standardized residual
+        var z = StandardizedLogTimes(logTimes, LinearPredictor(design, coefficients, Intercept));
+        var zSquared = engine.TensorMultiply(z, z);
+        var (_, logSurvival, millsRatio) = NormalUpperTail(z);
+
+        // Event: log density of log T, log f(t) = log phi(z) - log(sigma) - log(t)
+        var logDensity = engine.TensorSubtract(
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(zSquared, NumOps.FromDouble(-0.5)),
+                NumOps.Subtract(NumOps.FromDouble(-0.5 * Math.Log(2 * Math.PI)), NumOps.Log(Scale))),
+            logTimes);
+
+        // Censored: log survival, log S(t) = log(1 - Phi(z))
+        T logLik = engine.TensorSum(engine.TensorWhere(eventMask, logDensity, logSurvival));
+
+        // Gradients: events contribute z and z^2 - 1, censored subjects the inverse Mills ratio
+        // phi/(1-Phi) and z times it (dz/dmu = -1/sigma, d log(1-Phi)/dz = -phi/(1-Phi)).
+        var muTerms = engine.TensorWhere(eventMask, z, millsRatio);
+        var scaleTerms = engine.TensorWhere(eventMask,
+            engine.TensorAddScalar(zSquared, NumOps.Negate(NumOps.One)),
+            engine.TensorMultiply(z, millsRatio));
+
+        T gradIntercept = NumOps.Divide(engine.TensorSum(muTerms), Scale);
+        T gradScale = NumOps.Divide(engine.TensorSum(scaleTerms), Scale);
+        var gradBeta = engine.TensorDivideScalar(
+            engine.TensorMatMul(muTerms.Reshape(new[] { 1, n }), design), Scale).ToVector();
+
+        return (logLik, gradIntercept, gradScale, gradBeta);
+    }
+
+    /// <summary>
+    /// Evaluates the standard normal upper tail 1 - Phi(z), its log, and the inverse Mills ratio
+    /// phi(z) / (1 - Phi(z)).
+    /// </summary>
+    /// <remarks>
+    /// Uses the Abramowitz and Stegun 7.1.26 form erfc(x) = P(t) exp(-x^2) directly for z &gt;= 0 rather
+    /// than 1 - Phi(z): the subtraction cancels to 0 once z passes about 8 in double, after which the
+    /// clamped survival made the inverse Mills ratio (and every gradient) explode. On the upper side
+    /// the log and the ratio are formed analytically, so neither underflows.
+    /// </remarks>
+    private static (Tensor<T> Survival, Tensor<T> LogSurvival, Tensor<T> MillsRatio) NormalUpperTail(Tensor<T> z)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        int[] shape = z.Shape.ToArray();
+
+        // x = |z| / sqrt(2), t = 1 / (1 + p x), P(t) = t (a1 + t (a2 + t (a3 + t (a4 + t a5))))
+        var x = engine.TensorMultiplyScalar(engine.TensorAbs(z), numOps.FromDouble(1.0 / Math.Sqrt(2)));
+        var t = engine.TensorReciprocal(engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(x, numOps.FromDouble(0.3275911)), numOps.One));
+        var poly = engine.TensorMultiplyScalar(t, numOps.FromDouble(1.061405429));
+        poly = engine.TensorMultiply(t, engine.TensorAddScalar(poly, numOps.FromDouble(-1.453152027)));
+        poly = engine.TensorMultiply(t, engine.TensorAddScalar(poly, numOps.FromDouble(1.421413741)));
+        poly = engine.TensorMultiply(t, engine.TensorAddScalar(poly, numOps.FromDouble(-0.284496736)));
+        poly = engine.TensorMultiply(t, engine.TensorAddScalar(poly, numOps.FromDouble(0.254829592)));
+
+        // Upper tail of |z|: Q(|z|) = 0.5 P(t) exp(-z^2 / 2)
+        var halfPoly = engine.TensorMultiplyScalar(poly, numOps.FromDouble(0.5));
+        var negHalfZSquared = engine.TensorMultiplyScalar(engine.TensorMultiply(z, z), numOps.FromDouble(-0.5));
+        var tail = engine.TensorMultiply(halfPoly, engine.TensorExp(negHalfZSquared));
+        var oneMinusTail = engine.TensorAddScalar(engine.TensorNegate(tail), numOps.One);
+
+        var upper = engine.TensorAdd(
+            engine.TensorGreaterThan(z, numOps.Zero),
+            engine.TensorEquals(z, numOps.Zero));
+        var survival = engine.TensorWhere(upper, tail, oneMinusTail);
+        var logSurvival = engine.TensorWhere(upper,
+            engine.TensorAdd(engine.TensorLog(halfPoly), negHalfZSquared),
+            engine.TensorLog(oneMinusTail));
+
+        // phi(z) = exp(-z^2 / 2) / sqrt(2 pi); on the upper side phi / Q = 1 / (sqrt(2 pi) * 0.5 P(t))
+        T invSqrtTwoPi = numOps.FromDouble(1.0 / Math.Sqrt(2 * Math.PI));
+        var phi = engine.TensorMultiplyScalar(engine.TensorExp(negHalfZSquared), invSqrtTwoPi);
+        var millsRatio = engine.TensorWhere(upper,
+            engine.TensorMultiplyScalar(engine.TensorReciprocal(halfPoly), invSqrtTwoPi),
+            engine.TensorDivide(phi, oneMinusTail));
+
+        return (survival.Reshape(shape), logSurvival.Reshape(shape), millsRatio.Reshape(shape));
+    }
+
+    /// <summary>
+    /// Computes exp element-wise, returning MaxValue rather than infinity once the exponent reaches
+    /// log(MaxValue) of <typeparamref name="T"/>.
+    /// </summary>
+    private Tensor<T> ExpAsFiniteNumeric(Tensor<T> exponent)
+    {
+        var engine = AiDotNetEngine.Current;
+        T logMax = NumOps.Log(NumOps.MaxValue);
+        int[] shape = exponent.Shape.ToArray();
+
+        return engine.TensorWhere(
+            engine.TensorAdd(engine.TensorGreaterThan(exponent, logMax), engine.TensorEquals(exponent, logMax)),
+            Tensor<T>.CreateDefault(shape, NumOps.MaxValue),
+            engine.TensorExp(exponent));
     }
 
     /// <summary>
@@ -308,29 +338,17 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
         // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
         x = ExtractCovariates(x);
 
-        int numSubjects = x.Rows;
-        var result = new Matrix<T>(numSubjects, times.Length);
-        double sigma = NumOps.ToDouble(Scale);
-
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
+        var engine = AiDotNetEngine.Current;
+        var grid = new[] { x.Rows, times.Length };
 
-        for (int i = 0; i < numSubjects; i++)
-        {
-            // Compute linear predictor (μ_i)
-            double mu = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < coefficients.Length; j++)
-                mu += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
+        // Linear predictor (mu_i) per subject against log(max(1e-10, t)) per time
+        var mu = LinearPredictor(Tensor<T>.FromMatrix(x), coefficients, Intercept).Reshape(new[] { x.Rows, 1 });
+        var logTimes = engine.TensorLog(engine.TensorClampMin(times.AsTensor(), NumOps.FromDouble(1e-10)))
+            .Reshape(new[] { 1, times.Length });
+        var z = StandardizedLogTimes(engine.TensorBroadcastTo(logTimes, grid), engine.TensorBroadcastTo(mu, grid));
 
-            for (int t = 0; t < times.Length; t++)
-            {
-                double time = NumOps.ToDouble(times[t]);
-                double z = (Math.Log(Math.Max(1e-10, time)) - mu) / sigma;
-                double survival = 1 - NormalCdf(z);
-                result[i, t] = NumOps.FromDouble(survival);
-            }
-        }
-
-        return result;
+        return NormalUpperTail(z).Survival.ToMatrix();
     }
 
     /// <summary>
@@ -344,19 +362,11 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
         x = ExtractCovariates(x);
 
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
-        var result = new Vector<T>(x.Rows);
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            double eta = 0;
-            for (int j = 0; j < coefficients.Length; j++)
-                eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
-
-            // For log-normal, the acceleration factor is exp(-η)
-            result[i] = ExpAsFiniteNumeric(-eta);
-        }
-
-        return result;
+        // For log-normal, the acceleration factor is exp(-eta)
+        var eta = LinearPredictor(Tensor<T>.FromMatrix(x), coefficients, NumOps.Zero);
+        return ExpAsFiniteNumeric(engine.TensorNegate(eta)).ToVector();
     }
 
     /// <summary>
@@ -366,19 +376,11 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
-        var result = new Vector<T>(times.Length);
-        double mu = NumOps.ToDouble(Intercept);
-        double sigma = NumOps.ToDouble(Scale);
+        var engine = AiDotNetEngine.Current;
+        var logTimes = engine.TensorLog(engine.TensorClampMin(times.AsTensor(), NumOps.FromDouble(1e-10)));
+        var z = StandardizedLogTimes(logTimes, Tensor<T>.CreateDefault(new[] { times.Length }, Intercept));
 
-        for (int t = 0; t < times.Length; t++)
-        {
-            double time = NumOps.ToDouble(times[t]);
-            double z = (Math.Log(Math.Max(1e-10, time)) - mu) / sigma;
-            double survival = 1 - NormalCdf(z);
-            result[t] = NumOps.FromDouble(survival);
-        }
-
-        return result;
+        return NormalUpperTail(z).Survival.ToVector();
     }
 
     /// <summary>
@@ -391,21 +393,10 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
         // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
         input = ExtractCovariates(input);
 
-        var result = new Vector<T>(input.Rows);
-
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
 
-        for (int i = 0; i < input.Rows; i++)
-        {
-            double mu = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < coefficients.Length; j++)
-                mu += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(input[i, j]);
-
-            // Median survival time for log-normal: exp(μ)
-            result[i] = ExpAsFiniteNumeric(mu);
-        }
-
-        return result;
+        // Median survival time for log-normal: exp(mu)
+        return ExpAsFiniteNumeric(LinearPredictor(Tensor<T>.FromMatrix(input), coefficients, Intercept)).ToVector();
     }
 
     /// <inheritdoc />

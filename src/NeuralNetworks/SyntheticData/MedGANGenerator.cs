@@ -159,8 +159,14 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private List<(int Start, int Width, bool Softmax)>? _outputGroups;
 
     // Observed per-column range, for the optional out-of-range penalty.
-    private double[]? _colMin;
-    private double[]? _colMax;
+    private Vector<T>? _colMin;
+    private Vector<T>? _colMax;
+
+    // Training rows as a tensor, cached per matrix for batch slicing.
+    [Scratch]
+    private Matrix<T>? _realDataSource;
+    [Scratch]
+    private Tensor<T>? _realDataTensor;
 
     private bool _usingCustomLayers;
     private int _dataWidth;
@@ -420,6 +426,21 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// </remarks>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        try
+        {
+            FitCore(data, columns, epochs);
+        }
+        finally
+        {
+            // The cached training rows only serve the training loop: a fitted generator, or one whose Fit failed,
+            // does not keep a copy of its training data.
+            _realDataSource = null;
+            _realDataTensor = null;
+        }
+    }
+
+    private void FitCore(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs)
+    {
         int epochCount = epochs ?? _options.Epochs;
         _columns = new List<ColumnMetadata>(columns);
 
@@ -498,13 +519,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         var records = DecoderForwardBatched(latent, applyOutputActivation: true);
         records = ClampToObservedRange(records);
 
-        var result = new Matrix<T>(numSamples, _dataWidth);
-        for (int i = 0; i < numSamples; i++)
-        {
-            for (int j = 0; j < _dataWidth; j++) result[i, j] = records[i, j];
-        }
-
-        return _transformer.InverseTransform(result);
+        return _transformer.InverseTransform(Engine.TensorSlice(records, [0, 0], [numSamples, _dataWidth]).ToMatrix());
     }
 
     #endregion
@@ -1129,25 +1144,19 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         int cols = Math.Min(records.Shape[1], _colMin.Length);
         if (cols <= 0) return new Tensor<T>([1]);
 
-        var lowerArr = new T[batch * cols];
-        var upperArr = new T[batch * cols];
-        for (int b = 0; b < batch; b++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                lowerArr[b * cols + j] = NumOps.FromDouble(_colMin[j]);
-                upperArr[b * cols + j] = NumOps.FromDouble(_colMax[j]);
-            }
-        }
         var view = cols == records.Shape[1] ? records : SliceColumns(records, 0, cols);
-        var lower = new Tensor<T>(lowerArr, [batch, cols]);
-        var upper = new Tensor<T>(upperArr, [batch, cols]);
+        var lower = RangeRows(_colMin, batch, cols);
+        var upper = RangeRows(_colMax, batch, cols);
         var over = Engine.ReLU(Engine.TensorSubtract(view, upper));
         var under = Engine.ReLU(Engine.TensorSubtract(lower, view));
         var violation = Engine.TensorAdd(
             Engine.TensorMultiply(over, over), Engine.TensorMultiply(under, under));
         return MeanOverBatchOfFeatureSum(violation);
     }
+
+    /// <summary>The first <paramref name="cols"/> entries of <paramref name="bounds"/>, repeated on <paramref name="rows"/> rows.</summary>
+    private Tensor<T> RangeRows(Vector<T> bounds, int rows, int cols)
+        => Engine.TensorTile(Engine.TensorSlice(Tensor<T>.FromVector(bounds), [0], [cols]).Reshape([1, cols]), [rows, 1]);
 
     #endregion
 
@@ -1156,14 +1165,14 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private Tensor<T> BuildRealBatch(Matrix<T> data, int startRow, int endRow)
     {
         int batchSize = endRow - startRow;
-        var realBatch = new Tensor<T>([batchSize, _dataWidth]);
-        int cols = Math.Min(_dataWidth, data.Columns);
-        for (int b = 0; b < batchSize; b++)
+        if (_realDataTensor is null || !ReferenceEquals(_realDataSource, data))
         {
-            int row = startRow + b;
-            for (int j = 0; j < cols; j++) realBatch[b, j] = data[row, j];
+            _realDataTensor = Tensor<T>.FromMatrix(data);
+            _realDataSource = data;
         }
-        return realBatch;
+        var rowIndices = new int[batchSize];
+        for (int b = 0; b < batchSize; b++) rowIndices[b] = startRow + b;
+        return SyntheticTensorOps<T>.GatherRows(_realDataTensor, rowIndices, _dataWidth);
     }
 
     /// <summary>
@@ -1274,23 +1283,17 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
     private void LearnObservedRanges(Matrix<T> data)
     {
-        _colMin = new double[data.Columns];
-        _colMax = new double[data.Columns];
-
-        for (int j = 0; j < data.Columns; j++)
-        {
-            double min = double.MaxValue;
-            double max = double.MinValue;
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double v = NumOps.ToDouble(data[i, j]);
-                if (v < min) min = v;
-                if (v > max) max = v;
-            }
-            double range = max - min;
-            _colMin[j] = min - 0.1 * range;
-            _colMax[j] = max + 0.1 * range;
-        }
+        // Per column, the smallest and largest non-NaN value (double.MaxValue / double.MinValue when there is none),
+        // widened by a tenth of the range on each side.
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var min = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(
+            engine.TensorNanToNum(x, double.MaxValue, double.PositiveInfinity, double.NegativeInfinity)), [0], keepDims: false));
+        var max = engine.ReduceMax(
+            engine.TensorNanToNum(x, double.MinValue, double.PositiveInfinity, double.NegativeInfinity), [0], keepDims: false);
+        var margin = engine.TensorMultiplyScalar(engine.TensorSubtract(max, min), NumOps.FromDouble(0.1));
+        _colMin = engine.TensorSubtract(min, margin).ToVector();
+        _colMax = engine.TensorAdd(max, margin).ToVector();
     }
 
     /// <summary>
@@ -1302,19 +1305,26 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     {
         if (_options.ConstraintWeight <= 0.0 || _colMin is null || _colMax is null) return records;
 
-        var clamped = new Tensor<T>(records._shape);
+        // Columns with an observed range are clamped into it as Math.Min(Math.Max(v, min), max) does (NaN stays NaN);
+        // a rank other than 2 is one row.
+        var engine = Engine;
         int width = records.Rank == 2 ? records.Shape[1] : records.Length;
-        for (int i = 0; i < records.Length; i++)
+        if (width <= 0) return records.Clone();
+        int rows = records.Length / width;
+        var flat = records.Reshape([rows, width]);
+        int cols = Math.Min(width, _colMin.Length);
+        if (cols <= 0) return records.Clone();
+
+        var view = cols == width ? flat : engine.TensorSlice(flat, [0, 0], [rows, cols]);
+        var lower = RangeRows(_colMin, rows, cols);
+        var upper = RangeRows(_colMax, rows, cols);
+        var raised = engine.TensorWhere(engine.TensorGreaterThan(lower, view), lower, view);
+        var clamped = engine.TensorWhere(engine.TensorGreaterThan(raised, upper), upper, raised);
+        if (cols < width)
         {
-            int col = width > 0 ? i % width : 0;
-            double v = NumOps.ToDouble(records[i]);
-            if (col < _colMin.Length)
-            {
-                v = Math.Min(Math.Max(v, _colMin[col]), _colMax[col]);
-            }
-            clamped[i] = NumOps.FromDouble(v);
+            clamped = engine.TensorConcatenate([clamped, engine.TensorSlice(flat, [0, cols], [rows, width - cols])], 1);
         }
-        return clamped;
+        return clamped.Reshape(records._shape);
     }
 
     #endregion

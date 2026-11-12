@@ -82,19 +82,24 @@ public class FeatureDropout<T> : TabularAugmenterBase<T>
         // Determine which features can be dropped
         var droppableFeatures = FeatureIndices ?? Enumerable.Range(0, cols).ToArray();
 
-        for (int i = 0; i < rows; i++)
+        // Each listed feature has an independent chance of being dropped (draws in row, feature order)
+        var features = droppableFeatures.Where(f => f >= 0 && f < cols).ToArray();
+        var values = Tensor<T>.FromMatrix(result);
+        if (rows == 0 || features.Length == 0)
         {
-            foreach (int j in droppableFeatures.Where(f => f >= 0 && f < cols))
-            {
-                // Each feature has an independent chance of being dropped
-                if (context.Random.NextDouble() < DropoutRate)
-                {
-                    result[i, j] = NumOps.FromDouble(DropValue);
-                }
-            }
+            return result;
         }
 
-        return result;
+        var engine = Engine;
+        // Each listed feature's hits are accumulated into its column; a column drops if any listing hit.
+        var dropped = engine.TensorLessThan(
+            AugmentationRandom<T>.Unit(context, [rows, features.Length]), NumOps.FromDouble(DropoutRate));
+        var hits = engine.TensorIndexAdd(
+            new Tensor<T>([rows, cols]), 1, new Tensor<int>(features, [features.Length]), dropped);
+        var mask = engine.TensorGreaterThan(hits, NumOps.Zero);
+        var fill = new Tensor<T>([rows, cols]);
+        engine.TensorFill(fill, NumOps.FromDouble(DropValue));
+        return engine.TensorWhere(mask, fill, values).ToMatrix();
     }
 
     /// <inheritdoc />

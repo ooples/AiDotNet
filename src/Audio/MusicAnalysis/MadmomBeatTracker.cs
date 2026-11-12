@@ -217,14 +217,8 @@ public partial class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTrac
         var features = PreprocessAudio(audio);
         Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
-        // Apply sigmoid to get beat activation
-        var activation = new Tensor<T>([output.Length]);
-        for (int i = 0; i < output.Length; i++)
-        {
-            double v = NumOps.ToDouble(output[i]);
-            activation[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-v)));
-        }
-        return activation;
+        // Apply sigmoid to get beat activation (a fresh tensor)
+        return AudioEngineOps.SigmoidSegment(Engine, output, 0, output.Length);
     }
 
     #endregion
@@ -309,18 +303,31 @@ public partial class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTrac
         var beatConfidences = new List<T>();
         double lastBeat = double.NegativeInfinity;
 
-        for (int i = 1; i < activation.Length - 1; i++)
+        // Interior frames above the threshold that are at least as high as both neighbours
+        int n = activation.Length;
+        if (n >= 3)
         {
-            double val = NumOps.ToDouble(activation[i]);
-            double prev = NumOps.ToDouble(activation[Math.Max(0, i - 1)]);
-            double next = NumOps.ToDouble(activation[Math.Min(activation.Length - 1, i + 1)]);
-            double time = i * frameTime;
+            var flat = AudioEngineOps.Flatten(Engine, activation);
+            var center = Engine.TensorSlice(flat, [1], [n - 2]);
+            var isPeak = Engine.TensorMultiply(
+                Engine.TensorMultiply(
+                    Engine.TensorGreaterThan(center, NumOps.FromDouble(threshold)),
+                    Engine.TensorGreaterEqual(center, Engine.TensorSlice(flat, [0], [n - 2]))),
+                Engine.TensorGreaterEqual(center, Engine.TensorSlice(flat, [2], [n - 2])));
+            int[] candidates = Engine.TensorNonzero(isPeak).ToArray();
+            T[] values = candidates.Length == 0
+                ? new T[0]
+                : Engine.TensorIndexSelect(center, new Tensor<int>(candidates, [candidates.Length]), 0).ToArray();
 
-            if (val > threshold && val >= prev && val >= next && (time - lastBeat) >= minInterval)
+            for (int k = 0; k < candidates.Length; k++)
             {
-                beatTimes.Add(time);
-                beatConfidences.Add(NumOps.FromDouble(val));
-                lastBeat = time;
+                double time = (candidates[k] + 1) * frameTime;
+                if ((time - lastBeat) >= minInterval)
+                {
+                    beatTimes.Add(time);
+                    beatConfidences.Add(values[k]);
+                    lastBeat = time;
+                }
             }
         }
 

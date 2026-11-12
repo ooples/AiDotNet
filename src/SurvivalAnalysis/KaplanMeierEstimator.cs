@@ -161,50 +161,17 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
         }
 
         int numTimes = TrainedEventTimes.Length;
-        _survivalProbabilities = new Vector<T>(numTimes);
-        _numberAtRisk = new Vector<int>(numTimes);
-        _numberEvents = new Vector<int>(numTimes);
+        var engine = AiDotNetEngine.Current;
+        var (atRisk, deaths) = CountAtRiskAndEvents(times, events, TrainedEventTimes);
+        _numberAtRisk = atRisk.Cast<int>().ToVector();
+        _numberEvents = deaths.Cast<int>().ToVector();
 
-        T cumulativeSurvival = NumOps.One;
-
-        for (int t = 0; t < numTimes; t++)
-        {
-            T eventTime = TrainedEventTimes[t];
-            double eventTimeDouble = NumOps.ToDouble(eventTime);
-
-            // Count number at risk and number of events at this time
-            int atRisk = 0;
-            int numEventsAtTime = 0;
-
-            for (int i = 0; i < times.Length; i++)
-            {
-                double ti = NumOps.ToDouble(times[i]);
-
-                // At risk if observation time >= event time
-                if (ti >= eventTimeDouble)
-                {
-                    atRisk++;
-                }
-
-                // Event at this time if event occurred and time matches
-                if (events[i] == 1 && Math.Abs(ti - eventTimeDouble) < 1e-10)
-                {
-                    numEventsAtTime++;
-                }
-            }
-
-            _numberAtRisk[t] = atRisk;
-            _numberEvents[t] = numEventsAtTime;
-
-            // Kaplan-Meier product-limit estimator
-            if (atRisk > 0)
-            {
-                T survivalFraction = NumOps.FromDouble((double)(atRisk - numEventsAtTime) / atRisk);
-                cumulativeSurvival = NumOps.Multiply(cumulativeSurvival, survivalFraction);
-            }
-
-            _survivalProbabilities[t] = cumulativeSurvival;
-        }
+        // Kaplan-Meier product-limit estimator; a time with nobody at risk leaves the curve unchanged.
+        var survivalFraction = engine.TensorWhere(
+            engine.TensorGreaterThan(atRisk, NumOps.Zero),
+            engine.TensorDivide(engine.TensorSubtract(atRisk, deaths), atRisk),
+            Tensor<T>.CreateDefault(new[] { numTimes }, NumOps.One));
+        _survivalProbabilities = engine.TensorCumProd(survivalFraction, 0).ToVector();
 
         BaselineSurvivalFunction = _survivalProbabilities;
     }
@@ -222,19 +189,12 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
-        var result = new Matrix<T>(x.Rows, times.Length);
         var baseline = GetBaselineSurvival(times);
 
         // Kaplan-Meier gives same survival for all subjects
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int t = 0; t < times.Length; t++)
-            {
-                result[i, t] = baseline[t];
-            }
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorBroadcastTo(
+            baseline.AsTensor().Reshape(new[] { 1, times.Length }),
+            new[] { x.Rows, times.Length }).ToMatrix();
     }
 
     /// <summary>
@@ -252,13 +212,7 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
         EnsureFitted();
 
         // Kaplan-Meier doesn't estimate covariate effects
-        var result = new Vector<T>(x.Rows);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            result[i] = NumOps.One;
-        }
-
-        return result;
+        return Vector<T>.CreateDefault(x.Rows, NumOps.One);
     }
 
     /// <summary>
@@ -280,30 +234,8 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
             throw new InvalidOperationException("Model has no survival function stored.");
         }
 
-        var result = new Vector<T>(times.Length);
-
-        for (int i = 0; i < times.Length; i++)
-        {
-            double t = NumOps.ToDouble(times[i]);
-
-            // Find survival at this time (step function - use last event time <= t)
-            T survival = NumOps.One;
-            for (int j = 0; j < TrainedEventTimes.Length; j++)
-            {
-                if (NumOps.ToDouble(TrainedEventTimes[j]) <= t)
-                {
-                    survival = _survivalProbabilities[j];
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            result[i] = survival;
-        }
-
-        return result;
+        // Find survival at this time (step function - use last event time <= t)
+        return EvaluateStepFunction(times, TrainedEventTimes, _survivalProbabilities, NumOps.One).ToVector();
     }
 
     /// <summary>
@@ -316,25 +248,14 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
         // Return survival at median observed time
         if (TrainedEventTimes is null || TrainedEventTimes.Length == 0)
         {
-            var ones = new Vector<T>(x.Rows);
-            for (int i = 0; i < x.Rows; i++)
-            {
-                ones[i] = NumOps.One;
-            }
-            return ones;
+            return Vector<T>.CreateDefault(x.Rows, NumOps.One);
         }
 
         int medianIdx = TrainedEventTimes.Length / 2;
         var time = new Vector<T>(1) { [0] = TrainedEventTimes[medianIdx] };
         var probs = PredictSurvivalProbability(x, time);
 
-        var result = new Vector<T>(x.Rows);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            result[i] = probs[i, 0];
-        }
-
-        return result;
+        return probs.GetColumn(0);
     }
 
     /// <summary>

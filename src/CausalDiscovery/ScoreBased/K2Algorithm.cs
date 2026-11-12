@@ -121,18 +121,19 @@ public class K2Algorithm<T> : ScoreBasedBase<T>
         }
 
         // Build adjacency matrix from parent sets
-        var W = new Matrix<T>(d, d);
+        var positions = new List<int>();
+        var weights = new List<Tensor<T>>();
         for (int j = 0; j < d; j++)
         {
-            foreach (int parent in parentSets[j])
-            {
-                // Estimate edge weight via regression coefficient
-                double weight = EstimateEdgeWeight(data, parent, j, parentSets[j]);
-                W[parent, j] = NumOps.FromDouble(weight);
-            }
+            if (parentSets[j].Count == 0) continue;
+
+            // Estimate edge weights via the joint regression coefficients
+            var parentList = parentSets[j].ToArray();
+            positions.AddRange(parentList.Select(parent => parent * d + j));
+            weights.Add(EstimateEdgeWeights(data, j, parentList));
         }
 
-        return W;
+        return CausalTensorHelpers.FromTensorValues(d, d, positions, weights);
     }
 
     /// <summary>
@@ -160,55 +161,14 @@ public class K2Algorithm<T> : ScoreBasedBase<T>
     }
 
     /// <summary>
-    /// Estimates the partial regression coefficient for parent→child, controlling for all other parents.
-    /// Uses multivariate OLS: beta = (X^T X)^{-1} X^T y, returning only the coefficient for the target parent.
+    /// Estimates the partial regression coefficient of every parent→child, each controlling for all other parents.
+    /// Uses multivariate OLS: beta = (X^T X)^{-1} X^T y.
     /// </summary>
-    private double EstimateEdgeWeight(Matrix<T> data, int parent, int child, HashSet<int> allParents)
+    private Tensor<T> EstimateEdgeWeights(Matrix<T> data, int child, int[] parentList)
     {
-        int n = data.Rows;
-        var parentList = allParents.ToArray();
-        int p = parentList.Length;
-
-        // Compute means
-        var means = new double[p];
-        double meanC = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanC += NumOps.ToDouble(data[i, child]);
-            for (int j = 0; j < p; j++)
-                means[j] += NumOps.ToDouble(data[i, parentList[j]]);
-        }
-        meanC /= n;
-        for (int j = 0; j < p; j++) means[j] /= n;
-
-        // Build normal equations X^T X and X^T y (centered)
-        var XtX = new double[p, p];
-        var Xty = new double[p];
-        for (int i = 0; i < n; i++)
-        {
-            double dy = NumOps.ToDouble(data[i, child]) - meanC;
-            var dx = new double[p];
-            for (int j = 0; j < p; j++)
-                dx[j] = NumOps.ToDouble(data[i, parentList[j]]) - means[j];
-            for (int a = 0; a < p; a++)
-            {
-                Xty[a] += dx[a] * dy;
-                for (int b = a; b < p; b++)
-                    XtX[a, b] += dx[a] * dx[b];
-            }
-        }
-        for (int a = 0; a < p; a++)
-        {
-            XtX[a, a] += 1e-10; // regularization
-            for (int b = a + 1; b < p; b++)
-                XtX[b, a] = XtX[a, b];
-        }
-
-        // Solve via shared Gaussian elimination utility
-        var beta = SolveSmallSystem(XtX, Xty, p);
-
-        // Return coefficient for the requested parent
-        int parentIdx = Array.IndexOf(parentList, parent);
-        return parentIdx >= 0 ? beta[parentIdx] : 0;
+        // Centered normal equations X^T X beta = X^T y with 1e-10 regularization, solved by Gaussian
+        // elimination; beta[k] is the weight of parentList[k].
+        var (beta, _) = FitCenteredRegression(Tensor<T>.FromMatrix(data), child, parentList);
+        return beta;
     }
 }

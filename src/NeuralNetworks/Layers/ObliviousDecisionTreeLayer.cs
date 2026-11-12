@@ -1,6 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Tabular;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -75,12 +77,13 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     private readonly int _depth;
     private readonly int _outputDim;
     private readonly double _initScale;
+    private readonly ObliviousTreeChoiceFunction _choiceFunction;
     private bool _isInitialized;
 
     // Each level has one feature selection and one threshold
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
-    private Tensor<T> _featureSelectionWeights;  // [depth, inputDim] - softmax to select feature
+    private Tensor<T> _featureSelectionWeights;  // [depth, inputDim] - entmax (or softmax) to select feature
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
     private Tensor<T> _thresholds;                // [depth]
@@ -120,13 +123,35 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
     /// <remarks>
+    /// Uses NODE's 1.5-entmax feature choice and 1.5-entmoid splits.
+    /// </remarks>
+    // Retain the shipped optional-argument constructor alongside the explicit-choice overload.
+#pragma warning disable RS0027
+
+    public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
+        : this(inputDim, depth, outputDim, initScale, ObliviousTreeChoiceFunction.Entmax15)
+    {
+    }
+#pragma warning restore RS0027
+
+
+    /// <summary>
+    /// Initializes an oblivious decision tree with explicit choice functions.
+    /// </summary>
+    /// <param name="inputDim">Input feature dimension.</param>
+    /// <param name="depth">Tree depth (number of split levels).</param>
+    /// <param name="outputDim">Output dimension per leaf.</param>
+    /// <param name="initScale">Initialization scale.</param>
+    /// <param name="choiceFunction">Feature-choice and split functions; NODE uses <see cref="ObliviousTreeChoiceFunction.Entmax15"/>.</param>
+    /// <remarks>
     /// Not marked <c>[LayerState]</c>; the lazy overload below carries the annotation. The generator
     /// takes one constructor per type, first by source order, and this one takes <c>inputDim</c>,
     /// whose backing field is <c>-1</c> on a lazily-built layer that has not yet forwarded. The lazy
     /// overload re-resolves <c>inputDim</c> from the first input and so restores layers built
     /// either way.
     /// </remarks>
-    public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
+    public ObliviousDecisionTreeLayer(int inputDim, int depth, int outputDim, double initScale,
+        ObliviousTreeChoiceFunction choiceFunction)
         : base([inputDim], [outputDim])
     {
         if (inputDim <= 0)
@@ -135,11 +160,13 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
             throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be between 1 and 30.");
         if (outputDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputDim), "Output dimension must be positive.");
+        ValidateChoiceFunction(choiceFunction);
 
         _inputDim = inputDim;
         _depth = depth;
         _outputDim = outputDim;
         _initScale = initScale;
+        _choiceFunction = choiceFunction;
         _numLeaves = 1 << depth;  // 2^depth
 
         // Initialize parameters
@@ -155,6 +182,16 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
         InitializeParameters(initScale, Random);
         _isInitialized = true;
         NoteConstructorInitialization(_featureSelectionWeights, _thresholds, _leafValues);
+    }
+
+    private static void ValidateChoiceFunction(ObliviousTreeChoiceFunction choiceFunction)
+    {
+        if (choiceFunction != ObliviousTreeChoiceFunction.Entmax15
+            && choiceFunction != ObliviousTreeChoiceFunction.SoftmaxSigmoid)
+        {
+            throw new ArgumentOutOfRangeException(nameof(choiceFunction), choiceFunction,
+                "Choice function must be Entmax15 or SoftmaxSigmoid.");
+        }
     }
 
     /// <summary>
@@ -183,18 +220,43 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
-    public ObliviousDecisionTreeLayer([LayerState] int depth = 6, [LayerState] int outputDim = 1, [LayerState] double initScale = 0.01)
+    /// <remarks>
+    /// Uses NODE's 1.5-entmax feature choice and 1.5-entmoid splits. Not marked <c>[LayerState]</c>; the
+    /// overload below carries the annotation so the choice functions round-trip.
+    /// </remarks>
+    // Retain the shipped optional-argument constructor alongside the explicit-choice overload.
+#pragma warning disable RS0027
+
+    public ObliviousDecisionTreeLayer(int depth = 6, int outputDim = 1, double initScale = 0.01)
+        : this(depth, outputDim, initScale, ObliviousTreeChoiceFunction.Entmax15)
+    {
+    }
+#pragma warning restore RS0027
+
+
+    /// <summary>
+    /// Lazy constructor with explicit choice functions: resolves <c>inputDim</c> from
+    /// <c>input.Shape[^1]</c> on first <see cref="Forward"/>.
+    /// </summary>
+    /// <param name="depth">Tree depth (number of split levels).</param>
+    /// <param name="outputDim">Output dimension per leaf.</param>
+    /// <param name="initScale">Initialization scale.</param>
+    /// <param name="choiceFunction">Feature-choice and split functions; NODE uses <see cref="ObliviousTreeChoiceFunction.Entmax15"/>.</param>
+    public ObliviousDecisionTreeLayer([LayerState] int depth, [LayerState] int outputDim, [LayerState] double initScale,
+        [LayerState] ObliviousTreeChoiceFunction choiceFunction)
         : base([-1], [outputDim])
     {
         if (depth <= 0 || depth > 30)
             throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be between 1 and 30.");
         if (outputDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputDim), "Output dimension must be positive.");
+        ValidateChoiceFunction(choiceFunction);
 
         _inputDim = -1;
         _depth = depth;
         _outputDim = outputDim;
         _initScale = initScale;
+        _choiceFunction = choiceFunction;
         _numLeaves = 1 << depth;
 
         // Empty placeholders — EnsureInitialized will re-allocate against
@@ -359,7 +421,10 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
 
     private Tensor<T> ComputeFeatureSelections()
     {
-        return Engine.TensorSoftmax(_featureSelectionWeights, axis: 1);
+        // NODE chooses one feature per level with 1.5-entmax over the feature axis.
+        return _choiceFunction == ObliviousTreeChoiceFunction.Entmax15
+            ? Entmax15<T>.Forward(Engine, _featureSelectionWeights)
+            : Engine.TensorSoftmax(_featureSelectionWeights, axis: 1);
     }
 
     private Tensor<T> ComputeSplitDecisions(Tensor<T> input, Tensor<T> featureSelections, int batchSize)
@@ -372,7 +437,11 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
         var negativeThresholds = Engine.Reshape(
             Engine.TensorNegate(_thresholds),
             [1, _depth]);
-        return Engine.Sigmoid(Engine.TensorAdd(weightedFeatures, negativeThresholds));
+        var splitLogits = Engine.TensorAdd(weightedFeatures, negativeThresholds);
+        // NODE splits with 1.5-entmoid: exactly 0 or 1 once a sample is 2 or more past the threshold.
+        return _choiceFunction == ObliviousTreeChoiceFunction.Entmax15
+            ? Entmax15<T>.Entmoid(Engine, splitLogits)
+            : Engine.Sigmoid(splitLogits);
     }
 
     private Tensor<T> ComputeLeafProbabilities(Tensor<T> splitDecisions, int batchSize)
@@ -424,36 +493,12 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
                 "yet resolved. Run at least one Forward(input) before querying feature " +
                 "importance, or construct via the eager ctor with an explicit inputDim.");
         }
-        var importance = new Vector<T>(_inputDim);
-
-        if (_featureSelectionsCache != null)
-        {
-            for (int f = 0; f < _inputDim; f++)
-            {
-                var sum = NumOps.Zero;
-                for (int level = 0; level < _depth; level++)
-                {
-                    sum = NumOps.Add(sum, _featureSelectionsCache[level * _inputDim + f]);
-                }
-                importance[f] = NumOps.Divide(sum, NumOps.FromDouble(_depth));
-            }
-        }
-        else
-        {
-            // Use raw weights if forward hasn't been called
-            var selections = ComputeFeatureSelections();
-            for (int f = 0; f < _inputDim; f++)
-            {
-                var sum = NumOps.Zero;
-                for (int level = 0; level < _depth; level++)
-                {
-                    sum = NumOps.Add(sum, selections[level * _inputDim + f]);
-                }
-                importance[f] = NumOps.Divide(sum, NumOps.FromDouble(_depth));
-            }
-        }
-
-        return importance;
+        // Use the cached selections, or raw weights if forward hasn't been called. The selections
+        // are [depth, inputDim]; importance[f] is the mean over levels.
+        var selections = _featureSelectionsCache ?? ComputeFeatureSelections();
+        using var noGrad = new NoGradScope<T>();
+        var levelSum = Engine.ReduceSum(Engine.Reshape(selections, [_depth, _inputDim]), [0]);
+        return Engine.TensorDivideScalar(levelSum, NumOps.FromDouble(_depth)).ToVector();
     }
 
     /// <inheritdoc/>

@@ -37,8 +37,9 @@ namespace AiDotNet.NeuralNetworks.CreditAssignment;
 /// also learns from the teacher's guesses about the next word, not just the single correct word.
 /// </para>
 /// </remarks>
-public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRule<T>
+public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRule<T>, IOutputPredictionOptionalRule
 {
+    bool IOutputPredictionOptionalRule.UsesOutputPrediction => _kdAlpha > 0 && _teacherLogits is not null;
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
     private readonly Func<Tensor<T>, IReadOnlyList<Tensor<T>>> _teacherHidden;
     private readonly Func<Tensor<T>, Tensor<T>>? _teacherLogits;

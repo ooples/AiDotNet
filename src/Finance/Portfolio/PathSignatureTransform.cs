@@ -114,43 +114,24 @@ public class PathSignatureTransform<T>
         // A single sample has no increments, so every term is zero rather than undefined.
         if (steps < 2) return result;
 
-        var total = new double[dim];
-        var running = new double[dim];
-        var second = _level == 2 ? new double[dim * dim] : Array.Empty<double>();
-
-        // The step's increments are computed ONCE per step and reused. The inner j loop previously
-        // recomputed dj for every i, so each step made 2 * dim^2 NumOps.ToDouble calls where 2 * dim
-        // suffice. The transform runs per window over an asset panel, so this is a hot path.
-        var increment = new double[dim];
-
-        for (int k = 1; k < steps; k++)
+        // Increments D[k] = X[k + 1] - X[k], k in [0, steps - 1). The level-1 term is their sum; the level-2 term is
+        // sum_k R[k, i] D[k, j] + 0.5 D[k, i] D[k, j] = ((R + D / 2)^T D)[i, j], where R[k] = X[k] - X[0] is the
+        // running total before step k (the exclusive cumulative sum of D). Detached, like the vector it fills.
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var increments = engine.TensorSubtract(
+            engine.TensorNarrow(path, 0, 1, steps - 1), engine.TensorNarrow(path, 0, 0, steps - 1));
+        var total = engine.ReduceSum(increments, new[] { 0 }, false);                         // [dim]
+        Tensor<T> terms = total;
+        if (_level == 2)
         {
-            for (int i = 0; i < dim; i++)
-                increment[i] = NumOps.ToDouble(path[(k * dim) + i]) - NumOps.ToDouble(path[((k - 1) * dim) + i]);
-
-            for (int i = 0; i < dim; i++)
-            {
-                double di = increment[i];
-
-                if (_level == 2)
-                {
-                    for (int j = 0; j < dim; j++)
-                    {
-                        double dj = increment[j];
-                        // running[i] is X_i at the left endpoint, relative to the path's start.
-                        second[(i * dim) + j] += (running[i] * dj) + (0.5 * di * dj);
-                    }
-                }
-
-                total[i] += di;
-            }
-
-            for (int i = 0; i < dim; i++)
-                running[i] = total[i];
+            var before = engine.TensorSubtract(engine.TensorCumSum(increments, 0), increments);
+            var left = engine.TensorAdd(before, engine.TensorMultiplyScalar(increments, NumOps.FromDouble(0.5)));
+            var second = engine.TensorMatMul(engine.TensorTranspose(left), increments);       // [dim, dim]
+            terms = engine.TensorConcatenate(new[] { total, engine.Reshape(second, new[] { dim * dim }) }, 0);
         }
 
-        for (int i = 0; i < dim; i++) result[i] = NumOps.FromDouble(total[i]);
-        for (int i = 0; i < second.Length; i++) result[dim + i] = NumOps.FromDouble(second[i]);
+        terms.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
 
@@ -173,7 +154,7 @@ public class PathSignatureTransform<T>
     /// they are.
     /// </para>
     /// </remarks>
-    public double SignedArea(Vector<T> first, Vector<T> second)
+    public T SignedArea(Vector<T> first, Vector<T> second)
     {
         if (first == null) throw new ArgumentNullException(nameof(first));
         if (second == null) throw new ArgumentNullException(nameof(second));
@@ -181,26 +162,26 @@ public class PathSignatureTransform<T>
             throw new ArgumentException(
                 $"Paths must have equal length; got {first.Length} and {second.Length}.", nameof(second));
 
-        if (first.Length < 2) return 0.0;
+        if (first.Length < 2) return NumOps.Zero;
 
-        double x0 = NumOps.ToDouble(first[0]);
-        double y0 = NumOps.ToDouble(second[0]);
-        double area = 0.0;
-
-        for (int k = 1; k < first.Length; k++)
-        {
-            // Coordinates relative to the start, so the area measures the shape of the path rather
-            // than its absolute position. An absolute-coordinate version would report a spurious
-            // area for a pair that merely sits far from the origin.
-            double x = NumOps.ToDouble(first[k - 1]) - x0;
-            double y = NumOps.ToDouble(second[k - 1]) - y0;
-            double dx = NumOps.ToDouble(first[k]) - NumOps.ToDouble(first[k - 1]);
-            double dy = NumOps.ToDouble(second[k]) - NumOps.ToDouble(second[k - 1]);
-
-            area += 0.5 * ((x * dy) - (y * dx));
-        }
-
-        return area;
+        // Coordinates relative to the start, so the area measures the shape of the path rather
+        // than its absolute position. An absolute-coordinate version would report a spurious
+        // area for a pair that merely sits far from the origin.
+        // area = 0.5 * sum_k (x[k - 1] * dy[k] - y[k - 1] * dx[k]), k in [1, n).
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int n = first.Length;
+        var xs = Tensor<T>.FromVector(first);
+        var ys = Tensor<T>.FromVector(second);
+        var xHead = engine.TensorNarrow(xs, 0, 0, n - 1);
+        var yHead = engine.TensorNarrow(ys, 0, 0, n - 1);
+        var x = engine.TensorSubtractScalar(xHead, first[0]);
+        var y = engine.TensorSubtractScalar(yHead, second[0]);
+        var dx = engine.TensorSubtract(engine.TensorNarrow(xs, 0, 1, n - 1), xHead);
+        var dy = engine.TensorSubtract(engine.TensorNarrow(ys, 0, 1, n - 1), yHead);
+        T twice = NumOps.Subtract(
+            engine.TensorSum(engine.TensorMultiply(x, dy)), engine.TensorSum(engine.TensorMultiply(y, dx)));
+        return NumOps.Multiply(NumOps.FromDouble(0.5), twice);
     }
 
     /// <summary>
@@ -223,26 +204,18 @@ public class PathSignatureTransform<T>
 
         int steps = panel.Shape[0];
         int assets = panel.Shape[1];
-        var result = new Tensor<T>(new[] { assets, assets });
+        // A single sample has no increments, so every area is zero.
+        if (steps < 2) return new Tensor<T>(new[] { assets, assets });
 
-        var columns = new Vector<T>[assets];
-        for (int a = 0; a < assets; a++)
-        {
-            var column = new Vector<T>(steps);
-            for (int k = 0; k < steps; k++) column[k] = panel[(k * assets) + a];
-            columns[a] = column;
-        }
-
-        for (int j = 0; j < assets; j++)
-        {
-            for (int l = j + 1; l < assets; l++)
-            {
-                double area = SignedArea(columns[j], columns[l]);
-                result[(j * assets) + l] = NumOps.FromDouble(area);
-                result[(l * assets) + j] = NumOps.FromDouble(-area);
-            }
-        }
-
-        return result;
+        // Area(j, l) = 0.5 * sum_k (X[k, j] D[k, l] - X[k, l] D[k, j]) with X[k] = P[k] - P[0] (k < steps - 1) and
+        // D[k] = P[k + 1] - P[k], i.e. 0.5 * (X^T D - (X^T D)^T). Antisymmetric with a zero diagonal.
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var head = engine.TensorNarrow(panel, 0, 0, steps - 1);
+        var relative = engine.TensorSubtract(head, engine.TensorNarrow(panel, 0, 0, 1));
+        var increments = engine.TensorSubtract(engine.TensorNarrow(panel, 0, 1, steps - 1), head);
+        var cross = engine.TensorMatMul(engine.TensorTranspose(relative), increments);        // [assets, assets]
+        return engine.TensorMultiplyScalar(
+            engine.TensorSubtract(cross, engine.TensorTranspose(cross)), NumOps.FromDouble(0.5));
     }
 }

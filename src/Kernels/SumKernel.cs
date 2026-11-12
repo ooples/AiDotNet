@@ -44,11 +44,6 @@ public class SumKernel<T> : IKernelFunction<T>
     private readonly IKernelFunction<T>[] _kernels;
 
     /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new Sum kernel from an array of kernels.
     /// </summary>
     /// <param name="kernels">The kernels to combine by summation.</param>
@@ -78,7 +73,6 @@ public class SumKernel<T> : IKernelFunction<T>
         }
 
         _kernels = kernels;
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -107,13 +101,8 @@ public class SumKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        T sum = _numOps.Zero;
-        foreach (var kernel in _kernels)
-        {
-            sum = _numOps.Add(sum, kernel.Calculate(x1, x2));
-        }
-
-        return sum;
+        var values = new Vector<T>(_kernels.Select(kernel => kernel.Calculate(x1, x2)));
+        return AiDotNetEngine.Current.Sum(values);
     }
 
     /// <summary>

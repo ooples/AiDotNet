@@ -118,39 +118,49 @@ public class QuantileForecastResult<T>
         }
         int numSamples = samples.Count;
 
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var rows = new Tensor<T>[numSamples];
+        for (int s = 0; s < numSamples; s++)
+            rows[s] = engine.Reshape(samples[s].Contiguous(), new[] { horizon });
+        var grid = engine.TensorStack(rows, 0);
+
         // Compute point forecast as mean of samples
-        var pointData = new T[horizon];
-        for (int t = 0; t < horizon; t++)
-        {
-            T sum = NumOps.Zero;
-            for (int s = 0; s < numSamples; s++)
-                sum = NumOps.Add(sum, samples[s][t]);
-            pointData[t] = NumOps.Divide(sum, NumOps.FromDouble(numSamples));
-        }
-        PointForecast = new Tensor<T>(new[] { horizon });
-        for (int t = 0; t < horizon; t++)
-            PointForecast.Data.Span[t] = pointData[t];
+        PointForecast = engine.TensorDivideScalar(engine.ReduceSum(grid, new[] { 0 }, false), NumOps.FromDouble(numSamples));
 
-        // Pre-create tensors for each quantile level
         var qForecasts = new Dictionary<double, Tensor<T>>();
-        foreach (double q in quantileLevels)
+        if (engine.TensorCountNonzero(engine.TensorIsNan(grid)) > 0)
         {
-            qForecasts[q] = new Tensor<T>(new[] { horizon });
+            // NaN sorts first under the default double ordering; keep that exact placement.
+            foreach (double q in quantileLevels)
+            {
+                qForecasts[q] = new Tensor<T>(new[] { horizon });
+            }
+
+            for (int t = 0; t < horizon; t++)
+            {
+                var values = new double[numSamples];
+                for (int s = 0; s < numSamples; s++)
+                    values[s] = NumOps.ToDouble(samples[s][t]);
+                Array.Sort(values);
+
+                foreach (double q in quantileLevels)
+                {
+                    int idx = (int)Math.Floor(q * (numSamples - 1));
+                    idx = Math.Max(0, Math.Min(idx, numSamples - 1));
+                    qForecasts[q].Data.Span[t] = NumOps.FromDouble(values[idx]);
+                }
+            }
         }
-
-        // For each time step, sort sample values once and fill all quantiles
-        for (int t = 0; t < horizon; t++)
+        else
         {
-            var values = new double[numSamples];
-            for (int s = 0; s < numSamples; s++)
-                values[s] = NumOps.ToDouble(samples[s][t]);
-            Array.Sort(values);
-
+            // Sort the samples at every step once; quantile q reads sorted row floor(q * (n - 1)).
+            var sorted = engine.TensorSort(grid, 0, false).Values;
             foreach (double q in quantileLevels)
             {
                 int idx = (int)Math.Floor(q * (numSamples - 1));
                 idx = Math.Max(0, Math.Min(idx, numSamples - 1));
-                qForecasts[q].Data.Span[t] = NumOps.FromDouble(values[idx]);
+                qForecasts[q] = engine.Reshape(engine.TensorNarrow(sorted, 0, idx, 1), new[] { horizon }).Clone();
             }
         }
 

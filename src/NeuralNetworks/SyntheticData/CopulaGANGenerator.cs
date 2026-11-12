@@ -123,14 +123,14 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
 
     // Copula transform state: sorted values and empirical CDF per continuous column
-    private readonly List<double[]> _sortedValues = new();
+    private readonly List<T[]> _sortedValues = new();
     private readonly List<int> _continuousColumnIndices = new();
 
     // Cached pre-activations for proper backward passes
     [Scratch]
-    private readonly List<Tensor<T>> _genPreActivations = new();
+    private Matrix<T>? _realDataSource;
     [Scratch]
-    private readonly List<Tensor<T>> _discPreActivations = new();
+    private Tensor<T>? _realDataTensor;
 
     // Whether custom layers are being used (disables residual connection logic)
     private bool _usingCustomLayers;
@@ -422,6 +422,21 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </remarks>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        try
+        {
+            FitCore(data, columns, epochs);
+        }
+        finally
+        {
+            // The cached training rows only serve the training loop: a fitted generator, or one whose Fit failed,
+            // does not keep a copy of its training data.
+            _realDataSource = null;
+            _realDataTensor = null;
+        }
+    }
+
+    private void FitCore(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs)
+    {
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
@@ -577,8 +592,11 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
         }
 
-        var transformedRows = new Matrix<T>(numSamples, _dataWidth);
+        int[] conditionColumns = conditionColumn is not null ? SyntheticTensorOps<T>.TruncateToInt(conditionColumn) : Array.Empty<int>();
+        int[] conditionValues = conditionValue is not null ? SyntheticTensorOps<T>.TruncateToInt(conditionValue) : Array.Empty<int>();
+        var generated = new Tensor<T>(new[] { numSamples, _dataWidth });
 
+        // Rows are generated one at a time, in order, so each row's noise and condition draws keep their RNG order.
         for (int i = 0; i < numSamples; i++)
         {
             var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
@@ -586,9 +604,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             Vector<T> condVector;
             if (conditionColumn is not null && conditionValue is not null && i < conditionColumn.Length)
             {
-                int colIdx = (int)NumOps.ToDouble(conditionColumn[i]);
-                int catVal = (int)NumOps.ToDouble(conditionValue[i]);
-                condVector = _sampler.CreateConditionVector(colIdx, catVal);
+                condVector = _sampler.CreateConditionVector(conditionColumns[i], conditionValues[i]);
             }
             else
             {
@@ -596,19 +612,17 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             }
 
             var genInput = ConcatVectors(noise, condVector);
-            var fakeRow = Predict(VectorToTensor(genInput));
-
-            for (int j = 0; j < _dataWidth && j < fakeRow.Length; j++)
-            {
-                transformedRows[i, j] = fakeRow[j];
-            }
+            SyntheticTensorOps<T>.WriteRow(generated, i, Predict(VectorToTensor(genInput)), _dataWidth);
         }
 
-        // Inverse VGM transform
-        var copulaSpace = _transformer.InverseTransform(transformedRows);
-
-        // Inverse copula transform
-        return ApplyInverseCopulaTransform(copulaSpace);
+        // CopulaGAN samples like sdv-dev/CTGAN: each mode and category block is drawn from its distribution
+        // (gumbel_softmax then argmax), not set to its most likely entry.
+        // Inverse VGM transform, then inverse copula transform, in bounded blocks so only one block's
+        // intermediates are alive at a time.
+        TabularDataTransformer<T> transformer = _transformer;
+        int columnCount = _columns.Count;
+        return SyntheticTensorOps<T>.DecodeInBlocks(generated, block => ApplyInverseCopulaTransform(transformer.InverseTransform(
+            SyntheticTensorOps<T>.SampleCategoricalBlocks(block, transformer, columnCount, _random).ToMatrix())));
     }
 
     #endregion
@@ -634,36 +648,6 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _fakeRowBuf = new Vector<T>(_dataWidth);
         _interpolatedBuf = new Vector<T>(_packedInputDim);
         _sampleGradBuf = new Tensor<T>([_dataWidth]);
-    }
-
-    private void FillStandardNormal(Vector<T> buffer)
-    {
-        for (int i = 0; i < buffer.Length; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            buffer[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
-    }
-
-    private static void FillRow(Matrix<T> data, int row, Vector<T> buffer)
-    {
-        int cols = Math.Min(data.Columns, buffer.Length);
-        for (int j = 0; j < cols; j++) buffer[j] = data[row, j];
-    }
-
-    private static void ConcatInto(Vector<T> a, Vector<T> b, Vector<T> dest)
-    {
-        int aLen = a.Length;
-        for (int i = 0; i < aLen; i++) dest[i] = a[i];
-        int bLen = Math.Min(b.Length, dest.Length - aLen);
-        for (int i = 0; i < bLen; i++) dest[aLen + i] = b[i];
-    }
-
-    private static void FillFromTensor(Tensor<T> src, Vector<T> dest)
-    {
-        int len = Math.Min(src.Length, dest.Length);
-        for (int i = 0; i < len; i++) dest[i] = src[i];
     }
 
     #endregion
@@ -709,36 +693,57 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int total = numPacks * pacSize;
 
         var noiseBatch = GenerateNoiseBatchTensor(total);
-        var condBatch = SampleConditionalBatchTensor(total);
-        var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+        var (condBatch, maskBatch) = SyntheticTensorOps<T>.SampleCondMaskBatch(_sampler, total, _condWidth);
+        var catBlocks = SyntheticTensorOps<T>.CategoricalOutputBlocks(_transformer, _columns.Count);
 
-        // GPU-RESIDENT fast path — slice condBatch back out of the persistent
-        // genInput so replay uses fresh cond each step.
+        // GPU-RESIDENT fast path: the persistent input packs [noise | cond | mask | Gumbel noise] so a replayed plan
+        // uses a fresh condition, mask and Gumbel draw each step.
         var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableGenLayers.Count > 0)
         {
             int embedDim = _options.EmbeddingDimension;
             int condDim = _condWidth;
+            var gumbel = SyntheticTensorOps<T>.GumbelNoise([total, _dataWidth], _random);
+            var fusedInput = Engine.TensorConcatenate([noiseBatch, condBatch, maskBatch, gumbel], axis: 1);
             var target = new Tensor<T>(new[] { 1 });
-            Tensor<T> Fwd(Tensor<T> ginp)
+            Tensor<T>? capturedHead = null;
+            Tensor<T>? capturedCond = null;
+            Tensor<T>? capturedMask = null;
+            Tensor<T> Fwd(Tensor<T> packedInput)
             {
+                var ginp = Engine.TensorSlice(packedInput, [0, 0], [total, embedDim + condDim]);
                 var faked = GeneratorForwardWithResidualBatched(ginp);
-                var act = ApplyOutputActivationsBatched(faked);
-                var condFromInput = Engine.TensorSlice(ginp, [0, embedDim], [total, condDim]);
+                var gumbelFromInput = Engine.TensorSlice(packedInput, [0, embedDim + 2 * condDim], [total, _dataWidth]);
+                var act = ApplyOutputActivationsBatched(faked, gumbelFromInput);
+                var condFromInput = Engine.TensorSlice(packedInput, [0, embedDim], [total, condDim]);
+                capturedHead = faked;
+                capturedCond = condFromInput;
+                capturedMask = Engine.TensorSlice(packedInput, [0, embedDim + condDim], [total, condDim]);
                 var withCond = Engine.TensorConcatenate([act, condFromInput], axis: 1);
                 var packed = withCond.Reshape([numPacks, _packedInputDim]);
                 return DiscriminatorForwardBatched(packed, false);
             }
+            // sdv-dev/CTGAN's generator objective, which CopulaGAN inherits: -E[D(G(z, c))] + the conditional
+            // cross-entropy that makes the generator honour c.
             Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
             {
                 var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
-                return Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+                var lossT = Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+                if (condDim > 0 && catBlocks.Count > 0)
+                {
+                    if (capturedHead is null || capturedCond is null || capturedMask is null)
+                        throw new InvalidOperationException(
+                            "CopulaGAN fused step: generator intermediates were not captured by the forward closure.");
+                    lossT = Engine.TensorAdd(lossT,
+                        SyntheticTensorOps<T>.ConditionalCrossEntropy(capturedHead, capturedCond, capturedMask, catBlocks));
+                }
+                return lossT;
             }
             // One step through the shared training step: the fused plan when it applies, otherwise the shared
             // eager tape step on the same objective. The critic scores the samples in evaluation mode and is not
             // in the generator's parameter group, so only the generator moves.
             AiDotNet.Training.FusedTrainingStep<T>.Step(
-                this, trainableGenLayers, genInput, target,
+                this, trainableGenLayers, fusedInput, target,
                 forward: Fwd,
                 computeLoss: Loss,
                 optimizer: _generatorOptimizer,
@@ -759,16 +764,15 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
 
         var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
-        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
+        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat, SyntheticTensorOps<T>.GumbelNoise(fakeFlat._shape, _random));
         var fakeSingles = Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1);
 
-        var realFlat = new Tensor<T>([total, _dataWidth]);
-        for (int s = 0; s < total; s++)
+        if (_realDataTensor is null || !ReferenceEquals(_realDataSource, transformedData))
         {
-            int rowIdx = rowIndices[s];
-            int cols = Math.Min(_dataWidth, transformedData.Columns);
-            for (int j = 0; j < cols; j++) realFlat[s, j] = transformedData[rowIdx, j];
+            _realDataTensor = Tensor<T>.FromMatrix(transformedData);
+            _realDataSource = transformedData;
         }
+        var realFlat = SyntheticTensorOps<T>.GatherRows(_realDataTensor, rowIndices, _dataWidth);
         var realSingles = Engine.TensorConcatenate([realFlat, condBatch], axis: 1);
 
         return (realSingles.Reshape([numPacks, _packedInputDim]),
@@ -787,47 +791,11 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
         var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
         var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
-        var noiseData = new T[totalElements];
-        var z1Arr = z1.ToArray();
-        var z2Arr = z2.ToArray();
-        for (int i = 0; i < halfElements; i++)
-        {
-            int idx = i * 2;
-            if (idx < totalElements) noiseData[idx] = z1Arr[i];
-            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
-        }
-        return new Tensor<T>(noiseData, [batchSize, embedDim]);
-    }
-
-    private Tensor<T> SampleConditionalBatchTensor(int batchSize)
-    {
-        if (_sampler is null) return new Tensor<T>([batchSize, _condWidth]);
-        var batch = new Tensor<T>([batchSize, _condWidth]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            var (cv, _) = _sampler.SampleConditionAndRow();
-            int cols = Math.Min(_condWidth, cv.Length);
-            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
-        }
-        return batch;
+        return SyntheticTensorOps<T>.InterleaveNormalPairs(z1, z2, batchSize, embedDim);
     }
 
     private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int batchSize)
-    {
-        var batch = new Tensor<T>([batchSize, _condWidth]);
-        var rowIndices = new int[batchSize];
-        if (_sampler is null) return (batch, rowIndices);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var (cv, rowIndex) = _sampler.SampleConditionAndRow();
-            int cols = Math.Min(_condWidth, cv.Length);
-            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
-            rowIndices[b] = rowIndex;
-        }
-
-        return (batch, rowIndices);
-    }
+        => SyntheticTensorOps<T>.SampleConditionsWithRows(_sampler, batchSize, _condWidth);
 
     /// <summary>
     /// Batched, tape-tracked generator forward with residual skip connections.
@@ -879,120 +847,16 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
     /// <summary>
     /// Batched per-column VGM output activation: Tanh on continuous mode
-    /// value, Softmax on mode probabilities, Softmax on categorical blocks.
+    /// value, Softmax on mode probabilities, Softmax on categorical blocks. With Gumbel noise the softmaxes
+    /// are Gumbel-softmax samples at <see cref="CopulaGANOptions{T}.GumbelTemperature"/>, as in sdv-dev/CTGAN.
     /// </summary>
-    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output)
-    {
-        if (_transformer is null) return Engine.TensorTanh(output);
-
-        int batch = output.Shape[0];
-        int totalWidth = output.Shape[1];
-        var blocks = new List<Tensor<T>>(_columns.Count * 2);
-        int idx = 0;
-
-        for (int col = 0; col < _columns.Count && idx < totalWidth; col++)
-        {
-            var transform = _transformer.GetTransformInfo(col);
-            if (transform.IsContinuous)
-            {
-                var valueSlice = Engine.TensorSlice(output, [0, idx], [batch, 1]);
-                blocks.Add(Engine.TensorTanh(valueSlice));
-                idx++;
-                int numModes = transform.Width - 1;
-                int modeLength = Math.Min(numModes, totalWidth - idx);
-                if (modeLength > 0)
-                {
-                    var modeSlice = Engine.TensorSlice(output, [0, idx], [batch, modeLength]);
-                    blocks.Add(Engine.Softmax(modeSlice, axis: 1));
-                    idx += modeLength;
-                }
-            }
-            else
-            {
-                int blockLength = Math.Min(transform.Width, totalWidth - idx);
-                var catSlice = Engine.TensorSlice(output, [0, idx], [batch, blockLength]);
-                blocks.Add(Engine.Softmax(catSlice, axis: 1));
-                idx += blockLength;
-            }
-        }
-
-        if (idx < totalWidth)
-        {
-            var tail = Engine.TensorSlice(output, [0, idx], [batch, totalWidth - idx]);
-            blocks.Add(Engine.TensorTanh(tail));
-        }
-
-        if (blocks.Count == 1) return blocks[0];
-        return Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
-    }
+    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output, Tensor<T>? gumbelNoise = null)
+        => SyntheticTensorOps<T>.ApplyOutputActivationsBatched(
+            output, _transformer, _columns.Count, gumbelNoise, _options.GumbelTemperature);
 
     #endregion
 
     #region Discriminator Forward/Backward
-
-    /// <summary>
-    /// Runs the discriminator forward pass.
-    /// </summary>
-    private Tensor<T> DiscriminatorForward(Tensor<T> input, bool isTraining)
-    {
-        _discPreActivations.Clear();
-        var current = input;
-        int layerIdx = 0;
-
-        for (int i = 0; i < _discLayers.Count; i++)
-        {
-            var layer = _discLayers[i];
-
-            // Skip dropout layers in this loop - they're interleaved
-            if (layer is DropoutLayer<T> dropout)
-            {
-                if (isTraining)
-                {
-                    current = dropout.Forward(current);
-                }
-                continue;
-            }
-
-            bool isLastDense = layerIdx == _discLayerDims.Count - 1;
-            current = layer.Forward(current);
-
-            if (!isLastDense)
-            {
-                _discPreActivations.Add(CloneTensor(current));
-                current = ApplyLeakyReLU(current);
-            }
-
-            layerIdx++;
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Updates discriminator parameters with a given learning rate.
-    /// </summary>
-    private void UpdateDiscriminatorParameters(T learningRate)
-    {
-        foreach (var layer in _discLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-    }
-
-    /// <summary>
-    /// Updates generator parameters with a given learning rate.
-    /// </summary>
-    private void UpdateGeneratorParameters(T learningRate)
-    {
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-        foreach (var bn in _genBNLayers)
-        {
-            bn.UpdateParameters(learningRate);
-        }
-    }
 
     #endregion
 
@@ -1008,7 +872,6 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </summary>
     private Tensor<T> GeneratorForwardWithResidual(Tensor<T> input)
     {
-        _genPreActivations.Clear();
         var inputTensor = input;
         var current = input;
 
@@ -1027,7 +890,6 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 current = _genBNLayers[i].Forward(current);
             }
 
-            _genPreActivations.Add(CloneTensor(current));
             current = ApplyReLU(current);
         }
 
@@ -1048,44 +910,12 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </summary>
     private Matrix<T> ApplyCopulaTransform(Matrix<T> data)
     {
-        var result = new Matrix<T>(data.Rows, data.Columns);
-
-        for (int i = 0; i < data.Rows; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                result[i, j] = data[i, j];
-            }
-        }
-
+        var result = data.Clone();
         foreach (int col in _continuousColumnIndices)
         {
-            var values = new double[data.Rows];
-            for (int i = 0; i < data.Rows; i++)
-            {
-                values[i] = NumOps.ToDouble(data[i, col]);
-            }
-
-            var sorted = new double[data.Rows];
-            Array.Copy(values, sorted, data.Rows);
-            Array.Sort(sorted);
-            _sortedValues.Add(sorted);
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                int rank = Array.BinarySearch(sorted, values[i]);
-                if (rank < 0) rank = ~rank;
-                int lo = rank;
-                while (lo > 0 && sorted[lo - 1] == values[i]) lo--;
-                int hi = rank;
-                while (hi < sorted.Length - 1 && sorted[hi + 1] == values[i]) hi++;
-                double midRank = (lo + hi) / 2.0;
-
-                double u = (midRank + 1.0) / (data.Rows + 1.0);
-                u = Math.Max(1e-6, Math.Min(1.0 - 1e-6, u));
-                double z = NormalQuantile(u);
-                result[i, col] = NumOps.FromDouble(z);
-            }
+            var (z, sorted) = SyntheticTensorOps<T>.GaussianCopulaForward(Tensor<T>.FromVector(data.GetColumn(col)));
+            _sortedValues.Add(sorted.ToArray());
+            result.SetColumn(col, z.ToVector());
         }
 
         return result;
@@ -1096,144 +926,23 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </summary>
     private Matrix<T> ApplyInverseCopulaTransform(Matrix<T> data)
     {
-        var result = new Matrix<T>(data.Rows, data.Columns);
-
-        for (int i = 0; i < data.Rows; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                result[i, j] = data[i, j];
-            }
-        }
-
+        var result = data.Clone();
         for (int idx = 0; idx < _continuousColumnIndices.Count && idx < _sortedValues.Count; idx++)
         {
             int col = _continuousColumnIndices[idx];
-            var sorted = _sortedValues[idx];
-            int n = sorted.Length;
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double z = NumOps.ToDouble(data[i, col]);
-                double u = NormalCDF(z);
-                u = Math.Max(0, Math.Min(1, u));
-
-                double rank = u * (n + 1.0) - 1.0;
-                rank = Math.Max(0, Math.Min(n - 1, rank));
-                int lo = (int)Math.Floor(rank);
-                int hi = Math.Min(lo + 1, n - 1);
-                double frac = rank - lo;
-
-                double original = sorted[lo] * (1.0 - frac) + sorted[hi] * frac;
-                result[i, col] = NumOps.FromDouble(original);
-            }
+            var original = SyntheticTensorOps<T>.GaussianCopulaInverse(
+                Tensor<T>.FromVector(data.GetColumn(col)), Tensor<T>.FromVector(new Vector<T>(_sortedValues[idx])));
+            result.SetColumn(col, original.ToVector());
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Approximation of the inverse normal CDF using Beasley-Springer-Moro algorithm.
-    /// </summary>
-    private static double NormalQuantile(double p)
-    {
-        if (p <= 0) return -8.0;
-        if (p >= 1) return 8.0;
-
-        double t;
-        if (p < 0.5)
-        {
-            t = Math.Sqrt(-2.0 * Math.Log(p));
-            return -(2.515517 + t * (0.802853 + t * 0.010328))
-                   / (1.0 + t * (1.432788 + t * (0.189269 + t * 0.001308)));
-        }
-        else
-        {
-            t = Math.Sqrt(-2.0 * Math.Log(1.0 - p));
-            return (2.515517 + t * (0.802853 + t * 0.010328))
-                   / (1.0 + t * (1.432788 + t * (0.189269 + t * 0.001308)));
-        }
-    }
-
-    /// <summary>
-    /// Approximation of the normal CDF using the error function.
-    /// </summary>
-    private static double NormalCDF(double x)
-    {
-        return 0.5 * (1.0 + Erf(x / Math.Sqrt(2.0)));
-    }
-
-    /// <summary>
-    /// Approximation of the error function using Abramowitz and Stegun formula 7.1.26.
-    /// </summary>
-    private static double Erf(double x)
-    {
-        double sign = x >= 0 ? 1.0 : -1.0;
-        x = Math.Abs(x);
-
-        const double a1 = 0.254829592;
-        const double a2 = -0.284496736;
-        const double a3 = 1.421413741;
-        const double a4 = -1.453152027;
-        const double a5 = 1.061405429;
-        const double p = 0.3275911;
-
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
     }
 
     #endregion
 
     #region Activation Functions
 
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero)
-                ? gradOutput[i]
-                : NumOps.Multiply(slope, gradOutput[i]);
-        }
-        return result;
-    }
+    private Tensor<T> ApplyReLU(Tensor<T> input) => SyntheticTensorOps<T>.ReLU(input);
 
     /// <summary>
     /// Applies tanh to continuous columns and softmax to categorical/mode columns.
@@ -1241,90 +950,12 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private Tensor<T> ApplyOutputActivations(Tensor<T> output)
     {
         if (_transformer is null) return output;
-
-        var result = new Tensor<T>(output._shape);
-        int idx = 0;
-
-        for (int col = 0; col < _columns.Count && idx < output.Length; col++)
-        {
-            var transform = _transformer.GetTransformInfo(col);
-
-            if (transform.IsContinuous)
-            {
-                if (idx < output.Length)
-                {
-                    double val = NumOps.ToDouble(output[idx]);
-                    result[idx] = NumOps.FromDouble(Math.Tanh(val));
-                    idx++;
-                }
-
-                int numModes = transform.Width - 1;
-                if (numModes > 0)
-                {
-                    ApplySoftmaxBlock(output, result, ref idx, numModes);
-                }
-            }
-            else
-            {
-                ApplySoftmaxBlock(output, result, ref idx, transform.Width);
-            }
-        }
-
-        return result;
-    }
-
-    private void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
-    {
-        if (count <= 0) return;
-        int actualCount = Math.Min(count, input.Length - idx);
-        if (actualCount <= 0) return;
-        var slice = new Tensor<T>([actualCount]);
-        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
-        var result = Engine.Softmax(slice, -1);
-        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
-        idx += actualCount;
+        return SyntheticTensorOps<T>.ApplyOutputActivations(output, _transformer, _columns.Count);
     }
 
     #endregion
 
     #region Gradient Safety Utilities
-
-    /// <summary>
-    /// Applies NaN sanitization and gradient norm clipping in a single operation.
-    /// </summary>
-    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
-    {
-        // Sanitize NaN/Infinity
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                grad[i] = NumOps.Zero;
-            }
-        }
-
-        // Clip gradient norm
-        if (maxNorm <= 0) return grad;
-
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            normSq += v * v;
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm <= maxNorm) return grad;
-
-        double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad._shape);
-        for (int i = 0; i < grad.Length; i++)
-        {
-            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-        }
-        return clipped;
-    }
 
     #endregion
 
@@ -1399,67 +1030,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     private List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
-    {
-        var prepared = new List<ColumnMetadata>(columns.Count);
-
-        for (int col = 0; col < columns.Count; col++)
-        {
-            var meta = columns[col].Clone();
-            meta.ColumnIndex = col;
-
-            if (meta.IsNumerical)
-            {
-                ComputeColumnStatistics(data, col, meta);
-            }
-            else if (meta.IsCategorical && meta.NumCategories == 0)
-            {
-                var categories = new HashSet<string>();
-                for (int row = 0; row < data.Rows; row++)
-                {
-                    var val = NumOps.ToDouble(data[row, col]);
-                    categories.Add(val.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-                meta.Categories = categories.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
-            }
-
-            prepared.Add(meta);
-        }
-
-        return prepared;
-    }
-
-    private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
-    {
-        int n = data.Rows;
-        double sum = 0;
-        double min = double.MaxValue;
-        double max = double.MinValue;
-
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            sum += val;
-            if (val < min) min = val;
-            if (val > max) max = val;
-        }
-
-        double mean = sum / n;
-        double sumSqDiff = 0;
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            double diff = val - mean;
-            sumSqDiff += diff * diff;
-        }
-
-        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
-        if (std < 1e-10) std = 1e-10;
-
-        meta.Min = min;
-        meta.Max = max;
-        meta.Mean = mean;
-        meta.Std = std;
-    }
+        => SyntheticTabularGeneratorBase<T>.PrepareColumns(data, columns);
 
     #endregion
 
@@ -1487,50 +1058,11 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
     #region Helpers
 
-    private static Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var v = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++) v[j] = matrix[row, j];
-        return v;
-    }
+    private static Vector<T> ConcatVectors(Vector<T> a, Vector<T> b) => SyntheticTensorOps<T>.ConcatVectors(a, b);
 
-    private static Vector<T> ConcatVectors(Vector<T> a, Vector<T> b)
-    {
-        var result = new Vector<T>(a.Length + b.Length);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
-    }
+    private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
-
-    private static Vector<T> TensorToVector(Tensor<T> t, int length)
-    {
-        var v = new Vector<T>(length);
-        int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
-    }
-
-    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
-    {
-        var result = new Tensor<T>([a.Length + b.Length]);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
-    }
-
-    private static Tensor<T> CloneTensor(Tensor<T> source)
-    {
-        var clone = new Tensor<T>(source._shape);
-        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
-        return clone;
-    }
+    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b) => SyntheticTensorOps<T>.Concat1D(a, b);
 
     #endregion
 

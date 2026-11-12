@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -126,11 +127,13 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastOutput;
 
     /// <summary>
-    /// Gradient for weights, stored during backward pass.
-    /// Stored as dense matrix for gradient accumulation, then sparsified.
+    /// Gradient for weights, stored during backward pass: one value per stored non-zero, aligned with
+    /// the sparse weight's (row, column) order. The weight gradient is only ever applied at the sparse
+    /// pattern, so it is computed only there (SDDMM) rather than as a dense [OutputFeatures, InputFeatures]
+    /// matrix.
     /// </summary>
     [Scratch]
-    private Matrix<T>? _weightsGradient;
+    private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Gradient for biases, stored during backward pass. 1-D tensor matching
@@ -350,46 +353,26 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         bool wasSingleSample = _lastInput.Rank == 1;
         int batchSize = wasSingleSample ? 1 : _lastInput.Shape[0];
 
-        _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
-        _biasesGradient = new Tensor<T>([OutputFeatures]);
+        // Manual gradients into fresh buffers, exactly as master: nothing here joins the tape.
+        using var noGrad = new NoGradScope<T>();
+        var gradient2d = Engine.Reshape(preActGradient, new[] { batchSize, OutputFeatures });   // [batch, Out]
+        var input2d = Engine.Reshape(_lastInput, new[] { batchSize, InputFeatures });         // [batch, In]
 
-        // Read both gradient and input via index helpers so we don't have to
-        // materialise reshaped views — single-sample tensors are rank-1
-        // [features], batched are rank-2 [batch, features].
-        T GetGrad(int b, int o) => wasSingleSample ? preActGradient[o] : preActGradient[b, o];
-        T GetInput(int b, int i) => wasSingleSample ? _lastInput[i] : _lastInput[b, i];
+        // dB[o] = sum_b g[b, o].
+        _biasesGradient = Engine.ReduceSum(gradient2d, new[] { 0 });
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                T g = GetGrad(b, o);
-                _biasesGradient[o] = _numOps.Add(_biasesGradient[o], g);
-                for (int i = 0; i < InputFeatures; i++)
-                {
-                    _weightsGradient[o, i] = _numOps.Add(
-                        _weightsGradient[o, i],
-                        _numOps.Multiply(g, GetInput(b, i)));
-                }
-            }
-        }
+        // dW is only ever applied at the stored non-zeros, so sample it there: for each stored (o, i),
+        // dW[o, i] = sum_b g[b, o] x[b, i], the (o, i) entry of g^T x (sampled dense-dense matmul).
+        // O(nnz * batch) work and O(nnz) storage; no [Out, In] product.
+        var gradientRows = Engine.TensorTranspose(gradient2d).Contiguous();                    // [Out, batch]
+        var inputRows = Engine.TensorTranspose(input2d).Contiguous();                          // [In, batch]
+        var sampled = AiDotNet.Tensors.LinearAlgebra.Sparse.SparseOps.SDDMM(
+            _weights.RowIndices, _weights.ColumnIndices, gradientRows, inputRows);
+        _weightsGradient = new Tensor<T>(sampled, new[] { sampled.Length });                   // [nnz]
 
-        var inputGradient = new Tensor<T>(_lastInput._shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int nz = 0; nz < _weights.NonZeroCount; nz++)
-            {
-                int o = _weights.RowIndices[nz];
-                int i = _weights.ColumnIndices[nz];
-                T contribution = _numOps.Multiply(GetGrad(b, o), _weights.Values[nz]);
-                if (wasSingleSample)
-                    inputGradient[i] = _numOps.Add(inputGradient[i], contribution);
-                else
-                    inputGradient[b, i] = _numOps.Add(inputGradient[b, i], contribution);
-            }
-        }
-
-        return inputGradient;
+        // dX = g W, i.e. dX^T = W^T g^T, with the sparse transpose: no dense copy of W.
+        var inputGradientT = _engine.SparseMatMul(_engine.SparseTranspose(_weights), gradientRows); // [In, batch]
+        return Engine.Reshape(Engine.TensorTranspose(inputGradientT), _lastInput._shape);
     }
 
     private Tensor<T> ComputeActivationDerivative(Tensor<T> output, Tensor<T> upstream)
@@ -398,22 +381,11 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         if (ScalarActivation is null && VectorActivation is null)
             return upstream;
 
-        var derivative = new Tensor<T>(output._shape);
-        if (ScalarActivation is not null)
-        {
-            for (int i = 0; i < output.Length; i++)
-                derivative[i] = ScalarActivation.Derivative(output[i]);
-        }
-        else
-        {
-            for (int i = 0; i < output.Length; i++)
-                derivative[i] = _numOps.One;
-        }
-
-        var result = new Tensor<T>(output._shape);
-        for (int i = 0; i < output.Length; i++)
-            result[i] = _numOps.Multiply(upstream[i], derivative[i]);
-        return result;
+        // The derivative belongs at the PRE-activation value. Evaluating Derivative(output) gave
+        // f'(f(x)) - wrong for sigmoid, tanh, GELU, ... - and a vector activation was treated as
+        // the identity. The base helper uses the activation's output-form derivative when it has one,
+        // the cached pre-activation otherwise, and the full Jacobian for vector activations.
+        return ApplyActivationDerivativeFromOutput(output, upstream);
     }
 
     /// <summary>
@@ -428,28 +400,31 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
+        using var noGrad = new NoGradScope<T>();
+
         // Update biases in place — preserves the registered tensor reference
         // so any ParameterBuffer view aliasing _biases stays valid.
-        for (int o = 0; o < OutputFeatures; o++)
+        Engine.TensorCopy(
+            Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate)), _biases);
+
+        // Update only the non-zero weight positions (maintain sparsity): the gradient already holds one
+        // value per stored (row, col), in the same order as the stored values.
+        // Write into the sparse tensor's own value storage rather than constructing a new
+        // SparseTensor — same reasoning as biases. A new instance would leave any ParameterBuffer
+        // view aliasing the OLD _weights stale. SparseTensor.Values returns a COPY of the values, so
+        // the previous `_weights.Values[nz] = ...` loop updated a temporary and never changed a weight.
+        int nonZeroCount = _weights.NonZeroCount;
+        if (_weightsGradient.Length != nonZeroCount)
         {
-            var scaledGrad = _numOps.Multiply(learningRate, _biasesGradient[o]);
-            _biases[o] = _numOps.Subtract(_biases[o], scaledGrad);
+            throw new InvalidOperationException(
+                $"Weight gradient holds {_weightsGradient.Length} values but the weight stores {nonZeroCount} non-zeros.");
         }
 
-        // Update only the non-zero weight positions (maintain sparsity).
-        // Mutate _weights.Values IN PLACE rather than constructing a new
-        // SparseTensor — same reasoning as biases. A new instance would
-        // leave any ParameterBuffer view aliasing the OLD _weights stale,
-        // and Forward would keep reading the old values while the optimizer
-        // updated the view (silent decoupling that breaks training).
-        for (int nz = 0; nz < _weights.NonZeroCount; nz++)
-        {
-            int row = _weights.RowIndices[nz];
-            int col = _weights.ColumnIndices[nz];
-            T grad = _weightsGradient[row, col];
-            T scaledGrad = _numOps.Multiply(learningRate, grad);
-            _weights.Values[nz] = _numOps.Subtract(_weights.Values[nz], scaledGrad);
-        }
+        var storedGradients = _weightsGradient;
+        var storedValues = new Tensor<T>(_weights.Values, new[] { nonZeroCount });
+        var updatedValues = Engine.TensorSubtract(storedValues, Engine.TensorMultiplyScalar(storedGradients, learningRate));
+        updatedValues.AsSpan().CopyTo(_weights.DataVector.AsWritableSpan());
+        _weights.IncrementVersion();
     }
 
     /// <summary>

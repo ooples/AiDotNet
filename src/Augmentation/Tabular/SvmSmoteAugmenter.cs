@@ -124,7 +124,9 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
 
         // Calculate how many synthetic samples to generate
         int numSynthetic = (int)Math.Ceiling(supportVectorIndices.Count * SamplingRatio);
-        var syntheticSamples = new Matrix<T>(numSynthetic, cols);
+        var sources = new int[numSynthetic];
+        var targets = new int[numSynthetic];
+        var gaps = new Vector<T>(numSynthetic);
 
         // Precompute minority distances for neighbor finding
         var minorityDistances = ComputeDistanceMatrix(minorityData);
@@ -143,18 +145,14 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
             // Generate synthetic sample by interpolating
             double gap = context.Random.NextDouble();
 
-            for (int c = 0; c < cols; c++)
-            {
-                double val1 = NumOps.ToDouble(minorityData[svIdx, c]);
-                double val2 = NumOps.ToDouble(minorityData[neighborIdx, c]);
-                double synthetic = val1 + gap * (val2 - val1);
-                syntheticSamples[syntheticIndex, c] = NumOps.FromDouble(synthetic);
-            }
+            sources[syntheticIndex] = svIdx;
+            targets[syntheticIndex] = neighborIdx;
+            gaps[syntheticIndex] = NumOps.FromDouble(gap);
 
             syntheticIndex++;
         }
 
-        return syntheticSamples;
+        return TabularEngineOps<T>.InterpolateRows(minorityData, sources, targets, gaps, numSynthetic);
     }
 
     /// <summary>
@@ -173,37 +171,23 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
         var supportVectorIndices = new List<int>();
         int minorityCount = GetSampleCount(minorityData);
         int cols = GetFeatureCount(minorityData);
+        var engine = Engine;
+
+        var minorityValues = Tensor<T>.FromMatrix(minorityData);
 
         if (majorityData is null || GetSampleCount(majorityData) == 0)
         {
             // Without majority data, use distance to centroid as proxy for "borderline"
-            var centroid = new double[cols];
-            for (int i = 0; i < minorityCount; i++)
-            {
-                for (int c = 0; c < cols; c++)
-                    centroid[c] += NumOps.ToDouble(minorityData[i, c]);
-            }
-            for (int c = 0; c < cols; c++)
-                centroid[c] /= minorityCount;
+            var centroid = engine.TensorDivideScalar(engine.ReduceSum(minorityValues, [0], true), NumOps.FromDouble(minorityCount));
 
             // Calculate distances to centroid
-            var distances = new List<(int Index, double Distance)>();
-            for (int i = 0; i < minorityCount; i++)
-            {
-                double dist = 0;
-                for (int c = 0; c < cols; c++)
-                {
-                    double diff = NumOps.ToDouble(minorityData[i, c]) - centroid[c];
-                    dist += diff * diff;
-                }
-                distances.Add((i, Math.Sqrt(dist)));
-            }
+            var offsets = engine.TensorSubtract(minorityValues, engine.TensorBroadcastTo(centroid, [minorityCount, cols]));
+            var centroidDistances = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(offsets, offsets), [1], false));
 
-            // Select top 50% as "borderline" (furthest from centroid)
-            distances.Sort((a, b) => b.Distance.CompareTo(a.Distance));
+            // Select top 50% as "borderline" (furthest from centroid; ties by sample order)
+            var furthestFirst = TabularEngineOps<T>.StableOrder(centroidDistances, descending: true);
             int numBorderline = Math.Max(1, minorityCount / 2);
-            for (int i = 0; i < numBorderline; i++)
-                supportVectorIndices.Add(distances[i].Index);
+            supportVectorIndices.AddRange(furthestFirst.Take(numBorderline));
 
             return supportVectorIndices;
         }
@@ -212,65 +196,44 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
         int majorityCount = GetSampleCount(majorityData);
         int totalSamples = minorityCount + majorityCount;
 
-        // Initialize weights
-        var weights = new double[cols];
-        double bias = 0;
-        double learningRate = 0.01;
+        // Initialize weights; the hyper-parameters are converted to T once
+        var weights = new Vector<T>(cols);
+        T bias = NumOps.Zero;
+        T learningRate = NumOps.FromDouble(0.01);
+        T svmC = NumOps.FromDouble(SvmC);
+        T one = NumOps.One;
+        T negativeOne = NumOps.Negate(NumOps.One);
 
-        // SGD training for linear SVM
+        // SGD training for linear SVM: each update depends on the previous one, so samples are visited
+        // in order and only the taken branch is evaluated
         for (int iter = 0; iter < MaxIterations; iter++)
         {
             for (int i = 0; i < totalSamples; i++)
             {
-                int actualIdx;
-                int label;
-                Matrix<T> data;
+                T label = i < minorityCount ? one : negativeOne;
+                // Rows are read from the caller's matrices; the two classes are never copied into one matrix
+                var sample = i < minorityCount ? minorityData.GetRow(i) : majorityData.GetRow(i - minorityCount);
+                T decision = NumOps.Add(bias, engine.DotProduct(weights, sample));
 
-                if (i < minorityCount)
+                // Hinge loss gradient: w += lr * (label * x - w / C); otherwise w -= lr * w / C
+                if (NumOps.LessThan(NumOps.Multiply(label, decision), one))
                 {
-                    actualIdx = i;
-                    label = 1;
-                    data = minorityData;
+                    weights = engine.Add(weights, engine.Multiply(
+                        engine.Subtract(engine.Multiply(sample, label), engine.Divide(weights, svmC)), learningRate));
+                    bias = NumOps.Add(bias, NumOps.Multiply(learningRate, label));
                 }
                 else
                 {
-                    actualIdx = i - minorityCount;
-                    label = -1;
-                    data = majorityData;
-                }
-
-                // Compute decision value
-                double decision = bias;
-                for (int c = 0; c < cols; c++)
-                    decision += weights[c] * NumOps.ToDouble(data[actualIdx, c]);
-
-                // Hinge loss gradient
-                if (label * decision < 1)
-                {
-                    for (int c = 0; c < cols; c++)
-                        weights[c] += learningRate * (label * NumOps.ToDouble(data[actualIdx, c]) - weights[c] / SvmC);
-                    bias += learningRate * label;
-                }
-                else
-                {
-                    for (int c = 0; c < cols; c++)
-                        weights[c] -= learningRate * weights[c] / SvmC;
+                    weights = engine.Subtract(weights, engine.Divide(engine.Multiply(weights, learningRate), svmC));
                 }
             }
         }
 
-        // Identify support vectors from minority class (points with margin < 1)
-        for (int i = 0; i < minorityCount; i++)
-        {
-            double decision = bias;
-            for (int c = 0; c < cols; c++)
-                decision += weights[c] * NumOps.ToDouble(minorityData[i, c]);
-
-            // Support vectors have margin close to 1 or violate the margin
-            double margin = 1 * decision; // label = 1 for minority
-            if (margin <= 1.5) // Within or slightly beyond margin
-                supportVectorIndices.Add(i);
-        }
+        // Identify support vectors from minority class: margin = 1 * decision (label = 1 for minority);
+        // within or slightly beyond the margin means margin <= 1.5
+        var margins = engine.TensorAddScalar(engine.MatrixVectorMultiply(minorityValues.ToMatrix(), weights).AsTensor(), bias);
+        var withinMargin = engine.ScalarMinusTensor(one, engine.TensorGreaterThan(margins, NumOps.FromDouble(1.5)));
+        supportVectorIndices.AddRange(engine.TensorNonzero(withinMargin).ToArray());
 
         return supportVectorIndices;
     }
@@ -278,50 +241,17 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
     /// <summary>
     /// Computes the distance matrix for all pairs of samples.
     /// </summary>
-    private double[,] ComputeDistanceMatrix(Matrix<T> data)
+    private static Tensor<T> ComputeDistanceMatrix(Matrix<T> data)
     {
-        int rows = GetSampleCount(data);
-        int cols = GetFeatureCount(data);
-        var distances = new double[rows, rows];
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = i + 1; j < rows; j++)
-            {
-                double dist = 0;
-                for (int c = 0; c < cols; c++)
-                {
-                    double diff = NumOps.ToDouble(data[i, c]) - NumOps.ToDouble(data[j, c]);
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
-
-        return distances;
+        return TabularEngineOps<T>.PairwiseDistances(data);
     }
 
     /// <summary>
     /// Gets the k nearest neighbors for a given sample.
     /// </summary>
-    private int[] GetKNearestNeighbors(double[,] distances, int sampleIdx, int k)
+    private static int[] GetKNearestNeighbors(Tensor<T> distances, int sampleIdx, int k)
     {
-        int rows = distances.GetLength(0);
-        var indexedDistances = new List<(int Index, double Distance)>();
-
-        for (int i = 0; i < rows; i++)
-        {
-            if (i != sampleIdx)
-                indexedDistances.Add((i, distances[sampleIdx, i]));
-        }
-
-        return indexedDistances
-            .OrderBy(x => x.Distance)
-            .Take(k)
-            .Select(x => x.Index)
-            .ToArray();
+        return TabularEngineOps<T>.NearestNeighbors(distances, sampleIdx, k);
     }
 
     /// <inheritdoc />
