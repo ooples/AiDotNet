@@ -136,17 +136,9 @@ public partial class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// </summary>
     private Tensor<T> UncertaintyParameterTable(int n)
     {
-        int needed = 4 * n;
-        int available = Math.Min(_uncertaintyParams.Length, needed);
         T small = NumOps.FromDouble(0.01);
-        var defaults = ParameterModulation.Cycle(
-            Engine, new Vector<T>(new[] { small, NumOps.Zero, small, NumOps.Zero }), needed);
-        var parameters = available == needed
-            ? _uncertaintyParams.GetSubVector(0, needed)
-            : Vector<T>.Concatenate(
-                available > 0 ? _uncertaintyParams.GetSubVector(0, available) : new Vector<T>(0),
-                defaults.GetSubVector(available, needed - available));
-        return Engine.Reshape(Tensor<T>.FromVector(parameters), new[] { n, 4 });
+        return ParameterModulation.DefaultedTable(
+            Engine, _uncertaintyParams, n, new Vector<T>(new[] { small, NumOps.Zero, small, NumOps.Zero }));
     }
 
     /// <summary>

@@ -163,27 +163,7 @@ public partial class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
             if (supportFeatures != null && generatedKernel != null)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, generatedKernel.Length); i++)
-                {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double adaptedVal = NumOps.ToDouble(generatedKernel[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
-                }
+                ParameterModulation.ScaleByMeanClampedRatio(Engine, ParamModel, supportFeatures, generatedKernel, 0.5, 2.0, 1e-10);
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
@@ -203,52 +183,29 @@ public partial class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         if (supportFeatures == null || supportFeatures.Length == 0)
             return null;
 
-        // Compute support set statistics (mean, variance)
-        T mean = NumOps.Zero;
-        for (int i = 0; i < supportFeatures.Length; i++)
-            mean = NumOps.Add(mean, supportFeatures[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(Math.Max(supportFeatures.Length, 1)));
+        // Compute support set statistics (mean, population variance)
+        int n = supportFeatures.Length;
+        T mean = Engine.Mean(supportFeatures);
+        var centered = Engine.Subtract(supportFeatures, Engine.Fill(n, mean));
+        T variance = NumOps.Divide(Engine.DotProduct(centered, centered), NumOps.FromDouble(n));
 
-        T variance = NumOps.Zero;
-        for (int i = 0; i < supportFeatures.Length; i++)
-        {
-            T diff = NumOps.Subtract(supportFeatures[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(Math.Max(supportFeatures.Length, 1)));
+        // Pass statistics through hypernetwork (simple MLP). Element i reads w1, w2, b, w3, b2 in order from the
+        // hypernetwork parameters; once they run out every read takes its default (0.01, 0.01, 0, 0.01, 0).
+        T small = NumOps.FromDouble(0.01);
+        var table = ParameterModulation.DefaultedTable(
+            Engine, _hypernetParams, n, new Vector<T>(new[] { small, small, NumOps.Zero, small, NumOps.Zero }));
 
-        double meanVal = NumOps.ToDouble(mean);
-        double varVal = NumOps.ToDouble(variance);
+        // Hidden layer: ReLU(w1 * mean + w2 * var + b)
+        var hidden = Engine.TensorMax(Tensor<T>.FromVector(Engine.Add(Engine.Add(
+            Engine.Multiply(ParameterModulation.Column(Engine, table, 0), mean),
+            Engine.Multiply(ParameterModulation.Column(Engine, table, 1), variance)),
+            ParameterModulation.Column(Engine, table, 2))), NumOps.Zero).ToVector();
 
-        // Pass statistics through hypernetwork (simple MLP)
-        int hiddenDim = _hyperShotOptions.HypernetHiddenDim;
-        var kernelParams = new Vector<T>(supportFeatures.Length);
-        int paramIdx = 0;
-
-        for (int i = 0; i < supportFeatures.Length; i++)
-        {
-            // Hidden layer: ReLU(w1 * mean + w2 * var + b)
-            double w1 = paramIdx < _hypernetParams.Length
-                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0.01;
-            double w2 = paramIdx < _hypernetParams.Length
-                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0.01;
-            double b = paramIdx < _hypernetParams.Length
-                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0;
-            double hidden = Math.Max(0, w1 * meanVal + w2 * varVal + b); // ReLU
-
-            // Output layer: w3 * hidden + b2
-            double w3 = paramIdx < _hypernetParams.Length
-                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0.01;
-            double b2 = paramIdx < _hypernetParams.Length
-                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0;
-            double kernelVal = w3 * hidden + b2;
-
-            // Apply generated kernel as a scaling factor to support features
-            double scale = 1.0 / (1.0 + Math.Exp(-kernelVal)); // Sigmoid to bound [0,1]
-            kernelParams[i] = NumOps.Multiply(supportFeatures[i], NumOps.FromDouble(scale));
-        }
-
-        return kernelParams;
+        // Output layer: w3 * hidden + b2, then a sigmoid scale (bounded to [0, 1]) on each support feature
+        var kernelVal = Engine.Add(
+            Engine.Multiply(ParameterModulation.Column(Engine, table, 3), hidden),
+            ParameterModulation.Column(Engine, table, 4));
+        return Engine.Multiply(supportFeatures, Engine.Sigmoid(kernelVal));
     }
 
     /// <inheritdoc/>

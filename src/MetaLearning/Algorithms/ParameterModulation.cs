@@ -116,6 +116,23 @@ internal static class ParameterModulation
         return engine.Reshape(Tensor<T>.FromVector(Cycle(engine, parameters, rows * columns)), new[] { rows, columns });
     }
 
+    /// <summary>
+    /// Reads <paramref name="parameters"/> in order, without wrapping, as a [rows, defaults.Length] table; once
+    /// the parameters run out every remaining entry takes the default for its column.
+    /// </summary>
+    internal static Tensor<T> DefaultedTable<T>(IEngine engine, Vector<T> parameters, int rows, Vector<T> defaults)
+    {
+        int columns = defaults.Length;
+        int needed = rows * columns;
+        int available = Math.Min(parameters.Length, needed);
+        var values = available == needed
+            ? parameters.GetSubVector(0, needed)
+            : Vector<T>.Concatenate(
+                available > 0 ? parameters.GetSubVector(0, available) : new Vector<T>(0),
+                Cycle(engine, defaults, needed).GetSubVector(available, needed - available));
+        return engine.Reshape(Tensor<T>.FromVector(values), new[] { rows, columns });
+    }
+
     /// <summary>Columns [start, start + count) of a [rows, columns] table, shape [rows, count].</summary>
     internal static Tensor<T> Columns<T>(IEngine engine, Tensor<T> table, int start, int count)
     {
