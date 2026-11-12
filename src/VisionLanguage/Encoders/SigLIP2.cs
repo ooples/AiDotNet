@@ -129,6 +129,15 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     private int _captioningDecoderEnd;
     private int _mimDecoderEnd;
 
+    // The LocCa decoder's and the masked-prediction head's own weights (Tschannen et al. 2025, section 2):
+    // the vision-token projection to the decoder width, the start-of-caption and position embeddings, and the
+    // learned mask token. They live outside Layers and are registered as an auxiliary stream.
+    private readonly List<ILayer<T>> _headLayers = new();
+    private DenseLayer<T>? _captionMemoryProjection;
+    private DenseLayer<T>? _captionStartEmbedding;
+    private DenseLayer<T>? _captionPositionEmbedding;
+    private DenseLayer<T>? _maskTokenEmbedding;
+
     #endregion
 
     #region Constructors
@@ -304,14 +313,16 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     #region SigLIP 2 Specific: Captioning
 
     /// <summary>
-    /// Generates a caption for the given image using the autoregressive captioning decoder.
+    /// Generates a caption for the given image with SigLIP 2's LocCa decoder.
     /// </summary>
     /// <param name="image">Image tensor to caption.</param>
-    /// <returns>Tensor of predicted token logits for caption generation.</returns>
+    /// <returns>The logits of every generated position, <c>[MaxCaptionLength, VocabSize]</c>.</returns>
     /// <remarks>
-    /// <para>SigLIP 2's captioning decoder is a lightweight 4-layer transformer that attends to
-    /// vision encoder features via cross-attention. During training, this is supervised with
-    /// next-token prediction loss. At inference, tokens are generated autoregressively.</para>
+    /// <para>SigLIP 2 (Tschannen et al. 2025, section 2.2) adds the LocCa decoder (Wan et al. 2024): a transformer
+    /// decoder whose layers apply causal self-attention over the caption so far, cross-attention to the un-pooled vision
+    /// encoder tokens, and an MLP, each with a residual connection and layer normalization. The caption starts with a
+    /// learned start embedding, every position adds a learned position embedding, and generated tokens are fed back
+    /// through the embedding tied to the vocabulary projection. Decoding is greedy.</para>
     /// </remarks>
     public Tensor<T> GenerateCaption(Tensor<T> image)
     {
@@ -329,37 +340,87 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
             return OnnxImageEncoder.Run(preprocessed);
         }
 
-        // Get vision encoder features (before projection, since decoder cross-attends to full features)
-        var visionFeatures = ForwardVisionEncoder(preprocessed);
-
-        // Greedy autoregressive decoding: the sequence is a start-of-sequence embedding followed by the
-        // embedding of every token generated so far. Each step cross-attends the whole sequence to the vision
-        // tokens, runs the decoder, and takes the last position's logits; their argmax is the next token,
-        // embedded with the vocabulary projection's weights (tied input/output embeddings).
         int maxLen = _options.MaxCaptionLength;
         if (maxLen <= 0)
             return new Tensor<T>([0]);
 
+        var projection = _captionMemoryProjection ?? throw new InvalidOperationException("The captioning decoder is not initialized.");
+        var start = _captionStartEmbedding ?? throw new InvalidOperationException("The captioning decoder is not initialized.");
+        var vision = ForwardVisionEncoder(preprocessed);
+        var memory = projection.Forward(vision.Reshape([vision.Length / vision.Shape[vision.Rank - 1], vision.Shape[vision.Rank - 1]]));
+
         int width = _options.CaptioningDecoderDim;
-        var sequence = Tensor<T>.CreateDefault([1, width], NumOps.FromDouble(0.01));
-        var stepLogits = new Tensor<T>[maxLen];
+        var sequence = start.Forward(Tensor<T>.CreateDefault([1, 1], NumOps.One));
+        var stepLogits = new List<Tensor<T>>(maxLen);
         for (int step = 0; step < maxLen; step++)
         {
-            int positions = sequence.Shape[0];
-            var decoderOutput = ForwardCaptioningDecoder(CrossAttend(sequence, visionFeatures));
-            int perPosition = decoderOutput.Length / positions;
-            var last = Engine.TensorSlice(decoderOutput.Reshape([positions, perPosition]),
-                [positions - 1, 0], [1, perPosition]);
-            stepLogits[step] = FitLength(last, _options.VocabSize);
+            var hidden = DecodeCaption(sequence, memory);
+            int positions = hidden.Shape[0];
+            var last = Engine.TensorSlice(hidden, [positions - 1, 0], [1, hidden.Shape[1]]);
+            var logits = FitLength(VocabularyProjection().Forward(last), _options.VocabSize);
+            stepLogits.Add(logits);
 
             if (step + 1 < maxLen)
             {
-                int next = Math.Max(0, ArgExtremumSearch<T>.FirstIndex(Engine, last, true, out _));
+                int next = Math.Max(0, ArgExtremumSearch<T>.FirstIndex(Engine, logits, true, out _));
                 sequence = Engine.TensorConcatenate([sequence, CaptionTokenEmbedding(next, width)], 0);
             }
         }
 
-        return Engine.TensorConcatenate(stepLogits, 0);
+        return Engine.TensorConcatenate(stepLogits.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// The LocCa decoder on the caption so far <c>[L, CaptioningDecoderDim]</c> (start and token embeddings) with the
+    /// projected vision tokens <c>[N, CaptioningDecoderDim]</c> as memory: positions added, then per layer
+    /// <c>x = LN(x + CausalSelfAttention(x))</c>, <c>x = LN(x + CrossAttention(x, memory))</c>,
+    /// <c>x = LN(x + MLP(x))</c>.
+    /// </summary>
+    internal Tensor<T> DecodeCaption(Tensor<T> sequence, Tensor<T> memory)
+    {
+        var positionEmbedding = _captionPositionEmbedding ?? throw new InvalidOperationException("The captioning decoder is not initialized.");
+        int length = sequence.Shape[0], width = sequence.Shape[1];
+        var positions = new Tensor<int>([length], Vector<int>.FromArray(Enumerable.Range(0, length).ToArray()));
+        var x = Engine.TensorAdd(sequence,
+            positionEmbedding.Forward(Engine.TensorOneHot<T>(positions, Math.Max(1, _options.MaxCaptionLength))));
+        var memoryBatch = memory.Reshape([1, memory.Shape[0], memory.Shape[1]]);
+        for (int layer = 0; layer < _options.NumCaptioningDecoderLayers; layer++)
+        {
+            var block = CaptionBlock(layer);
+            var self = block.SelfAttention.Forward(x.Reshape([1, length, width])).Reshape([length, width]);
+            x = block.SelfNorm.Forward(Engine.TensorAdd(x, self));
+            var cross = block.CrossAttention.Forward(x.Reshape([1, length, width]), memoryBatch).Reshape([length, width]);
+            x = block.CrossNorm.Forward(Engine.TensorAdd(x, cross));
+            x = block.FeedForwardNorm.Forward(Engine.TensorAdd(x, block.FeedForwardDown.Forward(block.FeedForwardUp.Forward(x))));
+        }
+        return x;
+    }
+
+    /// <summary>
+    /// The layers of captioning decoder layer <paramref name="layer"/>, in the order the factory builds them:
+    /// cross-attention, its norm, self-attention, its norm, the MLP's two projections and its norm.
+    /// </summary>
+    private (MultiHeadAttentionLayer<T> CrossAttention, ILayer<T> CrossNorm, MultiHeadAttentionLayer<T> SelfAttention,
+        ILayer<T> SelfNorm, ILayer<T> FeedForwardUp, ILayer<T> FeedForwardDown, ILayer<T> FeedForwardNorm) CaptionBlock(int layer)
+    {
+        const int LayersPerBlock = 7;
+        int first = _textEncoderEnd + layer * LayersPerBlock;
+        if (first + LayersPerBlock > _captioningDecoderEnd - 1 || first + LayersPerBlock > Layers.Count)
+            throw new InvalidOperationException("The captioning decoder does not hold the expected layers.");
+        var cross = Layers[first] as MultiHeadAttentionLayer<T>;
+        var self = Layers[first + 2] as MultiHeadAttentionLayer<T>;
+        if (cross is null || self is null)
+            throw new InvalidOperationException("A captioning decoder layer must start with cross- and self-attention layers.");
+        return (cross, Layers[first + 1], self, Layers[first + 3], Layers[first + 4], Layers[first + 5], Layers[first + 6]);
+    }
+
+    /// <summary>The captioning decoder's vocabulary projection, the last layer of the decoder.</summary>
+    private ILayer<T> VocabularyProjection()
+    {
+        int index = _captioningDecoderEnd - 1;
+        if (index < _textEncoderEnd || index >= Layers.Count)
+            throw new InvalidOperationException("The captioning decoder has no vocabulary projection layer.");
+        return Layers[index];
     }
 
     /// <summary>
@@ -385,25 +446,30 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     #region SigLIP 2 Specific: Masked Image Modeling
 
     /// <summary>
-    /// Computes masked image modeling predictions for self-supervised training.
+    /// Predicts the features of masked patches with SigLIP 2's masked-prediction head.
     /// </summary>
     /// <param name="image">Image tensor to process.</param>
-    /// <param name="maskIndices">Indices of patches to mask (null for random masking).</param>
-    /// <returns>Predicted features for the masked patches.</returns>
+    /// <param name="maskIndices">Indices of patches to mask (null for a random <see cref="SigLIP2Options.MimMaskRatio"/> of them).</param>
+    /// <returns>The head's predictions at the masked patches, <c>[masked, features]</c>, in <paramref name="maskIndices"/> order.</returns>
     /// <remarks>
-    /// <para>The MIM objective masks a fraction of image patches (default 50%) and predicts their
-    /// features from the unmasked context. This is similar to MAE (Masked Autoencoder) but uses
-    /// the SigLIP 2 vision encoder as the backbone. The MIM decoder is a lightweight 2-layer MLP
-    /// that maps from encoder features to predicted patch features.</para>
+    /// <para>SigLIP 2 (Tschannen et al. 2025, section 2.3) adds the masked-prediction objective of TIPS (Maninis et al.
+    /// 2025) and SILC (Naeem et al. 2024): the student replaces the embeddings of the masked patches with a learned
+    /// mask token after the patch embedding, encodes the sequence, and predicts, at the masked positions only, the
+    /// per-patch features the teacher computes from the unmasked image. The masking is in embedding space, not on the
+    /// pixels.</para>
     /// </remarks>
     public Tensor<T> PredictMaskedPatches(Tensor<T> image, int[]? maskIndices = null)
     {
         ThrowIfDisposed();
+        var maskEmbedding = _maskTokenEmbedding ?? throw new InvalidOperationException("The masked-prediction head is not initialized.");
+        if (Layers.Count == 0)
+            throw new InvalidOperationException("The vision encoder has no layers.");
         var preprocessed = PreprocessImage(image);
 
-        int patchSize = _options.PatchSize;
-        int totalPatches = (preprocessed.Shape[preprocessed.Rank - 2] / patchSize)
-            * (preprocessed.Shape[preprocessed.Rank - 1] / patchSize);
+        // Patch embedding: one token per patch, in the order the patch grid is read.
+        var embedded = Layers[0].Forward(preprocessed);
+        int width = embedded.Shape[embedded.Rank - 1];
+        int totalPatches = embedded.Length / width;
         int numMasked = (int)(totalPatches * _options.MimMaskRatio);
 
         // Generate random mask if not provided
@@ -423,64 +489,41 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
             Array.Copy(indices, maskIndices, numMasked);
         }
 
-        // Forward through vision encoder with the masked patches zeroed
-        var encodedFeatures = ForwardVisionEncoder(MaskPatches(preprocessed, maskIndices));
-
-        // Forward through MIM decoder to predict masked patch features
-        var mimPredictions = ForwardMimDecoder(encodedFeatures);
-
-        return mimPredictions;
-    }
-
-    /// <summary>
-    /// Zeroes the listed patches of a <c>[C, H, W]</c> or <c>[N, C, H, W]</c> image in every channel. Patch
-    /// <c>p</c> is the <c>PatchSize x PatchSize</c> window at row <c>p / (W / PatchSize)</c> and column
-    /// <c>p % (W / PatchSize)</c> of the patch grid, the order the patch embedding reads patches in.
-    /// </summary>
-    /// <param name="image">The image to mask.</param>
-    /// <param name="maskIndices">Patch indices to zero; each must lie in the patch grid.</param>
-    /// <returns>A masked copy of <paramref name="image"/>.</returns>
-    internal Tensor<T> MaskPatches(Tensor<T> image, int[] maskIndices)
-    {
-        if (image is null) throw new ArgumentNullException(nameof(image));
-        if (maskIndices is null) throw new ArgumentNullException(nameof(maskIndices));
-        if (image.Rank < 2)
-            throw new ArgumentException("Expected a [C, H, W] or [N, C, H, W] image.", nameof(image));
-
-        int patchSize = _options.PatchSize;
-        int height = image.Shape[image.Rank - 2];
-        int width = image.Shape[image.Rank - 1];
-        int gridHeight = height / patchSize;
-        int gridWidth = width / patchSize;
-        int totalPatches = gridHeight * gridWidth;
         foreach (int patch in maskIndices)
         {
             if (patch < 0 || patch >= totalPatches)
                 throw new ArgumentOutOfRangeException(nameof(maskIndices),
-                    $"Patch index {patch} is outside the {gridHeight}x{gridWidth} patch grid.");
+                    $"Patch index {patch} is outside the {totalPatches} patches of the image.");
         }
 
+        var masked = MaskTokens(embedded.Reshape([totalPatches, width]), maskIndices, maskEmbedding).Reshape(embedded.Shape.ToArray());
+        var encoded = masked;
+        for (int i = 1; i < _visionEncoderEnd && i < Layers.Count; i++)
+            encoded = Layers[i].Forward(encoded);
+        var predictions = ForwardMimDecoder(encoded);
+        int features = predictions.Shape[predictions.Rank - 1];
         if (maskIndices.Length == 0)
-            return image.Clone();
-
-        var keepPatch = Engine.TensorIndexFill(
-            Tensor<T>.CreateDefault([totalPatches], NumOps.One), 0,
-            new Tensor<int>(new[] { maskIndices.Length }, Vector<int>.FromArray(maskIndices)), NumOps.Zero);
-        var keepPixel = Engine.TensorRepeatInterleave(
-            Engine.TensorRepeatInterleave(keepPatch.Reshape([gridHeight, gridWidth]), patchSize, 0), patchSize, 1);
-
-        // Pixels past the last whole patch belong to no patch and are kept.
-        if (gridHeight * patchSize < height)
-            keepPixel = Engine.TensorConcatenate(
-                [keepPixel, Tensor<T>.CreateDefault([height - gridHeight * patchSize, gridWidth * patchSize], NumOps.One)], 0);
-        if (gridWidth * patchSize < width)
-            keepPixel = Engine.TensorConcatenate(
-                [keepPixel, Tensor<T>.CreateDefault([height, width - gridWidth * patchSize], NumOps.One)], 1);
-
-        // Select rather than multiply, so a non-finite pixel in a masked patch still becomes zero.
-        return Engine.TensorWhere(Engine.TensorBroadcastTo(keepPixel, image.Shape.ToArray()), image,
-            new Tensor<T>(image.Shape.ToArray()));
+            return new Tensor<T>([0, features]);
+        var rows = predictions.Reshape([predictions.Length / features, features]);
+        return Engine.TensorIndexSelect(rows, new Tensor<int>([maskIndices.Length], Vector<int>.FromArray(maskIndices)), 0);
     }
+
+    /// <summary>
+    /// Replaces the listed rows of the patch tokens <c>[patches, width]</c> with the learned mask token.
+    /// </summary>
+    internal Tensor<T> MaskTokens(Tensor<T> tokens, int[] maskIndices, DenseLayer<T> maskEmbedding)
+    {
+        int patches = tokens.Shape[0], width = tokens.Shape[1];
+        var maskToken = maskEmbedding.Forward(Tensor<T>.CreateDefault([1, 1], NumOps.One));
+        if (maskIndices.Length == 0)
+            return tokens;
+        var keep = Engine.TensorIndexFill(Tensor<T>.CreateDefault([patches], NumOps.One), 0,
+            new Tensor<int>([maskIndices.Length], Vector<int>.FromArray(maskIndices)), NumOps.Zero);
+        // Select rather than blend, so a non-finite embedding of a masked patch never leaks through.
+        return Engine.TensorWhere(Engine.TensorBroadcastTo(keep.Reshape([patches, 1]), [patches, width]), tokens,
+            Engine.TensorBroadcastTo(maskToken, [patches, width]));
+    }
+
 
     #endregion
 
@@ -522,6 +565,35 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         }
 
         ComputeLayerBoundaries();
+
+        if (_maskTokenEmbedding is null)
+        {
+            // Learned tables held as bias-free linear maps of a one-hot input, built lazily like the other layers.
+            DenseLayer<T> Table(int width)
+            {
+                var layer = new DenseLayer<T>(width, (IActivationFunction<T>?)null, null, BiasMode.Never);
+                _headLayers.Add(layer);
+                return layer;
+            }
+            if (_options.IncludeCaptioningDecoder)
+            {
+                _captionMemoryProjection = new DenseLayer<T>(_options.CaptioningDecoderDim, (IActivationFunction<T>?)null);
+                _headLayers.Add(_captionMemoryProjection);
+                _captionStartEmbedding = Table(_options.CaptioningDecoderDim);
+                _captionPositionEmbedding = Table(_options.CaptioningDecoderDim);
+            }
+            _maskTokenEmbedding = Table(_options.VisionEmbeddingDim);
+            RegisterAuxiliaryEncoderStream(_headLayers);
+        }
+
+        // The decoder's self-attention sees only the caption so far.
+        if (_options.IncludeCaptioningDecoder)
+            for (int layer = 0; layer < _options.NumCaptioningDecoderLayers; layer++)
+            {
+                int index = _textEncoderEnd + layer * 7 + 2;
+                if (index < Layers.Count && Layers[index] is MultiHeadAttentionLayer<T> selfAttention)
+                    selfAttention.UseCausalMask = true;
+            }
     }
 
     /// <summary>
@@ -711,47 +783,6 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     private Tensor<T> ProjectText(Tensor<T> textOutput)
     {
         return textOutput; // Already projected in ForwardTextEncoder
-    }
-
-    /// <summary>
-    /// Cross-attention: decoder query attends to vision encoder key/value features.
-    /// Implements scaled dot-product cross-attention for the captioning decoder.
-    /// </summary>
-    /// <param name="query">Decoder positions, read as rows of the last axis' width.</param>
-    /// <param name="context">Vision tokens, read as rows of the same width; they are both keys and values.</param>
-    /// <returns>The <c>[positions, width]</c> residual sum query + softmax(Q K^T / sqrt(d)) V.</returns>
-    internal Tensor<T> CrossAttend(Tensor<T> query, Tensor<T> context)
-    {
-        int width = query.Shape[query.Rank - 1];
-        int contextWidth = context.Shape[context.Rank - 1];
-        if (width <= 0 || contextWidth != width)
-            throw new InvalidOperationException(
-                $"Cross-attention needs vision tokens as wide as the decoder ({width}); got {contextWidth}. "
-                + "Set CaptioningDecoderDim equal to ProjectionDim.");
-
-        var queries = query.Reshape([query.Length / width, width]);
-        var tokens = context.Reshape([context.Length / width, width]);
-
-        // Scale the queries before the product so the scores stay small in narrow types.
-        var scaledQueries = Engine.TensorMultiplyScalar(queries, NumOps.FromDouble(1.0 / Math.Sqrt(width)));
-        var weights = Engine.Softmax(Engine.TensorMatMul(scaledQueries, Engine.TensorTranspose(tokens)), 1);
-        return Engine.TensorAdd(queries, Engine.TensorMatMul(weights, tokens));
-    }
-
-    /// <summary>
-    /// Forwards through the captioning decoder layers.
-    /// </summary>
-    private Tensor<T> ForwardCaptioningDecoder(Tensor<T> input)
-    {
-        if (!_options.IncludeCaptioningDecoder)
-            return input;
-
-        int start = _textEncoderEnd;
-        int end = Math.Min(_captioningDecoderEnd, Layers.Count);
-        var current = input;
-        for (int i = start; i < end; i++)
-            current = Layers[i].Forward(current);
-        return current;
     }
 
     /// <summary>
