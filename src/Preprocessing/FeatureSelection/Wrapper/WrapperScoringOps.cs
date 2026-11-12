@@ -182,8 +182,14 @@ internal static class WrapperScoringOps
     /// <summary><c>a / b</c>.</summary>
     public static T Divide<T>(T a, T b) => MathHelper.GetNumericOperations<T>().Divide(a, b);
 
+    /// <summary><c>e^x</c>.</summary>
+    public static T Exp<T>(T x) => MathHelper.GetNumericOperations<T>().Exp(x);
+
     /// <summary>Whether <c>a &gt; b</c>.</summary>
     public static bool IsAbove<T>(T a, T b) => MathHelper.GetNumericOperations<T>().GreaterThan(a, b);
+
+    /// <summary>Whether <c>a &gt;= b</c>.</summary>
+    public static bool IsAtLeast<T>(T a, T b) => MathHelper.GetNumericOperations<T>().GreaterThanOrEquals(a, b);
 
     /// <summary>Whether <c>a &lt; b</c>.</summary>
     public static bool IsBelow<T>(T a, T b) => MathHelper.GetNumericOperations<T>().LessThan(a, b);

@@ -33,15 +33,15 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     private readonly double _loudness;  // Initial loudness
     private readonly double _pulseRate;  // Initial pulse rate
     private readonly int? _randomState;
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _fitnessFunction;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _fitnessFunction;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -55,7 +55,7 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         double fMax = 2.0,
         double loudness = 0.5,
         double pulseRate = 0.5,
-        Func<Matrix<T>, Vector<T>, int[], double>? fitnessFunction = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? fitnessFunction = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -96,118 +96,115 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize bats
-        var positions = new double[_populationSize][];
-        var velocities = new double[_populationSize][];
-        var fitness = new double[_populationSize];
-        var loudness = new double[_populationSize];
-        var pulseRate = new double[_populationSize];
+        // Initialize bats: positions uniform on [0, 1), each drawn in bulk by the engine from one seed of the
+        // selector's generator; zero velocities
+        var positions = new Tensor<T>[_populationSize];
+        var velocities = new Tensor<T>[_populationSize];
+        var fitness = new T[_populationSize];
+        var loudness = new T[_populationSize];
+        var pulseRate = new T[_populationSize];
+        T initialLoudness = NumOps.FromDouble(_loudness);
+        T initialPulseRate = NumOps.FromDouble(_pulseRate);
 
         for (int i = 0; i < _populationSize; i++)
         {
-            positions[i] = new double[p];
-            velocities[i] = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                positions[i][j] = random.NextDouble();
-                velocities[i][j] = 0;
-            }
+            positions[i] = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+            velocities[i] = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
             fitness[i] = EvaluateSolution(positions[i], data, target);
-            loudness[i] = _loudness;
-            pulseRate[i] = _pulseRate;
+            loudness[i] = initialLoudness;
+            pulseRate[i] = initialPulseRate;
         }
 
-        // Find best bat
-        int bestIdx = 0;
-        var bestPosition = (double[])positions[0].Clone();
-        double bestFitness = fitness[0];
-        for (int i = 1; i < _populationSize; i++)
-        {
-            if (fitness[i] > bestFitness)
-            {
-                bestIdx = i;
-                bestFitness = fitness[i];
-                bestPosition = (double[])positions[i].Clone();
-            }
-        }
+        // Find best bat (the first best)
+        int bestIdx = PreprocessingTensorOps.FirstArgMax(new Tensor<T>(fitness, new[] { _populationSize }));
+        var bestPosition = positions[bestIdx];
+        T bestFitness = fitness[bestIdx];
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+        T step = NumOps.FromDouble(0.01);
+        T loudnessDecay = NumOps.FromDouble(0.9);
 
         // Optimization loop
         for (int iter = 0; iter < _maxIterations; iter++)
         {
+            T increasedPulseRate = WrapperScoringOps.Scalar<T>(_pulseRate * (1 - Math.Exp(-0.9 * iter)));
             for (int i = 0; i < _populationSize; i++)
             {
                 // Generate new frequency
-                double freq = _fMin + (_fMax - _fMin) * random.NextDouble();
+                T freq = WrapperScoringOps.Scalar<T>(_fMin + (_fMax - _fMin) * random.NextDouble());
 
                 // Update velocity and position
+                velocities[i] = Engine.TensorAdd(velocities[i],
+                    Engine.TensorMultiplyScalar(Engine.TensorSubtract(positions[i], bestPosition), freq));
+                var moved = Engine.TensorAdd(positions[i], velocities[i]);
+
+                // Local search around the best bat in the dimensions whose draw exceeds the pulse rate:
+                // best + 0.01 u loudness with u uniform on [-1, 1)
+                var local = new List<int>();
                 for (int j = 0; j < p; j++)
                 {
-                    velocities[i][j] += (positions[i][j] - bestPosition[j]) * freq;
-                    double newPos = positions[i][j] + velocities[i][j];
-
-                    // Local search
-                    if (random.NextDouble() > pulseRate[i])
-                        newPos = bestPosition[j] + 0.01 * (2 * random.NextDouble() - 1) * loudness[i];
-
-                    positions[i][j] = Math.Max(0, Math.Min(1, newPos));
+                    if (WrapperScoringOps.IsAbove(WrapperScoringOps.Scalar<T>(random.NextDouble()), pulseRate[i]))
+                        local.Add(j);
                 }
 
+                if (local.Count > 0)
+                {
+                    var walk = Engine.TensorAdd(bestPosition, Engine.TensorMultiplyScalar(
+                        Engine.TensorUniform<T>(new[] { p }, -1, 1, random.Next()), WrapperScoringOps.Multiply(step, loudness[i])));
+                    moved = Engine.TensorWhere(WrapperScoringOps.Membership<T>(local.ToArray(), p), walk, moved);
+                }
+
+                positions[i] = Engine.TensorClamp(moved, zero, one);
+
                 // Evaluate new solution
-                double newFitness = EvaluateSolution(positions[i], data, target);
+                T newFitness = EvaluateSolution(positions[i], data, target);
 
                 // Accept if improved and random condition
-                if (newFitness > fitness[i] && random.NextDouble() < loudness[i])
+                if (WrapperScoringOps.IsAbove(newFitness, fitness[i])
+                    && WrapperScoringOps.IsBelow(WrapperScoringOps.Scalar<T>(random.NextDouble()), loudness[i]))
                 {
                     fitness[i] = newFitness;
-                    loudness[i] *= 0.9;  // Decrease loudness
-                    pulseRate[i] = _pulseRate * (1 - Math.Exp(-0.9 * iter));  // Increase pulse rate
+                    loudness[i] = WrapperScoringOps.Multiply(loudness[i], loudnessDecay);  // Decrease loudness
+                    pulseRate[i] = increasedPulseRate;  // Increase pulse rate
                 }
 
                 // Update best
-                if (fitness[i] > bestFitness)
+                if (WrapperScoringOps.IsAbove(fitness[i], bestFitness))
                 {
                     bestFitness = fitness[i];
-                    bestPosition = (double[])positions[i].Clone();
+                    bestPosition = positions[i];
                 }
             }
         }
 
         // Calculate feature importances from best solution
-        _featureImportances = bestPosition;
+        _featureImportances = bestPosition.ToVector();
 
         // Select top features
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureImportances
-            .Select((v, idx) => (Value: v, Index: idx))
-            .OrderByDescending(x => x.Value)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bestPosition, nToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluateSolution(double[] position, Matrix<T> data, Vector<T> target)
+    private T EvaluateSolution(Tensor<T> position, Matrix<T> data, Vector<T> target)
     {
-        var selectedFeatures = new List<int>();
-        for (int i = 0; i < position.Length; i++)
-            if (position[i] > 0.5)
-                selectedFeatures.Add(i);
+        var selectedFeatures = PreprocessingTensorOps.MaskPositions(Engine.TensorGreaterThan(position, NumOps.FromDouble(0.5)));
 
-        if (selectedFeatures.Count == 0)
-            return 0;
+        if (selectedFeatures.Length == 0)
+            return NumOps.Zero;
 
         if (_fitnessFunction is not null)
-            return _fitnessFunction(data, target, selectedFeatures.ToArray());
+            return _fitnessFunction(data, target, selectedFeatures);
 
-        return DefaultFitness(data, target, selectedFeatures.ToArray());
+        return DefaultFitness(data, target, selectedFeatures);
     }
 
-    private double DefaultFitness(Matrix<T> data, Vector<T> target, int[] features)
+    private T DefaultFitness(Matrix<T> data, Vector<T> target, int[] features)
     {
         // Correlation-based fitness: mean |Pearson r| with the target, minus 0.01 per selected feature
-        return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, features) - 0.01 * features.Length;
+        return NumOps.Subtract(WrapperScoringOps.MeanAbsTargetCorrelation(data, target, features),
+            NumOps.FromDouble(0.01 * features.Length));
     }
 
     /// <inheritdoc />

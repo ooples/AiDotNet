@@ -33,15 +33,15 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly double _beta0;  // Attractiveness at r=0
     private readonly double _gamma;  // Light absorption coefficient
     private readonly int? _randomState;
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _fitnessFunction;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _fitnessFunction;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -54,7 +54,7 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         double alpha = 0.5,
         double beta0 = 1.0,
         double gamma = 1.0,
-        Func<Matrix<T>, Vector<T>, int[], double>? fitnessFunction = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? fitnessFunction = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -96,17 +96,21 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize fireflies (binary position vectors)
-        var fireflies = new double[_populationSize][];
-        var brightness = new double[_populationSize];
+        // Initialize fireflies: positions uniform on [0, 1), each drawn in bulk by the engine from one seed of the
+        // selector's generator
+        var fireflies = new Tensor<T>[_populationSize];
+        var brightness = new T[_populationSize];
 
         for (int i = 0; i < _populationSize; i++)
         {
-            fireflies[i] = new double[p];
-            for (int j = 0; j < p; j++)
-                fireflies[i][j] = random.NextDouble();
+            fireflies[i] = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
             brightness[i] = EvaluateSolution(fireflies[i], data, target);
         }
+
+        T beta0 = NumOps.FromDouble(_beta0);
+        T negativeGamma = NumOps.FromDouble(-_gamma);
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
 
         // Optimization loop
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -115,24 +119,18 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             {
                 for (int j = 0; j < _populationSize; j++)
                 {
-                    if (brightness[j] > brightness[i])
+                    if (WrapperScoringOps.IsAbove(brightness[j], brightness[i]))
                     {
-                        // Calculate distance
-                        double r = 0;
-                        for (int k = 0; k < p; k++)
-                            r += Math.Pow(fireflies[i][k] - fireflies[j][k], 2);
-                        r = Math.Sqrt(r);
+                        // Attractiveness beta0 exp(-gamma r^2) with r the distance between the fireflies
+                        var difference = Engine.TensorSubtract(fireflies[j], fireflies[i]);
+                        T squaredDistance = Engine.TensorSumOfSquares(difference);
+                        T beta = WrapperScoringOps.Multiply(beta0,
+                            WrapperScoringOps.Exp(WrapperScoringOps.Multiply(negativeGamma, squaredDistance)));
 
-                        // Calculate attractiveness
-                        double beta = _beta0 * Math.Exp(-_gamma * r * r);
-
-                        // Move firefly i toward j
-                        for (int k = 0; k < p; k++)
-                        {
-                            fireflies[i][k] += beta * (fireflies[j][k] - fireflies[i][k])
-                                             + _alpha * (random.NextDouble() - 0.5);
-                            fireflies[i][k] = Math.Max(0, Math.Min(1, fireflies[i][k]));
-                        }
+                        // Move firefly i toward j, plus a random step alpha u with u uniform on [-0.5, 0.5)
+                        var noise = Engine.TensorUniform<T>(new[] { p }, -0.5 * _alpha, 0.5 * _alpha, random.Next());
+                        fireflies[i] = Engine.TensorClamp(Engine.TensorAdd(fireflies[i],
+                            Engine.TensorAdd(Engine.TensorMultiplyScalar(difference, beta), noise)), zero, one);
 
                         brightness[i] = EvaluateSolution(fireflies[i], data, target);
                     }
@@ -140,49 +138,38 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             }
         }
 
-        // Find best firefly
-        int bestIdx = 0;
-        for (int i = 1; i < _populationSize; i++)
-            if (brightness[i] > brightness[bestIdx])
-                bestIdx = i;
+        // Find best firefly (the first best)
+        int bestIdx = PreprocessingTensorOps.FirstArgMax(new Tensor<T>(brightness, new[] { _populationSize }));
 
         // Calculate feature importances from best solution
-        _featureImportances = (double[])fireflies[bestIdx].Clone();
+        _featureImportances = fireflies[bestIdx].ToVector();
 
         // Select top features
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureImportances
-            .Select((v, idx) => (Value: v, Index: idx))
-            .OrderByDescending(x => x.Value)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(fireflies[bestIdx], nToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluateSolution(double[] position, Matrix<T> data, Vector<T> target)
+    private T EvaluateSolution(Tensor<T> position, Matrix<T> data, Vector<T> target)
     {
         // Convert continuous position to binary selection
-        var selectedFeatures = new List<int>();
-        for (int i = 0; i < position.Length; i++)
-            if (position[i] > 0.5)
-                selectedFeatures.Add(i);
+        var selectedFeatures = PreprocessingTensorOps.MaskPositions(Engine.TensorGreaterThan(position, NumOps.FromDouble(0.5)));
 
-        if (selectedFeatures.Count == 0)
-            return 0;
+        if (selectedFeatures.Length == 0)
+            return NumOps.Zero;
 
         if (_fitnessFunction is not null)
-            return _fitnessFunction(data, target, selectedFeatures.ToArray());
+            return _fitnessFunction(data, target, selectedFeatures);
 
-        return DefaultFitness(data, target, selectedFeatures.ToArray());
+        return DefaultFitness(data, target, selectedFeatures);
     }
 
-    private double DefaultFitness(Matrix<T> data, Vector<T> target, int[] features)
+    private T DefaultFitness(Matrix<T> data, Vector<T> target, int[] features)
     {
         // Correlation-based fitness: mean |Pearson r| with the target, minus 0.01 per selected feature
-        return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, features) - 0.01 * features.Length;
+        return NumOps.Subtract(WrapperScoringOps.MeanAbsTargetCorrelation(data, target, features),
+            NumOps.FromDouble(0.01 * features.Length));
     }
 
     /// <inheritdoc />

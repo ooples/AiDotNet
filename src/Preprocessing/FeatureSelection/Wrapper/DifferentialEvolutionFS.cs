@@ -143,7 +143,7 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
                 // Selection
                 T trialFitness = EvaluateVector(data, target, trial, p, scorer);
-                if (!WrapperScoringOps.IsBelow(trialFitness, fitness[i]))
+                if (WrapperScoringOps.IsAtLeast(trialFitness, fitness[i]))
                 {
                     population[i] = trial;
                     fitness[i] = trialFitness;
