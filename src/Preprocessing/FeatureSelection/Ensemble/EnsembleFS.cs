@@ -29,7 +29,7 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     private readonly double _threshold;
     private readonly AggregationMethod _aggregation;
 
-    private double[]? _aggregatedScores;
+    private Vector<T>? _aggregatedScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -45,7 +45,7 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Threshold => _threshold;
     public AggregationMethod Aggregation => _aggregation;
-    public double[]? AggregatedScores => _aggregatedScores;
+    public Vector<T>? AggregatedScores => _aggregatedScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -85,33 +85,37 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         int n = data.Rows;
         int p = data.Columns;
 
-        // Run multiple base methods and collect rankings
-        var methodRankings = new List<int[]>();
-        var methodScores = new List<double[]>();
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+
+        // Run multiple base methods and collect rankings (0 = best, ties by index)
+        var methodRankings = new List<Tensor<T>>();
+        var methodScores = new List<Tensor<T>>();
 
         // Method 1: Correlation-based
-        var corrScores = ComputeCorrelationScores(data, target);
+        var corrScores = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, y));
         methodRankings.Add(GetRanking(corrScores));
         methodScores.Add(corrScores);
 
         // Method 2: Variance-based (combined with correlation)
-        var varianceScores = ComputeVarianceScores(data);
-        var combinedVar = corrScores.Zip(varianceScores, (c, v) => c * v).ToArray();
+        var varianceScores = ComputeVarianceScores(X, n, p);
+        var combinedVar = engine.TensorMultiply(corrScores, varianceScores);
         methodRankings.Add(GetRanking(combinedVar));
         methodScores.Add(combinedVar);
 
         // Method 3: Fisher score approximation
-        var fisherScores = ComputeFisherScoreApprox(data, target);
+        var fisherScores = ComputeFisherScoreApprox(X, y, n, p);
         methodRankings.Add(GetRanking(fisherScores));
         methodScores.Add(fisherScores);
 
-        // Method 4: Information gain approximation
-        var igScores = ComputeInformationGainApprox(data, target);
+        // Method 4: Information gain approximation (correlation; they're related for continuous data)
+        var igScores = corrScores;
         methodRankings.Add(GetRanking(igScores));
         methodScores.Add(igScores);
 
         // Aggregate results
-        _aggregatedScores = _aggregation switch
+        var aggregatedScores = _aggregation switch
         {
             AggregationMethod.MajorityVoting => AggregateMajorityVoting(methodRankings, p),
             AggregationMethod.WeightedVoting => AggregateWeightedVoting(methodScores, p),
@@ -119,226 +123,114 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
             AggregationMethod.BordaCount => AggregateBordaCount(methodRankings, p),
             _ => AggregateMajorityVoting(methodRankings, p)
         };
+        _aggregatedScores = aggregatedScores.ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _aggregatedScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(aggregatedScores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeCorrelationScores(Matrix<T> data, Vector<T> target)
+    private Tensor<T> ComputeVarianceScores(Tensor<T> X, int n, int p)
     {
-        int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
+        // Population variance, divided by the largest variance when that is positive
+        var engine = Engine;
+        var scores = engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(X,
+            engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { n, p }))), new[] { 0 }, false);
+        T maxVar = engine.TensorMaxValue(scores);
+        return PreprocessingTensorOps.IsAbove(maxVar, NumOps.Zero) ? engine.TensorDivideScalar(scores, maxVar) : scores;
+    }
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+    private Tensor<T> ComputeFisherScoreApprox(Tensor<T> X, Tensor<T> y, int n, int p)
+    {
+        // Binary split of the rows at the target mean: (mean0 - mean1)^2 / (var0 / n0 + var1 / n1)
+        var engine = Engine;
+        var shape = new[] { n, p };
+        var upper = engine.TensorGreaterThan(y, engine.TensorMean(y));
+        var lower = PreprocessingTensorOps.Not(upper);
+        var one = NumOps.One;
 
-        for (int j = 0; j < p; j++)
+        Tensor<T> GroupMean(Tensor<T> mask, out Tensor<T> rowMask, out T divisor)
         {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+            rowMask = engine.TensorBroadcastTo(engine.Reshape(mask, new[] { n, 1 }), shape);
+            divisor = PreprocessingTensorOps.ScalarMax(one, engine.TensorSum(mask));
+            return engine.TensorDivideScalar(engine.ReduceSum(engine.TensorMultiply(X, rowMask), new[] { 0 }, true), divisor);
         }
 
-        return scores;
+        var mean0 = GroupMean(lower, out var mask0, out T count0);
+        var mean1 = GroupMean(upper, out var mask1, out T count1);
+        var var0 = engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(
+            engine.TensorSubtract(X, engine.TensorBroadcastTo(mean0, shape))), mask0), new[] { 0 }, false);
+        var var1 = engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(
+            engine.TensorSubtract(X, engine.TensorBroadcastTo(mean1, shape))), mask1), new[] { 0 }, false);
+
+        var between = engine.Reshape(engine.TensorSquare(engine.TensorSubtract(mean0, mean1)), new[] { p });
+        var within = engine.TensorAdd(engine.TensorDivideScalar(var0, count0), engine.TensorDivideScalar(var1, count1));
+        var usable = engine.TensorGreaterThan(within, NumOps.FromDouble(1e-10));
+        var safe = engine.TensorWhere(usable, within, PreprocessingTensorOps.Filled(new[] { p }, one));
+        return engine.TensorWhere(usable, engine.TensorDivide(between, safe), new Tensor<T>(new[] { p }));
     }
 
-    private double[] ComputeVarianceScores(Matrix<T> data)
+    private Tensor<T> GetRanking(Tensor<T> scores)
     {
-        int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            scores[j] = variance / n;
-        }
-
-        // Normalize
-        double maxVar = scores.Max();
-        if (maxVar > 0)
-            for (int j = 0; j < p; j++)
-                scores[j] /= maxVar;
-
-        return scores;
+        // Rank of every feature in the stable descending order of its score
+        int p = scores.Length;
+        var order = PreprocessingTensorOps.StableOrder(scores, descending: true);
+        var ranks = new int[p];
+        for (int rank = 0; rank < p; rank++)
+            ranks[order[rank]] = rank;
+        return Engine.TensorIndexSelect(PreprocessingTensorOps.Range<T>(p), new Tensor<int>(ranks, new[] { p }), 0);
     }
 
-    private double[] ComputeFisherScoreApprox(Matrix<T> data, Vector<T> target)
+    private Tensor<T> AggregateMajorityVoting(List<Tensor<T>> rankings, int p)
     {
-        int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
-
-        // Binary split based on target median
-        double yMedian = 0;
-        for (int i = 0; i < n; i++)
-            yMedian += NumOps.ToDouble(target[i]);
-        yMedian /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double mean0 = 0, mean1 = 0;
-            int count0 = 0, count1 = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.ToDouble(target[i]) <= yMedian)
-                {
-                    mean0 += NumOps.ToDouble(data[i, j]);
-                    count0++;
-                }
-                else
-                {
-                    mean1 += NumOps.ToDouble(data[i, j]);
-                    count1++;
-                }
-            }
-
-            if (count0 > 0) mean0 /= count0;
-            if (count1 > 0) mean1 /= count1;
-
-            double var0 = 0, var1 = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (NumOps.ToDouble(target[i]) <= yMedian)
-                {
-                    var0 += (val - mean0) * (val - mean0);
-                }
-                else
-                {
-                    var1 += (val - mean1) * (val - mean1);
-                }
-            }
-
-            double between = (mean0 - mean1) * (mean0 - mean1);
-            double within = var0 / Math.Max(1, count0) + var1 / Math.Max(1, count1);
-            scores[j] = within > 1e-10 ? between / within : 0;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeInformationGainApprox(Matrix<T> data, Vector<T> target)
-    {
-        // Use correlation as IG approximation (they're related for continuous data)
-        return ComputeCorrelationScores(data, target);
-    }
-
-    private int[] GetRanking(double[] scores)
-    {
-        return scores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Select((x, rank) => (x.Index, Rank: rank))
-            .OrderBy(x => x.Index)
-            .Select(x => x.Rank)
-            .ToArray();
-    }
-
-    private double[] AggregateMajorityVoting(List<int[]> rankings, int p)
-    {
-        var votes = new double[p];
-        int topK = _nFeaturesToSelect;
+        // One vote per method for each of its top-k ranked features
+        var votes = new Tensor<T>(new[] { p });
+        T topK = NumOps.FromDouble(_nFeaturesToSelect);
 
         foreach (var ranking in rankings)
-        {
-            var topFeatures = ranking
-                .Select((r, idx) => (Rank: r, Index: idx))
-                .OrderBy(x => x.Rank)
-                .Take(topK)
-                .Select(x => x.Index);
-
-            foreach (int idx in topFeatures)
-                votes[idx]++;
-        }
+            votes = Engine.TensorAdd(votes, Engine.TensorLessThan(ranking, topK));
 
         return votes;
     }
 
-    private double[] AggregateWeightedVoting(List<double[]> allScores, int p)
+    private Tensor<T> AggregateWeightedVoting(List<Tensor<T>> allScores, int p)
     {
-        var aggregated = new double[p];
+        var aggregated = new Tensor<T>(new[] { p });
+        T zero = NumOps.Zero;
 
         foreach (var scores in allScores)
         {
-            double max = scores.Max();
-            if (max > 0)
-            {
-                for (int j = 0; j < p; j++)
-                    aggregated[j] += scores[j] / max;
-            }
+            T max = Engine.TensorMaxValue(scores);
+            if (PreprocessingTensorOps.IsAbove(max, zero))
+                aggregated = Engine.TensorAdd(aggregated, Engine.TensorDivideScalar(scores, max));
         }
 
         return aggregated;
     }
 
-    private double[] AggregateRanks(List<int[]> rankings, int p)
+    private Tensor<T> AggregateRanks(List<Tensor<T>> rankings, int p)
     {
-        var avgRanks = new double[p];
+        var rankSums = new Tensor<T>(new[] { p });
 
         foreach (var ranking in rankings)
-        {
-            for (int j = 0; j < p; j++)
-                avgRanks[j] += ranking[j];
-        }
+            rankSums = Engine.TensorAdd(rankSums, ranking);
 
         // Convert to scores (lower rank = higher score)
-        double maxRank = avgRanks.Max();
-        for (int j = 0; j < p; j++)
-            avgRanks[j] = maxRank - avgRanks[j];
-
-        return avgRanks;
+        return Engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, Engine.TensorMaxValue(rankSums)), rankSums);
     }
 
-    private double[] AggregateBordaCount(List<int[]> rankings, int p)
+    private Tensor<T> AggregateBordaCount(List<Tensor<T>> rankings, int p)
     {
-        var bordaScores = new double[p];
+        var bordaScores = new Tensor<T>(new[] { p });
+        var features = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(p));
 
         foreach (var ranking in rankings)
-        {
-            for (int j = 0; j < p; j++)
-                bordaScores[j] += p - ranking[j];
-        }
+            bordaScores = Engine.TensorAdd(bordaScores, Engine.TensorSubtract(features, ranking));
 
         return bordaScores;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
