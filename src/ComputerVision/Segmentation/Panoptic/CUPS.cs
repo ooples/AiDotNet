@@ -30,8 +30,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// clustering self-supervised features into 27 pseudo classes and instance pseudo labels from motion in stereo
 /// video; <see cref="GeneratePanopticPseudoLabels"/> fuses the two, and <see cref="FitThingStuffSplit"/> decides
 /// which pseudo classes are things (more than <c>psi_ts = 0.08</c> of their pixels inside instance masks).
-/// The network predicts semantic scores; <see cref="SegmentPanoptic"/> takes the connected regions of each thing
-/// class as instance candidates and combines them with the stuff regions the way Panoptic FPN does.
+/// The panoptic network is the paper's Panoptic Cascade Mask R-CNN: a semantic head plus a Cascade Mask R-CNN
+/// (RPN over an FPN on the backbone's four stages, three cascade box stages at IoU 0.5/0.6/0.7 and a mask head),
+/// trained on the pseudo labels with <see cref="TrainPanoptic"/>; <see cref="SegmentPanoptic"/> combines the
+/// detected thing instances with the stuff regions the way Panoptic FPN does.
 /// </para>
 /// <para>
 /// <b>Reference:</b> Hahn et al., "Scene-Centric Unsupervised Panoptic Segmentation", CVPR 2025.
@@ -77,6 +79,14 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     // Which pseudo classes are things. Starts from the base's stuff-first split and is replaced by the
     // paper's psi_ts rule once FitThingStuffSplit has seen pseudo labels.
     private readonly bool[] _isThingClass;
+    // The Cascade Mask R-CNN instance head (native mode only) and the FPN that feeds it: four lateral 1x1 and four
+    // output 3x3 convolutions in Layers after the semantic decoder, which ends at _decoderLayerEnd.
+    private readonly CascadeMaskRCNNHead<T>? _instanceHead;
+    private int _decoderLayerEnd;
+    private const int FpnLevels = 4;
+    [AiDotNet.Attributes.Scratch]
+    private Random? _trainingRandom;
+    private bool _lazyShapesResolved;
     #endregion
 
     #region Properties
@@ -120,6 +130,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         _depths = (int[])_options.StageDepths.Clone();
         _decoderDim = _options.DecoderDimension;
         _isThingClass = InitialThingClasses();
+        _instanceHead = new CascadeMaskRCNNHead<T>(_numClasses);
         InitializeLayers();
     }
 
@@ -172,6 +183,109 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => Optimizer ?? base.GetOrCreateBaseOptimizer();
 
+    /// <summary>
+    /// One training step of the Panoptic Cascade Mask R-CNN on a panoptic pseudo label (Hahn et al. 2025, Sec. 3.3).
+    /// </summary>
+    /// <param name="image">The image <c>[C, H, W]</c> or <c>[1, C, H, W]</c>.</param>
+    /// <param name="semanticLabels">Semantic pseudo labels <c>[H, W]</c>; <c>-1</c> is ignored (the output of
+    /// <see cref="GeneratePanopticPseudoLabels"/>).</param>
+    /// <param name="instanceIds">Instance ids <c>[H, W]</c>; <c>0</c> is no instance.</param>
+    /// <returns>The step's loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// The objective is the semantic head's cross-entropy over the labelled pixels (the labels nearest-resampled to
+    /// the head's resolution) plus the instance head's losses: the RPN loss, the three cascade stage losses and the
+    /// Mask R-CNN mask loss. Every instance is one object whose class is the majority semantic label of its pixels and
+    /// whose box encloses its mask. Generic <c>Train(input, target)</c> trains the semantic head only, since a
+    /// semantic target carries no instances.
+    /// </para>
+    /// </remarks>
+    public T TrainPanoptic(Tensor<T> image, Tensor<T> semanticLabels, Tensor<T> instanceIds)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        if (semanticLabels is null) throw new ArgumentNullException(nameof(semanticLabels));
+        if (instanceIds is null) throw new ArgumentNullException(nameof(instanceIds));
+        var head = _instanceHead;
+        if (!_useNativeMode || head is null) throw new NotSupportedException("Training is not supported in ONNX inference mode.");
+        var batched = image.Rank == 4 ? image : AddBatchDimension(image);
+        if (batched.Rank != 4 || batched.Shape[0] != 1) throw new ArgumentException("TrainPanoptic takes one image.", nameof(image));
+        int h = batched.Shape[2], w = batched.Shape[3];
+        if (semanticLabels.Rank != 2 || semanticLabels.Shape[0] != h || semanticLabels.Shape[1] != w)
+            throw new ArgumentException($"Semantic labels must be [{h}, {w}].", nameof(semanticLabels));
+        if (instanceIds.Rank != 2 || instanceIds.Shape[0] != h || instanceIds.Shape[1] != w)
+            throw new ArgumentException($"Instance ids must be [{h}, {w}].", nameof(instanceIds));
+
+        var (gold, goldClasses, goldMasks) = InstanceTargets(semanticLabels, instanceIds);
+        var random = _trainingRandom ??= _options.Seed is int seed
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed)
+            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        return TrainWithCustomObjective(batched, semanticLabels, (x, labels) =>
+        {
+            var (encoded, taps) = RunBackbone(x);
+            var semantic = SemanticCrossEntropy(Decode(encoded), labels);
+            if (gold.Count == 0) return semantic;
+            return Engine.TensorAdd(semantic, head.Loss(Fpn(taps), h, w, gold, goldClasses, goldMasks, random));
+        });
+    }
+
+    /// <summary>
+    /// The instance targets of a panoptic pseudo label: each instance's box (x1, y1, x2, y2; the end exclusive), its
+    /// class (the majority semantic label of its labelled pixels) and its mask <c>[M, 1, H, W]</c>.
+    /// </summary>
+    internal (List<double[]> Boxes, List<int> Classes, Tensor<T> Masks) InstanceTargets(Tensor<T> semanticLabels, Tensor<T> instanceIds)
+    {
+        int h = instanceIds.Shape[0], w = instanceIds.Shape[1], hw = h * w;
+        var ids = Engine.Reshape(instanceIds, new[] { hw }).Cast<int>();
+        int[] idCounts = Engine.TensorBinCount(ids, null).ToArray();
+        var present = new List<int>();
+        for (int id = 1; id < idCounts.Length; id++)
+        {
+            if (idCounts[id] > 0) present.Add(id);
+        }
+
+        if (present.Count == 0) return (new List<double[]>(), new List<int>(), new Tensor<T>(new[] { 0, 1, h, w }));
+        int m = present.Count;
+        var masks = Engine.TensorIndexSelect(
+            Engine.TensorTranspose(Engine.TensorOneHot<T>(ids, idCounts.Length)),
+            new Tensor<int>(present.ToArray(), new[] { m }), 0);                                       // [M, HW]
+        var labels = Engine.Reshape(semanticLabels, new[] { hw }).Cast<int>();
+        var labelled = Engine.TensorGreaterEqual(labels, Tensor<int>.CreateDefault(new[] { hw }, 0)); // 1 where labelled
+        var classOneHot = Engine.TensorMultiply(
+            Engine.TensorOneHot<T>(Engine.TensorMultiply(labels, labelled), _numClasses),
+            Engine.TensorBroadcastTo(Engine.Reshape(labelled.Cast<T>(), new[] { hw, 1 }), new[] { hw, _numClasses }));
+        int[] classes = Engine.TensorArgMax(Engine.TensorMatMul(masks, classOneHot), 1).ToArray();  // majority class
+
+        var grid = Engine.Reshape(masks, new[] { m, h, w });
+        var rows = Engine.ReduceMax(grid, new[] { 2 }, false);                                         // [M, H]
+        var columns = Engine.ReduceMax(grid, new[] { 1 }, false);                                      // [M, W]
+        int[] top = Engine.TensorArgMax(rows, 1).ToArray();
+        int[] bottomGap = Engine.TensorArgMax(Engine.TensorFlip(rows, new[] { 1 }), 1).ToArray();
+        int[] left = Engine.TensorArgMax(columns, 1).ToArray();
+        int[] rightGap = Engine.TensorArgMax(Engine.TensorFlip(columns, new[] { 1 }), 1).ToArray();
+        var boxes = new List<double[]>(m);
+        for (int i = 0; i < m; i++) boxes.Add(new double[] { left[i], top[i], w - rightGap[i], h - bottomGap[i] });
+        return (boxes, classes.ToList(), Engine.Reshape(masks, new[] { m, 1, h, w }));
+    }
+
+    /// <summary>Mean cross-entropy of the semantic logits over the labelled pixels (labels below zero are ignored).</summary>
+    private Tensor<T> SemanticCrossEntropy(Tensor<T> logits, Tensor<T> labels)
+    {
+        int k = logits.Shape[1], lh = logits.Shape[2], lw = logits.Shape[3], n = lh * lw;
+        var resized = Engine.Reshape(
+            Engine.Interpolate(Engine.Reshape(labels, new[] { 1, 1, labels.Shape[0], labels.Shape[1] }),
+                new[] { lh, lw }, InterpolateMode.Nearest, false), new[] { n }).Cast<int>();
+        var labelled = Engine.TensorGreaterEqual(resized, Tensor<int>.CreateDefault(new[] { n }, 0));
+        var target = Engine.TensorMultiply(
+            Engine.TensorOneHot<T>(Engine.TensorMultiply(resized, labelled), k),
+            Engine.TensorBroadcastTo(Engine.Reshape(labelled.Cast<T>(), new[] { n, 1 }), new[] { n, k })); // [n, K]
+        var logProbabilities = Engine.TensorTranspose(
+            Engine.Reshape(Engine.TensorLogSoftmax(logits, 1), new[] { k, n }));                          // [n, K]
+        int count = Math.Max(1, Engine.TensorSum(labelled));
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorNegate(Engine.ReduceSum(Engine.TensorMultiply(target, logProbabilities), null)),
+            NumOps.FromDouble(1.0 / count));
+    }
+
     #endregion
 
     #region Private Methods
@@ -181,8 +295,37 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+        features = Decode(features);
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
+    }
+
+    /// <summary>The backbone's output and its stage outputs (finest first) for a batched input.</summary>
+    private (Tensor<T> Encoded, List<Tensor<T>> Stages) RunBackbone(Tensor<T> batched)
+        => Common.FeaturePyramidOps.RunAndTapStages(Layers, 0, _encoderLayerEnd, batched);
+
+    /// <summary>The semantic head on the backbone's output.</summary>
+    private Tensor<T> Decode(Tensor<T> encoded)
+    {
+        var features = encoded;
+        for (int i = _encoderLayerEnd; i < _decoderLayerEnd; i++) features = Layers[i].Forward(features);
+        return features;
+    }
+
+    /// <summary>The FPN levels P2-P5 (256 channels, finest first) on the backbone's last four stages.</summary>
+    private List<Tensor<T>> Fpn(List<Tensor<T>> stages)
+    {
+        if (stages.Count < FpnLevels)
+            throw new InvalidOperationException(
+                $"CUPS's Cascade Mask R-CNN reads four backbone stages (strides 4 to 32), but the backbone produced {stages.Count} resolutions.");
+        var lateral = new List<Func<Tensor<T>, Tensor<T>>>(FpnLevels);
+        var output = new List<Func<Tensor<T>, Tensor<T>>>(FpnLevels);
+        for (int i = 0; i < FpnLevels; i++)
+        {
+            lateral.Add(Layers[_decoderLayerEnd + i].Forward);
+            output.Add(Layers[_decoderLayerEnd + FpnLevels + i].Forward);
+        }
+
+        return Common.FeaturePyramidOps.TopDown(stages.Skip(stages.Count - FpnLevels).ToList(), lateral, output);
     }
 
     /// <inheritdoc />
@@ -227,6 +370,38 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
             var decoderLayers = LayerHelper<T>.CreateCUPSDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
             Layers.AddRange(decoderLayers);
         }
+
+        // The FPN under the Cascade Mask R-CNN: lateral 1x1 and output 3x3 convolutions to 256 channels.
+        _decoderLayerEnd = Layers.Count;
+        var identity = new AiDotNet.ActivationFunctions.IdentityActivation<T>() as IActivationFunction<T>;
+        for (int i = 0; i < FpnLevels; i++) Layers.Add(new ConvolutionalLayer<T>(CascadeMaskRCNNHead<T>.Channels, 1, 1, 0, identity));
+        for (int i = 0; i < FpnLevels; i++) Layers.Add(new ConvolutionalLayer<T>(CascadeMaskRCNNHead<T>.Channels, 3, 1, 1, identity));
+    }
+
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent("cascade-mask-rcnn", _instanceHead);
+    }
+
+    /// <summary>
+    /// Resolves the lazy layers through the real forward: the FPN reads backbone stages rather than its sequential
+    /// predecessor, so the base class's sequential shape walk would size it wrongly.
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesResolved) return;
+        if (Layers is null || Layers.Count == 0) return;
+        if (!_useNativeMode) { _lazyShapesResolved = true; return; }
+        using (InferenceMode.Enter())
+        {
+            var (encoded, taps) = RunBackbone(new Tensor<T>(new[] { 1, _channels, _height, _width }));
+            Decode(encoded);
+            if (taps.Count >= FpnLevels) Fpn(taps);
+        }
+
+        _lazyShapesResolved = true;
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -375,8 +550,9 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// The semantic head's argmax gives the class map. Every connected region of a thing class is an instance
-    /// candidate scored by the mean probability of its class; candidates are pasted by descending score while
+    /// The semantic head's logits, bilinearly upsampled to the input, give the class map. The Cascade Mask R-CNN
+    /// head's detections (cascade-averaged class scores, class-aware NMS at IoU 0.5, at most 100) of thing classes
+    /// are the instance candidates; they are pasted by descending score while
     /// the score reaches <see cref="CUPSOptions.InstanceScoreThreshold"/> (0.4) and at most
     /// <see cref="CUPSOptions.OverlapThreshold"/> (0.5) of the candidate is already claimed, then every stuff
     /// class whose unclaimed area reaches <see cref="CUPSOptions.StuffAreaThreshold"/> (4096 input pixels)
@@ -387,40 +563,47 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
         if (image is null) throw new ArgumentNullException(nameof(image));
-        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
-        int k = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2], hw = h * w;
-        var probabilities = Engine.Reshape(Engine.TensorSoftmax(logits, 0), new[] { k, hw });
-        var semantic = Engine.TensorArgMax(probabilities, 0);                                     // [HW]
-        var semanticMap = Engine.Reshape(semantic, new[] { h, w });
-
-        var masks = new List<Tensor<int>>();
-        var scores = new List<Tensor<T>>();
-        var classes = new List<int>();
-        var one = NumOps.One;
-        for (int cls = 0; cls < k; cls++)
+        var head = _instanceHead;
+        if (!_useNativeMode || head is null)
+            throw new NotSupportedException("CUPS panoptic inference needs the native Cascade Mask R-CNN head; ONNX mode exports the semantic head only.");
+        var batched = image.Rank == 4 ? image : AddBatchDimension(image);
+        int h = batched.Shape[2], w = batched.Shape[3], hw = h * w;
+        Tensor<T> logits;
+        List<Tensor<T>> taps;
+        using (InferenceMode.Enter())
         {
-            if (!_isThingClass[cls]) continue;
-            var (componentMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(semanticMap, cls);
-            if (count == 0) continue;
-            var components = Engine.Reshape(componentMap, new[] { hw });
-            // Rows 1..count of the one-hot component map are the instance masks.
-            var oneHot = Engine.TensorPermute(Engine.TensorOneHot<int>(components, count + 1), new[] { 1, 0 });
-            masks.Add(Engine.TensorSlice(oneHot, new[] { 1, 0 }, new[] { count, hw }));
-            var classProbability = Engine.Reshape(Engine.TensorSlice(probabilities, new[] { cls, 0 }, new[] { 1, hw }), new[] { hw });
-            var sums = Engine.TensorScatterAdd(new Tensor<T>(new[] { count + 1 }), components, classProbability, 0);
-            var areas = Engine.TensorBinCount(components, count + 1).Cast<T>();
-            scores.Add(Engine.TensorSlice(Engine.TensorDivide(sums, Engine.TensorClampMin(areas, one)), new[] { 1 }, new[] { count }));
-            for (int c = 0; c < count; c++) classes.Add(cls);
+            var (encoded, stages) = RunBackbone(batched);
+            taps = stages;
+            logits = Engine.Interpolate(Decode(encoded), new[] { h, w }, InterpolateMode.Bilinear, false);
         }
 
-        var instanceMasks = masks.Count == 0 ? new Tensor<int>(new[] { 0, hw }) : Engine.TensorConcatenate(masks.ToArray(), 0);
-        var instanceScores = scores.Count == 0 ? new Tensor<T>(new[] { 0 }) : Engine.TensorConcatenate(scores.ToArray(), 0);
-        int imageHeight = image.Shape[image.Rank - 2], imageWidth = image.Shape[image.Rank - 1];
-        double pixelArea = (double)imageHeight * imageWidth / hw;
+        int k = logits.Shape[1];
+        var probabilities = Engine.Reshape(Engine.TensorSoftmax(logits, 1), new[] { k, hw });
+        var semantic = Engine.TensorArgMax(probabilities, 0);                                     // [HW]
+
+        Tensor<int> detectedMasks;
+        int[] detectedClasses;
+        Tensor<T> detectedScores;
+        using (InferenceMode.Enter())
+        {
+            (detectedMasks, detectedClasses, detectedScores) = head.Detect(Fpn(taps), h, w);
+        }
+
+        // Only thing-class detections are instances; stuff comes from the semantic head.
+        var keep = new List<int>();
+        for (int i = 0; i < detectedClasses.Length; i++)
+        {
+            if (detectedClasses[i] >= 0 && detectedClasses[i] < k && _isThingClass[detectedClasses[i]]) keep.Add(i);
+        }
+
+        var index = new Tensor<int>(keep.ToArray(), new[] { keep.Count });
+        var instanceMasks = keep.Count == 0 ? new Tensor<int>(new[] { 0, hw }) : Engine.TensorIndexSelect(detectedMasks, index, 0);
+        var instanceScores = keep.Count == 0 ? new Tensor<T>(new[] { 0 }) : Engine.TensorIndexSelect(detectedScores, index, 0);
+        var classes = keep.Select(i => detectedClasses[i]).ToArray();
         var settings = new Common.PanopticFpnSettings(
             _options.InstanceScoreThreshold, _options.OverlapThreshold, _options.StuffAreaThreshold);
         return Common.MaskClassificationOps.MergePanopticFpn(
-            semantic, probabilities, instanceMasks, classes.ToArray(), instanceScores, _isThingClass, h, w, settings, pixelArea);
+            semantic, probabilities, instanceMasks, classes, instanceScores, _isThingClass, h, w, settings, 1.0);
     }
     #endregion
 }
