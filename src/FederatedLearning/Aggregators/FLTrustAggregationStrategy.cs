@@ -89,7 +89,7 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
         var layerNames = referenceModel.Keys.ToArray();
 
         // Compute server gradient norm.
-        double serverNorm = 0;
+        int totalParams = 0;
         foreach (var layerName in layerNames)
         {
             if (!_serverGradient.TryGetValue(layerName, out var sg))
@@ -97,23 +97,20 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
                 throw new ArgumentException($"Server gradient missing layer '{layerName}'.");
             }
 
-            for (int i = 0; i < sg.Length; i++)
-            {
-                double v = NumOps.ToDouble(sg[i]);
-                serverNorm += v * v;
-            }
+            totalParams += sg.Length;
         }
 
-        serverNorm = Math.Sqrt(serverNorm);
+        var serverFlat = FlattenLayers(_serverGradient, layerNames, totalParams);
+        double serverNorm = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(serverFlat, serverFlat)));
 
         // Compute trust scores (ReLU'd cosine similarity with server gradient).
         var clientIds = clientModels.Keys.ToList();
         var trustScores = new double[clientIds.Count];
+        var clientNorms = new double[clientIds.Count];
 
         for (int c = 0; c < clientIds.Count; c++)
         {
             var clientModel = clientModels[clientIds[c]];
-            double dot = 0, clientNorm = 0;
 
             foreach (var layerName in layerNames)
             {
@@ -128,17 +125,12 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
                     throw new ArgumentException(
                         $"Client {clientIds[c]} layer '{layerName}' length {cp.Length} differs from server gradient length {sg.Length}.");
                 }
-
-                for (int i = 0; i < cp.Length; i++)
-                {
-                    double cv = NumOps.ToDouble(cp[i]);
-                    double sv = NumOps.ToDouble(sg[i]);
-                    dot += cv * sv;
-                    clientNorm += cv * cv;
-                }
             }
 
-            clientNorm = Math.Sqrt(clientNorm);
+            var clientFlat = FlattenLayers(clientModel, layerNames, totalParams);
+            double dot = NumOps.ToDouble(Engine.DotProduct(clientFlat, serverFlat));
+            double clientNorm = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(clientFlat, clientFlat)));
+            clientNorms[c] = clientNorm;
             double cosSim = (clientNorm > 0 && serverNorm > 0) ? dot / (clientNorm * serverNorm) : 0.0;
             trustScores[c] = Math.Max(0.0, cosSim); // ReLU
         }
@@ -167,19 +159,7 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
 
             var clientModel = clientModels[clientIds[c]];
 
-            // Compute this client's gradient norm.
-            double cNorm = 0;
-            foreach (var layerName in layerNames)
-            {
-                var cp = clientModel[layerName];
-                for (int i = 0; i < cp.Length; i++)
-                {
-                    double v = NumOps.ToDouble(cp[i]);
-                    cNorm += v * v;
-                }
-            }
-
-            cNorm = Math.Sqrt(cNorm);
+            double cNorm = clientNorms[c];
             double scale = (cNorm > 0 && trustSum > 0)
                 ? (serverNorm / cNorm) * (trustScores[c] / trustSum)
                 : 0.0;
@@ -187,12 +167,7 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
 
             foreach (var layerName in layerNames)
             {
-                var cp = clientModel[layerName];
-                var rp = result[layerName];
-                for (int i = 0; i < rp.Length; i++)
-                {
-                    rp[i] = NumOps.Add(rp[i], NumOps.Multiply(cp[i], scaleT));
-                }
+                AddScaledInto(result[layerName], clientModel[layerName], scaleT);
             }
         }
 

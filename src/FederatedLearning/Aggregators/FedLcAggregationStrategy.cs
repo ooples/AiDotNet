@@ -10,11 +10,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <para><b>For Beginners:</b> When different clients have different class distributions
 /// (e.g., Hospital A sees mostly flu, Hospital B sees mostly cold), local models develop
 /// biased predictions. FedLC fixes this by adjusting each client's logits based on its
-/// local class frequency before aggregation.</para>
+/// local class counts during local training.</para>
 ///
 /// <para>During local training, logits are calibrated:</para>
-/// <code>z_calibrated[c] = z[c] - tau * log(p_local[c])</code>
-/// <para>where p_local[c] is the local class frequency for class c. This counteracts the bias
+/// <code>z_calibrated[c] = z[c] - tau * n_local[c]^(-1/4)</code>
+/// <para>where n_local[c] is the number of local samples of class c. This counteracts the bias
 /// introduced by the imbalanced local data distribution.</para>
 ///
 /// <para>Reference: Zhang, J., et al. (2022). "Federated Learning with Label Distribution Skew
@@ -52,52 +52,43 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     }
 
     /// <summary>
-    /// Registers a client's local class distribution for use in logit calibration.
+    /// Registers a client's local per-class sample counts for use in logit calibration.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Before local training, each client reports how many samples
-    /// it has per class (as a probability distribution). This is used to calibrate the logits
-    /// during training so the model isn't biased toward classes that are over-represented locally.</para>
+    /// it has per class. This is used to calibrate the logits during training so the model
+    /// isn't biased toward classes that are over-represented locally.</para>
     /// </remarks>
     /// <param name="clientId">The client identifier.</param>
-    /// <param name="classDistribution">Probability distribution over classes (must sum to ~1.0).
-    /// Each element p[c] is the fraction of local data belonging to class c.</param>
-    public void RegisterClassDistribution(int clientId, Vector<T> classDistribution)
+    /// <param name="classCounts">Number of local samples n[c] in each class c (non-negative).</param>
+    public void RegisterClassCounts(int clientId, Vector<T> classCounts)
     {
-        // Validate it's a probability distribution.
-        double sum = 0;
-        for (int i = 0; i < classDistribution.Length; i++)
+        Guard.NotNull(classCounts);
+        if (classCounts.Length == 0)
         {
-            double v = NumOps.ToDouble(classDistribution[i]);
-            if (v < 0)
-            {
-                throw new ArgumentException(
-                    $"Class distribution must be non-negative, but got {v} at index {i}.",
-                    nameof(classDistribution));
-            }
-
-            sum += v;
+            throw new ArgumentException("Class counts must not be empty.", nameof(classCounts));
         }
 
-        if (Math.Abs(sum - 1.0) > 0.01)
+        var smallest = Engine.TensorMinValue(classCounts.AsTensor());
+        if (NumOps.IsNaN(smallest) || NumOps.LessThan(smallest, NumOps.Zero))
         {
             throw new ArgumentException(
-                $"Class distribution must sum to ~1.0, but sums to {sum}.",
-                nameof(classDistribution));
+                $"Class counts must be non-negative, but the smallest is {smallest}.",
+                nameof(classCounts));
         }
 
         lock (_distributionLock)
         {
-            _clientClassDistributions[clientId] = classDistribution.Clone();
+            _clientClassDistributions[clientId] = classCounts.Clone();
         }
     }
 
     /// <summary>
-    /// Removes a client's registered class distribution.
+    /// Removes a client's registered class counts.
     /// </summary>
     /// <param name="clientId">The client identifier.</param>
     /// <returns>True if the client was found and removed; false if not registered.</returns>
-    public bool UnregisterClassDistribution(int clientId)
+    public bool UnregisterClassCounts(int clientId)
     {
         lock (_distributionLock)
         {
@@ -106,9 +97,9 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     }
 
     /// <summary>
-    /// Clears all registered class distributions.
+    /// Removes all registered class counts.
     /// </summary>
-    public void ClearAllDistributions()
+    public void ClearAllClassCounts()
     {
         lock (_distributionLock)
         {
@@ -117,48 +108,27 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     }
 
     /// <summary>
-    /// Calibrates raw logits using the client's local class distribution.
+    /// Calibrates raw logits using the client's local class counts.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> If a client has 90% flu and 10% cold samples, the model
-    /// naturally predicts flu more often. This method subtracts a correction term based on
-    /// the class frequency, effectively removing the bias so the model makes predictions
+    /// naturally predicts flu more often. This method subtracts a pairwise label margin that is
+    /// larger for rare classes, effectively removing the bias so the model makes predictions
     /// based on actual features rather than local data imbalance.</para>
     /// </remarks>
     /// <param name="logits">Raw model logits for a single sample (one per class).</param>
-    /// <param name="clientId">The client identifier (to look up registered distribution).</param>
-    /// <returns>Calibrated logits: z_cal[c] = z[c] - tau * log(p_local[c]).</returns>
+    /// <param name="clientId">The client identifier (to look up registered counts).</param>
+    /// <returns>Calibrated logits: z_cal[c] = z[c] - tau * n[c]^(-1/4) (Zhang et al. 2022, eq. 9).</returns>
     public Vector<T> CalibrateLogits(Vector<T> logits, int clientId)
     {
-        Vector<T> distribution;
-        lock (_distributionLock)
-        {
-            if (!_clientClassDistributions.TryGetValue(clientId, out var dist))
-            {
-                throw new InvalidOperationException(
-                    $"No class distribution registered for client {clientId}. Call RegisterClassDistribution first.");
-            }
-
-            distribution = dist;
-        }
-
-        if (logits.Length != distribution.Length)
+        var correction = GetCorrection(clientId);
+        if (logits.Length != correction.Length)
         {
             throw new ArgumentException(
-                $"Logits length ({logits.Length}) must match distribution length ({distribution.Length}).");
+                $"Logits length ({logits.Length}) must match distribution length ({correction.Length}).");
         }
 
-        var calibrated = new T[logits.Length];
-        for (int c = 0; c < logits.Length; c++)
-        {
-            double p = NumOps.ToDouble(distribution[c]);
-            // Clamp to avoid log(0).
-            double logP = Math.Log(Math.Max(p, 1e-10));
-            double correction = _calibrationTemperature * logP;
-            calibrated[c] = NumOps.Subtract(logits[c], NumOps.FromDouble(correction));
-        }
-
-        return new Vector<T>(calibrated);
+        return Engine.Subtract(logits, correction);
     }
 
     /// <summary>
@@ -169,51 +139,27 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     /// <returns>Calibrated logits matrix.</returns>
     public Matrix<T> CalibrateBatch(Matrix<T> logitsBatch, int clientId)
     {
-        Vector<T> distribution;
-        lock (_distributionLock)
-        {
-            if (!_clientClassDistributions.TryGetValue(clientId, out var dist))
-            {
-                throw new InvalidOperationException(
-                    $"No class distribution registered for client {clientId}.");
-            }
-
-            distribution = dist;
-        }
-
-        if (logitsBatch.Columns != distribution.Length)
+        // Precompute the calibration correction vector (same for all samples).
+        var correction = GetCorrection(clientId);
+        if (logitsBatch.Columns != correction.Length)
         {
             throw new ArgumentException(
-                $"Logits columns ({logitsBatch.Columns}) must match distribution length ({distribution.Length}).");
+                $"Logits columns ({logitsBatch.Columns}) must match distribution length ({correction.Length}).");
         }
 
-        // Precompute the calibration correction vector (same for all samples).
-        var correction = new T[distribution.Length];
-        for (int c = 0; c < distribution.Length; c++)
-        {
-            double p = NumOps.ToDouble(distribution[c]);
-            correction[c] = NumOps.FromDouble(_calibrationTemperature * Math.Log(Math.Max(p, 1e-10)));
-        }
-
-        var result = new Matrix<T>(logitsBatch.Rows, logitsBatch.Columns);
-        for (int s = 0; s < logitsBatch.Rows; s++)
-        {
-            for (int c = 0; c < logitsBatch.Columns; c++)
-            {
-                result[s, c] = NumOps.Subtract(logitsBatch[s, c], correction[c]);
-            }
-        }
-
-        return result;
+        var rows = Engine.TensorBroadcastTo(
+            correction.AsTensor().Reshape(1, correction.Length),
+            new[] { logitsBatch.Rows, logitsBatch.Columns });
+        return Engine.TensorSubtract(Tensor<T>.FromMatrix(logitsBatch), rows).ToMatrix();
     }
 
     /// <summary>
-    /// Computes class distribution from sample labels (convenience helper).
+    /// Counts the local samples of each class (convenience helper).
     /// </summary>
     /// <param name="labels">Class label indices for all local samples.</param>
     /// <param name="numClasses">Total number of classes.</param>
-    /// <returns>Probability distribution vector of length numClasses.</returns>
-    public static Vector<T> ComputeClassDistribution(int[] labels, int numClasses)
+    /// <returns>Count vector of length numClasses.</returns>
+    public static Vector<T> ComputeClassCounts(int[] labels, int numClasses)
     {
         Guard.NotNull(labels);
         if (labels.Length == 0)
@@ -226,7 +172,7 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be positive.");
         }
 
-        var counts = new double[numClasses];
+        var counts = new int[numClasses];
         foreach (int label in labels)
         {
             if (label < 0 || label >= numClasses)
@@ -238,20 +184,35 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             counts[label]++;
         }
 
-        var distribution = new T[numClasses];
-        double total = labels.Length;
-        for (int c = 0; c < numClasses; c++)
+        return Vector<int>.Wrap(counts).AsTensor().Cast<T>().ToVector();
+    }
+
+    /// <summary>
+    /// tau * max(n[c], 1e-8)^(-1/4) for the client's registered counts (absent classes get the largest margin).
+    /// </summary>
+    private Vector<T> GetCorrection(int clientId)
+    {
+        Vector<T> counts;
+        lock (_distributionLock)
         {
-            distribution[c] = NumOps.FromDouble(counts[c] / total);
+            if (!_clientClassDistributions.TryGetValue(clientId, out var registered))
+            {
+                throw new InvalidOperationException(
+                    $"No class counts registered for client {clientId}. Call RegisterClassCounts first.");
+            }
+
+            counts = registered;
         }
 
-        return new Vector<T>(distribution);
+        var clamped = Engine.TensorClampMin(counts.AsTensor(), NumOps.FromDouble(1e-8));
+        var margin = Engine.TensorPower(clamped, NumOps.FromDouble(-0.25));
+        return Engine.TensorMultiplyScalar(margin, NumOps.FromDouble(_calibrationTemperature)).ToVector();
     }
 
     /// <summary>Gets the logit calibration temperature (tau).</summary>
     public double CalibrationTemperature => _calibrationTemperature;
 
-    /// <summary>Gets the number of clients with registered distributions.</summary>
+    /// <summary>Gets the number of clients with registered class counts.</summary>
     public int RegisteredClientCount
     {
         get

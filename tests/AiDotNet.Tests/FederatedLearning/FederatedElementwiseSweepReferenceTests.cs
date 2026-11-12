@@ -54,6 +54,37 @@ public class FederatedElementwiseSweepReferenceTests
         Assert.Equal(6.5, aggregated["w"][0], 12);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task FedDecorr_LossIsBetaOverDSquaredTimesCorrelationFrobenius()
+    {
+        await Task.Yield();
+
+        // Shi et al. ICLR 2023: L = beta * (1 / d^2) * ||K||_F^2. Two perfectly correlated columns give
+        // K = [[1, 1], [1, 1]], ||K||_F^2 = 4, so with beta = 0.1 and d = 2 the loss is 0.1 * 4 / 4 = 0.1.
+        var strategy = new FedDecorrAggregationStrategy<double>(decorrelationWeight: 0.1);
+        var features = new Matrix<double>(new[,] { { 1.0, 2.0 }, { 2.0, 4.0 }, { 3.0, 6.0 } });
+
+        Assert.Equal(0.1, strategy.ComputeDecorrelationLoss(features), 10);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedLc_SubtractsTauTimesCountToMinusQuarter()
+    {
+        await Task.Yield();
+
+        // Zhang et al. ICML 2022 (FedLC), eq. 9: z_cal[c] = z[c] - tau * n[c]^(-1/4).
+        // Counts {16, 1} with tau = 1: margins {0.5, 1}; logits {2, 2} -> {1.5, 1}.
+        var strategy = new FedLcAggregationStrategy<double>(calibrationTemperature: 1.0);
+        var counts = FedLcAggregationStrategy<double>.ComputeClassCounts(
+            new[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 }, 2);
+        strategy.RegisterClassCounts(7, counts);
+
+        var calibrated = strategy.CalibrateLogits(new Vector<double>(new[] { 2.0, 2.0 }), 7);
+
+        Assert.Equal(1.5, calibrated[0], 12);
+        Assert.Equal(1.0, calibrated[1], 12);
+    }
+
     private static Vector<double> Parameters(IFullModel<double, Matrix<double>, Vector<double>> model)
         => ((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters();
 
