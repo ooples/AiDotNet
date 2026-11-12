@@ -101,7 +101,7 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
     /// Applies the matrix-free product of Householder reflections stored in <paramref name="reflectors"/>
     /// (<c>[k, D]</c>) to <paramref name="input"/> (<c>[..., D]</c>) using pure tape-tracked <see cref="IEngine"/> ops.
     /// </summary>
-    public static Tensor<T> ApplyChain(IEngine engine, Tensor<T> input, Tensor<T> reflectors, bool transpose = false)
+    internal static Tensor<T> ApplyChain(IEngine engine, Tensor<T> input, Tensor<T> reflectors, bool transpose = false)
     {
         if (engine is null) throw new ArgumentNullException(nameof(engine));
         if (input is null) throw new ArgumentNullException(nameof(input));
@@ -118,9 +118,12 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
 
         var numOps = MathHelper.GetNumericOperations<T>();
         T two = numOps.FromDouble(2.0);
-        // 1e-20 is a normal float (> 1.17e-38) and well below both FP32 (1.19e-7) and FP64 (2.22e-16) machine
-        // epsilon at unit norm, preventing 0/0 on zero vectors with zero ULP perturbation on unit reflectors.
-        T eps = numOps.FromDouble(1e-20);
+        // The denominator is floored at FP32's smallest normal value instead of having an epsilon added: an added
+        // epsilon changes every reflector whose squared norm is near it (a double reflector [1e-10, 0] has squared norm
+        // 1e-20, and adding 1e-20 halved its reflection, so the chain stopped being orthogonal). A floor leaves every
+        // squared norm at or above it exact, and a zero reflector still yields 0 / floor = 0, the identity. The value
+        // is normal in both FP32 and FP64.
+        T normFloor = numOps.FromDouble(1.1754943508222875e-38);
 
         int rowCount = input.Length / d;
         Tensor<T> current = input.Rank == 2
@@ -139,7 +142,7 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             Tensor<T> uCol = engine.TensorTranspose(uRow);
             Tensor<T> proj = engine.TensorMatMul(current, uCol);
             Tensor<T> normSq = engine.ReduceSum(engine.TensorMultiply(uRow, uRow), null);
-            Tensor<T> denom = engine.TensorAddScalar(normSq, eps);
+            Tensor<T> denom = engine.TensorMax(normSq, normFloor);
             Tensor<T> scaledProj = engine.TensorDivide(engine.TensorMultiplyScalar(proj, two), denom);
             Tensor<T> outer = engine.TensorMatMul(scaledProj, uRow);
             current = engine.TensorSubtract(current, outer);
