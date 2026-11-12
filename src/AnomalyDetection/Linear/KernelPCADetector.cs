@@ -252,15 +252,41 @@ public partial class KernelPCADetector<T> : AnomalyDetectorBase<T>
             : NumOps.Divide(NumOps.One, NumOps.FromDouble(X.Columns));
 
         var engine = Engine;
-        int m = X.Rows;
-        var points = AnomalyTensorOps.ToTensor(X);
+        var training = AnomalyTensorOps.ToTensor(trainingData);
+        var meanTensor = mean.AsTensor();
+        T grandMean = engine.TensorMean(meanTensor);
+        T two = NumOps.FromDouble(2);
+        int k = _nComponents;
+        Tensor<T>? inverse = null;
+        Tensor<T>? alphasT = null;
+        if (k > 0)
+        {
+            var lambdaTensor = lambdas.AsTensor();
+            var significant = engine.TensorGreaterThan(lambdaTensor, NumOps.FromDouble(1e-10));
+            inverse = engine.TensorWhere(significant,
+                engine.TensorReciprocal(engine.TensorWhere(significant, lambdaTensor, Tensor<T>.CreateOnes(new[] { k }))),
+                Tensor<T>.CreateZeros(new[] { k }));
+            alphasT = engine.TensorTranspose(AnomalyTensorOps.ToTensor(alphas));
+        }
+
+        // Query rows are scored in bounded blocks: each block's kernel with the training data is
+        // [block, nTrain], never the whole [m, nTrain] matrix
+        var scores = AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), nTrain,
+            points => ScoreBlock(points, training, meanTensor, grandMean, two, effectiveGamma, inverse, alphasT));
+        return scores.ToVector();
+    }
+
+    // Kernel PCA reconstruction-error scores of one block of query rows.
+    private Tensor<T> ScoreBlock(Tensor<T> points, Tensor<T> training, Tensor<T> meanTensor, T grandMean, T two,
+        T effectiveGamma, Tensor<T>? inverse, Tensor<T>? alphasT)
+    {
+        var engine = Engine;
 
         // Kernel vectors with the training data, centered like the training kernel matrix
-        var kVec = ComputeKernel(points, AnomalyTensorOps.ToTensor(trainingData), effectiveGamma);
+        var kVec = ComputeKernel(points, training, effectiveGamma);
         var kMean = engine.ReduceMean(kVec, new[] { 1 }, false);
-        T grandMean = engine.TensorMean(mean.AsTensor());
         var centered = engine.TensorAddScalar(
-            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.SubtractColumn(kVec, kMean), mean.AsTensor()), grandMean);
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.SubtractColumn(kVec, kMean), meanTensor), grandMean);
 
         // Reconstruction error in the CENTERED kernel feature space is the KPCA novelty score
         // (Hoffmann, "Kernel PCA for novelty detection", Pattern Recognition 40(3):863-874, 2007):
@@ -269,22 +295,16 @@ public partial class KernelPCADetector<T> : AnomalyDetectorBase<T>
         // A point far from the training distribution cannot be reconstructed from the learned principal
         // subspace, so its residual is large -> higher score = more anomalous.
         var reconstructionError = engine.TensorAddScalar(
-            engine.TensorSubtract(SelfKernel(points), engine.TensorMultiplyScalar(kMean, NumOps.FromDouble(2))), grandMean);
-        int k = _nComponents;
-        if (k > 0)
+            engine.TensorSubtract(SelfKernel(points), engine.TensorMultiplyScalar(kMean, two)), grandMean);
+        if (inverse is not null && alphasT is not null)
         {
-            var lambdaTensor = lambdas.AsTensor();
-            var significant = engine.TensorGreaterThan(lambdaTensor, NumOps.FromDouble(1e-10));
-            var inverse = engine.TensorWhere(significant,
-                engine.TensorReciprocal(engine.TensorWhere(significant, lambdaTensor, Tensor<T>.CreateOnes(new[] { k }))),
-                Tensor<T>.CreateZeros(new[] { k }));
-            var proj = engine.TensorMatMul(centered, engine.TensorTranspose(AnomalyTensorOps.ToTensor(alphas)));
+            var proj = engine.TensorMatMul(centered, alphasT);
             reconstructionError = engine.TensorSubtract(reconstructionError, engine.ReduceSum(
                 AnomalyTensorOps.MultiplyRow(engine.TensorSquare(proj), inverse), new[] { 1 }, false));
         }
 
         // The residual is non-negative in exact arithmetic; clamp tiny negative values from numerical
         // error before taking the square root for a distance-like, well-scaled score.
-        return engine.TensorSqrt(engine.TensorMax(reconstructionError, NumOps.Zero)).ToVector();
+        return engine.TensorSqrt(engine.TensorMax(reconstructionError, NumOps.Zero));
     }
 }

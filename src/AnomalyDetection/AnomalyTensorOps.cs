@@ -14,6 +14,32 @@ internal static class AnomalyTensorOps
 
     private static IEngine Engine => AiDotNetEngine.Current;
 
+    /// <summary>
+    /// Applies <paramref name="scoreBlock"/> to bounded row blocks of <paramref name="rows"/> ([n, d]) and
+    /// concatenates the per-block results along axis 0, so a per-row computation that materialises
+    /// <paramref name="elementsPerRow"/> elements per row (e.g. a query-by-reference kernel) never holds more
+    /// than about one block of them at a time.
+    /// </summary>
+    internal static Tensor<T> MapRowBlocks<T>(Tensor<T> rows, long elementsPerRow, Func<Tensor<T>, Tensor<T>> scoreBlock)
+    {
+        int n = rows.Shape[0];
+        int d = rows.Shape[1];
+        int rowsPerBlock = (int)Math.Max(1, Math.Min(n, PairBlockElements / Math.Max(1, elementsPerRow)));
+        if (rowsPerBlock >= n)
+        {
+            return scoreBlock(rows);
+        }
+
+        var blocks = new List<Tensor<T>>();
+        for (int first = 0; first < n; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, n - first);
+            blocks.Add(scoreBlock(Engine.TensorSlice(rows, new[] { first, 0 }, new[] { count, d })));
+        }
+
+        return Engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
     /// <summary>Copies a matrix into a [rows, columns] tensor.</summary>
     internal static Tensor<T> ToTensor<T>(Matrix<T> matrix) => Tensor<T>.FromMatrix(matrix);
 
@@ -122,16 +148,16 @@ internal static class AnomalyTensorOps
             return engine.Reshape(RowPairSquaredDistances(x, y, n), new[] { n, m });
         }
 
-        var result = Tensor<T>.CreateZeros(new[] { n, m });
+        // Collect the row blocks and concatenate once (TensorSetSlice would copy the whole result per block)
+        var blocks = new List<Tensor<T>>();
         for (int start = 0; start < n; start += rowsPerBlock)
         {
             int count = Math.Min(rowsPerBlock, n - start);
             var block = engine.TensorSlice(x, new[] { start, 0 }, new[] { count, d });
-            var values = engine.Reshape(RowPairSquaredDistances(block, y, count), new[] { count, m });
-            result = engine.TensorSetSlice(result, values, new[] { start, 0 });
+            blocks.Add(engine.Reshape(RowPairSquaredDistances(block, y, count), new[] { count, m }));
         }
 
-        return result;
+        return engine.TensorConcatenate(blocks.ToArray(), 0);
     }
 
     /// <summary>Exact Euclidean distances between every row of x and every row of y.</summary>
@@ -224,10 +250,11 @@ internal static class AnomalyTensorOps
             deviation = engine.TensorMultiplyScalar(deviation, factor);
         }
 
-        var ratio = DivideRow(engine.TensorAbs(deviation), stdTensor);
-
-        // Zero-std columns are skipped: x/0 is +inf or NaN, times 0 is NaN, and NaN entries become 0.
-        ratio = MultiplyRow(ratio, engine.TensorNotEquals(stdTensor, numOps.Zero));
+        // Zero-std columns are skipped: they are divided by 1 instead of 0 (no division by zero for types such
+        // as decimal) and then zeroed; NaN entries (NaN inputs) become 0.
+        var nonZeroStd = engine.TensorNotEquals(stdTensor, numOps.Zero);
+        var safeStd = engine.TensorAdd(stdTensor, engine.TensorEquals(stdTensor, numOps.Zero));
+        var ratio = MultiplyRow(DivideRow(engine.TensorAbs(deviation), safeStd), nonZeroStd);
         ratio = engine.TensorMaskedFill(ratio, engine.TensorIsNan(ratio), numOps.Zero);
         return engine.ReduceMax(ratio, new[] { 1 }, false).ToVector();
     }
@@ -361,8 +388,10 @@ internal static class AnomalyTensorOps
         var low = engine.TensorTakeAlongDim(sorted, Tensor<int>.FromVector(Vector<int>.Wrap(lower), new[] { n, 1 }), 1);
         var high = engine.TensorTakeAlongDim(sorted, Tensor<int>.FromVector(Vector<int>.Wrap(upper), new[] { n, 1 }), 1);
 
-        // For an odd count both picks are the middle value and (v + v) / 2 == v exactly.
-        var median = engine.TensorMultiplyScalar(engine.TensorAdd(low, high), numOps.FromDouble(0.5));
+        // Halve before adding so large values cannot overflow; for an odd count both picks are the middle
+        // value and v / 2 + v / 2 == v exactly.
+        T half = numOps.FromDouble(0.5);
+        var median = engine.TensorAdd(engine.TensorMultiplyScalar(low, half), engine.TensorMultiplyScalar(high, half));
         return engine.Reshape(median, new[] { n });
     }
 
@@ -378,8 +407,10 @@ internal static class AnomalyTensorOps
         var low = engine.TensorSliceAxis(sorted, 0, (n - 1) / 2);
         var high = engine.TensorSliceAxis(sorted, 0, n / 2);
 
-        // For an odd n both picks are the middle value and (v + v) * 0.5 == v exactly.
-        return engine.TensorMultiplyScalar(engine.TensorAdd(low, high), numOps.FromDouble(0.5));
+        // Halve before adding so large values cannot overflow; for an odd n both picks are the middle value
+        // and v / 2 + v / 2 == v exactly.
+        T half = numOps.FromDouble(0.5);
+        return engine.TensorAdd(engine.TensorMultiplyScalar(low, half), engine.TensorMultiplyScalar(high, half));
     }
 
     /// <summary>
@@ -446,10 +477,10 @@ internal static class AnomalyTensorOps
         var below = engine.TensorSubtract(BroadcastRow(low, rows), data);
         var above = SubtractRow(data, high);
         var outside = engine.TensorMax(engine.TensorMax(below, above), numOps.Zero);
-        var score = DivideRow(outside, scale);
-
-        // Zero-scale columns are skipped: their ratio is +inf or NaN, times 0 is NaN, and NaN becomes 0.
-        score = MultiplyRow(score, engine.TensorNotEquals(scale, numOps.Zero));
+        // Zero-scale columns are skipped: they are divided by 1 instead of 0 (no division by zero for types
+        // such as decimal) and then zeroed; NaN entries (NaN inputs) become 0.
+        var safeScale = engine.TensorAdd(scale, engine.TensorEquals(scale, numOps.Zero));
+        var score = MultiplyRow(DivideRow(outside, safeScale), engine.TensorNotEquals(scale, numOps.Zero));
         score = engine.TensorMaskedFill(score, engine.TensorIsNan(score), numOps.Zero);
         return engine.ReduceMax(score, new[] { 1 }, false).ToVector();
     }

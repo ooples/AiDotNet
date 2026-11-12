@@ -299,7 +299,7 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 // Backprop through feed-forward (output -> attnOutput), attention (attnOutput -> projected)
                 // and the input projection (projected -> seq)
                 var dAttnOutput = BackpropFeedForward(pass.AttnOutput, pass.FFHidden, dOutput, lr, clipValue);
-                var dProjected = BackpropAttention(pass.Projected, pass.Attention, dAttnOutput, lr, clipValue);
+                var dProjected = BackpropAttention(pass.Projected, dAttnOutput, lr, clipValue);
                 BackpropInputProjection(seq, dProjected, lr, clipValue);
 
                 // Update prior sigma based on association discrepancy (at least 0.1)
@@ -415,7 +415,10 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         return dAttnOutput;
     }
 
-    private Tensor<T> BackpropAttention(Tensor<T> projected, Tensor<T> attention, Tensor<T> dAttnOutput, T lr, T clipValue)
+    // Exact backward pass of SelfAttention for every head: output = concat_h(A_h V_h) Wo + projected with
+    // A_h = softmax(Q_h K_h^T / sqrt(headDim)). Returns dL/dprojected through the residual and the Q, K and V
+    // paths, and updates Wq, Wk, Wv and Wo.
+    private Tensor<T> BackpropAttention(Tensor<T> projected, Tensor<T> dAttnOutput, T lr, T clipValue)
     {
         var Wq = _Wq;
         var Wk = _Wk;
@@ -427,42 +430,50 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         }
 
         var engine = Engine;
-        int headDim = _modelDim / _numHeads;
+        int seqLen = projected.Shape[0];
+        int heads = _numHeads;
+        int headDim = _modelDim / heads;
+        T scale = NumOps.Sqrt(NumOps.FromDouble(headDim));
         var wq = Tensor<T>.FromMatrix(Wq);
         var wk = Tensor<T>.FromMatrix(Wk);
         var wv = Tensor<T>.FromMatrix(Wv);
         var wo = Tensor<T>.FromMatrix(Wo);
         var projectedT = engine.TensorTranspose(projected);
 
-        // Recompute Q, K, V for backprop
-        var Q = engine.TensorMatMul(projected, wq);
-        var K = engine.TensorMatMul(projected, wk);
-        var V = engine.TensorMatMul(projected, wv);
+        // Recompute the per-head forward pass (the attention weights are not updated before this point)
+        var Q = SplitHeads(engine.TensorMatMul(projected, wq), seqLen, heads, headDim);
+        var K = SplitHeads(engine.TensorMatMul(projected, wk), seqLen, heads, headDim);
+        var V = SplitHeads(engine.TensorMatMul(projected, wv), seqLen, heads, headDim);
+        var attention = engine.TensorSoftmax(
+            engine.TensorDivideScalar(engine.TensorBatchMatMul(Q, engine.TensorSwapAxes(K, 1, 2)), scale), 2);
+        var concatenated = MergeHeads(engine.TensorBatchMatMul(attention, V), seqLen);
 
-        // Simplified backprop with the head-averaged attention: attnOutput = Wo * (attention * V) + projected.
-        // Gradient through Wo, and to projected from the residual connection
-        var weightedV = engine.TensorMatMul(attention, V);
-        var dWo = engine.TensorMatMul(engine.TensorTranspose(weightedV), dAttnOutput);
-        var dWeightedV = engine.TensorMatMul(dAttnOutput, engine.TensorTranspose(wo));
+        // Output projection: dWo = concat^T dOut, dConcat = dOut Wo^T (split back into heads)
+        var dWo = engine.TensorMatMul(engine.TensorTranspose(concatenated), dAttnOutput);
+        var dHeads = SplitHeads(engine.TensorMatMul(dAttnOutput, engine.TensorTranspose(wo)), seqLen, heads, headDim);
 
-        // Gradient through the V projection: dV = attention^T dWeightedV
-        var dV = engine.TensorMatMul(engine.TensorTranspose(attention), dWeightedV);
-        var dWv = engine.TensorMatMul(projectedT, dV);
-        var dProjected = engine.TensorAdd(dAttnOutput, engine.TensorMatMul(dV, engine.TensorTranspose(wv)));
+        // headOutput_h = A_h V_h: dV_h = A_h^T dO_h, dA_h = dO_h V_h^T
+        var dV = engine.TensorBatchMatMul(engine.TensorSwapAxes(attention, 1, 2), dHeads);
+        var dAttn = engine.TensorBatchMatMul(dHeads, engine.TensorSwapAxes(V, 1, 2));
 
-        // Attention backprop through the softmax Jacobian for Q and K:
-        // dAttn = dWeightedV V^T, dScore[i,j] = attention[i,j] * (dAttn[i,j] - sum_l attention[i,l] dAttn[i,l])
-        var dAttn = engine.TensorMatMul(dWeightedV, engine.TensorTranspose(V));
-        var rowDot = engine.ReduceSum(engine.TensorMultiply(attention, dAttn), new[] { 1 }, false);
-        var dScore = engine.TensorMultiply(attention,
-            engine.TensorSubtract(dAttn, AnomalyTensorOps.BroadcastColumn(rowDot, attention.Shape[1])));
+        // Softmax Jacobian per row: dScore = A * (dA - sum_l A[., l] dA[., l]), then the 1 / scale
+        var rowDot = engine.ReduceSum(engine.TensorMultiply(attention, dAttn), new[] { 2 }, true);
+        var dScore = engine.TensorDivideScalar(engine.TensorMultiply(attention,
+            engine.TensorSubtract(dAttn, engine.TensorBroadcastTo(rowDot, new[] { heads, seqLen, seqLen }))), scale);
 
-        // Score[i,j] = Q[i,:] . K[j,:] / scale: dQ = dScore K / scale, dK = dScore^T Q / scale
-        T scale = NumOps.FromDouble(Math.Sqrt(headDim));
-        var dQ = engine.TensorDivideScalar(engine.TensorMatMul(dScore, K), scale);
-        var dK = engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(dScore), Q), scale);
+        // score_h = Q_h K_h^T (scaled above): dQ_h = dScore_h K_h, dK_h = dScore_h^T Q_h
+        var dQ = MergeHeads(engine.TensorBatchMatMul(dScore, K), seqLen);
+        var dK = MergeHeads(engine.TensorBatchMatMul(engine.TensorSwapAxes(dScore, 1, 2), Q), seqLen);
+        var dVMerged = MergeHeads(dV, seqLen);
         var dWq = engine.TensorMatMul(projectedT, dQ);
         var dWk = engine.TensorMatMul(projectedT, dK);
+        var dWv = engine.TensorMatMul(projectedT, dVMerged);
+
+        // dL/dprojected: the residual connection plus the Q, K and V projection paths
+        var dProjected = engine.TensorAdd(
+            engine.TensorAdd(dAttnOutput, engine.TensorMatMul(dQ, engine.TensorTranspose(wq))),
+            engine.TensorAdd(engine.TensorMatMul(dK, engine.TensorTranspose(wk)),
+                engine.TensorMatMul(dVMerged, engine.TensorTranspose(wv))));
 
         // Apply weight updates
         _Wo = Step(wo, dWo, lr, clipValue).ToMatrix();
@@ -548,6 +559,10 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         return (output, avgAttention);
     }
 
+    // [heads, seqLen, headDim] as [seqLen, heads * headDim] (the inverse of SplitHeads).
+    private Tensor<T> MergeHeads(Tensor<T> x, int seqLen)
+        => Engine.Reshape(Engine.TensorPermute(x, new[] { 1, 0, 2 }), new[] { seqLen, _modelDim });
+
     // [seqLen, heads * headDim] as [heads, seqLen, headDim].
     private Tensor<T> SplitHeads(Tensor<T> x, int seqLen, int heads, int headDim)
         => Engine.TensorPermute(Engine.Reshape(x, new[] { seqLen, heads, headDim }), new[] { 1, 0, 2 });
@@ -562,25 +577,6 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             AnomalyTensorOps.BroadcastRow(positions, seqLen));
         var prior = engine.TensorExp(engine.TensorNegate(engine.TensorDivideScalar(engine.TensorSquare(offset), twoSigmaSq)));
         return AnomalyTensorOps.DivideColumn(prior, engine.ReduceSum(prior, new[] { 1 }, false));
-    }
-
-    // values placed at [start, start + length) of a length-n tensor of zeros.
-    private Tensor<T> Place(Tensor<T> values, int start, int n)
-    {
-        int length = values.Length;
-        var parts = new List<Tensor<T>>();
-        if (start > 0)
-        {
-            parts.Add(Tensor<T>.CreateZeros(new[] { start }));
-        }
-
-        parts.Add(values);
-        if (n - start - length > 0)
-        {
-            parts.Add(Tensor<T>.CreateZeros(new[] { n - start - length }));
-        }
-
-        return parts.Count == 1 ? values : Engine.TensorConcatenate(parts.ToArray(), 0);
     }
 
     /// <inheritdoc/>
@@ -611,23 +607,18 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         // Score using sliding windows (step at least 1), taking the max of overlapping scores. Per the
         // Anomaly Transformer paper, the anomaly score combines association discrepancy and the per-timestep
         // reconstruction error RMSE(output, projected input): disc * error + error.
-        var scores = Tensor<T>.CreateZeros(new[] { n });
-        var hasScore = Tensor<T>.CreateZeros(new[] { n });
+        // Each window keeps only its own [seqLength] scores; one scatter-max then reduces the overlaps.
         int stepSize = Math.Max(1, _seqLength / 2);
         T modelDim = NumOps.FromDouble(_modelDim);
+        var windowScores = new List<Tensor<T>>();
+        var positions = new List<int>();
         for (int windowStart = 0; windowStart + _seqLength <= n; windowStart += stepSize)
         {
             var pass = ForwardPass(engine.TensorSlice(data, new[] { windowStart, 0 }, new[] { _seqLength, _inputDim }));
             var reconError = engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(
                 engine.TensorSquare(engine.TensorSubtract(pass.Output, pass.Projected)), new[] { 1 }, false), modelDim));
-            var combined = engine.TensorAdd(engine.TensorMultiply(pass.AssocDisc, reconError), reconError);
-
-            var inWindow = Place(Tensor<T>.CreateOnes(new[] { _seqLength }), windowStart, n);
-            var candidate = Place(combined, windowStart, n);
-            var replace = engine.TensorMultiply(inWindow, engine.ScalarMinusTensor(NumOps.One,
-                engine.TensorMultiply(hasScore, engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(candidate, scores)))));
-            scores = engine.TensorWhere(replace, candidate, scores);
-            hasScore = engine.TensorMax(hasScore, inWindow);
+            windowScores.Add(engine.TensorAdd(engine.TensorMultiply(pass.AssocDisc, reconError), reconError));
+            positions.AddRange(Enumerable.Range(windowStart, _seqLength));
         }
 
         // Points without window coverage use the simple distance ||x||; then multiply by the value deviation
@@ -636,7 +627,11 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         // anomalies. Using multiplicative combination ensures extreme values get proportionally amplified
         // scores, which is critical when the model hasn't fully converged (few training epochs).
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(data), new[] { 1 }, false));
-        scores = engine.TensorWhere(hasScore, scores, norm);
+        var scores = windowScores.Count == 0
+            ? norm
+            : engine.TensorScatterReduce(norm, 0,
+                Tensor<int>.FromVector(Vector<int>.Wrap(positions.ToArray()), new[] { positions.Count }),
+                engine.TensorConcatenate(windowScores.ToArray(), 0), ScatterReduceMode.AMax, false);
         return engine.TensorMultiply(scores, engine.TensorAddScalar(norm, NumOps.One)).ToVector();
     }
 }

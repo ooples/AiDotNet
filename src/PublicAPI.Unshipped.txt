@@ -1219,10 +1219,11 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
-*REMOVED*AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100, double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42) -> void
 AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100, double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42, double adversarialWeight = 1, double contextualWeight = 50, double encoderWeight = 1) -> void
 *REMOVED*AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.SCiForest(int numTrees = 100, int maxSamples = 256, double sparsity = 0.2, double contamination = 0.1, int randomSeed = 42) -> void
 *REMOVED*AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.Sparsity.get -> double
 AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.SCiForest(int numTrees = 100, int maxSamples = 256, int attributesPerHyperplane = 2, int hyperplanesPerNode = 10, double contamination = 0.1, int randomSeed = 42) -> void
 AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.AttributesPerHyperplane.get -> int
 AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.HyperplanesPerNode.get -> int
+*REMOVED*AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100, double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42) -> void
+AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim, int hiddenDim, int epochs, double learningRate, double contamination, int randomSeed) -> void

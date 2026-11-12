@@ -199,9 +199,41 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
         // Pseudo ground truth: the largest standardized training score of each training row
         var pseudo = engine.ReduceMax(trainNorm, new[] { 1 }, false);
 
+        // Query rows are combined in bounded blocks so that the [rows, n] region and correlation tensors
+        // only ever cover one block; the feature subspaces are drawn once and shared by every block
+        if (m == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var featureSets = DrawFeatureSubspaces(trainingData.Columns);
+        var query = AnomalyTensorOps.ToTensor(X);
+        var reference = AnomalyTensorOps.ToTensor(trainingData);
+        int rowsPerBlock = Math.Max(1, Math.Min(m, RegionBlockElements / Math.Max(1, n)));
+        var blockScores = new List<Tensor<T>>();
+        for (int first = 0; first < m; first += rowsPerBlock)
+        {
+            int rows = Math.Min(rowsPerBlock, m - first);
+            var queryBlock = engine.TensorSlice(query, new[] { first, 0 }, new[] { rows, query.Shape[1] });
+            var testBlock = engine.TensorSlice(testNorm, new[] { first, 0 }, new[] { rows, _nEstimators });
+            blockScores.Add(CombineBlock(LocalRegionsBlock(queryBlock, reference, featureSets), trainNorm, pseudo, testBlock));
+        }
+
+        return (blockScores.Count == 1 ? blockScores[0] : engine.TensorConcatenate(blockScores.ToArray(), 0)).ToVector();
+    }
+
+    // Upper bound on the elements of one [rows, n] block of local-region tensors.
+    private const int RegionBlockElements = 1 << 22;
+
+    // The LSCP combination of one block of query rows: region is the block's 0/1 local-region mask
+    // ([m, n]), testNorm its standardized detector scores ([m, e]).
+    private Tensor<T> CombineBlock(Tensor<T> region, Tensor<T> trainNorm, Tensor<T> pseudo, Tensor<T> testNorm)
+    {
+        var engine = Engine;
+        int m = region.Shape[0];
+
         // Competence of every detector: Pearson correlation of its standardized training scores with the
         // pseudo ground truth over the local region of the query row (0 where undefined)
-        var region = LocalRegions(X, trainingData);
         var count = engine.ReduceSum(region, new[] { 1 }, false);
         var pseudoRows = AnomalyTensorOps.BroadcastRow(pseudo, m);
         var pseudoCentered = engine.TensorMultiply(region,
@@ -226,7 +258,7 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
         // histogram bin of the correlations)
         var competent = CompetentDetectors(engine.TensorStack(correlations, 1));
         var selectedScores = engine.ReduceSum(engine.TensorMultiply(competent, testNorm), new[] { 1 }, false);
-        return engine.TensorDivide(selectedScores, engine.ReduceSum(competent, new[] { 1 }, false)).ToVector();
+        return engine.TensorDivide(selectedScores, engine.ReduceSum(competent, new[] { 1 }, false));
     }
 
     // PyOD _get_local_region: over 20 random feature subspaces (between half and all but one of the
@@ -236,22 +268,22 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
     // from a generator seeded with the model seed on every call, so scores are reproducible.
     internal Tensor<T> LocalRegions(Matrix<T> X, Matrix<T> trainingData)
     {
-        const int Iterations = 20;
-        const int Threshold = Iterations / 2;
-        var engine = Engine;
-        int m = X.Rows;
-        int n = trainingData.Rows;
-        int d = trainingData.Columns;
-        int k = Math.Min(_localRegionSize, n);
-        var query = AnomalyTensorOps.ToTensor(X);
+        var featureSets = DrawFeatureSubspaces(trainingData.Columns);
         var reference = AnomalyTensorOps.ToTensor(trainingData);
+        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), trainingData.Rows,
+            queryBlock => LocalRegionsBlock(queryBlock, reference, featureSets));
+    }
+
+    private const int RegionIterations = 20;
+
+    // The RegionIterations feature subspaces, from a generator seeded with the model seed on every call.
+    private int[][] DrawFeatureSubspaces(int d)
+    {
         var random = RandomHelper.CreateSeededRandom(_randomSeed);
         int minFeatures = (int)(d * 0.5);
         bool allFeatures = minFeatures < 1;
-        var ones = Tensor<T>.CreateOnes(new[] { m, k });
-        var counts = Tensor<T>.CreateZeros(new[] { m, n });
-
-        for (int iteration = 0; iteration < Iterations; iteration++)
+        var featureSets = new int[RegionIterations][];
+        for (int iteration = 0; iteration < RegionIterations; iteration++)
         {
             int[] features;
             if (allFeatures)
@@ -273,6 +305,25 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
                 Array.Copy(pool, features, count);
             }
 
+            featureSets[iteration] = features;
+        }
+
+        return featureSets;
+    }
+
+    // Local-region mask ([m, n]) of a block of query rows over the given feature subspaces.
+    private Tensor<T> LocalRegionsBlock(Tensor<T> query, Tensor<T> reference, int[][] featureSets)
+    {
+        const int Threshold = RegionIterations / 2;
+        var engine = Engine;
+        int m = query.Shape[0];
+        int n = reference.Shape[0];
+        int k = Math.Min(_localRegionSize, n);
+        var ones = Tensor<T>.CreateOnes(new[] { m, k });
+        var counts = Tensor<T>.CreateZeros(new[] { m, n });
+
+        foreach (var features in featureSets)
+        {
             var distances = AnomalyTensorOps.PairwiseDistances(
                 AnomalyTensorOps.SelectColumns(query, features), AnomalyTensorOps.SelectColumns(reference, features));
             var (_, order) = AnomalyTensorOps.StableSortRows(distances, descending: false);

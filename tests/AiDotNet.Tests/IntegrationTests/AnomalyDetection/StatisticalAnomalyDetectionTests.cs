@@ -456,6 +456,7 @@ public class StatisticalAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task Grubbs_UsesSampleStandardDeviationAndExactCriticalValue()
     {
+        await Task.Yield();
         // Nine zeros and a ten: mean 1, sample variance (9 * 1 + 81) / 9 = 10, so G(10) = 9 / sqrt(10)
         // = 2.846050 and G(0) = 1 / sqrt(10) = 0.316228 (the population std 3 would give 3 and 1/3).
         // Two-sided 5% critical value for n = 10: t = t_{1 - 0.05/20, 8} = 3.832519, G_crit =
@@ -476,6 +477,7 @@ public class StatisticalAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task GESD_MatchesNistRosnerExample()
     {
+        await Task.Yield();
         // NIST e-Handbook 1.3.5.17.3: R_1 = 3.118906 (sample std) and, for alpha = 0.05, r = 10,
         // lambda_i = (n - i) t_{p, n-i-1} / sqrt((n - i - 1 + t^2)(n - i + 1)), p = 1 - alpha / (2(n - i + 1)),
         // tabulated (truncated to 3 decimals) as below.

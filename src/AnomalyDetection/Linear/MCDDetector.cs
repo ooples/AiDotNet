@@ -165,17 +165,23 @@ public partial class MCDDetector<T> : AnomalyDetectorBase<T>
         return (means[best], covariances[best]);
     }
 
-    // Mean and covariance (divisor h - 1, plus 1e-6 on the diagonal) of the selected rows.
+    // Mean and covariance (divisor h - 1, plus 1e-6 on the diagonal) of the selected rows. Where T cannot
+    // represent c_jj + 1e-6 (the ridge would round away, e.g. float with c_jj = 350), the ridge is scaled
+    // to 1e-6 * c_jj instead so the regularized covariance stays invertible.
     private (Tensor<T> mean, Tensor<T> covariance) ComputeMeanCovariance(Tensor<T> data, Tensor<int> indices)
     {
         var engine = Engine;
         int h = indices.Length;
         var subset = engine.TensorGather(data, indices, 0);
         var mean = engine.ReduceMean(subset, new[] { 0 }, false);
-        var cov = engine.TensorAdd(
-            AnomalyTensorOps.Covariance(AnomalyTensorOps.SubtractRow(subset, mean), NumOps.FromDouble(h - 1)),
-            AnomalyTensorOps.ScaledIdentity(_nFeatures, NumOps.FromDouble(1e-6)));
-        return (mean, cov);
+        var cov = AnomalyTensorOps.Covariance(AnomalyTensorOps.SubtractRow(subset, mean), NumOps.FromDouble(h - 1));
+        T ridge = NumOps.FromDouble(1e-6);
+        var identity = AnomalyTensorOps.ScaledIdentity(_nFeatures, NumOps.One);
+        var diagonal = engine.ReduceSum(engine.TensorMultiply(cov, identity), new[] { 1 }, false);
+        var absorbed = engine.TensorEquals(engine.TensorAddScalar(diagonal, ridge), diagonal);
+        var ridges = engine.TensorWhere(absorbed, engine.TensorMultiplyScalar(diagonal, ridge),
+            engine.Fill(_nFeatures, ridge).AsTensor());
+        return (mean, engine.TensorAdd(cov, AnomalyTensorOps.MultiplyRow(identity, ridges)));
     }
 
     // sqrt(max(0, (x - mean)' P (x - mean))) for every row.

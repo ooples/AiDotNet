@@ -112,12 +112,13 @@ public partial class FairCutForest<T> : AnomalyDetectorBase<T>
         // Build trees
         int maxDepth = (int)Math.Ceiling(Math.Log(_effectiveMaxSamples) / Math.Log(2));
         _trees = new List<FCFTree>(_numTrees);
+        var dataTensor = AnomalyTensorOps.ToTensor(X);
 
         for (int t = 0; t < _numTrees; t++)
         {
             // Sample data
             var sampleIndices = SampleIndices(n, _effectiveMaxSamples);
-            var sample = AnomalyTensorOps.SelectRows(AnomalyTensorOps.ToTensor(X), sampleIndices).ToMatrix();
+            var sample = AnomalyTensorOps.SelectRows(dataTensor, sampleIndices).ToMatrix();
 
             // Build tree with fair cuts
             var tree = BuildFairCutTree(sample, featureImportances, maxDepth);

@@ -143,6 +143,7 @@ public class TreeBasedAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task SCiForest_SdGainSplitSeparatesTheTightestGroups()
     {
+        await Task.Yield();
         // Liu et al. (2010) Eq. 3 on 0, .1, .2, 10: sigma(Y) = sqrt(73.5275 / 4); the split after .2 leaves
         // sigma(Y_l) = sqrt(.02 / 3), sigma(Y_r) = 0 and beats every other split; p is midway, 5.1.
         var values = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 10.0, 0.1, 0.0, 0.2 }, new[] { 4 });
@@ -156,6 +157,7 @@ public class TreeBasedAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task SCiForest_PathLengthsFollowAlgorithmsOneAndTwo()
     {
+        await Task.Yield();
         // Data 0, 1, 10 with psi = 3: every tree uses all three rows, and whatever the random coefficient the
         // root's best Sdgain split is {0, 1} | {10} (avg sigma .25 against 2.25 for {0} | {1, 10}). {0, 1} is a
         // leaf of size 2 (c = 1) and {10} a leaf of size 1 (c = 0), so h = 2, 2, 1 and s = 2^(-h / c(3)) with
