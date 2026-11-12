@@ -553,14 +553,14 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // is unaffected — the tape forward (base ForwardForTraining) walks the layers directly and never
         // calls PredictCore, so softmaxing here does NOT double-softmax the CrossEntropyWithLogits loss.
         // The internal probability paths (Classify / GetSceneProbabilities) call ForwardLogits + a single
-        // ApplySoftmax, so they still softmax exactly once. softmax of the uniform rule-based fallback is
-        // a no-op, and the ONNX logits become probabilities too, keeping all three paths consistent.
+        // ApplySoftmax, so they still softmax exactly once, and the ONNX logits become probabilities too,
+        // keeping all three paths consistent.
         return PostprocessOutput(ForwardLogits(input));
     }
 
     /// <summary>
-    /// Native forward to per-scene LOGITS (or the ONNX graph's logits, or the uniform rule-based
-    /// fallback). The linear classifier head is intentionally not soft-maxed here: <see cref="PredictCore"/>
+    /// Native forward to per-scene LOGITS (or the ONNX graph's logits). Without a loaded ONNX
+    /// encoder or native layers there is no model to score with, so it throws. The linear classifier head is intentionally not soft-maxed here: <see cref="PredictCore"/>
     /// softmaxes for inference and the training tape (base ForwardForTraining) consumes these logits
     /// directly via CrossEntropyWithLogitsLoss.
     /// </summary>
@@ -574,8 +574,10 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // Native mode - use layers
         if (!_useNativeMode || Layers.Count == 0)
         {
-            // Fallback to rule-based classification (a uniform distribution; softmax leaves it unchanged).
-            return ClassifyWithRulesAsTensor(input);
+            // No model to score with: report it instead of returning uniform scores that would still
+            // name a scene.
+            throw new InvalidOperationException(
+                "Scene classification requires a loaded ONNX model or initialized native layers.");
         }
 
         var current = input;
@@ -893,17 +895,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
 
     #endregion
 
-    #region Rule-Based Classification
-
-    private Tensor<T> ClassifyWithRulesAsTensor(Tensor<T> features)
-    {
-        // Extract feature values from tensor for rule-based classification
-        var scenes = ClassLabels;
-
-        // Simple rule-based scoring based on feature position
-        // This is a fallback when no neural network is available: a uniform distribution.
-        return Tensor<T>.CreateDefault([scenes.Count], NumOps.FromDouble(1.0 / scenes.Count));
-    }
+    #region Scene Categories
 
     private static string GetCategory(string scene)
     {
