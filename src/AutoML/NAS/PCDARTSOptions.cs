@@ -44,5 +44,15 @@ namespace AiDotNet.AutoML.NAS
         /// it, and a channel shuffle with K groups follows (default: 4).
         /// </summary>
         public int PartialChannelK { get; set; } = 4;
+
+        /// <summary>
+        /// The number of intermediate nodes of the searched cell (4 in Xu et al. 2020, as in DARTS).
+        /// </summary>
+        public int NumNodes { get; set; } = 4;
+
+        /// <summary>
+        /// Whether to weight each edge by softmax(beta), the edge normalization of PC-DARTS (Sec. 3.3).
+        /// </summary>
+        public bool UseEdgeNormalization { get; set; } = true;
     }
 }

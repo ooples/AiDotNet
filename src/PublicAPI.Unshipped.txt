@@ -23301,8 +23301,11 @@ AiDotNet.AutoML.NAS.PCDARTSOptions.BatchSize.get -> int
 AiDotNet.AutoML.NAS.PCDARTSOptions.BatchSize.set -> void
 AiDotNet.AutoML.NAS.PCDARTSOptions.PartialChannelK.get -> int
 AiDotNet.AutoML.NAS.PCDARTSOptions.PartialChannelK.set -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.NumNodes.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.NumNodes.set -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.UseEdgeNormalization.get -> bool
+AiDotNet.AutoML.NAS.PCDARTSOptions.UseEdgeNormalization.set -> void
 AiDotNet.AutoML.NAS.PCDARTS<T>.PCDARTS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.PCDARTSOptions! options) -> void
-AiDotNet.AutoML.NAS.PCDARTS<T>.PCDARTS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.PCDARTSOptions! options, int numNodes, bool useEdgeNormalization) -> void
 AiDotNet.AutoML.NAS.PCDARTS<T>.SearchOptions.get -> AiDotNet.AutoML.NAS.PCDARTSOptions!
 override AiDotNet.MetaLearning.Algorithms.MANNAlgorithm<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 override AiDotNet.MetaLearning.Algorithms.PMFAlgorithm<T, TInput, TOutput>.ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput) -> T

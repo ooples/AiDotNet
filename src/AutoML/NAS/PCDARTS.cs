@@ -107,11 +107,10 @@ namespace AiDotNet.AutoML.NAS
         /// Creates a PC-DARTS search with the given search settings.
         /// </summary>
         /// <param name="searchSpace">The search space defining the candidate operations.</param>
-        /// <param name="options">The search settings; the defaults are those of Xu et al. 2020 (Sec. 4.2).</param>
-        /// <param name="numNodes">The number of intermediate nodes of the searched cell.</param>
-        /// <param name="useEdgeNormalization">Whether to weight the edges by softmax(beta) (PC-DARTS Sec. 3.3).</param>
+        /// <param name="options">The search settings, including the cell size and edge normalization; the defaults are
+        /// those of Xu et al. 2020 (Sec. 4.2).</param>
         public PCDARTS(SearchSpaceBase<T> searchSpace, PCDARTSOptions options)
-            : this(searchSpace, options, 4, true)
+            : this(searchSpace, options, options?.NumNodes ?? 4, options?.UseEdgeNormalization ?? true)
         {
         }
 
@@ -122,7 +121,7 @@ namespace AiDotNet.AutoML.NAS
         /// <param name="options">The search settings; the defaults are those of Xu et al. 2020 (Sec. 4.2).</param>
         /// <param name="numNodes">The number of intermediate nodes of the searched cell.</param>
         /// <param name="useEdgeNormalization">Whether to weight the edges by softmax(beta) (PC-DARTS Sec. 3.3).</param>
-        public PCDARTS(SearchSpaceBase<T> searchSpace, PCDARTSOptions options, int numNodes,
+        internal PCDARTS(SearchSpaceBase<T> searchSpace, PCDARTSOptions options, int numNodes,
             bool useEdgeNormalization)
         {
             if (searchSpace is null)

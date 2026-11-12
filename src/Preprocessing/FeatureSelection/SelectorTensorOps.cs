@@ -668,12 +668,13 @@ internal static class SelectorTensorOps
         int s = sorted.Shape[0];
         int p = sorted.Shape[1];
         var candidates = new Tensor<T>[2 * k];
+        T infinity = ops.FromDouble(double.PositiveInfinity);
         for (int step = 1; step <= k; step++)
         {
             // gap[r] = sorted[r + step] - sorted[r]: the forward gap of row r and the backward gap of row r + step
             var gap = engine.TensorSubtract(
                 engine.TensorNarrow(sorted, 0, step, s - step), engine.TensorNarrow(sorted, 0, 0, s - step));
-            var missing = PreprocessingTensorOps.Filled(new[] { step, p }, ops.FromDouble(double.PositiveInfinity));
+            var missing = PreprocessingTensorOps.Filled(new[] { step, p }, infinity);
             candidates[2 * step - 2] = engine.TensorConcatenate(new[] { gap, missing }, 0);
             candidates[2 * step - 1] = engine.TensorConcatenate(new[] { missing, gap }, 0);
         }
