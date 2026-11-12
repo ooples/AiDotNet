@@ -663,4 +663,42 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(0.0, fromNode0[0], 2);
         Assert.Equal(1.0, fromNode0[1], 2);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task SubgraphExpander_AverageFallbackFillsOnlyPseudoNodesWithoutCrossClientFeatures()
+    {
+        await Task.Yield();
+
+        // 10 nodes with one feature 0..9 -> 2 pseudo-nodes. One cross-client row [42] fills pseudo-node 0 and the
+        // average 4.5 fills pseudo-node 1. The fallback used to restart at pseudo-node 0, overwriting the
+        // cross-client row with the average and leaving pseudo-node 1 at zero.
+        var options = new AiDotNet.Models.Options.FederatedGraphOptions { PseudoNodeStrategy = AiDotNet.Models.Options.PseudoNodeStrategy.GeneratorBased };
+        var expander = new AiDotNet.FederatedLearning.Graph.SubgraphExpander<double>(options);
+        var features = new double[10];
+        for (int i = 0; i < 10; i++)
+        {
+            features[i] = i;
+        }
+
+        var expanded = expander.Expand(
+            new Tensor<double>(new[] { 100 }),
+            new Tensor<double>(features, new[] { 10 }),
+            new Dictionary<int, Tensor<double>> { [3] = new Tensor<double>(new[] { 42.0 }, new[] { 1 }) });
+
+        Assert.Equal(2, expanded.PseudoNodeCount);
+        Assert.Equal(12, expanded.NodeFeatures.Length);
+        Assert.Equal(9.0, expanded.NodeFeatures[9], Precision);
+        Assert.Equal(42.0, expanded.NodeFeatures[10], Precision);
+        Assert.Equal(4.5, expanded.NodeFeatures[11], Precision);
+
+        // The original adjacency block is preserved and each pseudo-node links symmetrically to original nodes.
+        Assert.Equal(144, expanded.Adjacency.Length);
+        for (int p = 10; p < 12; p++)
+        {
+            for (int j = 0; j < 12; j++)
+            {
+                Assert.Equal(expanded.Adjacency[p * 12 + j], expanded.Adjacency[j * 12 + p]);
+            }
+        }
+    }
 }
