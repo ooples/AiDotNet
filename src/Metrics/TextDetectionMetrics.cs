@@ -330,11 +330,17 @@ public class TextDetectionMetrics<T> where T : struct
         }
 
         var engine = AiDotNetEngine.Current;
+
+        // Translate so the first vertex is the origin: the area is unchanged, and the products stay at the
+        // polygon's own scale instead of its image position (4097 x 4097 does not fit a float exactly).
+        var origin = polygon[0];
         var next = polygon.Skip(1).Concat(polygon.Take(1)).ToList();
-        var x = new Vector<T>(polygon.Select(p => p.X));
-        var y = new Vector<T>(polygon.Select(p => p.Y));
-        var nextX = new Vector<T>(next.Select(p => p.X));
-        var nextY = new Vector<T>(next.Select(p => p.Y));
+        var originX = Vector<T>.CreateDefault(polygon.Count, origin.X);
+        var originY = Vector<T>.CreateDefault(polygon.Count, origin.Y);
+        var x = engine.Subtract(new Vector<T>(polygon.Select(p => p.X)), originX);
+        var y = engine.Subtract(new Vector<T>(polygon.Select(p => p.Y)), originY);
+        var nextX = engine.Subtract(new Vector<T>(next.Select(p => p.X)), originX);
+        var nextY = engine.Subtract(new Vector<T>(next.Select(p => p.Y)), originY);
         var cross = engine.Subtract(engine.Multiply(x, nextY), engine.Multiply(nextX, y));
 
         return NumOps.Divide(engine.Sum(cross), NumOps.FromDouble(2.0));
@@ -412,19 +418,25 @@ public class TextDetectionMetrics<T> where T : struct
         return NumOps.GreaterThanOrEquals(cross, NumOps.Zero);
     }
 
+    /// <summary>
+    /// Intersection of the line through <paramref name="firstStart"/> and <paramref name="firstEnd"/> with
+    /// the line through <paramref name="secondStart"/> and <paramref name="secondEnd"/>, formed from
+    /// coordinates relative to <paramref name="firstStart"/>: firstStart + t (firstEnd - firstStart) with
+    /// t = cross(secondStart - firstStart, d2) / cross(d1, d2). Absolute-coordinate determinants lose the
+    /// fractional part at image-scale coordinates in float.
+    /// </summary>
     private static (T X, T Y) LineIntersection(
         (T X, T Y) firstStart,
         (T X, T Y) firstEnd,
         (T X, T Y) secondStart,
         (T X, T Y) secondEnd)
     {
-        T firstCross = NumOps.Subtract(NumOps.Multiply(firstStart.X, firstEnd.Y), NumOps.Multiply(firstStart.Y, firstEnd.X));
-        T secondCross = NumOps.Subtract(NumOps.Multiply(secondStart.X, secondEnd.Y), NumOps.Multiply(secondStart.Y, secondEnd.X));
-
-        T firstDx = NumOps.Subtract(firstStart.X, firstEnd.X);
-        T firstDy = NumOps.Subtract(firstStart.Y, firstEnd.Y);
-        T secondDx = NumOps.Subtract(secondStart.X, secondEnd.X);
-        T secondDy = NumOps.Subtract(secondStart.Y, secondEnd.Y);
+        T firstDx = NumOps.Subtract(firstEnd.X, firstStart.X);
+        T firstDy = NumOps.Subtract(firstEnd.Y, firstStart.Y);
+        T secondDx = NumOps.Subtract(secondEnd.X, secondStart.X);
+        T secondDy = NumOps.Subtract(secondEnd.Y, secondStart.Y);
+        T offsetX = NumOps.Subtract(secondStart.X, firstStart.X);
+        T offsetY = NumOps.Subtract(secondStart.Y, firstStart.Y);
 
         T denominator = NumOps.Subtract(NumOps.Multiply(firstDx, secondDy), NumOps.Multiply(firstDy, secondDx));
         if (NumOps.LessThan(NumOps.Abs(denominator), NumOps.FromDouble(GeometricTolerance)))
@@ -434,8 +446,8 @@ public class TextDetectionMetrics<T> where T : struct
             return firstEnd;
         }
 
-        T x = NumOps.Divide(NumOps.Subtract(NumOps.Multiply(firstCross, secondDx), NumOps.Multiply(firstDx, secondCross)), denominator);
-        T y = NumOps.Divide(NumOps.Subtract(NumOps.Multiply(firstCross, secondDy), NumOps.Multiply(firstDy, secondCross)), denominator);
-        return (x, y);
+        T t = NumOps.Divide(
+            NumOps.Subtract(NumOps.Multiply(offsetX, secondDy), NumOps.Multiply(offsetY, secondDx)), denominator);
+        return (NumOps.Add(firstStart.X, NumOps.Multiply(t, firstDx)), NumOps.Add(firstStart.Y, NumOps.Multiply(t, firstDy)));
     }
 }

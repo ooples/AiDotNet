@@ -70,7 +70,7 @@ namespace AiDotNet.Metrics
         /// <summary>
         /// Initializes a new instance of Inception Score calculator.
         /// </summary>
-        /// <param name="inceptionNetwork">Pre-trained Inception network for classification (optional)</param>
+        /// <param name="inceptionNetwork">Pre-trained Inception network for classification. Required to compute a score; scoring without one throws.</param>
         /// <param name="numClasses">Number of classes in the classifier (default 1000 for ImageNet)</param>
         /// <param name="numSplits">Number of splits for computing mean/std (default 10)</param>
         public InceptionScore(
@@ -173,10 +173,11 @@ namespace AiDotNet.Metrics
             var numImages = images.Shape[0];
             var predictions = new Matrix<T>(numImages, NumClasses);
 
-            if (InceptionNetwork == null)
+            if (InceptionNetwork is null)
             {
-                // No network provided, return dummy predictions
-                return CreateDummyPredictions(numImages);
+                // Scoring without a classifier would report a number unrelated to the images.
+                throw new InvalidOperationException(
+                    "Inception Score needs a classification network: pass one to the InceptionScore constructor.");
             }
 
             InceptionNetwork.SetTrainingMode(false);
@@ -206,23 +207,6 @@ namespace AiDotNet.Metrics
         private Tensor<T> Softmax(Tensor<T> logits)
         {
             return AiDotNetEngine.Current.Softmax(logits, -1);
-        }
-
-        /// <summary>
-        /// Creates dummy predictions for testing when no Inception network is available.
-        /// </summary>
-        private Matrix<T> CreateDummyPredictions(int numSamples)
-        {
-            var engine = AiDotNetEngine.Current;
-
-            // Create random probabilities that sum to 1: uniform draws from one seeded engine call,
-            // normalized by each row's sum
-            var values = engine.TensorRandomUniformRange(new[] { numSamples, NumClasses }, NumOps.Zero, NumOps.One,
-                RandomHelper.ThreadSafeRandom.Next());
-            var rowSums = engine.ReduceSum(values, new[] { 1 }, keepDims: true);
-
-            return engine.TensorDivide(values, engine.TensorBroadcastTo(rowSums, new[] { numSamples, NumClasses }))
-                .ToMatrix();
         }
 
         /// <summary>

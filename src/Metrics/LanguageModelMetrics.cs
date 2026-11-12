@@ -97,8 +97,12 @@ public static class LanguageModelMetrics<T>
         Tensor<T> nll;
         if (fromLogits)
         {
-            // Numerically stable log-softmax: nll = logSumExp(row) - row[target].
-            nll = engine.TensorSubtract(engine.TensorLogSumExp(predictions, 1, keepDims: false), targetScores);
+            // Numerically stable log-softmax: nll = logSumExp(row - row[target]). Centering on the target
+            // logit before the reduction keeps the result small, so large logits (e.g. 2^24 in float)
+            // do not round the fractional loss away as logSumExp(row) - row[target] would.
+            var centered = engine.TensorSubtract(predictions,
+                engine.TensorBroadcastTo(targetScores.Reshape(new[] { n, 1 }), new[] { n, v }));
+            nll = engine.TensorLogSumExp(centered, 1, keepDims: false);
         }
         else
         {

@@ -57,7 +57,7 @@ internal static class FrechetDistanceHelper<T>
 
         var sqrtSigma1 = SymmetricSquareRoot(sigma1);
         var inner = engine.TensorMatMul(engine.TensorMatMul(sqrtSigma1, sigma2), sqrtSigma1);
-        var (innerEigenvalues, _) = LinalgDispatch<T>.Eigh(inner);
+        var (innerEigenvalues, _) = ScaledEigh(inner);
         T traceSqrtProduct = engine.TensorSum(engine.TensorSqrt(engine.TensorClampMin(innerEigenvalues, NumOps.Zero)));
 
         return NumOps.Subtract(NumOps.Add(meanDiffSq, traceCov), NumOps.Multiply(NumOps.FromDouble(2.0), traceSqrtProduct));
@@ -69,12 +69,50 @@ internal static class FrechetDistanceHelper<T>
     private static Tensor<T> SymmetricSquareRoot(Tensor<T> matrix)
     {
         var engine = AiDotNetEngine.Current;
-        var (eigenvalues, eigenvectors) = LinalgDispatch<T>.Eigh(matrix);
+        var (eigenvalues, eigenvectors) = ScaledEigh(matrix);
         int n = eigenvalues.Length;
         var sqrtEigenvalues = engine.TensorSqrt(engine.TensorClampMin(eigenvalues, NumOps.Zero));
         var scaledVectors = engine.TensorMultiply(eigenvectors,
             engine.TensorBroadcastTo(engine.Reshape(sqrtEigenvalues, new[] { 1, n }), new[] { n, n }));
         return engine.TensorMatMul(scaledVectors, engine.TensorTranspose(eigenvectors));
+    }
+
+    /// <summary>
+    /// Symmetric eigendecomposition of the matrix divided by its largest absolute entry, with the
+    /// eigenvalues scaled back.
+    /// </summary>
+    /// <remarks>
+    /// The eigensolver's convergence threshold is absolute (1e-12), so a matrix whose entries are all far
+    /// below it (covariances of tiny features) would skip every rotation; normalizing first makes the
+    /// threshold relative. Numeric types the solver does not support (for example decimal) are
+    /// decomposed in double, the solver's widest type, and converted back.
+    /// </remarks>
+    private static (Tensor<T> Values, Tensor<T> Vectors) ScaledEigh(Tensor<T> matrix)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = matrix.Shape[0];
+        T scale = engine.TensorMaxValue(engine.TensorAbs(matrix));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero))
+        {
+            // The zero matrix: every eigenvalue is 0 and any orthonormal basis is an eigenbasis.
+            return (new Tensor<T>(new[] { n }), Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(n)));
+        }
+
+        var normalized = engine.TensorDivideScalar(matrix, scale);
+        Tensor<T> values;
+        Tensor<T> vectors;
+        if (typeof(T) == typeof(double) || typeof(T) == typeof(float))
+        {
+            (values, vectors) = LinalgDispatch<T>.Eigh(normalized);
+        }
+        else
+        {
+            var (doubleValues, doubleVectors) = LinalgDispatch<double>.Eigh(normalized.Cast<double>());
+            values = doubleValues.Cast<T>();
+            vectors = doubleVectors.Cast<T>();
+        }
+
+        return (engine.TensorMultiplyScalar(values, scale), vectors);
     }
 
     /// <summary>
