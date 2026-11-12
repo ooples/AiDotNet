@@ -539,7 +539,6 @@ internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, I
         var lowOrMid = Engine.TensorWhere(Engine.TensorLessThan(v, NumOps.FromDouble(-20.0)), exp, mid);
         return Engine.TensorWhere(Engine.TensorGreaterThan(v, NumOps.FromDouble(20.0)), v, lowOrMid);
     }
-    }
 }
 
 /// <summary>
