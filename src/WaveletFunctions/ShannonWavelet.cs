@@ -112,33 +112,31 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int n = input.Length;
-        var approximation = new Vector<T>((n + 1) / 2);
-        var detail = new Vector<T>((n + 1) / 2);
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        // Perform FFT
+
         var fft = new FastFourierTransform<T>();
         var spectrum = fft.Forward(input);
         int halfN = n / 2;
-        var approxSpectrum = new Vector<Complex<T>>(halfN + 1);
-        var detailSpectrum = new Vector<Complex<T>>(halfN + 1);
-        for (int i = 0; i < halfN; i++)
-        {
-            approxSpectrum[i] = spectrum[i];
-            detailSpectrum[i] = spectrum[halfN + i];
-        }
 
-        // If n is odd, handle the middle frequency
+        // The low half of the spectrum goes to the approximation, the high half to the detail; for odd lengths
+        // the middle bin is shared between both, scaled by sqrt(1/2). Otherwise the last bin is zero.
+        var approxTail = new Complex<T>(NumOps.Zero, NumOps.Zero);
+        var detailTail = new Complex<T>(NumOps.Zero, NumOps.Zero);
         if (n % 2 != 0)
         {
             T scaleFactor = NumOps.FromDouble(Math.Sqrt(0.5));
             Complex<T> complexScaleFactor = new Complex<T>(scaleFactor, NumOps.Zero);
-            approxSpectrum[halfN] = complexOps.Multiply(spectrum[halfN], complexScaleFactor);
-            detailSpectrum[halfN] = complexOps.Multiply(spectrum[halfN], complexScaleFactor);
+            approxTail = complexOps.Multiply(spectrum[halfN], complexScaleFactor);
+            detailTail = complexOps.Multiply(spectrum[halfN], complexScaleFactor);
         }
-        // Perform inverse FFT on both approximation and detail
+
+        var approxSpectrum = ComplexWaveletEngineOps<T>.Concat(
+            ComplexWaveletEngineOps<T>.Slice(spectrum, 0, halfN), new Vector<Complex<T>>(new[] { approxTail }));
+        var detailSpectrum = ComplexWaveletEngineOps<T>.Concat(
+            ComplexWaveletEngineOps<T>.Slice(spectrum, halfN, halfN), new Vector<Complex<T>>(new[] { detailTail }));
+
         var approxResult = fft.Inverse(approxSpectrum);
         var detailResult = fft.Inverse(detailSpectrum);
-
         return (approxResult, detailResult);
     }
 
@@ -191,17 +189,15 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
             // Users should pass originalLength for odd-length signals
         }
 
-        var combined = new Vector<Complex<T>>(outputLength);
-
+        // Approximation spectrum fills the low half, detail spectrum the high half; the rest stays zero.
         int halfN = outputLength / 2;
-        for (int i = 0; i < approxSpectrum.Length && i < halfN; i++)
-        {
-            combined[i] = approxSpectrum[i];
-        }
-        for (int i = 0; i < detailSpectrum.Length && halfN + i < outputLength; i++)
-        {
-            combined[halfN + i] = detailSpectrum[i];
-        }
+        int approxCount = Math.Min(approxSpectrum.Length, halfN);
+        int detailCount = Math.Min(detailSpectrum.Length, outputLength - halfN);
+        var combined = ComplexWaveletEngineOps<T>.Concat(
+            ComplexWaveletEngineOps<T>.Head(approxSpectrum, approxCount),
+            ComplexWaveletEngineOps<T>.Zeros(halfN - approxCount),
+            ComplexWaveletEngineOps<T>.Head(detailSpectrum, detailCount),
+            ComplexWaveletEngineOps<T>.Zeros(outputLength - halfN - Math.Max(detailCount, 0)));
 
         // Transform back to time domain
         return fft.Inverse(combined);
@@ -232,23 +228,16 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int n = 1024;
-        var coeffs = new T[n];
+        var engine = AiDotNetEngine.Current;
         T twoPi = NumOps.Multiply(NumOps.FromDouble(2), MathHelper.Pi<T>());
-        for (int k = -n / 2; k < n / 2; k++)
-        {
-            T x = NumOps.Divide(NumOps.FromDouble(k), NumOps.FromDouble(n));
-            if (k == 0)
-            {
-                coeffs[k + n / 2] = NumOps.FromDouble(Math.Sqrt(0.5));
-            }
-            else
-            {
-                T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Multiply(twoPi, x)), NumOps.Multiply(twoPi, x));
-                coeffs[k + n / 2] = NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(0.5)), sinc);
-            }
-        }
+        T scale = NumOps.FromDouble(Math.Sqrt(0.5));
 
-        return new Vector<T>(coeffs);
+        // x = k / n for k = -n/2 .. n/2 - 1; sqrt(1/2) * sinc(2 pi x), with sqrt(1/2) at k = 0
+        var x = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(n), NumOps.FromDouble(n));
+        var angle = engine.TensorMultiplyScalar(x, twoPi);
+        var values = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSin(angle), angle), scale);
+        var center = engine.TensorEquals(x, NumOps.Zero);
+        return engine.TensorWhere(center, engine.TensorFullLike(values, scale), values).ToVector();
     }
 
     /// <summary>
@@ -277,23 +266,17 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int n = 1024;
-        var coeffs = new T[n];
+        var engine = AiDotNetEngine.Current;
         T twoPi = NumOps.Multiply(NumOps.FromDouble(2), MathHelper.Pi<T>());
-        for (int k = -n / 2; k < n / 2; k++)
-        {
-            T x = NumOps.Divide(NumOps.FromDouble(k), NumOps.FromDouble(n));
-            if (k == 0)
-            {
-                coeffs[k + n / 2] = NumOps.FromDouble(Math.Sqrt(0.5));
-            }
-            else
-            {
-                T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Multiply(twoPi, x)), NumOps.Multiply(twoPi, x));
-                T modulation = MathHelper.Cos(NumOps.Multiply(twoPi, x));
-                coeffs[k + n / 2] = NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(0.5)), NumOps.Multiply(sinc, modulation));
-            }
-        }
+        T scale = NumOps.FromDouble(Math.Sqrt(0.5));
 
-        return new Vector<T>(coeffs);
+        // x = k / n for k = -n/2 .. n/2 - 1; sqrt(1/2) * sinc(2 pi x) * cos(2 pi x), with sqrt(1/2) at k = 0
+        var x = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(n), NumOps.FromDouble(n));
+        var angle = engine.TensorMultiplyScalar(x, twoPi);
+        var sinc = engine.TensorDivide(engine.TensorSin(angle), angle);
+        var modulation = engine.TensorCos(angle);
+        var values = engine.TensorMultiplyScalar(engine.TensorMultiply(sinc, modulation), scale);
+        var center = engine.TensorEquals(x, NumOps.Zero);
+        return engine.TensorWhere(center, engine.TensorFullLike(values, scale), values).ToVector();
     }
 }
