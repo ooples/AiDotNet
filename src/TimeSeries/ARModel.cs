@@ -309,17 +309,27 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
 
         var series = _trainedSeries;
         int horizon = input.Rows;
-
-        // In-sample: return training values directly
-        var inSample = series.GetSubVector(0, Math.Min(horizon, series.Length));
-        if (horizon <= series.Length)
+        Vector<T> predictions = new Vector<T>(horizon);
+        for (int t = 0; t < horizon; t++)
         {
-            return inSample;
+            if (t < series.Length)
+            {
+                // In-sample: return training values directly
+                predictions[t] = series[t];
+            }
+            else
+            {
+                // Out-of-sample: predict using available history including prior predictions
+                var extended = new Vector<T>(t + 1);
+                for (int j = 0; j < series.Length; j++)
+                    extended[j] = series[j];
+                for (int j = series.Length; j < t; j++)
+                    extended[j] = predictions[j];
+                predictions[t] = PredictAtIndex(extended, t);
+            }
         }
 
-        // Out-of-sample: predict using available history including prior predictions
-        var outOfSample = TimeSeriesEngineOps<T>.ForecastAR(series, _arCoefficients, horizon - series.Length);
-        return Vector<T>.Concatenate(inSample, outOfSample);
+        return predictions;
     }
 
     /// <summary>
@@ -555,8 +565,27 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model must be trained before making forecasts.");
         }
 
-        // Generate predictions one by one, each feeding the next
-        return TimeSeriesEngineOps<T>.ForecastAR(history, _arCoefficients, horizon);
+        // Create an extended history that will include predictions
+        Vector<T> extendedHistory = new Vector<T>(history.Length + horizon);
+        for (int i = 0; i < history.Length; i++)
+        {
+            extendedHistory[i] = history[i];
+        }
+
+        // Generate predictions one by one
+        for (int t = history.Length; t < extendedHistory.Length; t++)
+        {
+            extendedHistory[t] = PredictAtIndex(extendedHistory, t);
+        }
+
+        // Extract just the forecasted values
+        Vector<T> forecast = new Vector<T>(horizon);
+        for (int i = 0; i < horizon; i++)
+        {
+            forecast[i] = extendedHistory[history.Length + i];
+        }
+
+        return forecast;
     }
 
     /// <summary>
