@@ -265,20 +265,15 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     public virtual void Fit(Vector<T> times, Vector<T> events, Matrix<T>? features = null)
     {
         // Convert Vector<T> events to Vector<int>
-        var eventInts = new Vector<int>(events.Length);
-        for (int i = 0; i < events.Length; i++)
-        {
-            eventInts[i] = NumOps.GreaterThan(events[i], NumOps.FromDouble(0.5)) ? 1 : 0;
-        }
+        var eventInts = AiDotNetEngine.Current
+            .TensorGreaterThan(events.AsTensor(), NumOps.FromDouble(0.5))
+            .Cast<int>()
+            .ToVector();
 
         // Create dummy features if not provided
         if (features is null)
         {
-            features = new Matrix<T>(times.Length, 1);
-            for (int i = 0; i < times.Length; i++)
-            {
-                features[i, 0] = NumOps.One;
-            }
+            features = Matrix<T>.CreateDefault(times.Length, 1, NumOps.One);
         }
 
         FitSurvival(features, times, eventInts);
@@ -302,10 +297,6 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         if (features is null)
         {
             features = new Matrix<T>(1, NumFeatures > 0 ? NumFeatures : 1);
-            for (int j = 0; j < features.Columns; j++)
-            {
-                features[0, j] = NumOps.Zero;
-            }
         }
 
         return PredictSurvivalProbability(features, times);
@@ -325,18 +316,10 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     {
         // H(t) = -ln(S(t))
         var survival = PredictSurvival(times, features);
-        var cumHazard = new Matrix<T>(survival.Rows, survival.Columns);
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < survival.Rows; i++)
-        {
-            for (int j = 0; j < survival.Columns; j++)
-            {
-                double s = Math.Max(1e-10, NumOps.ToDouble(survival[i, j]));
-                cumHazard[i, j] = NumOps.FromDouble(-Math.Log(s));
-            }
-        }
-
-        return cumHazard;
+        return engine.TensorNegate(engine.TensorLog(
+            engine.TensorClampMin(Tensor<T>.FromMatrix(survival), NumOps.FromDouble(1e-10)))).ToMatrix();
     }
 
     /// <summary>
@@ -376,50 +359,35 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         if (features is null)
         {
             features = new Matrix<T>(1, NumFeatures > 0 ? NumFeatures : 1);
-            for (int j = 0; j < features.Columns; j++)
-            {
-                features[0, j] = NumOps.Zero;
-            }
         }
 
         var survivalProbs = PredictSurvivalProbability(features, TrainedEventTimes);
-        var medianTimes = new Vector<T>(features.Rows);
-        T half = NumOps.FromDouble(0.5);
+        var engine = AiDotNetEngine.Current;
+        int n = survivalProbs.Rows;
+        int m = TrainedEventTimes.Length;
 
-        for (int i = 0; i < features.Rows; i++)
+        // Median as lifelines defines it (qth_survival_time with q = 0.5): the first event time at
+        // which S(t) <= 0.5, with no interpolation, and +infinity (MaxValue) when the curve never
+        // reaches 0.5. The survival curve is non-increasing, so the number of leading points with
+        // S(t) > 0.5 indexes that time; summing the matching time steps reads it off per subject.
+        var above = engine.TensorGreaterThan(Tensor<T>.FromMatrix(survivalProbs), NumOps.FromDouble(0.5));
+        var times = TrainedEventTimes.AsTensor();
+        var median = Tensor<T>.CreateDefault(new[] { n }, TrainedEventTimes[0]);
+        if (m > 1)
         {
-            T medianTime = NumOps.MaxValue;
-            for (int t = 0; t < TrainedEventTimes.Length - 1; t++)
-            {
-                T prob = survivalProbs[i, t];
-                T nextProb = survivalProbs[i, t + 1];
-
-                if (NumOps.Compare(prob, half) >= 0 && NumOps.Compare(nextProb, half) < 0)
-                {
-                    T time1 = TrainedEventTimes[t];
-                    T time2 = TrainedEventTimes[t + 1];
-                    T probDiff = NumOps.Subtract(prob, nextProb);
-
-                    if (NumOps.Compare(probDiff, NumOps.Zero) > 0)
-                    {
-                        T fraction = NumOps.Divide(
-                            NumOps.Subtract(prob, half),
-                            probDiff);
-                        medianTime = NumOps.Add(time1,
-                            NumOps.Multiply(fraction, NumOps.Subtract(time2, time1)));
-                    }
-                    else
-                    {
-                        medianTime = time1;
-                    }
-                    break;
-                }
-            }
-
-            medianTimes[i] = medianTime;
+            var steps = engine.TensorSubtract(
+                engine.TensorSlice(times, new[] { 1 }, new[] { m - 1 }),
+                engine.TensorSlice(times, new[] { 0 }, new[] { m - 1 }));
+            var advance = engine.TensorMatMul(
+                engine.TensorSlice(above, new[] { 0, 0 }, new[] { n, m - 1 }),
+                steps.Reshape(new[] { m - 1, 1 }));
+            median = engine.TensorAdd(median, advance.Reshape(new[] { n }));
         }
 
-        return medianTimes;
+        var neverReached = engine.TensorSlice(above, new[] { 0, m - 1 }, new[] { n, 1 }).Reshape(new[] { n });
+
+        return engine.TensorWhere(neverReached, Tensor<T>.CreateDefault(new[] { n }, NumOps.MaxValue), median)
+            .ToVector();
     }
 
     #endregion
@@ -500,17 +468,9 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
 
         if (input.Columns == NumFeatures + 1)
         {
-            int n = input.Rows;
-            var covariates = new Matrix<T>(n, NumFeatures);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    covariates[i, j] = input[i, j + 1];
-                }
-            }
-
-            return covariates;
+            return AiDotNetEngine.Current
+                .TensorSlice(Tensor<T>.FromMatrix(input), new[] { 0, 1 }, new[] { input.Rows, NumFeatures })
+                .ToMatrix();
         }
 
         throw new ArgumentException(
@@ -533,46 +493,39 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         EnsureFitted();
 
         var riskScores = PredictHazardRatio(x);
-        double concordant = 0;
-        int comparable = 0;
+        var engine = AiDotNetEngine.Current;
+        int n = x.Rows;
+        var square = new[] { n, n };
 
-        for (int i = 0; i < x.Rows; i++)
+        // Pair (i, j) is comparable when subject i had the event and t_i < t_j (so i != j).
+        var hadEvent = engine.TensorGreaterThan(
+            engine.TensorAbs(engine.TensorSlice(events.AsTensor().Cast<T>(), new[] { 0 }, new[] { n })), NumOps.Zero).Reshape(new[] { n, 1 });
+        var column = new[] { n, 1 };
+        var row = new[] { 1, n };
+        var timesTensor = engine.TensorSlice(times.AsTensor(), new[] { 0 }, new[] { n });
+        var earlier = engine.TensorLessThan(
+            engine.TensorBroadcastTo(timesTensor.Reshape(column), square),
+            engine.TensorBroadcastTo(timesTensor.Reshape(row), square));
+        var comparablePairs = engine.TensorMultiply(engine.TensorBroadcastTo(hadEvent, square), earlier);
+
+        // Harrell's C-index: r_i > r_j scores 1, otherwise |r_i - r_j| < 1e-10 scores 1/2.
+        var riskTensor = riskScores.AsTensor();
+        var riskDiff = engine.TensorSubtract(
+            engine.TensorBroadcastTo(riskTensor.Reshape(column), square),
+            engine.TensorBroadcastTo(riskTensor.Reshape(row), square));
+        var higher = engine.TensorGreaterThan(riskDiff, NumOps.Zero);
+        var tied = engine.TensorLessThan(engine.TensorAbs(riskDiff), NumOps.FromDouble(1e-10));
+        T halfCredit = NumOps.FromDouble(0.5);
+        var credit = engine.TensorAdd(higher,
+            engine.TensorMultiplyScalar(engine.TensorSubtract(tied, engine.TensorMultiply(tied, higher)), halfCredit));
+
+        T comparable = engine.TensorSum(comparablePairs);
+        if (NumOps.Equals(comparable, NumOps.Zero))
         {
-            if (events[i] == 0) continue;
-
-            for (int j = 0; j < x.Rows; j++)
-            {
-                if (i == j) continue;
-
-                double timeI = NumOps.ToDouble(times[i]);
-                double timeJ = NumOps.ToDouble(times[j]);
-
-                if (timeI < timeJ)
-                {
-                    comparable++;
-
-                    double riskI = NumOps.ToDouble(riskScores[i]);
-                    double riskJ = NumOps.ToDouble(riskScores[j]);
-
-                    if (riskI > riskJ)
-                    {
-                        concordant += 1.0;
-                    }
-                    else if (Math.Abs(riskI - riskJ) < 1e-10)
-                    {
-                        // Harrell's C-index: tied risk scores get half credit
-                        concordant += 0.5;
-                    }
-                }
-            }
+            return halfCredit;
         }
 
-        if (comparable == 0)
-        {
-            return NumOps.FromDouble(0.5);
-        }
-
-        return NumOps.FromDouble(concordant / comparable);
+        return NumOps.Divide(engine.TensorSum(engine.TensorMultiply(comparablePairs, credit)), comparable);
     }
 
     /// <summary>
@@ -663,30 +616,29 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
 
         int n = x.Rows;
         int p = x.Columns - 1;
-        var features = new Matrix<T>(n, p);
-        var events = new Vector<int>(n);
+        var engine = AiDotNetEngine.Current;
+        var design = Tensor<T>.FromMatrix(x);
+        var indicators = engine.TensorSlice(design, new[] { 0, 0 }, new[] { n, 1 }).Reshape(new[] { n });
 
-        for (int i = 0; i < n; i++)
+        // Reading the indicator strictly rather than rounding: a covariate left in column 0 by
+        // mistake is the one failure this cannot recover from, and it would otherwise be read as
+        // censoring and silently change the answer.
+        var valid = engine.TensorAdd(
+            engine.TensorEquals(indicators, NumOps.Zero),
+            engine.TensorEquals(indicators, NumOps.One));
+        int firstInvalid = valid.ToVector().IndexOf(NumOps.Zero);
+        if (firstInvalid >= 0)
         {
-            // Reading the indicator strictly rather than rounding: a covariate left in column 0 by
-            // mistake is the one failure this cannot recover from, and it would otherwise be read as
-            // censoring and silently change the answer.
-            double indicator = NumOps.ToDouble(x[i, 0]);
-            if (indicator != 0.0 && indicator != 1.0)
-            {
-                throw new ArgumentException(
-                    $"Column 0 of X is the event indicator and must be 0 or 1; found {indicator} at row " +
-                    $"{i}. If that column is a covariate, move it: survival training needs to know which " +
-                    "subjects were censored, and cannot infer it.",
-                    nameof(x));
-            }
-
-            events[i] = (int)indicator;
-            for (int j = 0; j < p; j++)
-            {
-                features[i, j] = x[i, j + 1];
-            }
+            T indicator = indicators.GetFlatIndexValue(firstInvalid);
+            throw new ArgumentException(
+                $"Column 0 of X is the event indicator and must be 0 or 1; found {indicator} at row " +
+                $"{firstInvalid}. If that column is a covariate, move it: survival training needs to know which " +
+                "subjects were censored, and cannot infer it.",
+                nameof(x));
         }
+
+        var events = indicators.Cast<int>().ToVector();
+        var features = engine.TensorSlice(design, new[] { 0, 1 }, new[] { n, p }).ToMatrix();
 
         FitSurvival(features, y, events);
     }
@@ -712,21 +664,22 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
                 $"Number of samples in X ({x.Rows}) must match number of events ({events.Length}).");
         }
 
-        for (int i = 0; i < times.Length; i++)
+        int firstNonPositive = AiDotNetEngine.Current
+            .TensorGreaterThan(times.AsTensor(), NumOps.Zero)
+            .ToVector()
+            .IndexOf(NumOps.Zero);
+        if (firstNonPositive >= 0)
         {
-            if (NumOps.Compare(times[i], NumOps.Zero) <= 0)
-            {
-                throw new ArgumentException($"All times must be positive. Found non-positive time at index {i}.");
-            }
+            throw new ArgumentException(
+                $"All times must be positive. Found non-positive time at index {firstNonPositive}.");
         }
 
-        for (int i = 0; i < events.Length; i++)
+        var eventValues = events.ToArray();
+        int firstInvalid = Array.FindIndex(eventValues, e => e != 0 && e != 1);
+        if (firstInvalid >= 0)
         {
-            if (events[i] != 0 && events[i] != 1)
-            {
-                throw new ArgumentException(
-                    $"Event indicators must be 0 or 1. Found {events[i]} at index {i}.");
-            }
+            throw new ArgumentException(
+                $"Event indicators must be 0 or 1. Found {eventValues[firstInvalid]} at index {firstInvalid}.");
         }
     }
 
@@ -747,27 +700,14 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// </summary>
     protected Vector<T> GetUniqueEventTimes(Vector<T> times, Vector<int> events)
     {
-        var eventTimes = new List<double>();
-        for (int i = 0; i < times.Length; i++)
+        var eventFlags = events.ToArray();
+        var eventTimes = times.GetElements(Enumerable.Range(0, eventFlags.Length).Where(i => eventFlags[i] == 1));
+        if (eventTimes.Length == 0)
         {
-            if (events[i] == 1)
-            {
-                double t = NumOps.ToDouble(times[i]);
-                if (!eventTimes.Contains(t))
-                {
-                    eventTimes.Add(t);
-                }
-            }
+            return new Vector<T>(0);
         }
 
-        eventTimes.Sort();
-        var result = new Vector<T>(eventTimes.Count);
-        for (int i = 0; i < eventTimes.Count; i++)
-        {
-            result[i] = NumOps.FromDouble(eventTimes[i]);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorUnique(eventTimes.AsTensor(), sorted: true).ToVector();
     }
 
     #endregion
