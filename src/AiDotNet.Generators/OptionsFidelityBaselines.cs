@@ -321,7 +321,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.MetaLearning.Options.PACOHOptions<T, TInput, TOutput>.NumPosteriorSamples",
             "AiDotNet.MetaLearning.Options.PMFOptions<T, TInput, TOutput>.DistanceMetric",
             "AiDotNet.MetaLearning.Options.R2D2Options<T, TInput, TOutput>.UseWoodburyIdentity",
-            "AiDotNet.MetaLearning.Options.ReptileOptions<T, TInput, TOutput>.UseSerialUpdate",
             "AiDotNet.MetaLearning.Options.SimpleShotOptions<T, TInput, TOutput>.DistanceMetric",
             "AiDotNet.MetaLearning.Options.VERSAOptions<T, TInput, TOutput>.AggregationMethod",
             "AiDotNet.MetaLearning.Options.VERSAOptions<T, TInput, TOutput>.AmortizationDropout",
