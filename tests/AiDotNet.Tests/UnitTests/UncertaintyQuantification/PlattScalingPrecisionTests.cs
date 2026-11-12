@@ -24,8 +24,8 @@ public class PlattScalingPrecisionTests
     {
         var (low, high) = AiModelBuilder<double, Matrix<double>, Vector<double>>.ProbabilityClipBounds();
 
-        Assert.Equal(1e-12, low, 20);
-        Assert.Equal(1.0 - 1e-12, high, 20);
+        Assert.Equal(1e-12, low);
+        Assert.Equal(1.0 - 1e-12, high);
     }
 
     [Fact]
