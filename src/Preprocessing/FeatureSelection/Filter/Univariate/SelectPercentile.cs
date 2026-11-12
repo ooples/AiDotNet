@@ -127,6 +127,15 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     }
 
     /// <summary>
+    /// Fits and transforms the data.
+    /// </summary>
+    public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
+    {
+        Fit(data, target);
+        return Transform(data);
+    }
+
+    /// <summary>
     /// Transforms the data by selecting top percentile features.
     /// </summary>
     protected override Matrix<T> TransformCore(Matrix<T> data)
