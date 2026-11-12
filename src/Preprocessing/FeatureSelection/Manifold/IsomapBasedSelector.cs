@@ -71,12 +71,14 @@ public class IsomapBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         // Feature importance: mean over the connected pairs of (single-feature distance x geodesic distance)
         var pairs = engine.TensorMultiply(reachable, PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n)));
-        T pairCount = engine.TensorSum(pairs);
+        // the pairs are counted in int and divided out as 1 / count: n (n - 1) passes Half's 65504 at n = 257,
+        // where a count summed in T became +infinity and every score 0
+        int pairCount = PreprocessingTensorOps.CountNonZero(pairs);
         var scores = new Tensor<T>(new[] { p });
-        if (NumOps.GreaterThan(pairCount, NumOps.Zero))
+        if (pairCount > 0)
         {
             var weighted = FeatureSelectionTensorOps.AbsDifferenceSums(x, engine.TensorMultiply(pairs, geodesic));
-            scores = engine.TensorDivideScalar(engine.Reshape(weighted, new[] { p }), pairCount);
+            scores = engine.TensorMultiplyScalar(engine.Reshape(weighted, new[] { p }), NumOps.FromDouble(1.0 / pairCount));
         }
 
         // Normalize scores

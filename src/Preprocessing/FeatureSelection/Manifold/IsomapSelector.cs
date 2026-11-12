@@ -73,11 +73,14 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         // Each feature scores the Pearson correlation between its single-feature distances |x_i - x_j| and
         // the geodesic distances, over the connected pairs i != j
         var pairs = engine.TensorMultiply(reachable, PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n)));
-        T pairCount = engine.TensorSum(pairs);
+        // the pairs are counted in int and divided out as 1 / count: n (n - 1) passes Half's 65504 at n = 257,
+        // where a count summed in T became +infinity, the mean geodesic 0 and the correlation uncentred
+        int pairCount = PreprocessingTensorOps.CountNonZero(pairs);
         var scores = new Tensor<T>(new[] { p });
-        if (NumOps.GreaterThan(pairCount, NumOps.Zero))
+        if (pairCount > 0)
         {
-            T meanGeodesic = NumOps.Divide(engine.TensorSum(engine.TensorMultiply(pairs, geodesic)), pairCount);
+            T inversePairCount = NumOps.FromDouble(1.0 / pairCount);
+            T meanGeodesic = NumOps.Multiply(engine.TensorSum(engine.TensorMultiply(pairs, geodesic)), inversePairCount);
             var centeredGeodesic = engine.TensorMultiply(pairs, engine.TensorSubtractScalar(geodesic, meanGeodesic));
             T geodesicVariation = engine.TensorSum(engine.TensorSquare(centeredGeodesic));
 
@@ -93,7 +96,7 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
                     engine.ReduceSum(engine.TensorMultiply(x, engine.TensorMatMul(pairs, x)), new[] { 0 }, false)),
                 NumOps.FromDouble(2));
             var distanceVariation = engine.TensorMax(
-                engine.TensorSubtract(squaredSum, engine.TensorDivideScalar(engine.TensorSquare(distanceSum), pairCount)),
+                engine.TensorSubtract(squaredSum, engine.TensorMultiplyScalar(engine.TensorSquare(distanceSum), inversePairCount)),
                 NumOps.Zero);
 
             if (NumOps.GreaterThan(geodesicVariation, NumOps.FromDouble(1e-10)))
