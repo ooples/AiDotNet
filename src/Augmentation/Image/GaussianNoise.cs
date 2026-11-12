@@ -113,36 +113,17 @@ public class GaussianNoise<T> : AugmentationBase<T, ImageTensor<T>>
         double std = context.GetRandomDouble(MinStd, MaxStd);
 
         // Add Gaussian noise to each pixel
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
+        // Generate Gaussian noise for each pixel in y, x, c order (the RNG draw order)
+        var noise = AugmentationRandom<T>.Gaussian(context, [height, width, channels], Mean, std);
 
-                    // Generate Gaussian noise using Box-Muller transform
-                    double noise = SampleGaussian(context, Mean, std);
-                    double newValue = value + noise;
-
-                    // Clamp to valid range
-                    newValue = Math.Max(MinValue, Math.Min(MaxValue, newValue));
-
-                    result.SetPixel(y, x, c, NumOps.FromDouble(newValue));
-                }
-            }
-        }
+        // Add the noise and clamp to valid range
+        var engine = Engine;
+        var noisy = engine.TensorAdd(data.ToPlanarTensor(), ImageTensor<T>.PlanarFromInterleaved(noise, height, width, channels));
+        result.SetFromPlanarTensor(engine.TensorClamp(noisy, NumOps.FromDouble(MinValue), NumOps.FromDouble(MaxValue)));
 
         return result;
     }
 
-    /// <summary>
-    /// Samples from a Gaussian distribution.
-    /// </summary>
-    private static double SampleGaussian(AugmentationContext<T> context, double mean, double std)
-    {
-        return context.SampleGaussian(mean, std);
-    }
 
     /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()

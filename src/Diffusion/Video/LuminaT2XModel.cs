@@ -73,6 +73,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Lumina-T2X: Transforming Text into Any Modality, Resolution, and Duration via Flow-based Large Diffusion Transformers", "https://arxiv.org/abs/2405.05945", Year = 2024, Authors = "Gao et al.")]
+[DistinctImplementationOf(typeof(AiDotNet.Diffusion.TextToImage.LuminaT2XModel<>), "the paper trains a separate Flag-DiT per modality; this is the video generator, configured for frames and duration")]
 public partial class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
