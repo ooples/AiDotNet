@@ -64,4 +64,47 @@ public class SurvivalReferenceValueTests
 
         Assert.Equal(double.MaxValue, median[0]);
     }
+
+    private static double FitCoxCoefficient(int[] order)
+    {
+        double[] x = { 0, 1, 0, 1, 1, 0 };
+        double[] times = { 1, 1, 2, 3, 3, 4 };
+        int[] events = { 1, 1, 1, 1, 0, 1 };
+
+        var features = new Matrix<double>(order.Length, 1);
+        var t = new Vector<double>(order.Length);
+        var e = new Vector<int>(order.Length);
+        for (int i = 0; i < order.Length; i++)
+        {
+            features[i, 0] = x[order[i]];
+            t[i] = times[order[i]];
+            e[i] = events[order[i]];
+        }
+
+        var cox = new CoxProportionalHazards<double>(learningRate: 0.1, maxIterations: 3000, tolerance: 0.0);
+        cox.FitSurvival(features, t, e);
+        var coefficients = cox.GetCoefficients();
+        Assert.NotNull(coefficients);
+        return coefficients is null ? double.NaN : coefficients[0];
+    }
+
+    [Fact]
+    public void Cox_TiedEventTimes_ConvergesToBreslowPartialLikelihoodMaximum()
+    {
+        // Breslow partial likelihood (statsmodels PHReg ties="breslow"): every subject with t_j >= t_i
+        // is in the risk set of subject i, so tied subjects share one risk set. Newton's method on
+        // this data gives beta = -0.1707048952583424.
+        double beta = FitCoxCoefficient(new[] { 0, 1, 2, 3, 4, 5 });
+
+        Assert.Equal(-0.1707048952583424, beta, 8);
+    }
+
+    [Fact]
+    public void Cox_TiedEventTimes_DoesNotDependOnRowOrder()
+    {
+        double forward = FitCoxCoefficient(new[] { 0, 1, 2, 3, 4, 5 });
+        double reversed = FitCoxCoefficient(new[] { 5, 4, 3, 2, 1, 0 });
+
+        Assert.Equal(forward, reversed, 10);
+    }
 }

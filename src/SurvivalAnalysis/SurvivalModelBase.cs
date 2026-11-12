@@ -711,6 +711,28 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     }
 
     /// <summary>
+    /// Builds the risk-set mask: entry (k, i) is 1 when subject i is still at risk at
+    /// <paramref name="eventTimes"/>[k], that is when its observed time is &gt;= that time.
+    /// </summary>
+    /// <param name="times">The observed times.</param>
+    /// <param name="eventTimes">The times to form risk sets at.</param>
+    /// <returns>A [eventTimes.Length, times.Length] 0/1 mask.</returns>
+    protected Tensor<T> AtRiskMask(Vector<T> times, Vector<T> eventTimes)
+    {
+        var engine = AiDotNetEngine.Current;
+        int numTimes = eventTimes.Length;
+        int n = times.Length;
+        var grid = new[] { numTimes, n };
+        var observed = engine.TensorBroadcastTo(times.AsTensor().Reshape(new[] { 1, n }), grid);
+        var eventGrid = engine.TensorBroadcastTo(eventTimes.AsTensor().Reshape(new[] { numTimes, 1 }), grid);
+
+        // At risk if observation time >= event time
+        return engine.TensorAdd(
+            engine.TensorGreaterThan(observed, eventGrid),
+            engine.TensorEquals(observed, eventGrid));
+    }
+
+    /// <summary>
     /// Counts, for each sorted event time, the subjects at risk (observed time &gt;= event time) and
     /// the events observed at that time (within 1e-10).
     /// </summary>
@@ -727,11 +749,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         var grid = new[] { numTimes, n };
         var observed = engine.TensorBroadcastTo(times.AsTensor().Reshape(new[] { 1, n }), grid);
         var eventGrid = engine.TensorBroadcastTo(eventTimes.AsTensor().Reshape(new[] { numTimes, 1 }), grid);
-
-        // At risk if observation time >= event time
-        var atRiskMask = engine.TensorAdd(
-            engine.TensorGreaterThan(observed, eventGrid),
-            engine.TensorEquals(observed, eventGrid));
+        var atRiskMask = AtRiskMask(times, eventTimes);
 
         // Event at this time if event occurred and time matches
         var hadEvent = engine.TensorBroadcastTo(
