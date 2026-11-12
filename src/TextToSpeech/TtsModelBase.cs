@@ -293,20 +293,15 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         if (length <= 0)
             throw new ArgumentException("Text must contain at least one character.", nameof(text));
 
-        var tokens = new Tensor<T>(new[] { length });
         var domain = GetInputDomain(new[] { length });
-        if (domain.IsResolved && domain.Kind == LayerInputDomainKind.IntegerIndices)
-        {
-            int range = Math.Max(1, domain.MaxExclusive - domain.MinInclusive);
-            for (int i = 0; i < length; i++)
-                tokens[i] = NumOps.FromDouble(domain.MinInclusive + text[i] % range);
-        }
-        else
-        {
-            for (int i = 0; i < length; i++)
-                tokens[i] = NumOps.FromDouble(text[i] / 128.0);
-        }
-        return tokens;
+        bool integerIndices = domain.IsResolved && domain.Kind == LayerInputDomainKind.IntegerIndices;
+        int range = integerIndices ? Math.Max(1, domain.MaxExclusive - domain.MinInclusive) : 0;
+        var codes = new int[length];
+        for (int i = 0; i < length; i++)
+            codes[i] = integerIndices ? domain.MinInclusive + text[i] % range : text[i];
+        var tokens = new Tensor<int>(codes, new[] { length }).Cast<T>();
+        // Character codes are scaled by 1/128 (a power of two, so exact in every T) for a continuous front end.
+        return integerIndices ? tokens : Engine.TensorDivideScalar(tokens, NumOps.FromDouble(128.0));
     }
 
     /// <summary>Longest text, in tokens, the model reads.</summary>
@@ -594,20 +589,13 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         double refLevel = 20.0
     )
     {
-        var result = new Tensor<T>(mel._shape);
         double range = refLevel - minLevel;
         if (Math.Abs(range) < 1e-10)
             range = 1.0;
 
-        for (int i = 0; i < mel.Length; i++)
-        {
-            double val = NumOps.ToDouble(mel[i]);
-            double normalized = (val - minLevel) / range;
-            normalized = Math.Max(0.0, Math.Min(1.0, normalized));
-            result[i] = NumOps.FromDouble(normalized);
-        }
-
-        return result;
+        var shifted = Engine.TensorAddScalar(mel, NumOps.FromDouble(-minLevel));
+        var normalized = Engine.TensorDivideScalar(shifted, NumOps.FromDouble(range));
+        return Engine.TensorClamp(normalized, NumOps.Zero, NumOps.One);
     }
 
     /// <summary>
@@ -627,30 +615,9 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// <returns>Probabilities that sum to 1.</returns>
     protected Tensor<T> Softmax(Tensor<T> logits)
     {
-        double maxVal = double.MinValue;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal)
-                maxVal = v;
-        }
-
-        var result = new Tensor<T>(logits._shape);
-        double sum = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = Math.Exp(NumOps.ToDouble(logits[i]) - maxVal);
-            result[i] = NumOps.FromDouble(v);
-            sum += v;
-        }
-
-        if (sum > 1e-8)
-        {
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.FromDouble(NumOps.ToDouble(result[i]) / sum);
-        }
-
-        return result;
+        // One distribution over every element (the max-shifted exponentials sum to at least 1).
+        var flat = Engine.Reshape(logits, new[] { logits.Length });
+        return Engine.Reshape(Engine.TensorSoftmax(flat, axis: 0), logits._shape);
     }
 
     /// <summary>
@@ -660,22 +627,19 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// <returns>Unit-normalized tensor.</returns>
     protected Tensor<T> L2Normalize(Tensor<T> tensor)
     {
-        double norm = 0;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double v = NumOps.ToDouble(tensor[i]);
-            norm += v * v;
-        }
-
-        norm = Math.Sqrt(norm);
-        if (norm < 1e-8)
+        if (tensor.Length == 0)
+            return tensor;
+        // Scale by the largest magnitude first so the sum of squares cannot overflow a narrow T:
+        // x / ||x|| = (x / m) / ||x / m||.
+        var peak = Engine.TensorMaxValue(Engine.TensorAbs(tensor));
+        if (NumOps.Equals(peak, NumOps.Zero))
+            return tensor;
+        var scaled = Engine.TensorDivideScalar(tensor, peak);
+        var scaledNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorSquare(scaled)));
+        if (NumOps.LessThan(NumOps.Multiply(peak, scaledNorm), NumOps.FromDouble(1e-8)))
             return tensor;
 
-        var result = new Tensor<T>(tensor._shape);
-        for (int i = 0; i < tensor.Length; i++)
-            result[i] = NumOps.FromDouble(NumOps.ToDouble(tensor[i]) / norm);
-
-        return result;
+        return Engine.TensorDivideScalar(scaled, scaledNorm);
     }
 
     /// <summary>
