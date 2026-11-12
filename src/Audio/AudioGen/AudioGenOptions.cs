@@ -72,6 +72,7 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
         NumCodebooks = other.NumCodebooks;
         CodebookSize = other.CodebookSize;
         MaxTextLength = other.MaxTextLength;
+        EncodecWeightsPath = other.EncodecWeightsPath;
     }
 
     /// <summary>
@@ -161,6 +162,13 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     /// Gets or sets the max text length.
     /// </summary>
     public int MaxTextLength { get; set; }
+
+    /// <summary>
+    /// Gets or sets the path of a pretrained EnCodec checkpoint (safetensors, audiocraft state-dict
+    /// names) whose decoder and codebooks the native model decodes with; null keeps the seeded
+    /// initialization. AudioGen decodes with a pretrained, frozen EnCodec (Kreuk et al. 2022, §3.1).
+    /// </summary>
+    public string? EncodecWeightsPath { get; set; }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.

@@ -1,4 +1,5 @@
-using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -27,29 +28,29 @@ public partial class AudioGenModel<T>
     /// <summary>The paper's upsampling ratios, applied in this order when they divide the hop.</summary>
     private static readonly int[] PaperUpsampleRatios = { 8, 5, 4, 2 };
 
-    /// <summary>One embedding table per codebook: token id -> D-dimensional code vector.</summary>
-    private List<EmbeddingLayer<T>> _codecCodebooks = new List<EmbeddingLayer<T>>();
+    /// <summary>
+    /// Every EnCodec decoder weight, in the order <see cref="InitializeCodecDecoder"/> builds them.
+    /// </summary>
+    /// <remarks>
+    /// AudioGen decodes with a pretrained EnCodec that stays frozen while the language model trains
+    /// (Kreuk et al. 2022, §3.1), so these are frozen parameters: saved, loaded and cloned with the
+    /// model, never updated by an optimizer.
+    /// </remarks>
+    [FrozenParameter]
+    private List<Tensor<T>> _codecWeights = new List<Tensor<T>>();
 
-    /// <summary>Conv1d(D -> C·2^B, kernel 7).</summary>
-    private Conv1DLayer<T>? _codecInputConv;
+    /// <summary>The audiocraft state-dict name of each entry of <see cref="_codecWeights"/>.</summary>
+    private List<string> _codecWeightNames = new List<string>();
 
-    /// <summary>The decoder LSTM stack (applied with a skip connection).</summary>
-    private List<LSTMLayer<T>> _codecLstm = new List<LSTMLayer<T>>();
+    /// <summary>The frozen EnCodec decoder weights, in build order (for persistence checks).</summary>
+    internal IReadOnlyList<Tensor<T>> CodecDecoderWeights => _codecWeights;
 
-    /// <summary>One transposed convolution per upsampling ratio.</summary>
-    private List<Conv1DTransposeLayer<T>> _codecUpsample = new List<Conv1DTransposeLayer<T>>();
+    /// <summary>Decodes token ids with the native EnCodec decoder (no sampling involved).</summary>
+    internal Tensor<T> DecodeCodecTokens(Tensor<T> audioCodes, double durationSeconds)
+        => DecodeAudioNative(audioCodes, durationSeconds);
 
-    /// <summary>Residual unit convolutions, two per upsampling block (kernel 3, then kernel 1).</summary>
-    private List<Conv1DLayer<T>> _codecResidual = new List<Conv1DLayer<T>>();
-
-    /// <summary>Final Conv1d(C -> channels, kernel 7).</summary>
-    private Conv1DLayer<T>? _codecOutputConv;
-
-    /// <summary>Upsampling ratio of each block; their product is the hop.</summary>
+    /// <summary>Upsampling ratio of each decoder block; their product is the hop.</summary>
     private int[] _codecRatios = Array.Empty<int>();
-
-    /// <summary>The ELU used before every decoder convolution.</summary>
-    private readonly ELUActivation<T> _codecElu = new ELUActivation<T>();
 
     /// <summary>
     /// Splits <paramref name="hop"/> into upsampling ratios: each paper ratio that still divides it,
@@ -80,37 +81,151 @@ public partial class AudioGenModel<T>
         return ratios.ToArray();
     }
 
-    /// <summary>Builds the native EnCodec decoder for the configured sample rate and channel count.</summary>
+    /// <summary>
+    /// Builds the EnCodec decoder weights for the configured sample rate, codebooks and channels,
+    /// then loads pretrained values from <see cref="AudioGenOptions.EncodecWeightsPath"/> when given.
+    /// </summary>
+    /// <remarks>
+    /// Without pretrained weights every tensor is drawn uniformly from
+    /// <c>[-1/sqrt(fanIn), 1/sqrt(fanIn)]</c> (PyTorch's convolution and LSTM default), seeded from
+    /// the model's layer-initialization scope so a seeded model is reproducible.
+    /// </remarks>
     private void InitializeCodecDecoder()
     {
         int hop = Math.Max(1, (int)Math.Round((double)_sampleRate / CodecTokensPerSecond));
         _codecRatios = CodecUpsampleRatios(hop);
+        _codecWeights = new List<Tensor<T>>();
+        _codecWeightNames = new List<string>();
+        var random = LayerInitializationSeedScope.NextRandom();
 
-        _codecCodebooks = new List<EmbeddingLayer<T>>(_numCodebooks);
-        for (int cb = 0; cb < _numCodebooks; cb++)
-            _codecCodebooks.Add(new EmbeddingLayer<T>(_codebookSize, CodecLatentDim));
+        void Add(string name, int[] shape, int fanIn)
+        {
+            T bound = NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(1, fanIn)));
+            _codecWeights.Add(Engine.TensorRandomUniformRange(shape, NumOps.Negate(bound), bound, random.Next()));
+            _codecWeightNames.Add(name);
+        }
 
+        for (int q = 0; q < _numCodebooks; q++)
+            Add($"quantizer.vq.layers.{q}._codebook.embed", new[] { _codebookSize, CodecLatentDim }, CodecLatentDim);
+
+        // SEANetDecoder.model: [0] conv, [1] LSTM, then per ratio ELU / ConvTranspose / residual block,
+        // then ELU and the output conv.
         int width = CodecBaseChannels << _codecRatios.Length;
-        _codecInputConv = new Conv1DLayer<T>(CodecLatentDim, width, CodecOuterKernel);
-
-        _codecLstm = new List<LSTMLayer<T>>(CodecLstmLayers);
+        Add("decoder.model.0.conv.conv.weight", new[] { width, CodecLatentDim, CodecOuterKernel }, CodecLatentDim * CodecOuterKernel);
+        Add("decoder.model.0.conv.conv.bias", new[] { width }, CodecLatentDim * CodecOuterKernel);
         for (int l = 0; l < CodecLstmLayers; l++)
-            _codecLstm.Add(new LSTMLayer<T>(width));
+        {
+            Add($"decoder.model.1.lstm.weight_ih_l{l}", new[] { 4 * width, width }, width);
+            Add($"decoder.model.1.lstm.weight_hh_l{l}", new[] { 4 * width, width }, width);
+            Add($"decoder.model.1.lstm.bias_ih_l{l}", new[] { 4 * width }, width);
+            Add($"decoder.model.1.lstm.bias_hh_l{l}", new[] { 4 * width }, width);
+        }
 
-        _codecUpsample = new List<Conv1DTransposeLayer<T>>(_codecRatios.Length);
-        _codecResidual = new List<Conv1DLayer<T>>(2 * _codecRatios.Length);
+        int module = 2;
         foreach (int ratio in _codecRatios)
         {
             int half = width / 2;
-            // Kernel 2r, stride r, no built-in trimming: the r extra samples are cut in DecodeAudioNative.
-            _codecUpsample.Add(new Conv1DTransposeLayer<T>(width, half, 2 * ratio, ratio, 0));
-            // Residual unit with compression 2: dim -> dim / 2 (kernel 3) -> dim (kernel 1).
-            _codecResidual.Add(new Conv1DLayer<T>(half, Math.Max(1, half / 2), CodecResidualKernel));
-            _codecResidual.Add(new Conv1DLayer<T>(Math.Max(1, half / 2), half, 1));
+            int hidden = Math.Max(1, half / 2);
+            Add($"decoder.model.{module + 1}.convtr.convtr.weight", new[] { width, half, 2 * ratio }, half * 2 * ratio);
+            Add($"decoder.model.{module + 1}.convtr.convtr.bias", new[] { half }, half * 2 * ratio);
+            Add($"decoder.model.{module + 2}.block.1.conv.conv.weight", new[] { hidden, half, CodecResidualKernel }, half * CodecResidualKernel);
+            Add($"decoder.model.{module + 2}.block.1.conv.conv.bias", new[] { hidden }, half * CodecResidualKernel);
+            Add($"decoder.model.{module + 2}.block.3.conv.conv.weight", new[] { half, hidden, 1 }, hidden);
+            Add($"decoder.model.{module + 2}.block.3.conv.conv.bias", new[] { half }, hidden);
             width = half;
+            module += 3;
         }
 
-        _codecOutputConv = new Conv1DLayer<T>(width, Math.Max(1, _channels), CodecOuterKernel);
+        int channels = Math.Max(1, _channels);
+        Add($"decoder.model.{module + 1}.conv.conv.weight", new[] { channels, width, CodecOuterKernel }, width * CodecOuterKernel);
+        Add($"decoder.model.{module + 1}.conv.conv.bias", new[] { channels }, width * CodecOuterKernel);
+
+        if (_options.EncodecWeightsPath is string path && path.Length > 0)
+            LoadCodecWeights(path);
+    }
+
+    /// <summary>
+    /// Replaces the decoder weights with a pretrained EnCodec checkpoint in safetensors format, using
+    /// audiocraft's state-dict names. A weight-normalized convolution (<c>weight_g</c> /
+    /// <c>weight_v</c>) is folded into its plain weight.
+    /// </summary>
+    private void LoadCodecWeights(string path)
+    {
+        var checkpoint = new SafeTensorsLoader<T>().Load(path);
+        for (int i = 0; i < _codecWeights.Count; i++)
+        {
+            string name = _codecWeightNames[i];
+            Tensor<T> value;
+            if (checkpoint.TryGetValue(name, out var direct))
+            {
+                value = direct;
+            }
+            else if (name.EndsWith(".weight", StringComparison.Ordinal)
+                && checkpoint.TryGetValue(name + "_g", out var gain)
+                && checkpoint.TryGetValue(name + "_v", out var direction))
+            {
+                value = WeightNormalized(gain, direction);
+            }
+            else
+            {
+                throw new InvalidOperationException($"EnCodec checkpoint '{path}' has no tensor '{name}'.");
+            }
+
+            var expected = _codecWeights[i].Shape.ToArray();
+            if (!expected.SequenceEqual(value.Shape.ToArray()))
+                throw new InvalidOperationException(
+                    $"EnCodec tensor '{name}' has shape [{string.Join(", ", value.Shape.ToArray())}]; " +
+                    $"this model needs [{string.Join(", ", expected)}].");
+            _codecWeights[i] = value;
+        }
+    }
+
+    /// <summary><c>g * v / ||v||</c>, the norm taken over every axis but the first (weight_norm, dim 0).</summary>
+    private Tensor<T> WeightNormalized(Tensor<T> gain, Tensor<T> direction)
+    {
+        var shape = direction.Shape.ToArray();
+        var axes = Enumerable.Range(1, shape.Length - 1).ToArray();
+        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(direction), axes, keepDims: true));
+        var scale = Engine.TensorDivide(Engine.Reshape(gain, norm.Shape.ToArray()), norm);
+        return Engine.TensorMultiply(direction, Engine.TensorBroadcastTo(scale, shape));
+    }
+
+    /// <summary>Conv1d over <c>[1, C, T]</c> with "same" padding for odd kernels, plus bias.</summary>
+    private Tensor<T> CodecConv(Tensor<T> x, Tensor<T> weight, Tensor<T> bias)
+    {
+        int kernel = weight.Shape[2];
+        var y = Engine.Conv1D(x, weight, 1, (kernel - 1) / 2, 1);
+        return Engine.TensorAdd(y, Engine.TensorBroadcastTo(Engine.Reshape(bias, new[] { 1, bias.Length, 1 }), y.Shape.ToArray()));
+    }
+
+    /// <summary>One PyTorch-convention LSTM layer (gates i, f, g, o) over a <c>[T, H]</c> sequence.</summary>
+    private Tensor<T> CodecLstm(Tensor<T> sequence, Tensor<T> weightIh, Tensor<T> weightHh, Tensor<T> biasIh, Tensor<T> biasHh)
+    {
+        int steps = sequence.Shape[0];
+        int hiddenSize = weightHh.Shape[1];
+        var bias = Engine.Reshape(Engine.TensorAdd(biasIh, biasHh), new[] { 1, 4 * hiddenSize });
+        var inputGates = Engine.TensorAdd(
+            Engine.TensorMatMul(sequence, Engine.TensorTranspose(weightIh)),
+            Engine.TensorBroadcastTo(bias, new[] { steps, 4 * hiddenSize }));
+        var recurrent = Engine.TensorTranspose(weightHh);
+        var h = new Tensor<T>(new[] { 1, hiddenSize });
+        var c = new Tensor<T>(new[] { 1, hiddenSize });
+        var outputs = new Tensor<T>[steps];
+        for (int t = 0; t < steps; t++)
+        {
+            var gates = Engine.TensorAdd(
+                Engine.TensorSlice(inputGates, new[] { t, 0 }, new[] { 1, 4 * hiddenSize }),
+                Engine.TensorMatMul(h, recurrent));
+            var input = Engine.TensorSigmoid(Engine.TensorSlice(gates, new[] { 0, 0 }, new[] { 1, hiddenSize }));
+            var forget = Engine.TensorSigmoid(Engine.TensorSlice(gates, new[] { 0, hiddenSize }, new[] { 1, hiddenSize }));
+            var cell = Engine.TensorTanh(Engine.TensorSlice(gates, new[] { 0, 2 * hiddenSize }, new[] { 1, hiddenSize }));
+            var output = Engine.TensorSigmoid(Engine.TensorSlice(gates, new[] { 0, 3 * hiddenSize }, new[] { 1, hiddenSize }));
+            c = Engine.TensorAdd(Engine.TensorMultiply(forget, c), Engine.TensorMultiply(input, cell));
+            h = Engine.TensorMultiply(output, Engine.TensorTanh(c));
+            outputs[t] = h;
+        }
+
+        return Engine.Concat(outputs, 0);
     }
 
     /// <summary>
@@ -120,10 +235,11 @@ public partial class AudioGenModel<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// AudioGen (Kreuk et al. 2022, §3.1) generates the discrete tokens of an EnCodec model and decodes
-    /// them with that model's decoder. This is the EnCodec decoder (Défossez et al. 2022, §3.1 and
-    /// Figure 1): residual vector quantization is undone by summing each codebook's learned embedding
-    /// of its token, then a SEANet decoder maps the D-dimensional latent sequence to audio:
+    /// AudioGen (Kreuk et al. 2022, §3.1) generates the discrete tokens of a pretrained, frozen
+    /// EnCodec model and decodes them with that model's decoder. This is the EnCodec decoder
+    /// (Défossez et al. 2022, §3.1 and Figure 1): residual vector quantization is undone by summing
+    /// each codebook's embedding of its token, then a SEANet decoder maps the D-dimensional latents
+    /// to audio:
     /// </para>
     /// <list type="number">
     /// <item>Conv1d(D -> C·2^B, kernel 7).</item>
@@ -134,15 +250,16 @@ public partial class AudioGenModel<T>
     /// <item>ELU and a final Conv1d(C -> channels, kernel 7).</item>
     /// </list>
     /// <para>
-    /// The paper's 16 kHz model uses D = 128, C = 32 and ratios (8, 5, 4, 2), i.e. a hop of 320 samples
-    /// and 50 tokens per second. The hop here is the sample rate divided by the 50 Hz token rate, split
-    /// into those ratios where they divide it. In native mode the decoder's weights are trainable model
-    /// state like the language model's; in ONNX mode the supplied audio decoder is used instead.
+    /// The paper's 16 kHz model uses D = 128, C = 32 and ratios (8, 5, 4, 2), a hop of 320 samples and
+    /// 50 tokens per second. The hop here is the sample rate divided by the 50 Hz token rate, split
+    /// into those ratios where they divide it. Pretrained weights load from
+    /// <see cref="AudioGenOptions.EncodecWeightsPath"/>; in ONNX mode the supplied audio decoder is
+    /// used instead.
     /// </para>
     /// </remarks>
     private Tensor<T> DecodeAudioNative(Tensor<T> audioCodes, double durationSeconds)
     {
-        if (_codecInputConv is null || _codecOutputConv is null)
+        if (_codecWeights.Count == 0)
             throw new InvalidOperationException("The native EnCodec decoder is not initialized.");
 
         int channels = Math.Max(1, _channels);
@@ -151,6 +268,8 @@ public partial class AudioGenModel<T>
         int numTokens = audioCodes.Shape.Length >= 3 ? audioCodes.Shape[2] : audioCodes.Length / Math.Max(1, _numCodebooks);
         if (numTokens <= 0 || targetSamples <= 0 || _numCodebooks <= 0)
             return new Tensor<T>(outputShape);
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
         // Token ids as [numCodebooks, numTokens]
         Tensor<T> codes;
@@ -172,50 +291,57 @@ public partial class AudioGenModel<T>
         }
 
         // Residual vector quantization: the latent is the sum of every codebook's code vector.
+        int w = 0;
         Tensor<T>? latent = null;
-        for (int cb = 0; cb < _numCodebooks; cb++)
+        for (int q = 0; q < _numCodebooks; q++)
         {
-            var ids = Engine.TensorSlice(codes, new[] { cb, 0 }, new[] { 1, numTokens });
-            var embedded = _codecCodebooks[cb].Forward(ids); // [1, numTokens, D]
+            var ids = Engine.Reshape(Engine.TensorSlice(codes, new[] { q, 0 }, new[] { 1, numTokens }), new[] { numTokens }).Cast<int>();
+            var embedded = Engine.TensorIndexSelect(_codecWeights[w++], ids, 0); // [numTokens, D]
             latent = latent is null ? embedded : Engine.TensorAdd(latent, embedded);
         }
 
         if (latent is null)
             return new Tensor<T>(outputShape);
 
-        // [1, numTokens, D] -> [1, D, numTokens]
-        var x = _codecInputConv.Forward(Engine.TensorPermute(latent, new[] { 0, 2, 1 }));
+        // [numTokens, D] -> [1, D, numTokens]
+        var x = CodecConv(Engine.Reshape(Engine.TensorTranspose(latent), new[] { 1, CodecLatentDim, numTokens }), _codecWeights[w], _codecWeights[w + 1]);
+        w += 2;
 
-        // LSTM over time with a skip connection: [1, C, T] <-> [1, T, C]
-        var sequence = Engine.TensorPermute(x, new[] { 0, 2, 1 });
+        // LSTM over time with a skip connection: [1, C, T] <-> [T, C]
+        int width = x.Shape[1];
+        var sequence = Engine.TensorTranspose(Engine.Reshape(x, new[] { width, numTokens }));
         var recurrent = sequence;
-        foreach (var lstm in _codecLstm)
-            recurrent = lstm.Forward(recurrent);
-        x = Engine.TensorPermute(Engine.TensorAdd(recurrent, sequence), new[] { 0, 2, 1 });
+        for (int l = 0; l < CodecLstmLayers; l++)
+        {
+            recurrent = CodecLstm(recurrent, _codecWeights[w], _codecWeights[w + 1], _codecWeights[w + 2], _codecWeights[w + 3]);
+            w += 4;
+        }
+        x = Engine.Reshape(Engine.TensorTranspose(Engine.TensorAdd(recurrent, sequence)), new[] { 1, width, numTokens });
 
         int length = numTokens;
-        for (int block = 0; block < _codecRatios.Length; block++)
+        foreach (int ratio in _codecRatios)
         {
-            int ratio = _codecRatios[block];
-
-            // ELU -> transposed conv; keep the centre length * ratio samples (non-causal unpadding).
-            var upsampled = _codecUpsample[block].Forward(_codecElu.Activate(x));
+            // ELU -> transposed conv (kernel 2r, stride r); keep the centre length * ratio samples.
+            var upsampled = Engine.TensorConvTranspose1D(Engine.ELU(x), _codecWeights[w], ratio, 0, 0);
+            var upBias = _codecWeights[w + 1];
+            upsampled = Engine.TensorAdd(upsampled, Engine.TensorBroadcastTo(
+                Engine.Reshape(upBias, new[] { 1, upBias.Length, 1 }), upsampled.Shape.ToArray()));
             int extra = upsampled.Shape[2] - length * ratio;
             int left = extra - extra / 2;
             length *= ratio;
-            x = Engine.TensorSlice(upsampled, new[] { 0, 0, left }, new[] { upsampled.Shape[0], upsampled.Shape[1], length });
+            x = Engine.TensorSlice(upsampled, new[] { 0, 0, left }, new[] { 1, upsampled.Shape[1], length });
 
             // Residual unit: x + Conv1(ELU(Conv3(ELU(x))))
-            var inner = _codecResidual[2 * block].Forward(_codecElu.Activate(x));
-            inner = _codecResidual[2 * block + 1].Forward(_codecElu.Activate(inner));
+            var inner = CodecConv(Engine.ELU(x), _codecWeights[w + 2], _codecWeights[w + 3]);
+            inner = CodecConv(Engine.ELU(inner), _codecWeights[w + 4], _codecWeights[w + 5]);
             x = Engine.TensorAdd(x, inner);
+            w += 6;
         }
 
-        var waveform = _codecOutputConv.Forward(_codecElu.Activate(x)); // [1, channels, numTokens * hop]
+        var waveform = CodecConv(Engine.ELU(x), _codecWeights[w], _codecWeights[w + 1]); // [1, channels, numTokens * hop]
 
         // Fit to the requested duration: trim, or zero-pad a short decode.
-        int produced = waveform.Shape[2];
-        int kept = Math.Min(produced, targetSamples);
+        int kept = Math.Min(waveform.Shape[2], targetSamples);
         var fitted = Engine.Reshape(
             Engine.TensorSlice(waveform, new[] { 0, 0, 0 }, new[] { 1, channels, kept }), new[] { channels, kept });
         if (kept < targetSamples)

@@ -946,6 +946,88 @@ public class AudioIntegrationTests
         }
     }
 
+    /// <summary>
+    /// The EnCodec decoder is pretrained and frozen in AudioGen, so its weights are frozen model state:
+    /// a save/load round trip must restore every decoder weight bit-for-bit, and the restored model must
+    /// decode the same tokens to the same audio.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task AudioGenModel_EnCodecDecoder_SurvivesSaveLoadRoundTrip()
+    {
+        await Task.Yield();
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            using var source = BuildSmallAudioGen(layerSeed: 1337);
+            using var restored = BuildSmallAudioGen(layerSeed: 4242);
+
+            var sourceWeights = source.CodecDecoderWeights;
+            Assert.NotEmpty(sourceWeights);
+            Assert.Equal(sourceWeights.Count, restored.CodecDecoderWeights.Count);
+            // Different seeds give different decoders, so the round trip has something to restore.
+            Assert.False(SameBits(sourceWeights[0].ToArray(), restored.CodecDecoderWeights[0].ToArray()));
+
+            // 5 tokens of one codebook with ids inside CodebookSize = 4
+            var codes = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new double[] { 0, 3, 1, 2, 3 }, [1, 1, 5]);
+            var expectedAudio = source.DecodeCodecTokens(codes, 0.1).ToArray();
+
+            restored.Deserialize(source.Serialize());
+
+            var restoredWeights = restored.CodecDecoderWeights;
+            Assert.Equal(sourceWeights.Count, restoredWeights.Count);
+            for (int i = 0; i < sourceWeights.Count; i++)
+            {
+                Assert.Equal(sourceWeights[i].Shape.ToArray(), restoredWeights[i].Shape.ToArray());
+                Assert.True(SameBits(sourceWeights[i].ToArray(), restoredWeights[i].ToArray()), $"decoder weight {i} changed");
+            }
+
+            var restoredAudio = restored.DecodeCodecTokens(codes, 0.1).ToArray();
+            Assert.Equal(expectedAudio.Length, restoredAudio.Length);
+            Assert.True(SameBits(expectedAudio, restoredAudio), "decoded audio changed after reload");
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+        }
+    }
+
+    private static AudioGenModel<double> BuildSmallAudioGen(int layerSeed)
+    {
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = layerSeed;
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(layerSeed);
+        return new AudioGenModel<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                inputType: AiDotNet.Enums.InputType.TwoDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative,
+                inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
+            options: new AudioGenOptions
+            {
+                ModelSize = AudioGenModelSize.Medium,
+                SampleRate = 8000,
+                DurationSeconds = 0.1,
+                MaxDurationSeconds = 0.1,
+                TextHiddenDim = 32,
+                LmHiddenDim = 32,
+                NumLmLayers = 2,
+                NumHeads = 2,
+                NumCodebooks = 1,
+                CodebookSize = 4,
+                MaxTextLength = 8,
+                Seed = 7,
+            });
+    }
+
+    private static bool SameBits(double[] a, double[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (BitConverter.DoubleToInt64Bits(a[i]) != BitConverter.DoubleToInt64Bits(b[i])) return false;
+        }
+        return true;
+    }
+
     #endregion
 
     #region AudioGenResult - Properties
