@@ -369,4 +369,36 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(3.0, average[0, 0], Precision);
         Assert.Equal(0.5, average[1, 1], Precision);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedAGC_AdaptiveProjectionScalesConflictingGradientEvenForTinyImportance()
+    {
+        await Task.Yield();
+
+        // Per parameter, (g * imp / imp^2) * imp = g, so a conflicting entry becomes g * (1 - alpha) whatever
+        // the importance magnitude. imp = 1e-6 (imp^2 = 1e-12) used to bypass the correction.
+        var fedAgc = new AiDotNet.FederatedLearning.ContinualLearning.FedAGCContinualLearning<double>(correctionStrength: 0.5);
+        var gradient = new Vector<double>(new[] { 2.0, -4.0, 3.0 });
+        var importance = new Vector<double>(new[] { -1e-6, 1.0, 1.0 });
+        var strengths = new Vector<double>(new[] { 0.5, 0.25, 0.5 });
+
+        var corrected = fedAgc.ProjectGradientAdaptive(gradient, importance, strengths);
+        Assert.Equal(1.0, corrected[0], Precision);
+        Assert.Equal(-3.0, corrected[1], Precision);
+        Assert.Equal(3.0, corrected[2], Precision);
+
+        // Adaptive strength: base * |imp| / max|imp| on conflicting entries only.
+        var adaptive = fedAgc.ComputeAdaptiveCorrectionStrength(gradient, importance);
+        Assert.Equal(0.5e-6, adaptive[0], Precision);
+        Assert.Equal(0.5, adaptive[1], Precision);
+        Assert.Equal(0.0, adaptive[2], Precision);
+
+        // Importance: surrogate L = (theta . x)^2, forward difference 2 (theta . x) x_i + eps x_i^2, squared,
+        // summed over the seeded draws and divided by the sample count. With one parameter every draw hits 0.
+        var single = new AiDotNet.FederatedLearning.ContinualLearning.FedAGCContinualLearning<double>();
+        var fisher = single.ComputeImportance(new Vector<double>(new[] { 3.0 }), new Matrix<double>(new[,] { { 2.0 }, { 1.0 } }));
+        double g0 = 2 * 6.0 * 2.0 + 1e-5 * 4.0;
+        double g1 = 2 * 3.0 * 1.0 + 1e-5 * 1.0;
+        Assert.Equal((g0 * g0 + g1 * g1) / 2.0, fisher[0], 6);
+    }
 }
