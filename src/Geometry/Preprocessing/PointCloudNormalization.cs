@@ -89,7 +89,7 @@ public static class PointCloudNormalization<T>
 
         // Math.Max propagates NaN, so a NaN range makes the largest range NaN (and the guard below false).
         var ranges = engine.TensorSubtract(max, min);
-        T maxRange = GeometryEngineOps<T>.AnyNan(ranges) ? NumOps.FromDouble(double.NaN) : engine.TensorMaxValue(ranges);
+        T maxRange = GeometryEngineOps<T>.PropagatingMax(ranges);
 
         if (NumOps.LessThan(maxRange, NumOps.FromDouble(1e-10)))
         {
