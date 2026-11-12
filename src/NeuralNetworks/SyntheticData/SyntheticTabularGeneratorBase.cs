@@ -167,9 +167,10 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     }
 
     /// <summary>
-    /// Clones column metadata, assigns indices, and computes statistics from data.
+    /// Clones column metadata, assigns indices, and computes statistics from data; a categorical column given without
+    /// its categories takes the distinct values the data holds. Shared with generators outside this hierarchy.
     /// </summary>
-    private List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    internal static List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
     {
         var prepared = new List<ColumnMetadata>(columns.Count);
 

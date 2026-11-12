@@ -32,32 +32,22 @@ public class Sharpen<T> : ImageAugmenterBase<T>
         // sharpen  = [-1,-1,-1; -1,8+L,-1; -1,-1,-1] / (L)
         // Effective kernel = (1-alpha)*identity + alpha*sharpen
 
-        for (int c = 0; c < data.Channels; c++)
-        {
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double original = NumOps.ToDouble(data.GetPixel(y, x, c));
+        // Laplacian: (center * (8 + L) - sum of the 8 neighbours) / (8 + L), edges replicated
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        // Laplacian kernel: -1 everywhere except the centre tap, which is 8 + lightness
+        T centre = NumOps.FromDouble(8 + lightness);
+        var laplacianKernel = engine.TensorAdd(
+            ImageTensor<T>.KernelTensor(new double[,] { { -1, -1, -1 }, { -1, 0, -1 }, { -1, -1, -1 } }),
+            engine.TensorMultiplyScalar(
+                ImageTensor<T>.KernelTensor(new double[,] { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 0 } }), centre));
+        var laplacian = engine.TensorDivideScalar(
+            ImageTensor<T>.Correlate(image, laplacianKernel, mirror: false), centre);
 
-                    // Compute Laplacian
-                    double laplacian = 0;
-                    for (int ky = -1; ky <= 1; ky++)
-                        for (int kx = -1; kx <= 1; kx++)
-                        {
-                            int ny = Math.Max(0, Math.Min(data.Height - 1, y + ky));
-                            int nx = Math.Max(0, Math.Min(data.Width - 1, x + kx));
-                            double neighbor = NumOps.ToDouble(data.GetPixel(ny, nx, c));
-                            if (ky == 0 && kx == 0)
-                                laplacian += neighbor * (8 + lightness);
-                            else
-                                laplacian -= neighbor;
-                        }
-                    laplacian /= (8 + lightness);
-
-                    double sharpened = original * (1 - alpha) + laplacian * alpha;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, sharpened))));
-                }
-        }
+        var sharpened = engine.TensorAdd(
+            engine.TensorMultiplyScalar(image, NumOps.FromDouble(1 - alpha)),
+            engine.TensorMultiplyScalar(laplacian, NumOps.FromDouble(alpha)));
+        result.SetFromPlanarTensor(engine.TensorClamp(sharpened, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

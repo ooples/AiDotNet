@@ -101,6 +101,13 @@ public static class CompiledStepRandom<T>
     /// <summary>Suppresses draws on this thread for a forward run only to resolve shapes; dispose to restore.</summary>
     internal static SuppressionScope SuppressDraws() => new SuppressionScope();
 
+    /// <summary>
+    /// Whether this thread is in a forward that is not a training step: one run only to resolve lazy shapes, or to
+    /// check a plan against the eager tape. Per-step state other than random draws (a batch norm's running
+    /// statistics) must not advance in it either, or the step that follows sees it advanced twice.
+    /// </summary>
+    internal static bool InNonStepForward => t_suppressDepth > 0;
+
     /// <summary>A scope in which <see cref="Draw"/> returns zeros without consuming the generator.</summary>
     internal sealed class SuppressionScope : IDisposable
     {

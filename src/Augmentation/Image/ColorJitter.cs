@@ -153,21 +153,14 @@ public class ColorJitter<T> : AugmentationBase<T, ImageTensor<T>>
         ShuffleArray(order, context);
 
         // Calculate mean for contrast adjustment
-        double[] channelMeans = new double[3];
-        int totalPixels = height * width;
-
-        for (int c = 0; c < 3; c++)
-        {
-            double sum = 0;
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    sum += NumOps.ToDouble(data.GetPixel(y, x, c));
-                }
-            }
-            channelMeans[c] = sum / totalPixels;
-        }
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var r = engine.TensorSliceAxis(image, 0, 0);
+        var g = engine.TensorSliceAxis(image, 0, 1);
+        var b = engine.TensorSliceAxis(image, 0, 2);
+        T meanR = engine.TensorMean(r);
+        T meanG = engine.TensorMean(g);
+        T meanB = engine.TensorMean(b);
 
         // Value range
         double minValue = data.IsNormalized ? 0.0 : 0.0;
@@ -178,70 +171,73 @@ public class ColorJitter<T> : AugmentationBase<T, ImageTensor<T>>
         const double gWeight = 0.587;
         const double bWeight = 0.114;
 
-        // Apply all adjustments per pixel
-        for (int y = 0; y < height; y++)
+        T brightness = NumOps.FromDouble(brightnessFactor);
+        T contrast = NumOps.FromDouble(contrastFactor);
+        T saturation = NumOps.FromDouble(saturationFactor);
+
+        // Apply operations in random order to the whole image
+        foreach (int op in order)
         {
-            for (int x = 0; x < width; x++)
+            switch (op)
             {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
+                case 0: // Brightness
+                    r = engine.TensorMultiplyScalar(r, brightness);
+                    g = engine.TensorMultiplyScalar(g, brightness);
+                    b = engine.TensorMultiplyScalar(b, brightness);
+                    break;
 
-                // Apply operations in random order
-                foreach (int op in order)
-                {
-                    switch (op)
+                case 1: // Contrast
+                    r = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorSubtractScalar(r, meanR), contrast), meanR);
+                    g = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorSubtractScalar(g, meanG), contrast), meanG);
+                    b = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorSubtractScalar(b, meanB), contrast), meanB);
+                    break;
+
+                case 2: // Saturation
+                    var gray = ImageTensor<T>.MixPlanes(r, g, b, rWeight, gWeight, bWeight);
+                    r = engine.TensorAdd(gray, engine.TensorMultiplyScalar(engine.TensorSubtract(r, gray), saturation));
+                    g = engine.TensorAdd(gray, engine.TensorMultiplyScalar(engine.TensorSubtract(g, gray), saturation));
+                    b = engine.TensorAdd(gray, engine.TensorMultiplyScalar(engine.TensorSubtract(b, gray), saturation));
+                    break;
+
+                case 3: // Hue
+                    if (Math.Abs(hueShift) > 0.001)
                     {
-                        case 0: // Brightness
-                            r *= brightnessFactor;
-                            g *= brightnessFactor;
-                            b *= brightnessFactor;
-                            break;
-
-                        case 1: // Contrast
-                            r = channelMeans[0] + (r - channelMeans[0]) * contrastFactor;
-                            g = channelMeans[1] + (g - channelMeans[1]) * contrastFactor;
-                            b = channelMeans[2] + (b - channelMeans[2]) * contrastFactor;
-                            break;
-
-                        case 2: // Saturation
-                            double gray = rWeight * r + gWeight * g + bWeight * b;
-                            r = gray + (r - gray) * saturationFactor;
-                            g = gray + (g - gray) * saturationFactor;
-                            b = gray + (b - gray) * saturationFactor;
-                            break;
-
-                        case 3: // Hue
-                            if (Math.Abs(hueShift) > 0.001)
-                            {
-                                // Convert to HSV, shift hue, convert back
-                                RgbToHsv(r, g, b, maxValue, out double h, out double s, out double v);
-                                h = (h + hueShift) % 1.0;
-                                if (h < 0) h += 1.0;
-                                HsvToRgb(h, s, v, maxValue, out r, out g, out b);
-                            }
-                            break;
+                        // Convert to HSV, shift hue, convert back
+                        (r, g, b) = ShiftHue(engine, r, g, b, hueShift, maxValue);
                     }
-                }
-
-                // Clamp to valid range
-                r = Math.Max(minValue, Math.Min(maxValue, r));
-                g = Math.Max(minValue, Math.Min(maxValue, g));
-                b = Math.Max(minValue, Math.Min(maxValue, b));
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(r));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(g));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(b));
-
-                // Keep alpha channel unchanged if present
-                for (int c = 3; c < channels; c++)
-                {
-                    result.SetPixel(y, x, c, data.GetPixel(y, x, c));
-                }
+                    break;
             }
         }
 
+        // Clamp to valid range; alpha and other extra channels are kept unchanged
+        T min = NumOps.FromDouble(minValue);
+        T max = NumOps.FromDouble(maxValue);
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image,
+            engine.TensorClamp(r, min, max), engine.TensorClamp(g, min, max), engine.TensorClamp(b, min, max)));
+
         return result;
+    }
+
+    private static (Tensor<T> R, Tensor<T> G, Tensor<T> B) ShiftHue(
+        IEngine engine, Tensor<T> r, Tensor<T> g, Tensor<T> b, double hueShift, double maxValue)
+    {
+        // Normalize to 0-1 range
+        T scale = NumOps.FromDouble(maxValue);
+        r = engine.TensorDivideScalar(r, scale);
+        g = engine.TensorDivideScalar(g, scale);
+        b = engine.TensorDivideScalar(b, scale);
+
+        var max = engine.TensorMax(r, engine.TensorMax(g, b));
+        var min = engine.TensorMin(r, engine.TensorMin(g, b));
+        var delta = engine.TensorSubtract(max, min);
+
+        var black = engine.TensorLessThan(engine.TensorAbs(max), NumOps.FromDouble(1e-10));
+        var s = engine.TensorWhere(black, ImageTensor<T>.Constant(max, 0.0), engine.TensorDivide(delta, max));
+        var h = ImageTensor<T>.HexconeHue(r, g, b, max, delta);
+        h = ImageTensor<T>.WrapUnitInterval(engine.TensorAddScalar(h, NumOps.FromDouble(hueShift)));
+
+        var (rr, gg, bb) = ImageTensor<T>.HsvToRgbPlanes(h, s, max);
+        return (engine.TensorMultiplyScalar(rr, scale), engine.TensorMultiplyScalar(gg, scale), engine.TensorMultiplyScalar(bb, scale));
     }
 
     private static void ShuffleArray(int[] array, AugmentationContext<T> context)
@@ -251,65 +247,6 @@ public class ColorJitter<T> : AugmentationBase<T, ImageTensor<T>>
             int j = context.GetRandomInt(0, i + 1);
             (array[i], array[j]) = (array[j], array[i]);
         }
-    }
-
-    private static void RgbToHsv(double r, double g, double b, double maxValue, out double h, out double s, out double v)
-    {
-        // Normalize to 0-1 range
-        r /= maxValue;
-        g /= maxValue;
-        b /= maxValue;
-
-        double max = Math.Max(r, Math.Max(g, b));
-        double min = Math.Min(r, Math.Min(g, b));
-        double delta = max - min;
-
-        v = max;
-        s = Math.Abs(max) < 1e-10 ? 0 : delta / max;
-
-        if (Math.Abs(delta) < 1e-10)
-        {
-            h = 0;
-        }
-        else if (Math.Abs(max - r) < 1e-10)
-        {
-            h = ((g - b) / delta) % 6;
-        }
-        else if (Math.Abs(max - g) < 1e-10)
-        {
-            h = (b - r) / delta + 2;
-        }
-        else
-        {
-            h = (r - g) / delta + 4;
-        }
-
-        h /= 6;
-        if (h < 0) h += 1;
-    }
-
-    private static void HsvToRgb(double h, double s, double v, double maxValue, out double r, out double g, out double b)
-    {
-        double c = v * s;
-        double x = c * (1 - Math.Abs((h * 6) % 2 - 1));
-        double m = v - c;
-
-        double r1, g1, b1;
-        int sector = (int)(h * 6) % 6;
-
-        switch (sector)
-        {
-            case 0: r1 = c; g1 = x; b1 = 0; break;
-            case 1: r1 = x; g1 = c; b1 = 0; break;
-            case 2: r1 = 0; g1 = c; b1 = x; break;
-            case 3: r1 = 0; g1 = x; b1 = c; break;
-            case 4: r1 = x; g1 = 0; b1 = c; break;
-            default: r1 = c; g1 = 0; b1 = x; break;
-        }
-
-        r = (r1 + m) * maxValue;
-        g = (g1 + m) * maxValue;
-        b = (b1 + m) * maxValue;
     }
 
     /// <inheritdoc />

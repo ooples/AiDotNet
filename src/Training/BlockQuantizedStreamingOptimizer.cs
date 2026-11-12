@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.Tensors.Interfaces;
@@ -262,6 +263,9 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
     /// The CPU step for the BF16 and FP32 moment layouts: the same per-element update as the 8-bit path, with each
     /// moment read from and written back to its 2-byte or 4-byte slot instead of a quantized block.
     /// </summary>
+    [ScalarKernel("Each element's moments are decoded from their BF16 or FP32 slots, updated by the subclass's per-element "
+        + "UpdateElement and re-encoded, as ApplyOneBlock does for the 8-bit layout; the indexer is only the fallback for "
+        + "a parameter or gradient without a live backing array.")]
     private void ApplyUnquantized(Tensor<T> param, Tensor<T> grad, int length)
     {
         int momentCount = _signedMoments.Length;

@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
@@ -106,13 +107,17 @@ public class TriaffineNER<T> : SpanBasedNERBase<T>
     /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers()
     {
-        return LayerHelper<T>.CreateDefaultSpanBasedNERLayers(
-            hiddenDimension: NEROptions.HiddenDimension,
-            numAttentionHeads: NEROptions.NumAttentionHeads,
-            numTransformerLayers: NEROptions.NumTransformerLayers,
-            intermediateDimension: NEROptions.IntermediateDimension,
-            spanEmbeddingDimension: NEROptions.SpanEmbeddingDimension,
-            numLabels: NEROptions.NumLabels,
-            dropoutRate: NEROptions.DropoutRate);
+        // The encoder, the paper's BiLSTM token representations (section 3.2; directions summed here) and the triaffine
+        // attention and scoring of width SpanEmbeddingDimension (the paper uses d = 256) with m = 30 retained spans (section 4.2).
+        foreach (var layer in CreateTokenEncoderLayers()) yield return layer;
+        yield return new BidirectionalLayer<T>(new LSTMLayer<T>(NEROptions.HiddenDimension), mergeMode: true,
+            activationFunction: (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new TriaffineSpanLayer<T>(NEROptions.HiddenDimension, NEROptions.SpanEmbeddingDimension, NEROptions.NumLabels, TopSpans);
     }
+
+    // Section 4.2: m = 30.
+    private const int TopSpans = 30;
+
+    /// <inheritdoc />
+    protected override Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen) => BuildSpanGridTargets(labels, seqLen);
 }
