@@ -514,8 +514,7 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
         }
 
         // Compute auxiliary loss from each intermediate classifier
-        T totalAuxiliaryLoss = NumOps.Zero;
-        int validClassifiers = 0;
+        var auxiliaryLosses = new List<T>(_auxiliaryClassifierLayers.Count);
 
         for (int i = 0; i < _auxiliaryClassifierLayers.Count; i++)
         {
@@ -541,14 +540,13 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
             Vector<T> auxPredictionVector = current.ToVector();
             T classifierLoss = LossFunction.CalculateLoss(auxPredictionVector, _lastExpectedOutput);
 
-            totalAuxiliaryLoss = NumOps.Add(totalAuxiliaryLoss, classifierLoss);
-            validClassifiers++;
+            auxiliaryLosses.Add(classifierLoss);
         }
 
         // Average the losses across all auxiliary classifiers
-        if (validClassifiers > 0)
+        if (auxiliaryLosses.Count > 0)
         {
-            _lastDeepSupervisionLoss = NumOps.Divide(totalAuxiliaryLoss, NumOps.FromDouble(validClassifiers));
+            _lastDeepSupervisionLoss = Engine.TensorMean(new Tensor<T>(auxiliaryLosses.ToArray(), new[] { auxiliaryLosses.Count }));
         }
         else
         {

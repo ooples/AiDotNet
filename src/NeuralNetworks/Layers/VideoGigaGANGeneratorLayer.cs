@@ -282,6 +282,7 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
         // Input-conditioned style vector shared over a clip's spatial positions. Each stage has
         // its own affine projection, matching GigaGAN's per-layer style modulation.
         var style = Engine.ReduceMean(features, new[] { 2, 3 }, keepDims: false);
+        T residualScale = NumOps.FromDouble(0.2);
         for (int block = 0; block < _numResBlocks; block++)
         {
             var residual = features;
@@ -309,7 +310,7 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
 
             features = Engine.TensorAdd(
                 residual,
-                Engine.TensorMultiplyScalar(blockOutput, NumOps.FromDouble(0.2)));
+                Engine.TensorMultiplyScalar(blockOutput, residualScale));
 
             if (block < _numStyleLayers)
                 features = InflateTemporal(features, batch, frames, _temporalConvolutions[block]);
@@ -317,6 +318,7 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
 
         // High-frequency shuttle: subtract a low-pass image, project the real input detail, then
         // carry and inject it through every progressive upsampling stage.
+        T shuttleWeight = NumOps.FromDouble(_hfShuttleWeight);
         var lowFrequency = AntiAlias(rawFrames);
         var highFrequency = Engine.TensorSubtract(rawFrames, lowFrequency);
         var shuttle = _highFrequencyProjection.Forward(highFrequency);
@@ -329,7 +331,7 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
                 _shuttleUpsampleConvolutions[stage].Forward(shuttle));
             features = Engine.TensorAdd(
                 features,
-                Engine.TensorMultiplyScalar(shuttle, NumOps.FromDouble(_hfShuttleWeight)));
+                Engine.TensorMultiplyScalar(shuttle, shuttleWeight));
         }
 
         var output = _outputProjection.Forward(features);
@@ -427,24 +429,21 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
         int height = input.Shape[2];
         int width = input.Shape[3];
         var padded = Engine.Pad(input, 1, 1, 1, 1, NumOps.Zero);
-        int[] kernel = [1, 2, 1];
-        Tensor<T>? blurred = null;
-        for (int y = 0; y < 3; y++)
-        {
-            for (int x = 0; x < 3; x++)
-            {
-                var shifted = Engine.TensorSlice(
-                    padded,
-                    new[] { 0, 0, y, x },
-                    new[] { batch, channels, height, width });
-                var weighted = Engine.TensorMultiplyScalar(
-                    shifted,
-                    NumOps.FromDouble((double)kernel[y] * kernel[x] / 16.0));
-                blurred = blurred is null ? weighted : Engine.TensorAdd(blurred, weighted);
-            }
-        }
-
-        return blurred ?? throw new InvalidOperationException("VideoGigaGAN BlurPool kernel is empty.");
+        // The [1, 2, 1] x [1, 2, 1] / 16 kernel is separable: blur the rows with [1, 2, 1] / 4, then the columns.
+        T quarter = NumOps.FromDouble(0.25);
+        T half = NumOps.FromDouble(0.5);
+        var top = Engine.TensorSlice(padded, new[] { 0, 0, 0, 0 }, new[] { batch, channels, height, width + 2 });
+        var middle = Engine.TensorSlice(padded, new[] { 0, 0, 1, 0 }, new[] { batch, channels, height, width + 2 });
+        var bottom = Engine.TensorSlice(padded, new[] { 0, 0, 2, 0 }, new[] { batch, channels, height, width + 2 });
+        var vertical = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(Engine.TensorAdd(top, bottom), quarter),
+            Engine.TensorMultiplyScalar(middle, half));
+        var left = Engine.TensorSlice(vertical, new[] { 0, 0, 0, 0 }, new[] { batch, channels, height, width });
+        var center = Engine.TensorSlice(vertical, new[] { 0, 0, 0, 1 }, new[] { batch, channels, height, width });
+        var right = Engine.TensorSlice(vertical, new[] { 0, 0, 0, 2 }, new[] { batch, channels, height, width });
+        return Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(Engine.TensorAdd(left, right), quarter),
+            Engine.TensorMultiplyScalar(center, half));
     }
 
     private Tensor<T> NearestUpsample(Tensor<T> input, int scale)
