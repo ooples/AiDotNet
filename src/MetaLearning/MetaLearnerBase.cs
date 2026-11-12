@@ -462,86 +462,86 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         ResetOptimizerState();
     }
 
+    // Distinguishes complete learner checkpoints from legacy encoder-only files.
+    private const int LearnerCheckpointMagic = unchecked((int)0xA1D04D4C);
+    private const int LearnerCheckpointVersion = 1;
+
     /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// This method saves the meta-model parameters. Note that optimizer state (momentum, velocity)
-    /// is not persisted and will be reset when loading. For production use, consider implementing
-    /// a custom serialization scheme that saves:
-    /// </para>
-    /// <list type="bullet">
-    /// <item>Model parameters (saved here)</item>
-    /// <item>Optimizer state (momentum, velocity vectors)</item>
-    /// <item>Current iteration count</item>
-    /// <item>Learning rate schedules</item>
-    /// </list>
+    /// Saves the learner's complete model serialization, including encoder parameters, learner-owned
+    /// weights and declared state, plus its training iteration. Declared optimizer buffers are retained.
     /// </remarks>
     public virtual void Save(string filePath)
     {
-        // Basic serialization - saves model parameters
-        // Note: Optimizer state is not persisted (will be reset on load)
-        var serializer = MetaModel as IModelSerializer;
-        if (serializer != null)
-        {
-            serializer.SaveModel(filePath);
-
-            // Save iteration count in a companion file for training resumption
-            var metaPath = filePath + ".meta";
-            try
-            {
-                System.IO.File.WriteAllText(metaPath, _currentIteration.ToString());
-            }
-            catch
-            {
-                // Non-critical: continue even if metadata save fails
-            }
-        }
-        else
-        {
-            throw new NotSupportedException("The meta-model does not support serialization.");
-        }
+        byte[] payload = Serialize();
+        using var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var writer = new BinaryWriter(stream);
+        writer.Write(LearnerCheckpointMagic);
+        writer.Write(LearnerCheckpointVersion);
+        writer.Write(_currentIteration);
+        writer.Write(payload.Length);
+        writer.Write(payload);
     }
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// This method loads the meta-model parameters. Note that optimizer state is not restored
-    /// and will be reset after loading. Call <see cref="Reset"/> after loading if you want
-    /// to ensure a clean training state.
-    /// </para>
+    /// Complete checkpoints restore learner-owned state. Legacy encoder-only checkpoints and their
+    /// optional .meta iteration files remain readable, with transient optimizer state reset.
     /// </remarks>
     public virtual void Load(string filePath)
     {
-        var serializer = MetaModel as IModelSerializer;
-        if (serializer != null)
+        byte[]? payload = null;
+        int iteration = 0;
+        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (var reader = new BinaryReader(stream))
         {
-            serializer.LoadModel(filePath);
-
-            // Try to restore iteration count from companion file
-            var metaPath = filePath + ".meta";
-            if (System.IO.File.Exists(metaPath))
+            if (stream.Length >= sizeof(int) && reader.ReadInt32() == LearnerCheckpointMagic)
             {
-                try
-                {
-                    var content = System.IO.File.ReadAllText(metaPath);
-                    if (int.TryParse(content, out int iteration))
-                    {
-                        _currentIteration = iteration;
-                    }
-                }
-                catch
-                {
-                    // Non-critical: continue even if metadata load fails
-                }
+                if (stream.Length - stream.Position < 3 * sizeof(int))
+                    throw new InvalidDataException("Truncated meta-learner checkpoint header.");
+                int version = reader.ReadInt32();
+                if (version != LearnerCheckpointVersion)
+                    throw new InvalidDataException($"Unsupported meta-learner checkpoint version {version}.");
+                iteration = reader.ReadInt32();
+                int length = reader.ReadInt32();
+                if (length < 0 || length != stream.Length - stream.Position)
+                    throw new InvalidDataException("Invalid meta-learner checkpoint payload length.");
+                payload = reader.ReadBytes(length);
             }
-
-            // Reset optimizer state since it's not persisted
-            ResetOptimizerState();
         }
-        else
+        if (payload is null)
         {
-            throw new NotSupportedException("The meta-model does not support serialization.");
+            LoadLegacyCheckpoint(filePath);
+            return;
         }
+        ResetOptimizerState();
+        Deserialize(payload);
+        _currentIteration = iteration;
+    }
+
+    private void LoadLegacyCheckpoint(string filePath)
+    {
+        if (MetaModel is not IModelSerializer serializer)
+            throw new NotSupportedException("The meta-model does not support serialization.");
+        serializer.LoadModel(filePath);
+        var metaPath = filePath + ".meta";
+        if (File.Exists(metaPath))
+        {
+            try
+            {
+                if (int.TryParse(File.ReadAllText(metaPath), out int iteration))
+                    _currentIteration = iteration;
+            }
+            catch (IOException)
+            {
+                // Legacy iteration metadata is optional; encoder restoration has already succeeded.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Preserve legacy loading when only the optional sidecar is inaccessible.
+            }
+        }
+        ResetOptimizerState();
     }
 
     /// <inheritdoc/>

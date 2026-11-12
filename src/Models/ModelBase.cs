@@ -537,9 +537,14 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         writer.Write(ModelSerializationMagic);
         writer.Write(GetType().FullName ?? GetType().Name);
         writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+        // Convert in bounded blocks: Half is not IConvertible, and a full double copy can be very large.
+        const int SerializationBlockSize = 16384;
+        for (int start = 0; start < parameters.Length;)
         {
-            writer.Write(Convert.ToDouble(parameters[i]));
+            int count = Math.Min(SerializationBlockSize, parameters.Length - start);
+            var values = new Tensor<T>(parameters.AsSpan().Slice(start, count).ToArray(), [count]).Cast<double>();
+            foreach (double value in values) writer.Write(value);
+            start += count;
         }
 
         // Whatever the model declared that the parameter vector does not carry: a retained training

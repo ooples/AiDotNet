@@ -4,11 +4,38 @@ using System.Runtime.Serialization;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
 using Xunit;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
 public class Elementwise11MemoryOptimizerTests
 {
+    [Fact]
+    public void PublicCheckpoint_PreservesHalfEncoderParameters()
+    {
+        using var persistence = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
+        var encoder = new HalfCheckpointEncoder();
+        encoder.SetParameters(new Vector<Half>(new[] { (Half)0.75 }));
+        var learner = new MAMLAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+            new MAMLOptions<Half, Tensor<Half>, Tensor<Half>>(encoder));
+        string path = System.IO.Path.GetTempFileName();
+        try
+        {
+            learner.Save(path);
+            var restored = new MAMLAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+                new MAMLOptions<Half, Tensor<Half>, Tensor<Half>>(new HalfCheckpointEncoder()));
+            restored.Load(path);
+            Assert.Equal(new[] { (Half)0.75 }, restored.GetParameters().ToArray());
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
     private static T Uninitialized<T>() => (T)FormatterServices.GetUninitializedObject(typeof(T));
     private static void Field(object target, string name, object value)
         => (target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
@@ -97,6 +124,23 @@ public class Elementwise11MemoryOptimizerTests
             Assert.InRange(second[1], 1e-12, 1e-9);
         }
         Assert.Equal((Half)((double)(Half)0.99 * 0.99), parameters[0]);
+    }
+}
+
+internal sealed partial class HalfCheckpointEncoder : ModelBase<Half, Tensor<Half>, Tensor<Half>>
+{
+    [TrainableParameter]
+    private Vector<Half> _weight = new(new[] { (Half)0.5 });
+
+    public override ILossFunction<Half> DefaultLossFunction => new MeanSquaredErrorLoss<Half>();
+    public override Tensor<Half> Predict(Tensor<Half> input) => Engine.TensorMultiplyScalar(input, _weight[0]);
+    public override void Train(Tensor<Half> input, Tensor<Half> expectedOutput)
+        => throw new NotSupportedException("Checkpoint-only fixture.");
+    public override IFullModel<Half, Tensor<Half>, Tensor<Half>> WithParameters(Vector<Half> parameters)
+    {
+        var copy = new HalfCheckpointEncoder();
+        copy.SetParameters(parameters);
+        return copy;
     }
 }
 #endif

@@ -5552,7 +5552,6 @@
 1	ADNELEM001|AiDotNet.ModelLoading.Pretrained.Qwen2MoEModelBuilder<T>.Build(AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig, AiDotNet.Agentic.Models.Local.INamedTensorSource, int)
 1	ADNELEM001|AiDotNet.ModelLoading.Pretrained.StarCoder2ModelBuilder<T>.Build(AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig, AiDotNet.Agentic.Models.Local.INamedTensorSource, int)
 1	ADNELEM001|AiDotNet.Models.ModelBase<T, TInput, TOutput>.Deserialize(byte[])
-1	ADNELEM001|AiDotNet.Models.ModelBase<T, TInput, TOutput>.Serialize()
 2	ADNELEM001|AiDotNet.Models.ModelStateRegistry<T>.Declare(string, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<int>?>, System.Action<AiDotNet.Tensors.LinearAlgebra.Vector<int>?>)
 2	ADNELEM001|AiDotNet.Models.ModelStateRegistry<T>.DeclareByteVector(string, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<byte>?>, System.Action<AiDotNet.Tensors.LinearAlgebra.Vector<byte>?>)
 2	ADNELEM001|AiDotNet.Models.ModelStateRegistry<T>.DeclareDoubleVector(string, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>?>, System.Action<AiDotNet.Tensors.LinearAlgebra.Vector<double>?>)
