@@ -519,6 +519,18 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region X11Decomposition Tests
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(11)]
+    public void X11_SeriesShorterThanOneSeasonalPeriod_ThrowsArgumentException(int length)
+    {
+        // Seasonal normalisation needs one full cycle; a partial cycle must be rejected up front.
+        var ts = new Vector<double>(Enumerable.Range(0, length).Select(i => 1.0 + i).ToArray());
+
+        var ex = Assert.Throws<ArgumentException>(() => new X11Decomposition<double>(ts, seasonalPeriod: 12));
+        Assert.Equal("timeSeries", ex.ParamName);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task X11_Construction_DoesNotThrow()
     {
