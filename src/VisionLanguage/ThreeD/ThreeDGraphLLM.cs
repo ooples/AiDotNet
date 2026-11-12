@@ -202,148 +202,148 @@ public partial class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisi
         int maxNodes = _options.MaxGraphNodes;
         int encoderDim = _options.PointEncoderDim;
 
-        // Step 1: Build scene graph nodes via spatial clustering
-        var nodePositions = new double[maxNodes, 3];
-        var nodeFeatures = new double[maxNodes][];
-        var nodeCounts = new int[maxNodes];
-        for (int n = 0; n < maxNodes; n++)
-            nodeFeatures[n] = new double[encoderDim];
+        var engine = Engine;
+        if (maxNodes < 0)
+            throw new OverflowException("The maximum number of graph nodes cannot be negative.");
+        // Points p < numPoints with p * channels + 2 < totalValues are read (the scan stops at the
+        // first point that is not).
+        int readPoints = ReadablePointCount(numPoints, channels, totalValues);
 
-        for (int p = 0; p < numPoints; p++)
+        Tensor<T> graphTokens;
+        if (readPoints == 0)
         {
-            int baseIdx = p * channels;
-            if (baseIdx + 2 >= totalValues)
-                break;
-
-            double x = NumOps.ToDouble(pointCloud[baseIdx]);
-            double y = NumOps.ToDouble(pointCloud[baseIdx + 1]);
-            double z = NumOps.ToDouble(pointCloud[baseIdx + 2]);
-
-            int nodeId =
-                Math.Abs((int)(x * 3.0) * 7919 ^ (int)(y * 3.0) * 7907 ^ (int)(z * 3.0) * 7901)
-                % maxNodes;
-
-            nodePositions[nodeId, 0] += x;
-            nodePositions[nodeId, 1] += y;
-            nodePositions[nodeId, 2] += z;
-            nodeCounts[nodeId]++;
-
-            for (int c = 0; c < channels && baseIdx + c < totalValues; c++)
-            {
-                double val = NumOps.ToDouble(pointCloud[baseIdx + c]);
-                nodeFeatures[nodeId][c % encoderDim] += val;
-            }
+            graphTokens = new Tensor<T>([encoderDim]);
         }
-
-        // Normalize nodes
-        int activeNodes = 0;
-        for (int n = 0; n < maxNodes; n++)
+        else
         {
-            if (nodeCounts[n] > 0)
+            // Step 1: Build scene graph nodes via spatial clustering:
+            // node = |(int)(3x) * 7919 ^ (int)(3y) * 7907 ^ (int)(3z) * 7901| % maxNodes.
+            var coords = PointCoordinates(pointCloud, readPoints, channels);
+            var nodeIds = HashPointCells(coords, 3.0, 7919, 7907, 7901, maxNodes);
+            var pointFeatures = FoldedPointChannels(pointCloud, readPoints, channels, encoderDim);
+
+            if (encoderDim == 0)
             {
-                for (int d = 0; d < 3; d++)
-                    nodePositions[n, d] /= nodeCounts[n];
-                for (int d = 0; d < encoderDim; d++)
-                    nodeFeatures[n][d] /= nodeCounts[n];
-                activeNodes++;
+                graphTokens = new Tensor<T>([0]);
             }
-        }
-
-        // Step 2: Build graph edges with spatial relationship labels
-        // Message passing: each node aggregates features from neighbors
-        int numRounds = 3; // GNN message passing rounds
-        for (int round = 0; round < numRounds; round++)
-        {
-            var newFeatures = new double[maxNodes][];
-            for (int n = 0; n < maxNodes; n++)
-                newFeatures[n] = new double[encoderDim];
-
-            for (int i = 0; i < maxNodes; i++)
+            else
             {
-                if (nodeCounts[i] == 0)
-                    continue;
+                var nodeSums = engine.ScatterAdd(
+                    pointFeatures,
+                    engine.TensorBroadcastTo(nodeIds.Reshape([readPoints, 1]), [readPoints, encoderDim]),
+                    0,
+                    maxNodes);
 
-                // Self-feature
-                for (int d = 0; d < encoderDim; d++)
-                    newFeatures[i][d] = nodeFeatures[i][d];
+                // Normalize nodes
+                var nodeCounts = engine.TensorBinCount(nodeIds, maxNodes).Cast<T>().Reshape([maxNodes, 1]);
+                var safeCounts = engine.TensorMax(nodeCounts, NumOps.One);
+                var active = engine.TensorGreaterThan(nodeCounts, NumOps.Zero);
+                var nodePositions = engine.TensorDivide(
+                    engine.ScatterAdd(coords, engine.TensorBroadcastTo(nodeIds.Reshape([readPoints, 1]), [readPoints, 3]), 0, maxNodes),
+                    engine.TensorBroadcastTo(safeCounts, [maxNodes, 3]));
+                var nodeFeatures = engine.TensorDivide(nodeSums, engine.TensorBroadcastTo(safeCounts, [maxNodes, encoderDim]));
 
-                for (int j = 0; j < maxNodes; j++)
+                // Step 2: Build graph edges with spatial relationship labels.
+                // Active nodes i != j within distance 3 are connected (dx = pos_j - pos_i).
+                var nodeIndex = engine.TensorArange<T>(0, maxNodes, 1);
+                var isSelf = engine.TensorEquals(
+                    engine.TensorBroadcastTo(nodeIndex.Reshape([maxNodes, 1]), [maxNodes, maxNodes]),
+                    engine.TensorBroadcastTo(nodeIndex.Reshape([1, maxNodes]), [maxNodes, maxNodes]));
+                Tensor<T> Delta(int axis)
                 {
-                    if (i == j || nodeCounts[j] == 0)
-                        continue;
+                    var column = engine.TensorSlice(nodePositions, [0, axis], [maxNodes, 1]);
+                    return engine.TensorSubtract(
+                        engine.TensorBroadcastTo(column.Reshape([1, maxNodes]), [maxNodes, maxNodes]),
+                        engine.TensorBroadcastTo(column, [maxNodes, maxNodes]));
+                }
+                var dx = Delta(0);
+                var dy = Delta(1);
+                var dz = Delta(2);
+                var dist = engine.TensorSqrt(engine.TensorAdd(
+                    engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy)),
+                    engine.TensorMultiply(dz, dz)));
+                // Only connect nearby nodes (spatial neighborhood); a NaN distance is not "> 3" and stays connected.
+                var edgeMask = engine.TensorMultiply(
+                    engine.TensorMultiply(
+                        engine.TensorMultiply(active, active.Reshape([1, maxNodes])),
+                        engine.ScalarMinusTensor(NumOps.One, isSelf)),
+                    engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(dist, NumOps.FromDouble(3.0))));
+                // Edge features encode spatial relationship type
+                var edgeWeight = engine.TensorExp(engine.TensorNegate(dist));
+                // Directional encoding (above/below, left/right, front/back)
+                var paddedDist = engine.TensorAddScalar(dist, NumOps.FromDouble(1e-8));
+                var verticalRel = engine.TensorDivide(dy, paddedDist); // +1 = above, -1 = below
+                var horizontalRel = engine.TensorDivide(dx, paddedDist);
 
-                    double dx = nodePositions[j, 0] - nodePositions[i, 0];
-                    double dy = nodePositions[j, 1] - nodePositions[i, 1];
-                    double dz = nodePositions[j, 2] - nodePositions[i, 2];
-                    double dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-
-                    // Only connect nearby nodes (spatial neighborhood)
-                    if (dist > 3.0)
-                        continue;
-
-                    // Edge features encode spatial relationship type
-                    double edgeWeight = Math.Exp(-dist);
-                    // Directional encoding (above/below, left/right, front/back)
-                    double verticalRel = dy / (dist + 1e-8); // +1 = above, -1 = below
-                    double horizontalRel = dx / (dist + 1e-8);
-
-                    for (int d = 0; d < encoderDim; d++)
-                    {
-                        double edgeMsg = nodeFeatures[j][d] * edgeWeight;
-                        // Modulate by spatial relationship
-                        double relBias =
-                            Math.Sin(verticalRel * (d + 1)) * 0.05
-                            + Math.Cos(horizontalRel * (d + 1)) * 0.05;
-                        newFeatures[i][d] += edgeMsg + relBias;
-                    }
+                // Relationship bias sin(vertical (d + 1)) 0.05 + cos(horizontal (d + 1)) 0.05 summed over each
+                // node's edges (the same every round).
+                var frequency = engine.TensorArange<T>(1, encoderDim + 1, 1).Reshape([1, encoderDim]);
+                T biasScale = NumOps.FromDouble(0.05);
+                var noTerms = new Tensor<T>([maxNodes, encoderDim]);
+                var relBiasRows = new Tensor<T>[maxNodes];
+                var edgeRows = new Tensor<T>[maxNodes];
+                var edgeWeightRows = new Tensor<T>[maxNodes];
+                var activeRows = new Tensor<T>[maxNodes];
+                for (int i = 0; i < maxNodes; i++)
+                {
+                    edgeRows[i] = engine.TensorBroadcastTo(
+                        engine.TensorSlice(edgeMask, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]), [maxNodes, encoderDim]);
+                    edgeWeightRows[i] = engine.TensorBroadcastTo(
+                        engine.TensorSlice(edgeWeight, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]), [maxNodes, encoderDim]);
+                    activeRows[i] = engine.TensorBroadcastTo(engine.TensorSlice(active, [i, 0], [1, 1]).Reshape([1]), [encoderDim]);
+                    var vertical = engine.TensorSlice(verticalRel, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]);
+                    var horizontal = engine.TensorSlice(horizontalRel, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]);
+                    var relBias = engine.TensorAdd(
+                        engine.TensorMultiplyScalar(engine.TensorSin(engine.TensorMultiply(vertical, frequency)), biasScale),
+                        engine.TensorMultiplyScalar(engine.TensorCos(engine.TensorMultiply(horizontal, frequency)), biasScale));
+                    relBiasRows[i] = engine.ReduceSum(engine.TensorWhere(edgeRows[i], relBias, noTerms), [0], false);
                 }
 
-                // Normalize aggregated features
-                double norm = 0;
-                for (int d = 0; d < encoderDim; d++)
-                    norm += newFeatures[i][d] * newFeatures[i][d];
-                norm = Math.Sqrt(norm) + 1e-8;
-                for (int d = 0; d < encoderDim; d++)
-                    newFeatures[i][d] /= norm;
-            }
-            nodeFeatures = newFeatures;
-        }
+                // Message passing: each node aggregates its own feature plus edgeWeight * neighbor features,
+                // then is L2-normalized (norm + 1e-8); inactive nodes are 0.
+                int numRounds = 3; // GNN message passing rounds
+                T epsilon = NumOps.FromDouble(1e-8);
+                var inactiveRow = new Tensor<T>([encoderDim]);
+                for (int round = 0; round < numRounds; round++)
+                {
+                    var newRows = new Tensor<T>[maxNodes];
+                    for (int i = 0; i < maxNodes; i++)
+                    {
+                        var messages = engine.TensorWhere(
+                            edgeRows[i], engine.TensorMultiply(nodeFeatures, edgeWeightRows[i]), noTerms);
+                        var aggregated = engine.TensorAdd(
+                            engine.TensorAdd(
+                                engine.TensorSlice(nodeFeatures, [i, 0], [1, encoderDim]).Reshape([encoderDim]),
+                                engine.ReduceSum(messages, [0], false)),
+                            relBiasRows[i]);
+                        // Normalize aggregated features
+                        var norm = engine.TensorAddScalar(
+                            engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(aggregated, aggregated), [0], true)), epsilon);
+                        newRows[i] = engine.TensorWhere(
+                            activeRows[i],
+                            engine.TensorDivide(aggregated, engine.TensorBroadcastTo(norm, [encoderDim])),
+                            inactiveRow).Reshape([1, encoderDim]);
+                    }
+                    nodeFeatures = engine.TensorConcatenate(newRows, 0);
+                }
 
-        // Step 3: Serialize graph tokens for LLM
-        var graphTokens = new Tensor<T>([encoderDim]);
-        double totalWeight = 0;
-        for (int n = 0; n < maxNodes; n++)
-        {
-            if (nodeCounts[n] == 0)
-                continue;
-            double weight = nodeCounts[n];
-            totalWeight += weight;
-            for (int d = 0; d < encoderDim; d++)
-                graphTokens[d] = NumOps.FromDouble(
-                    NumOps.ToDouble(graphTokens[d]) + nodeFeatures[n][d] * weight
-                );
+                // Step 3: Serialize graph tokens for LLM: the node-count weighted mean of the active nodes
+                // (the total weight is the number of read points).
+                var countsWide = engine.TensorBroadcastTo(nodeCounts, [maxNodes, encoderDim]);
+                var weighted = engine.TensorWhere(
+                    engine.TensorBroadcastTo(active, [maxNodes, encoderDim]),
+                    engine.TensorMultiply(nodeFeatures, countsWide),
+                    noTerms);
+                graphTokens = engine.TensorDivideScalar(engine.ReduceSum(weighted, [0], false), NumOps.FromDouble(readPoints));
+            }
         }
-        if (totalWeight > 1e-8)
-            for (int d = 0; d < encoderDim; d++)
-                graphTokens[d] = NumOps.FromDouble(NumOps.ToDouble(graphTokens[d]) / totalWeight);
 
         // Step 4: Encode and decode
         var encoded = graphTokens;
         for (int i = 0; i < _encoderLayerEnd && i < Layers.Count; i++)
             encoded = Layers[i].Forward(encoded);
 
-        var promptTokens = TokenizeText(prompt);
-        int promptLen = promptTokens.Length;
-        for (int d = 0; d < encoded.Length; d++)
-        {
-            if (promptLen > 0)
-            {
-                double pVal = NumOps.ToDouble(promptTokens[d % promptLen]);
-                double eVal = NumOps.ToDouble(encoded[d]);
-                double gate = 1.0 / (1.0 + Math.Exp(-pVal / 100.0));
-                encoded[d] = NumOps.FromDouble(eVal * (0.5 + gate));
-            }
-        }
+        encoded = PromptGated(encoded, TokenizeText(prompt));
 
         var output = encoded;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)

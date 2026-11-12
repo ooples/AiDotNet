@@ -445,6 +445,38 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// Spatial-hash bucket of each point, in int arithmetic:
+    /// |(int)(x * cellScale) * primeX ^ (int)(y * cellScale) * primeY ^ (int)(z * cellScale) * primeZ| % buckets.
+    /// </summary>
+    /// <param name="coords">[points, 3] XYZ coordinates.</param>
+    /// <param name="cellScale">Scale applied before truncating a coordinate to its cell.</param>
+    /// <param name="primeX">Hash multiplier of the X cell.</param>
+    /// <param name="primeY">Hash multiplier of the Y cell.</param>
+    /// <param name="primeZ">Hash multiplier of the Z cell.</param>
+    /// <param name="buckets">Number of buckets.</param>
+    /// <returns>A [points] tensor of bucket ids.</returns>
+    /// <exception cref="OverflowException">A hash is int.MinValue, which has no absolute value.</exception>
+    /// <exception cref="DivideByZeroException">buckets is 0 while there are points.</exception>
+    private protected Tensor<int> HashPointCells(Tensor<T> coords, double cellScale, int primeX, int primeY, int primeZ, int buckets)
+    {
+        var engine = Engine;
+        int points = coords.Shape[0];
+        if (points == 0)
+            return new Tensor<int>([0]);
+        if (buckets == 0)
+            throw new DivideByZeroException("Points cannot be hashed into zero buckets.");
+
+        var cells = engine.TensorTrunc(engine.TensorMultiplyScalar(coords, NumOps.FromDouble(cellScale))).Cast<int>();
+        var hashX = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 0], [points, 1]), primeX);
+        var hashY = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 1], [points, 1]), primeY);
+        var hashZ = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 2], [points, 1]), primeZ);
+        var mixed = engine.TensorBitwiseXor(engine.TensorBitwiseXor(hashX, hashY), hashZ).Reshape([points]);
+        if (engine.TensorSum(engine.TensorEquals(mixed, int.MinValue)) > 0)
+            throw new OverflowException("Negating the minimum value of a twos complement number is invalid.");
+        return engine.TensorRemainder(engine.TensorAbs(mixed), Tensor<int>.CreateDefault([points], buckets));
+    }
+
+    /// <summary>
     /// Per-point features: value c &lt; channels of point p (when inside the cloud) is added to feature
     /// c % featureDim.
     /// </summary>
