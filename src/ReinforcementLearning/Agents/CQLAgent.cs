@@ -242,40 +242,21 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var policyOutputTensor = _policyNetwork.Predict(stateTensor);
         var policyOutput = policyOutputTensor.ToVector();
 
-        // Extract mean and log_std
-        var mean = new Vector<T>(_options.ActionSize);
-        var logStd = new Vector<T>(_options.ActionSize);
-
-        for (int i = 0; i < _options.ActionSize; i++)
-        {
-            mean[i] = policyOutput[i];
-            logStd[i] = policyOutput[_options.ActionSize + i];
-
-            // Clamp log_std for numerical stability
-            logStd[i] = MathHelper.Clamp<T>(logStd[i], _numOps.FromDouble(-20), _numOps.FromDouble(2));
-        }
+        // Extract mean and log_std (clamped to [-20, 2] for numerical stability)
+        var engine = AiDotNetEngine.Current;
+        var mean = policyOutput.GetSubVector(0, _options.ActionSize);
+        var logStd = engine.Clamp(
+            policyOutput.GetSubVector(_options.ActionSize, _options.ActionSize), _numOps.FromDouble(-20), _numOps.FromDouble(2));
 
         if (!training)
         {
             // Return mean action during evaluation
-            for (int i = 0; i < mean.Length; i++)
-            {
-                mean[i] = MathHelper.Tanh<T>(mean[i]);
-            }
-            return mean;
+            return engine.Tanh(mean);
         }
 
-        // Sample action from Gaussian policy
-        var action = new Vector<T>(_options.ActionSize);
-        for (int i = 0; i < _options.ActionSize; i++)
-        {
-            var std = NumOps.Exp(logStd[i]);
-            var noise = GetSeededNormalRandom(_numOps.Zero, _numOps.One, _random);
-            var rawAction = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
-            action[i] = MathHelper.Tanh<T>(rawAction);
-        }
-
-        return action;
+        // Sample action from Gaussian policy: tanh(mean + exp(log_std) * N(0, 1)), one draw per dimension in order
+        var noise = StandardNormalDraws(_options.ActionSize);
+        return engine.Tanh(engine.Add(mean, engine.Multiply(engine.Exp(logStd), noise)));
     }
 
     /// <inheritdoc />
@@ -296,11 +277,13 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
 
         int gradientSteps = Math.Max(1, _options.GradientSteps);
-        T totalLoss = _numOps.Zero;
+        var stepLosses = new List<T>(gradientSteps);
         for (int step = 0; step < gradientSteps; step++)
         {
-            totalLoss = _numOps.Add(totalLoss, TrainStep());
+            stepLosses.Add(TrainStep());
         }
+
+        T totalLoss = AiDotNetEngine.Current.Sum(Vector<T>.FromEnumerable(stepLosses));
 
         _updateCount++;
         return _numOps.Divide(totalLoss, _numOps.FromDouble(gradientSteps));
@@ -336,65 +319,37 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         // Rows: the n dataset pairs, then for every state its `samples` uniform actions followed by its `samples`
         // policy actions, so the sampled block reshapes to [n, 2·samples] one state per row.
-        int rows = n + 2 * n * samples;
-        var qInput = new Tensor<T>([rows, saDim]);
-        var tdTargets = new Tensor<T>([n, 1]);
-        var batchStates = new Tensor<T>([n, stateDim]);
-        var nextStateActions = new Tensor<T>([n, saDim]);
+        var engine = AiDotNetEngine.Current;
 
         // log of the proposal density each sampled action is divided by in the importance-sampled log-sum-exp
         // (Kumar et al. 2020, Appendix F): Unif([-1,1]^d) has density 2^-d, and a policy sample has π(a|s).
-        var densityCorrection = new Tensor<T>([n, 2 * samples]);
         double uniformLogDensity = -actionDim * Math.Log(2.0);
 
-        var policyOutputs = _policyNetwork.Predict(StatesTensor(batch, useNext: false)).ToVector();
+        var batchStates = StatesTensor(batch, useNext: false);
+        var policyOutputs = _policyNetwork.Predict(batchStates).ToVector();
         var nextPolicyOutputs = _policyNetwork.Predict(StatesTensor(batch, useNext: true)).ToVector();
         int policyWidth = actionDim * 2;
 
-        for (int i = 0; i < n; i++)
-        {
-            var exp = batch[i];
-            for (int j = 0; j < stateDim; j++)
-            {
-                batchStates[i, j] = exp.State[j];
-                qInput[i, j] = exp.State[j];
-                nextStateActions[i, j] = exp.NextState[j];
-            }
-            for (int k = 0; k < actionDim; k++) qInput[i, stateDim + k] = exp.Action[k];
+        // Per state, in the order the random stream is consumed: a' ~ π(·|s'), then `samples` uniform actions,
+        // then `samples` policy actions.
+        var blocks = batch.Select((exp, i) => SampleBlock(exp, i * policyWidth, policyOutputs, nextPolicyOutputs, samples, uniformLogDensity)).ToList();
 
-            var (nextAction, _) = SampleSquashedAction(nextPolicyOutputs, i * policyWidth);
-            for (int k = 0; k < actionDim; k++) nextStateActions[i, stateDim + k] = nextAction[k];
-
-            int sampleBase = n + i * 2 * samples;
-            for (int m = 0; m < samples; m++)
-            {
-                int row = sampleBase + m;
-                for (int j = 0; j < stateDim; j++) qInput[row, j] = exp.State[j];
-                for (int k = 0; k < actionDim; k++)
-                    qInput[row, stateDim + k] = _numOps.FromDouble(_random.NextDouble() * 2.0 - 1.0);
-                densityCorrection[i, m] = _numOps.FromDouble(-uniformLogDensity);
-            }
-            for (int m = 0; m < samples; m++)
-            {
-                int row = sampleBase + samples + m;
-                var (action, logProb) = SampleSquashedAction(policyOutputs, i * policyWidth);
-                for (int j = 0; j < stateDim; j++) qInput[row, j] = exp.State[j];
-                for (int k = 0; k < actionDim; k++) qInput[row, stateDim + k] = action[k];
-                densityCorrection[i, samples + m] = _numOps.FromDouble(-logProb);
-            }
-        }
+        // Rows: the n dataset pairs, then for every state its `samples` uniform actions followed by its `samples`
+        // policy actions, so the sampled block reshapes to [n, 2·samples] one state per row.
+        var datasetRows = RLTensorOps.Batch(batch.Select(exp => ConcatenateStateAction(RLTensorOps.Head(exp.State, stateDim), RLTensorOps.Head(exp.Action, actionDim))), saDim);
+        var qInput = engine.TensorConcatenate(new[] { datasetRows }.Concat(blocks.Select(block => block.Rows)).ToArray(), 0);
+        var densityCorrection = RLTensorOps.StackRows(blocks.Select(block => block.Density).ToList());
+        var nextStateActions = RLTensorOps.Batch(
+            batch.Select((exp, i) => ConcatenateStateAction(RLTensorOps.Head(exp.NextState, stateDim), blocks[i].NextAction)), saDim);
 
         // Clipped double-Q TD target with a' ~ π(·|s') and no entropy bonus in the backup (the reference
         // implementation's deterministic backup): y = r + γ(1 − done)·min(Q'_1, Q'_2)(s', a').
-        var q1Next = _targetQ1Network.Predict(nextStateActions).ToVector();
-        var q2Next = _targetQ2Network.Predict(nextStateActions).ToVector();
-        for (int i = 0; i < n; i++)
-        {
-            T minNext = _numOps.LessThan(q1Next[i], q2Next[i]) ? q1Next[i] : q2Next[i];
-            tdTargets[i, 0] = batch[i].Done
-                ? batch[i].Reward
-                : _numOps.Add(batch[i].Reward, _numOps.Multiply(gamma, minNext));
-        }
+        var q1Next = RLTensorOps.Head(_targetQ1Network.Predict(nextStateActions).ToVector(), n).AsTensor();
+        var q2Next = RLTensorOps.Head(_targetQ2Network.Predict(nextStateActions).ToVector(), n).AsTensor();
+        var minNext = engine.TensorWhere(engine.TensorLessThan(q1Next, q2Next), q1Next, q2Next).ToVector();
+        var rewards = Vector<T>.FromEnumerable(batch.Select(exp => exp.Reward));
+        var done = batch.Select(exp => exp.Done).ToArray();
+        var tdTargets = new Tensor<T>([n, 1], RLTensorOps.TdTargets(rewards, minNext, done, gamma));
 
         double alphaPrime = Math.Min(Math.Exp(_logAlphaPrime), 1e6);
         double penaltyWeight = _numOps.ToDouble(_options.CQLAlpha);
@@ -428,13 +383,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private Tensor<T> StatesTensor(List<Experience<T, Vector<T>, Vector<T>>> batch, bool useNext)
     {
-        var states = new Tensor<T>([batch.Count, _options.StateSize]);
-        for (int i = 0; i < batch.Count; i++)
-        {
-            var source = useNext ? batch[i].NextState : batch[i].State;
-            for (int j = 0; j < _options.StateSize; j++) states[i, j] = source[j];
-        }
-        return states;
+        return RLTensorOps.Batch(batch.Select(exp => useNext ? exp.NextState : exp.State), _options.StateSize);
     }
 
     /// <summary>
@@ -448,27 +397,24 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         // log Σ exp is shift-invariant, so subtracting each row's maximum (a constant taken from the current
         // critic) changes nothing mathematically and keeps exp from overflowing.
+        var engine = AiDotNetEngine.Current;
         var current = critic.Predict(qInput).ToVector();
-        var rowShift = new Tensor<T>([n, width]);
-        var rowShiftVector = new Tensor<T>([n]);
-        double gap = 0.0;
-        for (int i = 0; i < n; i++)
-        {
-            double max = double.NegativeInfinity;
-            for (int m = 0; m < width; m++)
-            {
-                max = Math.Max(max, _numOps.ToDouble(current[n + i * width + m]) + _numOps.ToDouble(densityCorrection[i, m]));
-            }
-            double sum = 0.0;
-            for (int m = 0; m < width; m++)
-            {
-                sum += Math.Exp(_numOps.ToDouble(current[n + i * width + m]) + _numOps.ToDouble(densityCorrection[i, m]) - max);
-                rowShift[i, m] = _numOps.FromDouble(max);
-            }
-            rowShiftVector[i] = _numOps.FromDouble(max);
-            gap += max + Math.Log(sum) - Math.Log(width) - _numOps.ToDouble(current[i]);
-        }
-        gap /= n;
+        var currentDoubles = current.AsTensor().Cast<double>().ToVector();
+
+        // Per state: m = max_k (Q_k + c_k), log Σ_k exp(Q_k + c_k − m) + m − log(width) − Q(s, a_data), in double.
+        var scores = engine.TensorAdd(
+            engine.Reshape(currentDoubles.GetSubVector(n, n * width).AsTensor(), [n, width]),
+            densityCorrection.Cast<double>());
+        var rowMax = engine.ReduceMax(scores, [1], keepDims: false);
+        var rowSum = engine.ReduceSum(
+            engine.TensorExp(engine.TensorSubtract(scores, engine.TensorTile(engine.Reshape(rowMax, [n, 1]), [1, width]))),
+            [1], keepDims: false);
+        var perState = engine.TensorSubtract(
+            engine.TensorAddScalar(engine.TensorAdd(rowMax, engine.TensorLog(rowSum)), -Math.Log(width)),
+            currentDoubles.GetSubVector(0, n).AsTensor());
+        double gap = engine.TensorSum(perState) / n;
+        var rowShiftVector = rowMax.Cast<T>();
+        var rowShift = engine.TensorTile(engine.Reshape(rowShiftVector, [n, 1]), [1, width]);
 
         var trainable = (NeuralNetworkBase<T>)critic;
         trainable.TrainWithCustomLoss(qInput, q =>
@@ -509,9 +455,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             var logStds = Engine.TensorClamp(
                 Engine.TensorSlice(actorOutput, [0, actionSize], [n, actionSize]),
                 _numOps.FromDouble(-20), _numOps.FromDouble(2));
-            var noise = new Tensor<T>([n, actionSize]);
-            for (int i = 0; i < noise.Length; i++)
-                noise[i] = GetSeededNormalRandom(_numOps.Zero, _numOps.One, _random);
+            var noise = new Tensor<T>([n, actionSize], StandardNormalDraws(n * actionSize));
             var preSquash = Engine.TensorAdd(means, Engine.TensorMultiply(Engine.TensorExp(logStds), noise));
             var actions = PolicyDistributionHelper<T>.SquashAction(Engine, preSquash, 1.0);
             var logProbs = PolicyDistributionHelper<T>.ComputeSquashedGaussianLogProb(Engine, means, logStds, preSquash, 1.0);
@@ -535,20 +479,67 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     /// </summary>
     private (Vector<T> Action, double LogProb) SampleSquashedAction(Vector<T> policyOutputs, int offset)
     {
-        int actionSize = _options.ActionSize;
-        var action = new Vector<T>(actionSize);
-        double logProb = 0.0;
-        for (int k = 0; k < actionSize; k++)
-        {
-            double mean = _numOps.ToDouble(policyOutputs[offset + k]);
-            double logStd = Math.Min(Math.Max(_numOps.ToDouble(policyOutputs[offset + actionSize + k]), -20.0), 2.0);
-            double epsilon = _numOps.ToDouble(GetSeededNormalRandom(_numOps.Zero, _numOps.One, _random));
-            double squashed = Math.Tanh(mean + Math.Exp(logStd) * epsilon);
-            action[k] = _numOps.FromDouble(squashed);
-            logProb += -0.5 * epsilon * epsilon - logStd - 0.5 * Math.Log(2.0 * Math.PI)
-                - Math.Log(1.0 - squashed * squashed + 1e-6);
+            // ã = tanh(μ + σ·ε), log π = Σ_k [−½ε_k² − log σ_k − ½ log 2π − log(1 − ã_k² + 1e-6)], in double precision
+            int actionSize = _options.ActionSize;
+            var engine = AiDotNetEngine.Current;
+            var mean = policyOutputs.GetSubVector(offset, actionSize).AsTensor().Cast<double>().ToVector();
+            var logStd = engine.Clamp(policyOutputs.GetSubVector(offset + actionSize, actionSize).AsTensor().Cast<double>().ToVector(), -20.0, 2.0);
+            var epsilon = StandardNormalDraws(actionSize).AsTensor().Cast<double>().ToVector();
+            var squashed = engine.Tanh(engine.Add(mean, engine.Multiply(engine.Exp(logStd), epsilon)));
+            var oneMinusSquare = engine.Subtract(Vector<double>.CreateDefault(actionSize, 1.0), engine.Multiply(squashed, squashed));
+            var perDimension = engine.Subtract(
+                engine.Subtract(
+                    engine.Subtract(engine.Multiply(engine.Multiply(epsilon, epsilon), -0.5), logStd),
+                    Vector<double>.CreateDefault(actionSize, 0.5 * Math.Log(2.0 * Math.PI))),
+                engine.TensorLog(engine.TensorAddScalar(oneMinusSquare.AsTensor(), 1e-6)).ToVector());
+            return (squashed.AsTensor().Cast<T>().ToVector(), engine.Sum(perDimension));
         }
-        return (action, logProb);
+
+        /// <summary>
+        /// <paramref name="count"/> standard-normal draws from this agent's seeded stream, in order.
+        /// </summary>
+        private Vector<T> StandardNormalDraws(int count)
+        {
+            if (count <= 0)
+            {
+                return new Vector<T>(0);
+            }
+
+            T zero = _numOps.Zero;
+            T one = _numOps.One;
+            return new Vector<T>(Enumerable.Range(0, count).Select(_ => GetSeededNormalRandom(zero, one, _random)));
+        }
+
+        /// <summary>
+        /// One state's sampled critic rows, drawn in the order the scalar loop drew them: a' ~ π(·|s') for the TD
+        /// target, then <paramref name="samples"/> uniform actions on [-1, 1]^d, then <paramref name="samples"/> policy
+        /// actions; with each sampled row's log proposal-density correction.
+        /// </summary>
+        private (Vector<T> NextAction, Tensor<T> Rows, Vector<T> Density) SampleBlock(
+            Experience<T, Vector<T>, Vector<T>> exp, int offset, Vector<T> policyOutputs, Vector<T> nextPolicyOutputs,
+            int samples, double uniformLogDensity)
+        {
+            var engine = AiDotNetEngine.Current;
+            int stateDim = _options.StateSize;
+            int actionDim = _options.ActionSize;
+
+            var (nextAction, _) = SampleSquashedAction(nextPolicyOutputs, offset);
+
+            var uniform = new Vector<double>(Enumerable.Range(0, samples * actionDim).Select(_ => _random.NextDouble()));
+            var uniformActions = engine.Subtract(engine.Multiply(uniform, 2.0), Vector<double>.CreateDefault(samples * actionDim, 1.0));
+            var uniformRows = engine.Reshape(uniformActions.AsTensor().Cast<T>(), [samples, actionDim]);
+
+            var policySamples = Enumerable.Range(0, samples).Select(_ => SampleSquashedAction(policyOutputs, offset)).ToList();
+            var policyRows = RLTensorOps.StackRows(policySamples.Select(sample => sample.Action).ToList());
+
+            var states = engine.TensorTile(engine.Reshape(RLTensorOps.Head(exp.State, stateDim).AsTensor(), [1, stateDim]), [2 * samples, 1]);
+            var actions = engine.TensorConcatenate([uniformRows, policyRows], 0);
+            var rows = engine.TensorConcatenate([states, actions], 1);
+
+            var density = RLTensorOps.Concat(
+                Vector<double>.CreateDefault(samples, -uniformLogDensity).AsTensor().Cast<T>().ToVector(),
+                new Vector<double>(policySamples.Select(sample => -sample.LogProb)).AsTensor().Cast<T>().ToVector());
+            return (nextAction, rows, density);
     }
 
     /// <summary>
@@ -655,12 +646,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     {
         // CQL uses custom gradient computation - return zero gradients as placeholder
         var parameters = GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            gradients[i] = _numOps.Zero;
-        }
-        return gradients;
+        return Vector<T>.CreateDefault(parameters.Length, _numOps.Zero);
     }
 
     /// <inheritdoc/>
