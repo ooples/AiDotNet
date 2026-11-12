@@ -202,8 +202,9 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
             var diff = Engine.TensorSubtract(Engine.TensorBroadcastTo(query, cube), Engine.TensorBroadcastTo(library.Reshape(new[] { 1, libSize, embDim }), cube));
             var distances = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 2 }, false));
 
-            // A row is never its own neighbour
-            var self = Engine.TensorSlice(Engine.TensorEye<T>(libSize), new[] { b0, 0 }, new[] { rows, libSize });
+            // A row is never its own neighbour: the [rows, libSize] one-hot of the block's row indices.
+            var blockRowIndex = new Tensor<int>(Enumerable.Range(b0, rows).ToArray(), new[] { rows });
+            var self = Engine.TensorOneHot<T>(blockRowIndex, libSize);
             var remaining = Engine.TensorWhere(self, Engine.TensorFullLike(distances, excluded), distances);
 
             // Successive argmin (first index on ties), each pick removed before the next
