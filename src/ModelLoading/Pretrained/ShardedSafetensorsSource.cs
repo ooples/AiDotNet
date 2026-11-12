@@ -67,6 +67,9 @@ public sealed class ShardedSafetensorsSource : INamedTensorSource, IDisposable
         return file.ReadAsDouble(name);
     }
 
+    /// <summary>The shard holding <paramref name="name"/>, or null when absent.</summary>
+    internal SafetensorsFile? FileOf(string name) => _tensorToFile.TryGetValue(name, out var file) ? file : null;
+
     private void LoadFromIndex(string directory, string indexPath)
     {
         JObject index;

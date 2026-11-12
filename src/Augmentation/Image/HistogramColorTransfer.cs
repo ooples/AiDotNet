@@ -24,66 +24,50 @@ public class HistogramColorTransfer<T> : ImageAugmenterBase<T>
         double maxVal = source.IsNormalized ? 1.0 : 255.0;
         int numBins = 256;
 
-        for (int c = 0; c < Math.Min(source.Channels, reference.Channels); c++)
+        var engine = Engine;
+        int channels = Math.Min(source.Channels, reference.Channels);
+        var sourcePlanar = source.ToPlanarTensor();
+        var referencePlanar = reference.ToPlanarTensor();
+        T keep = NumOps.FromDouble(1 - BlendFactor);
+        T blend = NumOps.FromDouble(BlendFactor);
+        T zero = NumOps.Zero;
+        T max = NumOps.FromDouble(maxVal);
+        T binSpan = NumOps.FromDouble(numBins - 1.0);
+        var planes = new Tensor<T>[channels];
+
+        for (int c = 0; c < channels; c++)
         {
-            // Build source CDF
-            var srcHist = new double[numBins];
-            for (int y = 0; y < source.Height; y++)
-                for (int x = 0; x < source.Width; x++)
-                {
-                    int bin = (int)(NumOps.ToDouble(source.GetPixel(y, x, c)) / maxVal * (numBins - 1));
-                    bin = Math.Max(0, Math.Min(numBins - 1, bin));
-                    srcHist[bin]++;
-                }
+            // Normalized source and reference CDFs
+            var srcPlane = engine.TensorSliceAxis(sourcePlanar, 0, c);
+            var srcBins = ImageTensor<T>.HistogramBins(srcPlane, maxVal, numBins);
+            var srcCdf = NormalizedCdf(engine, srcBins, numBins);
+            var refCdf = NormalizedCdf(engine,
+                ImageTensor<T>.HistogramBins(engine.TensorSliceAxis(referencePlanar, 0, c), maxVal, numBins), numBins);
 
-            var srcCdf = new double[numBins];
-            srcCdf[0] = srcHist[0];
-            for (int i = 1; i < numBins; i++) srcCdf[i] = srcCdf[i - 1] + srcHist[i];
-            double srcTotal = srcCdf[numBins - 1];
-            if (srcTotal > 0)
-                for (int i = 0; i < numBins; i++) srcCdf[i] /= srcTotal;
-
-            // Build reference CDF
-            var refHist = new double[numBins];
-            for (int y = 0; y < reference.Height; y++)
-                for (int x = 0; x < reference.Width; x++)
-                {
-                    int bin = (int)(NumOps.ToDouble(reference.GetPixel(y, x, c)) / maxVal * (numBins - 1));
-                    bin = Math.Max(0, Math.Min(numBins - 1, bin));
-                    refHist[bin]++;
-                }
-
-            var refCdf = new double[numBins];
-            refCdf[0] = refHist[0];
-            for (int i = 1; i < numBins; i++) refCdf[i] = refCdf[i - 1] + refHist[i];
-            double refTotal = refCdf[numBins - 1];
-            if (refTotal > 0)
-                for (int i = 0; i < numBins; i++) refCdf[i] /= refTotal;
-
-            // Build mapping LUT
-            var lut = new int[numBins];
-            for (int i = 0; i < numBins; i++)
-            {
-                int j = 0;
-                while (j < numBins - 1 && refCdf[j] < srcCdf[i]) j++;
-                lut[i] = j;
-            }
+            // Mapping LUT: first reference bin whose CDF reaches the source CDF (last bin if none)
+            var lut = engine.TensorClampMax(engine.TensorSearchSorted(refCdf, srcCdf, false), numBins - 1);
 
             // Apply mapping with blend
-            for (int y = 0; y < source.Height; y++)
-                for (int x = 0; x < source.Width; x++)
-                {
-                    double original = NumOps.ToDouble(source.GetPixel(y, x, c));
-                    int bin = (int)(original / maxVal * (numBins - 1));
-                    bin = Math.Max(0, Math.Min(numBins - 1, bin));
-                    double mapped = (double)lut[bin] / (numBins - 1) * maxVal;
-                    double blended = original * (1 - BlendFactor) + mapped * BlendFactor;
-                    result.SetPixel(y, x, c,
-                        NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, blended))));
-                }
+            var levels = engine.TensorMultiplyScalar(engine.TensorDivideScalar(lut.Cast<T>(), binSpan), max);
+            var mapped = engine.TensorTake(levels, srcBins);
+            planes[c] = engine.TensorClamp(
+                engine.TensorAdd(engine.TensorMultiplyScalar(srcPlane, keep), engine.TensorMultiplyScalar(mapped, blend)),
+                zero, max);
         }
 
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(sourcePlanar, planes));
+
         return result;
+    }
+
+    /// <summary>
+    /// CDF of the bin histogram, divided by the total count when it is positive.
+    /// </summary>
+    private static Tensor<T> NormalizedCdf(IEngine engine, Tensor<int> bins, int numBins)
+    {
+        var cdf = engine.TensorCumSum(engine.TensorBinCount(engine.Reshape(bins, [bins.Length]), numBins), 0).Cast<T>();
+        int total = bins.Length;
+        return total > 0 ? engine.TensorDivideScalar(cdf, NumOps.FromDouble(total)) : cdf;
     }
 
     /// <inheritdoc />

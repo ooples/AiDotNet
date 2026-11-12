@@ -92,20 +92,13 @@ public class ToFloat<T> : ImageAugmenterBase<T>
         double sourceRange = SourceMax - SourceMin;
         double targetRange = TargetMax - TargetMin;
 
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    // Map from source range to [0, 1], then to target range
-                    double normalized = (value - SourceMin) / sourceRange;
-                    double mapped = normalized * targetRange + TargetMin;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(mapped));
-                }
-            }
-        }
+        // Map from source range to [0, 1], then to target range
+        var engine = Engine;
+        var normalized = engine.TensorDivideScalar(
+            engine.TensorSubtractScalar(data.ToPlanarTensor(), NumOps.FromDouble(SourceMin)), NumOps.FromDouble(sourceRange));
+        var mapped = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(normalized, NumOps.FromDouble(targetRange)), NumOps.FromDouble(TargetMin));
+        result.SetFromPlanarTensor(mapped);
 
         // Mark as normalized if target range is within typical normalized ranges [0,1] or [-1,1]
         result.IsNormalized = (TargetMin >= -1.0 && TargetMax <= 1.0);

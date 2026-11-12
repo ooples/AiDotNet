@@ -551,7 +551,7 @@ public class TimeSeriesIntegrationTests
         var (x, y) = CreateLinearTrendData(60);
         var options = new AutoformerOptions<double>
         {
-            LookbackWindow = 10,
+            LookbackWindow = 10, LabelLength = 5,
             ForecastHorizon = 3,
             EmbeddingDim = 16,
             NumEncoderLayers = 1,
@@ -575,8 +575,10 @@ public class TimeSeriesIntegrationTests
         var options = new InformerOptions<double>
         {
             LookbackWindow = 10,
+            LabelLength = 5,
             ForecastHorizon = 3,
             EmbeddingDim = 16,
+            FeedForwardDim = 32,
             NumEncoderLayers = 1,
             NumDecoderLayers = 1,
             NumAttentionHeads = 2,

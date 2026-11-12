@@ -63,6 +63,7 @@ namespace AiDotNet.Clustering.Neural;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288", Year = 1982, Authors = "Teuvo Kohonen")]
+[TaskVariantOf(typeof(AiDotNet.NeuralNetworks.SelfOrganizingMap<>), "clustering")]
 public partial class SelfOrganizingMap<T> : ClusteringBase<T>
 {
     private readonly SOMOptions<T> _options;
@@ -133,68 +134,24 @@ public partial class SelfOrganizingMap<T> : ClusteringBase<T>
             }
         }
 
-        // Initialize weights randomly within the data range
-        _weights = new T[height, width][];
-        for (int r = 0; r < height; r++)
-        {
-            for (int c = 0; c < width; c++)
-            {
-                _weights[r, c] = new T[d];
-                for (int j = 0; j < d; j++)
-                {
-                    double range = maxVals[j] - minVals[j];
-                    if (range < 1e-10) range = 1.0;
-                    _weights[r, c][j] = NumOps.FromDouble(minVals[j] + rand.NextDouble() * range);
-                }
-            }
-        }
-
-        // Get initial parameters
-        double initialRadius = _options.InitialNeighborhoodRadius > 0
-            ? _options.InitialNeighborhoodRadius
-            : Math.Max(width, height) / 2.0;
-
-        double timeConstant = Options.MaxIterations / Math.Log(initialRadius);
-
-        // Training
+        // SOM_PAK's random initialization within the data range, then its schedules on the shared map.
+        var map = new NeuralNetworks.SelfOrganizingMapCore<T>(new NeuralNetworks.SelfOrganizingMapConfiguration(
+            width, height, d, Options.MaxIterations, _options.InitialLearningRate, _options.InitialNeighborhoodRadius,
+            _options.Topology, _options.NeighborhoodType));
+        map.InitializeWithinRange(minVals, maxVals, rand);
+        var drawn = new T[d];
         for (int iter = 0; iter < Options.MaxIterations; iter++)
         {
-            // Decay parameters
-            double radius = initialRadius * Math.Exp(-iter / timeConstant);
-            double learningRate = _options.InitialLearningRate * Math.Exp(-(double)iter / Options.MaxIterations);
-
-            // Select a random training sample
+            // A random training sample each step (SOM_PAK's -rand order).
             int sampleIdx = rand.Next(n);
-            var sample = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                sample[j] = x[sampleIdx, j];
-            }
-
-            // Find BMU
-            var (bmuRow, bmuCol) = FindBMU(sample, d);
-
-            // Update BMU and neighbors
-            for (int r = 0; r < height; r++)
-            {
-                for (int c = 0; c < width; c++)
-                {
-                    double distance = GetGridDistance(bmuRow, bmuCol, r, c);
-                    double influence = GetNeighborhoodInfluence(distance, radius);
-
-                    if (influence > 0.001)
-                    {
-                        T scaleFactor = NumOps.FromDouble(learningRate * influence);
-                        for (int j = 0; j < d; j++)
-                        {
-                            _weights[r, c][j] = NumOps.Add(_weights[r, c][j],
-                                NumOps.Multiply(scaleFactor,
-                                    NumOps.Subtract(sample[j], _weights[r, c][j])));
-                        }
-                    }
-                }
-            }
+            for (int j = 0; j < d; j++) drawn[j] = x[sampleIdx, j];
+            map.Step(drawn, iter, Distance);
         }
+        _weights = new T[height, width][];
+        var codebook = map.Codebook.AsSpan();
+        for (int r = 0; r < height; r++)
+            for (int c = 0; c < width; c++)
+                _weights[r, c] = codebook.Slice((r * width + c) * d, d).ToArray();
 
         // Cluster the neurons using K-Means on weight vectors
         ClusterNeurons(width, height, d);
@@ -299,84 +256,21 @@ public partial class SelfOrganizingMap<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
+    /// <summary>The configured distance, or null for SOM_PAK's Euclidean distance.</summary>
+    private Func<Vector<T>, Vector<T>, T>? Distance => _options.DistanceMetric is { } metric ? metric.Compute : null;
+
     private (int row, int col) FindBMU(T[] sample, int d)
     {
-        int bmuRow = 0;
-        int bmuCol = 0;
-        T minDist = NumOps.MaxValue;
-
-        var sampleVec = new Vector<T>(sample);
-
-        for (int r = 0; r < _options.GridHeight; r++)
-        {
-            for (int c = 0; c < _options.GridWidth; c++)
-            {
-                var weightVec = new Vector<T>(FittedWeights[r, c]);
-                // Inline sum-of-squares — see ClusteringBase.ComputeDistance for
-                // the rationale (Engine.DotProduct on tiny vectors dispatches
-                // to GPU when AutoDetectAndConfigureGpu has switched backends
-                // and produces wrong values, surfaced as #1224 Cluster B).
-                T dist = NumOps.Zero;
-                for (int j = 0; j < d; j++)
-                {
-                    T diffJ = NumOps.Subtract(sampleVec[j], weightVec[j]);
-                    dist = NumOps.Add(dist, NumOps.Multiply(diffJ, diffJ));
-                }
-
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    bmuRow = r;
-                    bmuCol = c;
-                }
-            }
-        }
-
-        return (bmuRow, bmuCol);
-    }
-
-    private double GetGridDistance(int r1, int c1, int r2, int c2)
-    {
-        int width = _options.GridWidth;
-        int height = _options.GridHeight;
-
-        double dr = r1 - r2;
-        double dc = c1 - c2;
-
-        if (_options.Topology == SOMTopology.Toroidal)
-        {
-            // Handle wrapping
-            if (Math.Abs(dr) > height / 2.0) dr = height - Math.Abs(dr);
-            if (Math.Abs(dc) > width / 2.0) dc = width - Math.Abs(dc);
-        }
-
-        if (_options.Topology == SOMTopology.Hexagonal)
-        {
-            // Adjust for hexagonal grid distance
-            double xDist = dc + (r1 % 2 - r2 % 2) * 0.5;
-            return Math.Sqrt(dr * dr + xDist * xDist);
-        }
-
-        return Math.Sqrt(dr * dr + dc * dc);
-    }
-
-    private double GetNeighborhoodInfluence(double distance, double radius)
-    {
-        switch (_options.NeighborhoodType)
-        {
-            case NeighborhoodFunction.Gaussian:
-                return Math.Exp(-(distance * distance) / (2 * radius * radius));
-
-            case NeighborhoodFunction.Bubble:
-                return distance <= radius ? 1.0 : 0.0;
-
-            case NeighborhoodFunction.MexicanHat:
-                double normalized = distance / radius;
-                return (1 - 2 * normalized * normalized) * Math.Exp(-normalized * normalized);
-
-            default:
-                return Math.Exp(-(distance * distance) / (2 * radius * radius));
-        }
+        int width = _options.GridWidth, height = _options.GridHeight;
+        var codebook = new Tensor<T>(new[] { width * height, d });
+        var span = codebook.AsWritableSpan();
+        for (int r = 0; r < height; r++)
+            for (int c = 0; c < width; c++)
+                FittedWeights[r, c].AsSpan().CopyTo(span.Slice((r * width + c) * d, d));
+        var map = new NeuralNetworks.SelfOrganizingMapCore<T>(new NeuralNetworks.SelfOrganizingMapConfiguration(
+            width, height, d, Math.Max(1, Options.MaxIterations), _options.InitialLearningRate), codebook);
+        int unit = map.BestMatchingUnit(sample, Distance);
+        return (unit / width, unit % width);
     }
 
     private void ClusterNeurons(int width, int height, int d)

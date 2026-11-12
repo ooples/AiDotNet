@@ -27,7 +27,6 @@ public class SVTROptions : DocumentNeuralNetworkOptions
         LocalMixingBlocks = other.LocalMixingBlocks;
         LocalWindowHeight = other.LocalWindowHeight;
         LocalWindowWidth = other.LocalWindowWidth;
-        OutputCharacterPositions = other.OutputCharacterPositions;
         OutputChannels = other.OutputChannels;
         LastStageDropout = other.LastStageDropout;
         DropPathRate = other.DropPathRate;
@@ -64,8 +63,8 @@ public class SVTROptions : DocumentNeuralNetworkOptions
     /// <summary>Local component-mixing window width.</summary>
     public int LocalWindowWidth { get; set; } = 11;
 
-    /// <summary>Width of the recognition sequence after height collapse.</summary>
-    public int OutputCharacterPositions { get; set; } = 25;
+    /// <summary>Width of the recognition sequence after height collapse: the stem halves the width twice, so InputWidth / 4.</summary>
+    public int OutputCharacterPositions => InputWidth / 4;
 
     /// <summary>Channel width presented to the CTC head.</summary>
     public int OutputChannels { get; set; } = 192;
@@ -112,10 +111,6 @@ public class SVTROptions : DocumentNeuralNetworkOptions
         if (InputWidth <= 0 || InputWidth % 4 != 0)
             throw new ArgumentOutOfRangeException(
                 nameof(InputWidth), "Input width must be positive and divisible by 4.");
-        if (OutputCharacterPositions != InputWidth / 4)
-            throw new ArgumentException(
-                "OutputCharacterPositions must equal InputWidth / 4.",
-                nameof(OutputCharacterPositions));
         int totalBlocks = StageDepths.Sum();
         if (LocalMixingBlocks < 0 || LocalMixingBlocks > totalBlocks)
             throw new ArgumentOutOfRangeException(nameof(LocalMixingBlocks));

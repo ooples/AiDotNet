@@ -456,9 +456,11 @@ public class DecisionTransformerPaperTests
             var network = (NeuralNetworkBase<double>)agent.TransformerNetwork;
 
             var rng = RandomHelper.CreateSeededRandom(11);
-            int features = network.Architecture.InputSize;
+            int features = agent.Network.StepWidth;
             var tokens = new Tensor<double>(new[] { 1, 12, features });
             for (int i = 0; i < tokens.Length; i++) tokens.SetFlat(i, rng.NextDouble());
+            // The final packed feature is an integer timestep consumed by the embedding table.
+            for (int i = 0; i < 12; i++) tokens[0, i, features - 1] = i;
 
             network.SetTrainingMode(true);
             var first = network.ForwardForTraining(tokens).ToVector();

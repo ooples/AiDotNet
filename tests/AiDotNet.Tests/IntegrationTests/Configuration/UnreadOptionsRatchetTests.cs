@@ -676,6 +676,46 @@ public class UnreadOptionsRatchetTests
             }
         }
 
+        // A read through an interface the options class implements is a read of the class's
+        // implementing member. The IL names the INTERFACE's getter (`settings.ImageSize` on an
+        // ISam2Settings emits a callvirt to ISam2Settings.get_ImageSize), so without this map
+        // every option a model consumes through such an interface reported unread: 125 of the
+        // SAM 2 family's, which Sam2Runtime reads through ISam2Settings.
+        foreach (var type in assembly.GetTypes())
+        {
+            if (!IsOptionsType(type) || type.IsInterface) continue;
+            Type[] interfaces;
+            try { interfaces = type.GetInterfaces(); }
+            catch { continue; }
+            foreach (var contract in interfaces)
+            {
+                InterfaceMapping map;
+                try { map = type.GetInterfaceMap(contract); }
+                catch { continue; }
+                var contractDefinition = contract.IsGenericType ? contract.GetGenericTypeDefinition() : contract;
+                for (int i = 0; i < map.InterfaceMethods.Length; i++)
+                {
+                    var interfaceMethod = map.InterfaceMethods[i];
+                    var interfaceKey = (contractDefinition.FullName ?? contractDefinition.Name,
+                        interfaceMethod.Name.StartsWith("get_", StringComparison.Ordinal)
+                            ? interfaceMethod.Name.Substring(4)
+                            : interfaceMethod.Name);
+                    if (!called.Contains(interfaceKey)) continue;
+                    var implementation = map.TargetMethods[i];
+                    var owner = implementation.DeclaringType;
+                    if (owner == null) continue;
+                    if (owner.IsGenericType) owner = owner.GetGenericTypeDefinition();
+                    // Keyed exactly as the scan keys an options member: a getter by its property
+                    // name, anything else (an explicit implementation) by its method name, so the
+                    // walk below reaches what an explicit implementation reads.
+                    called.Add((owner.FullName ?? owner.Name,
+                        implementation.IsSpecialName && implementation.Name.StartsWith("get_", StringComparison.Ordinal)
+                            ? implementation.Name.Substring(4)
+                            : implementation.Name));
+                }
+            }
+        }
+
         // A computed property that is read from outside consumes whatever its getter reads, so
         // walk those edges transitively. `FeedForwardDimension` being read is what makes
         // `FeedForwardMultiplier` read; without this the multiplier reports as unread while

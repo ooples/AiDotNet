@@ -4,9 +4,12 @@ using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.AlibabaASR;
 
-/// <summary>Options for SeACo-Paraformer: hot-word customizable ASR.</summary>
+/// <summary>Options for SeACo-Paraformer: Paraformer-large with a hotword bias encoder, bias decoder and bias output
+/// layer.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the SeACo model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para><b>For Beginners:</b> Defaults are the released SeACo-Paraformer (FunASR's seaco config and the paper's section
+/// 4.2): the Paraformer-large backbone, a two-layer LSTM bias encoder of width 512, a four-block bias decoder with 1,024
+/// hidden units, hotwords of 2 to 8 tokens sampled with ratios 0.75, and 8,404 characters.</para>
 /// </remarks>
 public class SeACoOptions : ModelOptions
 {
@@ -21,58 +24,69 @@ public class SeACoOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
-        // below; Seed is not declared here, so it was silently dropped and a copied configuration
-        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
-        // the most to diagnose, because the two configurations compare equal on everything visible.
+        // Seed is inherited from ModelOptions and easy to miss; a copy without it builds a different model.
         Seed = other.Seed;
-
+        WarmupSteps = other.WarmupSteps;
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
+        LfrM = other.LfrM;
+        LfrN = other.LfrN;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        NumMels = other.NumMels;
+        FeedForwardDim = other.FeedForwardDim;
+        FsmnKernelSize = other.FsmnKernelSize;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
         Language = other.Language;
-
-        // SeACo's own properties, as opposed to the shared ASR ones above. Omitting any of them
-        // is silent data loss: the clone keeps the default while the original keeps the
-        // configured value. LearningRate is the one that bites hardest - a clone would train at
-        // a different rate than the model it was copied from.
-        NumDecoderLayers = other.NumDecoderLayers;
-        NumBiasEncoderLayers = other.NumBiasEncoderLayers;
-        FeedForwardDim = other.FeedForwardDim;
-        LearningRate = other.LearningRate;
+        LabelSmoothing = other.LabelSmoothing;
+        SamplingRatio = other.SamplingRatio;
+        PredictorWeight = other.PredictorWeight;
+        TailThreshold = other.TailThreshold;
+        Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
         TrainingStage = other.TrainingStage;
-        CeWeight = other.CeWeight;
-        MaeWeight = other.MaeWeight;
-        BiasMergeLambda = other.BiasMergeLambda;
-        SamplerLambda = other.SamplerLambda;
-        HotwordMinLength = other.HotwordMinLength;
-        HotwordMaxLength = other.HotwordMaxLength;
+        NumBiasEncoderLayers = other.NumBiasEncoderLayers;
+        NumBiasDecoderLayers = other.NumBiasDecoderLayers;
+        BiasFeedForwardDim = other.BiasFeedForwardDim;
+        BiasFsmnKernelSize = other.BiasFsmnKernelSize;
+        BiasLabelSmoothing = other.BiasLabelSmoothing;
         HotwordMaskTokenId = other.HotwordMaskTokenId;
         HotwordBatchRatio = other.HotwordBatchRatio;
         HotwordUtteranceRatio = other.HotwordUtteranceRatio;
+        HotwordMinLength = other.HotwordMinLength;
+        HotwordMaxLength = other.HotwordMaxLength;
+        BiasMergeLambda = other.BiasMergeLambda;
+        AttentionFilterTopK = other.AttentionFilterTopK;
     }
 
     /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
-    /// <summary>Gets or sets the hidden width of the encoder.</summary>
-    public int EncoderDim { get; set; } = 512;
-    /// <summary>Gets or sets the number of encoder layers.</summary>
-    public int NumEncoderLayers { get; set; } = 12;
-    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
-    public int NumAttentionHeads { get; set; } = 8;
-    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
+    /// <summary>Kaldi filterbank bands (80).</summary>
     public int NumMels { get; set; } = 80;
-    /// <summary>Gets or sets the number of output tokens the model predicts over.</summary>
+    /// <summary>Filterbank frames stacked by the low frame rate front end (7).</summary>
+    public int LfrM { get; set; } = 7;
+    /// <summary>The stride between stacks (6).</summary>
+    public int LfrN { get; set; } = 6;
+    /// <summary>The model width (512), shared by the encoder, the predictor, both decoders and the bias encoder.</summary>
+    public int EncoderDim { get; set; } = 512;
+    /// <summary>SAN-M encoder blocks (50).</summary>
+    public int NumEncoderLayers { get; set; } = 50;
+    /// <summary>SAN-M ASR decoder blocks with cross-attention (16), before the final feed-forward block.</summary>
+    public int NumDecoderLayers { get; set; } = 16;
+    /// <summary>Gets or sets the number of attention heads. Defaults to <c>4</c>.</summary>
+    public int NumAttentionHeads { get; set; } = 4;
+    /// <summary>The encoder's and the ASR decoder's feed-forward width (2,048).</summary>
+    public int FeedForwardDim { get; set; } = 2048;
+    /// <summary>The encoder's and the ASR decoder's FSMN kernel (11).</summary>
+    public int FsmnKernelSize { get; set; } = 11;
+    /// <summary>Output vocabulary, blank (0), start (1) and end (2) included (8,404). The bias output layer adds the
+    /// no-bias class.</summary>
     public int VocabSize { get; set; } = 8404;
     /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
     public int MaxTextLength { get; set; } = 512;
@@ -80,82 +94,58 @@ public class SeACoOptions : ModelOptions
     public string? ModelPath { get; set; }
     /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
-    public double DropoutRate { get; set; } = 0.1;
-    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
-    public string Language { get; set; } = "en";
-
-    /// <summary>
-    /// Gets or sets the Adam learning rate. The default, 5e-4, is the peak rate Paraformer /
-    /// SeACo-Paraformer train with (Gao et al., arXiv 2206.08317; Shi et al., arXiv 2308.03266).
-    /// </summary>
-    /// <value>The optimizer step size, defaulting to <c>5e-4</c>.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This controls the size of each Adam parameter update.
-    /// The default is the peak learning rate reported by Paraformer and SeACo-Paraformer.</para>
-    /// </remarks>
-    public double LearningRate { get; set; } = 5e-4;
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"zh"</c>.</summary>
+    public string Language { get; set; } = "zh";
+    /// <summary>The ASR decoder loss's label smoothing (0.1).</summary>
+    public double LabelSmoothing { get; set; } = 0.1;
+    /// <summary>The glancing sampler's λ (0.75).</summary>
+    public double SamplingRatio { get; set; } = 0.75;
+    /// <summary>The MAE token-count loss's weight (1).</summary>
+    public double PredictorWeight { get; set; } = 1.0;
+    /// <summary>The CIF tail weight at inference (0.45).</summary>
+    public double TailThreshold { get; set; } = 0.45;
+    /// <summary>The learning rate's warmup steps (30,000, FunASR's warmuplr).</summary>
+    public int WarmupSteps { get; set; } = 30000;
+    /// <summary>Optional vocabulary mapping token IDs to text tokens (the release's tokens.json); hotwords are tokenized
+    /// with it.</summary>
+    public string[]? Vocabulary { get; set; }
 
     /// <summary>
     /// Which parameter group <c>Train</c> updates. Default: <see cref="SeACoTrainingStage.Backbone"/>.
     /// </summary>
-    /// <value>The stage whose parameter group is updated by <c>Train</c>.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Train the backbone first. Then select
-    /// <see cref="SeACoTrainingStage.Bias"/> to teach hotword customization without changing the
-    /// recognizer.</para>
-    /// <para>
-    /// SeACo-Paraformer (Shi et al., arXiv 2308.03266, §3) trains the ASR backbone first, then FREEZES
-    /// it and trains only the bias parameters, "separate from the ASR training". Select
-    /// <see cref="SeACoTrainingStage.Backbone"/> then <see cref="SeACoTrainingStage.Bias"/> to
-    /// reproduce that exactly.
-    /// </para>
-    /// <para>
-    /// The default is <see cref="SeACoTrainingStage.Backbone"/>, the first stage in the paper's
-    /// two-stage recipe. After the backbone is trained, select <see cref="SeACoTrainingStage.Bias"/>
-    /// to train the contextual-biasing branch while keeping the recognizer frozen.
-    /// </para>
+    /// <para><b>For Beginners:</b> Train the backbone first. Then select <see cref="SeACoTrainingStage.Bias"/> to teach
+    /// hotword customization without changing the recognizer.</para>
+    /// <para>SeACo-Paraformer (Shi et al., arXiv 2308.03266, section 3.1) trains the bias modules "with a well-trained
+    /// Paraformer model freezing", separately from the ASR training: <see cref="SeACoTrainingStage.Backbone"/> then
+    /// <see cref="SeACoTrainingStage.Bias"/>.</para>
     /// </remarks>
     public SeACoTrainingStage TrainingStage { get; set; } = SeACoTrainingStage.Backbone;
 
-    /// <summary>
-    /// Weight gamma on the cross-entropy term of Paraformer's objective,
-    /// L_total = gamma * L_CE + L_MAE + L_MWER (Gao et al., arXiv 2206.08317, Eq 6). Default: 1.0.
-    /// </summary>
-    /// <remarks>
-    /// The paper introduces gamma in Eq 6 without fixing a value in the text, so the neutral 1.0 is
-    /// used rather than inventing one. Raise it to weight transcription accuracy over the predictor's
-    /// token-count objective.
-    /// </remarks>
-    public double CeWeight { get; set; } = 1.0;
+    /// <summary>LSTM layers in the bias encoder (2; section 4.2).</summary>
+    public int NumBiasEncoderLayers { get; set; } = 2;
+    /// <summary>SAN-M blocks with cross-attention in the bias decoder (4; section 4.2), before its final feed-forward
+    /// block.</summary>
+    public int NumBiasDecoderLayers { get; set; } = 4;
+    /// <summary>The bias decoder's feed-forward width (1,024; section 4.2).</summary>
+    public int BiasFeedForwardDim { get; set; } = 1024;
+    /// <summary>The bias decoder's FSMN kernel (21; the release's seaco_decoder_conf).</summary>
+    public int BiasFsmnKernelSize { get; set; } = 21;
+    /// <summary>The bias loss's label smoothing (0.1; the release's seaco_lsm_weight).</summary>
+    public double BiasLabelSmoothing { get; set; } = 0.1;
 
     /// <summary>
-    /// Weight on the CIF predictor's mean-absolute-error term in Paraformer Eq 6. Default: 1.0, the
-    /// unweighted form the equation states.
+    /// The no-bias class ('#'). Defaults to <c>null</c>, which resolves to <see cref="VocabSize"/>: the class the paper
+    /// appends to the ASR vocabulary.
     /// </summary>
     /// <remarks>
-    /// This term supervises the predicted token COUNT. Paraformer §2.2/2.4 describe it as guiding the
-    /// predictor to convergence; with the weight at zero the predictor head trains unsupervised.
-    /// </remarks>
-    public double MaeWeight { get; set; } = 1.0;
-
-    /// <summary>
-    /// Token id substituted at non-hotword positions when computing SeACo's bias loss. Defaults to
-    /// <c>null</c>, which resolves to <see cref="VocabSize"/> -- the appended no-bias slot.
-    /// </summary>
-    /// <remarks>
-    /// SeACo §3.1 states that "an additional token (counted as #, means no-bias) is appended to the ASR
-    /// output vocabulary to mark non-hotword position outputs", and §3 defines L_bias with a
-    /// "hotword-position-aware criterion in which labels in non-hotword positions are replaced by #".
-    /// APPENDED means the id is <see cref="VocabSize"/> itself — the new last slot — which is why the
-    /// bias output layer emits VocabSize + 1 logits. A null value resolves to that appended index;
-    /// set it explicitly only to point at a different reserved slot.
+    /// SeACo section 3.1: "an additional token (counted as #, means no-bias) is appended to the ASR output vocabulary to
+    /// mark non-hotword position outputs", which is why the bias output layer emits <see cref="VocabSize"/> + 1 logits.
+    /// Set it only to point at a different reserved class (the release reuses id 8377).
     /// </remarks>
     public int? HotwordMaskTokenId { get; set; }
 
-    /// <summary>
-    /// Resolves the '#' no-bias token id, defaulting to the appended slot at <see cref="VocabSize"/>.
-    /// </summary>
+    /// <summary>Resolves the no-bias class, defaulting to the appended class at <see cref="VocabSize"/>.</summary>
     internal int ResolveHotwordMaskTokenId()
     {
         int tokenId = HotwordMaskTokenId ?? VocabSize;
@@ -170,101 +160,18 @@ public class SeACoOptions : ModelOptions
         return tokenId;
     }
 
-    /// <summary>
-    /// Depth of SeACo's bias (hotword) encoder. Default: 1.
-    /// </summary>
-    /// <remarks>
-    /// SeACo §3 describes the bias encoder as a light module over the sampled hotword token sequences;
-    /// the paper does not publish a depth, so the minimal single block is used rather than inventing a
-    /// larger figure.
-    /// </remarks>
-    public int NumBiasEncoderLayers { get; set; } = 1;
-
-    /// <summary>
-    /// SeACo's r_b: ratio of BATCHES on which hotword sampling is performed. Default: 0.5.
-    /// </summary>
-    /// <remarks>
-    /// SeACo §3: "r_b for the ratio of batches to conduct sampling, the forward of the other batches
-    /// will be conducted with a default hotword &lt;blank&gt;". The paper names the hyper-parameter but
-    /// does not publish its value, so an even split is used rather than inventing a tuned figure.
-    /// </remarks>
-    public double HotwordBatchRatio { get; set; } = 0.5;
-
-    /// <summary>
-    /// SeACo's r_u: same idea as <see cref="HotwordBatchRatio"/> but at UTTERANCE level inside an
-    /// active batch. Default: 0.5.
-    /// </summary>
-    /// <remarks>
-    /// SeACo §3: "the average number of hotwords sampled for active batch is r_u x bs + 1 (one for the
-    /// default hotword)". Value not published; even split used.
-    /// </remarks>
-    public double HotwordUtteranceRatio { get; set; } = 0.5;
-
-    /// <summary>
-    /// SeACo's l_min: minimum length, in characters, of a sampled hotword. Default: 2.
-    /// </summary>
-    /// <remarks>
-    /// SeACo §3 introduces "l_min and l_max for the minimum and maximum lengths of sampled hotwords"
-    /// without publishing values. 2 excludes single-character fragments that carry no entity signal.
-    /// </remarks>
+    /// <summary>r_b: the share of training batches that sample hotwords (0.75); the others train with the default hotword
+    /// alone.</summary>
+    public double HotwordBatchRatio { get; set; } = 0.75;
+    /// <summary>r_u: the share of utterances in a sampling batch that contribute a hotword (0.75).</summary>
+    public double HotwordUtteranceRatio { get; set; } = 0.75;
+    /// <summary>l_min: the shortest sampled hotword in tokens (2).</summary>
     public int HotwordMinLength { get; set; } = 2;
-
-    /// <summary>
-    /// SeACo's l_max: maximum length, in characters, of a sampled hotword. Default: 10.
-    /// </summary>
-    /// <remarks>
-    /// Companion to <see cref="HotwordMinLength"/>; the paper publishes no value. 10 spans the named
-    /// entities its Aishell-1-NE test sets are built from.
-    /// </remarks>
-    public int HotwordMaxLength { get; set; } = 10;
-
-    /// <summary>
-    /// SeACo's lambda in Eq 5, the trust placed in the bias decoder. Default: 1.0.
-    /// </summary>
-    /// <remarks>
-    /// arXiv 2308.03266 Eq 5: <c>P_m = P_ASR</c> when <c>argmax P_bi = &lt;no-bias&gt;</c>, otherwise
-    /// <c>lambda * P_bi + (1 - lambda) * P_ASR</c>. §4.3 states "we use lambda = 1.0 for Equation (5) in
-    /// inference", so that is the default; §3.2 calls it "a tunable parameter to adjust the degree of
-    /// trust bias decoder output".
-    /// </remarks>
+    /// <summary>l_max: the longest sampled hotword in tokens (8).</summary>
+    public int HotwordMaxLength { get; set; } = 8;
+    /// <summary>λ in Equation 5: the weight on the bias probabilities where the bias decoder detects a hotword (1).</summary>
     public double BiasMergeLambda { get; set; } = 1.0;
-
-    /// <summary>
-    /// Paraformer's sampling factor lambda, controlling how many target-embedding positions the GLM
-    /// sampler substitutes into the acoustic embedding. Default: 1.0.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Gao et al. 2022 (arXiv 2206.08317) §2.3 Eq 4:
-    /// <c>GLM(Y, Yhat) = Sampler(Es | Ea, Ec, ceil(lambda * d(Y, Yhat)))</c>, where
-    /// <c>d(Y, Yhat)</c> is the Hamming distance between the target and the Pass-1 prediction — a count
-    /// that is "larger when the model is poorly trained, and should decrease along with the training
-    /// process", so the substitution rate anneals on its own without a schedule.
-    /// </para>
-    /// <para>
-    /// §3 reports Paraformer "is robust to lambda in a range from 0.5 to 1.0" and Table 2 sweeps
-    /// 0.2 / 0.5 / 0.75 / 1.0 / 1.5. 1.0 is the top of the robust band, hence the default; it is the
-    /// paper's own value rather than an invented one.
-    /// </para>
-    /// </remarks>
-    public double SamplerLambda { get; set; } = 1.0;
-
-    /// <summary>
-    /// Number of parallel-decoder blocks. Default: 6.
-    /// </summary>
-    /// <remarks>
-    /// Gao et al. 2022 §4.2 describes the Paraformer base model as a "50-layers SAN-M encoder and
-    /// 16-layer NAR Transformer decoder"; SeACo §4.2 reuses that backbone. 6 is retained as the default
-    /// because it is what <c>LayerHelper.CreateDefaultParaformerLayers</c> already used, so exposing the
-    /// knob does not silently re-shape existing models — set 16 to match the published base config.
-    /// </remarks>
-    public int NumDecoderLayers { get; set; } = 6;
-
-    /// <summary>
-    /// Feed-forward inner width inside encoder and decoder blocks. Default: 2048.
-    /// </summary>
-    /// <remarks>
-    /// Gao et al. 2022 §4.2: the Paraformer base model runs "with 2048 hidden units".
-    /// </remarks>
-    public int FeedForwardDim { get; set; } = 2048;
+    /// <summary>k for attention score filtering (50; section 4.3): with more hotwords, only the k the bias decoder's last
+    /// layer attends to most are kept. Zero disables the filter.</summary>
+    public int AttentionFilterTopK { get; set; } = 50;
 }

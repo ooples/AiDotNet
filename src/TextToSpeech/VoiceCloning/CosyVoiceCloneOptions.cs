@@ -1,24 +1,26 @@
+using AiDotNet.TextToSpeech.CodecBased;
+
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 
-/// <summary>Options for CosyVoiceClone voice cloning model.</summary>
+/// <summary>CosyVoice release options plus the convenience voice-cloning API's reference-duration contract.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the CosyVoiceClone model. Default values follow the original paper settings.</para>
+/// The neural defaults are inherited unchanged from <see cref="CosyVoiceOptions"/>. This task facade consumes the same
+/// checkpoints and must therefore retain CosyVoice-300M's dimensions rather than defining a second set of defaults.
 /// </remarks>
-public class CosyVoiceCloneOptions : VoiceCloningOptions
+public class CosyVoiceCloneOptions : CosyVoiceOptions
 {
-    /// <summary>Initializes a new instance with default values.</summary>
+    /// <summary>Creates options with the released CosyVoice-300M defaults.</summary>
     public CosyVoiceCloneOptions()
     {
-        MinReferenceDurationSec = 3.0;
-        NumEncoderLayers = 6;
-        NumLLMLayers = 12;
-        NumHeads = 8;
-        DropoutRate = 0.1;
     }
 
     /// <summary>Initializes an independent copy of an existing configuration.</summary>
     public CosyVoiceCloneOptions(CosyVoiceCloneOptions other)
-        : base(other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        MinReferenceDurationSec = other.MinReferenceDurationSec;
     }
+
+    /// <summary>Minimum prompt length accepted by <c>IVoiceCloner</c>, whose input has no explicit sample rate.</summary>
+    public double MinReferenceDurationSec { get; set; } = 3.0;
 }

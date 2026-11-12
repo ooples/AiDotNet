@@ -52,8 +52,20 @@ internal sealed class FusedTrainingStepRequest<T>
     /// <summary>The model's own global-norm clip (0 = none); combined with the optimizer's by taking the smaller.</summary>
     public double ModelGradientClip { get; init; }
 
+    /// <summary>
+    /// Whether the model excludes some of its parameters from the optimizer's L2 term (coupled weight decay); asked only
+    /// when the optimizer regularizes with L2. Null = none excluded.
+    /// </summary>
+    public Func<bool>? ExcludesParametersFromWeightDecay { get; init; }
+
     /// <summary>Receives the step's gradients while their buffers are valid (the model's public gradient surface).</summary>
     public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
+
+    /// <summary>
+    /// Adds the optimizer's regularization to the gradients when the step runs eager, before clipping, as the fused plan
+    /// adds its L2. Null = the optimizer's plain regularization on every reached parameter.
+    /// </summary>
+    public Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? RegularizeGradients { get; init; }
 
     /// <summary>
     /// Why this step's forward cannot be compiled once and replayed, or null when it can. A non-null reason keeps the
@@ -262,16 +274,23 @@ internal sealed class FusedTrainingSession<T>
         if (request.Layers.Count == 0 && (request.ExtraParameters is null || request.ExtraParameters.Count == 0))
             return Decline("no trainable layers");
 
-        // The optimizer's regularization, applied the way its flat path applies it: to the gradient, BEFORE clipping.
-        // L2 has a fused form (the plan adds strength * theta ahead of its clip); any other regularizer runs on the
-        // eager tape. Every decline is decided BEFORE the per-step arena below exists: TensorArena.Create is
+        // The optimizer's regularization, applied the way its flat path applies it: to the gradient, on the side of the
+        // clip its RegularizationOrder chooses. L2 has a fused form (the plan adds strength * theta ahead of its clip);
+        // any other regularizer runs on the eager tape. Every decline is decided BEFORE the per-step arena below exists: TensorArena.Create is
         // thread-static and stacks on the enclosing arena, so a decline after it would leave it current for the
         // eager fallback and every later step.
         double l2 = 0.0;
         if (OptimizerRegularizationOf(optimizer) is { } regularization)
         {
+            // The plan adds one L2 strength to every parameter; a model that excludes some (TF EfficientNet decays
+            // nothing in batch normalization) trains on the eager tape, which skips them.
             if (regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2Regularization)
+            {
+                if (request.ExcludesParametersFromWeightDecay?.Invoke() == true)
+                    return DeclineAndDropCommitted(
+                        "L2 with parameters excluded from weight decay has no fused form; the eager tape applies it");
                 l2 = l2Regularization.GetOptions().Strength;
+            }
             else
                 return DeclineAndDropCommitted("regularization " + regularization.GetType().Name
                     + " has no fused form; the eager tape applies it");
@@ -288,6 +307,8 @@ internal sealed class FusedTrainingSession<T>
             return DeclineAndDropCommitted("optimizer clips gradients by value; the fused plan clips only by global norm");
         if (optimizerClip > 0.0)
             clip = clip > 0.0 ? Math.Min(clip, optimizerClip) : optimizerClip;
+        // The plan adds its L2 term on the optimizer's side of the clip; after it is PyTorch's order, the default.
+        bool l2AfterClip = optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true };
 
         bool verifyPersistence = (!_persistenceVerified && !IsCommitted)
             || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval;
@@ -362,6 +383,7 @@ internal sealed class FusedTrainingSession<T>
                 owner: _owner,
                 l2Regularization: l2,
                 deferredLoss: deferredLoss,
+                l2AfterClip: l2AfterClip,
                 stateKey: _stateKey);
         }
         finally
