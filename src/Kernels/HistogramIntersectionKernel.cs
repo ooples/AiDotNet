@@ -31,11 +31,6 @@ namespace AiDotNet.Kernels;
 public class HistogramIntersectionKernel<T> : IKernelFunction<T>
 {
     /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new instance of the Histogram Intersection kernel.
     /// </summary>
     /// <remarks>
@@ -55,7 +50,6 @@ public class HistogramIntersectionKernel<T> : IKernelFunction<T>
     /// </remarks>
     public HistogramIntersectionKernel()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>

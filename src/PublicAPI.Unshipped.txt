@@ -22597,3 +22597,17 @@ AiDotNet.Kernels.GridKernel<T>.GetEigenvalues() -> AiDotNet.Tensors.LinearAlgebr
 AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> T
 *REMOVED*AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> double
 AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> T
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeComprehensiveMetrics(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? realImages = null) -> (double isMean, double isStd, double? fid)
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeIS(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeISWithUncertainty(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> (double mean, double std)
+*REMOVED*AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFID(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+*REMOVED*AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFIDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+AiDotNet.Metrics.InceptionScore<T>.ComputeComprehensiveMetrics(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? realImages = null) -> (T isMean, T isStd, T fid, bool hasFid)
+AiDotNet.Metrics.InceptionScore<T>.ComputeIS(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+AiDotNet.Metrics.InceptionScore<T>.ComputeISWithUncertainty(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> (T mean, T std)
+AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFID(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFIDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+*REMOVED*AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVD(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realVideos, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> double
+*REMOVED*AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> double
+AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVD(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realVideos, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> T
+AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> T
