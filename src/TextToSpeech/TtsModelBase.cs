@@ -653,8 +653,18 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             : Engine.TensorDivideScalar(scaled, scaledNorm);
     }
 
+    /// <summary>A <c>[flags.Count, columns]</c> tensor that is 1 on the rows whose flag is set and 0 elsewhere.</summary>
+    protected Tensor<T> RowMask(IReadOnlyList<bool> flags, int columns)
+    {
+        Guard.NotNull(flags);
+        var set = new int[flags.Count];
+        for (int i = 0; i < set.Length; i++) set[i] = flags[i] ? 1 : 0;
+        return Engine.TensorTile(new Tensor<int>(set, new[] { set.Length, 1 }).Cast<T>(), new[] { 1, columns });
+    }
+
     /// <summary>
     /// The hard monotonic alignment
+
  <c>[durations.Length, sum(durations)]</c> that expands phoneme i over its
     /// durations[i] frames: row i is 1 on those frames and 0 elsewhere.
     /// </summary>
