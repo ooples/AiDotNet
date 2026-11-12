@@ -481,6 +481,13 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
                 nameof(topK));
         }
 
+        if (gatingNoise != MixtureOfExpertsGatingNoise.LearnedNoiseWeights
+            && gatingNoise != MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits)
+        {
+            throw new ArgumentOutOfRangeException(nameof(gatingNoise), gatingNoise,
+                "Unsupported gating-noise mode.");
+        }
+
         _experts = experts;
         _router = router;
         _topK = topK;
@@ -1309,14 +1316,19 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Gradients flow through the mask×weight product to the softmax weights for selected experts;
         // non-selected experts receive zero gradient. This is not a straight-through estimator
         // (which would use hard - soft.detach() + soft), but standard sparse gating per Shazeer et al.
-        // The mask is the one-hot encoding of the K distinct indices summed over K, built off the tape.
+        // The mask is built off the tape by scattering a 1 into each row at its K distinct selected
+        // expert indices (torch.scatter_reduce semantics along axis 1): O(batch * experts) storage, with
+        // no [batch, k, experts] one-hot intermediate.
         Tensor<T> mask;
         using (new NoGradScope<T>())
         {
-            // OneHot flattens its index input; restore [batch, k, expert] before reducing k.
-            var oneHot = Engine.Reshape(Engine.TensorOneHot<T>(topKIndicesTensor, numExperts),
-                new[] { batchSize, k, numExperts });
-            mask = Engine.ReduceSum(oneHot, new[] { 1 }); // [batchSize, numExperts]
+            mask = Engine.TensorScatterReduce(
+                new Tensor<T>(new[] { batchSize, numExperts }),
+                1,
+                topKIndicesTensor,
+                Tensor<T>.CreateDefault(new[] { batchSize, k }, NumOps.One),
+                ScatterReduceMode.Sum,
+                includeSelf: true); // [batchSize, numExperts]
         }
         _lastTopKMask = mask;
 
