@@ -102,16 +102,7 @@ public partial class AveragingDetector<T> : AnomalyDetectorBase<T>
 
             // Compute training scores to establish min/max for normalization
             var scores = detector.ScoreAnomalies(X);
-            T min = NumOps.MaxValue;
-            T max = NumOps.MinValue;
-
-            for (int i = 0; i < scores.Length; i++)
-            {
-                if (NumOps.LessThan(scores[i], min)) min = scores[i];
-                if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
-            }
-
-            _trainingScoreRanges.Add((min, max));
+            _trainingScoreRanges.Add(AnomalyTensorOps.MinMaxIgnoringNaN(scores));
         }
 
         // Calculate scores for training data to set threshold
@@ -151,47 +142,27 @@ public partial class AveragingDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Average the normalized scores
-        var avgScores = new Vector<T>(X.Rows);
-        T detectorCount = NumOps.FromDouble(allScores.Count);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T sum = NumOps.Zero;
-            foreach (var scores in allScores)
-            {
-                sum = NumOps.Add(sum, scores[i]);
-            }
-            avgScores[i] = NumOps.Divide(sum, detectorCount);
-        }
-
-        return avgScores;
+        return AnomalyTensorOps.ElementwiseMean(allScores);
     }
 
     private Vector<T> NormalizeScores(Vector<T> scores, T trainMin, T trainMax)
     {
-        int n = scores.Length;
-        var result = new Vector<T>(n);
-
         T range = NumOps.Subtract(trainMax, trainMin);
         T eps = NumOps.FromDouble(1e-10);
         T half = NumOps.FromDouble(0.5);
 
-        for (int i = 0; i < n; i++)
+        if (!NumOps.GreaterThan(range, eps))
         {
-            if (NumOps.GreaterThan(range, eps))
-            {
-                // Normalize using training min/max, clamp to [0, 1]
-                T normalized = NumOps.Divide(NumOps.Subtract(scores[i], trainMin), range);
-                if (NumOps.LessThan(normalized, NumOps.Zero)) normalized = NumOps.Zero;
-                if (NumOps.GreaterThan(normalized, NumOps.One)) normalized = NumOps.One;
-                result[i] = normalized;
-            }
-            else
-            {
-                result[i] = half; // Constant scores map to midpoint
-            }
+            return Engine.Fill(scores.Length, half); // Constant scores map to midpoint
         }
 
-        return result;
+        if (scores.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // Normalize using training min/max, clamp to [0, 1]
+        var normalized = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(scores.AsTensor(), trainMin), range);
+        return Engine.TensorClamp(normalized, NumOps.Zero, NumOps.One).ToVector();
     }
 }

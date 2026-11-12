@@ -443,6 +443,52 @@ internal static class AnomalyTensorOps
     internal static Tensor<T> ScaledIdentity<T>(int p, T scale)
         => Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), scale);
 
+    /// <summary>
+    /// The smallest and largest value of a vector, NaN entries ignored; (MaxValue, MinValue) when there is
+    /// no non-NaN entry, as a running min/max started from those bounds gives.
+    /// </summary>
+    internal static (T Min, T Max) MinMaxIgnoringNaN<T>(Vector<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (values.Length == 0)
+        {
+            return (numOps.MaxValue, numOps.MinValue);
+        }
+
+        var engine = Engine;
+        var t = values.AsTensor();
+        var nan = engine.TensorIsNan(t);
+        return (engine.TensorMinValue(engine.TensorMaskedFill(t, nan, numOps.MaxValue)),
+            engine.TensorMaxValue(engine.TensorMaskedFill(t, nan, numOps.MinValue)));
+    }
+
+    /// <summary>
+    /// The element-wise maximum over a list of equal-length vectors, NaN entries ignored; MinValue where
+    /// every entry is NaN or the list is empty.
+    /// </summary>
+    internal static Vector<T> ElementwiseMaxIgnoringNaN<T>(IReadOnlyList<Vector<T>> vectors, int length)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (vectors.Count == 0)
+        {
+            return Engine.Fill(length, numOps.MinValue);
+        }
+
+        var engine = Engine;
+        var stacked = engine.TensorStack(vectors.Select(v => v.AsTensor()).ToArray(), 0);
+        var comparable = engine.TensorMaskedFill(stacked, engine.TensorIsNan(stacked), numOps.MinValue);
+        return engine.ReduceMax(comparable, new[] { 0 }, false).ToVector();
+    }
+
+    /// <summary>The element-wise mean over a non-empty list of equal-length vectors (summed in list order).</summary>
+    internal static Vector<T> ElementwiseMean<T>(IReadOnlyList<Vector<T>> vectors)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var stacked = engine.TensorStack(vectors.Select(v => v.AsTensor()).ToArray(), 0);
+        return engine.TensorDivideScalar(engine.ReduceSum(stacked, new[] { 0 }, false), numOps.FromDouble(vectors.Count)).ToVector();
+    }
+
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
     {
