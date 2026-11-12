@@ -208,12 +208,16 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         T bestValidationLoss = NumOps.MaxValue;
         int epochsWithoutImprovement = 0;
         long totalGradientUpdates = 0;
+        var noDistillLoss = NumOps.Zero;
+        var replayLr = NumOps.Multiply(learningRate, NumOps.FromDouble(replayLrFactor));
 
         for (int epoch = 0; epoch < epochsPerTask; epoch++)
         {
             T epochTaskLoss = NumOps.Zero;
             T epochDistillLoss = NumOps.Zero;
             int batchCount = 0;
+            var batchTaskLosses = new List<T>();
+            var batchDistillLosses = new List<T>();
 
             // Calculate current distillation weight (with warmup)
             double currentDistillWeight = distillWeight;
@@ -221,6 +225,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             {
                 currentDistillWeight = distillWeight * (epoch + 1) / warmupEpochs;
             }
+            var currentDistillWeightT = NumOps.FromDouble(currentDistillWeight);
 
             // Shuffle indices for this epoch
             var indices = Enumerable.Range(0, numSamples)
@@ -235,8 +240,8 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
                 // Accumulate gradients for the batch
                 Vector<T>? batchGradients = null;
-                T batchTaskLoss = NumOps.Zero;
-                T batchDistillLoss = NumOps.Zero;
+                var sampleTaskLosses = new List<T>(actualBatchSize);
+                var sampleDistillLosses = new List<T>(actualBatchSize);
 
                 for (int i = batchStart; i < batchEnd; i++)
                 {
@@ -262,9 +267,10 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
                     var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(target);
                     var sampleLoss = LossFunction.CalculateLoss(predictionVector, targetVector);
-                    batchTaskLoss = NumOps.Add(batchTaskLoss, sampleLoss);
+                    sampleTaskLosses.Add(sampleLoss);
 
-                    // Compute distillation loss if we have a teacher model
+                    // Compute distillation loss if we have a teacher model (samples without one add zero)
+                    var sampleDistillLoss = noDistillLoss;
                     if (hasTeacher && _lwfStrategy != null)
                     {
                         var studentOutput = prediction;
@@ -276,11 +282,10 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
                         if (studentVector != null && teacherVector != null)
                         {
-                            var distillLoss = _lwfStrategy.ComputeDistillationLoss(teacherVector, studentVector);
-                            distillLoss = NumOps.Multiply(distillLoss, NumOps.FromDouble(currentDistillWeight));
-                            batchDistillLoss = NumOps.Add(batchDistillLoss, distillLoss);
+                            sampleDistillLoss = _lwfStrategy.ComputeDistillationLoss(teacherVector, studentVector);
                         }
                     }
+                    sampleDistillLosses.Add(sampleDistillLoss);
                 }
 
                 if (batchGradients == null)
@@ -302,11 +307,9 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 GradModel.ApplyGradients(adjustedGradients, learningRate);
                 totalGradientUpdates++;
 
-                // Track losses
-                batchTaskLoss = NumOps.Divide(batchTaskLoss, NumOps.FromDouble(actualBatchSize));
-                batchDistillLoss = NumOps.Divide(batchDistillLoss, NumOps.FromDouble(actualBatchSize));
-                epochTaskLoss = NumOps.Add(epochTaskLoss, batchTaskLoss);
-                epochDistillLoss = NumOps.Add(epochDistillLoss, batchDistillLoss);
+                // Track losses: batch means over all samples, distillation weighted per sample
+                batchTaskLosses.Add(Engine.Mean(new Vector<T>(sampleTaskLosses)));
+                batchDistillLosses.Add(Engine.Mean(Engine.Multiply(new Vector<T>(sampleDistillLosses), currentDistillWeightT)));
                 batchCount++;
             }
 
@@ -321,9 +324,6 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var replayGradients = ComputeReplayGradients(replayBatch);
                     if (replayGradients != null)
                     {
-                        var replayLr = NumOps.Multiply(
-                            learningRate,
-                            NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
                         GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
@@ -334,8 +334,8 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             // Average epoch losses
             if (batchCount > 0)
             {
-                epochTaskLoss = NumOps.Divide(epochTaskLoss, NumOps.FromDouble(batchCount));
-                epochDistillLoss = NumOps.Divide(epochDistillLoss, NumOps.FromDouble(batchCount));
+                epochTaskLoss = Engine.Mean(new Vector<T>(batchTaskLosses));
+                epochDistillLoss = Engine.Mean(new Vector<T>(batchDistillLosses));
             }
 
             var totalEpochLoss = NumOps.Add(epochTaskLoss, epochDistillLoss);
@@ -398,28 +398,20 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
     private Vector<T> CloneVector(Vector<T> source)
     {
         var result = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            result[i] = source[i];
-        }
+        source.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
 
     private void AccumulateGradients(Vector<T> target, Vector<T> source)
     {
-        for (int i = 0; i < target.Length; i++)
-        {
-            target[i] = NumOps.Add(target[i], source[i]);
-        }
+        // In place: target += source (over target's length)
+        Engine.TensorAdd(target.AsTensor(), HeadView(source, target.Length)).AsSpan().CopyTo(target.AsWritableSpan());
     }
 
     private void AverageGradients(Vector<T> gradients, int count)
     {
         var divisor = NumOps.FromDouble(count);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            gradients[i] = NumOps.Divide(gradients[i], divisor);
-        }
+        Engine.Divide(gradients, divisor).AsSpan().CopyTo(gradients.AsWritableSpan());
     }
 
     private void ClipGradients(Vector<T> gradients, double threshold)
@@ -430,10 +422,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         if (normValue > threshold)
         {
             var scale = NumOps.FromDouble(threshold / normValue);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scale);
-            }
+            Engine.Multiply(gradients, scale).AsSpan().CopyTo(gradients.AsWritableSpan());
         }
     }
 
