@@ -634,32 +634,41 @@ public partial class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             throw new NotSupportedException(
                 "Imputation requires native mode. ONNX inference only supports forecasting.");
 
-        // Apply mask to input (zero out missing values)
-        var masked = new Tensor<T>(series._shape);
-        for (int i = 0; i < series.Length && i < mask.Length; i++)
+        // Apply mask to input (zero out missing values); positions past the mask stay zero.
+        Tensor<T> masked;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            masked.Data.Span[i] = NumOps.Multiply(series[i], mask[i]);
+            int paired = Math.Min(series.Length, mask.Length);
+            var seriesFlat = Engine.Reshape(series.Contiguous(), new[] { series.Length });
+            var product = paired > 0
+                ? Engine.TensorMultiply(
+                    Engine.TensorNarrow(seriesFlat, 0, 0, paired).Contiguous(),
+                    Engine.TensorNarrow(Engine.Reshape(mask.Contiguous(), new[] { mask.Length }), 0, 0, paired).Contiguous())
+                : new Tensor<T>(new[] { 0 });
+            masked = Engine.Reshape(PrefixPadded(product, series.Length), series._shape);
         }
 
         // Reconstruct full sequence
         var normalized = ApplyInstanceNormalization(masked);
         var reconstructed = ReconstructNative(normalized);
 
-        // Blend: use original where mask=1, reconstruction where mask=0
-        var result = new Tensor<T>(series._shape);
-        for (int i = 0; i < series.Length; i++)
-        {
-            if (i < mask.Length && NumOps.GreaterThan(mask[i], NumOps.FromDouble(0.5)))
-            {
-                result.Data.Span[i] = series[i];
-            }
-            else if (i < reconstructed.Length)
-            {
-                result.Data.Span[i] = reconstructed[i];
-            }
-        }
+        // Blend: use original where mask=1, reconstruction where mask=0 (zero past the reconstruction).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var keep = Engine.TensorGreaterThan(PrefixPadded(mask, series.Length), NumOps.FromDouble(0.5));
+        var blended = Engine.TensorWhere(
+            keep, Engine.Reshape(series.Contiguous(), new[] { series.Length }), PrefixPadded(reconstructed, series.Length));
+        return Engine.Reshape(blended, series._shape);
+    }
 
-        return result;
+    /// <summary>The first <paramref name="length"/> flat values of a tensor, zero-padded when it is shorter.</summary>
+    private Tensor<T> PrefixPadded(Tensor<T> tensor, int length)
+    {
+        int taken = Math.Min(tensor.Length, length);
+        var flat = Engine.Reshape(tensor.Contiguous(), new[] { tensor.Length });
+        if (taken == length)
+            return taken == tensor.Length ? flat : Engine.TensorNarrow(flat, 0, 0, length).Contiguous();
+        var padding = new Tensor<T>(new[] { length - taken });
+        return taken == 0 ? padding : Engine.TensorConcatenate(new[] { Engine.TensorNarrow(flat, 0, 0, taken).Contiguous(), padding }, 0);
     }
 
     /// <inheritdoc/>
@@ -679,25 +688,38 @@ public partial class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         int seqDim = encoded.Shape.Length > 1 ? encoded.Shape[1] : 1;
         int hiddenDim = encoded.Shape.Length > 2 ? encoded.Shape[2] : encoded.Length / (batchSize * seqDim);
 
-        var embedding = new Tensor<T>(new[] { batchSize, hiddenDim });
-        for (int b = 0; b < batchSize; b++)
+        if (batchSize * seqDim * hiddenDim > encoded.Length)
         {
-            for (int h = 0; h < hiddenDim; h++)
+            // Some positions fall past the encoder output: sum only the ones present, as before.
+            var partialEmbedding = new Tensor<T>(new[] { batchSize, hiddenDim });
+            for (int b = 0; b < batchSize; b++)
             {
-                T sum = NumOps.Zero;
-                for (int s = 0; s < seqDim; s++)
+                for (int h = 0; h < hiddenDim; h++)
                 {
-                    int idx = b * seqDim * hiddenDim + s * hiddenDim + h;
-                    if (idx < encoded.Length)
-                        sum = NumOps.Add(sum, encoded[idx]);
+                    T sum = NumOps.Zero;
+                    for (int s = 0; s < seqDim; s++)
+                    {
+                        int idx = b * seqDim * hiddenDim + s * hiddenDim + h;
+                        if (idx < encoded.Length)
+                            sum = NumOps.Add(sum, encoded[idx]);
+                    }
+                    int dstIdx = b * hiddenDim + h;
+                    if (dstIdx < partialEmbedding.Length)
+                        partialEmbedding.Data.Span[dstIdx] = NumOps.Divide(sum, NumOps.FromDouble(seqDim));
                 }
-                int dstIdx = b * hiddenDim + h;
-                if (dstIdx < embedding.Length)
-                    embedding.Data.Span[dstIdx] = NumOps.Divide(sum, NumOps.FromDouble(seqDim));
             }
+
+            return partialEmbedding;
         }
 
-        return embedding;
+        // Mean over the sequence axis of the [batch, seq, hidden] encoder output.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (batchSize * hiddenDim == 0)
+            return new Tensor<T>(new[] { batchSize, hiddenDim });
+        var grid = Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(encoded.Contiguous(), new[] { encoded.Length }), 0, 0, batchSize * seqDim * hiddenDim),
+            new[] { batchSize, seqDim, hiddenDim });
+        return Engine.TensorDivideScalar(Engine.ReduceSum(grid, new[] { 1 }, false), NumOps.FromDouble(seqDim));
     }
 
     #endregion
