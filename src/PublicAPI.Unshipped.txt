@@ -1221,3 +1221,5 @@ override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGenerat
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 *REMOVED*AiDotNet.Evaluation.Statistics.NemenyiResult<T>.AverageRanks.get -> double[]!
 AiDotNet.Evaluation.Statistics.NemenyiResult<T>.AverageRanks.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Evaluation.Statistics.KruskalWallisTest<T>.DunnPostHoc(T[]![]! groups) -> System.Collections.Generic.Dictionary<(int, int), double>!
+AiDotNet.Evaluation.Statistics.KruskalWallisTest<T>.DunnPostHoc(T[]![]! groups) -> System.Collections.Generic.Dictionary<(int, int), T>!

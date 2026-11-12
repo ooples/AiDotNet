@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -52,65 +53,27 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         var groupSizes = groups.Select(g => g.Length).ToArray();
         int N = groupSizes.Sum();
 
-        // Pool all observations and compute ranks
-        var pooled = new List<(double value, int groupIdx, int sampleIdx)>();
-        for (int g = 0; g < k; g++)
-        {
-            for (int i = 0; i < groups[g].Length; i++)
-            {
-                pooled.Add((NumOps.ToDouble(groups[g][i]), g, i));
-            }
-        }
-
-        // Sort and assign ranks (handle ties by average rank)
-        var sorted = pooled.OrderBy(x => x.value).ToList();
-        var ranks = new double[N];
-
-        int idx = 0;
-        while (idx < N)
-        {
-            int start = idx;
-            double value = sorted[start].value;
-
-            // Find all tied values
-            while (idx < N && Math.Abs(sorted[idx].value - value) < 1e-10)
-                idx++;
-
-            // Assign average rank to all tied values
-            double avgRank = (start + 1 + idx) / 2.0;
-            for (int i = start; i < idx; i++)
-            {
-                int originalIdx = pooled.IndexOf(sorted[i]);
-                ranks[originalIdx] = avgRank;
-            }
-        }
+        // Pool all observations and compute ranks (tied values share their average rank)
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (pooled, groupIndex) = Pool(groups, N);
+        var ranks = EvaluationTensorOps<T>.MidRanks(pooled);
 
         // Compute rank sums for each group
-        var rankSums = new double[k];
-        int currentIdx = 0;
-        for (int g = 0; g < k; g++)
-        {
-            for (int i = 0; i < groups[g].Length; i++)
-            {
-                rankSums[g] += ranks[currentIdx];
-                currentIdx++;
-            }
-        }
+        var rankSums = engine.TensorIndexAdd(new Tensor<T>(new[] { k }), 0, groupIndex, ranks);
+        var sizes = new Tensor<int>(groupSizes, new[] { k }).Cast<T>();
 
         // Compute H statistic
-        double sumRankSquaredOverN = 0;
-        for (int g = 0; g < k; g++)
-        {
-            sumRankSquaredOverN += (rankSums[g] * rankSums[g]) / groupSizes[g];
-        }
-
+        double sumRankSquaredOverN = NumOps.ToDouble(engine.TensorSum(engine.TensorDivide(engine.TensorSquare(rankSums), sizes)));
         double H = (12.0 / ((double)N * (N + 1))) * sumRankSquaredOverN - 3.0 * (N + 1);
 
-        // Tie correction
-        var tieGroups = sorted.GroupBy(x => x.value).Where(g => g.Count() > 1).Select(g => g.Count()).ToList();
-        if (tieGroups.Count > 0)
+        // Tie correction: sum of t^3 - t over the groups of t equal values (singletons add 0)
+        var tieCounts = engine.TensorUniqueWithInfo(pooled, true, false, true).Counts;
+        if (tieCounts is not null && tieCounts.Length < N)
         {
-            double tieCorrection = 1 - tieGroups.Sum(t => (double)t * t * t - t) / ((double)N * N * N - N);
+            var t = tieCounts.Cast<T>();
+            double tieSum = NumOps.ToDouble(engine.TensorSum(engine.TensorSubtract(engine.TensorMultiply(engine.TensorSquare(t), t), t)));
+            double tieCorrection = 1 - tieSum / ((double)N * N * N - N);
             if (tieCorrection > 1e-10)
                 H /= tieCorrection;
         }
@@ -138,78 +101,70 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
     /// <summary>
     /// Performs Dunn's post-hoc test for pairwise comparisons.
     /// </summary>
-    public Dictionary<(int, int), double> DunnPostHoc(T[][] groups)
+    public Dictionary<(int, int), T> DunnPostHoc(T[][] groups)
     {
         int k = groups.Length;
         int N = groups.Sum(g => g.Length);
-        var results = new Dictionary<(int, int), double>();
+        var results = new Dictionary<(int, int), T>();
 
         // Pool and rank (same as main test)
-        var pooled = new List<(double value, int groupIdx)>();
-        for (int g = 0; g < k; g++)
-        {
-            foreach (var val in groups[g])
-                pooled.Add((NumOps.ToDouble(val), g));
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var groupSizes = groups.Select(g => g.Length).ToArray();
+        var (pooled, groupIndex) = Pool(groups, N);
+        var ranks = EvaluationTensorOps<T>.MidRanks(pooled);
 
-        var sorted = pooled.OrderBy(x => x.value).ToList();
-        var ranks = new double[N];
-        int idx = 0;
-        int rankIdx = 0;
-        while (idx < N)
-        {
-            int start = idx;
-            double value = sorted[start].value;
-            while (idx < N && Math.Abs(sorted[idx].value - value) < 1e-10)
-                idx++;
-            double avgRank = (start + 1 + idx) / 2.0;
-            for (int i = start; i < idx; i++)
-                ranks[rankIdx++] = avgRank;
-        }
+        // Compute mean ranks per group: each observation's rank goes to its own group
+        var sizes = new Tensor<int>(groupSizes, new[] { k }).Cast<T>();
+        var meanRanks = engine.TensorDivide(engine.TensorIndexAdd(new Tensor<T>(new[] { k }), 0, groupIndex, ranks), sizes);
 
-        // Compute mean ranks per group
-        var meanRanks = new double[k];
-        var groupSizes = new int[k];
-        rankIdx = 0;
-        for (int g = 0; g < k; g++)
-        {
-            groupSizes[g] = groups[g].Length;
-            for (int i = 0; i < groupSizes[g]; i++)
-            {
-                meanRanks[g] += ranks[rankIdx++];
-            }
-            meanRanks[g] /= groupSizes[g];
-        }
+        // Pairwise comparisons: z = |R_i - R_j| / sqrt(N (N + 1) / 12 * (1 / n_i + 1 / n_j)), p = 2 * (1 - Phi(z))
+        var shape = new[] { k, k };
+        var column = new[] { k, 1 };
+        var row = new[] { 1, k };
+        var rankGap = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(meanRanks, column), shape),
+            engine.TensorBroadcastTo(engine.Reshape(meanRanks, row), shape)));
+        var inverseSizes = engine.TensorReciprocal(sizes);
+        var inverseSizeSum = engine.TensorAdd(
+            engine.TensorBroadcastTo(engine.Reshape(inverseSizes, column), shape),
+            engine.TensorBroadcastTo(engine.Reshape(inverseSizes, row), shape));
+        var standardError = engine.TensorSqrt(engine.TensorMultiplyScalar(inverseSizeSum, NumOps.FromDouble((double)N * (N + 1) / 12.0)));
+        var z = engine.TensorDivide(rankGap, standardError);
+        var pValues = engine.TensorMultiplyScalar(engine.TensorNdtr(engine.TensorNegate(z)), NumOps.FromDouble(2.0));
 
-        // Pairwise comparisons
-        for (int i = 0; i < k - 1; i++)
+        int cell = 0;
+        foreach (T pValue in pValues)
         {
-            for (int j = i + 1; j < k; j++)
-            {
-                double z = Math.Abs(meanRanks[i] - meanRanks[j]) /
-                          Math.Sqrt(((double)N * (N + 1) / 12.0) * (1.0 / groupSizes[i] + 1.0 / groupSizes[j]));
-                double pValue = 2 * (1 - NormalCDF(z));
-                results[(i, j)] = pValue;
-            }
+            int i = cell / k, j = cell % k;
+            if (i < j) results[(i, j)] = pValue;
+            cell++;
         }
 
         return results;
     }
 
-    private double Median(T[] values)
+    private static (Tensor<T> Pooled, Tensor<int> GroupIndex) Pool(T[][] groups, int total)
     {
-        var sorted = values.Select(v => NumOps.ToDouble(v)).OrderBy(x => x).ToArray();
-        int n = sorted.Length;
-        if (n == 0) return 0;
-        return n % 2 == 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[n / 2];
+        var parts = new Tensor<T>[groups.Length];
+        var groupIndex = new int[total];
+        int position = 0;
+        for (int g = 0; g < groups.Length; g++)
+        {
+            parts[g] = new Tensor<T>(groups[g], new[] { groups[g].Length });
+            for (int i = 0; i < groups[g].Length; i++)
+                groupIndex[position++] = g;
+        }
+
+        return (AiDotNetEngine.Current.TensorConcatenate(parts, 0), new Tensor<int>(groupIndex, new[] { total }));
     }
 
-    private double NormalCDF(double z)
+    private static T Median(T[] values)
     {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(z));
-        double d = 0.3989423 * Math.Exp(-z * z / 2);
-        double prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return z > 0 ? 1 - prob : prob;
+        int n = values.Length;
+        if (n == 0) return NumOps.Zero;
+        var (lower, upper) = EvaluationTensorOps<T>.OrderStatistics(new Tensor<T>(values, new[] { n }), (n - 1) / 2, n / 2);
+        return n % 2 == 0 ? NumOps.Divide(NumOps.Add(lower, upper), NumOps.FromDouble(2.0)) : upper;
     }
 
     private double ChiSquareCDF(double x, int df)
