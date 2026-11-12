@@ -180,6 +180,11 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         foreach (var entry in _gpuState.Values)
             entry.Dispose();
         _gpuState.Clear();
+        foreach (var fp in _gpuFp32SmallState.Values)
+        {
+            fp.M.Dispose();
+            fp.V.Dispose();
+        }
         _gpuFp32SmallState.Clear();
     }
 }
