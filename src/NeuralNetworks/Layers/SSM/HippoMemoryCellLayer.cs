@@ -594,30 +594,109 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         return (Engine.TensorTranspose(transition).Contiguous(), Engine.TensorTranspose(inputTransition).Contiguous());
     }
 
+    // Pade approximant degrees and their backward-error bounds theta_m (Higham 2005, "The Scaling and
+    // Squaring Method for the Matrix Exponential Revisited", Table 2.3), the scheme scipy.linalg.expm
+    // follows. Coefficients b_k of the [m/m] Pade numerator are divided by b_0 when applied so every
+    // value stays inside the range of low-precision T (b_0 of degree 13 is 6.5e16); P and Q share the
+    // factor, so R = Q^-1 P is unchanged.
+    private static readonly int[] PadeDegrees = { 3, 5, 7, 9, 13 };
+    private static readonly double[] PadeThetas =
+    {
+        1.495585217958292e-2, 2.539398330063230e-1, 9.504178996162932e-1, 2.097847961257068e0, 5.371920351148152e0,
+    };
+    private static readonly double[][] PadeCoefficients =
+    {
+        new double[] { 120, 60, 12, 1 },
+        new double[] { 30240, 15120, 3360, 420, 30, 1 },
+        new double[] { 17297280, 8648640, 1995840, 277200, 25200, 1512, 56, 1 },
+        new double[] { 17643225600, 8821612800, 2075673600, 302702400, 30270240, 2162160, 110880, 3960, 90, 1 },
+        new double[]
+        {
+            64764752532480000, 32382376266240000, 7771770303897600, 1187353796428800, 129060195264000,
+            10559470521600, 670442572800, 33522128640, 1323241920, 40840800, 960960, 16380, 182, 1,
+        },
+    };
+
     /// <summary>
-    /// Matrix exponential by scaling and squaring of a 24-term Taylor series: the matrix is scaled
-    /// by 2^-s so its infinity norm is at most 0.5, exponentiated, then squared s times.
+    /// Matrix exponential by scaling and squaring with a diagonal Pade approximant (Higham 2005, the
+    /// algorithm of scipy.linalg.expm), in T through engine ops. The degree is the smallest m in
+    /// {3, 5, 7, 9, 13} whose theta_m bounds the 1-norm; otherwise the matrix is scaled by 2^-s down to
+    /// theta_13. Pade 13 needs about four fewer squarings than a Taylor series truncated at norm 0.5,
+    /// and each squaring roughly doubles the rounding error, which is what made float drift.
     /// </summary>
     private Tensor<T> MatrixExponential(Tensor<T> matrix)
     {
         int n = matrix.Shape[0];
-        double norm = n == 0
-            ? 0.0
-            : NumOps.ToDouble(Engine.TensorMaxValue(Engine.ReduceSum(Engine.TensorAbs(matrix), new[] { 1 })));
-        int squarings = norm <= 0.5 ? 0 : Math.Max(0, (int)Math.Ceiling(Math.Log(norm / 0.5, 2.0)));
-        var scaled = Engine.TensorMultiplyScalar(matrix, NumOps.FromDouble(1.0 / Math.Pow(2.0, squarings)));
-        var result = Engine.TensorEye<T>(n);
-        var term = Engine.TensorEye<T>(n);
-        // term_k = term_(k-1) * scaled / k; the 1/k factors are one [24] tensor, read as [1, 1] slices.
-        var reciprocals = Engine.TensorReciprocal(Engine.TensorArange<T>(1, 25, 1.0));
-        for (int k = 1; k <= 24; k++)
-        {
-            var inverseK = Engine.Reshape(Engine.TensorNarrow(reciprocals, 0, k - 1, 1), new[] { 1, 1 });
-            term = Engine.TensorMultiply(Engine.TensorMatMul(term, scaled), inverseK);
-            result = Engine.TensorAdd(result, term);
-        }
+        var identity = Engine.TensorEye<T>(n);
+        if (n == 0) return identity;
+
+        // 1-norm (max column abs sum) as maxAbs * ||matrix / maxAbs||_1, so the column sums of a
+        // wide low-precision matrix cannot overflow.
+        double maxAbs = NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(matrix)));
+        if (maxAbs == 0.0) return identity;
+        var unit = Engine.TensorDivideScalar(matrix, NumOps.FromDouble(maxAbs));
+        double norm = maxAbs * NumOps.ToDouble(
+            Engine.TensorMaxValue(Engine.ReduceSum(Engine.TensorAbs(unit), new[] { 0 })));
+
+        int degreeIndex = 0;
+        while (degreeIndex < PadeDegrees.Length - 1 && norm > PadeThetas[degreeIndex]) degreeIndex++;
+        int squarings = norm > PadeThetas[degreeIndex]
+            ? Math.Max(0, (int)Math.Ceiling(Math.Log(norm / PadeThetas[degreeIndex], 2.0)))
+            : 0;
+
+        // Scale through the unit matrix: unit * (maxAbs / 2^s) keeps the factor representable in T.
+        var scaled = Engine.TensorMultiplyScalar(unit, NumOps.FromDouble(maxAbs / Math.Pow(2.0, squarings)));
+        var (u, v) = PadeTerms(scaled, identity, PadeDegrees[degreeIndex], PadeCoefficients[degreeIndex]);
+
+        // (V - U) R = (V + U).
+        var (result, info) = SolveSystemWide(
+            Engine.TensorSubtract(v, u).Contiguous(), Engine.TensorAdd(v, u).Contiguous());
+        if (Engine.TensorCountNonzero(info) > 0)
+            throw new InvalidOperationException("HiPPO ZOH Pade denominator is singular.");
+
         for (int i = 0; i < squarings; i++) result = Engine.TensorMatMul(result, result);
         return result;
+    }
+
+    /// <summary>
+    /// The odd (U) and even (V) parts of the [m/m] Pade numerator p(A) = V + U with coefficients
+    /// normalized by b_0, evaluated as in Higham 2005, Algorithm 2.3.
+    /// </summary>
+    private (Tensor<T> U, Tensor<T> V) PadeTerms(Tensor<T> a, Tensor<T> identity, int degree, double[] b)
+    {
+        double b0 = b[0];
+        Tensor<T> Scale(Tensor<T> m, int k) => Engine.TensorMultiplyScalar(m, NumOps.FromDouble(b[k] / b0));
+
+        var a2 = Engine.TensorMatMul(a, a);
+        if (degree == 13)
+        {
+            var a4 = Engine.TensorMatMul(a2, a2);
+            var a6 = Engine.TensorMatMul(a4, a2);
+            var oddInner = Engine.TensorMatMul(a6,
+                Engine.TensorAdd(Engine.TensorAdd(Scale(a6, 13), Scale(a4, 11)), Scale(a2, 9)));
+            oddInner = Engine.TensorAdd(
+                Engine.TensorAdd(Engine.TensorAdd(oddInner, Scale(a6, 7)), Engine.TensorAdd(Scale(a4, 5), Scale(a2, 3))),
+                Scale(identity, 1));
+            var even = Engine.TensorMatMul(a6,
+                Engine.TensorAdd(Engine.TensorAdd(Scale(a6, 12), Scale(a4, 10)), Scale(a2, 8)));
+            even = Engine.TensorAdd(
+                Engine.TensorAdd(Engine.TensorAdd(even, Scale(a6, 6)), Engine.TensorAdd(Scale(a4, 4), Scale(a2, 2))),
+                identity);
+            return (Engine.TensorMatMul(a, oddInner), even);
+        }
+
+        // Degrees 3..9: U = A * sum_j b_(2j+1) A^(2j), V = sum_j b_(2j) A^(2j), with b_0 / b_0 = 1.
+        var oddSum = Scale(identity, 1);
+        var evenSum = identity;
+        var power = identity;
+        for (int j = 1; 2 * j <= degree; j++)
+        {
+            power = Engine.TensorMatMul(power, a2);
+            oddSum = Engine.TensorAdd(oddSum, Scale(power, (2 * j) + 1));
+            evenSum = Engine.TensorAdd(evenSum, Scale(power, 2 * j));
+        }
+
+        return (Engine.TensorMatMul(a, oddSum), evenSum);
     }
 
     private IEnumerable<Tensor<T>> ParameterTensors()
