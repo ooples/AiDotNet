@@ -294,29 +294,39 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         public T LateInteractionScore(Matrix<T> queryEmbeddings, Matrix<T> docEmbeddings)
         {
-            int queryRows = queryEmbeddings.Rows;
-            if (queryRows == 0)
-            {
+            if (queryEmbeddings.Rows == 0) return NumOps.Zero;
+            if (docEmbeddings.Rows > 0 && queryEmbeddings.Columns == 0 && docEmbeddings.Columns == 0)
                 return NumOps.Zero;
-            }
 
-            // Each query token keeps its best document match, starting from MinValue and never taking a NaN.
-            var floor = new Tensor<T>(new[] { queryRows, 1 });
-            floor.Fill(NumOps.MinValue);
-            var candidates = floor;
-            if (docEmbeddings.Rows > 0)
+            // Keep at most 1M token-pair scores live, independent of the full token counts.
+            const int MaxScoreElements = 1048576;
+            const int QueryBlockSize = 128;
+            var queries = Tensor<T>.FromMatrix(queryEmbeddings);
+            var documents = Tensor<T>.FromMatrix(docEmbeddings);
+            var blockScores = new List<T>();
+            for (int queryStart = 0; queryStart < queryEmbeddings.Rows;)
             {
-                var sims = Engine.TensorMatMul(
-                    Tensor<T>.FromMatrix(queryEmbeddings),
-                    Engine.TensorTranspose(Tensor<T>.FromMatrix(docEmbeddings)));
-                var minValues = new Tensor<T>(sims._shape);
-                minValues.Fill(NumOps.MinValue);
-                sims = Engine.TensorWhere(Engine.TensorIsNan(sims), minValues, sims);
-                candidates = Engine.TensorConcatenate(new[] { floor, sims }, 1);
+                int queryCount = Math.Min(QueryBlockSize, queryEmbeddings.Rows - queryStart);
+                var queryBlock = Engine.TensorSlice(queries, [queryStart, 0], [queryCount, queryEmbeddings.Columns]);
+                var best = new Tensor<T>([queryCount]);
+                best.Fill(NumOps.MinValue);
+                int documentBlockSize = Math.Max(1, MaxScoreElements / queryCount);
+                for (int documentStart = 0; documentStart < docEmbeddings.Rows;)
+                {
+                    int documentCount = Math.Min(documentBlockSize, docEmbeddings.Rows - documentStart);
+                    var documentBlock = Engine.TensorSlice(documents, [documentStart, 0],
+                        [documentCount, docEmbeddings.Columns]);
+                    var scores = Engine.TensorMatMul(queryBlock, Engine.TensorTranspose(documentBlock));
+                    var floor = new Tensor<T>(scores._shape);
+                    floor.Fill(NumOps.MinValue);
+                    scores = Engine.TensorWhere(Engine.TensorIsNan(scores.Cast<double>()), floor, scores);
+                    best = Engine.TensorMax(best, Engine.ReduceMax(scores, new[] { 1 }, false));
+                    documentStart += documentCount;
+                }
+                blockScores.Add(Engine.TensorSum(best));
+                queryStart += queryCount;
             }
-
-            var maxSims = Engine.ReduceMax(candidates, new[] { 1 }, false);
-            return Engine.TensorSum(maxSims);
+            return Engine.TensorSum(new Tensor<T>(blockScores.ToArray(), [blockScores.Count]));
         }
 
         /// <summary>
