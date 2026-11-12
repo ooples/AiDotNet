@@ -139,12 +139,8 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
             double blockNorm = 0;
             for (int i = start; i < end; i++)
             {
-                var layerGrad = gradient[layerNames[i]];
-                for (int j = 0; j < layerGrad.Length; j++)
-                {
-                    double v = NumOps.ToDouble(layerGrad[j]);
-                    blockNorm += v * v;
-                }
+                var layerGrad = Vector<T>.Wrap(gradient[layerNames[i]]);
+                blockNorm += NumOps.ToDouble(Engine.DotProduct(layerGrad, layerGrad));
             }
 
             _blockImportanceScores[b] += Math.Sqrt(blockNorm); // Accumulate L2 norm.
@@ -224,7 +220,7 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
 
         foreach (var (layerName, layerParams) in template)
         {
-            var averaged = new double[layerParams.Length];
+            var averaged = new Vector<T>(layerParams.Length);
             double layerWeight = 0;
 
             foreach (var (neighborId, block) in clientBlocks)
@@ -238,22 +234,15 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
                             $"Neighbor {neighborId} layer '{layerName}' length {neighborLayer.Length} differs from expected {layerParams.Length}.");
                     }
 
-                    for (int i = 0; i < neighborLayer.Length; i++)
-                    {
-                        averaged[i] += w * NumOps.ToDouble(neighborLayer[i]);
-                    }
+                    averaged = Engine.Add(averaged, Engine.Multiply(Vector<T>.Wrap(neighborLayer), NumOps.FromDouble(w)));
 
                     layerWeight += w;
                 }
             }
 
-            var averagedT = new T[layerParams.Length];
-            for (int i = 0; i < averagedT.Length; i++)
-            {
-                averagedT[i] = NumOps.FromDouble(layerWeight > 0 ? averaged[i] / layerWeight : 0);
-            }
-
-            result[layerName] = averagedT;
+            result[layerName] = layerWeight > 0
+                ? Engine.Divide(averaged, NumOps.FromDouble(layerWeight)).ToArray()
+                : new Vector<T>(layerParams.Length).ToArray();
         }
 
         return result;

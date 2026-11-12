@@ -87,21 +87,20 @@ public class SegmentedGossipProtocol<T> : Infrastructure.FederatedLearningCompon
 
             if (peerModel.TryGetValue(layerName, out var peerParams))
             {
-                for (int i = 0; i < myParams.Length; i++)
-                {
-                    if (globalIdx >= segmentStart && globalIdx < segmentEnd && i < peerParams.Length)
-                    {
-                        // Average this segment.
-                        updated[i] = NumOps.FromDouble(
-                            (NumOps.ToDouble(myParams[i]) + NumOps.ToDouble(peerParams[i])) / 2.0);
-                    }
-                    else
-                    {
-                        updated[i] = myParams[i];
-                    }
+                Array.Copy(myParams, updated, myParams.Length);
 
-                    globalIdx++;
+                // Average the part of this layer that falls inside the segment (and inside the peer's layer).
+                int lo = Math.Max(segmentStart - globalIdx, 0);
+                int hi = Math.Min(Math.Min(segmentEnd - globalIdx, myParams.Length), peerParams.Length);
+                if (hi > lo)
+                {
+                    var mine = Vector<T>.Wrap(myParams, lo, hi - lo);
+                    var theirs = Vector<T>.Wrap(peerParams, lo, hi - lo);
+                    Engine.Multiply(Engine.Add(mine, theirs), NumOps.FromDouble(0.5))
+                        .AsSpan().CopyTo(updated.AsSpan(lo, hi - lo));
                 }
+
+                globalIdx += myParams.Length;
             }
             else
             {

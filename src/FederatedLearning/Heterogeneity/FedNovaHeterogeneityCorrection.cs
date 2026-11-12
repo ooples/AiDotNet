@@ -25,17 +25,9 @@ public sealed class FedNovaHeterogeneityCorrection<T> : FederatedHeterogeneityCo
         }
 
         int steps = SafeLocalSteps(localEpochs);
-        int n = globalParameters.Length;
-        var corrected = new Vector<T>(n);
         var invSteps = NumOps.FromDouble(1.0 / steps);
-        for (int i = 0; i < n; i++)
-        {
-            var delta = NumOps.Subtract(localParameters[i], globalParameters[i]);
-            var normalized = NumOps.Multiply(invSteps, delta);
-            corrected[i] = NumOps.Add(globalParameters[i], normalized);
-        }
-
-        return corrected;
+        var delta = Engine.Subtract(localParameters, globalParameters);
+        return Engine.Add(globalParameters, Engine.Multiply(delta, invSteps));
     }
 
     /// <inheritdoc />
