@@ -47,30 +47,32 @@ public static class SceneBoundsEstimator
         var offsets = engine.TensorSubtract(cameras, engine.TensorBroadcastTo(centroid, cameras.Shape));
         var distances = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(offsets), new[] { 1 }, false));
         var isNan = engine.TensorIsNan(distances);
-        double cx = numOps.ToDouble(centroid[0, 0]);
-        double cy = numOps.ToDouble(centroid[0, 1]);
-        double cz = numOps.ToDouble(centroid[0, 2]);
 
         // Farthest-camera distance from centroid — the radius that comfortably contains all views.
-        // The running "d > best" scans skip NaN distances.
+        // The running "d > best" scan seeded with 0 skips NaN distances; distances are never negative, so
+        // the maximum with NaN replaced by 0 is that scan's result.
         var forMax = engine.TensorWhere(isNan, engine.TensorZerosLike(distances), distances);
-        double maxDist = Math.Max(0.0, numOps.ToDouble(engine.TensorMaxValue(forMax)));
-        double radius = maxDist * (1.0 + margin);
+        T maxDist = engine.TensorMaxValue(forMax);
+        T radius = numOps.Multiply(maxDist, numOps.FromDouble(1.0 + margin));
 
         // Near = smallest camera-to-centroid distance minus half-radius (surface hits before
         // reaching centroid). Far = camera-to-far-side-of-bbox from the most distant camera.
         var forMin = engine.TensorWhere(
             isNan, engine.TensorFullLike(distances, numOps.FromDouble(double.PositiveInfinity)), distances);
-        double minDist = numOps.ToDouble(engine.TensorMinValue(forMin));
+        T minDist = engine.TensorMinValue(forMin);
 
-        double near = Math.Max(0.1, minDist - radius);
-        double far  = maxDist + radius;
+        // Math.Max(0.1, value) semantics: a NaN value propagates.
+        T nearFloor = numOps.FromDouble(0.1);
+        T nearCandidate = numOps.Subtract(minDist, radius);
+        T near = numOps.IsNaN(nearCandidate) || numOps.GreaterThan(nearCandidate, nearFloor) ? nearCandidate : nearFloor;
+        T far = numOps.Add(maxDist, radius);
 
+        // SceneBounds is double by design; only the final values are converted.
         return new SceneBounds(
-            center: (cx, cy, cz),
-            radius: radius,
-            near: near,
-            far: far);
+            center: (numOps.ToDouble(centroid[0, 0]), numOps.ToDouble(centroid[0, 1]), numOps.ToDouble(centroid[0, 2])),
+            radius: numOps.ToDouble(radius),
+            near: numOps.ToDouble(near),
+            far: numOps.ToDouble(far));
     }
 }
 
