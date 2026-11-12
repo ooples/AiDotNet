@@ -22571,3 +22571,5 @@ AiDotNet.Interfaces.IAdaptedMetaModel<T>.ParameterModulationFactors.get -> AiDot
 AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.AdaptedMetaModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! model, AiDotNet.Tensors.LinearAlgebra.Vector<T>! adaptedParams, AiDotNet.Tensors.LinearAlgebra.Vector<T>? supportFeatures = null, AiDotNet.Tensors.LinearAlgebra.Vector<T>? modulationFactors = null) -> void
 *REMOVED*AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.ParameterModulationFactors.get -> double[]?
 AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.ParameterModulationFactors.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.MetaLearning.Algorithms.NeuralProcessModel<T, TInput, TOutput>.ParameterModulationFactors.get -> double[]?
+AiDotNet.MetaLearning.Algorithms.NeuralProcessModel<T, TInput, TOutput>.ParameterModulationFactors.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
