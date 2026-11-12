@@ -141,40 +141,19 @@ public class LpNormScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         _nColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(_nColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        var norms = new T[_nColumns];
-
-        for (int col = 0; col < _nColumns; col++)
+        var mask = ScalerTensorOps.ColumnMask<T>(_nColumns, GetColumnsToProcess(_nColumns));
+        if (data.Rows == 0 || _nColumns == 0)
         {
-            if (!processSet.Contains(col))
-            {
-                // For columns not processed, use 1.0 (no scaling)
-                norms[col] = NumOps.One;
-                continue;
-            }
-
-            // Compute Lp-norm: (sum of |x|^p)^(1/p)
-            double sum = 0;
-            for (int row = 0; row < data.Rows; row++)
-            {
-                double val = Math.Abs(NumOps.ToDouble(data[row, col]));
-                sum += Math.Pow(val, _p);
-            }
-
-            double norm = Math.Pow(sum, 1.0 / _p);
-
-            // Prevent division by zero - if norm is zero, use 1 (no scaling)
-            if (norm < 1e-10)
-            {
-                norm = 1.0;
-            }
-
-            norms[col] = NumOps.FromDouble(norm);
+            _columnNorms = ScalerTensorOps.FilledVector(_nColumns, NumOps.One);
+            return;
         }
 
-        _columnNorms = new Vector<T>(norms);
+        // Lp-norm of each column: (sum |x|^p)^(1/p); a norm that is zero up to rounding (below 10 * eps, as
+        // scikit-learn's normalize(axis=0) treats it) becomes 1, i.e. no scaling.
+        var x = Tensor<T>.FromMatrix(data);
+        var powered = Engine.TensorPower(Engine.TensorAbs(x), NumOps.FromDouble(_p));
+        var norms = Engine.TensorPower(Engine.ReduceSum(powered, new[] { 0 }, false), NumOps.FromDouble(1.0 / _p));
+        _columnNorms = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.HandleZerosInScale(norms), NumOps.One);
     }
 
     /// <summary>
@@ -200,28 +179,9 @@ public class LpNormScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    result[i, j] = NumOps.Divide(data[i, j], _columnNorms[j]);
-                }
-                else
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Unprocessed columns have norm 1, so x / 1 leaves them exactly unchanged.
+        return ScalerTensorOps.ShiftThenScale(
+            data, ScalerTensorOps.FilledVector(_columnNorms.Length, NumOps.Zero), _columnNorms);
     }
 
     /// <summary>
@@ -244,28 +204,8 @@ public class LpNormScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    result[i, j] = NumOps.Multiply(data[i, j], _columnNorms[j]);
-                }
-                else
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        return ScalerTensorOps.ScaleThenShift(
+            data, _columnNorms, ScalerTensorOps.FilledVector(_columnNorms.Length, NumOps.Zero));
     }
 
     /// <summary>

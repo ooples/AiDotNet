@@ -58,46 +58,32 @@ public class DecimalScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        // Initialize array for all columns
-        var scales = new T[numColumns];
-
-        // Default value for columns not processed (1.0 = no scaling)
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        if (data.Rows == 0 || numColumns == 0)
         {
-            scales[i] = NumOps.One;
+            _scale = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+            return;
         }
 
+        // Decimal scaling (Han & Kamber): scale = 10^j for the smallest j >= 0 with max|x| / 10^j < 1, i.e. the
+        // smallest power of ten strictly above max|x|. NaN does not take part in the maximum.
+        var maxAbs = Engine.TensorMax(
+            ScalerTensorOps.NanColumnMax(Engine.TensorAbs(Tensor<T>.FromMatrix(data))), NumOps.Zero);
         T ten = NumOps.FromDouble(10.0);
+        var tens = PreprocessingTensorOps.Filled(maxAbs.Shape.ToArray(), ten);
+        var log10 = Engine.TensorDivideScalar(Engine.TensorLog(maxAbs), NumOps.Log(ten));
+        var exponent = Engine.TensorMax(Engine.TensorAddScalar(Engine.TensorFloor(log10), NumOps.One), NumOps.Zero);
+        var scale = Engine.TensorPower(tens, exponent);
 
-        // Compute scale for specified columns
-        foreach (var colIdx in columnsToProcess)
-        {
-            var column = data.GetColumn(colIdx);
+        // log10 can land a hair off an exact power of ten; step the power once either way to fix it.
+        var tooSmall = Engine.TensorGreaterEqual(maxAbs, scale);
+        scale = Engine.TensorWhere(tooSmall, Engine.TensorMultiplyScalar(scale, ten), scale);
+        var lower = Engine.TensorDivideScalar(scale, ten);
+        var tooLarge = Engine.TensorMultiply(
+            Engine.TensorLessThan(maxAbs, lower), Engine.TensorGreaterEqual(lower, PreprocessingTensorOps.Filled(lower.Shape.ToArray(), NumOps.One)));
+        scale = Engine.TensorWhere(tooLarge, lower, scale);
 
-            // Find max absolute value
-            T maxAbs = NumOps.Zero;
-            for (int i = 0; i < column.Length; i++)
-            {
-                T absValue = NumOps.Abs(column[i]);
-                if (NumOps.Compare(absValue, maxAbs) > 0)
-                {
-                    maxAbs = absValue;
-                }
-            }
-
-            // Find smallest power of 10 greater than or equal to maxAbs
-            T scale = NumOps.One;
-            while (NumOps.Compare(maxAbs, scale) >= 0)
-            {
-                scale = NumOps.Multiply(scale, ten);
-            }
-
-            scales[colIdx] = scale;
-        }
-
-        _scale = new Vector<T>(scales);
+        _scale = ScalerTensorOps.MaskedParameters(mask, scale, NumOps.One);
     }
 
     /// <summary>
@@ -112,28 +98,8 @@ public class DecimalScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    value = NumOps.Divide(value, _scale[j]);
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Unprocessed columns have scale 1, so x / 1 leaves them exactly unchanged.
+        return ScalerTensorOps.ShiftThenScale(data, ScalerTensorOps.FilledVector(_scale.Length, NumOps.Zero), _scale);
     }
 
     /// <summary>
@@ -148,28 +114,7 @@ public class DecimalScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    value = NumOps.Multiply(value, _scale[j]);
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        return ScalerTensorOps.ScaleThenShift(data, _scale, ScalerTensorOps.FilledVector(_scale.Length, NumOps.Zero));
     }
 
     /// <summary>

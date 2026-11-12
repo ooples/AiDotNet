@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 using AiDotNet.Enums;
@@ -135,43 +136,27 @@ public class RobustScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        // Initialize arrays for all columns
-        var medians = new T[numColumns];
-        var iqrs = new T[numColumns];
-
-        // Default values for columns not processed
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        _median = ScalerTensorOps.FilledVector(numColumns, NumOps.Zero);
+        _iqr = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+        if (data.Rows == 0 || numColumns == 0)
         {
-            medians[i] = NumOps.Zero;
-            iqrs[i] = NumOps.One;
+            return;
         }
 
-        // Compute median and IQR for specified columns
-        foreach (var colIdx in columnsToProcess)
+        // scikit-learn: center_ = nanmedian, scale_ = nanpercentile(q_max) - nanpercentile(q_min) with linear
+        // interpolation, and a zero (or sub-10-eps) range is treated as 1.
+        var x = Tensor<T>.FromMatrix(data);
+        if (_withCentering)
         {
-            var column = data.GetColumn(colIdx);
-            var sorted = SortColumn(column);
-
-            if (_withCentering)
-            {
-                medians[colIdx] = ComputeQuantile(sorted, 50.0);
-            }
-
-            if (_withScaling)
-            {
-                T q1 = ComputeQuantile(sorted, _quantileRangeMin);
-                T q3 = ComputeQuantile(sorted, _quantileRangeMax);
-                T iqr = NumOps.Subtract(q3, q1);
-
-                // Prevent division by zero - if IQR is zero, use 1 (no scaling)
-                iqrs[colIdx] = NumOps.Compare(iqr, NumOps.Zero) == 0 ? NumOps.One : iqr;
-            }
+            _median = ScalerTensorOps.MaskedParameters(mask, ColumnQuantile(x, 50.0), NumOps.Zero);
         }
 
-        _median = new Vector<T>(medians);
-        _iqr = new Vector<T>(iqrs);
+        if (_withScaling)
+        {
+            var range = Engine.TensorSubtract(ColumnQuantile(x, _quantileRangeMax), ColumnQuantile(x, _quantileRangeMin));
+            _iqr = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.HandleZerosInScale(range), NumOps.One);
+        }
     }
 
     /// <summary>
@@ -186,36 +171,10 @@ public class RobustScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    if (_withCentering)
-                    {
-                        value = NumOps.Subtract(value, _median[j]);
-                    }
-
-                    if (_withScaling)
-                    {
-                        value = NumOps.Divide(value, _iqr[j]);
-                    }
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Unprocessed columns have center 0 and scale 1, so (x - 0) / 1 leaves them exactly unchanged.
+        var center = _withCentering ? _median : ScalerTensorOps.FilledVector(_median.Length, NumOps.Zero);
+        var scale = _withScaling ? _iqr : ScalerTensorOps.FilledVector(_iqr.Length, NumOps.One);
+        return ScalerTensorOps.ShiftThenScale(data, center, scale);
     }
 
     /// <summary>
@@ -230,91 +189,17 @@ public class RobustScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    if (_withScaling)
-                    {
-                        value = NumOps.Multiply(value, _iqr[j]);
-                    }
-
-                    if (_withCentering)
-                    {
-                        value = NumOps.Add(value, _median[j]);
-                    }
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        var center = _withCentering ? _median : ScalerTensorOps.FilledVector(_median.Length, NumOps.Zero);
+        var scale = _withScaling ? _iqr : ScalerTensorOps.FilledVector(_iqr.Length, NumOps.One);
+        return ScalerTensorOps.ScaleThenShift(data, scale, center);
     }
 
     /// <summary>
-    /// Sorts a column vector for quantile computation.
+    /// The <paramref name="percentile"/>-th percentile (0-100) of every column, ignoring NaN, with linear
+    /// interpolation between order statistics (numpy <c>nanpercentile</c>), as [p].
     /// </summary>
-    private T[] SortColumn(Vector<T> column)
-    {
-        var sorted = new T[column.Length];
-        for (int i = 0; i < column.Length; i++)
-        {
-            sorted[i] = column[i];
-        }
-
-        Array.Sort(sorted, (a, b) => NumOps.Compare(a, b));
-        return sorted;
-    }
-
-    /// <summary>
-    /// Computes a quantile from sorted data using linear interpolation.
-    /// </summary>
-    /// <param name="sorted">The sorted data.</param>
-    /// <param name="percentile">The percentile (0-100).</param>
-    /// <returns>The quantile value.</returns>
-    private T ComputeQuantile(T[] sorted, double percentile)
-    {
-        if (sorted.Length == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        if (sorted.Length == 1)
-        {
-            return sorted[0];
-        }
-
-        // Convert percentile to index
-        double index = (percentile / 100.0) * (sorted.Length - 1);
-        int lowerIndex = (int)Math.Floor(index);
-        int upperIndex = (int)Math.Ceiling(index);
-
-        if (lowerIndex == upperIndex)
-        {
-            return sorted[lowerIndex];
-        }
-
-        // Linear interpolation between adjacent values
-        double fraction = index - lowerIndex;
-        T lower = sorted[lowerIndex];
-        T upper = sorted[upperIndex];
-
-        T diff = NumOps.Subtract(upper, lower);
-        T interpolated = NumOps.Add(lower, NumOps.Multiply(diff, NumOps.FromDouble(fraction)));
-
-        return interpolated;
-    }
+    private Tensor<T> ColumnQuantile(Tensor<T> x, double percentile) =>
+        Engine.TensorNanQuantile(x, percentile / 100.0, 0, false, QuantileInterpolation.Linear);
 
     /// <summary>
     /// Gets the output feature names after transformation.

@@ -111,4 +111,72 @@ public class PreprocessingReferenceTests
         Assert.Equal(-1.0, result[0, 1], Tolerance);
         Assert.Equal(1.0, result[1, 1], Tolerance);
     }
+
+    // sklearn.preprocessing.MaxAbsScaler: max_abs_ = nanmax(|X|); NaN is kept by transform.
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_MatchesSklearn_WithNaN()
+    {
+        await Task.CompletedTask;
+        var scaler = new MaxAbsScaler<double>();
+        var result = scaler.FitTransform(M(new double[,] { { 1, -2 }, { double.NaN, 4 }, { -3, 0 } }));
+
+        Assert.Equal(1.0 / 3.0, result[0, 0], Tolerance);
+        Assert.Equal(-0.5, result[0, 1], Tolerance);
+        Assert.True(double.IsNaN(result[1, 0]));
+        Assert.Equal(1.0, result[1, 1], Tolerance);
+        Assert.Equal(-1.0, result[2, 0], Tolerance);
+        Assert.Equal(0.0, result[2, 1], Tolerance);
+    }
+
+    // sklearn.preprocessing.RobustScaler().fit_transform([[1], [2], [nan], [3], [4], [100]]):
+    // center_ = nanmedian = 3, scale_ = nanpercentile(75) - nanpercentile(25) = 4 - 2 = 2
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_MatchesSklearn_WithNaN()
+    {
+        await Task.CompletedTask;
+        var scaler = new RobustScaler<double>();
+        var result = scaler.FitTransform(M(new double[,] { { 1 }, { 2 }, { double.NaN }, { 3 }, { 4 }, { 100 } }));
+
+        Assert.Equal(3.0, scaler.Median?[0] ?? double.NaN, Tolerance);
+        Assert.Equal(2.0, scaler.InterquartileRange?[0] ?? double.NaN, Tolerance);
+        Assert.Equal(-1.0, result[0, 0], Tolerance);
+        Assert.Equal(-0.5, result[1, 0], Tolerance);
+        Assert.True(double.IsNaN(result[2, 0]));
+        Assert.Equal(48.5, result[5, 0], Tolerance);
+    }
+
+    // sklearn.preprocessing.Normalizer: rows divided by their norm, all-zero rows left at zero.
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_MatchesSklearn_L2AndMax()
+    {
+        await Task.CompletedTask;
+        var l2 = new Normalizer<double>(NormType.L2).FitTransform(M(new double[,] { { 3, 4 }, { 0, 0 } }));
+        Assert.Equal(0.6, l2[0, 0], Tolerance);
+        Assert.Equal(0.8, l2[0, 1], Tolerance);
+        Assert.Equal(0.0, l2[1, 0], Tolerance);
+        Assert.Equal(0.0, l2[1, 1], Tolerance);
+
+        var max = new Normalizer<double>(NormType.Max).FitTransform(M(new double[,] { { 1, -4 } }));
+        Assert.Equal(0.25, max[0, 0], Tolerance);
+        Assert.Equal(-1.0, max[0, 1], Tolerance);
+
+        var l1 = new Normalizer<double>(NormType.L1).FitTransform(M(new double[,] { { 1, -3 } }));
+        Assert.Equal(0.25, l1[0, 0], Tolerance);
+        Assert.Equal(-0.75, l1[0, 1], Tolerance);
+    }
+
+    // Decimal scaling (Han & Kamber): divide by the smallest power of ten above max|x|.
+    [Fact(Timeout = 120000)]
+    public async Task DecimalScaler_UsesSmallestPowerOfTenAboveMaxAbs()
+    {
+        await Task.CompletedTask;
+        var scaler = new DecimalScaler<double>();
+        scaler.Fit(M(new double[,] { { 999, 1000, 0.5, 1, 0 }, { -5, 3, -0.25, 0, 0 } }));
+
+        Assert.Equal(1000.0, scaler.Scale?[0] ?? double.NaN, Tolerance);
+        Assert.Equal(10000.0, scaler.Scale?[1] ?? double.NaN, Tolerance);
+        Assert.Equal(1.0, scaler.Scale?[2] ?? double.NaN, Tolerance);
+        Assert.Equal(10.0, scaler.Scale?[3] ?? double.NaN, Tolerance);
+        Assert.Equal(1.0, scaler.Scale?[4] ?? double.NaN, Tolerance);
+    }
 }

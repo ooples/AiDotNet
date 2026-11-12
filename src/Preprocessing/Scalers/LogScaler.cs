@@ -64,61 +64,34 @@ public class LogScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        // Initialize arrays for all columns
-        var shifts = new T[numColumns];
-        var logMins = new T[numColumns];
-        var logRanges = new T[numColumns];
-
-        // Default values for columns not processed
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        _shift = ScalerTensorOps.FilledVector(numColumns, NumOps.Zero);
+        _logMin = ScalerTensorOps.FilledVector(numColumns, NumOps.Zero);
+        _logRange = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+        if (data.Rows == 0 || numColumns == 0)
         {
-            shifts[i] = NumOps.Zero;
-            logMins[i] = NumOps.Zero;
-            logRanges[i] = NumOps.One;
+            return;
         }
 
-        // Compute parameters for specified columns
-        foreach (var colIdx in columnsToProcess)
-        {
-            var column = data.GetColumn(colIdx);
+        // Column min / max (NaN is treated as missing), shifted so the minimum is at least 1 when it is not
+        // already positive.
+        var x = Tensor<T>.FromMatrix(data);
+        var min = ScalerTensorOps.NanColumnMin(x);
+        var max = ScalerTensorOps.NanColumnMax(x);
+        var zeros = new Tensor<T>(min.Shape.ToArray());
+        var shift = Engine.TensorWhere(
+            Engine.TensorGreaterThan(min, NumOps.Zero), zeros, Engine.TensorAddScalar(Engine.TensorNegate(min), NumOps.One));
 
-            // Find min and max
-            T min = column[0];
-            T max = column[0];
-            for (int i = 1; i < column.Length; i++)
-            {
-                if (NumOps.Compare(column[i], min) < 0) min = column[i];
-                if (NumOps.Compare(column[i], max) > 0) max = column[i];
-            }
+        var logMin = Engine.TensorLog(Engine.TensorAdd(min, shift));
+        var logRange = Engine.TensorSubtract(Engine.TensorLog(Engine.TensorAdd(max, shift)), logMin);
 
-            // Calculate shift to ensure positive values
-            T shift = NumOps.Compare(min, NumOps.Zero) > 0
-                ? NumOps.Zero
-                : NumOps.Add(NumOps.Negate(min), NumOps.One);
+        // Prevent division by zero
+        var flat = Engine.TensorEquals(logRange, NumOps.Zero);
+        logRange = Engine.TensorWhere(flat, PreprocessingTensorOps.Filled(logRange.Shape.ToArray(), NumOps.One), logRange);
 
-            T shiftedMin = NumOps.Add(min, shift);
-            T shiftedMax = NumOps.Add(max, shift);
-
-            T logMin = NumOps.Log(shiftedMin);
-            T logMax = NumOps.Log(shiftedMax);
-            T logRange = NumOps.Subtract(logMax, logMin);
-
-            // Prevent division by zero
-            if (NumOps.Compare(logRange, NumOps.Zero) == 0)
-            {
-                logRange = NumOps.One;
-            }
-
-            shifts[colIdx] = shift;
-            logMins[colIdx] = logMin;
-            logRanges[colIdx] = logRange;
-        }
-
-        _shift = new Vector<T>(shifts);
-        _logMin = new Vector<T>(logMins);
-        _logRange = new Vector<T>(logRanges);
+        _shift = ScalerTensorOps.MaskedParameters(mask, shift, NumOps.Zero);
+        _logMin = ScalerTensorOps.MaskedParameters(mask, logMin, NumOps.Zero);
+        _logRange = ScalerTensorOps.MaskedParameters(mask, logRange, NumOps.One);
     }
 
     /// <summary>
@@ -133,39 +106,25 @@ public class LogScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _shift.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    T shiftedValue = NumOps.Add(value, _shift[j]);
-
-                    // Ensure positive for log
-                    if (NumOps.Compare(shiftedValue, NumOps.Zero) <= 0)
-                    {
-                        value = NumOps.Zero;
-                    }
-                    else
-                    {
-                        T logValue = NumOps.Log(shiftedValue);
-                        value = NumOps.Divide(NumOps.Subtract(logValue, _logMin[j]), _logRange[j]);
-                    }
-                }
-
-                result[i, j] = value;
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // (log(x + shift) - logMin) / logRange, and 0 where x + shift is not positive (log undefined) or NaN.
+        var shifted = Engine.TensorAdd(Tensor<T>.FromMatrix(data), ScalerTensorOps.BroadcastRow(_shift, numRows));
+        var scaled = Engine.TensorDivide(
+            Engine.TensorSubtract(Engine.TensorLog(shifted), ScalerTensorOps.BroadcastRow(_logMin, numRows)),
+            ScalerTensorOps.BroadcastRow(_logRange, numRows));
+        var zeros = new Tensor<T>(shifted.Shape.ToArray());
+        scaled = Engine.TensorWhere(Engine.TensorLessEqual(shifted, zeros), zeros, scaled);
+        scaled = Engine.TensorWhere(Engine.TensorIsNan(shifted), zeros, scaled);
+
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        return ScalerTensorOps.MergeColumns(mask, scaled, data);
     }
 
     /// <summary>
@@ -180,31 +139,22 @@ public class LogScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _shift.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // Reverse: exp(value * logRange + logMin) - shift
-                    T logValue = NumOps.Add(NumOps.Multiply(value, _logRange[j]), _logMin[j]);
-                    T expValue = NumOps.Exp(logValue);
-                    value = NumOps.Subtract(expValue, _shift[j]);
-                }
-
-                result[i, j] = value;
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // Reverse: exp(value * logRange + logMin) - shift
+        var logValue = Engine.TensorAdd(
+            Engine.TensorMultiply(Tensor<T>.FromMatrix(data), ScalerTensorOps.BroadcastRow(_logRange, numRows)),
+            ScalerTensorOps.BroadcastRow(_logMin, numRows));
+        var restored = Engine.TensorSubtract(Engine.TensorExp(logValue), ScalerTensorOps.BroadcastRow(_shift, numRows));
+
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        return ScalerTensorOps.MergeColumns(mask, restored, data);
     }
 
     /// <summary>
