@@ -1078,6 +1078,26 @@ internal static class FeatureSelectionTensorOps
 
         return engine.TensorConcatenate(columns, 1);
     }
+
+    /// <summary>
+    /// Class scatter of every column of <paramref name="x"/> ([n, p]) for rows grouped by
+    /// <paramref name="classIndex"/> (positions in 0..<paramref name="classCount"/>-1): returns the between-class sum
+    /// of squares <c>sum_c n_c (mean_c - mean)^2</c> and, in <paramref name="within"/>, the within-class sum of
+    /// squares <c>sum_i (x_i - mean_class(i))^2</c>. Both [p].
+    /// </summary>
+    public static Tensor<T> ClassScatter<T>(Tensor<T> x, Tensor<int> classIndex, int classCount, out Tensor<T> within)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = x.Shape[1];
+        var shape = new[] { classCount, p };
+        var membership = engine.TensorOneHot<T>(classIndex, classCount);
+        var classMeans = GroupMeans(membership, x, out var counts);
+        var overallMean = engine.TensorBroadcastTo(engine.ReduceMean(x, new[] { 0 }, true), shape);
+        within = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(x,
+            engine.TensorIndexSelect(classMeans, classIndex, 0))), new[] { 0 }, false);
+        return engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean)),
+            engine.TensorBroadcastTo(engine.Reshape(counts, new[] { classCount, 1 }), shape)), new[] { 0 }, false);
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>

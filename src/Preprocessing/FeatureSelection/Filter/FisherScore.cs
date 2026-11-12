@@ -27,13 +27,13 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _fisherScores;
+    private Vector<T>? _fisherScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FisherScores => _fisherScores;
+    public Vector<T>? FisherScores => _fisherScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -67,87 +67,25 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         int n = data.Rows;
         int p = data.Columns;
 
-        // Group samples by class
-        var classSamples = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int classLabel = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classSamples.ContainsKey(classLabel))
-                classSamples[classLabel] = [];
-            classSamples[classLabel].Add(i);
-        }
+        var engine = Engine;
 
-        var classLabels = classSamples.Keys.ToList();
-        int numClasses = classLabels.Count;
+        // Group samples by class (rounded target values)
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
 
-        _fisherScores = new double[p];
-
-        // Compute global mean for each feature
-        var globalMeans = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                globalMeans[j] += NumOps.ToDouble(data[i, j]);
-            globalMeans[j] /= n;
-        }
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute class means and variances
-            var classMeans = new Dictionary<int, double>();
-            var classVars = new Dictionary<int, double>();
-
-            foreach (int c in classLabels)
-            {
-                var samples = classSamples[c];
-                double mean = 0;
-                foreach (int i in samples)
-                    mean += NumOps.ToDouble(data[i, j]);
-                mean /= samples.Count;
-                classMeans[c] = mean;
-
-                double variance = 0;
-                foreach (int i in samples)
-                {
-                    double diff = NumOps.ToDouble(data[i, j]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= samples.Count;
-                classVars[c] = variance;
-            }
-
-            // Between-class variance: sum of n_k * (mean_k - global_mean)^2
-            double betweenVar = 0;
-            foreach (int c in classLabels)
-            {
-                double diff = classMeans[c] - globalMeans[j];
-                betweenVar += classSamples[c].Count * diff * diff;
-            }
-
-            // Within-class variance: sum of n_k * variance_k
-            double withinVar = 0;
-            foreach (int c in classLabels)
-            {
-                withinVar += classSamples[c].Count * classVars[c];
-            }
-
-            // Fisher Score = between-class variance / within-class variance
-            _fisherScores[j] = withinVar > 1e-10 ? betweenVar / withinVar : 0;
-        }
+        // Fisher Score = between-class / within-class sum of squares (0 when within is not above 1e-10)
+        var betweenVar = FeatureSelectionTensorOps.ClassScatter(Tensor<T>.FromMatrix(data),
+            new Tensor<int>(classIndex, new[] { n }), classes.Length, out var withinVar);
+        var usable = engine.TensorGreaterThan(withinVar, NumOps.FromDouble(1e-10));
+        var fisherScores = engine.TensorWhere(usable, engine.TensorDivide(betweenVar,
+            engine.TensorWhere(usable, withinVar, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
+        _fisherScores = fisherScores.ToVector();
 
         // Select top features by Fisher Score
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _fisherScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(fisherScores, numToSelect);
 
         IsFitted = true;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
