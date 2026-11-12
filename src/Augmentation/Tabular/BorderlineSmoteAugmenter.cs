@@ -210,9 +210,12 @@ public class BorderlineSmoteAugmenter<T> : TabularAugmenterBase<T>
         var targets = new int[numSynthetic];
         var gaps = new Vector<T>(numSynthetic);
 
-        // Minority rows followed by majority rows, so a majority neighbor index
-        // (minorityCount + majority row) addresses this matrix directly
-        var candidates = majorityData is not null && majorityData.Rows > 0
+        // Borderline-SMOTE2 can target a majority neighbor, so its candidates are the minority rows
+        // followed by the majority rows: a majority neighbor index (minorityCount + majority row)
+        // addresses that matrix directly. Borderline-SMOTE1 only ever targets minority rows (indices
+        // below minorityCount), so it interpolates within the minority matrix and never copies the
+        // majority rows.
+        var candidates = UseBorderline2 && majorityData is not null && majorityData.Rows > 0
             ? TabularEngineOps<T>.ConcatenateRows(minorityData, majorityData)
             : minorityData;
 
