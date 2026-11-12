@@ -333,18 +333,25 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 
         // Offset of the first coordinate within a row: past the token column when there is one.
         int boxBase = _includeTokens ? 1 : 0;
-        var flat = input.Data.Span;
 
-        var positions = new Tensor<T>(leading);
-        var positionSpan = positions.Data.Span;
-
-        Tensor<T>? tokenIds = _includeTokens ? new Tensor<T>(leading) : null;
-
-        for (int i = 0; i < gridSize; i++)
+        // Lookup indices are built off the gradient tape, as the fresh index tensors always were.
+        // Column k of a packed row (stride = rowWidth), or the bare index grid (stride = 1).
+        Tensor<T> RowColumn(int k)
         {
-            if (tokenIds is not null) tokenIds.Data.Span[i] = flat[i * stride];
-            // Reading order within each sequence; wraps per batch row.
-            positionSpan[i] = NumOps.FromDouble(Math.Min(i % seqLen, _maxSequenceLength - 1));
+            if (stride == 1) return Engine.Reshape(input, leading);
+            var rows = Engine.Reshape(input, [gridSize, rowWidth]);
+            return Engine.Reshape(Engine.TensorSlice(rows, [0, k], [gridSize, 1]), leading);
+        }
+
+        Tensor<T> positions;
+        Tensor<T>? tokenIds;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            tokenIds = _includeTokens ? RowColumn(0) : null;
+            // Reading order within each sequence; repeats per batch row.
+            positions = Engine.TensorBroadcastTo(
+                Engine.TensorClampMax(Engine.TensorArange<T>(0, seqLen, 1), NumOps.FromDouble(_maxSequenceLength - 1)),
+                leading);
         }
 
         // Reading-order position always applies. Word identity only when there is a token column --
@@ -361,41 +368,20 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             return embedded;
         }
 
-        var x0 = new Tensor<T>(leading);
-        var y0 = new Tensor<T>(leading);
-        var x1 = new Tensor<T>(leading);
-        var y1 = new Tensor<T>(leading);
-        var widths = new Tensor<T>(leading);
-        var heights = new Tensor<T>(leading);
-
-        var x0Span = x0.Data.Span;
-        var y0Span = y0.Data.Span;
-        var x1Span = x1.Data.Span;
-        var y1Span = y1.Data.Span;
-        var widthSpan = widths.Data.Span;
-        var heightSpan = heights.Data.Span;
-
-        for (int i = 0; i < gridSize; i++)
+        Tensor<T> x0, y0, x1, y1, widths, heights;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int b = i * rowWidth + boxBase;
-            int left = ClampCoordinate(flat[b]);
-            int top = ClampCoordinate(flat[b + 1]);
-            int right = ClampCoordinate(flat[b + 2]);
-            int bottom = ClampCoordinate(flat[b + 3]);
-
-            x0Span[i] = NumOps.FromDouble(left);
-            y0Span[i] = NumOps.FromDouble(top);
-            x1Span[i] = NumOps.FromDouble(right);
-            y1Span[i] = NumOps.FromDouble(bottom);
+            x0 = ClampCoordinate(RowColumn(boxBase));
+            y0 = ClampCoordinate(RowColumn(boxBase + 1));
+            x1 = ClampCoordinate(RowColumn(boxBase + 2));
+            y1 = ClampCoordinate(RowColumn(boxBase + 3));
 
             // Size, not position. Taken from the row when the caller supplied it, otherwise derived
             // from the corners -- and by magnitude, because a corner-swapped box (right < left) still
-            // has a real extent and clamping that difference to zero would erase it.
-            int w = extentsGiven ? ClampCoordinate(flat[b + 4]) : Math.Abs(right - left);
-            int h = extentsGiven ? ClampCoordinate(flat[b + 5]) : Math.Abs(bottom - top);
-
-            widthSpan[i] = NumOps.FromDouble(Math.Min(w, _maxPosition2D - 1));
-            heightSpan[i] = NumOps.FromDouble(Math.Min(h, _maxPosition2D - 1));
+            // has a real extent and clamping that difference to zero would erase it. Both corners
+            // are already in [0, maxPosition2D - 1], so their distance is too.
+            widths = extentsGiven ? ClampCoordinate(RowColumn(boxBase + 4)) : Engine.TensorAbs(Engine.TensorSubtract(x1, x0));
+            heights = extentsGiven ? ClampCoordinate(RowColumn(boxBase + 5)) : Engine.TensorAbs(Engine.TensorSubtract(y1, y0));
         }
 
         // Both corners go through the SAME axis table, per the paper.
@@ -414,15 +400,14 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// paper's 0-1000 grid, and a stray value must not throw out of a lookup that the caller cannot
     /// see — so out-of-range coordinates saturate at the edge of the page, which is where they are.
     /// </summary>
-    private int ClampCoordinate(T value)
+    /// <summary>
+    /// Coordinate to table index: NaN maps to 0, then round half to even and clamp to
+    /// <c>[0, maxPosition2D - 1]</c>.
+    /// </summary>
+    private Tensor<T> ClampCoordinate(Tensor<T> value)
     {
-        double raw = NumOps.ToDouble(value);
-        if (double.IsNaN(raw)) return 0;
-
-        int index = (int)Math.Round(raw);
-        if (index < 0) return 0;
-        if (index >= _maxPosition2D) return _maxPosition2D - 1;
-        return index;
+        var finite = Engine.TensorNanToNum(value, 0.0, null, null);
+        return Engine.TensorClamp(Engine.TensorRound(finite), NumOps.Zero, NumOps.FromDouble(_maxPosition2D - 1));
     }
 
     /// <inheritdoc/>

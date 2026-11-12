@@ -1069,40 +1069,20 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
 
         // 1. Compute negative entropy (to encourage low entropy/focused attention)
         // H = -Σ(p * log(p))
-        T totalNegativeEntropy = NumOps.Zero;
         // _lastAttentionScores has shape [batchSize, headCount, seqLen, seqLen]. The length is the last input's, read
         // from the scores: a model that prepends tokens (U-ViT's time and context tokens) or runs a shorter sequence
         // than the constructor's would otherwise leave tokens out of the loss or index past the scores.
         int numHeads = _lastAttentionScores.Shape[1];
         int seqLen = _lastAttentionScores.Shape[2];
         int batchSize = _lastAttentionScores.Shape[0];
+        var scores = Engine.TensorSlice(_lastAttentionScores, [0, 0, 0, 0], [batchSize, numHeads, seqLen, seqLen]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < seqLen; i++)
-                {
-                    T entropy = NumOps.Zero;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        // Get attention weight for this batch, head, and position
-                        T attnWeight = _lastAttentionScores[new int[] { b, h, i, j }];
-
-                        // Skip zero or very small values to avoid log(0)
-                        if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
-                            continue;
-
-                        // H = -Σ(p * log(p))
-                        T logWeight = NumOps.Log(attnWeight);
-                        T term = NumOps.Multiply(attnWeight, logWeight);
-                        entropy = NumOps.Subtract(entropy, term);
-                    }
-                    // We want low entropy (focused attention), so we minimize -H
-                    totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
-                }
-            }
-        }
+        // Per row H = -sum(p * log(p)) over weights >= 1e-10 (smaller ones are skipped to avoid log(0)).
+        // We minimize -H summed over every (batch, head, query) row: sum(p * log(p)) over all kept weights.
+        var plogp = Engine.TensorMultiply(scores, Engine.TensorLog(scores));
+        var kept = Engine.TensorWhere(
+            Engine.TensorLessThan(scores, NumOps.FromDouble(1e-10)), new Tensor<T>(scores._shape), plogp);
+        T totalNegativeEntropy = Engine.TensorSum(kept);
 
         // Average over batch size
         totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
@@ -1234,11 +1214,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         InitializeTensor(_valueWeights, scale);
 
         // Initialize bias tensor to zeros
-        int biasLen = _outputBias.Shape[0];
-        for (int i = 0; i < biasLen; i++)
-        {
-            _outputBias[i] = NumOps.Zero;
-        }
+        _outputBias.Fill(NumOps.Zero);
     }
 
     /// <summary>
