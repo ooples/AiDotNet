@@ -172,8 +172,8 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
     }
 
     /// <summary>
-    /// -0.5 log(1 - r^2) with r = sum(a b) / sqrt(max(sum(a^2), 1e-15) max(sum(b^2), 1e-15)) clamped to
-    /// [-0.9999, 0.9999].
+    /// -0.5 log(1 - r^2) with r = sum(a b) / (sqrt(max(sum(a^2), 1e-15)) sqrt(max(sum(b^2), 1e-15))) clamped
+    /// to [-0.9999, 0.9999]; the square roots are taken before the product so finite sums cannot overflow T.
     /// </summary>
     private double ClampedCorrelationMI(Tensor<T> a, Tensor<T> b)
     {
@@ -183,7 +183,7 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         T varB = Engine.TensorSum(Engine.TensorSquare(b));
         if (NumOps.LessThan(varA, floor)) varA = floor;
         if (NumOps.LessThan(varB, floor)) varB = floor;
-        T corr = NumOps.Divide(cov, NumOps.Sqrt(NumOps.Multiply(varA, varB)));
+        T corr = NumOps.Divide(cov, NumOps.Multiply(NumOps.Sqrt(varA), NumOps.Sqrt(varB)));
         T bound = NumOps.FromDouble(0.9999);
         if (NumOps.GreaterThan(corr, bound)) corr = bound;
         if (NumOps.LessThan(corr, NumOps.Negate(bound))) corr = NumOps.Negate(bound);
