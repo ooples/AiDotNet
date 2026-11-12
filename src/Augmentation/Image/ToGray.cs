@@ -13,6 +13,7 @@ public class ToGray<T> : ImageAugmenterBase<T>
 {
     public ToGray(double probability = 0.5) : base(probability) { }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         if (data.Channels < 3) return data.Clone();

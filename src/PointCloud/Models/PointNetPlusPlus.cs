@@ -362,6 +362,7 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         _classificationHeadLayers.Add(output);
     }
 
+    /// <inheritdoc />
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != _inputFeatureDim)
@@ -386,6 +387,7 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         return x;
     }
 
+    /// <inheritdoc />
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
     {
         bool originalMode = IsTrainingMode;
@@ -408,6 +410,7 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         }
     }
 
+    /// <inheritdoc />
     public Tensor<T> ExtractPointFeatures(Tensor<T> pointCloud)
     {
         if (pointCloud.Shape.Length != 2 || pointCloud.Shape[1] != _inputFeatureDim)
@@ -426,12 +429,14 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         return x;
     }
 
+    /// <inheritdoc />
     public Vector<T> ClassifyPointCloud(Tensor<T> pointCloud)
     {
         var output = Predict(pointCloud);
         return new Vector<T>(output.Data.ToArray());
     }
 
+    /// <inheritdoc />
     public Tensor<T> SegmentPointCloud(Tensor<T> pointCloud)
     {
         if (pointCloud.Shape.Length != 2 || pointCloud.Shape[1] != _inputFeatureDim)
@@ -529,16 +534,19 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         return new Tensor<T>(output, [numPoints, featureDim]);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
         return ForwardWithMemory(input);
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -1175,6 +1183,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != _inputChannels)
@@ -1211,6 +1220,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
     }
 
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var branch in _branches)
@@ -1222,6 +1232,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         foreach (var branch in _branches)
@@ -1235,6 +1246,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
 
     // UpdateParameters walked Layers by hand, distributing the flat vector slice by
     // slice. That is the base implementation, restated.
+    /// <inheritdoc />
     public override void ResetState()
     {
         _centroidIndices = null;
@@ -1252,6 +1264,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     private static int[] ValidateChannelArray(int[] values, string paramName)

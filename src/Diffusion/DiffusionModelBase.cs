@@ -60,6 +60,17 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// <summary>Training steps this model has run on the fused compiled plan.</summary>
     internal int FusedTrainingStepCount { get; private set; }
 
+    private T _lastTrainingLoss = default!;
+    private bool _lastTrainingLossRecorded;
+
+    /// <summary>
+    /// The noise-prediction loss of the most recent <see cref="Train"/> step, on the fused plan or the eager tape.
+    /// </summary>
+    /// <remarks>
+    /// Returns zero before the first step. NaN and Infinity are returned as they are, so divergence stays visible.
+    /// </remarks>
+    public virtual T GetLastLoss() => _lastTrainingLossRecorded ? _lastTrainingLoss : NumOps.Zero;
+
     /// <summary>Training steps this model has run on the eager tape.</summary>
     internal int EagerTrainingStepCount { get; private set; }
 
@@ -279,11 +290,14 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             ComputeLoss = Loss,
             Optimizer = optimizer,
             ExtraParameters = parameters,
-        }, out _);
+        }, out var loss);
 
         if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
             session.DropAfterCommittedFailure();
-        return outcome == AiDotNet.Training.FusedStepOutcome.Stepped;
+        if (outcome != AiDotNet.Training.FusedStepOutcome.Stepped)
+            return false;
+        RecordTrainingLoss(loss);
+        return true;
     }
 
     private static void RestoreShadow(Tensor<T> param, Vector<T> shadow)
@@ -589,6 +603,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     {
     }
 
+    /// <inheritdoc />
     public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
     {
         get { EnsureComponentsRegistered(); return _parameterRegistry.ParameterLayout; }
@@ -1390,6 +1405,12 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         Tensor<T> expectedOutput) => input;
 
     /// <summary>
+    /// Whether a training sample carries a leading batch axis, so each element gets its own timestep. Rank 1 is one
+    /// sample; by default any higher rank is a batch along axis 0.
+    /// </summary>
+    protected virtual bool IsBatchedTrainingSample(Tensor<T> sample) => sample.Rank >= 2;
+
+    /// <summary>
     /// Predicts scheduler noise for a prepared training sample.
     /// </summary>
     /// <remarks>
@@ -1406,6 +1427,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             ? PredictNoiseBatched(noisySample, timesteps)
             : PredictNoise(noisySample, timesteps[0]);
 
+    /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         _lastTrainingParameterGradients = null;
@@ -1466,8 +1488,8 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         // across the batch, which is the canonical DDPM training pattern.
         //
         // Rank-1 input (unbatched, historical AiDotNet contract) still gets a single
-        // timestep; rank ≥ 2 gets per-element timesteps.
-        bool isBatched = trainingSample.Rank >= 2;
+        // timestep; rank ≥ 2 gets per-element timesteps unless the model reads it as one sample.
+        bool isBatched = IsBatchedTrainingSample(trainingSample);
         int batchSize = isBatched ? trainingSample.Shape[0] : 1;
         var timesteps = new int[batchSize];
         for (int b = 0; b < batchSize; b++)
@@ -1554,11 +1576,21 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         // the element count and destabilised plain SGD (Imagen2's Training_ShouldReducePredictionError rose
         // 0.317 -> 0.321 over 10 steps). The objective replays the same timesteps and noise when an optimizer
         // re-evaluates it (line search).
+        // A model that predicts from a timestep tensor runs the whole batch through one forward, each element at its
+        // own timestep; the int-array path runs one forward per element.
+        Tensor<T>? timestepTensor = null;
+        if (isBatched && CanPredictFromTimestepTensor)
+        {
+            timestepTensor = new Tensor<T>([timesteps.Length]);
+            for (int b = 0; b < timesteps.Length; b++) timestepTensor[b] = NumOps.FromDouble(timesteps[b]);
+        }
+
         Tensor<T>? noiseTensor = null;
         Tensor<T> NoisePredictionLoss()
         {
-            var predicted = PredictTrainingNoise(
-                noisySampleTensor, timesteps, isBatched, input, expectedOutput);
+            var predicted = timestepTensor is not null
+                ? PredictTrainingNoise(noisySampleTensor, timestepTensor, input, expectedOutput)
+                : PredictTrainingNoise(noisySampleTensor, timesteps, isBatched, input, expectedOutput);
             noiseTensor ??= new Tensor<T>(predicted._shape, noiseVector);
             var diff = Engine.TensorSubtract(predicted, noiseTensor);
             var sq = Engine.TensorMultiply(diff, diff);
@@ -1589,7 +1621,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         //
         // Default optimizer: paper-faithful Adam (DDPM: beta1=0.9, beta2=0.999, eps=1e-8, no weight decay, fixed LR
         // captured at the first Train). Supply DiffusionModelOptions.OptimizerFactory for schedules.
-        AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+        var eagerLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
             TrainedTensors,
             NoisePredictionLoss,
             GetOrCreateTrainingOptimizer(),
@@ -1603,6 +1635,13 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
                         RestoreShadow(shadowedParams[i], shadows[i]);
                 }
                 : null);
+        RecordTrainingLoss(eagerLoss);
+    }
+
+    private void RecordTrainingLoss(T loss)
+    {
+        _lastTrainingLoss = loss;
+        _lastTrainingLossRecorded = true;
     }
 
     /// <summary>

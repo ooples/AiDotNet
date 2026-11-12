@@ -42,18 +42,19 @@ internal sealed class JitValueStability<TValue>
 
             if (_tracedValues is null)
             {
-                _tracedValues = new TValue[input.Length];
-                for (int i = 0; i < input.Length; i++) _tracedValues[i] = input[i];
+                _tracedValues = (input.IsContiguous ? input.AsSpan() : input.Contiguous().AsSpan()).ToArray();
 
                 return false;
             }
 
             if (_tracedValues.Length != input.Length) return true;
 
+            var current = input.IsContiguous ? input.AsSpan() : input.Contiguous().AsSpan();
             var comparer = EqualityComparer<TValue>.Default;
-            for (int i = 0; i < input.Length; i++)
+            var traced = _tracedValues;
+            for (int i = 0; i < traced.Length; i++)
             {
-                if (!comparer.Equals(_tracedValues[i], input[i])) return true;
+                if (!comparer.Equals(traced[i], current[i])) return true;
             }
 
             return false;

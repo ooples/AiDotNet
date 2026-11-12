@@ -335,6 +335,7 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         _outputWeights, _outputBias
     ];
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

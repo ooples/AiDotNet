@@ -6162,7 +6162,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
                 if (Model != null && modelBytes.Length > 0)
                 {
-                    Model.Deserialize(modelBytes);
+                    // Model is the JSON skeleton built from the type's defaults, so it adopts the saved architecture.
+                    using (AiDotNet.NeuralNetworks.SerializedArchitectureAdoption.Begin())
+                        Model.Deserialize(modelBytes);
                     OptimizationResult.BestSolution = Model;
                 }
 

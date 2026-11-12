@@ -176,6 +176,7 @@ public partial class CodeBERT<T> : CodeModelBase<T>
         CodeTransformerLayerFactory.AddOutputProjection(Layers, CodeArchitecture);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return CreateTransformerModelMetadata(

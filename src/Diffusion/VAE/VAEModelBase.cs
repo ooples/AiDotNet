@@ -297,6 +297,7 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     {
     }
 
+    /// <inheritdoc />
     public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
     {
         get { EnsureComponentsRegistered(); return _parameterRegistry.ParameterLayout; }

@@ -355,6 +355,29 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         return ParameterChunkRestore<T>.Read(this, typeof(ModelBase<T, TInput, TOutput>), _parameterRegistry, GetParameters);
     }
 
+    /// <summary>
+    /// Gets the number of values the optimizer trains: <see cref="ParameterCount"/> without buffers and frozen state.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ParameterCount"/> also counts state that is saved but never learned, such as batch normalization's
+    /// running statistics. This counts only the chunks whose role is <see cref="ParameterSlotRole.Trainable"/>, the
+    /// size PyTorch reports as <c>sum(p.numel() for p in model.parameters() if p.requires_grad)</c>.
+    /// </remarks>
+    public long TrainableParameterCount
+    {
+        get
+        {
+            var seen = new HashSet<Tensor<T>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            long total = 0;
+            foreach (var chunk in GetParameterStateChunks())
+            {
+                if (chunk.Role == ParameterSlotRole.Trainable && seen.Add(chunk.Tensor)) total += chunk.Tensor.Length;
+            }
+
+            return total;
+        }
+    }
+
     /// <inheritdoc/>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
     {

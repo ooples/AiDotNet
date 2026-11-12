@@ -545,6 +545,7 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
         // the convs in ParameterCount.
     }
 
+    /// <inheritdoc />
     protected override void OnFirstForward(Tensor<T> input)
     {
         var s = input._shape;
@@ -575,8 +576,10 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
@@ -609,6 +612,7 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
         return output;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _conv1.UpdateParameters(learningRate);
@@ -618,6 +622,7 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.Scratch]
     private Vector<T>? _pendingParameters;
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _conv1.ResetState();
@@ -718,6 +723,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
         // discovers _upsample/_conv1/_conv2.
     }
 
+    /// <inheritdoc />
     protected override void OnFirstForward(Tensor<T> input)
     {
         var s = input._shape;
@@ -751,8 +757,10 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return Forward(input, null);
@@ -903,6 +911,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
         return output;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _conv1.UpdateParameters(learningRate);
@@ -912,6 +921,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.Scratch]
     private Vector<T>? _pendingParameters;
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _lastInput = null;

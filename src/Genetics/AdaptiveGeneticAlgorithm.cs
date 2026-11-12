@@ -29,6 +29,7 @@ public partial class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
         _currentCrossoverRate = (minCrossoverRate + maxCrossoverRate) / 2;
     }
 
+    /// <inheritdoc />
     public override EvolutionStats<T, TInput, TOutput> Evolve(
         int generations,
         TInput trainingInput,
@@ -45,6 +46,7 @@ public partial class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
         return base.Evolve(generations, trainingInput, trainingOutput, validationInput, validationOutput, stopCriteria);
     }
 
+    /// <inheritdoc />
     protected override void UpdateEvolutionStats()
     {
         base.UpdateEvolutionStats();
@@ -95,6 +97,7 @@ public partial class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
         GeneticParams.CrossoverRate = _currentCrossoverRate;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();

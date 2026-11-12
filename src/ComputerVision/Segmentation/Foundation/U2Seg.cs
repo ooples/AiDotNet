@@ -178,6 +178,7 @@ public partial class U2Seg<T> : Common.PanopticSegmentationBase<T>
 
     #region Private Methods
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
@@ -189,6 +190,7 @@ public partial class U2Seg<T> : Common.PanopticSegmentationBase<T>
         return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

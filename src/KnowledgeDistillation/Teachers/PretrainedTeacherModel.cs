@@ -40,6 +40,7 @@ public class PretrainedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
     private readonly int _outputDim;
     private readonly int _inputDim;
 
+    /// <inheritdoc />
     public override int OutputDimension => _outputDim;
 
     /// <summary>

@@ -335,6 +335,7 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);

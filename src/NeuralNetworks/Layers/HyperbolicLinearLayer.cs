@@ -206,6 +206,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
@@ -574,6 +575,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         return grad;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         if (_weightsGradient == null || _biasesGradient == null)
@@ -610,6 +612,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         _biasesGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _weightsGradient = null;

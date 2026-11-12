@@ -578,6 +578,7 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights, _outputProjectionBias
     ];
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

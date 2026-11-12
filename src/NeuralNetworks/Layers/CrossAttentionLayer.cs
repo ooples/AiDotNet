@@ -194,8 +194,10 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         _isInitialized = false;
     }
 
+    /// <inheritdoc />
     protected override bool ParametersAreConstructionSized => true;
 
+    /// <inheritdoc />
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;
@@ -709,6 +711,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

@@ -394,6 +394,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>Per-channel centering cancels a preceding per-channel bias exactly.</remarks>
     public override bool MakesUpstreamBiasRedundant => true;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -788,6 +789,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         return applied ? output : Engine.ReLU(output);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
@@ -1345,6 +1347,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -1352,6 +1355,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _betaGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear CPU cached values

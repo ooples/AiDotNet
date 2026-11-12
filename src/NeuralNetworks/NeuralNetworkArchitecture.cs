@@ -1452,7 +1452,7 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
 
     // ── Persistence of the descriptor ────────────────────────────────────────────────────────────────────
     //
-    // A network's saved payload carries its layers and weights, and until format v9 it carried nothing of
+    // A network's saved payload carries its layers and weights, and until format v10 it carried nothing of
     // the architecture that described them. Restoring into an instance built with some OTHER architecture --
     // which is exactly what AiModelResult.Deserialize does, because the model it restores into is a skeleton
     // the JSON layer constructed with that type's defaults (FeedForwardNeuralNetwork's parameterless
@@ -1537,7 +1537,7 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     /// later version that added a field) are skipped; every field this type shares with the writer is
     /// restored, which always includes the whole base descriptor.
     /// </remarks>
-    internal void ReadAndRestoreDescriptor(BinaryReader reader)
+    internal void ReadAndRestoreDescriptor(BinaryReader reader, bool apply = true)
     {
         string magic = reader.ReadString();
         if (!string.Equals(magic, DescriptorMagic, StringComparison.Ordinal))
@@ -1552,7 +1552,7 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
         {
             string key = reader.ReadString();
             object? value = ReadDescriptorValue(reader);
-            if (!fieldsByKey.TryGetValue(key, out var field)) continue;
+            if (!apply || !fieldsByKey.TryGetValue(key, out var field)) continue;
 
             var targetType = Nullable.GetUnderlyingType(field.FieldType) ?? field.FieldType;
             if (value is null)

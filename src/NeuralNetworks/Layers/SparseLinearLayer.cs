@@ -477,6 +477,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         _biasesGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _lastInput = null;

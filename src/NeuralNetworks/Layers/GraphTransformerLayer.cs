@@ -257,6 +257,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </summary>
     private readonly IActivationFunction<T> _ffnActivation;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -886,6 +887,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         _ffnBias2Gradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _lastOutput = null;

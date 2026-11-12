@@ -698,6 +698,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
         _biasesGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

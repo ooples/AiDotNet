@@ -791,6 +791,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     // Rows per batched prediction forward (bounds activation memory; see Predict).
     private const int PredictChunkRows = 256;
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))

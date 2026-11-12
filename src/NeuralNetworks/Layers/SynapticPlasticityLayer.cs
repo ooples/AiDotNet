@@ -329,8 +329,10 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private readonly double _traceDecay;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         int size = GetInputShape()[0];

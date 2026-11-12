@@ -168,6 +168,7 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public Vector<T> PreviousState { get; set; }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>

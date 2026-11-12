@@ -375,9 +375,9 @@ public class InputGradientHelper<T>
     {
         var eng = AiDotNetEngine.Current;
         var rng = new Random(0x5eed);
-        var dir = new T[input.Length];
-        for (int i = 0; i < dir.Length; i++) dir[i] = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-        var direction = new Tensor<T>(dir, input._shape);
+        var dir = new double[input.Length];
+        for (int i = 0; i < dir.Length; i++) dir[i] = rng.NextDouble() * 2 - 1;
+        var direction = new Tensor<double>(dir, input._shape).Cast<T>();
         var step = eng.TensorMultiplyScalar(direction, NumOps.FromDouble(_epsilon));
         var plus = _tensorPredictFunction!(eng.TensorAdd(input, step));
         var minus = _tensorPredictFunction!(eng.TensorSubtract(input, step));

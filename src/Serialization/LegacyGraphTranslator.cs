@@ -53,13 +53,10 @@ internal static class LegacyGraphTranslator
 
         var shape = (probeInputShape is null || probeInputShape.Length == 0 ? new[] { 1 } : probeInputShape)
             .Select(d => d > 0 ? d : 1).ToArray();
-        var probe = new Tensor<T>(shape);
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < probe.Length; i++)
-        {
-            // Deterministic values in (0, 1): positive for Log/Sqrt, distinct enough that a verify catches a mismatch.
-            probe.SetFlat(i, numOps.FromDouble(0.05 + 0.9 * ((i * 7919) % 101) / 101.0));
-        }
+        // Deterministic values in (0, 1): positive for Log/Sqrt, distinct enough that a verify catches a mismatch.
+        var probeValues = new double[shape.Aggregate(1, (a, b) => checked(a * b))];
+        for (int i = 0; i < probeValues.Length; i++) probeValues[i] = 0.05 + 0.9 * ((i * 7919L) % 101) / 101.0;
+        var probe = new Tensor<double>(probeValues, shape).Cast<T>();
 
         try
         {
@@ -975,16 +972,17 @@ internal static class LegacyGraphTranslator
                 throw new ArgumentException("Theta must be of shape [batch, 2, 3]");
             int h = size[0], w = size[1], batch = theta.Shape[0];
             // Legacy base grid: x = w / max(W - 1, 1) · 2 - 1, y likewise, homogeneous 1; grid = base · thetaᵀ.
-            var grid = new Tensor<T>(new[] { h * w, 3 });
+            var gridValues = new double[h * w * 3];
             for (int r = 0, i = 0; r < h; r++)
             {
-                for (int c = 0; c < w; c++, i++)
+                for (int c = 0; c < w; c++, i += 3)
                 {
-                    grid[i, 0] = C((double)c / Math.Max(w - 1, 1) * 2.0 - 1.0);
-                    grid[i, 1] = C((double)r / Math.Max(h - 1, 1) * 2.0 - 1.0);
-                    grid[i, 2] = _ops.One;
+                    gridValues[i] = (double)c / Math.Max(w - 1, 1) * 2.0 - 1.0;
+                    gridValues[i + 1] = (double)r / Math.Max(h - 1, 1) * 2.0 - 1.0;
+                    gridValues[i + 2] = 1.0;
                 }
             }
+            var grid = new Tensor<double>(gridValues, new[] { h * w, 3 }).Cast<T>();
             var based = _e.TensorBroadcastTo(_e.Reshape(grid, new[] { 1, h * w, 3 }), new[] { batch, h * w, 3 });
             var mapped = _e.BatchMatMul(based, _e.TensorPermute(theta, new[] { 0, 2, 1 }));
             return _e.Reshape(mapped, new[] { batch, h, w, 2 });
@@ -1132,17 +1130,17 @@ internal static class LegacyGraphTranslator
                 "+06+60+17-71+24+42-35-53",
                 "+07+70+16+61-25-52-34+43",
             };
-            var table = new Tensor<T>(new[] { 64, 8 });
+            var table = new double[64 * 8];
             for (int k = 0; k < 8; k++)
             {
                 for (int t = 0; t < 8; t++)
                 {
                     var term = terms[k].Substring(3 * t, 3);
                     int p = term[1] - '0', q = term[2] - '0';
-                    table[8 * p + q, k] = term[0] == '+' ? _ops.One : _ops.Negate(_ops.One);
+                    table[(8 * p + q) * 8 + k] = term[0] == '+' ? 1.0 : -1.0;
                 }
             }
-            return table;
+            return new Tensor<double>(table, new[] { 64, 8 }).Cast<T>();
         }
 
         // ── Poincaré ball (legacy formulas, row-wise over the last axis) ──

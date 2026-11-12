@@ -287,9 +287,9 @@ public class ModelResultArchitectureRoundTripTests
     }
 
     [Fact]
-    public void Network_DeserializedIntoAnInstanceBuiltWithAnotherArchitecture_TakesTheSavedArchitecture()
+    public void Network_DeserializedIntoADefaultSkeleton_TakesTheSavedArchitecture()
     {
-        // The facade's path in miniature: a model's own payload restored into a default-constructed instance.
+        // The facade's path in miniature: a model's own payload restored into a default-constructed skeleton.
         var original = FeedForward();
         var x = Random(9, 3, 4);
         var before = original.Predict(x);
@@ -297,11 +297,28 @@ public class ModelResultArchitectureRoundTripTests
         var target = new FeedForwardNeuralNetwork<float>();
         Assert.Equal(128, target.Architecture.InputSize);
         using (ModelPersistenceGuard.InternalOperation())
+        using (SerializedArchitectureAdoption.Begin())
         {
             target.Deserialize(original.Serialize());
         }
 
         AssertSameArchitecture(original.Architecture, target);
         AssertClose(before, target.Predict(x));
+    }
+
+    [Fact]
+    public void Network_DeserializedIntoAnInstanceTheCallerBuilt_KeepsItsOwnArchitecture()
+    {
+        // Outside the facade's skeleton restore, the instance's architecture is the caller's: a subclass may depend on
+        // it (a code model's tokenizer) or validate the payload against it, so the payload must not overwrite it.
+        var original = FeedForward();
+        var target = new FeedForwardNeuralNetwork<float>();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            target.Deserialize(original.Serialize());
+        }
+
+        Assert.Equal(128, target.Architecture.InputSize);
+        Assert.Equal(original.Layers.Count, target.Layers.Count);
     }
 }

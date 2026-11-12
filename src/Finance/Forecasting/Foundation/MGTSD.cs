@@ -116,15 +116,25 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     #region Properties
 
+    /// <inheritdoc />
     public override int SequenceLength => _contextLength;
+    /// <inheritdoc />
     public override int PredictionHorizon => _forecastHorizon;
+    /// <inheritdoc />
     public override int NumFeatures => 1;
+    /// <inheritdoc />
     public override int PatchSize => 1;
+    /// <inheritdoc />
     public override int Stride => 1;
+    /// <inheritdoc />
     public override bool IsChannelIndependent => true;
+    /// <inheritdoc />
     public override bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override FoundationModelSize ModelSize => FoundationModelSize.Small;
+    /// <inheritdoc />
     public override int MaxContextLength => _contextLength;
+    /// <inheritdoc />
     public override int MaxPredictionHorizon => _forecastHorizon;
 
     #endregion
@@ -419,7 +429,9 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
 
     /// <summary>
@@ -588,6 +600,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "MGTSD" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "NumGranularities", _numGranularities }, { "GuidanceWeight", _guidanceWeight }, { "UseNativeMode", _useNativeMode } },
@@ -601,11 +614,15 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     #region IForecastingModel Implementation
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles) { if (quantiles is not null && quantiles.Length > 0) throw new NotSupportedException("MGTSD does not support quantile forecasting. Pass null for point forecasts."); return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData); }
+    /// <inheritdoc />
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps) { var predictions = new List<Tensor<T>>(); var currentInput = input; int stepsRemaining = steps; while (stepsRemaining > 0) { var prediction = Forecast(currentInput, null); predictions.Add(prediction); int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining); stepsRemaining -= stepsUsed; if (stepsRemaining > 0) currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed); } return ConcatenatePredictions(predictions, steps); }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
+    /// <inheritdoc />
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
         // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
         // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
@@ -614,6 +631,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         // differentiable layer in the paper, not a preprocessing step.
         => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _, out _);
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetFinancialMetrics() { T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero; return new Dictionary<string, T> { ["ContextLength"] = NumOps.FromDouble(_contextLength), ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon), ["NumGranularities"] = NumOps.FromDouble(_numGranularities), ["LastLoss"] = lastLoss }; }
 
     #endregion
@@ -793,6 +811,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }
 
     #endregion

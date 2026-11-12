@@ -140,6 +140,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         return result;
     }
 
+    /// <inheritdoc />
     public Vector<T> SelectAction(Vector<T> state, bool explore)
     {
         var s = new T[_stateDim];
@@ -159,6 +160,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         return new Vector<T>(action);
     }
 
+    /// <inheritdoc />
     public void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // Record the rollout HERE (owning a copy of the supplied state/action) — the transition the trainer
@@ -174,6 +176,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         _episodeDone = done;
     }
 
+    /// <inheritdoc />
     public T Train()
     {
         // On-policy: only update at the end of a complete episode rollout.
@@ -214,6 +217,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         return Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, hidden), _meanB));
     }
 
+    /// <inheritdoc />
     public void ResetEpisode()
     {
         ResetHidden();

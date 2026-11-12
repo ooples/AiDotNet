@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Regression;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -32,10 +32,13 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FScores => _fScores;
     public double[]? PValues => _pValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public FRegression(
@@ -49,12 +52,14 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nFeaturesToSelect = nFeaturesToSelect;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "FRegression requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -142,8 +147,8 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Simple approximation using normal distribution for large df
         if (df1 >= 1 && df2 >= 30)
         {
-            double z = Math.Pow(fStatistic, 1.0 / 3.0) * (1 - 2.0 / (9 * df2)) - (1 - 2.0 / (9 * df1));
-            double se = Math.Sqrt(2.0 / (9 * df1) + 2.0 / (9 * df2));
+            double z = Math.Pow(fStatistic, 1.0 / 3.0) * (1 - 2.0 / (9.0 * df2)) - (1 - 2.0 / (9.0 * df1));
+            double se = Math.Sqrt(2.0 / (9.0 * df1) + 2.0 / (9.0 * df2));
             double standardZ = z / se;
 
             // One-sided p-value from standard normal
@@ -173,12 +178,14 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return sign * y;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -195,11 +202,13 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("FRegression does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -212,6 +221,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

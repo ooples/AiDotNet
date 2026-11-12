@@ -1203,6 +1203,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _gradients?.Clear();

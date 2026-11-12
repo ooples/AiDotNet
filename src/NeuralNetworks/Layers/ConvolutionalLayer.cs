@@ -262,6 +262,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return UseBias ? _biases : null;
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -711,14 +712,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null,
         IActivationFunction<T>? nonlinearityForInit = null,
-        int groups = 1)
+        int groups = 1,
+        BiasMode biasMode = BiasMode.Auto)
     {
         if (inputDepth <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputDepth), "inputDepth must be positive.");
 
         var layer = new ConvolutionalLayer<T>(
             outputDepth, kernelSize, stride, padding, activationFunction,
-            initializationStrategy, nonlinearityForInit, groups);
+            initializationStrategy, nonlinearityForInit, groups, biasMode);
 
         // Pin the channel axis only. The spatial axes stay deferred: a convolution's parameters do
         // not depend on height or width, and pinning them would reject the variable-resolution
@@ -1033,6 +1035,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         OnFirstForward(input);
     }
 
+    /// <inheritdoc />
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;

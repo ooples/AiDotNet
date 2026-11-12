@@ -286,6 +286,7 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
             numMels: _options.NumMels, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -302,12 +303,14 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (_melSpectrogram is null) throw new InvalidOperationException("MelSpectrogram not initialized.");
         return _melSpectrogram.Forward(rawAudio);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         var result = new Tensor<T>(modelOutput._shape);
@@ -319,6 +322,7 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
         return result;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -461,6 +465,7 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CRNNEventDetector<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

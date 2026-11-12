@@ -489,6 +489,7 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
         _innerLayer?.ResetState();
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

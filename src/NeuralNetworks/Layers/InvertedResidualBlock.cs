@@ -149,6 +149,7 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     /// </summary>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

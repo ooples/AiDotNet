@@ -153,6 +153,7 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int NumFeatures => _numFeatures;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     #endregion
@@ -515,6 +516,7 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         foreach (var conv in _convLayers)

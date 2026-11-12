@@ -116,10 +116,12 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
     /// </remarks>
     public double[] Weights { get; set; }
 
+    /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => Members.Count == 0
         ? throw new InvalidOperationException("Ensemble has no members.")
         : Members[0].DefaultLossFunction;
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> input, Vector<T> expectedOutput)
     {
         if (Members.Count == 0)
@@ -133,6 +135,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         }
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (Members.Count == 0)
@@ -151,6 +154,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
             : WeightedAverage(predictions);
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = Members.Count == 0
@@ -171,6 +175,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         _membersView = _members.AsReadOnly();
     }
 
+    /// <inheritdoc />
     public override void SaveModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
@@ -180,6 +185,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         }
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
@@ -189,6 +195,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         }
     }
 
+    /// <inheritdoc />
     public override void SaveState(Stream stream)
     {
         if (stream is null)
@@ -206,6 +213,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         stream.Flush();
     }
 
+    /// <inheritdoc />
     public override void LoadState(Stream stream)
     {
         if (stream is null)
@@ -257,6 +265,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
 
     // Replaced by the declared parameter source below. Removed under AIDN082.
 
+    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
@@ -264,6 +273,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         return copy;
     }
 
+    /// <inheritdoc />
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (Members.Count == 0)
@@ -283,6 +293,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         return indices.OrderBy(i => i).ToArray();
     }
 
+    /// <inheritdoc />
     public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         foreach (var member in Members)
@@ -291,11 +302,13 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         }
     }
 
+    /// <inheritdoc />
     public override bool IsFeatureUsed(int featureIndex)
     {
         return Members.Any(m => InterfaceGuard.FeatureAware(m).IsFeatureUsed(featureIndex));
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
     {
         if (Members.Count == 0)
@@ -344,6 +357,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         return result;
     }
 
+    /// <inheritdoc />
     public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         if (Members.Count == 0)
@@ -358,6 +372,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         return Vector<T>.Concatenate(gradients);
     }
 
+    /// <inheritdoc />
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (Members.Count == 0)

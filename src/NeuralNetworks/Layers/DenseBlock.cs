@@ -124,8 +124,10 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     // OnFirstForward resolves it from the runtime input tensor.
     private int _inputChannels;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

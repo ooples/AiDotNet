@@ -227,6 +227,7 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private readonly double BoostFactor = 0.005;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>

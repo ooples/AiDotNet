@@ -302,6 +302,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
         _biasesGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _originalInputShape = null;

@@ -652,6 +652,7 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
         _normGamma1, _normBeta1, _normGamma2, _normBeta2
     ];
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

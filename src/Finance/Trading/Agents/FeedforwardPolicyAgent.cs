@@ -102,6 +102,7 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
         return Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB));
     }
 
+    /// <inheritdoc />
     public Vector<T> SelectAction(Vector<T> state, bool explore)
     {
         var s = new T[_stateDim];
@@ -124,6 +125,7 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
         return new Vector<T>(action);
     }
 
+    /// <inheritdoc />
     public void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // The rollout is recorded HERE (owning a copy of the supplied state/action) — the transition the trainer
@@ -139,6 +141,7 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
         _episodeDone = done;
     }
 
+    /// <inheritdoc />
     public T Train()
     {
         if (!_episodeDone || _states.Count == 0 || _states.Count != _rewards.Count)
@@ -167,6 +170,7 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
         return reported;
     }
 
+    /// <inheritdoc />
     public void ResetEpisode()
     {
         _states.Clear();

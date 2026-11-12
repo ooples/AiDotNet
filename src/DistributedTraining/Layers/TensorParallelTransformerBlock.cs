@@ -95,6 +95,7 @@ public sealed partial class TensorParallelTransformerBlock<T> : LayerBase<T>, IS
         _mlpDown = new RowParallelLinear<T>(backend, ffnDim, embedDim);
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     /// <summary>Seeds the sharded projections (attention Q/K/V/O and MLP up/down) from full un-sharded weights.
@@ -144,8 +145,10 @@ public sealed partial class TensorParallelTransformerBlock<T> : LayerBase<T>, IS
         return result;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
         => throw new InvalidOperationException("TensorParallelTransformerBlock is an inference-only serving block.");
 
+    /// <inheritdoc />
     public override void ResetState() { }
 }

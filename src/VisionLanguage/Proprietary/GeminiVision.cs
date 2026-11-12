@@ -111,14 +111,20 @@ public partial class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryV
         InitializeLayers();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
+    /// <inheritdoc />
     public string Provider => _options.Provider;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -174,6 +180,7 @@ public partial class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryV
         return output;
     }
 
+    /// <inheritdoc />
     public Tensor<T> Chat(Tensor<T> image, string prompt) => GenerateFromImage(image, prompt);
 
     protected override void InitializeLayers()
@@ -221,6 +228,7 @@ public partial class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryV
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -237,11 +245,14 @@ public partial class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryV
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -268,6 +279,7 @@ public partial class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryV
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GeminiVision<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

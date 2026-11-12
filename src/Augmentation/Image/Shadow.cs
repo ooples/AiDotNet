@@ -23,6 +23,7 @@ public class Shadow<T> : ImageAugmenterBase<T>
         MinDarkness = minDarkness; MaxDarkness = maxDarkness;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -67,6 +68,7 @@ public class Shadow<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

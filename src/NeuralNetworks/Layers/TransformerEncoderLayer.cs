@@ -330,6 +330,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return parameters;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -521,6 +522,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
 
 
+    /// <inheritdoc />
     protected override void EnsureInitialized()
     {
         // TWO CONDITIONS, NOT ONE. _isInitialized means the sublayers EXIST with resolved shapes;

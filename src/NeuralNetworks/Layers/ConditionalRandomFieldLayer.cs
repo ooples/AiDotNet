@@ -115,6 +115,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
     /// over a long sequence (256 * 1e9 = 2.56e11 &lt;&lt; float.MaxValue).</summary>
     private const double IllegalTransitionPenalty = -1e9;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -1009,6 +1010,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         return sub;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _transitionMatrixGradient = null;

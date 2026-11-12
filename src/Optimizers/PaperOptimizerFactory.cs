@@ -61,15 +61,21 @@ internal static class PaperOptimizerFactory
     /// <c>null</c> when there is no applicable declaration, so callers keep their existing default.
     /// </returns>
     internal static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
-        IFullModel<T, TInput, TOutput> model, string component = "", int warmupStepsOverride = 0)
+        IFullModel<T, TInput, TOutput> model, string component = "", int warmupStepsOverride = 0,
+        double? learningRateOverride = null)
     {
         if (model is null) return null;
+        if (learningRateOverride is { } rate && (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0))
+            throw new ArgumentOutOfRangeException(
+                nameof(learningRateOverride), rate, "A learning-rate override must be finite and positive.");
 
         var recipe = Find(model, component);
-        // A model whose own options configure a warmup (S4Options.WarmupSteps) applies it to its paper
-        // recipe here, so the declared optimizer and the model's configuration agree rather than the
-        // configured warmup reaching only the fallback optimizer.
-        if (recipe is not null && warmupStepsOverride > 0)
+        // A model whose own options configure a warmup (S4Options.WarmupSteps) or a learning rate
+        // (DocBankOptions.LearningRate) applies it to its paper recipe here, so the declared optimizer
+        // and the model's configuration agree rather than the configured value reaching only the
+        // fallback optimizer, which is never built while a recipe resolves. The rate replaces the
+        // recipe's, and the recipe's scheduler is built from it, so the schedule follows the override.
+        if (recipe is not null && (warmupStepsOverride > 0 || learningRateOverride is not null))
             recipe = Merge(new PaperOptimizerAttribute(OptimizerKind.Unspecified)
             {
                 Phase = recipe.Phase,
@@ -78,6 +84,7 @@ internal static class PaperOptimizerFactory
                 Provenance = recipe.Provenance,
                 Source = recipe.Source,
                 WarmupSteps = warmupStepsOverride,
+                LearningRate = learningRateOverride ?? double.NaN,
             }, recipe);
         if (recipe is null)
         {

@@ -51,6 +51,7 @@ public class StopWordRemovalQueryProcessor : QueryProcessorBase
         _preserveFirstWord = preserveFirstWord;
     }
 
+    /// <inheritdoc />
     protected override string ProcessQueryCore(string query)
     {
         if (string.IsNullOrWhiteSpace(query))

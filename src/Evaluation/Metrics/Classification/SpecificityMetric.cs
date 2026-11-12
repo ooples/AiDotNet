@@ -24,13 +24,21 @@ public class SpecificityMetric<T> : IClassificationMetric<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly T _positiveLabel;
 
+    /// <inheritdoc />
     public string Name => "Specificity";
+    /// <inheritdoc />
     public string Category => "Classification";
+    /// <inheritdoc />
     public string Description => "Proportion of actual negatives correctly identified (TN / (TN + FP)).";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.HigherIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
     public SpecificityMetric()
@@ -43,6 +51,7 @@ public class SpecificityMetric<T> : IClassificationMetric<T>
         _positiveLabel = positiveLabel;
     }
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -69,6 +78,7 @@ public class SpecificityMetric<T> : IClassificationMetric<T>
         return actualNegatives > 0 ? NumOps.FromDouble((double)trueNegatives / actualNegatives) : NumOps.One;
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

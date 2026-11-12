@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Statistical;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -32,10 +32,13 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? HStatistics => _hStatistics;
     public double[]? PValues => _pValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public KruskalWallis(
@@ -49,12 +52,14 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nFeaturesToSelect = nFeaturesToSelect;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "KruskalWallis requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -148,8 +153,8 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (x <= 0) return 0;
         if (df <= 0) return 1;
 
-        double z = Math.Pow(x / df, 1.0 / 3) - (1 - 2.0 / (9 * df));
-        z /= Math.Sqrt(2.0 / (9 * df));
+        double z = Math.Pow(x / df, 1.0 / 3) - (1 - 2.0 / (9.0 * df));
+        z /= Math.Sqrt(2.0 / (9.0 * df));
 
         return NormalCDF(z);
     }
@@ -162,12 +167,14 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return x > 0 ? 1 - p : p;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -184,11 +191,13 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("KruskalWallis does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -201,6 +210,7 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

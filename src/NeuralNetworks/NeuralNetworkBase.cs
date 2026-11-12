@@ -1230,6 +1230,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return readiness;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameters()
     {
         // Pre-resolve any lazy layer shapes from the architecture before
@@ -1389,6 +1390,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual AiDotNet.Models.Parameters.ParameterSlotRole ResolveExtraTensorParameterRole(
         Tensor<T> tensor, AiDotNet.Models.Parameters.ParameterSlotRole declared) => declared;
 
+    /// <inheritdoc />
     public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
     {
         ResolveLazyLayerShapes();
@@ -5172,6 +5174,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return _hasCustomTrainableParameterSelection.Value;
     }
 
+    /// <summary>
+    /// Gets the number of values the optimizer trains: <see cref="ParameterCount"/> without the buffers.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ParameterCount"/> also counts buffers (<see cref="AiDotNet.Attributes.BufferAttribute"/>), state that
+    /// is saved and restored but never learned, such as batch normalization's running mean and variance. That is the
+    /// size of <see cref="GetParameters"/>; this is the size PyTorch reports as
+    /// <c>sum(p.numel() for p in model.parameters() if p.requires_grad)</c>. For a ResNet-50 the two differ by
+    /// 53,120, the running statistics of its 26,560 normalized channels.
+    /// <para><b>For Beginners:</b> the number of weights training adjusts. The larger <see cref="ParameterCount"/>
+    /// also includes remembered statistics that are saved with the model but never trained.</para>
+    /// </remarks>
+    public long TrainableParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var tensor in CollectModelTrainableTensors()) total += tensor.Length;
+            return total;
+        }
+    }
+
     /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
     protected internal IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
     {
@@ -5283,6 +5307,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return gradients;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameterGradients()
     {
         if (_gradientSurfaceUnavailable)
@@ -6971,6 +6996,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Train(input, expectedOutput);
     }
 
+    /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input) => PredictFunnel(input, differentiable: false);
 
     /// <summary>
@@ -10867,6 +10893,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal bool HasRecordedLoss => _lastLossRecorded;
 
+    /// <inheritdoc />
     public virtual T GetLastLoss()
     {
         // A missing loss means training has not produced one yet. Preserve NaN/Infinity:
@@ -11266,6 +11293,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         Guard.NotNull(input);
@@ -16214,12 +16242,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // parameters, and Serialize, which builds one byte array, overflowed it for any float model above
     // ~268M parameters (UnifiedMultimodalNetwork's GetModelMetadata did, #2087). A float model now
     // stores 4-byte floats, exactly; every other T keeps 8-byte doubles.
-    // v9 records the architecture descriptor right after the encoding, followed by how many of the
-    // network's leading layers the architecture's own layer list held. Until v9 a payload restored into an
+    // v9 writes each layer's input-sized buffers after its extras. They are kept out of the parameter vector by design
+    // (a graph layer's adjacency is sized by the graph, not the layer), and the vector plus extras was all this format
+    // stored, so a saved graph network, and every clone that fell back to this round trip, lost its graph.
+    // v10 records the architecture descriptor right after the encoding, followed by how many of the
+    // network's leading layers the architecture's own layer list held. Until v10 a payload restored into an
     // instance built with any other architecture -- AiModelResult.Deserialize's JSON skeleton, which a
     // parameterless constructor gives a default 128-wide input -- came back with the saved layers and the
     // skeleton's descriptor, and the loaded model rejected the inputs it was trained on.
-    private const int SerializationVersion = 9;
+    private const int SerializationVersion = 10;
 
     /// <summary>How the parameter values of a serialized network are stored (format v8 and later).</summary>
     private enum SerializedParameterEncoding : byte
@@ -16335,7 +16366,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         writer.Write(SerializationVersion);
         writer.Write((byte)encoding);
 
-        // v9: the architecture that describes these layers, so a restore reproduces the model's input and
+        // v10: the architecture that describes these layers, so a restore reproduces the model's input and
         // output contract instead of keeping whatever the target instance was constructed with.
         Architecture.WriteDescriptor(writer);
         writer.Write(CountArchitectureLayersMirroringNetwork());
@@ -16425,6 +16456,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 writer.Write(0);
             }
+
+            if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> bufferedLayer)
+                bufferedLayer.WriteInputSizedBuffers(writer);
+            else
+                writer.Write(0);
         }
 
         WriteGeneratedAdditionalLayerState(writer);
@@ -16488,12 +16524,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 if (encoding != SerializedParameterEncoding.Float64 && encoding != SerializedParameterEncoding.Float32)
                     throw new InvalidDataException($"Serialized network declares unknown parameter encoding {(byte)encoding}.");
             }
-            if (version >= 9)
+            if (version >= 10)
             {
                 // Restore the descriptor BEFORE the layers are rebuilt: lazy-layer resolution below reads
-                // Architecture.GetInputShape() when a saved shape is still symbolic.
-                Architecture.ReadAndRestoreDescriptor(reader);
-                architectureLayerMirrorCount = reader.ReadInt32();
+                // Architecture.GetInputShape() when a saved shape is still symbolic. Only a skeleton adopts it
+                // (SerializedArchitectureAdoption); an instance the caller built keeps its own architecture, so
+                // DeserializeNetworkSpecificData can still report a payload written for a different one.
+                bool adopt = SerializedArchitectureAdoption.IsActive;
+                Architecture.ReadAndRestoreDescriptor(reader, apply: adopt);
+                int mirrorCount = reader.ReadInt32();
+                if (adopt) architectureLayerMirrorCount = mirrorCount;
             }
             layerCount = reader.ReadInt32();
         }
@@ -16645,6 +16685,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (extraParametersVector != null && layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extrasLayer)
             {
                 extrasLayer.SetExtraParameters(extraParametersVector);
+            }
+
+            if (version >= 9)
+            {
+                if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> bufferedLayer)
+                    bufferedLayer.ReadInputSizedBuffers(reader);
+                else if (reader.ReadInt32() != 0)
+                    throw new InvalidDataException(
+                        $"Layer '{layerType}' carries input-sized buffers but was reconstructed outside LayerBase<{typeof(T).Name}>.");
             }
 
             // Prefer restoring into the constructor-created layer at the same canonical slot when
@@ -18849,6 +18898,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <inheritdoc />
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)
@@ -20145,6 +20195,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return result;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Pluggable credit-assignment rule (Feedback Alignment, Direct Feedback Alignment, Sign-Symmetric,

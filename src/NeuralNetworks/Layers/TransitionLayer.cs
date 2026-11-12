@@ -100,6 +100,7 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// </summary>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

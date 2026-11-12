@@ -139,12 +139,11 @@ public static class DelegateState
     // replay verification vacuous.
     private static Tensor<T> ProbeInput<T>(int[] shape)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
         int length = shape.Aggregate(1, (a, b) => checked(a * b));
-        var data = new T[length];
+        var data = new double[length];
         var rng = new Random(0x0A1D);
-        for (int i = 0; i < length; i++) data[i] = ops.FromDouble(rng.NextDouble() * 2 - 1);
-        return new Tensor<T>(data, shape);
+        for (int i = 0; i < length; i++) data[i] = rng.NextDouble() * 2 - 1;
+        return new Tensor<double>(data, shape).Cast<T>();
     }
 
 

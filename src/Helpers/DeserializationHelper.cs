@@ -2869,6 +2869,8 @@ public static class DeserializationHelper
                     (Type t, _) when t == typeof(int) && n == "numheads" => nhTdb,
                     (Type t, _) when t == typeof(int) && n == "ffndim" => ffTdb,
                     (Type t, _) when t == typeof(double) && n == "dropoutrate" => drTdb,
+                    (_, "ffnactivation") => TryCreateActivationInstance(additionalParams, "FfnActivationType",
+                        typeof(IActivationFunction<>).MakeGenericType(typeof(T))),
                     _ => p.HasDefaultValue ? p.DefaultValue : null,
                 };
             }
@@ -4614,6 +4616,14 @@ public static class DeserializationHelper
         if (causalMask.HasValue)
         {
             attention.UseCausalMask = causalMask.Value;
+        }
+
+        // Before any weight is loaded: the biases are parameter slots, so they must exist when the vector is sliced.
+        bool queryBias = TryGetBool(additionalParams, "QueryBias") ?? false;
+        bool valueBias = TryGetBool(additionalParams, "ValueBias") ?? false;
+        if (queryBias || valueBias)
+        {
+            attention.ConfigureProjectionBiases(queryBias, valueBias);
         }
 
         double? attentionDropoutRate = TryGetDouble(additionalParams, "AttentionDropoutRate");

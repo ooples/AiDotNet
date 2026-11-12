@@ -1044,6 +1044,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         base.ApplyParameters(GetCurrentState());
     }
 
+    /// <inheritdoc />
     protected override void ApplyParameters(Vector<T> parameters)
     {
         if (parameters == null)

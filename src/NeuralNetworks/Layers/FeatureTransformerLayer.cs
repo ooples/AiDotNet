@@ -361,6 +361,7 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
         // Note: BN layers update running stats during forward, not here
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);

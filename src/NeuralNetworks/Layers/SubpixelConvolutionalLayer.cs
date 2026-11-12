@@ -428,6 +428,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// </remarks>
     private readonly T _weightDecay;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -951,6 +952,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
         _biasGradients = null;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _kernelGradients = null;
