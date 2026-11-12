@@ -214,43 +214,34 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
     protected Tensor<T> EmbedFeatures(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
         int batchSize = numericalFeatures.Shape[0];
-        var embedded = new Tensor<T>(new[] { batchSize, TotalFeatures, Options.EmbeddingDimension });
+        int embeddingDim = Options.EmbeddingDimension;
 
-        // Embed numerical features
-        for (int b = 0; b < batchSize; b++)
+        // Numerical features: embedded[b, f, :] = x[b, f] * E_num[f, :]
+        var values = TabularMetrics.Flat(numericalFeatures, batchSize * NumNumericalFeatures)
+            .Reshape(batchSize, NumNumericalFeatures, 1);
+        var numerical = Engine.TensorMultiply(
+            values, _numericalEmbeddings.Reshape(1, NumNumericalFeatures, embeddingDim));
+
+        if (NumCategoricalFeatures == 0)
         {
-            for (int f = 0; f < NumNumericalFeatures; f++)
-            {
-                var featureValue = numericalFeatures[b * NumNumericalFeatures + f];
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    int embIdx = f * Options.EmbeddingDimension + d;
-                    int outIdx = (b * TotalFeatures + f) * Options.EmbeddingDimension + d;
-                    embedded[outIdx] = NumOps.Multiply(featureValue, _numericalEmbeddings[embIdx]);
-                }
-            }
+            return numerical;
         }
 
-        // Embed categorical features
-        if (categoricalIndices != null && _categoricalEmbeddings != null)
+        // Categorical features: embedded[b, NumNumerical + f, :] = E_cat_f[index[b, f], :], zeros without indices
+        var parts = new Tensor<T>[NumCategoricalFeatures + 1];
+        parts[0] = numerical;
+        var categoricalEmbeddings = _categoricalEmbeddings;
+        for (int f = 0; f < NumCategoricalFeatures; f++)
         {
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < NumCategoricalFeatures; f++)
-                {
-                    int catIdx = categoricalIndices[b, f];
-                    int featureIdx = NumNumericalFeatures + f;
-                    for (int d = 0; d < Options.EmbeddingDimension; d++)
-                    {
-                        int embIdx = catIdx * Options.EmbeddingDimension + d;
-                        int outIdx = (b * TotalFeatures + featureIdx) * Options.EmbeddingDimension + d;
-                        embedded[outIdx] = _categoricalEmbeddings[f][embIdx];
-                    }
-                }
-            }
+            parts[f + 1] = categoricalIndices != null && categoricalEmbeddings != null
+                ? Engine.TensorIndexSelect(
+                    categoricalEmbeddings[f],
+                    Tensor<int>.FromVector(categoricalIndices.GetColumn(f).GetSubVector(0, batchSize)),
+                    0).Reshape(batchSize, 1, embeddingDim)
+                : new Tensor<T>(new[] { batchSize, 1, embeddingDim });
         }
 
-        return embedded;
+        return Engine.TensorConcatenate(parts, 1);
     }
 
     /// <summary>
@@ -283,34 +274,14 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
             backward = ReverseSequence(backward, batchSize, TotalFeatures, Options.EmbeddingDimension);
 
             // Concatenate forward and backward
-            combined = new Tensor<T>(new[] { batchSize, TotalFeatures * Options.EmbeddingDimension * 2 });
-            for (int b = 0; b < batchSize; b++)
-            {
-                int outIdx = 0;
-                for (int i = 0; i < TotalFeatures * Options.EmbeddingDimension; i++)
-                {
-                    combined[b * TotalFeatures * Options.EmbeddingDimension * 2 + outIdx++] =
-                        forward[b * TotalFeatures * Options.EmbeddingDimension + i];
-                }
-                for (int i = 0; i < TotalFeatures * Options.EmbeddingDimension; i++)
-                {
-                    combined[b * TotalFeatures * Options.EmbeddingDimension * 2 + outIdx++] =
-                        backward[b * TotalFeatures * Options.EmbeddingDimension + i];
-                }
-            }
+            int flatWidth = TotalFeatures * Options.EmbeddingDimension;
+            combined = Engine.TensorConcatenate(
+                new[] { forward.Reshape(batchSize, flatWidth), backward.Reshape(batchSize, flatWidth) }, 1);
         }
         else
         {
             // Flatten forward output
-            combined = new Tensor<T>(new[] { batchSize, TotalFeatures * Options.EmbeddingDimension });
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < TotalFeatures * Options.EmbeddingDimension; i++)
-                {
-                    combined[b * TotalFeatures * Options.EmbeddingDimension + i] =
-                        forward[b * TotalFeatures * Options.EmbeddingDimension + i];
-                }
-            }
+            combined = forward.Reshape(batchSize, TotalFeatures * Options.EmbeddingDimension);
         }
 
         // MLP head
@@ -325,19 +296,7 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
 
     private Tensor<T> ReverseSequence(Tensor<T> input, int batchSize, int seqLen, int dim)
     {
-        var output = new Tensor<T>(input._shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                int srcPos = seqLen - 1 - s;
-                for (int d = 0; d < dim; d++)
-                {
-                    output[(b * seqLen + s) * dim + d] = input[(b * seqLen + srcPos) * dim + d];
-                }
-            }
-        }
-        return output;
+        return Engine.TensorFlip(input.Reshape(batchSize, seqLen, dim), new[] { 1 }).Reshape(input._shape);
     }
 
     /// <summary>
@@ -432,11 +391,13 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
         public Vector<T> GetParameters()
         {
             var result = new Vector<T>(checked((int)ParameterCount));
+            var destination = result.AsWritableSpan();
             int offset = 0;
 
             foreach (var tensor in Tensors())
             {
-                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+                tensor.AsSpan().CopyTo(destination.Slice(offset, tensor.Length));
+                offset += tensor.Length;
             }
 
             return result;
@@ -460,9 +421,11 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
             }
 
             int offset = 0;
+            var source = parameters.AsSpan();
             foreach (var tensor in Tensors())
             {
-                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+                source.Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
+                offset += tensor.Length;
             }
         }
 
@@ -496,10 +459,7 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
             InitializeWeights(_B, scale, random);
             InitializeWeights(_C, scale, random);
 
-            for (int i = 0; i < _D.Length; i++)
-            {
-                _D[i] = NumOps.One;
-            }
+            AiDotNetEngine.Current.TensorFill(_D, NumOps.One);
 
             // Projections
             _inProj = new Tensor<T>(new[] { modelDim, innerDim * 2 });
@@ -541,107 +501,46 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
 
         public Tensor<T> Forward(Tensor<T> input, int batchSize, int seqLen, int dim)
         {
-            var output = new Tensor<T>(input._shape);
+            var engine = AiDotNetEngine.Current;
+            int innerDim = _innerDim;
+            int stateDim = _stateDim;
+            int rows = batchSize * seqLen;
 
-            for (int b = 0; b < batchSize; b++)
+            // Input projection: x -> (z, x'), for every position at once
+            var x = TabularMetrics.Flat(input, rows * dim).Reshape(rows, dim);
+            var projected = engine.TensorMatMul(x, _inProj);
+            var gate = engine.Sigmoid(engine.TensorNarrow(projected, 1, 0, innerDim)).Reshape(batchSize, seqLen, innerDim);
+            var xPrime = engine.TensorNarrow(projected, 1, innerDim, innerDim).Reshape(batchSize, seqLen, innerDim);
+
+            // Discretization: delta = softplus(deltaProj) = log(1 + exp(deltaProj)); a = exp(A * delta), b = B * delta
+            var delta = engine.TensorLog(engine.TensorAddScalar(engine.TensorExp(_deltaProj), NumOps.One))
+                .Reshape(innerDim, 1);
+            var decay = engine.TensorExp(engine.TensorMultiply(_A.Reshape(innerDim, stateDim), delta))
+                .Reshape(1, innerDim, stateDim);
+            var inputGain = engine.TensorMultiply(_B.Reshape(innerDim, stateDim), delta).Reshape(1, innerDim, stateDim);
+            var readout = _C.Reshape(1, innerDim, stateDim);
+            var skip = _D.Reshape(1, innerDim);
+
+            // Simplified SSM scan over the sequence: h = a * h + b * x', y = (C . h + D * x') * z
+            var state = new Tensor<T>(new[] { batchSize, innerDim, stateDim });
+            var steps = new Tensor<T>[seqLen];
+            for (int s = 0; s < seqLen; s++)
             {
-                // Initialize state
-                var state = new T[_innerDim, _stateDim];
-                for (int i = 0; i < _innerDim; i++)
-                {
-                    for (int j = 0; j < _stateDim; j++)
-                    {
-                        state[i, j] = NumOps.Zero;
-                    }
-                }
+                var xs = engine.TensorNarrow(xPrime, 1, s, 1).Reshape(batchSize, innerDim);
+                state = engine.TensorAdd(
+                    engine.TensorMultiply(decay, state),
+                    engine.TensorMultiply(inputGain, xs.Reshape(batchSize, innerDim, 1)));
 
-                for (int s = 0; s < seqLen; s++)
-                {
-                    // Get input vector
-                    var x = new T[dim];
-                    for (int d = 0; d < dim; d++)
-                    {
-                        x[d] = input[(b * seqLen + s) * dim + d];
-                    }
-
-                    // Input projection: x -> (z, x')
-                    var projected = new T[_innerDim * 2];
-                    for (int i = 0; i < _innerDim * 2; i++)
-                    {
-                        var sum = NumOps.Zero;
-                        for (int d = 0; d < dim; d++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(x[d], _inProj[d * _innerDim * 2 + i]));
-                        }
-                        projected[i] = sum;
-                    }
-
-                    // Split into z (gate) and x' (input to SSM)
-                    var z = new T[_innerDim];
-                    var xPrime = new T[_innerDim];
-                    for (int i = 0; i < _innerDim; i++)
-                    {
-                        z[i] = Sigmoid(projected[i]);
-                        xPrime[i] = projected[_innerDim + i];
-                    }
-
-                    // Simplified SSM step
-                    var y = new T[_innerDim];
-                    for (int i = 0; i < _innerDim; i++)
-                    {
-                        var delta = Softplus(_deltaProj[i]);
-
-                        // State update: h = A * h + B * x
-                        for (int j = 0; j < _stateDim; j++)
-                        {
-                            var a = NumOps.Exp(NumOps.Multiply(_A[i * _stateDim + j], delta));
-                            var bVal = NumOps.Multiply(_B[i * _stateDim + j], delta);
-                            state[i, j] = NumOps.Add(
-                                NumOps.Multiply(a, state[i, j]),
-                                NumOps.Multiply(bVal, xPrime[i]));
-                        }
-
-                        // Output: y = C * h + D * x
-                        var hSum = NumOps.Zero;
-                        for (int j = 0; j < _stateDim; j++)
-                        {
-                            hSum = NumOps.Add(hSum, NumOps.Multiply(_C[i * _stateDim + j], state[i, j]));
-                        }
-                        y[i] = NumOps.Add(hSum, NumOps.Multiply(_D[i], xPrime[i]));
-
-                        // Apply gate
-                        y[i] = NumOps.Multiply(y[i], z[i]);
-                    }
-
-                    // Output projection
-                    for (int d = 0; d < dim; d++)
-                    {
-                        var sum = NumOps.Zero;
-                        for (int i = 0; i < _innerDim; i++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(y[i], _outProj[i * dim + d]));
-                        }
-                        // Residual connection
-                        output[(b * seqLen + s) * dim + d] = NumOps.Add(x[d], sum);
-                    }
-                }
+                var hSum = engine.ReduceSum(engine.TensorMultiply(readout, state), new[] { 2 }, false);
+                var y = engine.TensorAdd(hSum, engine.TensorMultiply(skip, xs));
+                steps[s] = engine.TensorMultiply(y, engine.TensorNarrow(gate, 1, s, 1).Reshape(batchSize, innerDim))
+                    .Reshape(batchSize, 1, innerDim);
             }
 
-            return output;
-        }
-
-        private T Sigmoid(T x)
-        {
-            var negX = NumOps.Negate(x);
-            var expNegX = NumOps.Exp(negX);
-            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
-        }
-
-        private T Softplus(T x)
-        {
-            // softplus(x) = log(1 + exp(x))
-            var expX = NumOps.Exp(x);
-            return NumOps.Log(NumOps.Add(NumOps.One, expX));
+            // Output projection with residual connection
+            var ySequence = engine.TensorConcatenate(steps, 1).Reshape(rows, innerDim);
+            var output = engine.TensorAdd(x, engine.TensorMatMul(ySequence, _outProj));
+            return output.Reshape(input._shape);
         }
 
         public void UpdateParameters(T learningRate)
