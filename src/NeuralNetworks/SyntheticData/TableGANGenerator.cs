@@ -264,6 +264,21 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     /// <inheritdoc />
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        try
+        {
+            FitCore(data, columns, epochs);
+        }
+        finally
+        {
+            // The cached training rows only serve the training loop: a fitted generator, or one whose Fit failed,
+            // does not keep a copy of its training data.
+            _realDataSource = null;
+            _realDataTensor = null;
+        }
+    }
+
+    private void FitCore(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs)
+    {
         int epochCount = epochs ?? _options.Epochs;
         _columns = columns.ToList();
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
@@ -356,17 +371,18 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
             throw new InvalidOperationException("Generator is not fitted. Call Fit() first.");
         }
 
-        var rows = new List<Tensor<T>>(numSamples);
+        var generated = new Tensor<T>(new[] { Math.Max(0, numSamples), _dataWidth });
 
-        // Rows are generated one at a time, in order, so each row's noise draws keep their RNG order.
+        // Rows are generated one at a time, in order, so each row's noise draws keep their RNG order. Each activated
+        // row is written into one buffer as it is produced.
         for (int i = 0; i < numSamples; i++)
         {
             var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-            var generated = GeneratorForward(noise);
-            rows.Add(ApplyOutputActivations(generated));
+            SyntheticTensorOps<T>.WriteRow(generated, i, ApplyOutputActivations(GeneratorForward(noise)), _dataWidth);
         }
 
-        return _transformer.InverseTransform(SyntheticTensorOps<T>.StackRows(rows, _dataWidth).ToMatrix());
+        TabularDataTransformer<T> transformer = _transformer;
+        return SyntheticTensorOps<T>.DecodeInBlocks(generated, block => transformer.InverseTransform(block.ToMatrix()));
     }
 
     #endregion
