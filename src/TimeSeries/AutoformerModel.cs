@@ -415,16 +415,14 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     private Tensor<T> ForwardEngine(Vector<T> rawInput)
     {
         int seqLen = Math.Min(rawInput.Length, _options.LookbackWindow);
-        var norm = new Vector<T>(seqLen);
-        for (int t = 0; t < seqLen; t++)
-            norm[t] = _numOps.Divide(_numOps.Subtract(rawInput[t], _normMean), _normStd);
+        var norm = TimeSeriesEngineOps<T>.Standardize(rawInput.GetSubVector(0, seqLen), _normMean, _normStd);
 
         var outNorm = ForwardCore(norm);
         int horizon = _options.ForecastHorizon;
-        var result = new Tensor<T>(new[] { horizon, 1 });
-        for (int h = 0; h < Math.Min(horizon, outNorm.Length); h++)
-            result[h] = _numOps.Add(_numOps.Multiply(outNorm[h], _normStd), _normMean);
-        return result;
+        // Denormalized forecast; any steps beyond the core output stay zero
+        int produced = Math.Min(horizon, outNorm.Length);
+        var denormalized = TimeSeriesEngineOps<T>.Destandardize(outNorm.ToVector().GetSubVector(0, produced), _normStd, _normMean);
+        return Tensor<T>.FromVector(Vector<T>.Concatenate(denormalized, new Vector<T>(horizon - produced)), new[] { horizon, 1 });
     }
 
     // Forward on ONE already z-normalized lookback window: the batched forward with a batch of one, returned as
@@ -432,8 +430,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     internal Tensor<T> ForwardCore(Vector<T> input)
     {
         int seqLen = Math.Min(input.Length, _options.LookbackWindow);
-        var inData = new Vector<T>(seqLen);
-        for (int t = 0; t < seqLen; t++) inData[t] = input[t];
+        var inData = input.GetSubVector(0, seqLen);
         var forecast = ForwardBatched(new Tensor<T>(new[] { 1, seqLen }, inData));
         return Engine.Reshape(forecast, new[] { _options.ForecastHorizon, 1 });
     }
@@ -492,7 +489,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         int embDim = _options.EmbeddingDim;
         var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
         var posData = new Vector<T>(seqLen * embDim);
-        for (int i = 0; i < seqLen * embDim; i++) posData[i] = peHost[i];
+        peHost.AsSpan(0, seqLen * embDim).CopyTo(posData.AsWritableSpan());
         return new Tensor<T>(new[] { 1, seqLen, embDim }, posData);
     }
 
@@ -531,10 +528,10 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     {
         return _shiftOperatorCache.GetOrAdd((corrLen, lq, lk), _ =>
         {
-            var data = new Vector<T>(corrLen * lq * lk);
-            for (int lag = 0; lag < corrLen; lag++)
-                for (int t = 0; t < lq; t++)
-                    data[lag * (lq * lk) + t * lk + (t + lag) % lk] = _numOps.One;
+            int[] ones = Enumerable.Range(0, Math.Max(corrLen, 0) * Math.Max(lq, 0))
+                .Select(cell => (cell / lq) * (lq * lk) + (cell % lq) * lk + (cell % lq + cell / lq) % lk)
+                .ToArray();
+            var data = TimeSeriesEngineOps<T>.Scatter(new Vector<T>(corrLen * lq * lk), ones, Engine.Fill(ones.Length, _numOps.One));
             return new Tensor<T>(new[] { corrLen, lq * lk }, data);
         });
     }
@@ -605,11 +602,9 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     {
         return _earlierLagMaskCache.GetOrAdd(lags, _ =>
         {
-            var data = new Vector<T>(lags * lags);
-            for (int i = 0; i < lags; i++)
-                for (int j = 0; j < i; j++)
-                    data[i * lags + j] = _numOps.One;
-            return new Tensor<T>(new[] { 1, lags, lags }, data);
+            // Strictly lower-triangular ones: [i, j] = 1 for j < i
+            var mask = Engine.TensorTril(Engine.TensorOnesLike(new Tensor<T>(new[] { lags, lags })), -1);
+            return Engine.Reshape(mask, new[] { 1, lags, lags });
         });
     }
     private (Tensor<T> seasonal, Tensor<T> trend) EncoderLayerBatched(Tensor<T> seasonal, Tensor<T> trend, int layerIdx)
@@ -726,14 +721,14 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     {
         return _diagOperatorCache.GetOrAdd((lq, lk, corrLen, d), _ =>
         {
-            var data = new Vector<T>(corrLen * lq * lk);
-            for (int lag = 0; lag < corrLen; lag++)
-            {
-                int valid = corrLen - lag;
-                T w = _numOps.FromDouble(1.0 / ((double)valid * d));
-                for (int t = 0; t < valid; t++)
-                    data[lag * (lq * lk) + t * lk + (t + lag)] = w;
-            }
+            // (lag, t) pairs with t < corrLen - lag, in lag-major order
+            var cells = Enumerable.Range(0, Math.Max(corrLen, 0))
+                .SelectMany(lag => Enumerable.Range(0, corrLen - lag).Select(t => (Lag: lag, Step: t)))
+                .ToArray();
+            int[] positions = cells.Select(c => c.Lag * (lq * lk) + c.Step * lk + (c.Step + c.Lag)).ToArray();
+            double[] weights = cells.Select(c => 1.0 / ((double)(corrLen - c.Lag) * d)).ToArray();
+            var data = TimeSeriesEngineOps<T>.Scatter(
+                new Vector<T>(corrLen * lq * lk), positions, new Vector<T>(Array.ConvertAll(weights, _numOps.FromDouble)));
 
             return new Tensor<T>(new[] { corrLen, lq * lk }, data);
         });
@@ -815,21 +810,11 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
 
         // Each row's window: the in-sample lookback of the observed series, or (out-of-sample / no history yet)
         // the row itself. ForwardEngine consumes the first min(length, lookback) values of a window.
-        var windows = new Vector<T>[n];
-        for (int i = 0; i < n; i++)
-        {
-            int w = inSample ? Math.Min(lookback, i) : 0;
-            if (w > 0)
-            {
-                var window = new Vector<T>(w);
-                for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
-                windows[i] = window;
-            }
-            else
-            {
-                windows[i] = input.GetRow(i);
-            }
-        }
+        var windows = Enumerable.Range(0, n)
+            .Select(i => inSample && Math.Min(lookback, i) > 0
+                ? _trainingSeries.GetSubVector(i - Math.Min(lookback, i), Math.Min(lookback, i))
+                : input.GetRow(i))
+            .ToArray();
 
         // One batched forward per window length instead of one per row: AiModelBuilder predicts the whole dataset
         // after fitting, which made per-row inference a large share of a production fit. Same per-row values
@@ -848,13 +833,12 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
                 // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena
                 // the caller has open (whose tensors may still be live).
                 using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-                var data = new Vector<T>(rows.Length * len);
-                for (int r = 0; r < rows.Length; r++)
-                    for (int t = 0; t < len; t++)
-                        data[r * len + t] = _numOps.Divide(_numOps.Subtract(windows[rows[r]][t], _normMean), _normStd);
+                var data = TimeSeriesEngineOps<T>.Standardize(
+                    Vector<T>.Concatenate(rows.Select(r => windows[r].GetSubVector(0, len)).ToArray()), _normMean, _normStd);
                 var outNorm = ForwardBatched(new Tensor<T>(new[] { rows.Length, len }, data));      // [rows, horizon]
-                for (int r = 0; r < rows.Length; r++)
-                    predictions[rows[r]] = _numOps.Add(_numOps.Multiply(outNorm[r, 0], _normStd), _normMean);
+                var firstStep = Engine.StridedGather(outNorm.Contiguous().ToVector(), 0, outNorm.Shape[1], rows.Length);
+                predictions = TimeSeriesEngineOps<T>.Scatter(
+                    predictions, rows, TimeSeriesEngineOps<T>.Destandardize(firstStep, _normStd, _normMean));
             }
         }
 
@@ -896,10 +880,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
             throw new InvalidOperationException(
                 $"ForwardEngine returned {output.Length} values, expected at least {forecastHorizon}.");
         }
-        for (int h = 0; h < forecastHorizon; h++)
-        {
-            predictions[h] = output[h];
-        }
+        output.ToVector().GetSubVector(0, forecastHorizon).AsSpan().CopyTo(predictions.AsWritableSpan());
 
         return predictions;
     }
@@ -1094,11 +1075,8 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
         _layerNorm1Beta = new Tensor<T>(new[] { embeddingDim });
         _layerNorm2Gamma = new Tensor<T>(new[] { embeddingDim });
         _layerNorm2Beta = new Tensor<T>(new[] { embeddingDim });
-        for (int i = 0; i < embeddingDim; i++)
-        {
-            _layerNorm1Gamma[i] = NumOps.One;
-            _layerNorm2Gamma[i] = NumOps.One;
-        }
+        Engine.TensorFill(_layerNorm1Gamma, NumOps.One);
+        Engine.TensorFill(_layerNorm2Gamma, NumOps.One);
     }
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
@@ -1296,12 +1274,9 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
         _layerNorm2Beta = new Tensor<T>(new[] { embeddingDim });
         _layerNorm3Gamma = new Tensor<T>(new[] { embeddingDim });
         _layerNorm3Beta = new Tensor<T>(new[] { embeddingDim });
-        for (int i = 0; i < embeddingDim; i++)
-        {
-            _layerNorm1Gamma[i] = NumOps.One;
-            _layerNorm2Gamma[i] = NumOps.One;
-            _layerNorm3Gamma[i] = NumOps.One;
-        }
+        Engine.TensorFill(_layerNorm1Gamma, NumOps.One);
+        Engine.TensorFill(_layerNorm2Gamma, NumOps.One);
+        Engine.TensorFill(_layerNorm3Gamma, NumOps.One);
     }
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)

@@ -390,6 +390,22 @@ internal static class TimeSeriesEngineOps<T>
         return Vector<T>.Concatenate(new Vector<T>(length - available), y.GetSubVector(end - available, available));
     }
 
+    /// <summary>
+    /// A copy of <paramref name="target"/> with <c>result[positions[k]] = values[k]</c> for every k
+    /// (positions must be distinct and in range).
+    /// </summary>
+    public static Vector<T> Scatter(Vector<T> target, int[] positions, Vector<T> values)
+    {
+        var result = Tensor<T>.FromVector(target.Clone());
+        if (positions.Length > 0)
+        {
+            var index = new Tensor<int>(new[] { positions.Length }, new Vector<int>(positions));
+            Engine.TensorIndexPutInPlace(result, new[] { index }, Tensor<T>.FromVector(values.GetSubVector(0, positions.Length)));
+        }
+
+        return result.ToVector();
+    }
+
     private static string FormatValue(T value)
         => value is IFormattable formattable
             ? formattable.ToString("F4", System.Globalization.CultureInfo.CurrentCulture)
