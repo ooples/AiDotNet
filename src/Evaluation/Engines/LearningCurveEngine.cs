@@ -3,6 +3,7 @@ using AiDotNet.Evaluation.Options;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Engines;
 
@@ -93,8 +94,8 @@ public class LearningCurveEngine<T>
 
             trainSize = Math.Max(cvFolds + 1, Math.Min(trainSize, totalSamples));
 
-            var trainScores = new List<double>();
-            var valScores = new List<double>();
+            var trainScores = new List<T>();
+            var valScores = new List<T>();
 
             // Run CV at this training size
             for (int fold = 0; fold < cvFolds; fold++)
@@ -127,7 +128,7 @@ public class LearningCurveEngine<T>
                     : _metricEngine.ComputeRegressionMetrics(trainPreds, trainTargets);
                 var trainMetric = trainMetrics[metricName];
                 if (trainMetric != null)
-                    trainScores.Add(NumOps.ToDouble(trainMetric.Value));
+                    trainScores.Add(trainMetric.Value);
 
                 // Evaluate on validation set
                 var valPreds = predictFunc(model, valFeatures);
@@ -136,14 +137,16 @@ public class LearningCurveEngine<T>
                     : _metricEngine.ComputeRegressionMetrics(valPreds, valTargets);
                 var valMetric = valMetrics[metricName];
                 if (valMetric != null)
-                    valScores.Add(NumOps.ToDouble(valMetric.Value));
+                    valScores.Add(valMetric.Value);
             }
 
             result.TrainingSizes.Add(trainSize);
-            result.TrainScoreMeans.Add(trainScores.Average());
-            result.TrainScoreStds.Add(StandardDeviation(trainScores));
-            result.ValidationScoreMeans.Add(valScores.Average());
-            result.ValidationScoreStds.Add(StandardDeviation(valScores));
+            var (trainMean, trainStd) = MeanAndStandardDeviation(trainScores);
+            var (valMean, valStd) = MeanAndStandardDeviation(valScores);
+            result.TrainScoreMeans.Add(trainMean);
+            result.TrainScoreStds.Add(trainStd);
+            result.ValidationScoreMeans.Add(valMean);
+            result.ValidationScoreStds.Add(valStd);
         }
 
         result.Diagnosis = DiagnoseLearningCurve(result, higherIsBetter);
@@ -202,12 +205,20 @@ public class LearningCurveEngine<T>
         return BiasVarianceDiagnosis.Unknown;
     }
 
-    private static double StandardDeviation(List<double> values)
+    // Mean and sample standard deviation (0 for fewer than two values) of the fold scores; the summaries are
+    // reported as double.
+    private static (double Mean, double Std) MeanAndStandardDeviation(List<T> values)
     {
-        if (values.Count <= 1) return 0;
-        double mean = values.Average();
-        double variance = values.Sum(v => (v - mean) * (v - mean)) / (values.Count - 1);
-        return Math.Sqrt(variance);
+        if (values.Count == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
+
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var tensor = new Tensor<T>(values.ToArray(), new[] { values.Count });
+        T mean = engine.TensorMean(tensor);
+        if (values.Count <= 1) return (NumOps.ToDouble(mean), 0);
+        T sumSq = engine.TensorSumOfSquares(engine.TensorSubtractScalar(tensor, mean));
+        return (NumOps.ToDouble(mean), Math.Sqrt(NumOps.ToDouble(sumSq) / (values.Count - 1)));
     }
 
     private static T[,] ExtractRows(T[,] matrix, int[] indices)
