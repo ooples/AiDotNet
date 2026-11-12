@@ -120,7 +120,7 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var baseParams = ParamModel.GetParameters();
-        var moduleUsageCounts = new double[_bankSize];
+        var moduleUsageCounts = new int[_bankSize];
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -135,35 +135,13 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
 
             // Track module usage for load balancing
             foreach (int idx in selectedIndices)
-                moduleUsageCounts[idx] += 1.0;
+                moduleUsageCounts[idx]++;
 
             // Combine selected modules into task-specific parameter delta
             var paramDelta = CombineModules(selectedIndices, gatingWeights);
 
             // Inner loop: fine-tune gating weights on support set
-            var currentWeights = new double[gatingWeights.Length];
-            Array.Copy(gatingWeights, currentWeights, gatingWeights.Length);
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                var delta = CombineModulesWithWeights(selectedIndices, currentWeights);
-                var adaptedParams = AddVectors(baseParams, delta);
-                ParamModel.SetParameters(adaptedParams);
-
-                var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Compute gradient w.r.t. each gating weight
-                var stepGradient = new double[currentWeights.Length];
-                for (int k = 0; k < selectedIndices.Length; k++)
-                {
-                    double gradW = ComputeModuleGradient(fullGrad, selectedIndices[k]);
-                    stepGradient[k] = gradW;
-                }
-                ApplyInnerGradientsInPlace(currentWeights, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-
-                // Re-normalize weights to sum to 1
-                NormalizeWeights(currentWeights);
-            }
+            var currentWeights = FineTuneGatingWeights(task, baseParams, selectedIndices, gatingWeights);
 
             // Evaluate on query set with final adapted params
             var finalDelta = CombineModulesWithWeights(selectedIndices, currentWeights);
@@ -173,8 +151,8 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Add load balancing regularization
-            double loadBalanceLoss = ComputeLoadBalanceLoss(moduleUsageCounts, taskBatch.Tasks.Length);
-            var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(_algoOptions.LoadBalanceRegularization * loadBalanceLoss));
+            T loadBalanceLoss = ComputeLoadBalanceLoss(moduleUsageCounts, taskBatch.Tasks.Length);
+            var totalLoss = NumOps.Add(queryLoss, NumOps.Multiply(NumOps.FromDouble(_algoOptions.LoadBalanceRegularization), loadBalanceLoss));
             losses.Add(totalLoss);
 
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -206,25 +184,7 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
         var (selectedIndices, gatingWeights) = SelectTopK(scores);
 
         // Fine-tune gating weights on support set
-        var currentWeights = new double[gatingWeights.Length];
-        Array.Copy(gatingWeights, currentWeights, gatingWeights.Length);
-
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            var delta = CombineModulesWithWeights(selectedIndices, currentWeights);
-            var adaptedParams = AddVectors(baseParams, delta);
-            ParamModel.SetParameters(adaptedParams);
-
-            var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            var stepGradient = new double[currentWeights.Length];
-            for (int k = 0; k < selectedIndices.Length; k++)
-            {
-                double gradW = ComputeModuleGradient(fullGrad, selectedIndices[k]);
-                stepGradient[k] = gradW;
-            }
-            ApplyInnerGradientsInPlace(currentWeights, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            NormalizeWeights(currentWeights);
-        }
+        var currentWeights = FineTuneGatingWeights(task, baseParams, selectedIndices, gatingWeights);
 
         var finalDelta = CombineModulesWithWeights(selectedIndices, currentWeights);
         var finalParams = AddVectors(baseParams, finalDelta);
@@ -232,151 +192,157 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
 
+    /// <summary>
+    /// Inner loop: steps the selected modules' gating weights along dL/dw_k (the gradient's dot product with
+    /// each module's mean basis vector) and re-normalizes them to sum to 1 after every step.
+    /// </summary>
+    private Vector<T> FineTuneGatingWeights(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> baseParams, int[] selectedIndices, Vector<T> gatingWeights)
+    {
+        var currentWeights = gatingWeights.Clone();
+        var moduleMeans = SelectedModuleMeans(selectedIndices);
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+        {
+            var delta = CombineModulesWithWeights(selectedIndices, currentWeights);
+            var adaptedParams = AddVectors(baseParams, delta);
+            ParamModel.SetParameters(adaptedParams);
+
+            var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+
+            // Compute gradient w.r.t. each gating weight
+            var stepGradient = ComputeModuleGradient(fullGrad, moduleMeans);
+            currentWeights = ApplyInnerGradients(currentWeights, stepGradient, _algoOptions.InnerLearningRate, step == 0);
+
+            // Re-normalize weights to sum to 1
+            currentWeights = NormalizeWeights(currentWeights);
+        }
+
+        return currentWeights;
+    }
+
     private Vector<T> ComputeTaskEmbedding(TInput supportInput)
     {
         var features = ConvertToVector(MetaModel.Predict(supportInput));
-        var embed = new Vector<T>(_embeddingDim);
-        if (features == null) return embed;
+        if (features == null || features.Length == 0) return new Vector<T>(_embeddingDim);
 
-        for (int i = 0; i < _embeddingDim && i < features.Length; i++)
-            embed[i] = features[i];
-        return embed;
+        // The first embeddingDim features, zero-padded when there are fewer
+        return features.Length >= _embeddingDim
+            ? features.GetSubVector(0, _embeddingDim)
+            : Vector<T>.Concatenate(features.Clone(), new Vector<T>(_embeddingDim - features.Length));
     }
 
-    private double[] ComputeGatingScores(Vector<T> taskEmbed)
+    /// <summary>Gating scores W e + b for the linear gate embeddingDim -> bankSize.</summary>
+    private Vector<T> ComputeGatingScores(Vector<T> taskEmbed)
     {
-        var scores = new double[_bankSize];
-        int biasOffset = _embeddingDim * _bankSize;
-        for (int k = 0; k < _bankSize; k++)
-        {
-            double sum = 0;
-            for (int i = 0; i < _embeddingDim; i++)
-                sum += NumOps.ToDouble(taskEmbed[i]) * NumOps.ToDouble(_gatingParams[k * _embeddingDim + i]);
-            if (biasOffset + k < _gatingParams.Length)
-                sum += NumOps.ToDouble(_gatingParams[biasOffset + k]);
-            scores[k] = sum;
-        }
-        return scores;
+        int weightCount = _embeddingDim * _bankSize;
+        var weights = Engine.Reshape(Tensor<T>.FromVector(_gatingParams.GetSubVector(0, weightCount)), new[] { _bankSize, _embeddingDim });
+        var scores = Engine.TensorMatMul(weights, Tensor<T>.FromVector(taskEmbed, new[] { _embeddingDim, 1 })).ToVector();
+        int biasCount = Math.Min(_bankSize, _gatingParams.Length - weightCount);
+        if (biasCount <= 0) return scores;
+        var bias = _gatingParams.GetSubVector(weightCount, biasCount);
+        return Engine.Add(scores, biasCount == _bankSize ? bias : Vector<T>.Concatenate(bias, new Vector<T>(_bankSize - biasCount)));
     }
 
-    private (int[] indices, double[] weights) SelectTopK(double[] scores)
+    /// <summary>
+    /// The top-K modules by score (ties broken by the lower module index) and the temperature softmax of
+    /// their scores, shifted by the best score.
+    /// </summary>
+    private (int[] indices, Vector<T> weights) SelectTopK(Vector<T> scores)
     {
-        // Find top-K indices
-        var indexScorePairs = new (int index, double score)[_bankSize];
-        for (int k = 0; k < _bankSize; k++)
-            indexScorePairs[k] = (k, scores[k]);
-        Array.Sort(indexScorePairs, (a, b) => b.score.CompareTo(a.score));
+        var engine = Engine;
+        var square = new[] { _bankSize, _bankSize };
+        var s = Tensor<T>.FromVector(scores);
 
-        var indices = new int[_topK];
-        var topScores = new double[_topK];
-        for (int k = 0; k < _topK; k++)
-        {
-            indices[k] = indexScorePairs[k].index;
-            topScores[k] = indexScorePairs[k].score;
-        }
+        // rank_k = #{j : s_j > s_k} + #{j < k : s_j == s_k}: a unique position in descending order
+        var others = engine.TensorBroadcastTo(engine.Reshape(s, new[] { 1, _bankSize }), square);
+        var own = engine.TensorBroadcastTo(engine.Reshape(s, new[] { _bankSize, 1 }), square);
+        var index = engine.TensorArange<T>(0, _bankSize, 1);
+        var earlier = engine.TensorLessThan(
+            engine.TensorBroadcastTo(engine.Reshape(index, new[] { 1, _bankSize }), square),
+            engine.TensorBroadcastTo(engine.Reshape(index, new[] { _bankSize, 1 }), square));
+        var ahead = engine.TensorAdd(engine.TensorGreaterThan(others, own),
+            engine.TensorMultiply(engine.TensorEquals(others, own), earlier));
+        var rank = engine.ReduceSum(ahead, new[] { 1 }, keepDims: false);
+
+        // Row p of the selection picks the module ranked p
+        var positions = engine.TensorArange<T>(0, _topK, 1);
+        var selection = engine.TensorEquals(
+            engine.TensorBroadcastTo(engine.Reshape(rank, new[] { 1, _bankSize }), new[] { _topK, _bankSize }),
+            engine.TensorBroadcastTo(engine.Reshape(positions, new[] { _topK, 1 }), new[] { _topK, _bankSize }));
+        var indices = engine.TensorRound(engine.TensorMatMul(selection, engine.Reshape(index, new[] { _bankSize, 1 })))
+            .Cast<int>().ToArray();
+        var topScores = engine.TensorMatMul(selection, engine.Reshape(s, new[] { _bankSize, 1 })).ToVector();
 
         // Softmax over top-K scores
-        double maxScore = topScores[0];
-        double sumExp = 0;
-        var weights = new double[_topK];
-        for (int k = 0; k < _topK; k++)
-        {
-            weights[k] = Math.Exp((topScores[k] - maxScore) / _algoOptions.GatingTemperature);
-            sumExp += weights[k];
-        }
-        for (int k = 0; k < _topK; k++)
-            weights[k] /= sumExp;
-
-        return (indices, weights);
+        T maxScore = Engine.TensorMaxValue(Tensor<T>.FromVector(topScores));
+        var exps = Engine.Exp(Engine.Divide(Engine.Subtract(topScores, Engine.Fill(_topK, maxScore)),
+            NumOps.FromDouble(_algoOptions.GatingTemperature)));
+        return (indices, Engine.Divide(exps, Engine.Sum(exps)));
     }
 
-    private Vector<T> CombineModules(int[] selectedIndices, double[] weights)
+    private Vector<T> CombineModules(int[] selectedIndices, Vector<T> weights)
     {
         return CombineModulesWithWeights(selectedIndices, weights);
     }
 
-    private Vector<T> CombineModulesWithWeights(int[] selectedIndices, double[] weights)
+    /// <summary>The mean of each selected module's rank basis vectors, [K, paramDim].</summary>
+    private Tensor<T> SelectedModuleMeans(int[] selectedIndices)
     {
-        var delta = new Vector<T>(_paramDim);
-        int moduleSize = _rank * _paramDim;
-
-        for (int k = 0; k < selectedIndices.Length; k++)
-        {
-            if (Math.Abs(weights[k]) < 1e-10) continue;
-            int moduleOffset = selectedIndices[k] * moduleSize;
-
-            // Sum all rank basis vectors within the module, weighted by gating weight
-            for (int r = 0; r < _rank; r++)
-            {
-                int basisOffset = moduleOffset + r * _paramDim;
-                double w = weights[k] / _rank; // Average over rank vectors
-                T wT = NumOps.FromDouble(w);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    if (basisOffset + d < _moduleBank.Length)
-                        delta[d] = NumOps.Add(delta[d], NumOps.Multiply(_moduleBank[basisOffset + d], wT));
-                }
-            }
-        }
-        return delta;
+        var bank = Engine.Reshape(Tensor<T>.FromVector(_moduleBank), new[] { _bankSize, _rank, _paramDim });
+        var means = Engine.ReduceMean(bank, new[] { 1 }, keepDims: false);
+        return Engine.TensorIndexSelect(means, new Tensor<int>(selectedIndices, new[] { selectedIndices.Length }), 0);
     }
 
-    private double ComputeModuleGradient(Vector<T> fullGrad, int moduleIndex)
+    /// <summary>
+    /// delta = sum_k w_k * mean_r(B[idx_k, r]), skipping weights below 1e-10 in magnitude.
+    /// </summary>
+    private Vector<T> CombineModulesWithWeights(int[] selectedIndices, Vector<T> weights)
     {
-        // Dot product of full gradient with module's mean basis vector
-        int moduleOffset = moduleIndex * _rank * _paramDim;
-        double dot = 0;
-        for (int r = 0; r < _rank; r++)
-        {
-            int basisOffset = moduleOffset + r * _paramDim;
-            for (int d = 0; d < _paramDim && basisOffset + d < _moduleBank.Length; d++)
-                dot += NumOps.ToDouble(fullGrad[d]) * NumOps.ToDouble(_moduleBank[basisOffset + d]);
-        }
-        return dot / _rank;
+        var w = Tensor<T>.FromVector(weights, new[] { 1, selectedIndices.Length });
+        var negligible = Engine.TensorLessThan(Engine.TensorAbs(w), NumOps.FromDouble(1e-10));
+        var kept = Engine.TensorMultiply(w, Engine.ScalarMinusTensor(NumOps.One, negligible));
+        return Engine.TensorMatMul(kept, SelectedModuleMeans(selectedIndices)).ToVector();
+    }
+
+    /// <summary>
+    /// dL/dw_k: the dot product of the full gradient with each selected module's mean basis vector.
+    /// </summary>
+    private Vector<T> ComputeModuleGradient(Vector<T> fullGrad, Tensor<T> moduleMeans)
+    {
+        var g = fullGrad.Length == _paramDim ? fullGrad : fullGrad.GetSubVector(0, _paramDim);
+        return Engine.TensorMatMul(moduleMeans, Tensor<T>.FromVector(g, new[] { _paramDim, 1 })).ToVector();
     }
 
     private Vector<T> AddVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-            result[d] = NumOps.Add(a[d], b[d]);
-        return result;
+        return Engine.Add(a.Length == _paramDim ? a : a.GetSubVector(0, _paramDim),
+            b.Length == _paramDim ? b : b.GetSubVector(0, _paramDim));
     }
 
-    private static void NormalizeWeights(double[] weights)
+    /// <summary>Clamps the weights at zero and rescales them to sum to 1 (uniform when they sum to ~0).</summary>
+    private Vector<T> NormalizeWeights(Vector<T> weights)
     {
-        double sum = 0;
-        for (int i = 0; i < weights.Length; i++)
-        {
-            weights[i] = Math.Max(0, weights[i]); // Ensure non-negative
-            sum += weights[i];
-        }
-        if (sum > 1e-10)
-            for (int i = 0; i < weights.Length; i++) weights[i] /= sum;
-        else
-            for (int i = 0; i < weights.Length; i++) weights[i] = 1.0 / weights.Length;
+        var nonNegative = Engine.Max(weights, Engine.Fill(weights.Length, NumOps.Zero)); // Ensure non-negative
+        T sum = Engine.Sum(nonNegative);
+        return NumOps.GreaterThan(sum, NumOps.FromDouble(1e-10))
+            ? Engine.Divide(nonNegative, sum)
+            : Engine.Fill(weights.Length, NumOps.FromDouble(1.0 / weights.Length));
     }
 
-    private static double ComputeLoadBalanceLoss(double[] usageCounts, int numTasks)
+    /// <summary>Population variance of the per-module usage fractions count_m / numTasks.</summary>
+    private T ComputeLoadBalanceLoss(int[] usageCounts, int numTasks)
     {
-        if (numTasks == 0) return 0;
-        double mean = 0;
-        for (int i = 0; i < usageCounts.Length; i++) mean += usageCounts[i];
-        mean /= usageCounts.Length;
-
-        double variance = 0;
-        for (int i = 0; i < usageCounts.Length; i++)
-        {
-            double diff = usageCounts[i] / numTasks - mean / numTasks;
-            variance += diff * diff;
-        }
-        return variance / usageCounts.Length;
+        if (numTasks == 0) return NumOps.Zero;
+        var fractions = Engine.Divide(new Tensor<int>(usageCounts, new[] { usageCounts.Length }).Cast<T>().ToVector(),
+            NumOps.FromDouble(numTasks));
+        var centered = Engine.Subtract(fractions, Engine.Fill(fractions.Length, Engine.Mean(fractions)));
+        return NumOps.Divide(Engine.DotProduct(centered, centered), NumOps.FromDouble(usageCounts.Length));
     }
 
     private double ComputeBankLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var baseParams = ParamModel.GetParameters();
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -387,10 +353,12 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             var delta = CombineModulesWithWeights(selectedIndices, gatingWeights);
             var adaptedParams = AddVectors(baseParams, delta);
             ParamModel.SetParameters(adaptedParams);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         ParamModel.SetParameters(baseParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }
