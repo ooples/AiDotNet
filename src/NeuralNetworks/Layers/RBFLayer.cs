@@ -373,22 +373,6 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorDivide(ones, twoWidthSquared);
     }
 
-    /// <summary>
-    /// Converts epsilon gradients to width gradients using chain rule.
-    /// </summary>
-    private Tensor<T> ConvertEpsilonGradientsToWidthGradients(Tensor<T> gradEpsilons)
-    {
-        var gradWidths = new Tensor<T>(_widths._shape);
-        for (int i = 0; i < _numCenters; i++)
-        {
-            // depsilon/dwidth = -1/width³
-            var widthCubed = NumOps.Multiply(_widths[i], NumOps.Multiply(_widths[i], _widths[i]));
-            var dEpsilonDWidth = NumOps.Negate(NumOps.Divide(NumOps.One, widthCubed));
-            gradWidths[i] = NumOps.Multiply(gradEpsilons[i], dEpsilonDWidth);
-        }
-        return gradWidths;
-    }
-
 
     /// <summary>
     /// Updates the parameters of the RBF layer using the calculated gradients.

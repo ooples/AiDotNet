@@ -330,52 +330,6 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Applies the product of M Householder reflections to a matrix.
-    /// H = H_M * ... * H_1, where H_m = I - 2*u*u^T/||u||^2.
-    /// Computes H * S for state matrix S.
-    /// </summary>
-    private void ApplyHouseholderProduct(
-        Tensor<T> state, Tensor<T> hVecs,
-        int bi, int hi, int posFlat)
-    {
-        // Apply each Householder reflection sequentially: S <- (I - 2*u*u^T/||u||^2) * S
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            // Compute ||u||^2
-            T normSq = NumOps.Zero;
-            for (int d = 0; d < _headDimension; d++)
-            {
-                T u = hVecs[new[] { posFlat, mi, hi, d }];
-                normSq = NumOps.Add(normSq, NumOps.Multiply(u, u));
-            }
-            T eps = NumOps.FromDouble(1e-8);
-            normSq = NumOps.Add(normSq, eps);
-            T twoOverNormSq = NumOps.Divide(NumOps.FromDouble(2.0), normSq);
-
-            // For each column j of S: S[:,j] <- S[:,j] - (2/||u||^2) * u * (u^T * S[:,j])
-            for (int j = 0; j < _headDimension; j++)
-            {
-                // dot = u^T * S[:,j]
-                T dot = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-                    dot = NumOps.Add(dot, NumOps.Multiply(u, state[new[] { bi, hi, d, j }]));
-                }
-                T factor = NumOps.Multiply(twoOverNormSq, dot);
-
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-                    state[new[] { bi, hi, d, j }] = NumOps.Subtract(
-                        state[new[] { bi, hi, d, j }],
-                        NumOps.Multiply(factor, u));
-                }
-            }
-        }
-    }
-
-    /// <summary>
     /// DeltaProduct recurrence: state update with Householder product transitions.
     /// S_t = H_t * S_{t-1} + beta_t * v_t * k_t^T
     /// O_t = S_t * q_t
@@ -453,68 +407,6 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
             new[] { 0, 2, 1, 3 }),
             new[] { batchSize, seqLen, _modelDimension });
-
-    /// <summary>
-    /// Accumulates Householder weight gradients from per-position gradients.
-    /// </summary>
-    private void AccumulateHouseholderWeightGradients(
-        Tensor<T> dHVecs, Tensor<T> inputFlat, int batchSize, int seqLen)
-    {
-        int total = batchSize * seqLen;
-        var gradient = _householderWeightsGradient ?? throw new InvalidOperationException("Gradients not initialized.");
-
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            for (int pos = 0; pos < total; pos++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        T dH = dHVecs[new[] { pos, mi, hi, d }];
-                        for (int j = 0; j < _modelDimension; j++)
-                        {
-                            gradient[new[] { mi, j, d }] = NumOps.Add(
-                                gradient[new[] { mi, j, d }],
-                                NumOps.Multiply(dH, inputFlat[new[] { pos, j }]));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Computes input gradient contribution from Householder vectors.
-    /// </summary>
-    private Tensor<T> ComputeHouseholderInputGradient(
-        Tensor<T> dHVecs, int batchSize, int seqLen)
-    {
-        int total = batchSize * seqLen;
-        var dInput = TensorAllocator.Rent<T>(new[] { total, _modelDimension });
-
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            for (int pos = 0; pos < total; pos++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        T dH = dHVecs[new[] { pos, mi, hi, d }];
-                        for (int j = 0; j < _modelDimension; j++)
-                        {
-                            dInput[new[] { pos, j }] = NumOps.Add(
-                                dInput[new[] { pos, j }],
-                                NumOps.Multiply(dH, _householderWeights[new[] { mi, j, d }]));
-                        }
-                    }
-                }
-            }
-        }
-
-        return dInput;
-    }
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {

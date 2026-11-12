@@ -389,37 +389,4 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         return importance;
     }
 
-    private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
-    {
-        writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor._shape)
-        {
-            writer.Write(dim);
-        }
-
-        writer.Write(tensor.Length);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(tensor[i]));
-        }
-    }
-
-    private Tensor<T> DeserializeTensor(BinaryReader reader)
-    {
-        int rank = reader.ReadInt32();
-        var shape = new int[rank];
-        for (int i = 0; i < rank; i++)
-        {
-            shape[i] = reader.ReadInt32();
-        }
-
-        var tensor = new Tensor<T>(shape);
-        int length = reader.ReadInt32();
-        for (int i = 0; i < length; i++)
-        {
-            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        return tensor;
-    }
 }

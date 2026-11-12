@@ -384,65 +384,6 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         return Engine.GlaScanForward(q, v, k, gate, _numHeads);
     }
 
-    /// <summary>
-    /// Backward pass through RMSNorm.
-    /// </summary>
-    private Tensor<T> RMSNormBackward(
-        Tensor<T> dOutput, Tensor<T> input, Tensor<T> scale, Tensor<T> rmsInv,
-        Tensor<T> scaleGradient, int batchSize, int seqLen)
-    {
-        var dInput = TensorAllocator.Rent<T>(input._shape);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int h = 0; h < _numHeads; h++)
-                {
-                    int dimStart = h * _headDimension;
-                    T invRms = rmsInv[new[] { bi, t, h }];
-
-                    // Compute intermediate sums for the RMSNorm gradient
-                    T sumDyXhat = NumOps.Zero;
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T xNorm = NumOps.Multiply(input[new[] { bi, t, flatD }], invRms);
-                        T dy = dOutput[new[] { bi, t, flatD }];
-                        T s = scale[new[] { h, d }];
-
-                        // Scale gradient
-                        scaleGradient[new[] { h, d }] = NumOps.Add(
-                            scaleGradient[new[] { h, d }],
-                            NumOps.Multiply(dy, xNorm));
-
-                        T dyScaled = NumOps.Multiply(dy, s);
-                        sumDyXhat = NumOps.Add(sumDyXhat,
-                            NumOps.Multiply(dyScaled, xNorm));
-                    }
-
-                    T invHD = NumOps.FromDouble(1.0 / _headDimension);
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T xNorm = NumOps.Multiply(input[new[] { bi, t, flatD }], invRms);
-                        T dy = dOutput[new[] { bi, t, flatD }];
-                        T s = scale[new[] { h, d }];
-                        T dyScaled = NumOps.Multiply(dy, s);
-
-                        // dInput = invRms * (dyScaled - xNorm * invHD * sumDyXhat)
-                        T correction = NumOps.Multiply(xNorm,
-                            NumOps.Multiply(invHD, sumDyXhat));
-                        dInput[new[] { bi, t, flatD }] = NumOps.Multiply(
-                            invRms, NumOps.Subtract(dyScaled, correction));
-                    }
-                }
-            }
-        }
-
-        return dInput;
-    }
-
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
