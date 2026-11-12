@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -35,7 +36,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 internal sealed class JanusVQCodebook<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly double[,] _codebook;
+    private Tensor<T> _codebook;
     private bool _isLoaded;
 
     /// <summary>Number of entries in the codebook (Janus-Pro: 16384; Janus: 8192).</summary>
@@ -84,7 +85,6 @@ internal sealed class JanusVQCodebook<T>
         CodebookSize = codebookSize;
         EmbeddingDim = embeddingDim;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _codebook = new double[codebookSize, embeddingDim];
 
         // VQ-VAE codebook init: uniform in [-1/sqrt(d), 1/sqrt(d)]. A fixed seed
         // keeps construction deterministic (so quantize round-trips are stable),
@@ -92,9 +92,11 @@ internal sealed class JanusVQCodebook<T>
         // recovers the same id (nearest-neighbour to itself).
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1234);
         double scale = 1.0 / Math.Sqrt(embeddingDim);
-        for (int id = 0; id < codebookSize; id++)
-        for (int d = 0; d < embeddingDim; d++)
-            _codebook[id, d] = (rng.NextDouble() * 2.0 - 1.0) * scale;
+        _codebook = AiDotNetEngine.Current.TensorRandomUniformRange(
+            [codebookSize, embeddingDim],
+            _numOps.FromDouble(-scale),
+            _numOps.FromDouble(scale),
+            rng.Next());
 
         _isLoaded = false;
     }
@@ -105,10 +107,8 @@ internal sealed class JanusVQCodebook<T>
     public Tensor<T> Lookup(int tokenId)
     {
         int safeId = Math.Max(0, Math.Min(CodebookSize - 1, tokenId));
-        var embed = new Tensor<T>([EmbeddingDim]);
-        for (int d = 0; d < EmbeddingDim; d++)
-            embed[d] = _numOps.FromDouble(_codebook[safeId, d]);
-        return embed;
+        var ids = new Tensor<int>(new[] { 1 }, Vector<int>.FromArray(new[] { safeId }));
+        return AiDotNetEngine.Current.TensorIndexSelect(_codebook, ids, 0).Reshape([EmbeddingDim]);
     }
 
     /// <summary>
@@ -125,23 +125,23 @@ internal sealed class JanusVQCodebook<T>
                 nameof(continuousEmbedding)
             );
 
-        int bestId = 0;
-        double bestDist = double.PositiveInfinity;
-        for (int id = 0; id < CodebookSize; id++)
-        {
-            double dist = 0.0;
-            for (int d = 0; d < EmbeddingDim; d++)
-            {
-                double v = _numOps.ToDouble(continuousEmbedding[d]) - _codebook[id, d];
-                dist += v * v;
-            }
-            if (dist < bestDist)
-            {
-                bestDist = dist;
-                bestId = id;
-            }
-        }
-        return bestId;
+        var engine = AiDotNetEngine.Current;
+        var query = engine.TensorBroadcastTo(
+            continuousEmbedding.Reshape([1, EmbeddingDim]), [CodebookSize, EmbeddingDim]);
+        var diff = engine.TensorSubtract(query, _codebook);
+        var dist = engine.ReduceSum(engine.TensorMultiply(diff, diff), [1], false);
+
+        // Nearest entry; NaN distances never win, an all-infinite/NaN row keeps id 0, and on
+        // ties the lowest id wins (first position holding the minimum).
+        var posInf = Tensor<T>.CreateDefault([CodebookSize], _numOps.FromDouble(double.PositiveInfinity));
+        var comparable = engine.TensorWhere(engine.TensorIsNan(dist), posInf, dist);
+        T bestDist = engine.TensorMinValue(comparable);
+        if (!_numOps.LessThan(bestDist, _numOps.FromDouble(double.PositiveInfinity)))
+            return 0;
+        var isBest = engine.TensorEquals(comparable, bestDist);
+        var positions = engine.TensorArange<T>(0, CodebookSize, 1);
+        var sentinel = Tensor<T>.CreateDefault([CodebookSize], _numOps.FromDouble(CodebookSize));
+        return _numOps.ToInt(engine.TensorMinValue(engine.TensorWhere(isBest, positions, sentinel)));
     }
 
     /// <summary>
@@ -167,38 +167,26 @@ internal sealed class JanusVQCodebook<T>
                 nameof(tokenIds)
             );
 
-        var grid = new Tensor<T>([gridHeight * gridWidth * EmbeddingDim]);
-        for (int y = 0; y < gridHeight; y++)
-        {
-            for (int x = 0; x < gridWidth; x++)
-            {
-                int idx = y * gridWidth + x;
-                int safeId = Math.Max(0, Math.Min(CodebookSize - 1, tokenIds[idx]));
-                for (int d = 0; d < EmbeddingDim; d++)
-                    grid[(y * gridWidth + x) * EmbeddingDim + d] = _numOps.FromDouble(
-                        _codebook[safeId, d]
-                    );
-            }
-        }
-        return grid;
+        var engine = AiDotNetEngine.Current;
+        var ids = new Tensor<int>(new[] { expected }, Vector<int>.FromArray(tokenIds));
+        var safeIds = engine.TensorClamp(ids, 0, CodebookSize - 1);
+        return engine.TensorIndexSelect(_codebook, safeIds, 0).Reshape([expected * EmbeddingDim]);
     }
 
     /// <summary>
     /// Replaces the codebook entries in bulk (used when loading a trained checkpoint).
-    /// The supplied array must be shape <c>[CodebookSize, EmbeddingDim]</c>.
+    /// The supplied tensor must be shape <c>[CodebookSize, EmbeddingDim]</c>.
     /// </summary>
-    public void LoadCodebook(double[,] codebook)
+    public void LoadCodebook(Tensor<T> codebook)
     {
         if (codebook is null)
             throw new ArgumentNullException(nameof(codebook));
-        if (codebook.GetLength(0) != CodebookSize || codebook.GetLength(1) != EmbeddingDim)
+        if (codebook.Rank != 2 || codebook.Shape[0] != CodebookSize || codebook.Shape[1] != EmbeddingDim)
             throw new ArgumentException(
-                $"codebook shape ({codebook.GetLength(0)}×{codebook.GetLength(1)}) does not match expected ({CodebookSize}×{EmbeddingDim}).",
+                $"codebook shape ({string.Join("×", codebook._shape)}) does not match expected ({CodebookSize}×{EmbeddingDim}).",
                 nameof(codebook)
             );
-        for (int i = 0; i < CodebookSize; i++)
-        for (int d = 0; d < EmbeddingDim; d++)
-            _codebook[i, d] = codebook[i, d];
+        _codebook = codebook.Clone();
         _isLoaded = true;
     }
 }
