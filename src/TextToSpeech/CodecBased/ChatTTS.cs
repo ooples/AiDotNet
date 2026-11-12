@@ -302,12 +302,10 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (body.Length == 0) throw new ArgumentException("The text has no tokens.", nameof(text));
         var ids = new List<int> { TokenId("[Stts]"), TokenId(Voice?.Reference is not null ? "[spk_emb]" : "[empty_spk]") };
         if (Voice?.ReferenceTokens is { } transcript)
-            for (int i = 0; i < transcript.Length; i++) ids.Add((int)Math.Round(NumOps.ToDouble(transcript[i])));
+            ids.AddRange(RoundedIds(transcript));
         ids.AddRange(body.Take(_options.MaxTextLength));
         ids.Add(TokenId("[Ptts]"));
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return IdTensor(ids);
     }
 
     /// <summary>
@@ -322,9 +320,7 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         Tensor<T>? tokens = null;
         if (transcript is not null)
         {
-            var ids = Tokenize(transcript);
-            tokens = new Tensor<T>(new[] { ids.Length });
-            for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
+            tokens = IdTensor(Tokenize(transcript));
         }
         return new TtsVoice<T> { Reference = speakerEmbedding, ReferenceAudio = recording, ReferenceTokens = tokens };
     }
@@ -363,19 +359,21 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
     internal Tensor<T> Embed(IReadOnlyList<int[]> rows, IReadOnlyList<bool> textMask, Tensor<T>? speaker)
     {
         int length = rows.Count, d = _options.HiddenDim, vq = _options.NumVq;
-        var textIds = new Tensor<T>(new[] { length });
-        var mask = new Tensor<T>(new[] { length, d });
+        var textIdValues = new int[length];
+        var isText = new int[length];
         for (int i = 0; i < length; i++)
         {
-            textIds[i] = textMask[i] ? NumOps.FromDouble(rows[i][0]) : NumOps.Zero;
-            if (textMask[i]) for (int k = 0; k < d; k++) mask[i, k] = NumOps.One;
+            textIdValues[i] = textMask[i] ? rows[i][0] : 0;
+            isText[i] = textMask[i] ? 1 : 0;
         }
+        var textIds = IdTensor(textIdValues);
+        var mask = Engine.TensorTile(new Tensor<int>(isText, new[] { length, 1 }).Cast<T>(), new[] { 1, d });
         var text = (_textTable ?? throw new InvalidOperationException("native model")).Forward(textIds);
         Tensor<T> CodeEmbedding(int q)
         {
-            var ids = new Tensor<T>(new[] { length });
-            for (int i = 0; i < length; i++) ids[i] = textMask[i] ? NumOps.Zero : NumOps.FromDouble(rows[i][q]);
-            return _codeTables[q].Forward(ids);
+            var codeIds = new int[length];
+            for (int i = 0; i < length; i++) codeIds[i] = textMask[i] ? 0 : rows[i][q];
+            return _codeTables[q].Forward(IdTensor(codeIds));
         }
         var code = CodeEmbedding(0);
         for (int q = 1; q < vq; q++) code = Engine.TensorAdd(code, CodeEmbedding(q));
@@ -384,20 +382,16 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (speaker is not null)
         {
             int speakerId = TokenId("[spk_emb]");
-            double norm = 0;
-            for (int k = 0; k < d; k++) norm += Math.Pow(NumOps.ToDouble(speaker[k]), 2);
-            norm = Math.Max(Math.Sqrt(norm), 1e-12);
-            var replace = new Tensor<T>(new[] { length, d });
-            var values = new Tensor<T>(new[] { length, d });
+            var isSpeaker = new int[length];
             for (int i = 0; i < length; i++)
-            {
-                if (!textMask[i] || rows[i][0] != speakerId) continue;
-                for (int k = 0; k < d; k++)
-                {
-                    replace[i, k] = NumOps.One;
-                    values[i, k] = NumOps.FromDouble(NumOps.ToDouble(speaker[k]) / norm);
-                }
-            }
+                isSpeaker[i] = textMask[i] && rows[i][0] == speakerId ? 1 : 0;
+            var speakerRows = new Tensor<int>(isSpeaker, new[] { length, 1 }).Cast<T>();                    // [L, 1]
+            // Speaker.apply: F.normalize(spk_emb, p=2, dim=0, eps=1e-12) at every [spk_emb] position.
+            var unitSpeaker = Engine.Reshape(
+                NormalizeL2(Engine.TensorSlice(Engine.Reshape(speaker, new[] { speaker.Length }), new[] { 0 }, new[] { d }), 1e-12),
+                new[] { 1, d });                                                                             // [1, d]
+            var replace = Engine.TensorTile(speakerRows, new[] { 1, d });
+            var values = Engine.TensorMatMul(speakerRows, unitSpeaker);
             var keep = Engine.TensorSubtract(Engine.TensorAddScalar(Engine.TensorMultiplyScalar(replace, NumOps.Zero), NumOps.One), replace);
             embeddings = Engine.TensorAdd(Engine.TensorMultiply(embeddings, keep), values);
         }
@@ -475,13 +469,14 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         {
             if (tokens.Rank != 2 || tokens.Shape[1] != vq)
                 throw new ArgumentException($"Expected DVAE codes [frames, {vq}].", nameof(sample));
+            var flat = RoundedIds(tokens);
             var rows = new int[tokens.Shape[0]][];
             for (int f = 0; f < rows.Length; f++)
             {
                 rows[f] = new int[vq];
                 for (int q = 0; q < vq; q++)
                 {
-                    rows[f][q] = (int)Math.Round(NumOps.ToDouble(tokens[f, q]));
+                    rows[f][q] = flat[f * vq + q];
                     if (rows[f][q] < 0 || rows[f][q] >= CodebookSize)
                         throw new ArgumentOutOfRangeException(nameof(sample), $"DVAE codes lie in [0, {CodebookSize}).");
                 }
@@ -505,9 +500,8 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         int vq = _options.NumVq;
         var rows = new List<int[]>();
         var textMask = new List<bool>();
-        for (int i = 0; i < sample.Tokens.Length; i++)
+        foreach (int id in RoundedIds(sample.Tokens))
         {
-            int id = (int)Math.Round(NumOps.ToDouble(sample.Tokens[i]));
             if (id < 0 || id >= TextVocabulary) throw new ArgumentOutOfRangeException(nameof(sample), $"Text ids lie in [0, {TextVocabulary}).");
             rows.Add(Enumerable.Repeat(id, vq).ToArray());
             textMask.Add(true);
@@ -529,8 +523,11 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
             Tensor<T> Term(int q)
             {
                 var logProbabilities = Engine.TensorLogSoftmax(CodeLogits(q, predicting), axis: -1);           // [targets, V]
-                var picks = new Tensor<T>(logProbabilities._shape);
-                for (int t = 0; t < targets; t++) picks[t, rows[firstFrame + t][q]] = NumOps.FromDouble(-1.0 / ((double)targets * vq));
+                var targetCodes = new int[targets];
+                for (int t = 0; t < targets; t++) targetCodes[t] = rows[firstFrame + t][q];
+                var picks = Engine.TensorMultiplyScalar(
+                    Engine.TensorOneHot<T>(new Tensor<int>(targetCodes, new[] { targets }), logProbabilities.Shape[1]),
+                    NumOps.FromDouble(-1.0 / ((double)targets * vq)));
                 return Engine.ReduceSum(Engine.TensorMultiply(logProbabilities, picks), new[] { 0, 1 }, keepDims: false);
             }
             var total = Term(0);
@@ -724,9 +721,15 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(tokens);
         Guard.NotNull(tokens);
         if (tokens.Rank != 2 || tokens.Shape[1] != _options.NumVq) throw new ArgumentException($"Expected codes [frames, {_options.NumVq}].", nameof(tokens));
+        int vq = _options.NumVq;
+        var flat = RoundedIds(tokens);
         var frames = new List<int[]>();
         for (int f = 0; f < tokens.Shape[0]; f++)
-            frames.Add(Enumerable.Range(0, _options.NumVq).Select(q => (int)Math.Round(NumOps.ToDouble(tokens[f, q]))).ToArray());
+        {
+            var frame = new int[vq];
+            Array.Copy(flat, f * vq, frame, 0, vq);
+            frames.Add(frame);
+        }
         using var _ = new NoGradScope<T>();
         var audio = (_vocos ?? throw new InvalidOperationException("native model")).Forward(MelFromCodes(frames));
         return audio.Reshape(new[] { audio.Length });
@@ -738,10 +741,10 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(audio);
         var rows = EncodeCodes(audio);
-        var tokens = new Tensor<T>(new[] { rows.Length, _options.NumVq });
-        for (int f = 0; f < rows.Length; f++)
-            for (int q = 0; q < _options.NumVq; q++) tokens[f, q] = NumOps.FromDouble(rows[f][q]);
-        return tokens;
+        int vq = _options.NumVq;
+        var flat = new int[rows.Length * vq];
+        for (int f = 0; f < rows.Length; f++) Array.Copy(rows[f], 0, flat, f * vq, vq);
+        return new Tensor<int>(flat, new[] { rows.Length, vq }).Cast<T>();
     }
 
     // ---------------------------------------------------------------- synthesis
@@ -762,7 +765,8 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         try
         {
             using var _ = new NoGradScope<T>();
-            var ids = Enumerable.Range(0, input.Length).Select(i => (int)Math.Round(NumOps.ToDouble(input[i]))).ToList();
+            var ids = RoundedIds(input).ToList();
+
             if (ids.Any(id => id < 0 || id >= TextVocabulary))
                 throw new ArgumentOutOfRangeException(nameof(input), $"Text ids lie in [0, {TextVocabulary}).");
             int stts = TokenId("[Stts]"), ptts = TokenId("[Ptts]");

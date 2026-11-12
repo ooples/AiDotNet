@@ -636,7 +636,26 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
-    /// The hard monotonic alignment <c>[durations.Length, sum(durations)]</c> that expands phoneme i over its
+    /// <c>x / max(â€–xâ€–â‚‚, eps)</c> over the whole tensor (<c>torch.nn.functional.normalize</c>). The norm is taken after
+    /// scaling by the peak magnitude, so its sum of squares cannot overflow a narrow T.
+    /// </summary>
+    protected Tensor<T> NormalizeL2(Tensor<T> tensor, double eps)
+    {
+        Guard.NotNull(tensor);
+        if (tensor.Length == 0) return tensor;
+        var peak = Engine.TensorMaxValue(Engine.TensorAbs(tensor));
+        if (NumOps.Equals(peak, NumOps.Zero)) return new Tensor<T>(tensor._shape);
+        var scaled = Engine.TensorDivideScalar(tensor, peak);
+        var scaledNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorSquare(scaled)));
+        var floor = NumOps.FromDouble(eps);
+        return NumOps.LessThan(NumOps.Multiply(peak, scaledNorm), floor)
+            ? Engine.TensorDivideScalar(tensor, floor)
+            : Engine.TensorDivideScalar(scaled, scaledNorm);
+    }
+
+    /// <summary>
+    /// The hard monotonic alignment
+ <c>[durations.Length, sum(durations)]</c> that expands phoneme i over its
     /// durations[i] frames: row i is 1 on those frames and 0 elsewhere.
     /// </summary>
     protected Tensor<T> DurationAlignment(int[] durations)
