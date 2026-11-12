@@ -247,11 +247,18 @@ function Get-SelfHostedPendingJobs {
     $remaining = { [int][Math]::Floor(($deadline - [DateTime]::UtcNow).TotalSeconds) }
     if ($null -eq $Get) {
         $headers = @{ Authorization = "Bearer $Token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+        # -TimeoutSec bounds only the request and the response headers; a body that stalls after them is bounded per
+        # read by -OperationTimeoutSeconds (PowerShell 7.4+, whose default 0 means no limit). Passed only where the
+        # parameter exists: on an older pwsh it would fail binding, and the scan would silently count 0.
+        $boundsBodyReads = (Get-Command Invoke-RestMethod).Parameters.ContainsKey('OperationTimeoutSeconds')
         # Three tries for transient errors, each request capped by what is left of the budget.
         $Get = { param([string] $Uri) for ($try = 1; ; $try++) {
             $left = & $remaining
             if ($left -lt 1) { throw "pending-job scan exceeded its $BudgetSeconds s budget" }
-            try { return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec ([Math]::Min(30, $left)) -ErrorAction Stop }
+            $limit = [Math]::Min(30, $left)
+            $bodyLimit = @{}
+            if ($boundsBodyReads) { $bodyLimit['OperationTimeoutSeconds'] = $limit }
+            try { return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec $limit @bodyLimit -ErrorAction Stop }
             catch { if ($try -ge 3 -or (& $remaining) -lt (2 * $try + 1)) { throw }; Start-Sleep -Seconds (2 * $try) } } }
     }
     try {
