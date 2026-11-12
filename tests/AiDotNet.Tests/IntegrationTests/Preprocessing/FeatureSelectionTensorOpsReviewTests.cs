@@ -244,4 +244,68 @@ public class FeatureSelectionTensorOpsReviewTests
         Assert.Equal(0.5, (double)propagation[1, 2], 3);
         Assert.Equal(0.5, (double)propagation[2, 2], 3);
     }
+
+    // 3000 rows, x = i mod 4 split at the sorted value 2 against class (i / 4) mod 2: the table is a = b = 1125,
+    // c = d = 375, odds ratio 1 and two-sided p = 1. Summed in Half the low count stopped at 2048 (b = 923).
+    [Fact(Timeout = 120000)]
+    public async Task FisherExactTest_Half_CountsTablePast2048()
+    {
+        await Task.CompletedTask;
+        const int n = 3000;
+        var data = new Matrix<Half>(n, 1);
+        var target = new Vector<Half>(n);
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = (Half)(i % 4);
+            target[i] = (Half)((i / 4) % 2);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate.FisherExactTest<Half>(nFeaturesToSelect: 1);
+        selector.Fit(data, target);
+        Assert.NotNull(selector.PValues);
+        Assert.NotNull(selector.OddsRatios);
+        if (selector.PValues is not null && selector.OddsRatios is not null)
+        {
+            Assert.Equal(1.0, (double)selector.PValues[0], 2);
+            Assert.Equal(1.0, (double)selector.OddsRatios[0], 2);
+        }
+    }
+
+    // Betweenness on a chain of 17 diamonds: there are 2^17 shortest paths end to end, past Half's largest value,
+    // so path counts in Half became inf and the shares inf / inf = NaN. Run in double, Half matches double.
+    [Fact(Timeout = 60000)]
+    public async Task GraphBasedFS_Betweenness_Half_MatchesDoubleWithManyShortestPaths()
+    {
+        await Task.CompletedTask;
+        const int diamonds = 17;
+        int p = 1 + 3 * diamonds;
+        var edges = new double[p * p];
+        void Link(int u, int v)
+        {
+            edges[u * p + v] = 1;
+            edges[v * p + u] = 1;
+        }
+
+        int previous = 0;
+        for (int d = 0; d < diamonds; d++)
+        {
+            int top = 1 + 3 * d, bottom = top + 1, join = top + 2;
+            Link(previous, top);
+            Link(previous, bottom);
+            Link(top, join);
+            Link(bottom, join);
+            previous = join;
+        }
+
+        var reference = AiDotNet.Preprocessing.FeatureSelection.Graph.GraphBasedFS<double>.BetweennessCentrality(
+            new Tensor<double>(edges, new[] { p, p }));
+        var half = AiDotNet.Preprocessing.FeatureSelection.Graph.GraphBasedFS<Half>.BetweennessCentrality(
+            HalfMatrix(edges, p, p));
+        for (int v = 0; v < p; v++)
+        {
+            Assert.True(Half.IsFinite(half[v]), $"node {v} is {half[v]}");
+            Assert.True(Math.Abs((double)half[v] - reference[v]) <= 1e-3 * Math.Max(1, reference[v]),
+                $"node {v}: {(double)half[v]} vs {reference[v]}");
+        }
+    }
 }
