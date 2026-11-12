@@ -1068,11 +1068,12 @@ internal static class FeatureSelectionTensorOps
             var column = PreprocessingTensorOps.ColumnVector(x, j);
             var sorted = engine.TensorSort(column, 0, false).Item1;
 
-            // below = #{v < x_i - tol (inclusive)}, upTo = #{v < x_i + tol}; average rank = (below + upTo + 1) / 2
+            // below = #{v <= x_i - tol}, upTo = #{v < x_i + tol} (int insertion indices);
+            // average rank = (below + upTo + 1) / 2
             var below = engine.TensorSearchSorted(sorted, engine.TensorSubtractScalar(column, tolerance), true);
             var upTo = engine.TensorSearchSorted(sorted, engine.TensorAddScalar(column, tolerance), false);
             columns[j] = engine.Reshape(engine.TensorMultiplyScalar(
-                engine.TensorAddScalar(engine.TensorAdd(below, upTo), one), half), new[] { n, 1 });
+                engine.TensorAddScalar(engine.TensorAdd(below, upTo).Cast<T>(), one), half), new[] { n, 1 });
         }
 
         return engine.TensorConcatenate(columns, 1);
