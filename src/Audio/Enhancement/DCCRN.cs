@@ -778,25 +778,31 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 : new Tensor<T>([_fftSize]);
             frames[frame] = Engine.TensorMultiply(frameData, window);
         }
-
-        // DFT: X[k] = sum_n x[n] (cos(2 pi k n / N) - i sin(2 pi k n / N)).
-        var (cosBasis, sinBasis) = DftBasis(numBins);
-        var frameColumns = Engine.TensorTranspose(Engine.TensorStack(frames, 0));
-        var real = Engine.TensorMatMul(cosBasis, frameColumns);
-        var imag = Engine.TensorNegate(Engine.TensorMatMul(sinBasis, frameColumns));
-
-        return Engine.Reshape(Engine.TensorStack([real, imag], 0), [1, 2, numBins, numFrames]);
+        // Bound the DFT basis independently of FFT size; all index and phase arithmetic stays wide.
+        var frameColumns = Engine.TensorTranspose(Engine.TensorStack(frames, 0)).Cast<double>();
+        var real = new Tensor<double>([numBins, numFrames]);
+        var imag = new Tensor<double>([numBins, numFrames]);
+        int blockSize = Math.Max(1, 262144 / _fftSize);
+        for (int start = 0; start < numBins;)
+        {
+            int count = Math.Min(blockSize, numBins - start);
+            var (cosBasis, sinBasis) = DftBasis(start, count);
+            Engine.TensorMatMul(cosBasis, frameColumns)
+                .CopyTo(real.AsWritableSpan().Slice(start * numFrames, count * numFrames));
+            Engine.TensorNegate(Engine.TensorMatMul(sinBasis, frameColumns))
+                .CopyTo(imag.AsWritableSpan().Slice(start * numFrames, count * numFrames));
+            start += count;
+        }
+        return Engine.Reshape(Engine.TensorStack([real, imag], 0), [1, 2, numBins, numFrames]).Cast<T>();
     }
 
-    /// <summary>
-    /// The real DFT basis <c>cos / sin(2 pi k n / N)</c> as <c>[numBins, N]</c> tensors; <c>k n</c> is
-    /// reduced modulo N first so the angle stays in <c>[0, 2 pi)</c>.
-    /// </summary>
-    private (Tensor<T> Cos, Tensor<T> Sin) DftBasis(int numBins)
+    /// <summary>Builds at most a bounded block of real DFT basis rows, with exact integer indices in double.</summary>
+    private (Tensor<double> Cos, Tensor<double> Sin) DftBasis(int firstBin, int count)
     {
-        var kn = Engine.TensorOuterProduct(Engine.TensorArange<T>(0, numBins, 1), Engine.TensorArange<T>(0, _fftSize, 1));
-        var reduced = Engine.TensorFmod(kn, Tensor<T>.CreateDefault([numBins, _fftSize], NumOps.FromDouble(_fftSize)));
-        var angle = Engine.TensorMultiplyScalar(reduced, NumOps.FromDouble(2 * Math.PI / _fftSize));
+        var kn = Engine.TensorOuterProduct(Engine.TensorArange<double>(firstBin, firstBin + count, 1),
+            Engine.TensorArange<double>(0, _fftSize, 1));
+        var reduced = Engine.TensorFmod(kn, Tensor<double>.CreateDefault([count, _fftSize], (double)_fftSize));
+        var angle = Engine.TensorMultiplyScalar(reduced, 2 * Math.PI / _fftSize);
         return (Engine.TensorCos(angle), Engine.TensorSin(angle));
     }
 
@@ -817,15 +823,24 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var window = CreateHannWindow(_fftSize);
 
         // frame[t, n] = sum_k (re[k, t] cos(2 pi k n / N) - im[k, t] sin(2 pi k n / N)) * w[n] / N
-        var real = Engine.Reshape(Engine.TensorSlice(stft, [0, 0, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]);
-        var imag = Engine.Reshape(Engine.TensorSlice(stft, [0, 1, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]);
-        var (cosBasis, sinBasis) = DftBasis(numBins);
-        var sums = Engine.TensorSubtract(
-            Engine.TensorMatMul(Engine.TensorTranspose(real), cosBasis),
-            Engine.TensorMatMul(Engine.TensorTranspose(imag), sinBasis));
+        var real = Engine.Reshape(Engine.TensorSlice(stft, [0, 0, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]).Cast<double>();
+        var imag = Engine.Reshape(Engine.TensorSlice(stft, [0, 1, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]).Cast<double>();
+        var sums = new Tensor<double>([numFrames, _fftSize]);
+        int blockSize = Math.Max(1, 262144 / _fftSize);
+        for (int start = 0; start < numBins;)
+        {
+            int count = Math.Min(blockSize, numBins - start);
+            var (cosBasis, sinBasis) = DftBasis(start, count);
+            var blockReal = Engine.TensorSlice(real, [start, 0], [count, numFrames]);
+            var blockImag = Engine.TensorSlice(imag, [start, 0], [count, numFrames]);
+            sums = Engine.TensorAdd(sums, Engine.TensorSubtract(
+                Engine.TensorMatMul(Engine.TensorTranspose(blockReal), cosBasis),
+                Engine.TensorMatMul(Engine.TensorTranspose(blockImag), sinBasis)));
+            start += count;
+        }
         var weighted = Engine.TensorDivideScalar(
-            Engine.TensorMultiply(sums, Engine.TensorBroadcastTo(Engine.Reshape(window, [1, _fftSize]), [numFrames, _fftSize])),
-            NumOps.FromDouble(_fftSize));
+            Engine.TensorMultiply(sums, Engine.TensorBroadcastTo(Engine.Reshape(window.Cast<double>(), [1, _fftSize]), [numFrames, _fftSize])),
+            (double)_fftSize).Cast<T>();
 
         var frames = new List<Tensor<T>>(numFrames);
         var starts = new List<int>(numFrames);
