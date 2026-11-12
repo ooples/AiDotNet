@@ -189,6 +189,8 @@ internal sealed class ClapAudioFrontEnd<T>
     /// </remarks>
     internal static Tensor<T> AntialiasedBilinearShrink(Tensor<T> rows, int outputs)
     {
+        if (typeof(T) != typeof(double))
+            return ClapAudioFrontEnd<double>.AntialiasedBilinearShrink(rows.Cast<double>(), outputs).Cast<T>();
         int inputs = rows.Shape[0], mels = rows.Shape[1];
         double scale = inputs / (double)outputs;
         double support = scale >= 1.0 ? scale : 1.0;

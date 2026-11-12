@@ -101,6 +101,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
     /// <returns>Beat tracking result with tempo and beat times.</returns>
     public BeatTrackingResult<T> Track(Tensor<T> audio)
     {
+        ValidateOptions(_options);
         // Compute spectral flux (onset strength)
         var onsetEnvelope = ComputeOnsetEnvelopeInternal(audio);
 
