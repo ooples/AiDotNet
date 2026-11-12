@@ -343,11 +343,13 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         var reconstructedComponents = new Vector<T>[_numberOfComponents];
 
+        // Every grouped component has the same [W, K] shape, so the anti-diagonal counts are shared.
+        Tensor<T>? counts = null;
         for (int k = 0; k < _numberOfComponents; k++)
         {
             var X = Tensor<T>.FromMatrix(groupedComponents[k]);
             var sums = AntiDiagonalSums(X);
-            var counts = AntiDiagonalSums(Engine.TensorOnesLike(X));
+            counts ??= AntiDiagonalSums(Engine.TensorOnesLike(X));
             reconstructedComponents[k] = DivideElementwise(sums, counts).ToVector();
         }
 
