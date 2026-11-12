@@ -26,19 +26,19 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Transfer;
 public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly double[]? _sourceImportances;
+    private readonly Vector<T>? _sourceImportances;
     private readonly double _transferWeight;
 
-    private double[]? _targetImportances;
-    private double[]? _combinedImportances;
+    private Vector<T>? _targetImportances;
+    private Vector<T>? _combinedImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double TransferWeight => _transferWeight;
-    public double[]? TargetImportances => _targetImportances;
-    public double[]? CombinedImportances => _combinedImportances;
+    public Vector<T>? TargetImportances => _targetImportances;
+    public Vector<T>? CombinedImportances => _combinedImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -46,7 +46,7 @@ public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
     public TransferLearningSelector(
         int nFeaturesToSelect = 10,
-        double[]? sourceImportances = null,
+        Vector<T>? sourceImportances = null,
         double transferWeight = 0.5,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -75,78 +75,31 @@ public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to arrays
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        // Compute target domain importances
-        _targetImportances = ComputeImportances(X, y, n, p);
+        // Compute target domain importances: |Pearson r| with the target (0 for a constant column or target)
+        var targetImportances = Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)));
+        _targetImportances = targetImportances.ToVector();
 
         // Combine with source importances if available
-        _combinedImportances = new double[p];
-        if (_sourceImportances is not null && _sourceImportances.Length == p)
+        var combined = targetImportances;
+        if (_sourceImportances is not null && _sourceImportances.Length == p && p > 0)
         {
-            // Normalize both
-            double maxSource = _sourceImportances.Max() + 1e-10;
-            double maxTarget = _targetImportances.Max() + 1e-10;
-
-            for (int j = 0; j < p; j++)
-            {
-                double normSource = _sourceImportances[j] / maxSource;
-                double normTarget = _targetImportances[j] / maxTarget;
-                _combinedImportances[j] = _transferWeight * normSource + (1 - _transferWeight) * normTarget;
-            }
-        }
-        else
-        {
-            Array.Copy(_targetImportances, _combinedImportances, p);
+            // Normalize both by their maximum (+1e-10)
+            var source = Tensor<T>.FromVector(_sourceImportances);
+            T eps = NumOps.FromDouble(1e-10);
+            var normSource = Engine.TensorDivideScalar(source, NumOps.Add(Engine.TensorMaxValue(source), eps));
+            var normTarget = Engine.TensorDivideScalar(targetImportances, NumOps.Add(Engine.TensorMaxValue(targetImportances), eps));
+            combined = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(normSource, NumOps.FromDouble(_transferWeight)),
+                Engine.TensorMultiplyScalar(normTarget, NumOps.FromDouble(1 - _transferWeight)));
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _combinedImportances[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _combinedImportances = combined.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(combined, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double[] ComputeImportances(double[,] X, double[] y, int n, int p)
-    {
-        var importances = new double[p];
-        double yMean = y.Average();
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = X[i, j] - xMean;
-                double yDiff = y[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            importances[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return importances;
     }
 
     /// <inheritdoc />
@@ -162,15 +115,7 @@ public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("TransferLearningSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
