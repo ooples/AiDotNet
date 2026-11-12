@@ -241,15 +241,10 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
                 Array.Copy(indices, batch, batchRows, 0, actualBatchSize);
                 var x = AnomalyTensorOps.SelectRows(values, batchRows);
 
-                // Reparameterization noise epsilon ~ N(0, 1), drawn sample by sample and latent unit by latent
-                // unit (same random draws as the per-sample forward pass)
-                var noise = new double[actualBatchSize * _latentDim];
-                for (int i = 0; i < noise.Length; i++)
-                {
-                    noise[i] = GaussianRandom();
-                }
-
-                var epsilon = Tensor<double>.FromVector(Vector<double>.Wrap(noise), new[] { actualBatchSize, _latentDim }).Cast<T>();
+                // Reparameterization noise epsilon ~ N(0, 1): one seeded engine draw per batch, seed taken from
+                // the detector's Random
+                var epsilon = Tensor<T>.CreateZeros(new[] { actualBatchSize, _latentDim });
+                Engine.TensorNormalInPlace(epsilon, 0.0, 1.0, _random.Next());
 
                 // Forward pass, then gradients summed over the batch and a step of learningRate / batch size
                 var forward = Forward(x, epsilon);
@@ -415,13 +410,6 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
     // weights - lr * gradients
     private Tensor<T> Step(Tensor<T> weights, Tensor<T> gradients, T lr)
         => Engine.TensorSubtract(weights, Engine.TensorMultiplyScalar(gradients, lr));
-
-    private double GaussianRandom()
-    {
-        double u1 = 1.0 - _random.NextDouble();
-        double u2 = 1.0 - _random.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-    }
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)

@@ -348,16 +348,19 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
             for (int trial = 0; trial < _hyperplanesPerNode; trial++)
             {
                 var pool = Enumerable.Range(0, _nFeatures).ToArray();
-                var coefficients = new double[_nFeatures];
+                var attributes = new int[_attributesPerHyperplane];
                 for (int i = 0; i < _attributesPerHyperplane; i++)
                 {
                     int j = i + _random.Next(_nFeatures - i);
                     (pool[i], pool[j]) = (pool[j], pool[i]);
-                    coefficients[pool[i]] = _random.NextDouble() * 2.0 - 1.0;
+                    attributes[i] = pool[i];
                 }
 
-                var weights = engine.TensorMultiply(
-                    Tensor<double>.FromVector(Vector<double>.Wrap(coefficients), new[] { _nFeatures }).Cast<T>(), inverseStd).ToVector();
+                // Coefficients of the chosen attributes: one seeded engine draw, seed taken from the tree's Random
+                var drawn = engine.TensorUniform<T>(new[] { _attributesPerHyperplane }, -1.0, 1.0, _random.Next());
+                var coefficients = engine.TensorIndexCopy(Tensor<T>.CreateZeros(new[] { _nFeatures }), 0,
+                    Tensor<int>.FromVector(Vector<int>.Wrap(attributes), new[] { _attributesPerHyperplane }), drawn);
+                var weights = engine.TensorMultiply(coefficients, inverseStd).ToVector();
                 var projections = AnomalyTensorOps.Project(data, weights);
                 var (gain, split) = BestSdGainSplit(projections);
                 trialWeights.Add(weights);
