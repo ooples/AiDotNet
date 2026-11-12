@@ -66,21 +66,6 @@ public class MaskBinarizer<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>A binary mask with values of exactly 0 or 1.</returns>
     public Tensor<T> Apply(Tensor<T> mask)
     {
-        var shape = mask._shape;
-        var result = new Tensor<T>(shape);
-        int height = shape[0];
-        int width = shape.Length > 1 ? shape[1] : 1;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                result[y, x] = NumOps.GreaterThan(mask[y, x], _threshold)
-                    ? NumOps.One
-                    : NumOps.Zero;
-            }
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorGreaterThan(mask, _threshold);
     }
 }

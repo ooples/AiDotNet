@@ -55,18 +55,10 @@ public class LatentMaskBlender<T>
     public Vector<T> Blend(Vector<T> original, Vector<T> generated, Vector<T> mask)
     {
         int len = Math.Min(original.Length, generated.Length);
-        var result = new Vector<T>(len);
-
-        for (int i = 0; i < len; i++)
-        {
-            var m = i < mask.Length ? mask[i] : NumOps.Zero;
-            var oneMinusM = NumOps.Subtract(NumOps.One, m);
-            result[i] = NumOps.Add(
-                NumOps.Multiply(oneMinusM, original[i]),
-                NumOps.Multiply(m, generated[i]));
-        }
-
-        return result;
+        return MaskVectorOps.Lerp(
+            MaskVectorOps.Fit(original, len, NumOps.Zero),
+            MaskVectorOps.Fit(generated, len, NumOps.Zero),
+            MaskVectorOps.Fit(mask, len, NumOps.Zero));
     }
 
     /// <summary>
@@ -81,19 +73,11 @@ public class LatentMaskBlender<T>
         Vector<T> original, Vector<T> generated, Vector<T> mask, double timestepRatio)
     {
         int len = Math.Min(original.Length, generated.Length);
-        var result = new Vector<T>(len);
         var scheduleScale = NumOps.FromDouble(Math.Pow(timestepRatio, _blendSharpness));
-
-        for (int i = 0; i < len; i++)
-        {
-            var baseMask = i < mask.Length ? mask[i] : NumOps.Zero;
-            var m = NumOps.Multiply(baseMask, scheduleScale);
-            var oneMinusM = NumOps.Subtract(NumOps.One, m);
-            result[i] = NumOps.Add(
-                NumOps.Multiply(oneMinusM, original[i]),
-                NumOps.Multiply(m, generated[i]));
-        }
-
-        return result;
+        var scaledMask = AiDotNetEngine.Current.Multiply(MaskVectorOps.Fit(mask, len, NumOps.Zero), scheduleScale);
+        return MaskVectorOps.Lerp(
+            MaskVectorOps.Fit(original, len, NumOps.Zero),
+            MaskVectorOps.Fit(generated, len, NumOps.Zero),
+            scaledMask);
     }
 }

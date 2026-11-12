@@ -66,22 +66,11 @@ public class MaskFromSegmentation<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>A binary mask where selected labels are 1 and others are 0.</returns>
     public Tensor<T> Apply(Tensor<T> segmentationMap)
     {
-        var shape = segmentationMap._shape;
-        var result = new Tensor<T>(shape);
-        int height = shape[0];
-        int width = shape.Length > 1 ? shape[1] : 1;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                int label = (int)NumOps.ToDouble(segmentationMap[y, x]);
-                result[y, x] = _selectedLabels.Contains(label)
-                    ? NumOps.One
-                    : NumOps.Zero;
-            }
-        }
-
-        return result;
+        // A pixel is selected when its truncated label is one of the selected labels
+        var engine = AiDotNetEngine.Current;
+        var labels = new Tensor<int>(new[] { _selectedLabels.Count }, new Vector<int>(_selectedLabels)).Cast<T>();
+        var selected = engine.TensorIsIn(engine.TensorTrunc(segmentationMap), labels, false);
+        return engine.TensorWhere(selected,
+            Tensor<T>.CreateDefault(segmentationMap._shape, NumOps.One), new Tensor<T>(segmentationMap._shape));
     }
 }
