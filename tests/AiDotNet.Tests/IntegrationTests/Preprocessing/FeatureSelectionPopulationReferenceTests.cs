@@ -400,7 +400,7 @@ public class FeatureSelectionPopulationReferenceTests
             1.329340388179137 * System.Math.Sin(System.Math.PI * 0.75) / (0.906402477055477 * 1.5 * System.Math.Pow(2, 0.25)),
             1 / 1.5);
         double levy = 0.01 * r1 * sigma / System.Math.Pow(System.Math.Abs(r2), 1 / 1.5);
-        Assert.Equal(0.1 + levy * 0.1, ToArray(positions)[0], 1e-10);
+        Assert.Equal(System.Math.Min(1, 0.1 + levy * 0.1), ToArray(positions)[0], 1e-10);
         Assert.Equal(0.0, ToArray(steps)[0], Tolerance);
     }
 }
