@@ -262,6 +262,7 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
     /// The CPU step for the BF16 and FP32 moment layouts: the same per-element update as the 8-bit path, with each
     /// moment read from and written back to its 2-byte or 4-byte slot instead of a quantized block.
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Per-element BF16/FP32 moment bit-packing update calling virtual UpdateElement")]
     private void ApplyUnquantized(Tensor<T> param, Tensor<T> grad, int length)
     {
         int momentCount = _signedMoments.Length;

@@ -116,5 +116,6 @@ public class RegressionOptions<T> : ModelOptions
     /// For most applications, keep this set to true unless you have a specific reason to change it.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; its dense projections always carry biases, so the regression intercept switch does not apply.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public bool UseIntercept { get; set; } = true;
 }

@@ -330,7 +330,7 @@ public class VideoSafetyConfig
     /// </remarks>
     // -- Internal defaults --
     internal bool EffectiveDeepfakeDetection => DeepfakeDetection ?? false;
-    internal bool EffectiveContentModeration => ContentModeration ?? false;
+    internal bool EffectiveContentModeration => ContentModeration ?? false;
 }
 
 /// <summary>

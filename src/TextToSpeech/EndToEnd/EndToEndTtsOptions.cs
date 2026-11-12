@@ -33,20 +33,25 @@ public class EndToEndTtsOptions : TtsModelOptions
     }
 
     /// <summary>Gets or sets the number of flow steps in the posterior encoder.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro's duration predictor and ISTFTNet decoder contain no normalizing flow.", ModelType = typeof(Kokoro<>))]
     public int NumFlowSteps { get; set; } = 4;
 
     /// <summary>Gets or sets the number of diffusion/denoising steps (if applicable).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro selects released voice styles directly and contains no diffusion sampler.", ModelType = typeof(Kokoro<>))]
     public int NumDiffusionSteps { get; set; } = 50;
 
     /// <summary>Gets or sets the inter-channel dimension for the normalizing flow.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro contains no flow latent representation whose channels this inherited option configures.", ModelType = typeof(Kokoro<>))]
     public int InterChannels { get; set; } = 192;
 
     /// <summary>Gets or sets the filter channels for the text encoder.</summary>
     public int FilterChannels { get; set; } = 768;
 
-    /// <summary>Gets or sets the encoder hidden dimension (defaults to HiddenDim).</summary>
-    public int EncoderDim { get; set; } = 192;
+    /// <summary>Gets or sets the shared encoder/decoder width through <see cref="TtsModelOptions.HiddenDim"/>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("This aliases HiddenDim; Kokoro's released decoder interfaces require width 512, enforced by the native constructor.", ModelType = typeof(Kokoro<>))]
+    public int EncoderDim { get => HiddenDim; set => HiddenDim = value; }
 
-    /// <summary>Gets or sets the decoder hidden dimension (defaults to HiddenDim).</summary>
-    public int DecoderDim { get; set; } = 192;
+    /// <summary>Gets or sets the shared encoder/decoder width through <see cref="TtsModelOptions.HiddenDim"/>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("This aliases HiddenDim; Kokoro's released decoder interfaces require width 512, enforced by the native constructor.", ModelType = typeof(Kokoro<>))]
+    public virtual int DecoderDim { get => HiddenDim; set => HiddenDim = value; }
 }

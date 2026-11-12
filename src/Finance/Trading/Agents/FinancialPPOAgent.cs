@@ -1,7 +1,7 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
+using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -11,39 +11,48 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.ReinforcementLearning;
-using AiDotNet.ReinforcementLearning.Common;
 using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Training;
 
 namespace AiDotNet.Finance.Trading.Agents;
 
 /// <summary>
-/// Financial Proximal Policy Optimization (PPO) agent for robust trading.
+/// Proximal Policy Optimization (Schulman et al. 2017) for trading: the clipped surrogate objective trained over a
+/// fixed-length rollout, as the paper and its reference code (OpenAI Baselines <c>ppo1</c>) define it.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> The PPO (Proximal Policy Optimization) trading agent is one
-/// of the most reliable RL algorithms for trading. It prevents the agent from making too
-/// large a policy change in any single update, which keeps learning stable. Think of it
-/// as a cautious trader who adjusts their strategy gradually rather than making radical
-/// shifts. PPO balances exploration (trying new strategies) with exploitation (sticking
-/// with what works), making it robust for financial applications.</para>
+/// <para>
+/// <b>The algorithm (paper, Algorithm 1 and §5):</b> act for <c>T</c> steps (<see cref="FinancialPPOAgentOptions{T}.RolloutLength"/>,
+/// across episode boundaries), estimate advantages with GAE(λ), then optimize
+/// <c>L = L^CLIP − c₂·S + c₁·L^VF</c> for K epochs of minibatch Adam over that rollout.
+/// <c>L^CLIP = E[min(r·Â, clip(r, 1 − ε, 1 + ε)·Â)]</c> with <c>r = π(a|s) / π_old(a|s)</c>.
+/// </para>
+/// <para>
+/// <b>Defaults are the paper's MuJoCo setting (Table 3)</b>, the one for separate fully-connected policy and value
+/// networks, which this agent builds: T = 2048, Adam step size 3e-4, 10 epochs, minibatch 64, γ = 0.99, λ = 0.95,
+/// ε = 0.2, no entropy bonus. Baselines' <c>ppo1</c> fills what the paper leaves open: two 64-unit tanh layers
+/// with normc initialization (0.01 on the policy head), a Gaussian policy with a learned state-independent log
+/// standard deviation for continuous actions, observations standardized by running statistics (updated once per
+/// rollout) and clipped to ±5, advantages standardized over the rollout, one Adam (ε = 1e-5) over both networks, and
+/// the value loss added at weight 1. CleanRL's additions are options: an entropy bonus
+/// (<see cref="TradingAgentOptions{T}.EntropyCoefficient"/>) and global gradient-norm clipping
+/// (<see cref="FinancialPPOAgentOptions{T}.MaxGradientNorm"/>).
+/// </para>
+/// <para><b>For Beginners:</b> PPO improves its trading policy in small, safe steps: it collects a batch of experience,
+/// then updates the policy several times on that batch, but stops any action's probability from moving too far from
+/// where it was when the batch was collected. That keeps one unlucky batch from wrecking a policy that was working.</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Define actor and critic architectures for PPO trading (30 state features, 5 continuous actions)
-/// var actorArch = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 30, outputSize: 5);
-/// var criticArch = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 30, outputSize: 1);
-///
-/// // Create PPO agent for stable, robust trading policy optimization
-/// var options = new TradingAgentOptions&lt;double&gt;();
-/// var model = new FinancialPPOAgent&lt;double&gt;(actorArch, criticArch, options);
+/// var options = new FinancialPPOAgentOptions&lt;double&gt; { StateSize = 30, ActionSize = 3 };
+/// var agent = new FinancialPPOAgent&lt;double&gt;(
+///     new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 30, outputSize: 3),
+///     new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 30, outputSize: 1),
+///     options);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Finance)]
@@ -62,59 +71,44 @@ namespace AiDotNet.Finance.Trading.Agents;
 public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>,
     IMaskableAgent<T>
 {
-
     #region Fields
 
-    private const string ObservationNormalizerMarker = "AiDotNet.FinancialPPOAgent.ObservationNormalizer.v1";
-    private const double ObservationNormalizerEpsilon = 1e-8;
-    private const double ObservationClipRange = 10.0;
+    // Baselines' RunningMeanStd: the sum starts at 0, the sum of squares and the count at epsilon = 1e-2, and the
+    // variance is floored at 1e-2. Before any update the statistics are mean 0, standard deviation 1.
+    private const double ObservationStatisticsEpsilon = 1e-2;
 
     private readonly TradingAgentOptions<T> _options;
     private readonly FinancialPPOAgentOptions<T> _ppoOptions;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
-    private readonly Trajectory<T> _trajectory;
-    [Scratch]
-    private readonly List<Vector<T>> _nextStates;
-    private readonly Random _random;
+    // The constructor's arguments, kept under their names so a clone can replay the constructor.
     private readonly NeuralNetworkArchitecture<T> _actorArchitecture;
     private readonly NeuralNetworkArchitecture<T> _criticArchitecture;
-    private double[]? _observationMean;
-    private double[]? _observationM2;
-    private long _observationCount;
-    [Scratch]
-    private Vector<T>? _lastActionRawState;
-    [Scratch]
-    private Vector<T>? _lastActionNormalizedState;
-    [Scratch]
-    private Vector<T>? _lastActionVector;
-    [Scratch]
-    private Vector<T>? _lastStoredNextRawState;
-    // Meaningful only while _hasLastActionLogProb is set.
-    private T _lastActionLogProb = MathHelper.GetNumericOperations<T>().Zero;
-    private bool _hasLastActionLogProb;
+    // The continuous policy's log standard deviation, one per action dimension (Baselines' "logstd", zeros at init);
+    // null for a discrete policy. Trained with the networks by the same optimizer.
+    [TrainableParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
+    private readonly Tensor<T>? _logStd;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly Random _random;
 
-    /// <summary>
-    /// The validated legal-action mask that produced <see cref="_lastActionLogProb"/>, or
-    /// <see langword="null"/> when the selection was unrestricted.
-    /// </summary>
-    [Scratch]
-    private bool[]? _lastActionMask;
+    private double[]? _observationSum;
+    private double[]? _observationSumOfSquares;
+    private double _observationCount = ObservationStatisticsEpsilon;
 
-    /// <summary>
-    /// The mask in force at each stored step, index-aligned with <see cref="_trajectory"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>A parallel list rather than a field on <c>Trajectory&lt;T&gt;</c>: that type is shared with
-    /// the six non-financial policy-gradient agents, none of which can mask, so widening it would add a
-    /// member that is null everywhere except here.</para>
-    /// </remarks>
-    [Scratch]
-    private readonly List<bool[]?> _stepMasks;
+    // The rollout: raw observations (normalized at update time, under the statistics the update uses), the actions,
+    // rewards, value predictions made when each step was taken, episode ends and legal-action masks.
+    [Scratch] private readonly List<Vector<T>> _states = new();
+    [Scratch] private readonly List<Vector<T>> _actions = new();
+    [Scratch] private readonly List<double> _rewards = new();
+    [Scratch] private readonly List<double> _values = new();
+    [Scratch] private readonly List<bool> _dones = new();
+    [Scratch] private readonly List<bool[]?> _stepMasks = new();
+    [Scratch] private Vector<T>? _lastNextState;
 
-    /// <summary>
-    /// Whether this agent has ever been handed a non-null mask.
-    /// </summary>
+    [Scratch] private Vector<T>? _lastActionRawState;
+    [Scratch] private Vector<T>? _lastActionVector;
+    [Scratch] private bool[]? _lastActionMask;
+
     private bool _maskingInUse;
 
     /// <inheritdoc/>
@@ -127,21 +121,22 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
 
+    /// <summary>The number of steps collected since the last update.</summary>
+    public int RolloutCount => _states.Count;
+
     #endregion
 
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the FinancialPPOAgent class.
+    /// Creates a PPO agent from its policy (actor) and value (critic) architectures.
     /// </summary>
-    /// <param name="actorArchitecture">User-provided architecture for the policy (actor).</param>
-    /// <param name="criticArchitecture">User-provided architecture for the value (critic).</param>
-    /// <param name="options">Configuration options for the trading agent.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, FinancialPPOAgent sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="actorArchitecture">The policy network: <c>StateSize</c> inputs and <c>ActionSize</c> outputs (action
+    /// logits, or the Gaussian's means for continuous actions). Left without layers, the agent builds Baselines' policy:
+    /// the <see cref="TradingAgentOptions{T}.HiddenLayers"/> widths with tanh, normc-initialized, 0.01 on the head.</param>
+    /// <param name="criticArchitecture">The value network: <c>StateSize</c> inputs and one output. Left without layers,
+    /// the same hidden widths with a normc(1.0) head.</param>
+    /// <param name="options">The agent's options; pass <see cref="FinancialPPOAgentOptions{T}"/> for PPO's own.</param>
     public FinancialPPOAgent(
         NeuralNetworkArchitecture<T> actorArchitecture,
         NeuralNetworkArchitecture<T> criticArchitecture,
@@ -150,276 +145,170 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         _options = options;
         _ppoOptions = options as FinancialPPOAgentOptions<T> ?? new FinancialPPOAgentOptions<T>();
+        ValidatePpoOptions(_ppoOptions);
+
+        EnsurePpoDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize, headColumnNorm: 0.01);
+        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize, 1, headColumnNorm: 1.0);
+
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
-
-        EnsurePpoDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
-        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize, 1);
-
-        var actor = new NeuralNetwork<T>(
-            actorArchitecture,
-            optimizer: CreatePpoOptimizer(null, options),
-            lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        var critic = new NeuralNetwork<T>(
-            criticArchitecture,
-            optimizer: CreatePpoOptimizer(null, options),
-            lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        actor.SetBaseTrainOptimizer(CreatePpoOptimizer(actor, options));
-        critic.SetBaseTrainOptimizer(CreatePpoOptimizer(critic, options));
-
+        // The networks do not clip their own gradients: the update clips only when MaxGradientNorm asks it to.
+        var networkOptions = new AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions { MaxGradNorm = 0.0 };
+        var actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: new MeanSquaredErrorLoss<T>(), options: networkOptions);
         _actor = actor;
-        _critic = critic;
+        _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: new MeanSquaredErrorLoss<T>(), options: networkOptions);
+        if (options.ContinuousActions) _logStd = new Tensor<T>([options.ActionSize]);
+        _optimizer = CreatePpoOptimizer(actor, options, _ppoOptions);
+
         Networks.Add(_actor);
         Networks.Add(_critic);
-        _trajectory = new Trajectory<T>();
-        _nextStates = new List<Vector<T>>();
-        _stepMasks = new List<bool[]?>();
         _random = options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
     }
 
-    #endregion
-
-    private void EnsurePpoDefaultLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int expectedInputSize,
-        int expectedOutputSize)
+    private static void ValidatePpoOptions(FinancialPPOAgentOptions<T> o)
     {
-        if (architecture is null)
-            throw new ArgumentNullException(nameof(architecture));
+        if (o.RolloutLength < 2)
+            throw new ArgumentOutOfRangeException(nameof(o.RolloutLength), o.RolloutLength,
+                "The rollout must hold at least two steps: its advantages are standardized by their standard deviation.");
+        if (o.MiniBatchSize <= 0 || o.MiniBatchSize > o.RolloutLength)
+            throw new ArgumentOutOfRangeException(nameof(o.MiniBatchSize), o.MiniBatchSize,
+                $"The minibatch must hold between 1 and RolloutLength ({o.RolloutLength}) steps.");
+        if (o.NumEpochs <= 0) throw new ArgumentOutOfRangeException(nameof(o.NumEpochs), o.NumEpochs, "At least one epoch is needed.");
+        if (!(o.AdamEpsilon > 0)) throw new ArgumentOutOfRangeException(nameof(o.AdamEpsilon), o.AdamEpsilon, "Adam's epsilon must be positive.");
+        if (!(o.ObservationClipRange > 0)) throw new ArgumentOutOfRangeException(nameof(o.ObservationClipRange), o.ObservationClipRange, "The clip range must be positive.");
+        if (o.MaxGradientNorm is double norm && !(norm > 0))
+            throw new ArgumentOutOfRangeException(nameof(o.MaxGradientNorm), norm, "The gradient-norm bound must be positive, or null for none.");
+    }
 
+    private void EnsurePpoDefaultLayers(NeuralNetworkArchitecture<T> architecture, int expectedInputSize, int expectedOutputSize,
+        double headColumnNorm)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
         if (architecture.CalculatedInputSize != expectedInputSize)
             throw new ArgumentException($"Architecture input size {architecture.CalculatedInputSize} does not match expected {expectedInputSize}.", nameof(architecture));
-
         if (architecture.OutputSize != expectedOutputSize)
             throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {expectedOutputSize}.", nameof(architecture));
 
-        // Derive a reproducible init seed from options.Seed (when the architecture has none) and build the
-        // default layers under it, so identically seeded PPO agents start from identical weights.
+        // Derive a reproducible init seed from options.Seed (when the architecture has none), so identically seeded
+        // agents start from identical weights.
         ApplyNetworkSeed(architecture);
+        if (architecture.Layers.Count > 0) return;
 
-        if (architecture.Layers.Count == 0)
+        var hiddenSizes = GetHiddenLayerSizes();
+        AddSeededDefaultLayers(architecture, () =>
         {
-            // Tanh MLP sized by TradingAgentOptions.HiddenLayers (default [64, 64]) with a linear head:
-            // the actor emits logits / action means and the critic a state value, whatever the task type.
-            var hiddenSizes = GetHiddenLayerSizes();
-            AddSeededDefaultLayers(architecture, () =>
-            {
-                var layers = new List<ILayer<T>>(hiddenSizes.Length + 1);
-                foreach (int width in hiddenSizes)
-                {
-                    layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new TanhActivation<T>()));
-                }
-
-                layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
-                return layers;
-            });
-        }
+            var layers = new List<ILayer<T>>(hiddenSizes.Length + 1);
+            foreach (int width in hiddenSizes)
+                layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new TanhActivation<T>(),
+                    new NormalizedColumnsInitializationStrategy<T>(1.0)));
+            layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>(),
+                new NormalizedColumnsInitializationStrategy<T>(headColumnNorm)));
+            return layers;
+        });
     }
 
-    private static AdamOptimizer<T, Tensor<T>, Tensor<T>> CreatePpoOptimizer(
-        IFullModel<T, Tensor<T>, Tensor<T>>? model,
-        TradingAgentOptions<T> options)
+    private static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePpoOptimizer(
+        IFullModel<T, Tensor<T>, Tensor<T>> model, TradingAgentOptions<T> options, FinancialPPOAgentOptions<T> ppo)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            model,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(model, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = numOps.ToDouble(options.LearningRate),
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = ppo.AdamEpsilon,
+            UseAdaptiveBetas = false,
+            UseAMSGrad = false,
+            // Baselines' ppo1 does not clip; CleanRL clips the global norm at 0.5 (MaxGradientNorm).
+            EnableGradientClipping = ppo.MaxGradientNorm.HasValue,
+            GradientClippingMethod = GradientClippingMethod.ByNorm,
+            MaxGradientNorm = ppo.MaxGradientNorm ?? GradientClippingHelper.DefaultMaxNorm,
+        });
+    }
+
+    #endregion
+
+    #region Observation statistics
+
+    // Baselines' RunningMeanStd over the raw observations: mean = sum / count, std = sqrt(max(sumsq / count - mean², 1e-2)).
+    private (double[] Mean, double[] Std) ObservationStatistics(int size)
+    {
+        var mean = new double[size];
+        var std = new double[size];
+        for (int i = 0; i < size; i++)
+        {
+            double sum = _observationSum is { } s && s.Length == size ? s[i] : 0.0;
+            double squares = _observationSumOfSquares is { } q && q.Length == size ? q[i] : ObservationStatisticsEpsilon;
+            double count = _observationSum is { } c && c.Length == size ? _observationCount : ObservationStatisticsEpsilon;
+            mean[i] = sum / count;
+            std[i] = Math.Sqrt(Math.Max(squares / count - mean[i] * mean[i], 1e-2));
+        }
+        return (mean, std);
+    }
+
+    private void UpdateObservationStatistics(IReadOnlyList<Vector<T>> states)
+    {
+        int size = states[0].Length;
+        var sum = _observationSum;
+        var squares = _observationSumOfSquares;
+        if (sum is null || squares is null || sum.Length != size)
+        {
+            sum = _observationSum = new double[size];
+            squares = _observationSumOfSquares = new double[size];
+            for (int i = 0; i < size; i++) squares[i] = ObservationStatisticsEpsilon;
+            _observationCount = ObservationStatisticsEpsilon;
+        }
+        foreach (var state in states)
+            for (int i = 0; i < size; i++)
             {
-                InitialLearningRate = numOps.ToDouble(options.LearningRate),
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false
-            });
-    }
-
-    private Vector<T> NormalizeObservation(Vector<T> state, bool updateStatistics)
-    {
-        if (updateStatistics)
-        {
-            UpdateObservationStatistics(state);
-        }
-
-        if (_observationMean is null ||
-            _observationM2 is null ||
-            _observationMean.Length != state.Length ||
-            _observationCount == 0)
-        {
-            return CopyVector(state);
-        }
-
-        var normalized = new Vector<T>(state.Length);
-        if (_observationCount < 2)
-        {
-            return normalized;
-        }
-
-        double denominator = Math.Max(1, _observationCount - 1);
-        for (int i = 0; i < state.Length; i++)
-        {
-            double variance = _observationM2[i] / denominator;
-            double scale = Math.Sqrt(Math.Max(variance, ObservationNormalizerEpsilon));
-            double value = (NumOps.ToDouble(state[i]) - _observationMean[i]) / scale;
-            value = Math.Max(-ObservationClipRange, Math.Min(ObservationClipRange, value));
-            normalized[i] = NumOps.FromDouble(value);
-        }
-
-        return normalized;
-    }
-
-    private void UpdateObservationStatistics(Vector<T> state)
-    {
-        EnsureObservationStatistics(state.Length);
-
-        _observationCount++;
-        for (int i = 0; i < state.Length; i++)
-        {
-            double value = NumOps.ToDouble(state[i]);
-            double delta = value - (_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i];
-            _observationMean[i] += delta / _observationCount;
-            double delta2 = value - _observationMean[i];
-            (_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i] += delta * delta2;
-        }
-    }
-
-    private void EnsureObservationStatistics(int observationSize)
-    {
-        if (_observationMean is not null && _observationMean.Length == observationSize)
-        {
-            return;
-        }
-
-        _observationMean = new double[observationSize];
-        _observationM2 = new double[observationSize];
-        _observationCount = 0;
-    }
-
-    private void CacheSelectedAction(
-        Vector<T> rawState,
-        Vector<T> normalizedState,
-        Vector<T> action,
-        T logProb,
-        bool[]? mask)
-    {
-        _lastActionRawState = CopyVector(rawState);
-        _lastActionNormalizedState = CopyVector(normalizedState);
-        _lastActionVector = CopyVector(action);
-        _lastActionLogProb = logProb;
-        _hasLastActionLogProb = true;
-
-        // A copy, for the same reason TradingEnvironment.Step publishes one: the caller owns the array it
-        // passed and may reuse it for the next state. A retained reference would silently re-point every
-        // stored step at the latest mask.
-        _lastActionMask = mask is null ? null : (bool[])mask.Clone();
-    }
-
-    private bool TryGetCachedPolicyState(
-        Vector<T> state,
-        Vector<T> action,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Vector<T>? normalizedState,
-        out T logProb,
-        out bool[]? mask)
-    {
-        if (!_hasLastActionLogProb ||
-            _lastActionRawState is null ||
-            _lastActionNormalizedState is null ||
-            _lastActionVector is null ||
-            !VectorsApproximatelyEqual(_lastActionRawState, state) ||
-            !VectorsApproximatelyEqual(_lastActionVector, action))
-        {
-            normalizedState = null;
-            logProb = NumOps.Zero;
-            mask = null;
-            return false;
-        }
-
-        normalizedState = CopyVector(_lastActionNormalizedState);
-        logProb = _lastActionLogProb;
-        mask = _lastActionMask;
-        return true;
-    }
-
-    private void MarkHiddenEpisodeBoundaryIfNeeded(Vector<T> currentRawState)
-    {
-        if (_trajectory.Length == 0 || _lastStoredNextRawState is null)
-        {
-            return;
-        }
-
-        int previousIndex = _trajectory.Length - 1;
-        if (!_trajectory.Dones[previousIndex] &&
-            !VectorsApproximatelyEqual(_lastStoredNextRawState, currentRawState))
-        {
-            _trajectory.Dones[previousIndex] = true;
-        }
-    }
-
-    private bool VectorsApproximatelyEqual(Vector<T> left, Vector<T> right)
-    {
-        if (left.Length != right.Length)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < left.Length; i++)
-        {
-            double a = NumOps.ToDouble(left[i]);
-            double b = NumOps.ToDouble(right[i]);
-            double tolerance = 1e-6 * Math.Max(1.0, Math.Max(Math.Abs(a), Math.Abs(b)));
-            if (Math.Abs(a - b) > tolerance)
-            {
-                return false;
+                double value = NumOps.ToDouble(state[i]);
+                sum[i] += value;
+                squares[i] += value * value;
             }
-        }
-
-        return true;
+        _observationCount += states.Count;
     }
 
-    private static Vector<T> CopyVector(Vector<T> source)
+    // clip((x - mean) / std, -c, c), Baselines' "obz".
+    private void Normalize(Vector<T> state, double[] mean, double[] std, Span<T> destination)
     {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            copy[i] = source[i];
-        }
-
-        return copy;
+        double clip = _ppoOptions.ObservationClipRange;
+        for (int i = 0; i < state.Length; i++)
+            destination[i] = NumOps.FromDouble(Math.Max(-clip, Math.Min(clip, (NumOps.ToDouble(state[i]) - mean[i]) / std[i])));
     }
+
+    private Tensor<T> NormalizedRow(Vector<T> state)
+    {
+        var (mean, std) = ObservationStatistics(state.Length);
+        var row = new Tensor<T>([1, state.Length]);
+        Normalize(state, mean, std, row.AsWritableSpan());
+        return row;
+    }
+
+    #endregion
 
     #region Action Selection
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, SelectAction performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         => SelectAction(state, training, legalActions: null);
 
     /// <inheritdoc cref="IMaskableAgent{T}.SelectAction(Vector{T}, bool, bool[])"/>
     /// <remarks>
-    /// <para><b>The mask is applied to the LOGITS, before the softmax.</b> That ordering is not stylistic.
-    /// Huang and Ontañón (2020) showed masking at this point keeps the policy gradient unbiased, and here it
-    /// is also mechanically necessary: both branches below cache <c>LogProbability(probs, index)</c> for the
-    /// PPO update, so masking after the softmax would take that log-probability against a distribution whose
-    /// entries no longer sum to one — making the importance ratio silently wrong rather than merely worse.</para>
-    ///
-    /// <para>The continuous branch REFUSES a mask rather than returning before applying it. A real-valued
-    /// action vector has no index set to restrict, so a mask there is not a narrower choice, it is a category
-    /// error — and this agent advertises <see cref="IMaskableAgent{T}"/> regardless of the
-    /// <c>ContinuousActions</c> setting, so a caller holding the interface cannot tell which shape it got.
-    /// Dropping the mask silently would hand back an unconstrained action that LOOKS masked, which is the
-    /// failure this whole feature exists to prevent; <c>FinRLAgent</c> refuses the same case for the same
-    /// reason.</para>
+    /// <para>Training samples from the policy (Baselines' <c>stochastic=True</c>); evaluation takes its mode, the most
+    /// probable action or the Gaussian's mean.</para>
+    /// <para><b>The mask is applied to the LOGITS, before the softmax.</b> Huang and Ontañón (2020) showed masking at
+    /// this point keeps the policy gradient unbiased, and the update re-applies the same mask to the current policy, so
+    /// the ratio compares the distributions the action was actually drawn from.</para>
+    /// <para>The continuous branch REFUSES a mask: a real-valued action has no index set to restrict, and this agent
+    /// advertises <see cref="IMaskableAgent{T}"/> whatever its <c>ContinuousActions</c> setting.</para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// A non-null mask was supplied to a continuous-action policy.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">A non-null mask was supplied to a continuous-action policy.</exception>
     public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
     {
-        var normalizedState = NormalizeObservation(state, updateStatistics: training);
-        var logits = _actor.Predict(CreateStateTensor(normalizedState)).ToVector();
+        var output = _actor.Predict(NormalizedRow(state)).ToVector();
+        int actionSize = TradingOptions.ActionSize;
 
         if (_options.ContinuousActions)
         {
@@ -433,48 +322,38 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
                     + "the environment.");
             }
 
-            CacheSelectedAction(state, normalizedState, logits, NumOps.Zero, mask: null);
-            return logits;
+            var continuous = new Vector<T>(actionSize);
+            for (int j = 0; j < actionSize; j++)
+            {
+                double mean = NumOps.ToDouble(output[j]);
+                continuous[j] = NumOps.FromDouble(training
+                    ? mean + Math.Exp(NumOps.ToDouble(RequireLogStd()[j])) * StandardNormal()
+                    : mean);
+            }
+            CacheSelectedAction(state, continuous, mask: null);
+            return continuous;
         }
 
-        var mask = ActionMasking.Validate(legalActions, TradingOptions.ActionSize);
+        var mask = ActionMasking.Validate(legalActions, actionSize);
         _maskingInUse |= mask is not null;
-        var probs = Softmax(ActionMasking.MaskLogits(logits, mask, NumOps));
-        
+        var logits = ActionMasking.MaskLogits(output, mask, NumOps);
+        int index;
         if (training)
         {
-            int actionIdx = SampleCategorical(probs);
-            var action = new Vector<T>(TradingOptions.ActionSize);
-            action[actionIdx] = NumOps.One;
-            CacheSelectedAction(state, normalizedState, action, LogProbability(probs, actionIdx), mask);
-            return action;
+            var probabilities = AiDotNetEngine.Current.Softmax(Tensor<T>.FromVector(logits)).ToVector();
+            index = SampleCategorical(probabilities);
         }
-
-        int bestIdx = 0;
-        T maxProb = probs[0];
-        for (int i = 1; i < probs.Length; i++)
+        else
         {
-            if (NumOps.GreaterThan(probs[i], maxProb))
-            {
-                maxProb = probs[i];
-                bestIdx = i;
-            }
+            index = ActionMasking.ArgMaxLegal(logits, mask, NumOps);
         }
 
-        var result = new Vector<T>(TradingOptions.ActionSize);
-        result[bestIdx] = NumOps.One;
-        CacheSelectedAction(state, normalizedState, result, LogProbability(probs, bestIdx), mask);
-        return result;
+        var action = new Vector<T>(actionSize);
+        action[index] = NumOps.One;
+        CacheSelectedAction(state, action, mask);
+        return action;
     }
 
-    /// <summary>
-    /// Executes SampleAction for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, SampleAction performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     private int SampleCategorical(Vector<T> probabilities)
     {
         double r = _random.NextDouble();
@@ -484,438 +363,32 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             cumulative += NumOps.ToDouble(probabilities[i]);
             if (r < cumulative) return i;
         }
+        // Rounding can leave the cumulative sum a hair under 1; the last legal entry takes the remainder.
+        for (int i = probabilities.Length - 1; i >= 0; i--)
+            if (NumOps.ToDouble(probabilities[i]) > 0) return i;
         return probabilities.Length - 1;
     }
 
+    private double StandardNormal()
+    {
+        double u1 = 1.0 - _random.NextDouble();
+        double u2 = _random.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+    }
+
+    private void CacheSelectedAction(Vector<T> rawState, Vector<T> action, bool[]? mask)
+    {
+        _lastActionRawState = CopyVector(rawState);
+        _lastActionVector = CopyVector(action);
+        // A copy: the caller owns the array it passed and may reuse it for the next state.
+        _lastActionMask = mask is null ? null : (bool[])mask.Clone();
+    }
+
     #endregion
 
-    #region Training
+    #region Experience
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, Train performs a training step. This updates the FinancialPPOAgent architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override T Train()
-    {
-        if (_trajectory.Length == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        if (_trajectory.Length < GetMinimumRolloutSize() && !LatestStepIsTerminal())
-        {
-            return NumOps.Zero;
-        }
-
-        TrainingSteps++;
-
-        ComputeAdvantagesAndReturns();
-
-        T totalLoss = NumOps.Zero;
-        int updateCount = 0;
-        int trajectoryLength = _trajectory.Length;
-        int epochCount = GetEffectiveEpochCount(trajectoryLength);
-        int minibatchCount = GetEffectiveMiniBatchCount(trajectoryLength);
-        int minibatchSize = Math.Max(1, (int)Math.Ceiling((double)trajectoryLength / minibatchCount));
-
-        for (int epoch = 0; epoch < epochCount; epoch++)
-        {
-            var indices = Enumerable.Range(0, trajectoryLength)
-                .OrderBy(_ => _random.Next())
-                .ToArray();
-
-            for (int start = 0; start < indices.Length; start += minibatchSize)
-            {
-                int count = Math.Min(minibatchSize, indices.Length - start);
-                var batchIndices = new int[count];
-                Array.Copy(indices, start, batchIndices, 0, count);
-
-                var loss = UpdatePpoMiniBatch(batchIndices);
-                totalLoss = NumOps.Add(totalLoss, loss);
-                updateCount++;
-            }
-        }
-
-        var averageLoss = updateCount == 0
-            ? NumOps.Zero
-            : NumOps.Divide(totalLoss, NumOps.FromDouble(updateCount));
-        LossHistory.Add(averageLoss);
-
-        _trajectory.Clear();
-        _stepMasks.Clear();
-        _nextStates.Clear();
-
-        return averageLoss;
-    }
-
-    private int GetEffectiveEpochCount(int trajectoryLength)
-    {
-        int configuredEpochs = Math.Max(1, _ppoOptions.NumEpochs);
-        return trajectoryLength < 8 ? 1 : configuredEpochs;
-    }
-
-    private int GetEffectiveMiniBatchCount(int trajectoryLength)
-    {
-        if (trajectoryLength < 8)
-        {
-            return 1;
-        }
-
-        return Math.Max(1, Math.Min(_ppoOptions.NumMiniBatches, trajectoryLength));
-    }
-
-    private int GetMinimumRolloutSize()
-    {
-        return Math.Max(1, _options.BatchSize);
-    }
-
-    private bool LatestStepIsTerminal()
-    {
-        return _trajectory.Length > 0 && _trajectory.Dones[^1];
-    }
-
-    private T UpdatePpoMiniBatch(int[] batchIndices)
-    {
-        int n = batchIndices.Length;
-        int stateDim = GetBatchStateSize(batchIndices);
-        var returns = _trajectory.Returns ?? throw new InvalidOperationException("Returns not initialized.");
-        var advantages = _trajectory.Advantages ?? throw new InvalidOperationException("Advantages not initialized.");
-
-        var states = new Tensor<T>([n, stateDim]);
-        var targetReturns = new Tensor<T>([n, 1]);
-        var oldLogProbs = new Tensor<T>([n]);
-        var advantageTensor = new Tensor<T>([n]);
-
-        for (int i = 0; i < n; i++)
-        {
-            int idx = batchIndices[i];
-            CopyStateToBatch(states, i, _trajectory.States[idx], stateDim);
-
-            targetReturns[i, 0] = returns[idx];
-            oldLogProbs[i] = _trajectory.LogProbs[idx];
-            advantageTensor[i] = advantages[idx];
-        }
-
-        _critic.Train(states, targetReturns);
-        T valueLoss = _critic.GetLastLoss();
-
-        if (_options.ContinuousActions)
-        {
-            var actionTargets = new Tensor<T>([n, TradingOptions.ActionSize]);
-            for (int i = 0; i < n; i++)
-            {
-                var action = _trajectory.Actions[batchIndices[i]];
-                for (int j = 0; j < TradingOptions.ActionSize; j++)
-                {
-                    actionTargets[i, j] = action[j];
-                }
-            }
-
-            _actor.Train(states, actionTargets);
-            return NumOps.Add(valueLoss, _actor.GetLastLoss());
-        }
-
-        var actionIndices = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            actionIndices[i] = ArgMax(_trajectory.Actions[batchIndices[i]]);
-        }
-
-        using var maskBias = BuildMaskBias(batchIndices);
-
-        var trainableActor = (NeuralNetworkBase<T>)_actor;
-        T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
-        {
-            var engine = AiDotNetEngine.Current;
-
-            // The same restriction the action was drawn under, re-applied to the CURRENT actor. Without
-            // it the ratio below compares a masked old policy against an unmasked new one, and the
-            // entropy bonus rewards spreading probability onto actions the environment refuses.
-            var logits = maskBias is null ? actorOutput : engine.TensorAdd(actorOutput, maskBias);
-
-            var newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, logits, actionIndices);
-            var logDiff = engine.TensorSubtract(newLogProbs, oldLogProbs);
-            var ratio = engine.TensorExp(logDiff);
-
-            var surr1 = engine.TensorMultiply(ratio, advantageTensor);
-            var clippedRatio = engine.TensorClamp(
-                ratio,
-                NumOps.FromDouble(1.0 - TradingOptions.PPOClipRange),
-                NumOps.FromDouble(1.0 + TradingOptions.PPOClipRange));
-            var surr2 = engine.TensorMultiply(clippedRatio, advantageTensor);
-
-            var minSurr = engine.TensorNegate(
-                engine.TensorMax(
-                    engine.TensorNegate(surr1),
-                    engine.TensorNegate(surr2)));
-
-            var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, logits);
-            var entropyBonus = engine.TensorMultiplyScalar(entropy, NumOps.FromDouble(TradingOptions.EntropyCoefficient));
-            var objective = engine.TensorAdd(minSurr, entropyBonus);
-            var allAxes = Enumerable.Range(0, objective.Shape.Length).ToArray();
-            var meanObjective = engine.ReduceMean(objective, allAxes, keepDims: false);
-            return engine.TensorNegate(meanObjective);
-        });
-
-        return NumOps.Add(policyLoss, NumOps.Multiply(NumOps.FromDouble(TradingOptions.ValueCoefficient), valueLoss));
-    }
-
-    /// <summary>
-    /// Builds an additive logit bias for a mini-batch: zero where an action was legal, negative infinity
-    /// where it was not. Returns <see langword="null"/> when no step in the batch carried a mask.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>Additive, not multiplicative.</b> A constant added to the logits is a no-op for the
-    /// gradient with respect to the actor - the derivative of <c>x + c</c> is 1 - so the mask restricts
-    /// the distribution without distorting what the network learns about the actions that remain.</para>
-    ///
-    /// <para><b>Negative infinity, matching <see cref="ActionMasking.MaskLogits{T}"/>.</b> The softmax
-    /// downstream subtracts the row max before exponentiating, so an illegal entry becomes exactly zero
-    /// probability rather than merely a small one, and the log-probability helper's <c>+1e-8</c> floor
-    /// keeps the subsequent log finite. Both helpers then multiply that entry by zero - the one-hot
-    /// gather in the log-prob, and the probability itself in the entropy - so nothing non-finite
-    /// reaches the loss. A large finite constant would work numerically and was rejected for the reason
-    /// given on MaskLogits: it is a tuning parameter that stops working once logits grow.</para>
-    /// </remarks>
-    private Tensor<T>? BuildMaskBias(int[] batchIndices)
-    {
-        int n = batchIndices.Length;
-        int actionSize = TradingOptions.ActionSize;
-
-        bool anyMasked = false;
-        for (int i = 0; i < n; i++)
-        {
-            if (_stepMasks[batchIndices[i]] is not null)
-            {
-                anyMasked = true;
-                break;
-            }
-        }
-
-        if (!anyMasked)
-        {
-            return null;
-        }
-
-        // default(T) is the additive identity for every numeric T, so the legal entries need no write.
-        var data = new T[n * actionSize];
-        var blocked = ActionMasking.NegativeInfinity(NumOps);
-        for (int i = 0; i < n; i++)
-        {
-            var mask = _stepMasks[batchIndices[i]];
-            if (mask is null)
-            {
-                continue;
-            }
-
-            for (int j = 0; j < actionSize; j++)
-            {
-                if (!mask[j])
-                {
-                    data[(i * actionSize) + j] = blocked;
-                }
-            }
-        }
-
-        return new Tensor<T>(data, [n, actionSize]);
-    }
-
-    private Tensor<T> CreateStateTensor(Vector<T> normalizedState)    {
-        return Tensor<T>.FromVector(normalizedState);
-    }
-
-    private int GetBatchStateSize(int[] batchIndices)
-    {
-        if (batchIndices.Length == 0)
-        {
-            return Math.Max(1, TradingOptions.StateSize);
-        }
-
-        int stateSize = _trajectory.States[batchIndices[0]].Length;
-        for (int i = 1; i < batchIndices.Length; i++)
-        {
-            int nextSize = _trajectory.States[batchIndices[i]].Length;
-            if (nextSize != stateSize)
-            {
-                throw new InvalidOperationException(
-                    $"PPO trajectory contains mixed state sizes ({stateSize} and {nextSize}). " +
-                    "Use a stable observation schema before training.");
-            }
-        }
-
-        return stateSize;
-    }
-
-    private static void CopyStateToBatch(Tensor<T> batch, int row, Vector<T> state, int stateSize)
-    {
-        for (int j = 0; j < stateSize; j++)
-        {
-            batch[row, j] = state[j];
-        }
-    }
-
-    private void ComputeAdvantagesAndReturns()
-    {
-        var advantages = new List<T>(_trajectory.Length);
-        var returns = new List<T>(_trajectory.Length);
-        T lastGae = NumOps.Zero;
-        var gamma = TradingOptions.DiscountFactor;
-        var lambda = NumOps.FromDouble(TradingOptions.GAELambda);
-
-        for (int t = _trajectory.Length - 1; t >= 0; t--)
-        {
-            T nextValue = _trajectory.Dones[t] ? NumOps.Zero : PredictValueFromNormalized(_nextStates[t]);
-            var delta = NumOps.Add(
-                _trajectory.Rewards[t],
-                NumOps.Subtract(NumOps.Multiply(gamma, nextValue), _trajectory.Values[t]));
-
-            lastGae = NumOps.Add(
-                delta,
-                NumOps.Multiply(
-                    NumOps.Multiply(gamma, lambda),
-                    _trajectory.Dones[t] ? NumOps.Zero : lastGae));
-
-            advantages.Insert(0, lastGae);
-            returns.Insert(0, NumOps.Add(lastGae, _trajectory.Values[t]));
-        }
-
-        NormalizeAdvantagesWhenStable(advantages);
-
-        _trajectory.Advantages = advantages;
-        _trajectory.Returns = returns;
-    }
-
-    private void NormalizeAdvantagesWhenStable(List<T> advantages)
-    {
-        if (advantages.Count < 8)
-        {
-            return;
-        }
-
-        var stdAdv = StatisticsHelper<T>.CalculateStandardDeviation(advantages);
-        if (Math.Abs(NumOps.ToDouble(stdAdv)) <= 1e-8)
-        {
-            return;
-        }
-
-        T meanAdv = NumOps.Zero;
-        foreach (var advantage in advantages)
-        {
-            meanAdv = NumOps.Add(meanAdv, advantage);
-        }
-
-        meanAdv = NumOps.Divide(meanAdv, NumOps.FromDouble(advantages.Count));
-
-        for (int i = 0; i < advantages.Count; i++)
-        {
-            advantages[i] = NumOps.Divide(
-                NumOps.Subtract(advantages[i], meanAdv),
-                NumOps.Add(stdAdv, NumOps.FromDouble(1e-8)));
-        }
-    }
-
-    private T PredictValueFromNormalized(Vector<T> normalizedState)
-    {
-        return _critic.Predict(CreateStateTensor(normalizedState)).ToVector()[0];
-    }
-
-    private T ComputeDiscreteLogProbFromNormalized(Vector<T> normalizedState, Vector<T> action)
-    {
-        var logits = _actor.Predict(CreateStateTensor(normalizedState)).ToVector();
-        var probs = Softmax(logits);
-        int actionIndex = ArgMax(action);
-        return LogProbability(probs, actionIndex);
-    }
-
-    private T LogProbability(Vector<T> probabilities, int actionIndex)
-    {
-        return NumOps.FromDouble(Math.Log(NumOps.ToDouble(probabilities[actionIndex]) + 1e-10));
-    }
-
-    private Vector<T> Softmax(Vector<T> logits)
-    {
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (NumOps.GreaterThan(logits[i], maxLogit))
-            {
-                maxLogit = logits[i];
-            }
-        }
-
-        var probabilities = new Vector<T>(logits.Length);
-        T sumExp = NumOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var exp = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], maxLogit))));
-            probabilities[i] = exp;
-            sumExp = NumOps.Add(sumExp, exp);
-        }
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            probabilities[i] = NumOps.Divide(probabilities[i], sumExp);
-        }
-
-        return probabilities;
-    }
-
-    private int ArgMax(Vector<T> vector)
-    {
-        int maxIndex = 0;
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], vector[maxIndex]))
-            {
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
-    }
-
-    #endregion
-
-    #region Base Implementation
-
-    /// <summary>
-    /// Executes LoadModel for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, LoadModel performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void LoadModel(string filepath)
-    {
-        var data = File.ReadAllBytes(filepath);
-        Deserialize(data);
-    }
-
-    /// <summary>
-    /// Executes SaveModel for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, SaveModel performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SaveModel(string filepath)
-    {
-        var data = Serialize();
-        File.WriteAllBytes(filepath, data);
-    }
-
-    /// <summary>
-    /// Executes StoreExperience for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, StoreExperience performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
         bool done, bool[]? nextLegalActions)
     {
@@ -930,94 +403,372 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     /// <inheritdoc/>
-
+    /// <remarks>
+    /// Records one step of the rollout with the value prediction for <paramref name="state"/> (Baselines' <c>vpred</c>,
+    /// taken under the statistics the action was chosen with). A step whose state does not continue the previous
+    /// step's next state ends the previous episode, so a caller that resets without passing <c>done</c> does not
+    /// bootstrap across the reset.
+    /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        if (action.Length != TradingOptions.ActionSize)
+            throw new ArgumentException($"Expected an action of {TradingOptions.ActionSize} entries, got {action.Length}.", nameof(action));
         MarkHiddenEpisodeBoundaryIfNeeded(state);
 
-        if (!TryGetCachedPolicyState(state, action, out var normalizedState, out var logProb, out var mask))
+        bool[]? mask = null;
+        if (_lastActionRawState is not null && _lastActionVector is not null
+            && VectorsApproximatelyEqual(_lastActionRawState, state) && VectorsApproximatelyEqual(_lastActionVector, action))
         {
-            // Refused rather than degraded, for the reason IMaskableAgent gives. The cache is the only
-            // record of which actions were legal when this action was chosen; without it the old
-            // log-probability would come from the unrestricted distribution while the action was drawn
-            // from the restricted one, and PPO's ratio would divide two different policies. That does not
-            // fail - it trains, and the numbers stay plausible.
-            if (_maskingInUse)
-            {
-                throw new InvalidOperationException(
-                    "StoreExperience could not match this (state, action) to the selection that produced "
-                    + "it, and this agent has selected under a legal-action mask, so the mask for this step "
-                    + "cannot be recovered. PPO needs the mask to compute the behaviour log-probability "
-                    + "from the same distribution the action was drawn from. Call StoreExperience with the "
-                    + "state and action from the immediately preceding SelectAction call.");
-            }
-
-            normalizedState = NormalizeObservation(state, updateStatistics: true);
-            logProb = _options.ContinuousActions
-                ? NumOps.Zero
-                : ComputeDiscreteLogProbFromNormalized(normalizedState, action);
+            mask = _lastActionMask;
+        }
+        else if (_maskingInUse)
+        {
+            // Refused rather than degraded: the cache is the only record of which actions were legal when this
+            // action was chosen, and the update must re-apply that mask, or PPO's ratio would divide two different
+            // policies. That does not fail - it trains, and the numbers stay plausible.
+            throw new InvalidOperationException(
+                "StoreExperience could not match this (state, action) to the selection that produced "
+                + "it, and this agent has selected under a legal-action mask, so the mask for this step "
+                + "cannot be recovered. PPO needs the mask to compute the behaviour log-probability "
+                + "from the same distribution the action was drawn from. Call StoreExperience with the "
+                + "state and action from the immediately preceding SelectAction call.");
         }
 
-        var normalizedNextState = NormalizeObservation(nextState, updateStatistics: false);
-        var value = PredictValueFromNormalized(normalizedState);
-
-        _trajectory.AddStep(normalizedState, CopyVector(action), reward, value, logProb, done);
+        _states.Add(CopyVector(state));
+        _actions.Add(CopyVector(action));
+        _rewards.Add(NumOps.ToDouble(reward));
+        _values.Add(NumOps.ToDouble(_critic.Predict(NormalizedRow(state)).ToVector()[0]));
+        _dones.Add(done);
         _stepMasks.Add(mask);
-        _nextStates.Add(normalizedNextState);
-        _lastStoredNextRawState = CopyVector(nextState);
+        _lastNextState = CopyVector(nextState);
+    }
+
+    private void MarkHiddenEpisodeBoundaryIfNeeded(Vector<T> currentRawState)
+    {
+        int previous = _states.Count - 1;
+        if (previous < 0 || _lastNextState is null || _dones[previous]) return;
+        if (!VectorsApproximatelyEqual(_lastNextState, currentRawState)) _dones[previous] = true;
+    }
+
+    private bool VectorsApproximatelyEqual(Vector<T> left, Vector<T> right)
+    {
+        if (left.Length != right.Length) return false;
+        for (int i = 0; i < left.Length; i++)
+        {
+            double a = NumOps.ToDouble(left[i]);
+            double b = NumOps.ToDouble(right[i]);
+            double tolerance = 1e-6 * Math.Max(1.0, Math.Max(Math.Abs(a), Math.Abs(b)));
+            if (Math.Abs(a - b) > tolerance) return false;
+        }
+        return true;
+    }
+
+    private static Vector<T> CopyVector(Vector<T> source)
+    {
+        var copy = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
+        return copy;
     }
 
     #endregion
 
-    #region Serialization
+    #region Training
 
-    private void WriteObservationNormalizer(BinaryWriter writer)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>Returns zero until <see cref="FinancialPPOAgentOptions{T}.RolloutLength"/> steps have been stored, then runs
+    /// one PPO update over them (Baselines' <c>pposgd_simple.learn</c> iteration) and returns its mean loss:</para>
+    /// <list type="number">
+    /// <item>GAE(λ) advantages and λ-returns from the stored values, bootstrapping the last step from V(s_T);</item>
+    /// <item>advantages standardized over the rollout;</item>
+    /// <item>the observation statistics updated with the rollout, and the old log-probabilities taken under them;</item>
+    /// <item><see cref="FinancialPPOAgentOptions{T}.NumEpochs"/> passes over a fresh shuffle in minibatches of
+    /// <see cref="FinancialPPOAgentOptions{T}.MiniBatchSize"/> (a final partial minibatch is dropped), each one Adam
+    /// step on <c>−L^CLIP − c₂·S + c₁·L^VF</c> over both networks.</item>
+    /// </list>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Every advantage in the rollout is equal, so standardizing them divides
+    /// by zero (the reference divides regardless and trains on NaN).</exception>
+    public override T Train()
     {
-        writer.Write(_observationCount);
-        int length = _observationMean?.Length ?? 0;
-        writer.Write(length);
+        int n = _states.Count;
+        if (n < _ppoOptions.RolloutLength) return NumOps.Zero;
+        TrainingSteps++;
 
-        for (int i = 0; i < length; i++)
+        var (advantages, returns) = AdvantagesAndReturns();
+        Standardize(advantages);
+        UpdateObservationStatistics(_states);
+        var order = Enumerable.Range(0, n).ToArray();
+        var oldLogProbs = OldLogProbabilities(order);
+
+        double total = 0;
+        int updates = 0;
+        int batch = _ppoOptions.MiniBatchSize;
+        Actor.SetTrainingMode(true);
+        Critic.SetTrainingMode(true);
+        try
         {
-            writer.Write((_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i]);
-            writer.Write((_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i]);
+            for (int epoch = 0; epoch < _ppoOptions.NumEpochs; epoch++)
+            {
+                Shuffle(order);
+                for (int start = 0; start + batch <= n; start += batch)
+                {
+                    var indices = new int[batch];
+                    Array.Copy(order, start, indices, 0, batch);
+                    total += NumOps.ToDouble(UpdateMiniBatch(indices, oldLogProbs, advantages, returns));
+                    updates++;
+                }
+            }
+        }
+        finally
+        {
+            Actor.SetTrainingMode(false);
+            Critic.SetTrainingMode(false);
+        }
+
+        var averageLoss = NumOps.FromDouble(updates == 0 ? 0 : total / updates);
+        LossHistory.Add(averageLoss);
+        ClearRollout();
+        return averageLoss;
+    }
+
+    private void ClearRollout()
+    {
+        _states.Clear();
+        _actions.Clear();
+        _rewards.Clear();
+        _values.Clear();
+        _dones.Clear();
+        _stepMasks.Clear();
+    }
+
+    // Baselines' add_vtarg_and_adv.
+    private (double[] Advantages, double[] Returns) AdvantagesAndReturns()
+    {
+        int n = _states.Count;
+        double gamma = NumOps.ToDouble(TradingOptions.DiscountFactor), lambda = TradingOptions.GAELambda;
+        double bootstrap = _dones[n - 1] ? 0.0 : NumOps.ToDouble(_critic.Predict(NormalizedRow(_lastNextState ?? throw new InvalidOperationException("The rollout has no next state."))).ToVector()[0]);
+        var advantages = new double[n];
+        var returns = new double[n];
+        double last = 0;
+        for (int t = n - 1; t >= 0; t--)
+        {
+            double nonterminal = _dones[t] ? 0.0 : 1.0;
+            double next = t == n - 1 ? bootstrap : _values[t + 1];
+            double delta = _rewards[t] + gamma * next * nonterminal - _values[t];
+            last = delta + gamma * lambda * nonterminal * last;
+            advantages[t] = last;
+            returns[t] = last + _values[t];
+        }
+        return (advantages, returns);
+    }
+
+    // (A - mean) / std, the population standard deviation as numpy's default.
+    private static void Standardize(double[] values)
+    {
+        double mean = values.Average();
+        double variance = values.Sum(v => (v - mean) * (v - mean)) / values.Length;
+        double std = Math.Sqrt(variance);
+        if (!(std > 0))
+            throw new InvalidOperationException(
+                $"Every advantage in this rollout of {values.Length} steps equals {mean}, so standardizing them divides by "
+                + "zero. PPO normalizes advantages by their standard deviation over the rollout; a rollout with no "
+                + "variation in reward or value gives it nothing to learn from.");
+        for (int i = 0; i < values.Length; i++) values[i] = (values[i] - mean) / std;
+    }
+
+    // Fisher-Yates over the agent's generator (numpy.random.shuffle in the reference).
+    private void Shuffle(int[] order)
+    {
+        for (int i = order.Length - 1; i > 0; i--)
+        {
+            int j = _random.Next(i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
         }
     }
 
-    private void ReadObservationNormalizer(BinaryReader reader)
+    // log π_old(a|s) for every step, under the statistics just updated and the weights before this update
+    // (Baselines assigns oldpi = pi after the observation filter's update).
+    private double[] OldLogProbabilities(int[] order)
     {
-        _observationCount = reader.ReadInt64();
-        int length = reader.ReadInt32();
+        var (states, actions, bias) = BatchTensors(order);
+        using var _ = new NoGradScope<T>();
+        var logProbs = LogProbabilityAndEntropy(_actor.Predict(states), actions, bias).LogProb.ToVector();
+        var result = new double[order.Length];
+        for (int i = 0; i < result.Length; i++) result[i] = NumOps.ToDouble(logProbs[i]);
+        return result;
+    }
 
-        _observationMean = length > 0 ? new double[length] : null;
-        _observationM2 = length > 0 ? new double[length] : null;
-
-        for (int i = 0; i < length; i++)
+    // The minibatch's normalized states [B, S], its actions [B, A] (one-hot, or the continuous values), and the
+    // additive legal-action bias [B, A] (0 or −∞; null when no step carried a mask, or for continuous actions).
+    private (Tensor<T> States, Tensor<T> Actions, Tensor<T>? Bias) BatchTensors(int[] indices)
+    {
+        int b = indices.Length, stateSize = _states[indices[0]].Length, actionSize = TradingOptions.ActionSize;
+        var (mean, std) = ObservationStatistics(stateSize);
+        var states = new Tensor<T>([b, stateSize]);
+        var actions = new Tensor<T>([b, actionSize]);
+        var stateSpan = states.AsWritableSpan();
+        var actionSpan = actions.AsWritableSpan();
+        bool anyMask = false;
+        for (int i = 0; i < b; i++)
         {
-            (_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i] = reader.ReadDouble();
-            (_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i] = reader.ReadDouble();
+            var state = _states[indices[i]];
+            if (state.Length != stateSize)
+                throw new InvalidOperationException($"The rollout mixes state sizes ({stateSize} and {state.Length}). Use a stable observation schema.");
+            Normalize(state, mean, std, stateSpan.Slice(i * stateSize, stateSize));
+            var action = _actions[indices[i]];
+            if (_options.ContinuousActions)
+            {
+                for (int j = 0; j < actionSize; j++) actionSpan[i * actionSize + j] = action[j];
+            }
+            else
+            {
+                actionSpan[i * actionSize + ArgMax(action)] = NumOps.One;
+            }
+            anyMask |= _stepMasks[indices[i]] is not null;
         }
+        if (!anyMask || _options.ContinuousActions) return (states, actions, null);
+
+        var bias = new Tensor<T>([b, actionSize]);
+        var biasSpan = bias.AsWritableSpan();
+        var blocked = ActionMasking.NegativeInfinity(NumOps);
+        for (int i = 0; i < b; i++)
+        {
+            var mask = _stepMasks[indices[i]];
+            if (mask is null) continue;
+            for (int j = 0; j < actionSize; j++)
+                if (!mask[j]) biasSpan[i * actionSize + j] = blocked;
+        }
+        return (states, actions, bias);
     }
 
-    private void CopyObservationNormalizerFrom(FinancialPPOAgent<T> source)
+    private T UpdateMiniBatch(int[] indices, double[] oldLogProbs, double[] advantages, double[] returns)
     {
-        _observationCount = source._observationCount;
-        _observationMean = source._observationMean is null ? null : (double[])source._observationMean.Clone();
-        _observationM2 = source._observationM2 is null ? null : (double[])source._observationM2.Clone();
+        int b = indices.Length, actionSize = TradingOptions.ActionSize;
+        var (states, actions, bias) = BatchTensors(indices);
+        var old = new Tensor<T>([b]);
+        var adv = new Tensor<T>([b]);
+        var ret = new Tensor<T>([b, 1]);
+        for (int i = 0; i < b; i++)
+        {
+            old[i] = NumOps.FromDouble(oldLogProbs[indices[i]]);
+            adv[i] = NumOps.FromDouble(advantages[indices[i]]);
+            ret[i, 0] = NumOps.FromDouble(returns[indices[i]]);
+        }
+        int stateSize = states.Shape[1];
+        // Everything the objective reads per step travels in the packed input, which a compiled step rebinds on
+        // every replay; the bias is packed as zeros when no step was masked.
+        var packed = StepInputPacking<T>.Pack(states, actions, bias ?? new Tensor<T>([b, actionSize]), old, adv, ret);
+        double clip = TradingOptions.PPOClipRange;
+        double entropyCoefficient = TradingOptions.EntropyCoefficient, valueCoefficient = TradingOptions.ValueCoefficient;
+
+        Tensor<T> Objective(Tensor<T> data)
+        {
+            var engine = AiDotNetEngine.Current;
+            int offset = 0;
+            Tensor<T> Next(int[] shape)
+            {
+                var part = StepInputPacking<T>.Slice(data, offset, shape);
+                offset += shape.Aggregate(1, (x, y) => x * y);
+                return part;
+            }
+            var s = Next([b, stateSize]);
+            var a = Next([b, actionSize]);
+            var maskBias = Next([b, actionSize]);
+            var oldLogProb = Next([b]);
+            var advantage = Next([b]);
+            var target = Next([b, 1]);
+
+            var (logProb, entropy) = LogProbabilityAndEntropy(Actor.ForwardForTraining(s), a, maskBias);
+            var ratio = engine.TensorExp(engine.TensorSubtract(logProb, oldLogProb));
+            var surrogate = engine.TensorMultiply(ratio, advantage);
+            var clipped = engine.TensorMultiply(
+                engine.TensorClamp(ratio, NumOps.FromDouble(1.0 - clip), NumOps.FromDouble(1.0 + clip)), advantage);
+            // min(x, y) = −max(−x, −y)
+            var pessimistic = engine.TensorNegate(engine.TensorMax(engine.TensorNegate(surrogate), engine.TensorNegate(clipped)));
+            var policyLoss = engine.TensorNegate(engine.ReduceMean(pessimistic, [0], keepDims: false));
+            var difference = engine.TensorSubtract(Critic.ForwardForTraining(s), target);
+            var valueLoss = engine.ReduceMean(engine.TensorMultiply(difference, difference), [0, 1], keepDims: false);
+            var loss = engine.TensorAdd(policyLoss, engine.TensorMultiplyScalar(valueLoss, NumOps.FromDouble(valueCoefficient)));
+            if (entropyCoefficient != 0)
+                loss = engine.TensorSubtract(loss, engine.TensorMultiplyScalar(
+                    engine.ReduceMean(entropy, [0], keepDims: false), NumOps.FromDouble(entropyCoefficient)));
+            return loss;
+        }
+
+        return Actor.TrainObjectiveFused(packed, Objective, _optimizer, TrainedTensors);
     }
 
-    #endregion
+    private Tensor<T> RequireLogStd() => _logStd ?? throw new InvalidOperationException("A discrete policy has no log standard deviation.");
 
-    #region Model Metadata
+    private NeuralNetworkBase<T> Actor => (NeuralNetworkBase<T>)_actor;
+    private NeuralNetworkBase<T> Critic => (NeuralNetworkBase<T>)_critic;
+
+    // Both networks and the Gaussian's log standard deviation, under one optimizer (Baselines' var_list).
+    private IReadOnlyList<Tensor<T>> TrainedTensors()
+    {
+        var tensors = new List<Tensor<T>>(Actor.CollectModelTrainableTensors());
+        tensors.AddRange(Critic.CollectModelTrainableTensors());
+        if (_logStd is not null) tensors.Add(_logStd);
+        return tensors;
+    }
 
     /// <summary>
-    /// Executes GetModelMetadata for the FinancialPPOAgent.
+    /// The log-probability of each row's action under the policy output, and the policy's entropy, exactly.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, GetModelMetadata performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
+    /// Discrete: <c>log π(a) = logit_a − logsumexp(logits + bias)</c> and <c>H = logsumexp − Σ p·logit</c>, which stay
+    /// finite with −∞ biases (a masked entry has p = 0 and never meets its −∞ in a product). Continuous (Baselines'
+    /// DiagGaussianPd): <c>log π(a) = −½ Σ ((a − μ)/σ)² − ½ log(2π)·A − Σ log σ</c> and <c>H = Σ (log σ + ½ log(2πe))</c>.
     /// </remarks>
+    private (Tensor<T> LogProb, Tensor<T> Entropy) LogProbabilityAndEntropy(Tensor<T> output, Tensor<T> actions, Tensor<T>? bias)
+    {
+        var engine = AiDotNetEngine.Current;
+        int b = actions.Shape[0], actionSize = actions.Shape[1];
+        var policy = engine.Reshape(output, [b, actionSize]);
+        if (_logStd is not null)
+        {
+            var logStd = engine.TensorTile(engine.Reshape(_logStd, [1, actionSize]), [b, 1]);
+            var z = engine.TensorDivide(engine.TensorSubtract(actions, policy), engine.TensorExp(logStd));
+            var squares = engine.ReduceSum(engine.TensorMultiply(z, z), [1], keepDims: false);
+            var logStdSum = engine.ReduceSum(logStd, [1], keepDims: false);
+            var logProb = engine.TensorAddScalar(
+                engine.TensorSubtract(engine.TensorMultiplyScalar(squares, NumOps.FromDouble(-0.5)), logStdSum),
+                NumOps.FromDouble(-0.5 * Math.Log(2.0 * Math.PI) * actionSize));
+            var entropy = engine.TensorAddScalar(logStdSum, NumOps.FromDouble(0.5 * Math.Log(2.0 * Math.PI * Math.E) * actionSize));
+            return (logProb, entropy);
+        }
+
+        var masked = bias is null ? policy : engine.TensorAdd(policy, bias);
+        var max = engine.ReduceMax(masked, [1], keepDims: true);
+        var logSumExp = engine.TensorAdd(
+            engine.TensorLog(engine.ReduceSum(engine.TensorExp(engine.TensorSubtract(masked, max)), [1], keepDims: true)), max);
+        var chosen = engine.ReduceSum(engine.TensorMultiply(actions, policy), [1], keepDims: false);
+        var lse = engine.Reshape(logSumExp, [b]);
+        var probabilities = engine.TensorExp(engine.TensorSubtract(masked, logSumExp));
+        var expectedLogit = engine.ReduceSum(engine.TensorMultiply(probabilities, policy), [1], keepDims: false);
+        return (engine.TensorSubtract(chosen, lse), engine.TensorSubtract(lse, expectedLogit));
+    }
+
+    private int ArgMax(Vector<T> vector)
+    {
+        int maxIndex = 0;
+        for (int i = 1; i < vector.Length; i++)
+            if (NumOps.GreaterThan(vector[i], vector[maxIndex])) maxIndex = i;
+        return maxIndex;
+    }
+
+    #endregion
+
+    #region Base Implementation
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath) => Deserialize(File.ReadAllBytes(filepath));
+
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath) => File.WriteAllBytes(filepath, Serialize());
+
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -1030,34 +781,12 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         };
     }
 
-    /// <summary>
-    /// Executes ComputeGradients for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
+    /// <summary>The policy network's gradients of <paramref name="lossFunction"/> on one normalized observation.</summary>
     public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        return _actor.ComputeGradients(
-            CreateStateTensor(NormalizeObservation(input, updateStatistics: false)),
-            Tensor<T>.FromVector(target),
-            lossFunction);
-    }
+        => _actor.ComputeGradients(NormalizedRow(input), Tensor<T>.FromVector(target), lossFunction);
 
-    /// <summary>
-    /// Executes ApplyGradients for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        _actor.ApplyGradients(gradients, learningRate);
-    }
+    /// <summary>Applies gradients to the policy network.</summary>
+    public void ApplyGradients(Vector<T> gradients, T learningRate) => _actor.ApplyGradients(gradients, learningRate);
 
     #endregion
 }

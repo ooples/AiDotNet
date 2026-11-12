@@ -146,9 +146,76 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     public override Tensor<T> PredictLabels(Tensor<T> tokenEmbeddings)
     {
         ThrowIfDisposed();
+        SetTrainingMode(false);
         var preprocessed = PreprocessTokens(tokenEmbeddings);
         var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
         return PostprocessOutput(output);
+    }
+
+    /// <summary>
+    /// The entities the model's own head finds, nested and overlapping ones included: every scored span whose most likely
+    /// category is not the non-entity class (0), with its probability.
+    /// </summary>
+    /// <param name="tokenEmbeddings">One sequence <c>[seqLen, hiddenDim]</c>.</param>
+    /// <exception cref="NotSupportedException">The model runs custom layers or an ONNX graph, whose output is not the
+    /// paper head's.</exception>
+    public IReadOnlyList<NamedEntitySpan> PredictSpans(Tensor<T> tokenEmbeddings)
+    {
+        ThrowIfDisposed();
+        SetTrainingMode(false);
+        if (!_usesPaperHead) throw new NotSupportedException("Span predictions are defined for the paper's head; this model runs custom layers or ONNX.");
+        var preprocessed = PreprocessTokens(tokenEmbeddings);
+        if (preprocessed.Rank != 2) throw new ArgumentException("PredictSpans takes one sequence [seqLen, hiddenDim].", nameof(tokenEmbeddings));
+        return DecodeSpans(Forward(preprocessed), preprocessed.Shape[0]);
+    }
+
+    /// <summary>
+    /// The entities in the paper head's output for one sequence of <paramref name="seqLen"/> tokens. The default reads the
+    /// span grid <c>[seqLen * seqLen, NumLabels]</c> (span start * seqLen + end): each candidate span (end not before start,
+    /// at most <see cref="SpanBasedNEROptions.MaxSpanLength"/> tokens) whose most likely category is an entity.
+    /// </summary>
+    protected virtual IReadOnlyList<NamedEntitySpan> DecodeSpans(Tensor<T> output, int seqLen)
+    {
+        int classes = output.Shape[^1];
+        if (output.Length != seqLen * seqLen * classes)
+            throw new InvalidOperationException($"The span head emitted {output.Length} scores, not a {seqLen} x {seqLen} grid of {classes}.");
+        var grid = Engine.Reshape(output, new[] { seqLen * seqLen, classes });
+        int maxSpan = _options.MaxSpanLength > 0 ? _options.MaxSpanLength : seqLen;
+        var spans = new List<NamedEntitySpan>();
+        for (int start = 0; start < seqLen; start++)
+            for (int end = start; end < seqLen && end - start < maxSpan; end++)
+            {
+                var (label, probability) = MostLikely(grid, start * seqLen + end, classes);
+                if (label != 0) spans.Add(new NamedEntitySpan(start, end, label, probability));
+            }
+        return spans;
+    }
+
+    /// <summary>The most likely class of one row of scores <c>[rows, classes]</c> and its softmax probability.</summary>
+    protected (int Label, double Probability) MostLikely(Tensor<T> rows, int row, int classes)
+    {
+        int best = 0;
+        double max = double.NegativeInfinity;
+        for (int c = 0; c < classes; c++) { double v = NumOps.ToDouble(rows[row, c]); if (v > max) { max = v; best = c; } }
+        double sum = 0;
+        for (int c = 0; c < classes; c++) sum += Math.Exp(NumOps.ToDouble(rows[row, c]) - max);
+        return (best, 1.0 / sum);
+    }
+
+    // One label per token from the decoded spans: the most probable spans first, each kept unless it overlaps one already
+    // kept (flat decoding), its tokens taking its category; uncovered tokens are the non-entity class.
+    private Tensor<T> TokenLabels(IReadOnlyList<NamedEntitySpan> spans, int seqLen)
+    {
+        var labels = new Tensor<T>(new[] { seqLen });
+        var taken = new bool[seqLen];
+        foreach (var span in spans.OrderByDescending(s => s.Probability))
+        {
+            bool free = true;
+            for (int t = span.Start; t <= span.End && free; t++) free = !taken[t];
+            if (!free) continue;
+            for (int t = span.Start; t <= span.End; t++) { taken[t] = true; labels[t] = NumOps.FromDouble(span.Label); }
+        }
+        return labels;
     }
 
     /// <inheritdoc />
@@ -279,12 +346,18 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
+            _usesPaperHead = false;
         }
         else
         {
             Layers.AddRange(CreateDefaultLayers());
+            _usesPaperHead = true;
         }
     }
+
+    // Whether the layers are this model's own (CreateDefaultLayers), whose head BuildTrainingTargets and DecodeSpans read;
+    // custom layers are a per-token classifier trained on and decoded from per-token labels.
+    private bool _usesPaperHead;
 
     /// <summary>
     /// Creates the default layer stack for this span-based NER model.
@@ -294,6 +367,8 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
+        // A model of this family that declares its own objective or learning rule takes its step through it.
+        if (TryTrainDeclaredObjectives(input, expected)) return;
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
         SetTrainingMode(true);
@@ -321,7 +396,7 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
             // and sequences are truncated to MaxSequenceLength before label alignment.
             var preprocessed = PreprocessTokens(input);
             int validatedSeqLen = preprocessed.Rank == 3 ? preprocessed.Shape[1] : preprocessed.Shape[0];
-            var alignedExpected = BuildTrainingTargets(expected, validatedSeqLen);
+            var alignedExpected = _usesPaperHead ? BuildTrainingTargets(expected, validatedSeqLen) : PreprocessLabels(expected, validatedSeqLen);
             // Use the model's configured optimizer. Falling back to NeuralNetworkBase's
             // default Adam step ignores SpanBasedNEROptions.LearningRate (5e-5 for
             // SpERT) and is large enough to make the generated memorization test diverge.
@@ -386,6 +461,7 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     /// Shapes the supervision the model is trained against, given token-level labels.
     /// </summary>
     /// <remarks>
+    /// The targets of the model's own head; custom layers always train on per-token labels.
     /// Defaults to per-token labels aligned to the encoder's sequence length, which is what a
     /// token-classification head consumes. Span-scoring heads that emit one score per candidate
     /// span override this to build span-level supervision instead.
@@ -395,6 +471,74 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     /// <returns>The target tensor to pair with the model's output.</returns>
     protected virtual Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen)
         => PreprocessLabels(labels, seqLen);
+
+    /// <summary>The token encoder every span model starts from: a stack of Transformer encoder layers (the paper's
+    /// pre-trained BERT stands here as a trainable encoder of <see cref="SpanBasedNEROptions.NumTransformerLayers"/> layers).</summary>
+    protected IEnumerable<ILayer<T>> CreateTokenEncoderLayers()
+    {
+        int heads = _options.NumAttentionHeads;
+        while (heads > 1 && _options.HiddenDimension % heads != 0) heads--;
+        for (int layer = 0; layer < _options.NumTransformerLayers; layer++)
+        {
+            yield return new TransformerEncoderLayer<T>(numHeads: heads, feedForwardDim: _options.IntermediateDimension);
+            if (_options.DropoutRate > 0 && layer < _options.NumTransformerLayers - 1) yield return new DropoutLayer<T>(_options.DropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Span-grid training targets for a scorer that emits one score vector per span <c>[S * S, C]</c>: a token's label on
+    /// the diagonal (single-token entity), the non-entity category for the other candidate spans up to
+    /// <see cref="SpanBased_options.MaxSpanLength"/>, and -1 (ignored) for the rest.
+    /// </summary>
+    protected Tensor<T> BuildSpanGridTargets(Tensor<T> labels, int seqLen)
+    {
+        var tokenLabels = PreprocessLabels(labels, seqLen);
+
+        // The scorer emits [batch, l*l, c] for a batched input and [l*l, c] unbatched, so the
+        // target has to carry the same batch axis. Building a flat [l*l] regardless meant a
+        // two-example batch produced a [26] target against a [2, 64, 9] prediction, which cannot
+        // broadcast -- the failure DifferentInputs_AfterTraining reported, since that test is the
+        // one that feeds two distinct inputs at once.
+        int batch = tokenLabels.Rank >= 2 ? tokenLabels.Shape[0] : 1;
+
+        var spanTargets = batch > 1
+            ? new Tensor<T>([batch, seqLen * seqLen])
+            : new Tensor<T>([seqLen * seqLen]);
+
+        var ignore = NumOps.FromDouble(-1.0);
+        int maxSpan = _options.MaxSpanLength > 0 ? _options.MaxSpanLength : seqLen;
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int start = 0; start < seqLen; start++)
+            {
+                var category = tokenLabels.Rank == 1 ? tokenLabels[start] : tokenLabels[b, start];
+
+                for (int end = 0; end < seqLen; end++)
+                {
+                    bool isCandidate = end >= start && (end - start + 1) <= maxSpan;
+
+                    // A single-token entity occupies the diagonal; other candidate spans are
+                    // non-entities; non-candidates are ignored rather than taught as negatives.
+                    var value = !isCandidate ? ignore
+                        : end == start ? category
+                        : NumOps.Zero;
+
+                    if (batch > 1)
+                    {
+                        spanTargets[b, (start * seqLen) + end] = value;
+                    }
+                    else
+                    {
+                        spanTargets[(start * seqLen) + end] = value;
+                    }
+                }
+            }
+        }
+
+        return spanTargets;
+    }
+
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
@@ -449,8 +593,28 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     }
 
     /// <inheritdoc />
+    /// <remarks>The paper head's output is decoded into spans (<see cref="DecodeSpans"/>) and then into one label per token,
+    /// so <see cref="PredictLabels"/> keeps its per-token contract; <see cref="PredictSpans"/> returns the spans
+    /// themselves.</remarks>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
+        if (_usesPaperHead && modelOutput.Rank >= 2)
+        {
+            bool batched = modelOutput.Rank == 3;
+            int batch = batched ? modelOutput.Shape[0] : 1, rows = batched ? modelOutput.Shape[1] : modelOutput.Shape[0];
+            int classes = modelOutput.Shape[^1], seqLen = (int)Math.Round(Math.Sqrt(rows));
+            if (seqLen * seqLen == rows)
+            {
+                var flat = Engine.Reshape(modelOutput, new[] { batch, rows * classes });
+                var sequences = new Tensor<T>[batch];
+                for (int b = 0; b < batch; b++)
+                {
+                    var one = Engine.Reshape(Engine.TensorSlice(flat, new[] { b, 0 }, new[] { 1, rows * classes }), new[] { rows, classes });
+                    sequences[b] = TokenLabels(DecodeSpans(one, seqLen), seqLen);
+                }
+                return batched ? Engine.TensorStack(sequences, 0) : sequences[0];
+            }
+        }
         if (modelOutput.Rank >= 2 && modelOutput.Shape[^1] == _options.NumLabels)
         {
             return ArgmaxDecode(modelOutput);

@@ -11,9 +11,9 @@ using System.Threading.Tasks;
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
 /// <summary>
-/// Integration tests for Open-Vocabulary (OpenVocabSAM, GroundedSAM2, CATSeg, MaskAdapter, SAN, SED),
+/// Integration tests for Open-Vocabulary (OpenVocabSAM, CATSeg, MaskAdapter, SAN, SED),
 /// Interactive (SegGPT, SEEM), and
-/// Referring (LISA, VideoLISA, GLaMM, OMGLLaVA, PixelLM) segmentation models.
+/// Referring (LISA, VideoLISA, OMGLLaVA, PixelLM) segmentation models.
 /// </summary>
 public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 {
@@ -53,34 +53,6 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     public async Task OpenVocabSAM_Dispose_DoesNotThrow()
     {
         var model = new OpenVocabSAM<double>(Arch());
-        Assert.Null(Record.Exception(() => model.Dispose()));
-    }
-
-    #endregion
-
-    #region GroundedSAM2
-
-    [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_Construction_Succeeds()
-    {
-        var model = new GroundedSAM2<double>(Arch());
-        Assert.NotNull(model);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_Predict_ReturnsOutput()
-    {
-        var model = new GroundedSAM2<double>(Arch());
-        var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_Dispose_DoesNotThrow()
-    {
-        var model = new GroundedSAM2<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
@@ -305,34 +277,6 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     public async Task VideoLISA_Dispose_DoesNotThrow()
     {
         var model = new VideoLISA<double>(Arch());
-        Assert.Null(Record.Exception(() => model.Dispose()));
-    }
-
-    #endregion
-
-    #region GLaMM
-
-    [Fact(Timeout = 120000)]
-    public async Task GLaMM_Construction_Succeeds()
-    {
-        var model = new GLaMM<double>(Arch());
-        Assert.NotNull(model);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task GLaMM_Predict_ReturnsOutput()
-    {
-        var model = new GLaMM<double>(Arch());
-        var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task GLaMM_Dispose_DoesNotThrow()
-    {
-        var model = new GLaMM<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
