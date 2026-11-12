@@ -212,7 +212,7 @@ public class WaveletReferenceValueTests
     {
         // A unit approximation impulse reconstructs to the scaling filter, a unit detail impulse to the wavelet
         // filter (the previous index arithmetic never matched and returned zeros).
-        var wavelet = new FejÃ©rKorovkinWavelet<double>(order: 4);
+        var wavelet = new FejérKorovkinWavelet<double>(order: 4);
         var h = wavelet.GetScalingCoefficients();
         var g = wavelet.GetWaveletCoefficients();
         var impulse = new Vector<double>(4);
