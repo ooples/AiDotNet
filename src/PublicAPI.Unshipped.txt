@@ -22619,3 +22619,9 @@ AiDotNet.Kernels.LCMKernel<T>.CalculateForOutputs(AiDotNet.Tensors.LinearAlgebra
 AiDotNet.Kernels.LCMKernel<T>.GetCoregMatrix(int componentIndex) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.Kernels.LCMKernel<T>.GetTotalCorrelation() -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.Kernels.LCMKernel<T>.LCMKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! inputKernels, AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! coregMatrices) -> void
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X, AiDotNet.Interfaces.IKernelFunction<T>! exactKernel) -> double
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.GetFeatureMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> double[,]!
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.GetFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double[]!
+AiDotNet.Kernels.RFFKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X, AiDotNet.Interfaces.IKernelFunction<T>! exactKernel) -> T
+AiDotNet.Kernels.RFFKernel<T>.GetFeatureMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.RFFKernel<T>.GetFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
