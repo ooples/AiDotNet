@@ -2807,6 +2807,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             ResetDensificationStats();
         }
 
+        T one = NumOps.One;
         foreach (var batch in gradients)
         {
             if (batch.Count == 0)
@@ -2817,7 +2818,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(batch.Gradients, batch.Gradients), new[] { 1 }, false));
             _densifyGradientSum = engine.TensorIndexAdd(_densifyGradientSum, 0, batch.Indices, batch.Gradients);
             _densifyNormSum = engine.TensorIndexAdd(_densifyNormSum, 0, batch.Indices, norms);
-            _densifyVisibleCount = engine.TensorIndexAdd(_densifyVisibleCount, 0, batch.Indices, Full(new[] { batch.Count }, NumOps.One));
+            _densifyVisibleCount = engine.TensorIndexAdd(_densifyVisibleCount, 0, batch.Indices, Full(new[] { batch.Count }, one));
         }
 
         _densifyAccumulatedSteps++;
