@@ -92,18 +92,11 @@ public sealed class ConsistencyModelScheduler<T> : NoiseSchedulerBase<T>
             return;
         }
 
-        // Geometrically-spaced sigmas from sigma_max to sigma_min
-        double logSigmaMax = Math.Log(_sigmaMax);
-        double logSigmaMin = Math.Log(_sigmaMin);
-
-        for (int i = 0; i < inferenceSteps; i++)
-        {
-            double t = (double)i / (inferenceSteps - 1);
-            double logSigma = logSigmaMax + t * (logSigmaMin - logSigmaMax);
-            _sigmas[i] = NumOps.FromDouble(Math.Exp(logSigma));
-        }
-
-        _sigmas[inferenceSteps] = NumOps.FromDouble(_sigmaMin);
+        // Geometrically-spaced sigmas from sigma_max to sigma_min, then a final sigma_min
+        var logSigmas = Engine.TensorLinspace(
+            NumOps.FromDouble(Math.Log(_sigmaMax)), NumOps.FromDouble(Math.Log(_sigmaMin)), inferenceSteps);
+        _sigmas = Vector<T>.Concatenate(
+            Engine.TensorExp(logSigmas).ToVector(), new Vector<T>(new[] { NumOps.FromDouble(_sigmaMin) }));
     }
 
     /// <summary>
