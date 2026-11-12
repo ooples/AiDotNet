@@ -226,48 +226,31 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private (Vector<T> Action, T LogProb) SampleAction(Vector<T> policyOutput, bool training)
     {
-        var action = new Vector<T>(_sacOptions.ActionSize);
-        T totalLogProb = NumOps.Zero;
+        int actionSize = _sacOptions.ActionSize;
+        var engine = AiDotNetEngine.Current;
+        var mean = policyOutput.GetSubVector(0, actionSize);
 
-        for (int i = 0; i < _sacOptions.ActionSize; i++)
+        if (!training)
         {
-            var mean = policyOutput[i];
-            var logStd = policyOutput[_sacOptions.ActionSize + i];
-
-            // Clip log_std for numerical stability using MathHelper
-            logStd = MathHelper.Clamp<T>(logStd, NumOps.FromDouble(-20), NumOps.FromDouble(2));
-            var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
-
-            if (training)
-            {
-                // Sample from Gaussian using MathHelper
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
-                var rawAction = NumOps.Add(mean, NumOps.Multiply(std, noise));
-
-                // Apply tanh squashing using MathHelper
-                action[i] = MathHelper.Tanh<T>(rawAction);
-
-                // Compute log prob with tanh correction
-                var gaussianLogProb = NumOps.FromDouble(
-                    -0.5 * Math.Log(2 * Math.PI) -
-                    NumOps.ToDouble(logStd) -
-                    0.5 * NumOps.ToDouble(NumOps.Multiply(noise, noise))
-                );
-
-                // Tanh correction: log(1 - tanh^2(x))
-                var tanhCorrection = NumOps.FromDouble(
-                    Math.Log(1 - Math.Pow(NumOps.ToDouble(action[i]), 2) + 1e-6)
-                );
-
-                totalLogProb = NumOps.Add(totalLogProb,
-                    NumOps.Subtract(gaussianLogProb, tanhCorrection));
-            }
-            else
-            {
-                // Deterministic: use mean with tanh using MathHelper
-                action[i] = MathHelper.Tanh<T>(mean);
-            }
+            // Deterministic: use mean with tanh
+            return (engine.Tanh(mean), NumOps.Zero);
         }
+
+        // Clip log_std for numerical stability
+        var logStd = engine.Clamp(policyOutput.GetSubVector(actionSize, actionSize), NumOps.FromDouble(-20), NumOps.FromDouble(2));
+        var std = engine.Exp(logStd);
+
+        // Reparameterized sample a = tanh(mu + sigma * eps), one N(0, 1) draw per dimension in order
+        var noise = RLTensorOps.NormalRandom<T>(Random, actionSize);
+        var action = engine.Tanh(engine.Add(mean, engine.Multiply(std, noise)));
+
+        // log pi = sum_i [-0.5 log(2 pi) - log sigma_i - 0.5 eps_i^2] - sum_i log(1 - a_i^2 + 1e-6)
+        var gaussianLogProb = engine.Subtract(
+            engine.Subtract(Vector<T>.CreateDefault(actionSize, NumOps.FromDouble(-0.5 * Math.Log(2 * Math.PI))), logStd),
+            engine.Multiply(engine.Multiply(noise, noise), NumOps.FromDouble(0.5)));
+        var oneMinusSquare = engine.Subtract(Vector<T>.CreateDefault(actionSize, NumOps.One), engine.Multiply(action, action));
+        var tanhCorrection = engine.TensorLog(engine.TensorAddScalar(oneMinusSquare.AsTensor(), NumOps.FromDouble(1e-6))).ToVector();
+        T totalLogProb = engine.Sum(engine.Subtract(gaussianLogProb, tanhCorrection));
 
         return (action, totalLogProb);
     }
@@ -325,8 +308,7 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         {
             demoActionVec = new Vector<T>(actionSize);
             int copyLen = Math.Min(actionSize, target.Length);
-            for (int i = 0; i < copyLen; i++)
-                demoActionVec[i] = target[i];
+            target.AsSpan().Slice(0, copyLen).CopyTo(demoActionVec.AsWritableSpan());
         }
 
         // Reshape via Tensor<T>.FromVector — this shares the underlying buffer with
@@ -372,138 +354,130 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             return NumOps.Zero;
         }
 
-        T totalLoss = NumOps.Zero;
+        var stepLosses = new List<T>();
 
         // Multiple gradient steps per environment step (Haarnoja et al. 2018)
         for (int g = 0; g < _sacOptions.GradientSteps; g++)
         {
-            var batch = _replayBuffer.Sample(_sacOptions.BatchSize);
-            int stateSize = _sacOptions.StateSize;
-            int actionSize = _sacOptions.ActionSize;
-            int batchCount = batch.Count;
-            T alpha = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_logAlpha)));
-
-            // Build batched state-action tensors for critic training
-            var batchStateActions = new Tensor<T>([batchCount, stateSize + actionSize]);
-            var batchStates = new Tensor<T>([batchCount, stateSize]);
-            for (int i = 0; i < batchCount; i++)
-            {
-                for (int j = 0; j < stateSize; j++)
-                {
-                    batchStates[i, j] = batch[i].State[j];
-                    batchStateActions[i, j] = batch[i].State[j];
-                }
-                for (int j = 0; j < actionSize; j++)
-                    batchStateActions[i, stateSize + j] = batch[i].Action[j];
-            }
-
-            // --- Compute Q targets (outside tape — target networks not trained) ---
-            // y = r + gamma * (1-done) * (min(Q_tgt1, Q_tgt2) - alpha * log_pi_next)
-            var targetQ = new Tensor<T>([batchCount, 1]);
-            for (int i = 0; i < batchCount; i++)
-            {
-                // SampleAction expects the policy network's output (mean+log_std
-                // pair of length 2*ActionSize), not a raw state vector. Forward
-                // the next state through the policy network first — passing the
-                // state directly indexed past its tail and raised
-                // ArgumentOutOfRangeException for [ActionSize + i].
-                var nextStateTensor = Tensor<T>.FromVector(batch[i].NextState);
-                var nextPolicyOutput = _policyNetwork.Predict(nextStateTensor).ToVector();
-                // Stochastic branch (training: true) so nextLogProb is the real log π(a'|s');
-                // the SAC critic target needs the entropy term y = r + γ(minQ' − α·nextLogProb).
-                var (nextAction, nextLogProb) = SampleAction(nextPolicyOutput, training: true);
-                var nextSA = ConcatenateStateAction(batch[i].NextState, nextAction);
-                var nextSATensor = Tensor<T>.FromVector(nextSA, [1, stateSize + actionSize]);
-                var q1Next = _q1TargetNetwork.Predict(nextSATensor).ToVector()[0];
-                var q2Next = _q2TargetNetwork.Predict(nextSATensor).ToVector()[0];
-                var minQNext = NumOps.LessThan(q1Next, q2Next) ? q1Next : q2Next;
-                var softV = NumOps.Subtract(minQNext, NumOps.Multiply(alpha, nextLogProb));
-                var doneT = batch[i].Done ? NumOps.Zero : NumOps.One;
-                targetQ[i, 0] = NumOps.Add(batch[i].Reward,
-                    NumOps.Multiply(DiscountFactor, NumOps.Multiply(doneT, softV)));
-            }
-
-            // --- Update both Q-networks (MSE on TD targets) ---
-            _q1Network.Train(batchStateActions, targetQ);
-            T q1Loss = _q1Network.GetLastLoss();
-            _q2Network.Train(batchStateActions, targetQ);
-            T q2Loss = _q2Network.GetLastLoss();
-            T qLoss = NumOps.Divide(NumOps.Add(q1Loss, q2Loss), NumOps.FromDouble(2.0));
-
-            // --- Update actor (minimize alpha * log_pi - Q via engine ops) ---
-            var trainableActor = (NeuralNetworkBase<T>)_policyNetwork;
-            T policyLoss = trainableActor.TrainWithCustomLoss(batchStates, actorOutput =>
-            {
-                // actorOutput = [batchCount, actionSize*2] for continuous = [means, logStds].
-                // TensorSlice takes (start, length) — length on axis 1 must be
-                // actionSize for the logStds half, not actionSize*2 (which is
-                // the FULL output width and would over-slice past the tensor's
-                // upper bound, throwing "Slice length 2*actionSize starting at
-                // actionSize exceeds axis 1 size 2*actionSize").
-                var means = Engine.TensorSlice(actorOutput, [0, 0], [batchCount, actionSize]);
-                var logStds = Engine.TensorSlice(actorOutput, [0, actionSize], [batchCount, actionSize]);
-
-                // Reparameterized sample: u = mu + sigma * eps, eps ~ N(0, I). The previous noise was
-                // rng.NextDouble() * 2 - 1, which is UNIFORM on [-1, 1) rather than Gaussian, so neither the
-                // sample nor the log-probability below described the distribution this agent samples from.
-                // It also came from an unseeded CreateSecureRandom, making the update irreproducible under a
-                // configured seed; GetNormalRandom is what SampleAction already draws with.
-                var stds = Engine.TensorExp(logStds);
-                var noise = new Tensor<T>([batchCount, actionSize]);
-                for (int i = 0; i < noise.Length; i++)
-                    noise[i] = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
-                var preSquash = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
-
-                // SampleAction squashes with tanh, so the replay buffer holds squashed actions and the
-                // critics were trained on them. Handing the RAW Gaussian sample to the critics here queried
-                // Q off the distribution it learned, and scored it with the wrong density: a squashed policy
-                // needs the change-of-variables correction, log pi = log N(u) - sum_i log(1 - tanh^2(u_i))
-                // (Haarnoja et al. 2018, Appendix C). This agent's tanh is unscaled, hence scale 1.
-                var sampledActions = PolicyDistributionHelper<T>.SquashAction(Engine, preSquash, 1.0);
-                var logProbs = PolicyDistributionHelper<T>.ComputeSquashedGaussianLogProb(
-                    Engine, means, logStds, preSquash, 1.0);
-
-                // Build [state | action] with engine ops. Filling a fresh tensor element by element detaches
-                // it from the tape, so the critics below would have been handed a constant no matter how
-                // they were called.
-                var stateActionForQ = Engine.TensorConcatenate([batchStates, sampledActions], axis: 1);
-
-                // Forward the critics ON THE TAPE. Predict runs inside a NoGradScope, so reading Q through it
-                // yields a detached constant and the actor ascends nothing but its own entropy — the Q term
-                // contributes no gradient at all. TrainWithCustomLoss collects only the actor's tensors, so
-                // the critics supply dQ/da here without being updated by this step.
-                var tapedQ1 = (NeuralNetworkBase<T>)_q1Network;
-                var tapedQ2 = (NeuralNetworkBase<T>)_q2Network;
-                var minQ = Engine.TensorMin(
-                    tapedQ1.ForwardForTraining(stateActionForQ),
-                    tapedQ2.ForwardForTraining(stateActionForQ));
-
-                // policy loss = mean(alpha * log_pi - min_Q). min_Q stays on the tape rather than being
-                // copied element by element into a new tensor, which severed it a second time.
-                var alphaLogPi = Engine.TensorMultiplyScalar(logProbs, alpha);
-                var flatMinQ = Engine.ReduceSum(minQ, [1], keepDims: false);
-                var loss = Engine.TensorSubtract(alphaLogPi, flatMinQ);
-                return Engine.ReduceMean(loss, [0], keepDims: false);
-            });
-
-            // Update temperature (alpha)
-            if (_sacOptions.AutoTuneTemperature)
-            {
-                UpdateTemperature(batch);
-            }
-
-            // Soft update target networks (Polyak averaging)
-            SoftUpdateTargets();
-
-            totalLoss = NumOps.Add(totalLoss, NumOps.Add(qLoss, policyLoss));
+            stepLosses.Add(GradientStep());
         }
 
+        T totalLoss = stepLosses.Count == 0 ? NumOps.Zero : AiDotNetEngine.Current.Sum(Vector<T>.FromEnumerable(stepLosses));
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_sacOptions.GradientSteps));
         LossHistory.Add(avgLoss);
 
         return avgLoss;
     }
 
+
+    /// <summary>One SAC gradient step on a fresh minibatch; returns the critic loss plus the actor loss.</summary>
+    private T GradientStep()
+    {
+        var batch = _replayBuffer.Sample(_sacOptions.BatchSize);
+        int stateSize = _sacOptions.StateSize;
+        int actionSize = _sacOptions.ActionSize;
+        int batchCount = batch.Count;
+        T alpha = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_logAlpha)));
+
+        // Build batched state-action tensors for critic training
+        var batchStates = RLTensorOps.Batch(batch.Select(exp => exp.State), stateSize);
+        var batchStateActions = RLTensorOps.Batch(
+            batch.Select(exp => RLTensorOps.Concat(RLTensorOps.Head(exp.State, stateSize), RLTensorOps.Head(exp.Action, actionSize))),
+            stateSize + actionSize);
+
+        // --- Compute Q targets (outside tape — target networks not trained) ---
+        // y = r + gamma * (1-done) * (min(Q_tgt1, Q_tgt2) - alpha * log_pi_next)
+        // SampleAction expects the policy network's output (mean+log_std pair of length 2*ActionSize);
+        // the next states go through the policy as one batch, then each row is sampled in order (stochastic
+        // branch, so nextLogProb is the real log pi(a'|s') the entropy term needs).
+        var engine = AiDotNetEngine.Current;
+        var nextPolicyOutputs = RLTensorOps.Rows(
+            _policyNetwork.Predict(RLTensorOps.Batch(batch.Select(exp => exp.NextState), stateSize)), batchCount);
+        var nextSamples = nextPolicyOutputs.Select(output => SampleAction(output, training: true)).ToList();
+        var nextSA = RLTensorOps.Batch(
+            batch.Select((exp, row) => ConcatenateStateAction(exp.NextState, nextSamples[row].Action)), stateSize + actionSize);
+        var q1Next = RLTensorOps.FirstColumn(_q1TargetNetwork.Predict(nextSA), batchCount).AsTensor();
+        var q2Next = RLTensorOps.FirstColumn(_q2TargetNetwork.Predict(nextSA), batchCount).AsTensor();
+        var minQNext = engine.TensorWhere(engine.TensorLessThan(q1Next, q2Next), q1Next, q2Next).ToVector();
+        var nextLogProbs = Vector<T>.FromEnumerable(nextSamples.Select(sample => sample.LogProb));
+        var softV = engine.Subtract(minQNext, engine.Multiply(nextLogProbs, alpha));
+        var notDone = Vector<T>.FromEnumerable(batch.Select(exp => exp.Done ? NumOps.Zero : NumOps.One));
+        var rewards = Vector<T>.FromEnumerable(batch.Select(exp => exp.Reward));
+        var targetValues = engine.Add(rewards, engine.Multiply(engine.Multiply(notDone, softV), DiscountFactor));
+        var targetQ = new Tensor<T>([batchCount, 1], targetValues);
+
+        // --- Update both Q-networks (MSE on TD targets) ---
+        _q1Network.Train(batchStateActions, targetQ);
+        T q1Loss = _q1Network.GetLastLoss();
+        _q2Network.Train(batchStateActions, targetQ);
+        T q2Loss = _q2Network.GetLastLoss();
+        T qLoss = NumOps.Divide(NumOps.Add(q1Loss, q2Loss), NumOps.FromDouble(2.0));
+
+        // --- Update actor (minimize alpha * log_pi - Q via engine ops) ---
+        var trainableActor = (NeuralNetworkBase<T>)_policyNetwork;
+        T policyLoss = trainableActor.TrainWithCustomLoss(batchStates, actorOutput =>
+        {
+            // actorOutput = [batchCount, actionSize*2] for continuous = [means, logStds].
+            // TensorSlice takes (start, length) — length on axis 1 must be
+            // actionSize for the logStds half, not actionSize*2 (which is
+            // the FULL output width and would over-slice past the tensor's
+            // upper bound, throwing "Slice length 2*actionSize starting at
+            // actionSize exceeds axis 1 size 2*actionSize").
+            var means = Engine.TensorSlice(actorOutput, [0, 0], [batchCount, actionSize]);
+            var logStds = Engine.TensorSlice(actorOutput, [0, actionSize], [batchCount, actionSize]);
+
+            // Reparameterized sample: u = mu + sigma * eps, eps ~ N(0, I). The previous noise was
+            // rng.NextDouble() * 2 - 1, which is UNIFORM on [-1, 1) rather than Gaussian, so neither the
+            // sample nor the log-probability below described the distribution this agent samples from.
+            // It also came from an unseeded CreateSecureRandom, making the update irreproducible under a
+            // configured seed; GetNormalRandom is what SampleAction already draws with.
+            var stds = Engine.TensorExp(logStds);
+            var noise = new Tensor<T>([batchCount, actionSize], RLTensorOps.NormalRandom<T>(Random, batchCount * actionSize));
+            var preSquash = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
+
+            // SampleAction squashes with tanh, so the replay buffer holds squashed actions and the
+            // critics were trained on them. Handing the RAW Gaussian sample to the critics here queried
+            // Q off the distribution it learned, and scored it with the wrong density: a squashed policy
+            // needs the change-of-variables correction, log pi = log N(u) - sum_i log(1 - tanh^2(u_i))
+            // (Haarnoja et al. 2018, Appendix C). This agent's tanh is unscaled, hence scale 1.
+            var sampledActions = PolicyDistributionHelper<T>.SquashAction(Engine, preSquash, 1.0);
+            var logProbs = PolicyDistributionHelper<T>.ComputeSquashedGaussianLogProb(
+                Engine, means, logStds, preSquash, 1.0);
+
+            // Build [state | action] with engine ops. Filling a fresh tensor element by element detaches
+            // it from the tape, so the critics below would have been handed a constant no matter how
+            // they were called.
+            var stateActionForQ = Engine.TensorConcatenate([batchStates, sampledActions], axis: 1);
+
+            // Forward the critics ON THE TAPE. Predict runs inside a NoGradScope, so reading Q through it
+            // yields a detached constant and the actor ascends nothing but its own entropy — the Q term
+            // contributes no gradient at all. TrainWithCustomLoss collects only the actor's tensors, so
+            // the critics supply dQ/da here without being updated by this step.
+            var tapedQ1 = (NeuralNetworkBase<T>)_q1Network;
+            var tapedQ2 = (NeuralNetworkBase<T>)_q2Network;
+            var minQ = Engine.TensorMin(
+                tapedQ1.ForwardForTraining(stateActionForQ),
+                tapedQ2.ForwardForTraining(stateActionForQ));
+
+            // policy loss = mean(alpha * log_pi - min_Q). min_Q stays on the tape rather than being
+            // copied element by element into a new tensor, which severed it a second time.
+            var alphaLogPi = Engine.TensorMultiplyScalar(logProbs, alpha);
+            var flatMinQ = Engine.ReduceSum(minQ, [1], keepDims: false);
+            var loss = Engine.TensorSubtract(alphaLogPi, flatMinQ);
+            return Engine.ReduceMean(loss, [0], keepDims: false);
+        });
+
+        // Update temperature (alpha)
+        if (_sacOptions.AutoTuneTemperature)
+        {
+            UpdateTemperature(batch);
+        }
+
+        // Soft update target networks (Polyak averaging)
+        SoftUpdateTargets();
+
+        return NumOps.Add(qLoss, policyLoss);
+    }
 
     private Vector<T> ComputeSACPolicyGradient(
         Vector<T> policyOutput, Vector<T> action, T alpha, T logProb, T qValue)
@@ -512,61 +486,47 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         // Split into two terms:
         // 1. Entropy term: α * ∇θ log π(a|s)
         // 2. Q term: -∇θ Q(s, f_θ(s, ε)) via reparameterization
+        int actionSize = _sacOptions.ActionSize;
+        var engine = AiDotNetEngine.Current;
+        var gradient = new Vector<T>(actionSize * 2);
+        var mean = policyOutput.GetSubVector(0, actionSize);
+        var clippedLogStd = engine.Clamp(policyOutput.GetSubVector(actionSize, actionSize), NumOps.FromDouble(-20), NumOps.FromDouble(2));
+        var std = engine.Exp(clippedLogStd);
 
-        var gradient = new Vector<T>(_sacOptions.ActionSize * 2);
+        // Reconstruct the noise used: ε = (atanh(a) - μ) / σ, atanh(a) = log((1 + a) / (1 - a + 1e-6)) / 2
+        // Note: action is already tanh-squashed
+        var taken = RLTensorOps.Head(action, actionSize);
+        var ones = Vector<T>.CreateDefault(actionSize, NumOps.One);
+        var ratio = engine.Divide(
+            engine.Add(ones, taken),
+            engine.TensorAddScalar(engine.Subtract(ones, taken).AsTensor(), NumOps.FromDouble(1e-6)).ToVector());
+        var rawAction = engine.Divide(engine.TensorLog(ratio.AsTensor()).ToVector(), NumOps.FromDouble(2.0));
 
-        for (int i = 0; i < _sacOptions.ActionSize; i++)
-        {
-            var mean = policyOutput[i];
-            var logStd = policyOutput[_sacOptions.ActionSize + i];
-            var clippedLogStd = MathHelper.Clamp<T>(logStd, NumOps.FromDouble(-20), NumOps.FromDouble(2));
-            var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(clippedLogStd)));
+        // Gradient of log probability w.r.t. mean and log_std
+        // For Gaussian: ∂log_π/∂μ = (a - μ) / σ²
+        //               ∂log_π/∂log_σ = -1 - (a - μ)² / σ²   (as implemented)
+        var actionDiff = engine.Subtract(rawAction, mean);
+        var stdSquared = engine.Multiply(std, std);
+        var dLogPiDMean = engine.Divide(actionDiff, stdSquared);
+        var dLogPiDLogStd = engine.Subtract(
+            Vector<T>.CreateDefault(actionSize, NumOps.FromDouble(-1.0)),
+            engine.Divide(engine.Multiply(actionDiff, actionDiff), stdSquared));
 
-            // Reconstruct the noise used: ε = (atanh(a) - μ) / σ
-            // Note: action[i] is already tanh-squashed
-            var atanhAction = NumOps.FromDouble(Math.Log((1.0 + NumOps.ToDouble(action[i])) /
-                                                           (1.0 - NumOps.ToDouble(action[i]) + 1e-6)) / 2.0);
-            var rawAction = atanhAction; // This was tanh^(-1)(action)
+        // Entropy gradient: α * ∇θ log π
+        var entropyGradMean = engine.Multiply(dLogPiDMean, alpha);
+        var entropyGradLogStd = engine.Multiply(dLogPiDLogStd, alpha);
 
-            // Gradient of log probability w.r.t. mean and log_std
-            // For Gaussian: ∂log_π/∂μ = (a - μ) / σ²
-            //               ∂log_π/∂log_σ = -1 + (a - μ)² / σ²
-            var actionDiff = NumOps.Subtract(rawAction, mean);
-            var stdSquared = NumOps.Multiply(std, std);
+        // Q-value gradient, simplified: -Q / (σ + 1e-6) through the mean, scaled by σ for log_std
+        var qGradScale = engine.Negate(engine.Divide(
+            Vector<T>.CreateDefault(actionSize, qValue),
+            engine.TensorAddScalar(std.AsTensor(), NumOps.FromDouble(1e-6)).ToVector()));
+        var qGradLogStd = engine.Multiply(qGradScale, std);
 
-            var dLogPi_dMean = NumOps.Divide(actionDiff, stdSquared);
-            var dLogPi_dLogStd = NumOps.Subtract(
-                NumOps.FromDouble(-1.0),
-                NumOps.Divide(NumOps.Multiply(actionDiff, actionDiff), stdSquared)
-            );
-
-            // Entropy gradient: α * ∇θ log π
-            var entropyGradMean = NumOps.Multiply(alpha, dLogPi_dMean);
-            var entropyGradLogStd = NumOps.Multiply(alpha, dLogPi_dLogStd);
-
-            // Q-value gradient using reparameterization trick
-            // SAC gradient: ∇θ [α log π(a|s) - Q(s, f_θ(ε))]
-            // The Q term requires ∇_μ Q and ∇_log_σ Q through the action
-            // For tanh-squashed Gaussian: a = tanh(μ + σε)
-            //
-            // Approximation: Since we can't easily compute ∇_a Q analytically,
-            // we use the fact that for policy gradient methods:
-            // ∇θ Q(s, f_θ(ε)) ≈ ∇θ f_θ(ε) * ∇_a Q(s,a)
-            //
-            // In this simplified version, we scale the gradient by Q-value
-            // A more accurate implementation would use finite differences or
-            // automatic differentiation to compute ∇_a Q
-            var qGradScale = NumOps.Negate(NumOps.Divide(qValue, NumOps.Add(std, NumOps.FromDouble(1e-6))));
-            var qGradMean = qGradScale;  // Simplified: gradient flows through mean
-            var qGradLogStd = NumOps.Multiply(qGradScale, std);  // Scaled by std
-
-            // Total gradient: α * ∇θ log π - ∇θ Q
-            // We negate the sum because networks minimize loss (gradient descent)
-            // but we want to maximize J = E[Q - α log π]
-            gradient[i] = NumOps.Negate(NumOps.Add(entropyGradMean, qGradMean));
-            gradient[_sacOptions.ActionSize + i] = NumOps.Negate(NumOps.Add(entropyGradLogStd, qGradLogStd));
-        }
-
+        // Total gradient: α * ∇θ log π - ∇θ Q, negated because networks minimize loss
+        var meanGradient = engine.Negate(engine.Add(entropyGradMean, qGradScale));
+        var logStdGradient = engine.Negate(engine.Add(entropyGradLogStd, qGradLogStd));
+        meanGradient.AsSpan().CopyTo(gradient.AsWritableSpan().Slice(0, actionSize));
+        logStdGradient.AsSpan().CopyTo(gradient.AsWritableSpan().Slice(actionSize, actionSize));
         return gradient;
     }
 
@@ -574,16 +534,11 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     {
         if (!_sacOptions.AutoTuneTemperature) return;
 
-        T totalEntropy = NumOps.Zero;
-
-        foreach (var exp in batch)
-        {
-            var stateTensor = Tensor<T>.FromVector(exp.State);
-            var policyOutputTensor = _policyNetwork.Predict(stateTensor);
-            var policyOutput = policyOutputTensor.ToVector();
-            var (_, logProb) = SampleAction(policyOutput, training: true);
-            totalEntropy = NumOps.Add(totalEntropy, logProb);
-        }
+        // sum of log pi(a|s) over the batch: one batched policy forward, then each row sampled in order
+        var policyOutputs = RLTensorOps.Rows(
+            _policyNetwork.Predict(RLTensorOps.Batch(batch.Select(exp => exp.State), _sacOptions.StateSize)), batch.Count);
+        var logProbs = Vector<T>.FromEnumerable(policyOutputs.Select(output => SampleAction(output, training: true).LogProb));
+        T totalEntropy = batch.Count == 0 ? NumOps.Zero : AiDotNetEngine.Current.Sum(logProbs);
 
         var avgEntropy = NumOps.Divide(totalEntropy, NumOps.FromDouble(batch.Count));
         var targetEntropy = NumOps.FromDouble(ResolvedTargetEntropy);
