@@ -321,4 +321,27 @@ public class ModelResultArchitectureRoundTripTests
         Assert.Equal(128, target.Architecture.InputSize);
         Assert.Equal(original.Layers.Count, target.Layers.Count);
     }
+
+    [Fact]
+    public void Network_FromANewerFormatVersion_IsRejectedInsteadOfMisread()
+    {
+        // A later format inserts fields this reader does not know, so every field after them would be misread: the
+        // header's version must be checked against the newest this library writes.
+        var bytes = FeedForward().Serialize();
+        byte[] magic = BitConverter.GetBytes(0x4E444941); // "AIDN", the network payload header
+        int at = -1;
+        for (int i = 0; i + 8 <= bytes.Length && at < 0; i++)
+            if (bytes[i] == magic[0] && bytes[i + 1] == magic[1] && bytes[i + 2] == magic[2] && bytes[i + 3] == magic[3])
+                at = i;
+        Assert.True(at >= 0, "the serialized network carries no payload header");
+        int written = BitConverter.ToInt32(bytes, at + 4);
+        Array.Copy(BitConverter.GetBytes(written + 1), 0, bytes, at + 4, 4);
+
+        var target = new FeedForwardNeuralNetwork<float>();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            var error = Assert.Throws<InvalidDataException>(() => target.Deserialize(bytes));
+            Assert.Contains($"version {written + 1}", error.Message);
+        }
+    }
 }

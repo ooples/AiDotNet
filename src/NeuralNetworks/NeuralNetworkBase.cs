@@ -17255,6 +17255,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (first == SerializationMagic)
         {
             version = reader.ReadInt32();
+            // A later format adds fields this reader does not know; reading on would misparse every field after them.
+            if (version > SerializationVersion)
+                throw new InvalidDataException(
+                    $"Serialized network format version {version} is newer than this library supports ({SerializationVersion}); " +
+                    "load it with the AiDotNet version that saved it or a later one.");
             if (version >= 8)
             {
                 encoding = (SerializedParameterEncoding)reader.ReadByte();
