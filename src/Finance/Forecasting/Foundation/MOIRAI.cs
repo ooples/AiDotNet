@@ -926,17 +926,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -1168,10 +1158,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         _maskStepCounter++;
 
         // Copy input data
-        for (int i = 0; i < input.Length; i++)
-        {
-            masked.Data.Span[i] = input.Data.Span[i];
-        }
+        input.Data.Span.Slice(0, input.Length).CopyTo(masked.Data.Span);
 
         // Apply masking based on mask ratio
         int numPatches = _totalPatches;
@@ -1211,6 +1198,25 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         var result = new Tensor<T>(new[] { 1, horizon, 1 });
         int paramsPerStep = _numMixtures * 3; // weight, mean, variance per mixture
 
+        if (horizon > 0 && _numMixtures > 0 && mixtureOutput.Length >= horizon * paramsPerStep)
+        {
+            // Every step has all its mixtures: sum_m exp(w_m) mu_m / sum_m exp(w_m), left as the plain sum
+            // where the total weight is not positive.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var grid = Engine.Reshape(
+                Engine.TensorNarrow(Engine.Reshape(mixtureOutput.Contiguous(), new[] { mixtureOutput.Length }), 0, 0, horizon * paramsPerStep),
+                new[] { horizon, _numMixtures, 3 });
+            var expWeight = Engine.TensorExp(Engine.TensorNarrow(grid, 2, 0, 1).Contiguous());
+            var means = Engine.TensorNarrow(grid, 2, 1, 1).Contiguous();
+            var weightedSum = Engine.ReduceSum(Engine.TensorMultiply(expWeight, means), new[] { 1, 2 }, false);
+            var totalWeight = Engine.ReduceSum(expWeight, new[] { 1, 2 }, false);
+            var positive = Engine.TensorGreaterThan(totalWeight, NumOps.Zero);
+            var normalized = Engine.TensorDivide(
+                weightedSum, Engine.TensorWhere(positive, totalWeight, Engine.TensorFullLike(totalWeight, NumOps.One)));
+            return Engine.Reshape(Engine.TensorWhere(positive, normalized, weightedSum), new[] { 1, horizon, 1 });
+        }
+
+        // Some steps lack mixture parameters: accumulate only the ones present, as before.
         for (int t = 0; t < horizon; t++)
         {
             T weightedMean = NumOps.Zero;
@@ -1401,9 +1407,9 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         foreach (var pred in predictions)
         {
             int toCopy = Math.Min(pred.Length, totalSteps - position);
-            for (int i = 0; i < toCopy; i++)
+            if (toCopy > 0)
             {
-                result.Data.Span[position + i] = pred.Data.Span[i];
+                pred.Data.Span.Slice(0, toCopy).CopyTo(result.Data.Span.Slice(position, toCopy));
             }
             position += toCopy;
         }
@@ -1428,10 +1434,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     private float[] ConvertToFloatArray(Tensor<T> tensor)
     {
         var result = new float[tensor.Length];
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            result[i] = (float)NumOps.ToDouble(tensor.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(tensor.Data.Span.Slice(0, tensor.Length), result.AsSpan(0, tensor.Length));
         return result;
     }
 

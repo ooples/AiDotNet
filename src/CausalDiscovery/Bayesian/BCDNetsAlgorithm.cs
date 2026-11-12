@@ -75,12 +75,10 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
 
         var cov = ComputeCovarianceMatrix(data);
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
-        T lr = NumOps.FromDouble(_learningRate);
 
         // Variational parameters: edge logits Z, weight means mu, weight log-variances logvar
-        var Z = new Matrix<T>(d, d);       // edge presence logits
-        var mu = new Matrix<T>(d, d);      // weight means
-        var logvar = new Matrix<T>(d, d);  // log-variance of weights
+        var offDiagonal = OffDiagonalMask(d);
+        var c = Tensor<T>.FromMatrix(cov);
 
         // Initialize mu from OLS; initialize Z DIRECTION-AWARE per pair.
         //
@@ -101,36 +99,14 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
         // optimizer starts inside the true-DAG basin; the reverse logit starts
         // OFF and can still be revived by the reconstruction gradient if the
         // data disagrees.
-        T eps = NumOps.FromDouble(1e-10);
-        for (int i = 0; i < d; i++)
+        var (Z, mu, logvar) = InitializeVariationalParameters(c, offDiagonal, d);
+
+        // Row-major flat positions of the off-diagonal entries, the order the weight noise is drawn in.
+        var offDiagonalPositions = new int[d * (d - 1)];
+        for (int i = 0, slot = 0; i < d; i++)
             for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                if (NumOps.GreaterThan(cov[i, i], eps))
-                    mu[i, j] = NumOps.Divide(cov[i, j], cov[i, i]);
-                Z[i, j] = NumOps.FromDouble(-1.0);
-                logvar[i, j] = NumOps.FromDouble(-4); // small initial variance
-            }
-
-        for (int i = 0; i < d; i++)
-            for (int j = i + 1; j < d; j++)
-            {
-                double vi = NumOps.ToDouble(cov[i, i]);
-                double vj = NumOps.ToDouble(cov[j, j]);
-                double cij = NumOps.ToDouble(cov[i, j]);
-                if (vi < 1e-10 || vj < 1e-10) continue;
-
-                double olsIJ = Math.Abs(cij / vi);
-                double olsJI = Math.Abs(cij / vj);
-                if (Math.Max(olsIJ, olsJI) <= 0.2) continue; // no signal in either direction
-
-                double resJgivenI = vj - cij * cij / vi; // residual of i → j
-                double resIgivenJ = vi - cij * cij / vj; // residual of j → i
-                if (resJgivenI <= resIgivenJ)
-                    Z[i, j] = NumOps.FromDouble(1.0);
-                else
-                    Z[j, i] = NumOps.FromDouble(1.0);
-            }
+                if (i != j) offDiagonalPositions[slot++] = i * d + j;
+        var noisePositions = new Tensor<int>(offDiagonalPositions, new[] { offDiagonalPositions.Length });
 
         // Augmented Lagrangian for acyclicity. Per the NOTEARS scheme BCD-Nets
         // builds on (Zheng et al. 2018 §3.2; Cundy et al. 2021 §4), the duals are
@@ -143,171 +119,200 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
         // ~16 steps and the acyclicity term symmetrically annihilated every
         // edge logit before the reconstruction term could orient the graph —
         // the discovered structure was always empty.
-        T alpha = NumOps.Zero;
-        T rho = NumOps.One;
-        double hPrev = double.PositiveInfinity;
+        var duals = new BcdDuals(NumOps.Zero, NumOps.One, double.PositiveInfinity);
         int innerSteps = Math.Max(1, Math.Min(25, NumSamples));
 
         for (int iter = 0; iter < NumSamples; iter++)
         {
             double tau = Math.Max(0.1, 1.0 * Math.Pow(0.95, iter));
-            T tauT = NumOps.FromDouble(tau);
 
-            // Compute edge probabilities and sample weights
-            var P = new Matrix<T>(d, d);
-            var W = new Matrix<T>(d, d);
+            // Approximate N(0,1) reparameterization noise in [-1, 1), one draw per off-diagonal entry
+            var uniform = Tensor<T>.CreateRandom(rng, offDiagonalPositions.Length);
+            var noise = Engine.TensorScatter(new Tensor<T>(new[] { d * d }), noisePositions, uniform, 0).Reshape(new[] { d, d });
 
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-
-                    // Edge probability via sigmoid
-                    T zScaled = NumOps.Divide(Z[i, j], tauT);
-                    double sv = NumOps.ToDouble(zScaled);
-                    double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                    P[i, j] = NumOps.FromDouble(sigVal);
-
-                    // Reparameterized weight sample: w = mu + exp(logvar/2) * epsilon
-                    T stddev = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(logvar[i, j])));
-                    T epsilon = NumOps.FromDouble(rng.NextDouble() * 2 - 1); // approximate N(0,1)
-                    T wSample = NumOps.Add(mu[i, j], NumOps.Multiply(stddev, epsilon));
-
-                    W[i, j] = NumOps.Multiply(P[i, j], wSample);
-                }
-
-            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
-            var PSqCurrent = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    PSqCurrent[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
-            var expPSqCurrent = MatrixExponentialTaylor(PSqCurrent, d);
-            T hValCurrent = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                hValCurrent = NumOps.Add(hValCurrent, expPSqCurrent[i, i]);
-            hValCurrent = NumOps.Subtract(hValCurrent, NumOps.FromDouble(d));
-
-            var gradMu = new Matrix<T>(d, d);
-            var gradLogvar = new Matrix<T>(d, d);
-            var gradZ = new Matrix<T>(d, d);
-
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-
-                    // Reconstruction gradient
-                    T reconGrad = NumOps.Negate(cov[i, j]);
-                    for (int k = 0; k < d; k++)
-                    {
-                        if (k == j) continue;
-                        reconGrad = NumOps.Add(reconGrad, NumOps.Multiply(W[k, j], cov[i, k]));
-                    }
-
-                    // Gradient w.r.t. mu: P[i,j] * reconGrad
-                    gradMu[i, j] = NumOps.Multiply(P[i, j], reconGrad);
-
-                    // KL for weight: d_KL(N(mu, sigma^2) || N(0, 1)) gradient
-                    // = mu - gradient from variance term
-                    T klMuGrad = NumOps.Multiply(NumOps.FromDouble(0.01), mu[i, j]);
-                    gradMu[i, j] = NumOps.Add(gradMu[i, j], klMuGrad);
-
-                    // Gradient w.r.t. logvar: through reparameterization
-                    T var_ij = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logvar[i, j])));
-                    T klVarGrad = NumOps.Multiply(NumOps.FromDouble(0.5),
-                        NumOps.Subtract(var_ij, NumOps.One));
-                    gradLogvar[i, j] = klVarGrad;
-
-                    // Gradient w.r.t. Z: through edge probability
-                    T pij = P[i, j];
-                    T oneMinusP = NumOps.Subtract(NumOps.One, pij);
-                    T wSample = NumOps.GreaterThan(pij, NumOps.FromDouble(1e-10))
-                        ? NumOps.Divide(W[i, j], pij) : NumOps.Zero;
-                    T edgeGrad = NumOps.Multiply(reconGrad, wSample);
-
-                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
-                    T acycGrad = NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent)),
-                        NumOps.Multiply(expPSqCurrent[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
-
-                    T totalEdgeGrad = NumOps.Add(edgeGrad, acycGrad);
-                    T sigDeriv = NumOps.Divide(NumOps.Multiply(pij, oneMinusP),
-                        NumOps.Add(tauT, NumOps.FromDouble(1e-10)));
-                    gradZ[i, j] = NumOps.Multiply(totalEdgeGrad, sigDeriv);
-                }
-
-            // Apply gradients. Z is clamped to [-4, 4]: during the early phase the
-            // acyclicity penalty pushes EVERY logit down roughly symmetrically
-            // (all 2-cycles violate the constraint), and an unclamped Z saturates
-            // so deep that sigmoid'(Z/tau) ≈ 0 freezes ALL edge gradients — the
-            // reconstruction term can then never pull the true edges back and the
-            // posterior collapses to the empty graph. Clamping keeps the gate
-            // responsive (standard logit clamping for Gumbel-sigmoid relaxations)
-            // while sigmoid(±4) ≈ 0.018/0.982 still saturates the edge decision.
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    Z[i, j] = NumOps.Subtract(Z[i, j], NumOps.Multiply(lr, gradZ[i, j]));
-                    double zClamped = Math.Max(-4.0, Math.Min(4.0, NumOps.ToDouble(Z[i, j])));
-                    Z[i, j] = NumOps.FromDouble(zClamped);
-                    mu[i, j] = NumOps.Subtract(mu[i, j], NumOps.Multiply(lr, gradMu[i, j]));
-                    logvar[i, j] = NumOps.Subtract(logvar[i, j],
-                        NumOps.Multiply(NumOps.FromDouble(_learningRate * 0.1), gradLogvar[i, j]));
-                }
+            T hValCurrent;
+            (Z, mu, logvar, hValCurrent) = VariationalStep(c, Z, mu, logvar, noise, offDiagonal, duals, tau, d);
 
             // Dual ascent once per OUTER round (every innerSteps gradient steps),
             // per the NOTEARS / BCD-Nets augmented-Lagrangian schedule:
             //   alpha <- alpha + rho * h
             //   rho   <- 10 * rho   only if h did not shrink to <= 0.25 * h_prev
             if ((iter + 1) % innerSteps == 0)
-            {
-                double hNow = NumOps.ToDouble(hValCurrent);
-
-                // Dual ascent only while the acyclicity constraint is genuinely
-                // violated. Once h ≈ 0 (the edge probabilities form a DAG) the
-                // multiplier must stop growing — alpha += rho·h is ~0 anyway, but
-                // skipping the rho-stall check prevents a needless rho escalation
-                // from numerical jitter around zero.
-                if (hNow > 1e-8)
-                {
-                    alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent));
-
-                    T rhoMaxT = NumOps.FromDouble(RhoMax);
-                    if (!double.IsPositiveInfinity(hPrev)
-                        && hNow > RhoIncreaseThreshold * hPrev)
-                    {
-                        T newRho = NumOps.Multiply(rho, NumOps.FromDouble(RhoMultiplier));
-                        rho = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
-                    }
-                }
-
-                hPrev = hNow;
-            }
+                duals = UpdateDuals(duals, hValCurrent);
         }
 
         // Final output: threshold edge probabilities and use posterior mean weights
-        var result = new Matrix<T>(d, d);
-        T edgeThreshold = NumOps.FromDouble(0.5);
-        T weightThreshold = NumOps.FromDouble(0.1);
+        var probability = ClampedSigmoid(Z, 0.1);
+        var keep = Engine.TensorMultiply(offDiagonal, Engine.TensorMultiply(
+            Engine.TensorGreaterThan(probability, NumOps.FromDouble(0.5)),
+            Engine.TensorGreaterThan(Engine.TensorAbs(mu), NumOps.FromDouble(0.1))));
+        return Engine.TensorWhere(keep, mu, Engine.TensorZerosLike(mu)).ToMatrix();
+    }
 
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
+    /// <summary>Augmented Lagrangian multipliers and the constraint value of the previous round.</summary>
+    private readonly struct BcdDuals
+    {
+        public BcdDuals(T alpha, T rho, double hPrev)
+        {
+            Alpha = alpha;
+            Rho = rho;
+            HPrev = hPrev;
+        }
+
+        public T Alpha { get; }
+        public T Rho { get; }
+        public double HPrev { get; }
+    }
+
+    /// <summary>
+    /// Initial logits, OLS weight means and log-variances. Off the diagonal: mu = cov[i,j]/cov[i,i]
+    /// (when cov[i,i] &gt; 1e-10), logvar = -4, Z = -1 except Z = +1 on the lower-residual
+    /// direction of each pair with an OLS slope above 0.2 in either direction.
+    /// </summary>
+    private (Tensor<T> Z, Tensor<T> Mu, Tensor<T> Logvar) InitializeVariationalParameters(
+        Tensor<T> c, Tensor<T> offDiagonal, int d)
+    {
+        var zeros = Engine.TensorZerosLike(c);
+        var ones = Engine.TensorOnesLike(c);
+        var shape = new[] { d, d };
+        var diagonal = Engine.TensorDiagonal(c);
+        var rowVariance = Engine.TensorBroadcastTo(diagonal.Reshape(new[] { d, 1 }), shape); // cov[i, i]
+        var columnVariance = Engine.TensorBroadcastTo(diagonal.Reshape(new[] { 1, d }), shape); // cov[j, j]
+        T eps = NumOps.FromDouble(1e-10);
+
+        var rowUsable = Engine.TensorGreaterThan(rowVariance, eps);
+        var mu = Engine.TensorWhere(Engine.TensorMultiply(offDiagonal, rowUsable),
+            Engine.TensorDivide(c, Engine.TensorWhere(rowUsable, rowVariance, ones)), zeros);
+        var logvar = Engine.TensorMultiplyScalar(offDiagonal, NumOps.FromDouble(-4));
+        var z = Engine.TensorNegate(offDiagonal);
+
+        // Pair (i, j), i < j, is skipped when either variance is below 1e-10 or both |OLS| slopes are <= 0.2.
+        var olsIJ = Engine.TensorAbs(Engine.TensorDivide(c, rowVariance));
+        var olsJI = Engine.TensorAbs(Engine.TensorDivide(c, columnVariance));
+        var weak = Engine.TensorMultiply(Engine.TensorLessEqual(olsIJ, Engine.TensorFullLike(c, NumOps.FromDouble(0.2))),
+            Engine.TensorLessEqual(olsJI, Engine.TensorFullLike(c, NumOps.FromDouble(0.2))));
+        var active = Engine.TensorMultiply(
+            Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(rowVariance, eps)),
+                Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(columnVariance, eps))),
+            Engine.ScalarMinusTensor(NumOps.One, weak));
+
+        // resJgivenI = vj - cij²/vi (i → j), resIgivenJ = vi - cij²/vj (j → i)
+        var cSquared = Engine.TensorMultiply(c, c);
+        var resJgivenI = Engine.TensorSubtract(columnVariance, Engine.TensorDivide(cSquared, rowVariance));
+        var resIgivenJ = Engine.TensorSubtract(rowVariance, Engine.TensorDivide(cSquared, columnVariance));
+        var forward = Engine.TensorLessEqual(resJgivenI, resIgivenJ);
+
+        var forwardOn = Engine.TensorTriu(Engine.TensorMultiply(active, forward), 1);
+        var reverseOn = Engine.TensorTranspose(Engine.TensorTriu(
+            Engine.TensorMultiply(active, Engine.ScalarMinusTensor(NumOps.One, forward)), 1));
+        z = Engine.TensorWhere(Engine.TensorAdd(forwardOn, reverseOn), ones, z);
+
+        return (z, mu, logvar);
+    }
+
+    /// <summary>
+    /// One variational gradient step on (Z, mu, logvar) with the given reparameterization noise
+    /// (uniform draws in [0, 1), off-diagonal), returning the updated parameters and the NOTEARS
+    /// acyclicity h(P) = tr(exp(P∘P)) - d of the edge probabilities used for the step.
+    /// </summary>
+    private (Tensor<T> Z, Tensor<T> Mu, Tensor<T> Logvar, T H) VariationalStep(
+        Tensor<T> c, Tensor<T> Z, Tensor<T> mu, Tensor<T> logvar, Tensor<T> uniform, Tensor<T> offDiagonal,
+        BcdDuals duals, double tau, int d)
+    {
+        var zeros = Engine.TensorZerosLike(Z);
+        T tauT = NumOps.FromDouble(tau);
+
+        // Edge probability via sigmoid; reparameterized weight sample w = mu + exp(logvar/2) * epsilon
+        var P = Engine.TensorMultiply(offDiagonal, ClampedSigmoid(Z, tau));
+        var stddev = Engine.TensorExp(Engine.TensorMultiplyScalar(logvar, NumOps.FromDouble(0.5)));
+        var epsilon = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(uniform, NumOps.FromDouble(2)), NumOps.FromDouble(-1));
+        var wSampleDrawn = Engine.TensorAdd(mu, Engine.TensorMultiply(stddev, epsilon));
+        var W = Engine.TensorWhere(offDiagonal, Engine.TensorMultiply(P, wSampleDrawn), zeros);
+
+        // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+        var expPSq = Tensor<T>.FromMatrix(MatrixExponentialTaylor(Engine.TensorMultiply(P, P).ToMatrix(), d));
+        T hValCurrent = NumOps.Subtract(Engine.TensorTrace(expPSq), NumOps.FromDouble(d));
+
+        // Reconstruction gradient: -cov[i,j] + sum_{k != j} W[k,j] cov[i,k] (W has a zero diagonal)
+        var reconGrad = Engine.TensorSubtract(Engine.TensorMatMul(c, W), c);
+
+        // Gradient w.r.t. mu: P[i,j] * reconGrad + KL term 0.01 * mu
+        var gradMu = Engine.TensorAdd(Engine.TensorMultiply(P, reconGrad),
+            Engine.TensorMultiplyScalar(mu, NumOps.FromDouble(0.01)));
+
+        // Gradient w.r.t. logvar through the KL term: 0.5 * (exp(logvar) - 1)
+        var gradLogvar = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorExp(logvar), NumOps.FromDouble(-1)), NumOps.FromDouble(0.5));
+
+        // Gradient w.r.t. Z through the edge probability
+        var pUsable = Engine.TensorGreaterThan(P, NumOps.FromDouble(1e-10));
+        var wSample = Engine.TensorWhere(pUsable,
+            Engine.TensorDivide(W, Engine.TensorWhere(pUsable, P, Engine.TensorOnesLike(P))), zeros);
+        var edgeGrad = Engine.TensorMultiply(reconGrad, wSample);
+
+        // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+        T augFactor = NumOps.Add(duals.Alpha, NumOps.Multiply(duals.Rho, hValCurrent));
+        var acycGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorTranspose(expPSq), Engine.TensorMultiplyScalar(P, NumOps.FromDouble(2))),
+            augFactor);
+
+        var sigDeriv = Engine.TensorDivideScalar(Engine.TensorMultiply(P, Engine.ScalarMinusTensor(NumOps.One, P)),
+            NumOps.Add(tauT, NumOps.FromDouble(1e-10)));
+        var gradZ = Engine.TensorMultiply(Engine.TensorAdd(edgeGrad, acycGrad), sigDeriv);
+
+        // Apply gradients off the diagonal. Z is clamped to [-4, 4]: during the early phase the
+        // acyclicity penalty pushes EVERY logit down roughly symmetrically
+        // (all 2-cycles violate the constraint), and an unclamped Z saturates
+        // so deep that sigmoid'(Z/tau) ≈ 0 freezes ALL edge gradients — the
+        // reconstruction term can then never pull the true edges back and the
+        // posterior collapses to the empty graph. Clamping keeps the gate
+        // responsive (standard logit clamping for Gumbel-sigmoid relaxations)
+        // while sigmoid(±4) ≈ 0.018/0.982 still saturates the edge decision.
+        T lr = NumOps.FromDouble(_learningRate);
+        var zStepped = Engine.TensorSubtract(Z, Engine.TensorMultiplyScalar(gradZ, lr));
+        var four = Engine.TensorFullLike(Z, NumOps.FromDouble(4.0));
+        var minusFour = Engine.TensorNegate(four);
+        zStepped = Engine.TensorWhere(Engine.TensorGreaterThan(zStepped, four), four, zStepped);
+        zStepped = Engine.TensorWhere(Engine.TensorLessThan(zStepped, minusFour), minusFour, zStepped);
+
+        var newZ = Engine.TensorWhere(offDiagonal, zStepped, Z);
+        var newMu = Engine.TensorWhere(offDiagonal,
+            Engine.TensorSubtract(mu, Engine.TensorMultiplyScalar(gradMu, lr)), mu);
+        var newLogvar = Engine.TensorWhere(offDiagonal,
+            Engine.TensorSubtract(logvar, Engine.TensorMultiplyScalar(gradLogvar, NumOps.FromDouble(_learningRate * 0.1))),
+            logvar);
+
+        return (newZ, newMu, newLogvar, hValCurrent);
+    }
+
+    /// <summary>
+    /// Dual ascent for one outer round: only while the acyclicity constraint is genuinely
+    /// violated (h &gt; 1e-8), alpha += rho·h and rho is multiplied by 10 (capped at RhoMax)
+    /// when h did not shrink to at most 0.25 of the previous round's value.
+    /// </summary>
+    private BcdDuals UpdateDuals(BcdDuals duals, T hValCurrent)
+    {
+        double hNow = NumOps.ToDouble(hValCurrent);
+        T alpha = duals.Alpha;
+        T rho = duals.Rho;
+
+        // Once h ≈ 0 (the edge probabilities form a DAG) the multiplier must stop
+        // growing — alpha += rho·h is ~0 anyway, but skipping the rho-stall check
+        // prevents a needless rho escalation from numerical jitter around zero.
+        if (hNow > 1e-8)
+        {
+            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent));
+
+            T rhoMaxT = NumOps.FromDouble(RhoMax);
+            if (!double.IsPositiveInfinity(duals.HPrev)
+                && hNow > RhoIncreaseThreshold * duals.HPrev)
             {
-                if (i == j) continue;
-                double sv = NumOps.ToDouble(Z[i, j]) / 0.1;
-                double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                T prob = NumOps.FromDouble(sigVal);
-
-                if (NumOps.GreaterThan(prob, edgeThreshold))
-                {
-                    T weight = mu[i, j];
-                    if (NumOps.GreaterThan(NumOps.Abs(weight), weightThreshold))
-                        result[i, j] = weight;
-                }
+                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(RhoMultiplier));
+                rho = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
             }
+        }
 
-        return result;
+        return new BcdDuals(alpha, rho, hNow);
     }
 
 }

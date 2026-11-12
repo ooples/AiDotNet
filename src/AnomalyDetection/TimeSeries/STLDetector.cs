@@ -120,11 +120,7 @@ public partial class STLDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            values[i] = NumOps.ToDouble(X[i, 0]);
-        }
+        var values = Engine.Reshape(AnomalyTensorOps.ToTensor(X), new[] { n });
 
         // Perform STL decomposition
         DecomposeSTL(values);
@@ -136,105 +132,83 @@ public partial class STLDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private void DecomposeSTL(double[] values)
+    private void DecomposeSTL(Tensor<T> values)
     {
+        var engine = Engine;
         int n = values.Length;
+        int seasonLength = _seasonLength;
+
+        // Season position i % seasonLength of every point and the number of points at each position
+        var position = new int[n];
+        var positionCount = new int[seasonLength];
+        for (int i = 0; i < n; i++)
+        {
+            position[i] = i % seasonLength;
+            positionCount[position[i]]++;
+        }
+
+        var positions = Tensor<int>.FromVector(Vector<int>.Wrap(position), new[] { n });
+        var counts = Tensor<int>.FromVector(Vector<int>.Wrap(positionCount), new[] { seasonLength }).Cast<T>();
 
         // Initialize
-        var trendLocal = new double[n];
-        var seasonalLocal = new double[n];
+        var trend = Tensor<T>.CreateZeros(new[] { n });
+        var seasonal = Tensor<T>.CreateZeros(new[] { n });
 
         // Iterative STL (simplified)
         for (int iter = 0; iter < 3; iter++)
         {
             // Step 1: Detrend
-            var detrended = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                detrended[i] = values[i] - trendLocal[i];
-            }
+            var detrended = engine.TensorSubtract(values, trend);
 
-            // Step 2: Extract seasonal using subseries
-            var seasonalTemp = new double[n];
-            for (int s = 0; s < _seasonLength; s++)
-            {
-                // Extract subseries for this season position
-                var subseries = new List<double>();
-                for (int i = s; i < n; i += _seasonLength)
-                {
-                    subseries.Add(detrended[i]);
-                }
-
-                // Smooth subseries (simple average for now)
-                double subMean = subseries.Average();
-
-                // Assign to seasonal
-                for (int i = s; i < n; i += _seasonLength)
-                {
-                    seasonalTemp[i] = subMean;
-                }
-            }
+            // Step 2: Extract seasonal using subseries: the mean of every season position's subseries
+            // (simple average for now), assigned back to its points
+            var subMeans = engine.TensorDivide(engine.ScatterAdd(detrended, positions, 0, seasonLength), counts);
+            var seasonalTemp = engine.TensorGather(subMeans, positions, 0);
 
             // Normalize seasonal (mean = 0)
-            double seasonalMean = seasonalTemp.Average();
-            var seasonalD = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                seasonalD[i] = seasonalTemp[i] - seasonalMean;
-            }
+            seasonal = engine.TensorSubtractScalar(seasonalTemp, engine.TensorMean(seasonalTemp));
 
             // Step 3: Deseasonalize
-            var deseasoned = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                deseasoned[i] = values[i] - seasonalD[i];
-            }
+            var deseasoned = engine.TensorSubtract(values, seasonal);
 
-            // Step 4: Smooth to get trend (moving average)
-            var trendD = SmoothMovingAverage(deseasoned, _trendSmoothness);
-
-            // Feed updated decomposition into next iteration
-            trendLocal = trendD;
-            seasonalLocal = seasonalD;
-
-            _trend = new Vector<T>(trendD.Select(v => NumOps.FromDouble(v)));
-            _seasonal = new Vector<T>(seasonalD.Select(v => NumOps.FromDouble(v)));
+            // Step 4: Smooth to get trend (moving average); fed into the next iteration
+            trend = SmoothMovingAverage(deseasoned, _trendSmoothness);
         }
 
-        // Compute residual standard deviation
-        var trendVec = _trend ?? throw new InvalidOperationException("Trend not computed.");
-        var seasonalVec = _seasonal ?? throw new InvalidOperationException("Seasonal not computed.");
-        var residuals = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            residuals[i] = values[i] - NumOps.ToDouble(trendVec[i]) - NumOps.ToDouble(seasonalVec[i]);
-        }
+        _trend = trend.ToVector();
+        _seasonal = seasonal.ToVector();
 
-        double residualStdD = Math.Sqrt(residuals.Select(r => r * r).Average());
-        if (residualStdD < 1e-10) residualStdD = 1e-10;
-        _residualStd = NumOps.FromDouble(residualStdD);
+        // Compute residual standard deviation sqrt(mean(residual^2)), floored at 1e-10
+        var residuals = engine.TensorSubtract(engine.TensorSubtract(values, trend), seasonal);
+        T residualStd = NumOps.Sqrt(engine.TensorMean(engine.TensorSquare(residuals)));
+        T floor = NumOps.FromDouble(1e-10);
+        _residualStd = NumOps.LessThan(residualStd, floor) ? floor : residualStd;
     }
 
-    private double[] SmoothMovingAverage(double[] values, int windowSize)
+    // Centered moving average over [i - windowSize / 2, i + windowSize / 2], truncated at the ends.
+    private Tensor<T> SmoothMovingAverage(Tensor<T> values, int windowSize)
     {
+        var engine = Engine;
         int n = values.Length;
-        var smoothed = new double[n];
         int halfWindow = windowSize / 2;
 
+        var windowCount = new int[n];
         for (int i = 0; i < n; i++)
         {
-            int start = Math.Max(0, i - halfWindow);
-            int end = Math.Min(n, i + halfWindow + 1);
-            double sum = 0;
-            for (int j = start; j < end; j++)
-            {
-                sum += values[j];
-            }
-            smoothed[i] = sum / (end - start);
+            windowCount[i] = Math.Min(n, i + halfWindow + 1) - Math.Max(0, i - halfWindow);
         }
 
-        return smoothed;
+        var padded = values;
+        if (halfWindow > 0)
+        {
+            var padding = Tensor<T>.CreateZeros(new[] { halfWindow });
+            padded = engine.TensorConcatenate(new[] { padding, values, padding }, 0);
+        }
+
+        var sums = engine.ReduceSum(engine.TensorUnfold(padded, 0, 2 * halfWindow + 1, 1), new[] { 1 }, false);
+        return engine.TensorDivide(sums, Tensor<int>.FromVector(Vector<int>.Wrap(windowCount), new[] { n }).Cast<T>());
     }
+
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
@@ -262,22 +236,21 @@ public partial class STLDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
+        // Use modular indexing for seasonal if test data is longer
+        int m = X.Rows;
+        var trendIndex = new int[m];
+        var seasonIndex = new int[m];
+        for (int i = 0; i < m; i++)
         {
-            double value = NumOps.ToDouble(X[i, 0]);
-
-            // Use modular indexing for seasonal if test data is longer
-            int trendIdx = Math.Min(i, trend.Length - 1);
-            int seasonIdx = i % _seasonLength;
-
-            double residual = value - NumOps.ToDouble(trend[trendIdx]) - NumOps.ToDouble(seasonal[seasonIdx]);
-            double score = Math.Abs(residual) / NumOps.ToDouble(_residualStd);
-
-            scores[i] = NumOps.FromDouble(score);
+            trendIndex[i] = Math.Min(i, trend.Length - 1);
+            seasonIndex[i] = i % _seasonLength;
         }
 
-        return scores;
+        var engine = Engine;
+        var values = engine.Reshape(AnomalyTensorOps.ToTensor(X), new[] { m });
+        var residual = engine.TensorSubtract(
+            engine.TensorSubtract(values, engine.TensorGather(trend.AsTensor(), Tensor<int>.FromVector(Vector<int>.Wrap(trendIndex), new[] { m }), 0)),
+            engine.TensorGather(seasonal.AsTensor(), Tensor<int>.FromVector(Vector<int>.Wrap(seasonIndex), new[] { m }), 0));
+        return engine.TensorDivideScalar(engine.TensorAbs(residual), _residualStd).ToVector();
     }
 }
