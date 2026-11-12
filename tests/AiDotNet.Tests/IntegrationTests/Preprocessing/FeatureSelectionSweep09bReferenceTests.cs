@@ -23,9 +23,12 @@ using L1 = AiDotNet.Preprocessing.FeatureSelection.Sparsity.L1RegularizationSele
 using MaximalInformation = AiDotNet.Preprocessing.FeatureSelection.Unsupervised.MaximalInformation<double>;
 using MinimalRedundancy = AiDotNet.Preprocessing.FeatureSelection.Unsupervised.MinimalRedundancy<double>;
 using OnlineSelector = AiDotNet.Preprocessing.FeatureSelection.Streaming.OnlineFeatureSelector<double>;
+using RandomizedLasso = AiDotNet.Preprocessing.FeatureSelection.Stability.RandomizedLassoSelector<double>;
 using RFE = AiDotNet.Preprocessing.FeatureSelection.Wrapper.RFE<double>;
 using RFECV = AiDotNet.Preprocessing.FeatureSelection.Wrapper.RFECV<double>;
 using RFEImportanceMethod = AiDotNet.Preprocessing.FeatureSelection.Wrapper.RFEImportanceMethod;
+using SparseGroupLasso = AiDotNet.Preprocessing.FeatureSelection.Sparse.SparseGroupLasso<double>;
+using SparseGroupLassoSelector = AiDotNet.Preprocessing.FeatureSelection.Sparse.SparseGroupLassoSelector<double>;
 using StatisticalTTest = AiDotNet.Preprocessing.FeatureSelection.Statistical.TTestSelector<double>;
 using SupervisedTTest = AiDotNet.Preprocessing.FeatureSelection.Supervised.TTestSelector<double>;
 using Wavelet = AiDotNet.Preprocessing.FeatureSelection.Wavelet.WaveletCoefficientSelector<double>;
@@ -460,5 +463,43 @@ public class FeatureSelectionSweep09bReferenceTests
 
         Assert.NotNull(selector.CVScores);
         Assert.Equal(1.0, selector.CVScores[0], Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SparseGroupLasso_AllL1_IsTheLasso()
+    {
+        // l1Ratio = 1 leaves only the lasso term: Lasso(alpha=0.2).fit(Xs, y).coef_ (population std)
+        //   -> [1.1581360571760964, 0, 0, 0.49355907583947295]
+        var selector = new SparseGroupLasso(nFeaturesToSelect: 2, alpha: 0.2, l1Ratio: 1.0, maxIterations: 100000,
+            tolerance: 1e-10);
+        selector.Fit(RegressionData(), RegressionTarget());
+
+        AssertValues(new[] { 1.1581360571760964, 0.0, 0.0, 0.49355907583947295 }, selector.Coefficients, SolverTolerance);
+        Assert.Equal(new[] { 0, 3 }, selector.SelectedIndices);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SparseGroupLassoSelector_NoGroupWeight_IsTheLasso()
+    {
+        // groupRatio = 0 leaves only the lasso term on X scaled by its sample std + 1e-10:
+        // Lasso(alpha=0.2).fit(Xs, y).coef_ -> [1.2288176623268445, 0, 0, 0.518354984760389]
+        var selector = new SparseGroupLassoSelector(nFeaturesToSelect: 2, alpha: 0.2, groupRatio: 0.0);
+        selector.Fit(RegressionData(), RegressionTarget());
+
+        AssertValues(new[] { 1.2288176623268445, 0.0, 0.0, 0.518354984760389 }, selector.Coefficients, SolverTolerance);
+        Assert.Equal(new[] { 0, 3 }, selector.SelectedIndices);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedLasso_DominantFeature_IsAlwaysSelected()
+    {
+        // Meinshausen and Buhlmann (2010): the reweighted lasso keeps the dominant feature 0 (lasso coefficient 1.16
+        // on the standardized data) in every subsample, so its selection probability is 1
+        var selector = new RandomizedLasso(nFeaturesToSelect: 1, nIterations: 30, alpha: 0.01);
+        selector.Fit(RegressionData(), RegressionTarget());
+
+        Assert.NotNull(selector.SelectionProbabilities);
+        Assert.Equal(1.0, selector.SelectionProbabilities[0], Tolerance);
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
     }
 }
