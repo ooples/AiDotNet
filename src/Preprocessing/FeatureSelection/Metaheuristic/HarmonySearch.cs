@@ -112,6 +112,7 @@ public class HarmonySearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var memorySource = new int[p];
         var adjustSource = new int[p];
         var memoryRows = new int[p];
+        var unused = new Tensor<T>(new[] { 1 });
 
         // Main loop
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -119,13 +120,13 @@ public class HarmonySearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             // Improvise a new harmony. The draws per dimension are conditional (memory consideration, then a memory
             // row and a pitch-adjustment test with its bandwidth draw, or else a fresh random value), so they are
             // taken one by one in Geem's order; every value derived from them is computed below on whole tensors.
-            var drawn = new Vector<T>(p);
+            var drawn = new Tensor<T>[p];
             for (int j = 0; j < p; j++)
             {
-                double value = 0;
                 memorySource[j] = 0;
                 adjustSource[j] = 0;
                 memoryRows[j] = 0;
+                drawn[j] = unused;
                 if (random.NextDouble() < _hmcr)
                 {
                     memorySource[j] = 1;
@@ -133,18 +134,16 @@ public class HarmonySearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
                     if (random.NextDouble() < _par)
                     {
                         adjustSource[j] = 1;
-                        value = random.NextDouble();
+                        drawn[j] = PopulationSearchOps.Uniform<T>(random, 1);
                     }
                 }
                 else
                 {
-                    value = random.NextDouble();
+                    drawn[j] = PopulationSearchOps.Uniform<T>(random, 1);
                 }
-
-                drawn[j] = NumOps.FromDouble(value);
             }
 
-            var draws = Tensor<T>.FromVector(drawn);
+            var draws = engine.TensorConcatenate(drawn, 0);
             var fromMemory = new Tensor<int>((int[])memorySource.Clone(), new[] { p }).Cast<T>();
             var adjusted = new Tensor<int>((int[])adjustSource.Clone(), new[] { p }).Cast<T>();
 
