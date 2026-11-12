@@ -182,4 +182,88 @@ internal static class AudioEngineOps
         (n == flat.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { n })).CopyTo(result.AsSpan());
         return result;
     }
+
+    /// <summary>Truncates or zero-pads a rank-1 tensor to exactly <paramref name="length"/> elements.</summary>
+    internal static Tensor<T> FitLength<T>(IEngine engine, Tensor<T> x, int length)
+    {
+        var flat = Flatten(engine, x);
+        if (flat.Length == length) return flat;
+        if (flat.Length > length) return engine.TensorSlice(flat, new[] { 0 }, new[] { length });
+        if (flat.Length == 0) return new Tensor<T>(new[] { length });
+        return engine.Concat(new[] { flat, new Tensor<T>(new[] { length - flat.Length }) }, 0);
+    }
+
+    /// <summary>
+    /// Magnitude and phase (<c>atan2(im, re)</c>) of the first <c>fftSize / 2 + 1</c> bins of the
+    /// complex FFT of <paramref name="frame"/>, truncated or zero-padded to <paramref name="fftSize"/>
+    /// samples (a power of two).
+    /// </summary>
+    internal static (Tensor<T> Magnitude, Tensor<T> Phase) HalfSpectrum<T>(IEngine engine, Tensor<T> frame, int fftSize)
+    {
+        var spectrum = engine.NativeComplexFFT(FitLength(engine, frame, fftSize));
+        var magnitude = engine.NativeMagnitudeAndPhase(spectrum, out var phase);
+        int bins = fftSize / 2 + 1;
+        return (engine.TensorSlice(magnitude, new[] { 0 }, new[] { bins }), engine.TensorSlice(phase, new[] { 0 }, new[] { bins }));
+    }
+
+    /// <summary>
+    /// Real part of the inverse FFT (1/N normalised) of the length-<paramref name="fftSize"/> spectrum
+    /// whose bins <c>k &lt; m</c> are <c>polar(magnitude[k], phase[k])</c> and whose bins
+    /// <c>fftSize - k</c> for <c>1 &lt;= k &lt;= m - 2</c> are their conjugates (m = magnitude length).
+    /// </summary>
+    internal static Tensor<T> InverseHalfSpectrum<T>(IEngine engine, Tensor<T> magnitude, Tensor<T> phase, int fftSize)
+    {
+        var mag = Flatten(engine, magnitude);
+        var ph = Flatten(engine, phase);
+        int m = mag.Length;
+        int mirrored = Math.Max(0, m - 2);
+        int gap = fftSize - m - mirrored;
+        var magParts = new List<Tensor<T>> { mag };
+        var phaseParts = new List<Tensor<T>> { ph };
+        if (gap > 0)
+        {
+            magParts.Add(new Tensor<T>(new[] { gap }));
+            phaseParts.Add(new Tensor<T>(new[] { gap }));
+        }
+        if (mirrored > 0)
+        {
+            // Conjugate symmetry X[N - k] = conj(X[k]): same magnitude, negated phase, reversed order.
+            magParts.Add(engine.TensorFlip(engine.TensorSlice(mag, new[] { 1 }, new[] { mirrored }), new[] { 0 }));
+            phaseParts.Add(engine.TensorNegate(engine.TensorFlip(engine.TensorSlice(ph, new[] { 1 }, new[] { mirrored }), new[] { 0 })));
+        }
+        var fullMag = magParts.Count == 1 ? mag : engine.Concat(magParts, 0);
+        var fullPhase = phaseParts.Count == 1 ? ph : engine.Concat(phaseParts, 0);
+        return engine.NativeComplexIFFTReal(engine.NativeComplexFromPolar(fullMag, fullPhase));
+    }
+
+    /// <summary>
+    /// Overlap-adds rank-1 frames into a signal of <paramref name="length"/> samples: frame f lands at
+    /// <c>starts[f]</c>, and samples falling at or past the end are dropped. One scatter-add.
+    /// </summary>
+    internal static Tensor<T> OverlapAdd<T>(IEngine engine, IReadOnlyList<Tensor<T>> frames, IReadOnlyList<int> starts, int length)
+    {
+        var values = new List<Tensor<T>>(frames.Count);
+        var positions = new List<Tensor<int>>(frames.Count);
+        for (int f = 0; f < frames.Count; f++)
+        {
+            var frame = Flatten(engine, frames[f]);
+            int keep = Math.Min(frame.Length, length - starts[f]);
+            if (keep <= 0) continue;
+            values.Add(keep == frame.Length ? frame : engine.TensorSlice(frame, new[] { 0 }, new[] { keep }));
+            positions.Add(engine.TensorArange<int>(starts[f], starts[f] + keep));
+        }
+        if (values.Count == 0) return new Tensor<T>(new[] { length });
+        return engine.ScatterAdd(engine.Concat(values, 0), engine.Concat(positions, 0), 0, length);
+    }
+
+    /// <summary>
+    /// The symmetric Hann window <c>0.5 * (1 - cos(2 pi i / (size - 1)))</c>; a one-sample window
+    /// evaluates 0/0 like the closed form and is NaN.
+    /// </summary>
+    internal static Tensor<T> SymmetricHannWindow<T>(IEngine engine, int size)
+    {
+        if (size == 1) return Tensor<T>.CreateDefault(new[] { 1 }, MathHelper.GetNumericOperations<T>().FromDouble(double.NaN));
+        if (size <= 0) return new Tensor<T>(new[] { Math.Max(size, 0) });
+        return engine.TensorHannWindow<T>(size, periodic: false);
+    }
 }
