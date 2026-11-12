@@ -803,41 +803,22 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
             int seqLen = input.Shape[1];
             int features = input.Shape[2];
 
-            _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
-            _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
-
-            var normalized = new Tensor<T>(input._shape);
             T epsilon = NumOps.FromDouble(1e-5);
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        sum = NumOps.Add(sum, input[b, t, f]);
-                    }
-                    T mean = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-                    _instanceMean[b, 0, f] = mean;
+            // Per (batch, feature) statistics over time: mean, then sqrt(population variance + eps).
+            T count = NumOps.FromDouble(seqLen);
+            var shape = new[] { batchSize, seqLen, features };
+            var x = Engine.Reshape(input.Contiguous(), shape);
+            var mean = Engine.TensorDivideScalar(Engine.ReduceSum(x, new[] { 1 }, true), count);
+            var centered = Engine.TensorSubtract(x, Engine.TensorBroadcastTo(mean, shape));
+            var variance = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 1 }, true), count);
+            var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, epsilon));
+            _instanceMean = mean;
+            _instanceStd = std;
 
-                    T varSum = NumOps.Zero;
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        var diff = NumOps.Subtract(input[b, t, f], mean);
-                        varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-                    }
-                    T std = NumOps.Sqrt(NumOps.Add(NumOps.Divide(varSum, NumOps.FromDouble(seqLen)), epsilon));
-                    _instanceStd[b, 0, f] = std;
-
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        normalized[b, t, f] = NumOps.Divide(NumOps.Subtract(input[b, t, f], mean), std);
-                    }
-                }
-            }
-
-            return normalized;
+            return Engine.Reshape(Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape)), input._shape);
         }
         else
         {
