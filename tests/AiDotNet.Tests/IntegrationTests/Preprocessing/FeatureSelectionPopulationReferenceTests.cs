@@ -305,4 +305,51 @@ public class FeatureSelectionPopulationReferenceTests
         for (int k = 0; k < 8; k++)
             Assert.Equal(expected[k], moved[k], Tolerance);
     }
+
+    // ---------------------------------------------------------------- Firefly Algorithm (Yang 2009)
+
+    [Fact]
+    public void FireflyAlgorithm_Attract_MatchesMovementEquation()
+    {
+        double alpha = 0.2, beta0 = 1.0, gamma = 2.0;
+        double[] xi = { 0.2, 0.5 }, xj = { 0.6, 0.1 }, u = { 0.3, 0.8 };
+        var moved = ToArray(FireflyAlgorithm<double>.Attract(Tensor1D(xi), Tensor1D(xj), Tensor1D(u), alpha, beta0, gamma));
+
+        double r2 = (xi[0] - xj[0]) * (xi[0] - xj[0]) + (xi[1] - xj[1]) * (xi[1] - xj[1]);
+        double beta = beta0 * System.Math.Exp(-gamma * r2);
+        for (int k = 0; k < 2; k++)
+        {
+            double expected = xi[k] + beta * (xj[k] - xi[k]) + alpha * (u[k] - 0.5);
+            Assert.Equal(System.Math.Max(0, System.Math.Min(1, expected)), moved[k], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void FireflyAlgorithm_BrightestFireflyMovesRandomly()
+    {
+        var fireflies = Tensor2D(new[,] { { 0.6, 0.7 }, { 0.1, 0.2 } });
+        System.Func<Tensor<double>, Tensor<double>> evaluate = rows =>
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.ReduceSum(rows, new[] { 1 }, false);
+        var intensity = evaluate(fireflies);
+        double alpha = 0.3, beta0 = 1.0, gamma = 1.0;
+        FireflyAlgorithm<double>.Generation(ref fireflies, ref intensity, evaluate, new System.Random(7), alpha, beta0, gamma);
+
+        // Same draws in the same order: firefly 0 has no brighter one and walks randomly, then firefly 1 moves
+        // towards the walked firefly 0 (its intensity is updated before firefly 1 compares against it)
+        var rng = new System.Random(7);
+        double[] x0 = { 0.6, 0.7 }, x1 = { 0.1, 0.2 };
+        for (int k = 0; k < 2; k++)
+            x0[k] = System.Math.Max(0, System.Math.Min(1, x0[k] + alpha * (rng.NextDouble() - 0.5)));
+        double r2 = (x0[0] - x1[0]) * (x0[0] - x1[0]) + (x0[1] - x1[1]) * (x0[1] - x1[1]);
+        double beta = beta0 * System.Math.Exp(-gamma * r2);
+        var moved1 = new double[2];
+        for (int k = 0; k < 2; k++)
+            moved1[k] = System.Math.Max(0, System.Math.Min(1, x1[k] + beta * (x0[k] - x1[k]) + alpha * (rng.NextDouble() - 0.5)));
+
+        var result = ToArray(fireflies);
+        Assert.Equal(x0[0], result[0], Tolerance);
+        Assert.Equal(x0[1], result[1], Tolerance);
+        Assert.Equal(moved1[0], result[2], Tolerance);
+        Assert.Equal(moved1[1], result[3], Tolerance);
+    }
 }
