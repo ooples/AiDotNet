@@ -21,7 +21,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 using System;
 using System.Threading.Tasks;
 
-namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
+using AiDotNet.Tests.Helpers;
+
+
 
 /// <summary>
 /// Tests interface contract compliance, model metadata, parameter counts,
@@ -430,7 +432,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAN_OpenVocabInterface_SegmentWithText()
     {
-        var model = new SAN<float>(Arch(), options: new SANOptions { NumClasses = 5 });
+        var model = new SAN<float>(Arch(), new DeterministicTextEncoder<float>(), options: new SANOptions { NumClasses = 5 });
         var ov = (IOpenVocabSegmentation<float>)model;
         var result = ov.SegmentWithText(Rand(1, 3, 32, 32), new[] { "car", "person" });
         Assert.NotNull(result);
@@ -439,7 +441,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task CATSeg_OpenVocabInterface_SegmentWithText()
     {
-        var model = new CATSeg<float>(Arch(), options: new CATSegOptions { NumClasses = 5 });
+        var model = new CATSeg<float>(Arch(), new DeterministicTextEncoder<float>(), options: new CATSegOptions { NumClasses = 5 });
         var ov = (IOpenVocabSegmentation<float>)model;
         var result = ov.SegmentWithText(Rand(1, 3, 32, 32), new[] { "car" });
         Assert.NotNull(result);
@@ -448,7 +450,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SED_OpenVocabInterface_SegmentWithText()
     {
-        var model = new SED<float>(Arch(), options: new SEDOptions { NumClasses = 5 });
+        var model = new SED<float>(Arch(), new DeterministicTextEncoder<float>(), options: new SEDOptions { NumClasses = 5 });
         var ov = (IOpenVocabSegmentation<float>)model;
         var result = ov.SegmentWithText(Rand(1, 3, 32, 32), new[] { "car" });
         Assert.NotNull(result);
@@ -461,7 +463,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task LISA_ReferringInterface_SegmentFromExpression()
     {
-        var model = new LISA<float>(Arch(), options: new LISAOptions { NumClasses = 5 });
+        var model = new LISA<float>(Arch(), new DeterministicTextEncoder<float>(), options: new LISAOptions { NumClasses = 5 });
         var referring = (IReferringSegmentation<float>)model;
         var result = referring.SegmentFromExpression(Rand(1, 3, 32, 32), "the red car on the left");
         Assert.NotNull(result);
@@ -470,7 +472,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task VideoLISA_ReferringInterface_SegmentFromExpression()
     {
-        var model = new VideoLISA<float>(Arch(), options: new VideoLISAOptions { NumClasses = 5 });
+        var model = new VideoLISA<float>(Arch(), new DeterministicTextEncoder<float>(), options: new VideoLISAOptions { NumClasses = 5 });
         var referring = (IReferringSegmentation<float>)model;
         var result = referring.SegmentFromExpression(Rand(1, 3, 32, 32), "the person walking");
         Assert.NotNull(result);
@@ -479,7 +481,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task PixelLM_ReferringInterface_SegmentFromExpression()
     {
-        var model = new PixelLM<float>(Arch(), options: new PixelLMOptions { NumClasses = 5 });
+        var model = new PixelLM<float>(Arch(), new DeterministicTextEncoder<float>(), options: new PixelLMOptions { NumClasses = 5 });
         var referring = (IReferringSegmentation<float>)model;
         var result = referring.SegmentFromExpression(Rand(1, 3, 32, 32), "the building");
         Assert.NotNull(result);

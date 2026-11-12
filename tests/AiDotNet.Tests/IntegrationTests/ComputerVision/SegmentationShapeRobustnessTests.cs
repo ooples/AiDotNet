@@ -20,7 +20,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 using System;
 using System.Threading.Tasks;
 
-namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
+using AiDotNet.Tests.Helpers;
+
+
 
 /// <summary>
 /// Tests tensor shape robustness across all segmentation models.
@@ -399,7 +401,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void SAN_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SAN<float>(Arch(), options: new SANOptions { NumClasses = 5 });
+        var model = new SAN<float>(Arch(), new DeterministicTextEncoder<float>(), options: new SANOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -410,7 +412,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void LISA_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new LISA<float>(Arch(), options: new LISAOptions { NumClasses = 5 });
+        var model = new LISA<float>(Arch(), new DeterministicTextEncoder<float>(), options: new LISAOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
