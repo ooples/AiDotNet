@@ -160,7 +160,9 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             var values = Engine.TensorSort(PreprocessingTensorOps.Column(data, col)).Item1;
 
             // Create knots based on strategy
-            _knots[col] = CreateKnots(values);
+            // Fitted state: copy the engine result out of any tensor arena that would hand its buffer out again
+            var knots = CreateKnots(values);
+            _knots[col] = new Tensor<T>(knots.Shape.ToArray(), knots.ToVector());
             numOutputCols += _nSplineFeatures;
         }
 
@@ -192,17 +194,29 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
         else // Quantile
         {
-            // Knots at quantile positions, linearly interpolated between the neighbouring order statistics
-            var percentile = engine.TensorDivideScalar(
-                engine.TensorMultiplyScalar(positions, NumOps.FromDouble(100.0)), NumOps.FromDouble(_nKnots + 1));
-            var index = engine.TensorMultiplyScalar(
-                engine.TensorDivideScalar(percentile, NumOps.FromDouble(100.0)), NumOps.FromDouble(count - 1));
-            var lower = engine.TensorFloor(index);
-            var fraction = engine.TensorSubtract(index, lower);
-            var lowerValues = engine.TensorIndexSelect(sortedValues, lower.Cast<int>(), 0);
-            var upperValues = engine.TensorIndexSelect(sortedValues, engine.TensorCeiling(index).Cast<int>(), 0);
-            internalKnots = engine.TensorAdd(lowerValues,
-                engine.TensorMultiply(fraction, engine.TensorSubtract(upperValues, lowerValues)));
+            // Knots at quantile positions, linearly interpolated between the neighbouring order statistics.
+            // The positions are row indices, so they are computed as integers and doubles (not in T, where Half
+            // cannot represent indices past 2048), and an exact position takes its order statistic unchanged.
+            var lowerIndex = new int[_nKnots];
+            var upperIndex = new int[_nKnots];
+            var fractions = new T[_nKnots];
+            var exact = new bool[_nKnots];
+            for (int i = 0; i < _nKnots; i++)
+            {
+                double percentile = (i + 1) * 100.0 / (_nKnots + 1);
+                double index = percentile / 100.0 * (count - 1);
+                lowerIndex[i] = (int)Math.Floor(index);
+                upperIndex[i] = (int)Math.Ceiling(index);
+                fractions[i] = NumOps.FromDouble(index - lowerIndex[i]);
+                exact[i] = lowerIndex[i] == upperIndex[i];
+            }
+
+            var knotShape = new[] { _nKnots };
+            var lowerValues = engine.TensorIndexSelect(sortedValues, new Tensor<int>(lowerIndex, knotShape), 0);
+            var upperValues = engine.TensorIndexSelect(sortedValues, new Tensor<int>(upperIndex, knotShape), 0);
+            var interpolated = engine.TensorAdd(lowerValues, engine.TensorMultiply(
+                new Tensor<T>(fractions, knotShape), engine.TensorSubtract(upperValues, lowerValues)));
+            internalKnots = engine.TensorWhere(exact, lowerValues, interpolated);
         }
 
         // Create full knot vector with boundary knots
