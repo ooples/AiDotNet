@@ -303,13 +303,15 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         // Get best prediction
         var (predictedGenre, confidence) = GetPrediction(probabilities);
 
-        // Build result
-        var allGenres = probabilities
-            .OrderByDescending(p => NumOps.ToDouble(p.Value))
-            .Select((p, index) => new GenrePrediction<T>
+        // Build result (descending probability, ties in label order)
+        var entries = probabilities.ToList();
+        var allGenres = (entries.Count == 0
+                ? Array.Empty<int>()
+                : AudioEngineOps.StableDescendingOrder(Engine, new Tensor<T>(entries.Select(p => p.Value).ToArray(), [entries.Count])))
+            .Select((i, index) => new GenrePrediction<T>
             {
-                Genre = p.Key,
-                Probability = p.Value,
+                Genre = entries[i].Key,
+                Probability = entries[i].Value,
                 Rank = index + 1
             })
             .ToList();
@@ -393,14 +395,14 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         int samplesPerSegment = (int)(segmentDuration * _options.SampleRate);
         var segments = new List<GenreSegment<T>>();
         var genreCounts = new Dictionary<string, double>();
+        var genreIndex = new Dictionary<string, int>();
+        var segmentGenre = new List<int>();
+        var segmentConfidence = new List<T>();
+        var flatAudio = AudioEngineOps.Flatten(Engine, audio);
 
         for (int start = 0; start + samplesPerSegment <= audio.Length; start += samplesPerSegment)
         {
-            var segment = new Tensor<T>([samplesPerSegment]);
-            for (int i = 0; i < samplesPerSegment; i++)
-            {
-                segment[i] = audio[start + i];
-            }
+            var segment = Engine.TensorSlice(flatAudio, [start], [samplesPerSegment]);
 
             var result = Classify(segment);
             double startTime = (double)start / _options.SampleRate;
@@ -414,11 +416,27 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
                 Confidence = result.Confidence
             });
 
-            if (!genreCounts.ContainsKey(result.PredictedGenre))
+            if (!genreIndex.TryGetValue(result.PredictedGenre, out int g))
             {
-                genreCounts[result.PredictedGenre] = 0;
+                g = genreIndex.Count;
+                genreIndex[result.PredictedGenre] = g;
             }
-            genreCounts[result.PredictedGenre] += NumOps.ToDouble(result.Confidence);
+            segmentGenre.Add(g);
+            segmentConfidence.Add(result.Confidence);
+        }
+
+        // Confidence-weighted vote per genre: one scatter-add over all segments.
+        if (segmentConfidence.Count > 0)
+        {
+            double[] totals = Engine.ScatterAdd(
+                new Tensor<T>(segmentConfidence.ToArray(), [segmentConfidence.Count]),
+                new Tensor<int>(segmentGenre.ToArray(), [segmentGenre.Count]),
+                0,
+                genreIndex.Count).Cast<double>().ToArray();
+            foreach (var kv in genreIndex)
+            {
+                genreCounts[kv.Key] = totals[kv.Value];
+            }
         }
 
         // Find dominant genre
@@ -475,13 +493,19 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
 
     private GenreClassificationResult ConvertToLegacyResult(GenreClassificationResult<T> result)
     {
-        var allProbabilities = result.AllGenres.ToDictionary(
-            g => g.Genre,
-            g => NumOps.ToDouble(g.Probability));
+        // The legacy result is double-typed: convert all probabilities with one tensor cast.
+        var genres = result.AllGenres.ToList();
+        double[] probs = genres.Count == 0
+            ? Array.Empty<double>()
+            : new Tensor<T>(genres.Select(g => g.Probability).ToArray(), [genres.Count]).Cast<double>().ToArray();
 
-        var topPredictions = result.AllGenres
+        var allProbabilities = genres.Select((g, i) => (g.Genre, P: probs[i])).ToDictionary(
+            g => g.Genre,
+            g => g.P);
+
+        var topPredictions = genres
             .Take(_options.TopK)
-            .Select(g => (g.Genre, NumOps.ToDouble(g.Probability)))
+            .Select((g, i) => (g.Genre, probs[i]))
             .ToList();
 
         return new GenreClassificationResult
@@ -558,13 +582,11 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
     {
         // Apply softmax normalization
         var probs = ApplySoftmax(modelOutput);
-        var result = new Tensor<T>([probs.Count]);
-        int i = 0;
-        foreach (var label in ClassLabels)
-        {
-            result[i++] = probs.TryGetValue(label, out var prob) ? prob : NumOps.Zero;
-        }
-        return result;
+        T zero = NumOps.Zero;
+        T[] values = ClassLabels.Select(label => probs.TryGetValue(label, out var prob) ? prob : zero).ToArray();
+        if (values.Length > probs.Count)
+            throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+        return new Tensor<T>(values, [values.Length]);
     }
 
     /// <summary>

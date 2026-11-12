@@ -806,7 +806,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     }
 
     private double ComputeZeroCrossingRate(Tensor<T> audio)
-        => AudioEventDetectionOps.ZeroCrossingCount(Engine, audio) / (double)audio.Length;
+        => AudioEngineOps.ZeroCrossingCount(Engine, audio) / (double)audio.Length;
 
     private double ComputeSpectralCentroid(Tensor<T> melSpec)
     {
