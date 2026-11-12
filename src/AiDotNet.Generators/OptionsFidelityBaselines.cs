@@ -314,7 +314,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.UseValueProjection",
             "AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.WriteHeadOptions",
             "AiDotNet.MetaLearning.Options.MCLOptions<T, TInput, TOutput>.NumWays",
-            "AiDotNet.MetaLearning.Options.PMFOptions<T, TInput, TOutput>.DistanceMetric",
             "AiDotNet.MetaLearning.Options.R2D2Options<T, TInput, TOutput>.UseWoodburyIdentity",
             "AiDotNet.MetaLearning.Options.SimpleShotOptions<T, TInput, TOutput>.DistanceMetric",
             "AiDotNet.MetaLearning.Options.VERSAOptions<T, TInput, TOutput>.AggregationMethod",

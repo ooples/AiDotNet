@@ -5208,8 +5208,6 @@
 3	ADNELEM001|AiDotNet.MetaLearning.Algorithms.PEARLAlgorithm<T, TInput, TOutput>.MetaTrain(AiDotNet.Data.Structures.TaskBatch<T, TInput, TOutput>)
 2	ADNELEM001|AiDotNet.MetaLearning.Algorithms.PEARLAlgorithm<T, TInput, TOutput>.PEARLAlgorithm(AiDotNet.MetaLearning.Options.PEARLOptions<T, TInput, TOutput>)
 2	ADNELEM001|AiDotNet.MetaLearning.Algorithms.PEARLAlgorithm<T, TInput, TOutput>.ProjectZ(double[])
-2	ADNELEM001|AiDotNet.MetaLearning.Algorithms.PMFAlgorithm<T, TInput, TOutput>.Adapt(AiDotNet.Interfaces.IMetaLearningTask<T, TInput, TOutput>)
-2	ADNELEM001|AiDotNet.MetaLearning.Algorithms.PMFAlgorithm<T, TInput, TOutput>.MetaTrain(AiDotNet.Data.Structures.TaskBatch<T, TInput, TOutput>)
 3	ADNELEM001|AiDotNet.MetaLearning.Algorithms.ProtoNetsAlgorithm<T, TInput, TOutput>.Accumulate(AiDotNet.Tensors.LinearAlgebra.Vector<T>?, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 2	ADNELEM001|AiDotNet.MetaLearning.Algorithms.ProtoNetsAlgorithm<T, TInput, TOutput>.CloneVector(AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 2	ADNELEM001|AiDotNet.MetaLearning.Algorithms.ProtoNetsAlgorithm<T, TInput, TOutput>.EnsureMetricShapes(System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.IMetaLearningTask<T, TInput, TOutput>>)
