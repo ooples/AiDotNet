@@ -24,13 +24,13 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _correlations;
+    private Vector<T>? _correlations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Correlations => _correlations;
+    public Vector<T>? Correlations => _correlations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,52 +64,26 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
+        // |Pearson r| from population moments; 0 where either standard deviation is below 1e-10
+        var xc = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var yc = SelectorTensorOps.CenteredColumn(target);
+        T count = NumOps.FromDouble(n);
+        T eps = NumOps.FromDouble(1e-10);
+        T yStd = NumOps.Sqrt(NumOps.Divide(Engine.TensorSumOfSquares(yc), count));
+        var xStd = Engine.TensorSqrt(Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(xc), count));
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (!NumOps.LessThan(yStd, eps))
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            var covariance = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorMultiply(xc, yc), new[] { 0 }, false), count);
+            var usable = PreprocessingTensorOps.AtLeast(xStd, eps);
+            var safeStd = Engine.TensorWhere(usable, xStd, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+            scores = SelectorTensorOps.ZeroUnless(usable,
+                Engine.TensorAbs(Engine.TensorDivide(covariance, Engine.TensorMultiplyScalar(safeStd, yStd))));
         }
 
-        // Compute mean and std of y
-        double yMean = y.Average();
-        double yStd = Math.Sqrt(y.Select(v => (v - yMean) * (v - yMean)).Average());
-
-        _correlations = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double xMean = col.Average();
-            double xStd = Math.Sqrt(col.Select(v => (v - xMean) * (v - xMean)).Average());
-
-            if (xStd < 1e-10 || yStd < 1e-10)
-            {
-                _correlations[j] = 0;
-            }
-            else
-            {
-                double covariance = 0;
-                for (int i = 0; i < n; i++)
-                    covariance += (col[i] - xMean) * (y[i] - yMean);
-                covariance /= n;
-
-                _correlations[j] = Math.Abs(covariance / (xStd * yStd));
-            }
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _correlations[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _correlations = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -126,15 +100,7 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("PearsonCorrelationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
