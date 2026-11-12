@@ -33,11 +33,6 @@ namespace AiDotNet.Kernels;
 public class HellingerKernel<T> : IKernelFunction<T>
 {
     /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new instance of the Hellinger kernel.
     /// </summary>
     /// <remarks>
@@ -57,7 +52,6 @@ public class HellingerKernel<T> : IKernelFunction<T>
     /// </remarks>
     public HellingerKernel()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>

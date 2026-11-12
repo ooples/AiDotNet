@@ -48,11 +48,6 @@ public class ProductKernel<T> : IKernelFunction<T>
     private readonly IKernelFunction<T>[] _kernels;
 
     /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new Product kernel from an array of kernels.
     /// </summary>
     /// <param name="kernels">The kernels to combine by multiplication.</param>
@@ -82,7 +77,6 @@ public class ProductKernel<T> : IKernelFunction<T>
         }
 
         _kernels = kernels;
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
