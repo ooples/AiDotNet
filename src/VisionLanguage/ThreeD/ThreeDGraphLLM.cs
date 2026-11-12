@@ -281,22 +281,16 @@ public partial class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisi
                 T biasScale = NumOps.FromDouble(0.05);
                 var noTerms = new Tensor<T>([maxNodes, encoderDim]);
                 var relBiasRows = new Tensor<T>[maxNodes];
-                var edgeRows = new Tensor<T>[maxNodes];
-                var edgeWeightRows = new Tensor<T>[maxNodes];
-                var activeRows = new Tensor<T>[maxNodes];
+                Tensor<T> EdgeRow(int node) => engine.TensorBroadcastTo(
+                    engine.TensorSlice(edgeMask, [node, 0], [1, maxNodes]).Reshape([maxNodes, 1]), [maxNodes, encoderDim]);
                 for (int i = 0; i < maxNodes; i++)
                 {
-                    edgeRows[i] = engine.TensorBroadcastTo(
-                        engine.TensorSlice(edgeMask, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]), [maxNodes, encoderDim]);
-                    edgeWeightRows[i] = engine.TensorBroadcastTo(
-                        engine.TensorSlice(edgeWeight, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]), [maxNodes, encoderDim]);
-                    activeRows[i] = engine.TensorBroadcastTo(engine.TensorSlice(active, [i, 0], [1, 1]).Reshape([1]), [encoderDim]);
                     var vertical = engine.TensorSlice(verticalRel, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]);
                     var horizontal = engine.TensorSlice(horizontalRel, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]);
                     var relBias = engine.TensorAdd(
                         engine.TensorMultiplyScalar(engine.TensorSin(engine.TensorMultiply(vertical, frequency)), biasScale),
                         engine.TensorMultiplyScalar(engine.TensorCos(engine.TensorMultiply(horizontal, frequency)), biasScale));
-                    relBiasRows[i] = engine.ReduceSum(engine.TensorWhere(edgeRows[i], relBias, noTerms), [0], false);
+                    relBiasRows[i] = engine.ReduceSum(engine.TensorWhere(EdgeRow(i), relBias, noTerms), [0], false);
                 }
 
                 // Message passing: each node aggregates its own feature plus edgeWeight * neighbor features,
@@ -309,8 +303,12 @@ public partial class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisi
                     var newRows = new Tensor<T>[maxNodes];
                     for (int i = 0; i < maxNodes; i++)
                     {
+                        // Masked per-pair products (not a matmul): a non-finite feature of an unconnected
+                        // node must not leak into node i as 0 * inf = NaN.
+                        var edgeWeightRow = engine.TensorBroadcastTo(
+                            engine.TensorSlice(edgeWeight, [i, 0], [1, maxNodes]).Reshape([maxNodes, 1]), [maxNodes, encoderDim]);
                         var messages = engine.TensorWhere(
-                            edgeRows[i], engine.TensorMultiply(nodeFeatures, edgeWeightRows[i]), noTerms);
+                            EdgeRow(i), engine.TensorMultiply(nodeFeatures, edgeWeightRow), noTerms);
                         var aggregated = engine.TensorAdd(
                             engine.TensorAdd(
                                 engine.TensorSlice(nodeFeatures, [i, 0], [1, encoderDim]).Reshape([encoderDim]),
@@ -320,7 +318,7 @@ public partial class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisi
                         var norm = engine.TensorAddScalar(
                             engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(aggregated, aggregated), [0], true)), epsilon);
                         newRows[i] = engine.TensorWhere(
-                            activeRows[i],
+                            engine.TensorBroadcastTo(engine.TensorSlice(active, [i, 0], [1, 1]).Reshape([1]), [encoderDim]),
                             engine.TensorDivide(aggregated, engine.TensorBroadcastTo(norm, [encoderDim])),
                             inactiveRow).Reshape([1, encoderDim]);
                     }

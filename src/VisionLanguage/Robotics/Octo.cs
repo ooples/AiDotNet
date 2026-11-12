@@ -251,12 +251,17 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
             var query = engine.TensorSin(engine.TensorMultiplyScalar(
                 engine.TensorOuter(engine.TensorArange<T>(1, numReadout + 1, 1), engine.TensorArange<T>(0, dim, 1)),
                 NumOps.FromDouble(Math.PI / dim)));
-            var attn = engine.TensorExp(engine.TensorDivideScalar(
-                engine.TensorMultiply(query, key), NumOps.FromDouble(Math.Sqrt(dim))));
+            var logits = engine.TensorDivideScalar(engine.TensorMultiply(query, key), NumOps.FromDouble(Math.Sqrt(dim)));
+            // Shift each row by its maximum logit before exponentiating so a float T cannot overflow
+            // (the weighted mean is unchanged). The "mass above 1e-8" test of the unshifted weights is
+            // rowMax + log(sum exp(logit - rowMax)) > log(1e-8).
+            var rowMax = engine.ReduceMax(logits, [1], true);
+            var attn = engine.TensorExp(engine.TensorSubtract(logits, engine.TensorBroadcastTo(rowMax, [numReadout, dim])));
             var attnSum = engine.ReduceSum(attn, [1], false);
             var valSum = engine.ReduceSum(engine.TensorMultiply(attn, key), [1], false);
+            var logMass = engine.TensorAdd(rowMax.Reshape([numReadout]), engine.TensorLog(attnSum));
             readoutFeatures = engine.TensorWhere(
-                engine.TensorGreaterThan(attnSum, NumOps.FromDouble(1e-8)),
+                engine.TensorGreaterThan(logMass, NumOps.FromDouble(Math.Log(1e-8))),
                 engine.TensorDivide(valSum, attnSum),
                 new Tensor<T>([numReadout]));
         }

@@ -296,19 +296,11 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <returns>The first position holding the maximum, or -1 when there is none.</returns>
     private protected int FirstArgMax(Tensor<T> values)
     {
-        int n = values.Length;
-        if (n == 0)
+        int first = ArgExtremumSearch<T>.FirstIndex(Engine, values, largest: true, out T best);
+        // Only a value strictly above -infinity wins.
+        if (first < 0 || (NumOps.IsInfinity(best) && NumOps.LessThan(best, NumOps.Zero)))
             return -1;
-        var flat = values.Reshape([n]);
-        T negInfValue = NumOps.FromDouble(double.NegativeInfinity);
-        var comparable = Engine.TensorWhere(Engine.TensorIsNan(flat), Tensor<T>.CreateDefault([n], negInfValue), flat);
-        T best = Engine.TensorMaxValue(comparable);
-        if (!NumOps.GreaterThan(best, negInfValue))
-            return -1;
-        var isBest = Engine.TensorEquals(comparable, best);
-        var positions = Engine.TensorArange<T>(0, n, 1);
-        var sentinel = Tensor<T>.CreateDefault([n], NumOps.FromDouble(n));
-        return NumOps.ToInt(Engine.TensorMinValue(Engine.TensorWhere(isBest, positions, sentinel)));
+        return first;
     }
 
     /// <summary>
@@ -768,7 +760,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
         var negInf = Tensor<T>.CreateDefault([n], negInfValue);
         var comparable = Engine.TensorWhere(Engine.TensorIsNan(flat), negInf, flat);
         comparable = Engine.TensorWhere(eligible.Reshape([n]), comparable, negInf);
-        int available = NumOps.ToInt(Engine.TensorSum(Engine.TensorGreaterThan(comparable, negInfValue)));
+        int available = Engine.TensorSum(Engine.TensorGreaterThan(comparable, negInfValue).Cast<int>());
         int take = Math.Min(k, available);
         if (take <= 0)
             return new Tensor<T>([n]);
@@ -777,7 +769,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
         // holding exactly tau fill the remaining slots.
         T tau = Engine.TensorKthvalue(comparable, n - take + 1).Item1;
         var above = Engine.TensorGreaterThan(comparable, tau);
-        int remaining = take - NumOps.ToInt(Engine.TensorSum(above));
+        int remaining = take - Engine.TensorSum(above.Cast<int>());
         var atTau = Engine.TensorEquals(comparable, tau);
         var tieRank = Engine.TensorCumSum(atTau, 0);
         var tiesTaken = Engine.TensorMultiply(atTau, Engine.TensorLessThan(tieRank, NumOps.FromDouble(remaining + 0.5)));
