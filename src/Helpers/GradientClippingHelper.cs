@@ -41,28 +41,47 @@ public static class GradientClippingHelper
     /// because it sums across every layer. One helper is what stops them drifting apart again.
     /// </remarks>
     private static double SumSquares<T>(Vector<T> gradients, INumericOperations<T> ops)
-    {
-        double total = 0.0;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            double v = ops.ToDouble(gradients[i]);
-            total += v * v;
-        }
-
-        return total;
-    }
+        => SumSquares(Tensor<T>.FromVector(gradients), ops);
 
     /// <inheritdoc cref="SumSquares{T}(Vector{T}, INumericOperations{T})"/>
+    /// <remarks>
+    /// The squares are summed in T after dividing by the largest magnitude m (the LAPACK nrm2
+    /// scaling), so every scaled square is at most 1 and the T-typed sum is bounded by the length;
+    /// only m * m * sum is formed in <c>double</c>. That keeps the overflow protection without
+    /// staging the gradients outside T.
+    /// </remarks>
     private static double SumSquares<T>(Tensor<T> gradients, INumericOperations<T> ops)
     {
-        double total = 0.0;
-        for (int i = 0; i < gradients.Length; i++)
+        if (gradients.Length == 0) return 0.0;
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var magnitudes = engine.TensorAbs(gradients);
+        T maxMagnitude = engine.TensorMaxValue(magnitudes);
+        double m = ops.ToDouble(maxMagnitude);
+
+        // All zero, NaN or infinite: the plain sum of magnitudes is then 0, NaN or +Infinity, and its
+        // square is exactly what the sum of squares is in those cases.
+        if (!(m > 0.0) || double.IsInfinity(m))
         {
-            double v = ops.ToDouble(gradients.GetFlatIndexValue(i));
-            total += v * v;
+            double magnitudeSum = ops.ToDouble(engine.TensorSum(magnitudes));
+            return magnitudeSum * magnitudeSum;
         }
 
-        return total;
+        var scaled = engine.TensorDivideScalar(magnitudes, maxMagnitude);
+        double scaledSum = ops.ToDouble(engine.TensorSum(engine.TensorMultiply(scaled, scaled)));
+        return m * m * scaledSum;
+    }
+
+    /// <summary>
+    /// Clamps every element to [min, max] while letting NaN through unchanged, as the scalar
+    /// MathHelper.Clamp comparison chain does.
+    /// </summary>
+    private static Tensor<T> ClampKeepingNaN<T>(Tensor<T> values, T min, T max)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorWhere(engine.TensorIsNan(values), values, engine.TensorClamp(values, min, max));
     }
 
     /// <summary>True when a norm cannot be used to scale, having reported why.</summary>
@@ -105,13 +124,7 @@ public static class GradientClippingHelper
         T maxVal = numOps.FromDouble(maxValue);
         T minVal = numOps.FromDouble(-maxValue);
 
-        var clipped = new Vector<T>(gradients.Length);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            clipped[i] = MathHelper.Clamp(gradients[i], minVal, maxVal);
-        }
-
-        return clipped;
+        return ClampKeepingNaN(Tensor<T>.FromVector(gradients), minVal, maxVal).ToVector();
     }
 
     /// <summary>
@@ -128,10 +141,8 @@ public static class GradientClippingHelper
         T maxVal = numOps.FromDouble(maxValue);
         T minVal = numOps.FromDouble(-maxValue);
 
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            gradients[i] = MathHelper.Clamp(gradients[i], minVal, maxVal);
-        }
+        ClampKeepingNaN(Tensor<T>.FromVector(gradients), minVal, maxVal).AsSpan()
+            .CopyTo(gradients.AsWritableSpan());
     }
 
     /// <summary>
@@ -185,13 +196,7 @@ public static class GradientClippingHelper
 
         // Scale gradients
         T scale = numOps.FromDouble(maxNorm / norm);
-        var clipped = new Vector<T>(gradients.Length);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            clipped[i] = numOps.Multiply(gradients[i], scale);
-        }
-
-        return clipped;
+        return AiDotNetEngine.Current.Multiply(gradients, scale);
     }
 
     /// <summary>
@@ -221,10 +226,7 @@ public static class GradientClippingHelper
 
         // Scale gradients in place
         T scale = numOps.FromDouble(maxNorm / norm);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            gradients[i] = numOps.Multiply(gradients[i], scale);
-        }
+        AiDotNetEngine.Current.Multiply(gradients, scale).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return true;
     }
@@ -286,12 +288,7 @@ public static class GradientClippingHelper
                 continue;
             }
 
-            var clipped = new Vector<T>(gradients.Length);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                clipped[i] = numOps.Multiply(gradients[i], scale);
-            }
-            clippedList.Add(clipped);
+            clippedList.Add(AiDotNetEngine.Current.Multiply(gradients, scale));
         }
 
         return clippedList;
@@ -309,7 +306,6 @@ public static class GradientClippingHelper
         if (gradients == null) return null;
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        int length = gradients.Length;
 
         // Compute L2 norm
         double norm = Math.Sqrt(SumSquares(gradients, numOps));
@@ -322,13 +318,8 @@ public static class GradientClippingHelper
 
         // Scale gradients
         T scale = numOps.FromDouble(maxNorm / norm);
-        var clipped = new Tensor<T>(gradients._shape);
-        for (int i = 0; i < length; i++)
-        {
-            clipped.SetFlatIndexValue(i, numOps.Multiply(gradients.GetFlatIndexValue(i), scale));
-        }
-
-        return clipped;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AiDotNetEngine.Current.TensorMultiplyScalar(gradients, scale);
     }
 
     /// <summary>
@@ -422,13 +413,7 @@ public static class GradientClippingHelper
             return gradients.Clone();
 
         T scale = numOps.Divide(maxGradNorm, gradNorm);
-        var clipped = new Vector<T>(gradients.Length);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            clipped[i] = numOps.Multiply(gradients[i], scale);
-        }
-
-        return clipped;
+        return AiDotNetEngine.Current.Multiply(gradients, scale);
     }
 
     /// <summary>
