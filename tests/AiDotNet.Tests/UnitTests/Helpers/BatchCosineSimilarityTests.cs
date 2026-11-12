@@ -24,6 +24,7 @@ public class BatchCosineSimilarityTests
         Assert.Equal(new[] { 1f, -1f, 0f, 0f }, scores.ToArray());
     }
 
+#if NET5_0_OR_GREATER
     [Fact]
     public void HalfScores_DoNotOverflowTheNormProduct()
     {
@@ -32,6 +33,7 @@ public class BatchCosineSimilarityTests
 
         Assert.Equal((Half)1, scores.GetFlat(0));
     }
+#endif
 
     [Fact]
     public void DecimalZeroVectors_AreMaskedBeforeDivision()
@@ -43,6 +45,7 @@ public class BatchCosineSimilarityTests
         Assert.Equal(new[] { 0m, 0m }, BatchCosineSimilarity.Scores(zero, new[] { zero, nonzero }).ToArray());
     }
 
+#if NET5_0_OR_GREATER
     [Fact]
     public void HalfScores_KeepEpsilonInWidePrecision()
     {
@@ -51,6 +54,7 @@ public class BatchCosineSimilarityTests
         Assert.Equal((Half)0, BatchCosineSimilarity.Scores(query, new[] { query }, 1e-5).GetFlat(0));
         Assert.Equal((Half)1, BatchCosineSimilarity.Scores(query, new[] { query }, 1e-8).GetFlat(0));
     }
+#endif
 
     [Fact]
     public void NaNNorm_ScoresZero()

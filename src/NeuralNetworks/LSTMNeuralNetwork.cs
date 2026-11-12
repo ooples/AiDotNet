@@ -1143,8 +1143,8 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     {
         // Every |x - 0| below 1e-8 (MathHelper.AlmostEqual's default); NaN is not.
         if (tensor.Length == 0) return true;
-        var nearZero = Engine.TensorLessThan(Engine.TensorAbs(tensor), NumOps.FromDouble(1e-8));
-        return NumOps.Equals(Engine.TensorSum(nearZero), NumOps.FromDouble(tensor.Length));
+        var nearZero = Engine.TensorLessThan(Engine.TensorAbs(tensor.Cast<double>()), 1e-8);
+        return Engine.TensorMinValue(nearZero) == 1.0;
     }
 
     /// <summary>
