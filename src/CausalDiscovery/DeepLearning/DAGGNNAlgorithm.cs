@@ -59,127 +59,39 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
         // ordering nodes by descending raw variance yields the correct causal direction. This stays
         // invariant to the uniform data scaling the contract requires: scaling every column by c multiplies
         // every variance by c², leaving the ordering — and therefore the oriented structure — unchanged.
-        var rawVar = new double[d];
-        for (int j = 0; j < d; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-            double v = 0;
-            for (int i = 0; i < n; i++) { double c = NumOps.ToDouble(data[i, j]) - mean; v += c * c; }
-            rawVar[j] = v / Math.Max(1, n - 1);
-        }
+        var rawColumns = Tensor<T>.FromMatrix(data);
+        var rawSumSquares = Engine.ReduceSum(Engine.TensorSquare(CenterColumns(rawColumns)), new[] { 0 }, false);
+        var rawVar = Engine.TensorDivideScalar(rawSumSquares, NumOps.FromDouble(Math.Max(1, n - 1)))
+            .Cast<double>().ToArray();
 
         // Standardize columns so the LEARNING is invariant to per-variable scaling.
         data = StandardizeColumns(data);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
-        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
+        double scale = Math.Sqrt(2.0 / d);
 
         // Separate source and target embeddings to break symmetry:
         // P[i,j] = sigmoid(Zs_i . Zt_j) != P[j,i] = sigmoid(Zs_j . Zt_i)
-        var Zs = new Matrix<T>(d, embDim);
-        var Zt = new Matrix<T>(d, embDim);
-        for (int i = 0; i < d; i++)
-            for (int k = 0; k < embDim; k++)
-            {
-                Zs[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                Zt[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-            }
+        // Draws alternate Zs[i,k], Zt[i,k] in (i, k) order.
+        var draws = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Tensor<T>.CreateRandom(rng, d, embDim, 2), NumOps.FromDouble(-0.5)),
+            NumOps.FromDouble(scale));
+        var Zs = Engine.TensorSliceAxis(draws, 2, 0);
+        var Zt = Engine.TensorSliceAxis(draws, 2, 1);
 
-        T lr = NumOps.FromDouble(LearningRate);
         T alpha = NumOps.Zero;
         // Acyclicity warm-up: rho = 0 (no NOTEARS penalty) for the first half of training so the data fit
         // can drive edge probabilities up; a bounded fixed penalty is applied after (see the rho update).
         T rho = NumOps.Zero;
+        T boundedRho = NumOps.One;
         var cov = ComputeCovarianceMatrix(data);
-        T eps = NumOps.FromDouble(1e-10);
+        var c = Tensor<T>.FromMatrix(cov);
+        var offDiagonal = OffDiagonalMask(d);
+        var dataGrad = ComputeSkeletonDataGradient(c, offDiagonal, d);
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
-            // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j)
-            var P = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    T dot = NumOps.Zero;
-                    for (int k = 0; k < embDim; k++)
-                        dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
-                    double sv = NumOps.ToDouble(dot);
-                    P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                }
-
-            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
-            var PSq = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
-            var expPSq = MatrixExponentialTaylor(PSq, d);
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                hVal = NumOps.Add(hVal, expPSq[i, i]);
-            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
-
-            // Gradient w.r.t. Zs and Zt
-            var gradZs = new Matrix<T>(d, embDim);
-            var gradZt = new Matrix<T>(d, embDim);
-
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    T varI = cov[i, i];
-                    if (!NumOps.GreaterThan(varI, eps)) continue;
-
-                    // Data fit: encourage P[i,j] when i and j are strongly related.
-                    //
-                    // SYMMETRIC ON PURPOSE. This used to divide by varI alone, which is asymmetric
-                    // in exactly the wrong way: cov[i,j]^2 is symmetric, so dividing by the SOURCE's
-                    // variance rewarded edges leaving the LOW-variance node. In an attenuating
-                    // linear SEM the parent carries the larger variance, so every edge was pushed
-                    // child-to-parent -- and the variance ordering used for the final projection
-                    // says the opposite, so the two fought. On a fixture whose variance ordering
-                    // matches its topology the projection kept the direction this term had
-                    // suppressed, it fell under the threshold, and the graph came back empty.
-                    //
-                    // It cannot be otherwise: for linear-Gaussian data the direction of an edge is
-                    // not identifiable from second-order statistics at all -- both orientations lie
-                    // in the same Markov equivalence class -- so any covariance surrogate that
-                    // appears to orient is orienting on an artefact. Squared Pearson correlation is
-                    // the direction-neutral form, so this term now decides only the SKELETON and
-                    // leaves orientation to the acyclicity penalty and the variance ordering, which
-                    // is what the projection below already documents itself as doing.
-                    T varJ = cov[j, j];
-                    if (!NumOps.GreaterThan(varJ, eps)) continue;
-                    T corrSq = NumOps.Divide(
-                        NumOps.Multiply(cov[i, j], cov[i, j]),
-                        NumOps.Multiply(varI, varJ));
-                    T dataGrad = NumOps.Negate(corrSq);
-
-                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
-                    T acycGrad = NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
-                        NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), P[i, j])));
-                    T totalGradP = NumOps.Add(dataGrad, acycGrad);
-
-                    T sigDeriv = NumOps.Multiply(P[i, j], NumOps.Subtract(NumOps.One, P[i, j]));
-                    T gradScale = NumOps.Multiply(totalGradP, sigDeriv);
-
-                    // d(Zs_i . Zt_j)/dZs_i = Zt_j, d(Zs_i . Zt_j)/dZt_j = Zs_i
-                    for (int k = 0; k < embDim; k++)
-                    {
-                        gradZs[i, k] = NumOps.Add(gradZs[i, k], NumOps.Multiply(gradScale, Zt[j, k]));
-                        gradZt[j, k] = NumOps.Add(gradZt[j, k], NumOps.Multiply(gradScale, Zs[i, k]));
-                    }
-                }
-
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < embDim; k++)
-                {
-                    Zs[i, k] = NumOps.Subtract(Zs[i, k], NumOps.Multiply(lr, gradZs[i, k]));
-                    Zt[i, k] = NumOps.Subtract(Zt[i, k], NumOps.Multiply(lr, gradZt[i, k]));
-                }
+            (Zs, Zt) = EmbeddingStep(Zs, Zt, dataGrad, offDiagonal, alpha, rho, d);
 
             // Apply only a BOUNDED acyclicity penalty in the second half of training (warm-up; see the rho
             // init). The original schedule grew rho ×10 toward 1e16 AND accumulated alpha every epoch, which
@@ -188,23 +100,12 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
             // the data fit. DAG-GNN learns ASYMMETRIC edge probabilities (Zs_i·Zt_j ≠ Zs_j·Zt_i) which can
             // form a directed cycle, so the final probabilities are projected onto a DAG below.
             if (epoch >= MaxEpochs / 2)
-                rho = NumOps.FromDouble(1.0);
+                rho = boundedRho;
         }
 
         // Final output: use trained P for directionality, covariance for weights
-        var result = new Matrix<T>(d, d);
         // Compute final P matrix from trained embeddings
-        var finalP = new double[d, d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                T dot = NumOps.Zero;
-                for (int k = 0; k < embDim; k++)
-                    dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
-                double sv = NumOps.ToDouble(dot);
-                finalP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-            }
+        var finalP = EdgeProbabilities(Zs, Zt, offDiagonal);
 
         // SKELETON CONFIDENCE IS SYMMETRIC; DIRECTION IS NOT LEARNED FROM IT.
         //
@@ -221,20 +122,93 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
         // Taking the larger of the two therefore restores what the pair actually established -- that
         // i and j are related -- and lets the variance ordering supply the direction, which is what
         // the projection already documents itself as doing.
-        for (int i = 0; i < d; i++)
-            for (int j = i + 1; j < d; j++)
-            {
-                double undirected = Math.Max(finalP[i, j], finalP[j, i]);
-                finalP[i, j] = undirected;
-                finalP[j, i] = undirected;
-            }
+        var undirected = Engine.TensorMax(finalP, Engine.TensorTranspose(finalP));
 
         // Project the asymmetric learned probabilities onto a DAG, orienting by raw per-column variance
         // (highest-variance exogenous root first). The learned P is (near-)symmetric after standardization
         // and cannot orient edges by itself; the variance ordering supplies the direction and is preserved
         // under uniform scaling (see rawVar above), so the result stays scale-invariant. BuildFinalAdjacency
         // then thresholds and weights the acyclic probabilities.
-        return BuildFinalAdjacency(ProjectToDag(finalP, d, rawVar), cov, d);
+        return BuildFinalAdjacency(ProjectToDag(ToDoubleGrid(undirected, d), d, rawVar), cov, d);
+    }
+
+    /// <summary>P[i,j] = sigmoid(Zs_i . Zt_j) off the diagonal (saturated beyond ±20), zero on it.</summary>
+    private Tensor<T> EdgeProbabilities(Tensor<T> Zs, Tensor<T> Zt, Tensor<T> offDiagonal)
+    {
+        var dot = Engine.TensorMatMul(Zs, Engine.TensorTranspose(Zt));
+        return Engine.TensorMultiply(offDiagonal, ClampedSigmoid(dot, 1.0));
+    }
+
+    /// <summary>
+    /// Data-fit gradient -cov[i,j]^2 / (var[i] var[j]) for off-diagonal pairs with both variances above
+    /// 1e-10, zero elsewhere (those pairs receive no gradient at all).
+    /// </summary>
+    /// <remarks>
+    /// Data fit: encourage P[i,j] when i and j are strongly related.
+    ///
+    /// SYMMETRIC ON PURPOSE. This used to divide by varI alone, which is asymmetric
+    /// in exactly the wrong way: cov[i,j]^2 is symmetric, so dividing by the SOURCE's
+    /// variance rewarded edges leaving the LOW-variance node. In an attenuating
+    /// linear SEM the parent carries the larger variance, so every edge was pushed
+    /// child-to-parent -- and the variance ordering used for the final projection
+    /// says the opposite, so the two fought. On a fixture whose variance ordering
+    /// matches its topology the projection kept the direction this term had
+    /// suppressed, it fell under the threshold, and the graph came back empty.
+    ///
+    /// It cannot be otherwise: for linear-Gaussian data the direction of an edge is
+    /// not identifiable from second-order statistics at all -- both orientations lie
+    /// in the same Markov equivalence class -- so any covariance surrogate that
+    /// appears to orient is orienting on an artefact. Squared Pearson correlation is
+    /// the direction-neutral form, so this term now decides only the SKELETON and
+    /// leaves orientation to the acyclicity penalty and the variance ordering, which
+    /// is what the projection below already documents itself as doing.
+    /// </remarks>
+    private (Tensor<T> Gradient, Tensor<T> Usable) ComputeSkeletonDataGradient(Tensor<T> c, Tensor<T> offDiagonal, int d)
+    {
+        var shape = new[] { d, d };
+        var diagonal = Engine.TensorDiagonal(c);
+        var varI = Engine.TensorBroadcastTo(diagonal.Reshape(new[] { d, 1 }), shape);
+        var varJ = Engine.TensorBroadcastTo(diagonal.Reshape(new[] { 1, d }), shape);
+        T eps = NumOps.FromDouble(1e-10);
+        var usable = Engine.TensorMultiply(offDiagonal, Engine.TensorMultiply(
+            Engine.TensorGreaterThan(varI, eps), Engine.TensorGreaterThan(varJ, eps)));
+        var ones = Engine.TensorOnesLike(c);
+        var denominator = Engine.TensorWhere(usable, Engine.TensorMultiply(varI, varJ), ones);
+        var corrSq = Engine.TensorDivide(Engine.TensorMultiply(c, c), denominator);
+        return (Engine.TensorWhere(usable, Engine.TensorNegate(corrSq), Engine.TensorZerosLike(c)), usable);
+    }
+
+    /// <summary>
+    /// One gradient step on the source and target embeddings: for every usable pair,
+    /// dL/dP = data + (alpha + rho*h) * [exp(P∘P)^T ∘ 2P], chained through P(1-P) into
+    /// dZs_i += g_ij Zt_j and dZt_j += g_ij Zs_i.
+    /// </summary>
+    private (Tensor<T> Zs, Tensor<T> Zt) EmbeddingStep(Tensor<T> Zs, Tensor<T> Zt,
+        (Tensor<T> Gradient, Tensor<T> Usable) dataGrad, Tensor<T> offDiagonal, T alpha, T rho, int d)
+    {
+        // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j)
+        var P = EdgeProbabilities(Zs, Zt, offDiagonal);
+
+        // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+        var expPSq = Tensor<T>.FromMatrix(MatrixExponentialTaylor(Engine.TensorMultiply(P, P).ToMatrix(), d));
+        T hVal = NumOps.Subtract(Engine.TensorTrace(expPSq), NumOps.FromDouble(d));
+
+        // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+        var acycGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorTranspose(expPSq), Engine.TensorMultiplyScalar(P, NumOps.FromDouble(2))),
+            NumOps.Add(alpha, NumOps.Multiply(rho, hVal)));
+        var totalGradP = Engine.TensorAdd(dataGrad.Gradient, acycGrad);
+        var sigDeriv = Engine.TensorMultiply(P, Engine.ScalarMinusTensor(NumOps.One, P));
+        var gradScale = Engine.TensorWhere(dataGrad.Usable, Engine.TensorMultiply(totalGradP, sigDeriv),
+            Engine.TensorZerosLike(P));
+
+        // d(Zs_i . Zt_j)/dZs_i = Zt_j, d(Zs_i . Zt_j)/dZt_j = Zs_i
+        var gradZs = Engine.TensorMatMul(gradScale, Zt);
+        var gradZt = Engine.TensorMatMul(Engine.TensorTranspose(gradScale), Zs);
+
+        T lr = NumOps.FromDouble(LearningRate);
+        return (Engine.TensorSubtract(Zs, Engine.TensorMultiplyScalar(gradZs, lr)),
+            Engine.TensorSubtract(Zt, Engine.TensorMultiplyScalar(gradZt, lr)));
     }
 
 }

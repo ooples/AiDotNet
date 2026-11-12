@@ -67,254 +67,28 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
         var cov = ComputeCovarianceMatrix(data);
-        T eps = NumOps.FromDouble(1e-10);
+        var x = Tensor<T>.FromMatrix(data);
+        var offDiagonal = OffDiagonalMask(d);
 
         // Adjacency logits A_logits[i,j]: sigmoid(A_logits[i,j]) = soft edge weight
-        var ALogits = new Matrix<T>(d, d);
+        var ALogits = new Tensor<T>(new[] { d, d });
 
-        // Encoder: W_enc (d x h), b_enc (h), produces mu and logvar for exogenous noise
-        var Wenc = new Matrix<T>(d, h);
-        var Wmu = new Matrix<T>(h, d);    // h -> d (produces per-variable mu)
-        var WlogV = new Matrix<T>(h, d);  // h -> d (produces per-variable logvar)
-        for (int i = 0; i < d; i++)
-            for (int k = 0; k < h; k++)
-                Wenc[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-        for (int k = 0; k < h; k++)
-            for (int j = 0; j < d; j++)
-            {
-                Wmu[k, j] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                WlogV[k, j] = NumOps.FromDouble(-2);
-            }
+        // Encoder: W_enc (d x h) and W_mu (h x d, per-variable mu of the exogenous noise);
+        // decoder: W_dec (d x h), W_out (h x d). Drawn in that order, each row-major.
+        int block = d * h;
+        var draws = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Tensor<T>.CreateRandom(rng, 4 * block), NumOps.FromDouble(-0.5)), scale);
+        var Wenc = Engine.TensorSlice(draws, new[] { 0 }, new[] { block }).Reshape(new[] { d, h });
+        var Wmu = Engine.TensorSlice(draws, new[] { block }, new[] { block }).Reshape(new[] { h, d });
+        var Wdec = Engine.TensorSlice(draws, new[] { 2 * block }, new[] { block }).Reshape(new[] { d, h });
+        var Wout = Engine.TensorSlice(draws, new[] { 3 * block }, new[] { block }).Reshape(new[] { h, d });
 
-        // Decoder: W_dec (d x h), W_out (h x d)
-        var Wdec = new Matrix<T>(d, h);
-        var Wout = new Matrix<T>(h, d);
-        for (int i = 0; i < d; i++)
-            for (int k = 0; k < h; k++)
-                Wdec[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-        for (int k = 0; k < h; k++)
-            for (int j = 0; j < d; j++)
-                Wout[k, j] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-
-        T lr = NumOps.FromDouble(LearningRate);
-        T alpha = NumOps.Zero;
-        T rho = NumOps.One;
-        T lambda1 = NumOps.FromDouble(0.1);
-        double previousConstraint = double.PositiveInfinity;
+        var duals = new CausalVaeDuals(NumOps.Zero, NumOps.One, double.PositiveInfinity);
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
-            // Compute soft adjacency
-            var A = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    double sv = NumOps.ToDouble(ALogits[i, j]);
-                    A[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                }
-
-            // Compute (I - A)^{-1} via Neumann series: sum_{k=0}^{K} A^k
-            // For small A values this converges quickly
-            var IminusAinv = new Matrix<T>(d, d);
-            var Apow = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-            {
-                IminusAinv[i, i] = NumOps.One;
-                Apow[i, i] = NumOps.One;
-            }
-
-            for (int p = 1; p <= 5; p++)
-            {
-                Apow = MatMul(Apow, A);
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                        IminusAinv[i, j] = NumOps.Add(IminusAinv[i, j], Apow[i, j]);
-            }
-
-            var gALogits = new Matrix<T>(d, d);
-            var gWenc = new Matrix<T>(d, h);
-            var gWmu = new Matrix<T>(h, d);
-            var gWdec = new Matrix<T>(d, h);
-            var gWout = new Matrix<T>(h, d);
-            T invN = NumOps.FromDouble(1.0 / n);
-
-            // Pre-allocate reusable vectors outside the sample loop
-            var xRow = new Vector<T>(d);
-            var hEnc = new Vector<T>(h);
-            var wCol = new Vector<T>(d);
-            var epsNoise = new Vector<T>(d);
-            var wmuCol = new Vector<T>(h);
-            var z = new Vector<T>(d);
-            var invRow = new Vector<T>(d);
-            var hDec = new Vector<T>(h);
-            var wdecCol = new Vector<T>(d);
-            var xhat = new Vector<T>(d);
-            var woutCol = new Vector<T>(h);
-
-            for (int s = 0; s < n; s++)
-            {
-                // Encoder forward: hidden_enc = sigmoid(x * Wenc) using Engine.DotProduct
-                for (int i = 0; i < d; i++) xRow[i] = data[s, i];
-                for (int k = 0; k < h; k++)
-                {
-                    for (int i = 0; i < d; i++) wCol[i] = Wenc[i, k];
-                    double sv = NumOps.ToDouble(Engine.DotProduct(xRow, wCol));
-                    hEnc[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                }
-
-                // Exogenous noise: epsilon_j = mu_j(hEnc) using Engine.DotProduct
-                for (int j = 0; j < d; j++)
-                {
-                    for (int k = 0; k < h; k++) wmuCol[k] = Wmu[k, j];
-                    epsNoise[j] = Engine.DotProduct(hEnc, wmuCol);
-                }
-
-                // Causal layer: z = (I - A)^{-1} * epsilon using Engine.DotProduct
-                for (int j = 0; j < d; j++)
-                {
-                    for (int i = 0; i < d; i++) invRow[i] = IminusAinv[j, i];
-                    z[j] = Engine.DotProduct(invRow, epsNoise);
-                }
-
-                // Decoder: hidden_dec = sigmoid(z * Wdec), xhat = hidden_dec * Wout
-                for (int k = 0; k < h; k++)
-                {
-                    for (int j = 0; j < d; j++) wdecCol[j] = Wdec[j, k];
-                    double sv = NumOps.ToDouble(Engine.DotProduct(z, wdecCol));
-                    hDec[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                }
-
-                for (int j = 0; j < d; j++)
-                {
-                    for (int k = 0; k < h; k++) woutCol[k] = Wout[k, j];
-                    xhat[j] = Engine.DotProduct(hDec, woutCol);
-                }
-
-                // Reconstruction loss gradients
-                for (int j = 0; j < d; j++)
-                {
-                    T residual = NumOps.Multiply(NumOps.Subtract(xhat[j], data[s, j]), invN);
-
-                    // Gradient w.r.t. Wout
-                    for (int k = 0; k < h; k++)
-                        gWout[k, j] = NumOps.Add(gWout[k, j], NumOps.Multiply(residual, hDec[k]));
-
-                    // Gradient through decoder hidden
-                    for (int k = 0; k < h; k++)
-                    {
-                        T sigD = NumOps.Multiply(hDec[k], NumOps.Subtract(NumOps.One, hDec[k]));
-                        T dH = NumOps.Multiply(residual, NumOps.Multiply(Wout[k, j], sigD));
-                        for (int i = 0; i < d; i++)
-                            gWdec[i, k] = NumOps.Add(gWdec[i, k], NumOps.Multiply(dH, z[i]));
-                    }
-                }
-
-                // Gradient w.r.t. z through decoder
-                var dZ = new T[d];
-                for (int j = 0; j < d; j++)
-                {
-                    T reconGrad = NumOps.Multiply(NumOps.Subtract(xhat[j], data[s, j]), invN);
-                    for (int k = 0; k < h; k++)
-                    {
-                        T sigD = NumOps.Multiply(hDec[k], NumOps.Subtract(NumOps.One, hDec[k]));
-                        T dH = NumOps.Multiply(reconGrad, NumOps.Multiply(Wout[k, j], sigD));
-                        for (int i = 0; i < d; i++)
-                            dZ[i] = NumOps.Add(dZ[i], NumOps.Multiply(dH, Wdec[i, k]));
-                    }
-                }
-
-                // Gradient w.r.t. A through causal layer: dL/dA[i,j] = dL/dz * d(IminusAinv*eps)/dA
-                // z_m = sum_l (I-A)^{-1}[m,l] * eps[l]
-                // d(I-A)^{-1}/dA[i,j] = (I-A)^{-1} * dA/dA[i,j] * (I-A)^{-1}
-                // where dA[i,j] is the matrix with 1 at [i,j] and 0 elsewhere
-                // So dz_m/dA[i,j] = IminusAinv[m,i] * IminusAinv[j,:] . eps
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                    {
-                        if (i == j) continue;
-                        T IinvEpsJ = NumOps.Zero;
-                        for (int l = 0; l < d; l++)
-                            IinvEpsJ = NumOps.Add(IinvEpsJ, NumOps.Multiply(IminusAinv[j, l], epsNoise[l]));
-                        T dataFitGrad = NumOps.Zero;
-                        for (int m = 0; m < d; m++)
-                            dataFitGrad = NumOps.Add(dataFitGrad, NumOps.Multiply(dZ[m], IminusAinv[m, i]));
-                        dataFitGrad = NumOps.Multiply(dataFitGrad, IinvEpsJ);
-                        T aSigD = NumOps.Multiply(A[i, j], NumOps.Subtract(NumOps.One, A[i, j]));
-                        gALogits[i, j] = NumOps.Add(gALogits[i, j], NumOps.Multiply(dataFitGrad, aSigD));
-                    }
-
-                // Backprop dZ through causal layer: dEps = (I-A)^{-T} * dZ
-                var dEps = new T[d];
-                for (int j = 0; j < d; j++)
-                {
-                    dEps[j] = NumOps.Zero;
-                    for (int m = 0; m < d; m++)
-                        dEps[j] = NumOps.Add(dEps[j], NumOps.Multiply(IminusAinv[m, j], dZ[m]));
-                }
-
-                // Gradient w.r.t. encoder weights through z = (I-A)^{-1} * eps
-                // dL/dWmu[k,j] = dL/dEps[j] * d(eps[j])/dWmu[k,j] = dEps[j] * hEnc[k]
-                for (int j = 0; j < d; j++)
-                {
-                    for (int k = 0; k < h; k++)
-                    {
-                        gWmu[k, j] = NumOps.Add(gWmu[k, j], NumOps.Multiply(dEps[j], hEnc[k]));
-                        T sigD = NumOps.Multiply(hEnc[k], NumOps.Subtract(NumOps.One, hEnc[k]));
-                        T dHEnc = NumOps.Multiply(dEps[j], NumOps.Multiply(Wmu[k, j], sigD));
-                        for (int i = 0; i < d; i++)
-                            gWenc[i, k] = NumOps.Add(gWenc[i, k], NumOps.Multiply(dHEnc, data[s, i]));
-                    }
-                }
-            }
-
-            // NOTEARS acyclicity: h(A) = tr(exp(A∘A)) - d
-            var ASq = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    ASq[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
-            var expASq = MatrixExponentialTaylor(ASq, d);
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                hVal = NumOps.Add(hVal, expASq[i, i]);
-            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
-
-            // Acyclicity and sparsity gradients on A logits
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    T aij = A[i, j];
-                    T l1Grad = NumOps.Multiply(lambda1,
-                        NumOps.FromDouble(Math.Sign(NumOps.ToDouble(aij))));
-                    // Acyclicity gradient: (alpha + rho*h) * [exp(A∘A)^T ∘ 2A][i,j]
-                    T acycGrad = NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
-                        NumOps.Multiply(expASq[j, i], NumOps.Multiply(NumOps.FromDouble(2), aij)));
-                    T aSigD = NumOps.Multiply(aij, NumOps.Subtract(NumOps.One, aij));
-                    gALogits[i, j] = NumOps.Add(gALogits[i, j],
-                        NumOps.Multiply(NumOps.Add(l1Grad, acycGrad), aSigD));
-                }
-
-            // Apply gradients
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j)
-                        ALogits[i, j] = NumOps.Subtract(ALogits[i, j],
-                            NumOps.Multiply(lr, gALogits[i, j]));
-
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < h; k++)
-                {
-                    Wenc[i, k] = NumOps.Subtract(Wenc[i, k], NumOps.Multiply(lr, gWenc[i, k]));
-                    Wdec[i, k] = NumOps.Subtract(Wdec[i, k], NumOps.Multiply(lr, gWdec[i, k]));
-                }
-            for (int k = 0; k < h; k++)
-                for (int j = 0; j < d; j++)
-                {
-                    Wmu[k, j] = NumOps.Subtract(Wmu[k, j], NumOps.Multiply(lr, gWmu[k, j]));
-                    Wout[k, j] = NumOps.Subtract(Wout[k, j], NumOps.Multiply(lr, gWout[k, j]));
-                }
+            T hVal;
+            (ALogits, Wenc, Wmu, Wdec, Wout, hVal) = CausalVaeStep(x, ALogits, Wenc, Wmu, Wdec, Wout, offDiagonal, duals, n, d);
 
             // NOTEARS updates the dual variables between inner optimization rounds, not after
             // every gradient step. The old per-epoch rho *= 10 reached 1e99 in 100 epochs and
@@ -323,33 +97,16 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
             // increase rho only when the constraint failed to improve by the NOTEARS factor,
             // and honor the user-configurable penalty cap.
             if ((epoch + 1) % 10 == 0 || epoch == MaxEpochs - 1)
-            {
-                double constraint = Math.Max(0.0, NumOps.ToDouble(hVal));
-                alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-                if (constraint > 0.25 * previousConstraint)
-                {
-                    double nextRho = Math.Min(MaxPenaltyValue, NumOps.ToDouble(rho) * 10.0);
-                    rho = NumOps.FromDouble(nextRho);
-                }
-                previousConstraint = constraint;
-            }
+                duals = UpdateCausalVaeDuals(duals, hVal);
         }
 
         // Final output: extract learned edge probabilities and build adjacency
-        var learnedP = new double[d, d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                double sv = NumOps.ToDouble(ALogits[i, j]);
-                learnedP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-            }
-
-        var result = BuildFinalAdjacency(learnedP, cov, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j && Math.Abs(NumOps.ToDouble(result[i, j])) >= EdgeThreshold)
-                    return result;
+        var learnedP = Engine.TensorMultiply(offDiagonal, ClampedSigmoid(ALogits, 1.0));
+        var result = Tensor<T>.FromMatrix(BuildFinalAdjacency(ToDoubleGrid(learnedP, d), cov, d));
+        var strong = Engine.TensorMultiply(offDiagonal,
+            Engine.TensorGreaterEqual(Engine.TensorAbs(result), Engine.TensorFullLike(result, NumOps.FromDouble(EdgeThreshold))));
+        if (Engine.TensorCountNonzero(strong) > 0)
+            return result.ToMatrix();
 
         // A variational adjacency can legitimately finish below the absolute probability
         // pruning floor even though the observations contain an unmistakable structural
@@ -359,33 +116,165 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
         // direction), and keep the caller's edge-weight threshold. Since every retained
         // edge follows the same descending-variance order, the fallback is a DAG; uniform
         // rescaling leaves both its evidence and ordering unchanged.
-        const double correlationFloor = 0.3;
-        for (int i = 0; i < d; i++)
+        return CorrelationFallback(Tensor<T>.FromMatrix(cov), result, d).ToMatrix();
+    }
+
+    /// <summary>Augmented Lagrangian multipliers and the constraint value of the previous round.</summary>
+    private readonly struct CausalVaeDuals
+    {
+        public CausalVaeDuals(T alpha, T rho, double previousConstraint)
         {
-            double varI = Math.Max(0.0, NumOps.ToDouble(cov[i, i]));
-            if (varI < 1e-10) continue;
-
-            for (int j = i + 1; j < d; j++)
-            {
-                double varJ = Math.Max(0.0, NumOps.ToDouble(cov[j, j]));
-                if (varJ < 1e-10) continue;
-
-                double covariance = NumOps.ToDouble(cov[i, j]);
-                double correlation = Math.Abs(covariance) / Math.Sqrt(varI * varJ);
-                if (double.IsNaN(correlation) || double.IsInfinity(correlation) || correlation < correlationFloor)
-                    continue;
-
-                int source = varI > varJ || (Math.Abs(varI - varJ) < 1e-12 && i < j) ? i : j;
-                int target = source == i ? j : i;
-                double sourceVariance = source == i ? varI : varJ;
-                double weight = covariance / sourceVariance;
-                if (Math.Abs(weight) < EdgeThreshold) continue;
-
-                result[source, target] = NumOps.FromDouble(weight);
-            }
+            Alpha = alpha;
+            Rho = rho;
+            PreviousConstraint = previousConstraint;
         }
 
-        return result;
+        public T Alpha { get; }
+        public T Rho { get; }
+        public double PreviousConstraint { get; }
+    }
+
+    /// <summary>
+    /// alpha += rho*h; rho = min(MaxPenaltyValue, 10*rho) when max(0, h) &gt; 0.25 of the previous round's value.
+    /// </summary>
+    private CausalVaeDuals UpdateCausalVaeDuals(CausalVaeDuals duals, T hVal)
+    {
+        double constraint = Math.Max(0.0, NumOps.ToDouble(hVal));
+        T alpha = NumOps.Add(duals.Alpha, NumOps.Multiply(duals.Rho, hVal));
+        T rho = duals.Rho;
+        if (constraint > 0.25 * duals.PreviousConstraint)
+        {
+            double nextRho = Math.Min(MaxPenaltyValue, NumOps.ToDouble(rho) * 10.0);
+            rho = NumOps.FromDouble(nextRho);
+        }
+
+        return new CausalVaeDuals(alpha, rho, constraint);
+    }
+
+    /// <summary>
+    /// One full-batch step of the causal VAE: encoder hEnc = sigmoid(x W_enc), exogenous noise
+    /// eps = hEnc W_mu, causal layer z = (I - A)^{-1} eps with the inverse taken as the Neumann series
+    /// I + A + ... + A^5, decoder xhat = sigmoid(z W_dec) W_out; reconstruction gradients flow back
+    /// through every layer, and the L1 and augmented-Lagrangian acyclicity gradients act on the
+    /// adjacency logits. Returns the updated parameters and h(A) = tr(exp(A∘A)) - d.
+    /// </summary>
+    private (Tensor<T> ALogits, Tensor<T> Wenc, Tensor<T> Wmu, Tensor<T> Wdec, Tensor<T> Wout, T H) CausalVaeStep(
+        Tensor<T> x, Tensor<T> ALogits, Tensor<T> Wenc, Tensor<T> Wmu, Tensor<T> Wdec, Tensor<T> Wout,
+        Tensor<T> offDiagonal, CausalVaeDuals duals, int n, int d)
+    {
+        // Compute soft adjacency
+        var A = Engine.TensorMultiply(offDiagonal, ClampedSigmoid(ALogits, 1.0));
+
+        // Compute (I - A)^{-1} via Neumann series: sum_{k=0}^{K} A^k
+        // For small A values this converges quickly
+        var inverse = Engine.TensorEye<T>(d);
+        var aPow = Engine.TensorEye<T>(d);
+        for (int p = 1; p <= 5; p++)
+        {
+            aPow = Engine.TensorMatMul(aPow, A);
+            inverse = Engine.TensorAdd(inverse, aPow);
+        }
+
+        T invN = NumOps.FromDouble(1.0 / n);
+
+        // Encoder forward, exogenous noise and causal layer z[s,j] = sum_i inverse[j,i] eps[s,i]
+        var hEnc = ClampedSigmoid(Engine.TensorMatMul(x, Wenc), 1.0);                 // [n,h]
+        var epsNoise = Engine.TensorMatMul(hEnc, Wmu);                                 // [n,d]
+        var z = Engine.TensorMatMul(epsNoise, Engine.TensorTranspose(inverse));        // [n,d]
+
+        // Decoder: hidden_dec = sigmoid(z * Wdec), xhat = hidden_dec * Wout
+        var hDec = ClampedSigmoid(Engine.TensorMatMul(z, Wdec), 1.0);                  // [n,h]
+        var xhat = Engine.TensorMatMul(hDec, Wout);                                    // [n,d]
+
+        // Reconstruction loss gradients
+        var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(xhat, x), invN);
+        var gWout = Engine.TensorMatMul(Engine.TensorTranspose(hDec), residual);
+        var decSigD = Engine.TensorMultiply(hDec, Engine.ScalarMinusTensor(NumOps.One, hDec));
+        var dHidden = Engine.TensorMultiply(Engine.TensorMatMul(residual, Engine.TensorTranspose(Wout)), decSigD);
+        var gWdec = Engine.TensorMatMul(Engine.TensorTranspose(z), dHidden);
+
+        // Gradient w.r.t. z through decoder
+        var dZ = Engine.TensorMatMul(dHidden, Engine.TensorTranspose(Wdec));          // [n,d]
+
+        // Backprop dZ through causal layer: dEps = (I-A)^{-T} * dZ
+        var dEps = Engine.TensorMatMul(dZ, inverse);                                   // [n,d]
+
+        // Gradient w.r.t. A through causal layer: dz_m/dA[i,j] = IminusAinv[m,i] * IminusAinv[j,:] . eps,
+        // so dL/dA[i,j] = sum_s dEps[s,i] z[s,j], times the sigmoid derivative A(1-A).
+        var aSigD = Engine.TensorMultiply(A, Engine.ScalarMinusTensor(NumOps.One, A));
+        var dataFitGrad = Engine.TensorMatMul(Engine.TensorTranspose(dEps), z);
+
+        // Gradient w.r.t. encoder weights through z = (I-A)^{-1} * eps
+        // dL/dWmu[k,j] = dL/dEps[j] * d(eps[j])/dWmu[k,j] = dEps[j] * hEnc[k]
+        var gWmu = Engine.TensorMatMul(Engine.TensorTranspose(hEnc), dEps);
+        var encSigD = Engine.TensorMultiply(hEnc, Engine.ScalarMinusTensor(NumOps.One, hEnc));
+        var dHEnc = Engine.TensorMultiply(Engine.TensorMatMul(dEps, Engine.TensorTranspose(Wmu)), encSigD);
+        var gWenc = Engine.TensorMatMul(Engine.TensorTranspose(x), dHEnc);
+
+        // NOTEARS acyclicity: h(A) = tr(exp(A∘A)) - d
+        var expASq = Tensor<T>.FromMatrix(MatrixExponentialTaylor(Engine.TensorMultiply(A, A).ToMatrix(), d));
+        T hVal = NumOps.Subtract(Engine.TensorTrace(expASq), NumOps.FromDouble(d));
+
+        // Acyclicity and sparsity gradients on A logits:
+        // lambda1 * sign(A) + (alpha + rho*h) * [exp(A∘A)^T ∘ 2A][i,j]
+        var l1Grad = Engine.TensorMultiplyScalar(Engine.TensorSign(A), NumOps.FromDouble(0.1));
+        var acycGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorTranspose(expASq), Engine.TensorMultiplyScalar(A, NumOps.FromDouble(2))),
+            NumOps.Add(duals.Alpha, NumOps.Multiply(duals.Rho, hVal)));
+        var gALogits = Engine.TensorMultiply(offDiagonal, Engine.TensorMultiply(
+            Engine.TensorAdd(dataFitGrad, Engine.TensorAdd(l1Grad, acycGrad)), aSigD));
+
+        // Apply gradients
+        T lr = NumOps.FromDouble(LearningRate);
+        return (
+            Engine.TensorWhere(offDiagonal, Engine.TensorSubtract(ALogits, Engine.TensorMultiplyScalar(gALogits, lr)), ALogits),
+            Engine.TensorSubtract(Wenc, Engine.TensorMultiplyScalar(gWenc, lr)),
+            Engine.TensorSubtract(Wmu, Engine.TensorMultiplyScalar(gWmu, lr)),
+            Engine.TensorSubtract(Wdec, Engine.TensorMultiplyScalar(gWdec, lr)),
+            Engine.TensorSubtract(Wout, Engine.TensorMultiplyScalar(gWout, lr)),
+            hVal);
+    }
+
+    /// <summary>
+    /// For each pair i &lt; j with both variances (floored at 0) at least 1e-10 and a finite
+    /// |correlation| of at least 0.3, writes the edge from the higher-variance variable (index order on
+    /// near-ties) with weight cov / source variance, unless |weight| &lt; EdgeThreshold.
+    /// </summary>
+    private Tensor<T> CorrelationFallback(Tensor<T> c, Tensor<T> result, int d)
+    {
+        const double correlationFloor = 0.3;
+        var shape = new[] { d, d };
+        var ones = Engine.TensorOnesLike(c);
+        var zeros = Engine.TensorZerosLike(c);
+
+        var variance = Engine.TensorMax(Engine.TensorDiagonal(c), NumOps.Zero);
+        var varI = Engine.TensorBroadcastTo(variance.Reshape(new[] { d, 1 }), shape);
+        var varJ = Engine.TensorBroadcastTo(variance.Reshape(new[] { 1, d }), shape);
+        T floor = NumOps.FromDouble(1e-10);
+        var usable = Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(varI, floor)),
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(varJ, floor)));
+
+        var correlation = Engine.TensorDivide(Engine.TensorAbs(c), Engine.TensorSqrt(Engine.TensorMultiply(varI, varJ)));
+        var finiteCorrelation = Engine.TensorWhere(Engine.TensorIsFinite(correlation), ones, zeros);
+        var strongCorrelation = Engine.TensorMultiply(finiteCorrelation, Engine.ScalarMinusTensor(NumOps.One,
+            Engine.TensorLessThan(Engine.TensorWhere(Engine.TensorIsFinite(correlation), correlation, zeros),
+                NumOps.FromDouble(correlationFloor))));
+        var pair = Engine.TensorMultiply(Engine.TensorTriu(ones, 1), Engine.TensorMultiply(usable, strongCorrelation));
+
+        var nearlyEqual = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(varI, varJ)), NumOps.FromDouble(1e-12));
+        var forward = Engine.TensorSign(Engine.TensorAdd(Engine.TensorGreaterThan(varI, varJ), nearlyEqual));
+
+        // Source i: weight cov[i,j] / var_i at [i,j]; source j: weight cov[i,j] / var_j at [j,i].
+        T threshold = NumOps.FromDouble(EdgeThreshold);
+        var forwardWeight = Engine.TensorDivide(c, Engine.TensorWhere(usable, varI, ones));
+        var reverseWeight = Engine.TensorDivide(c, Engine.TensorWhere(usable, varJ, ones));
+        var forwardKeep = Engine.TensorMultiply(Engine.TensorMultiply(pair, forward),
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(Engine.TensorAbs(forwardWeight), threshold)));
+        var reverseKeep = Engine.TensorMultiply(Engine.TensorMultiply(pair, Engine.ScalarMinusTensor(NumOps.One, forward)),
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(Engine.TensorAbs(reverseWeight), threshold)));
+
+        var withReverse = Engine.TensorWhere(Engine.TensorTranspose(reverseKeep), Engine.TensorTranspose(reverseWeight), result);
+        return Engine.TensorWhere(forwardKeep, forwardWeight, withReverse);
     }
 
 }
