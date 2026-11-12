@@ -10,6 +10,11 @@ tests/AiDotNet.Tests/UnitTests/Diffusion/Schedulers/DiffusersSchedulerReferenceT
 Guidance: APG is diffusers' normalized_guidance with eta = 1 - projectionStrength (0.5) and scale 7.5;
 RescaledCFG is rescale_noise_cfg (guidance_rescale 0.7) applied to standard CFG at scale 7.5. Both are per
 sample. Used by tests/AiDotNet.Tests/UnitTests/Diffusion/Guidance/DiffusersGuidanceReferenceTests.cs.
+
+Consistency models: one CMStochasticIterativeScheduler step (Song et al. 2023, Algorithm 1) at the first of two
+Karras sigmas (sigma_min 0.002, sigma_max 80, rho 7) re-noises the boundary-conditioned denoised sample to
+sigma_next with z = sin(1.3 (i + 1)). Prints sigma_next, the denoised sample and the re-noised sample used by
+DiffusersSchedulerReferenceTests.ConsistencyRenoise_MatchesDiffusers.
 """
 import os
 import re
@@ -17,7 +22,8 @@ import re
 import diffusers
 import torch
 import diffusers.schedulers.scheduling_euler_ancestral_discrete as euler_ancestral
-from diffusers import DPMSolverMultistepScheduler, EulerAncestralDiscreteScheduler, EulerDiscreteScheduler
+import diffusers.schedulers.scheduling_consistency_models as consistency_models
+from diffusers import CMStochasticIterativeScheduler, DPMSolverMultistepScheduler, EulerAncestralDiscreteScheduler, EulerDiscreteScheduler
 from diffusers.guiders.adaptive_projected_guidance import normalized_guidance
 
 torch.set_default_dtype(torch.float64)
@@ -107,3 +113,15 @@ def fmt(x):
 print("APG", fmt(normalized_guidance(c, u, 7.5, eta=1 - 0.5)))
 g = u + 7.5 * (c - u)
 print("RESCALE", fmt(rescale_noise_cfg(g, c, guidance_rescale=0.7)))
+
+# Consistency model re-noise (one multistep step)
+consistency_models.randn_tensor = lambda shape, **kwargs: torch.sin(1.3 * torch.arange(1, shape[-1] + 1, dtype=torch.float64))
+cm = CMStochasticIterativeScheduler(clip_denoised=False)
+cm.set_timesteps(2)
+cm.sigmas = cm.sigmas.double()  # diffusers stores float32 sigmas; keep the step math in float64
+cm_sample = X0 * 80.0
+cm_output = 0.5 * cm_sample + C
+c_skip, c_out = cm.get_scalings_for_boundary_condition(cm.sigmas[0].to(torch.float64))
+cm_denoised = c_out * cm_output + c_skip * cm_sample
+cm_next = cm.step(cm_output, cm.timesteps[0], cm_sample).prev_sample
+print("CM sigma_next", f"{float(cm.sigmas[1]):.17g}", "denoised", fmt(cm_denoised), "renoised", fmt(cm_next))

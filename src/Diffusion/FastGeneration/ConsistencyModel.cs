@@ -337,6 +337,22 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     #endregion
 
     /// <summary>
+    /// Multistep consistency sampling re-noise: x = denoised + sqrt(sigma_next^2 - sigma_min^2) z
+    /// (Song et al. 2023, Algorithm 1; diffusers CMStochasticIterativeScheduler.step).
+    /// </summary>
+    /// <param name="denoised">The consistency-function output at the current sigma.</param>
+    /// <param name="noise">Standard normal noise z with the same shape.</param>
+    /// <param name="nextSigma">The sigma level to re-noise to.</param>
+    /// <param name="sigmaMin">The boundary sigma, whose sample is already clean.</param>
+    internal static Tensor<T> RenoiseToSigma(Tensor<T> denoised, Tensor<T> noise, T nextSigma, double sigmaMin)
+    {
+        var engine = AiDotNetEngine.Current;
+        var noiseScale = NumOps.Sqrt(NumOps.Subtract(NumOps.Multiply(nextSigma, nextSigma),
+            NumOps.FromDouble(sigmaMin * sigmaMin)));
+        return engine.TensorAdd(denoised, engine.TensorMultiplyScalar(noise, noiseScale));
+    }
+
+    /// <summary>
     /// Computes the sigma schedule for the ODE.
     /// </summary>
     private T[] ComputeSigmaSchedule()
@@ -498,9 +514,7 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
                 // Add noise to reach the next sigma level: x = denoised + sqrt(sigma_next^2 - sigma_min^2) z
                 // (Song et al. 2023, Algorithm 1; the sample at sigma_min is already the clean boundary)
                 var noise = SampleNoiseTensor(latentShape, rng);
-                var noiseScale = NumOps.Sqrt(NumOps.Subtract(NumOps.Multiply(nextSigma, nextSigma),
-                    NumOps.FromDouble(_sigmaMin * _sigmaMin)));
-                latents = Engine.TensorAdd(denoised, Engine.TensorMultiplyScalar(noise, noiseScale));
+                latents = RenoiseToSigma(denoised, noise, nextSigma, _sigmaMin);
             }
             else
             {

@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using AiDotNet.Diffusion.FastGeneration;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -16,7 +17,8 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Schedulers;
 /// <remarks>
 /// Before this, DPM-Solver++ built its log-SNR from the Karras sigma instead of the VP sigma and added
 /// alpha_t (exp(-h) - 1) D0 where the solver subtracts it, and the Euler schedulers converted a v-prediction with
-/// the VP coefficients although their sample lives in sigma space.
+/// the VP coefficients although their sample lives in sigma space. The consistency model re-noised a multistep
+/// sample with sigma_next instead of Algorithm 1's sqrt(sigma_next^2 - sigma_min^2).
 /// </remarks>
 public class DiffusersSchedulerReferenceTests
 {
@@ -117,5 +119,19 @@ public class DiffusersSchedulerReferenceTests
         var scheduler = new DPMSolverMultistepScheduler<double>(StableDiffusionConfig(DiffusionPredictionType.Epsilon), solverOrder: 3);
         AssertClose(new[] { 1.93788526846478, 0.280834257993723, -1.80678631863168, 8.87487810583401 },
             Run(scheduler, ancestralNoise: false));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConsistencyRenoise_MatchesDiffusers()
+    {
+        await Task.Yield();
+        // diffusers CMStochasticIterativeScheduler.step from the first to the second of two Karras sigmas
+        const double sigmaNext = 2.2404396533966064;
+        var denoised = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 20.0522322038777, -10.1011127621746, 5.15055192806836, 39.8044777668122 }));
+        var noise = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { Math.Sin(1.3), Math.Sin(2.6), Math.Sin(3.9), Math.Sin(5.2) }));
+
+        var renoised = ConsistencyModel<double>.RenoiseToSigma(denoised, noise, sigmaNext, 0.002);
+
+        AssertClose(new[] { 22.2110253106901, -8.94616350754432, 3.60965396672485, 37.8251517128031 }, renoised.ToArray());
     }
 }
