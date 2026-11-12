@@ -195,26 +195,8 @@ public class BidirectionalSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
     private double EvaluateFeature(Matrix<T> data, Vector<T> target, int j, int n)
     {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+        // |Pearson r| with the target
+        return WrapperScoringOps.AbsTargetCorrelation(data, target, j);
     }
 
     /// <inheritdoc />

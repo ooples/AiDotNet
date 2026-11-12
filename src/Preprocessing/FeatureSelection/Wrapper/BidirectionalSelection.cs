@@ -199,56 +199,12 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
 
     private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int featureIdx)
     {
-        int n = data.Rows;
-        double xMean = 0, yMean = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, featureIdx]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double covariance = 0, xVar = 0, yVar = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, featureIdx]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            covariance += xDiff * yDiff;
-            xVar += xDiff * xDiff;
-            yVar += yDiff * yDiff;
-        }
-
-        double denom = Math.Sqrt(xVar * yVar);
-        return denom > 1e-10 ? Math.Abs(covariance / denom) : 0;
+        return WrapperScoringOps.AbsTargetCorrelationWithDenominatorGuard(data, target, featureIdx);
     }
 
     private double ComputeFeatureCorrelation(Matrix<T> data, int f1, int f2)
     {
-        int n = data.Rows;
-        double x1Mean = 0, x2Mean = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            x1Mean += NumOps.ToDouble(data[i, f1]);
-            x2Mean += NumOps.ToDouble(data[i, f2]);
-        }
-        x1Mean /= n;
-        x2Mean /= n;
-
-        double covariance = 0, x1Var = 0, x2Var = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double x1Diff = NumOps.ToDouble(data[i, f1]) - x1Mean;
-            double x2Diff = NumOps.ToDouble(data[i, f2]) - x2Mean;
-            covariance += x1Diff * x2Diff;
-            x1Var += x1Diff * x1Diff;
-            x2Var += x2Diff * x2Diff;
-        }
-
-        double denom = Math.Sqrt(x1Var * x2Var);
-        return denom > 1e-10 ? covariance / denom : 0;
+        return WrapperScoringOps.ColumnCorrelationWithDenominatorGuard(data, f1, f2);
     }
 
     /// <inheritdoc />

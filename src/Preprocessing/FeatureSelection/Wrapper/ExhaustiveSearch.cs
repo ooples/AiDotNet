@@ -127,72 +127,12 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
     private double EvaluateSubset(Matrix<T> data, Vector<T> target, int[] featureIndices, int n)
     {
-        // Compute average absolute correlation with target
-        double totalScore = 0;
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        foreach (int j in featureIndices)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-            totalScore += corr;
-        }
-
-        // Penalize redundancy
-        double redundancy = 0;
-        for (int i = 0; i < featureIndices.Length; i++)
-        {
-            for (int j = i + 1; j < featureIndices.Length; j++)
-            {
-                redundancy += ComputeFeatureCorrelation(data, featureIndices[i], featureIndices[j], n);
-            }
-        }
-
-        int pairCount = featureIndices.Length * (featureIndices.Length - 1) / 2;
-        double avgRedundancy = pairCount > 0 ? redundancy / pairCount : 0;
-
-        return totalScore / featureIndices.Length - 0.5 * avgRedundancy;
-    }
-
-    private double ComputeFeatureCorrelation(Matrix<T> data, int j1, int j2, int n)
-    {
-        double mean1 = 0, mean2 = 0;
-        for (int i = 0; i < n; i++)
-        {
-            mean1 += NumOps.ToDouble(data[i, j1]);
-            mean2 += NumOps.ToDouble(data[i, j2]);
-        }
-        mean1 /= n;
-        mean2 /= n;
-
-        double s12 = 0, s11 = 0, s22 = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double d1 = NumOps.ToDouble(data[i, j1]) - mean1;
-            double d2 = NumOps.ToDouble(data[i, j2]) - mean2;
-            s12 += d1 * d2;
-            s11 += d1 * d1;
-            s22 += d2 * d2;
-        }
-
-        return (s11 > 1e-10 && s22 > 1e-10) ? Math.Abs(s12 / Math.Sqrt(s11 * s22)) : 0;
+        // Average absolute correlation with target, penalized by the average absolute pairwise correlation
+        // (redundancy) of the subset
+        double relevance = featureIndices.Length > 0
+            ? WrapperScoringOps.MeanAbsTargetCorrelation(data, target, featureIndices)
+            : double.NaN;
+        return relevance - 0.5 * WrapperScoringOps.MeanAbsPairCorrelation(data, featureIndices);
     }
 
     /// <inheritdoc />

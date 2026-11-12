@@ -24,6 +24,18 @@ internal static class WrapperScoringOps
         AiDotNetEngine.Current.TensorAbs(
             PreprocessingTensorOps.TargetCorrelations(Columns(data, features), Tensor<T>.FromVector(target), Epsilon));
 
+    /// <summary>|Pearson r| of column <paramref name="feature"/> with the target (see <see cref="AbsTargetCorrelations{T}"/>).</summary>
+    public static double AbsTargetCorrelation<T>(Matrix<T> data, Vector<T> target, int feature) =>
+        ToDouble(AbsTargetCorrelations(data, target, new[] { feature }).GetFlat(0));
+
+    /// <summary>
+    /// |Pearson r| of column <paramref name="feature"/> with <paramref name="target"/>; 0 when
+    /// <c>sqrt(sxx * syy)</c> is not above 1e-10.
+    /// </summary>
+    public static double AbsTargetCorrelationWithDenominatorGuard<T>(Matrix<T> data, Vector<T> target, int feature) =>
+        Math.Abs(ToDouble(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
+            Columns(data, new[] { feature }), Tensor<T>.FromVector(target), Epsilon).GetFlat(0)));
+
     /// <summary>Mean of <see cref="AbsTargetCorrelations{T}"/> over the given (non-empty) columns.</summary>
     public static double MeanAbsTargetCorrelation<T>(Matrix<T> data, Vector<T> target, int[] features) =>
         ToDouble(AiDotNetEngine.Current.TensorMean(AbsTargetCorrelations(data, target, features)));

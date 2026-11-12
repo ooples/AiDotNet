@@ -200,40 +200,13 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_fitnessFunc is not null)
             return _fitnessFunc(data, target, mask);
 
-        int n = data.Rows;
-        int nSelected = mask.Count(b => b);
+        var selected = Enumerable.Range(0, mask.Length).Where(j => mask[j]).ToArray();
+        int nSelected = selected.Length;
         if (nSelected == 0) return double.NegativeInfinity;
 
-        double totalCorr = 0;
-        for (int j = 0; j < mask.Length; j++)
-        {
-            if (!mask[j]) continue;
-
-            double xMean = 0, yMean = 0;
-            for (int i = 0; i < n; i++)
-            {
-                xMean += NumOps.ToDouble(data[i, j]);
-                yMean += NumOps.ToDouble(target[i]);
-            }
-            xMean /= n;
-            yMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                totalCorr += Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-        }
-
+        // Mean |Pearson r| with the target, penalized for selecting more than the requested number of features
         double penalty = nSelected > _nFeaturesToSelect ? 0.1 * (nSelected - _nFeaturesToSelect) : 0;
-        return totalCorr / nSelected - penalty;
+        return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, selected) - penalty;
     }
 
     /// <inheritdoc />
