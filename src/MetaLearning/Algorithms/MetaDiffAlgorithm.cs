@@ -69,13 +69,13 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     private readonly MetaDiffOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>Noise schedule: β_t values.</summary>
-    private readonly double[] _betas;
+    private readonly Vector<T> _betas;
 
     /// <summary>α_t = 1 - β_t.</summary>
-    private readonly double[] _alphas;
+    private readonly Vector<T> _alphas;
 
     /// <summary>ᾱ_t = cumulative product of α.</summary>
-    private readonly double[] _alphasCumprod;
+    private readonly Vector<T> _alphasCumprod;
 
     /// <summary>Denoiser network parameters (task-conditional noise predictor).</summary>
     [AiDotNet.Attributes.TrainableParameter]
@@ -112,16 +112,16 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         _diffusionSteps = Math.Max(1, options.DiffusionSteps);
 
         // Compute linear noise schedule
-        _betas = new double[_diffusionSteps];
-        _alphas = new double[_diffusionSteps];
-        _alphasCumprod = new double[_diffusionSteps];
-
-        for (int t = 0; t < _diffusionSteps; t++)
-        {
-            _betas[t] = options.BetaStart + (options.BetaEnd - options.BetaStart) * t / Math.Max(_diffusionSteps - 1, 1);
-            _alphas[t] = 1.0 - _betas[t];
-            _alphasCumprod[t] = t == 0 ? _alphas[0] : _alphasCumprod[t - 1] * _alphas[t];
-        }
+        // beta_t = start + (end - start) * t / max(T - 1, 1), alpha_t = 1 - beta_t, alphaBar_t = prod_{s<=t} alpha_s
+        var betas = Engine.TensorAddScalar(
+            Engine.TensorDivideScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, _diffusionSteps, 1), NumOps.FromDouble(options.BetaEnd - options.BetaStart)),
+                NumOps.FromDouble(Math.Max(_diffusionSteps - 1, 1))),
+            NumOps.FromDouble(options.BetaStart));
+        var alphas = Engine.TensorSubtract(Engine.TensorOnesLike(betas), betas);
+        _betas = betas.ToVector();
+        _alphas = alphas.ToVector();
+        _alphasCumprod = Engine.TensorCumProd(alphas, 0).ToVector();
 
         // Task encoder: feature_dim → condDim (linear + tanh)
         int featureDim = Math.Min(_paramDim, 64);
@@ -160,11 +160,7 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             var noise = SampleGaussianArray(_compressedDim);
 
             // Step 3: Add noise to target delta: w_t = √ᾱ_t * w_0 + √(1-ᾱ_t) * ε
-            double sqrtAlphaCumprod = Math.Sqrt(_alphasCumprod[t]);
-            double sqrtOneMinusAlphaCumprod = Math.Sqrt(1.0 - _alphasCumprod[t]);
-            var noisedDelta = new double[_compressedDim];
-            for (int i = 0; i < _compressedDim; i++)
-                noisedDelta[i] = sqrtAlphaCumprod * NumOps.ToDouble(targetDelta[i]) + sqrtOneMinusAlphaCumprod * noise[i];
+            var noisedDelta = AddNoise(targetDelta, noise, t);
 
             // Step 4: Compute task conditioning
             var taskCondition = ComputeTaskCondition(task.SupportInput);
@@ -173,13 +169,7 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             var predictedNoise = PredictNoise(noisedDelta, taskCondition, t);
 
             // Step 6: Noise prediction loss (MSE)
-            double noiseLoss = 0;
-            for (int i = 0; i < _compressedDim; i++)
-            {
-                double diff = noise[i] - predictedNoise[i];
-                noiseLoss += diff * diff;
-            }
-            noiseLoss /= _compressedDim;
+            T noiseLoss = MeanSquaredDifference(noise, predictedNoise);
 
             // Also evaluate task performance for meta-gradient on base params
             var denoised = RunDenoisingInference(taskCondition, Math.Min(_algoOptions.SamplingSteps, 5));
@@ -187,7 +177,7 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             ParamModel.SetParameters(adaptedParams);
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(noiseLoss));
+            var totalLoss = NumOps.Add(queryLoss, noiseLoss);
             losses.Add(totalLoss);
 
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -229,8 +219,7 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// </summary>
     private Vector<T> ComputeTargetDelta(Vector<T> baseParams, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) currentParams[d] = baseParams[d];
+        var currentParams = baseParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -239,13 +228,11 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             currentParams = ApplyInnerGradients(currentParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
-        var delta = new Vector<T>(_compressedDim);
+        // delta_i = (theta' - theta)[i * stride]; i * stride < paramDim since compressedDim <= paramDim
         int stride = Math.Max(1, _paramDim / _compressedDim);
-        for (int i = 0; i < _compressedDim; i++)
-        {
-            int idx = Math.Min(i * stride, _paramDim - 1);
-            delta[i] = NumOps.FromDouble(NumOps.ToDouble(currentParams[idx]) - NumOps.ToDouble(baseParams[idx]));
-        }
+        var full = Engine.Subtract(currentParams.GetSubVector(0, _compressedDim * stride), baseParams.GetSubVector(0, _compressedDim * stride));
+        var delta = Engine.TensorSlice(Tensor<T>.FromVector(full, new[] { _compressedDim, stride }),
+            new[] { 0, 0 }, new[] { _compressedDim, 1 }).ToVector();
         return delta;
     }
 
@@ -260,17 +247,17 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
         if (features == null) return condition;
 
+        // tanh(W f + b), W stored [condDim, featureDim], reading the first min(|f|, featureDim) features
         int biasOffset = featureDim * _condDim;
-        for (int o = 0; o < _condDim; o++)
-        {
-            T sum = NumOps.Zero;
-            int fLen = Math.Min(features.Length, featureDim);
-            for (int i = 0; i < fLen; i++)
-                sum = NumOps.Add(sum, NumOps.Multiply(features[i], _taskEncoderParams[o * featureDim + i]));
-            if (biasOffset + o < _taskEncoderParams.Length)
-                sum = NumOps.Add(sum, _taskEncoderParams[biasOffset + o]);
-            condition[o] = sum;
-        }
+        var bias = _taskEncoderParams.GetSubVector(biasOffset, _condDim);
+        int fLen = Math.Min(features.Length, featureDim);
+        if (fLen == 0) return VectorTanh(bias);
+
+        var weights = Engine.TensorSlice(
+            Tensor<T>.FromVector(_taskEncoderParams.GetSubVector(0, biasOffset), new[] { _condDim, featureDim }),
+            new[] { 0, 0 }, new[] { _condDim, fLen });
+        var input = Tensor<T>.FromVector(features.Length == fLen ? features : features.GetSubVector(0, fLen), new[] { fLen, 1 });
+        condition = Engine.Add(Engine.TensorMatMul(weights, input).ToVector(), bias);
         return VectorTanh(condition);
     }
 
@@ -278,60 +265,53 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// Denoiser MLP: predicts noise given noised weights, task condition, and timestep.
     /// Architecture: concat(w_t, c, t/T) → hidden(ReLU) → output.
     /// </summary>
-    private double[] PredictNoise(double[] noisedDelta, Vector<T> taskCondition, int timestep)
+    /// <summary>
+    /// The denoiser MLP: relu(W1 [w_t, c, t / T] + b1) -> W2 h + b2, parameters laid out [W1 | b1 | W2 | b2]
+    /// with W1 [hidden, inputDim] and W2 [compressedDim, hidden].
+    /// </summary>
+    private Vector<T> PredictNoise(Vector<T> noisedDelta, Vector<T> taskCondition, int timestep)
     {
         int inputDim = _compressedDim + _condDim + 1;
         int hidden = Math.Max(32, _compressedDim);
 
         // Build input vector
-        var input = new double[inputDim];
-        Array.Copy(noisedDelta, 0, input, 0, _compressedDim);
-        for (int i = 0; i < _condDim; i++)
-            input[_compressedDim + i] = NumOps.ToDouble(taskCondition[i]);
-        input[_compressedDim + _condDim] = (double)timestep / _diffusionSteps; // Normalized timestep
+        var input = Vector<T>.Concatenate(
+            noisedDelta.GetSubVector(0, _compressedDim),
+            taskCondition.GetSubVector(0, _condDim),
+            new Vector<T>(new[] { NumOps.FromDouble((double)timestep / _diffusionSteps) })); // Normalized timestep
 
         // Layer 1: input → hidden (ReLU)
-        int w1Offset = 0;
         int b1Offset = inputDim * hidden;
-        var h = new double[hidden];
-        for (int o = 0; o < hidden; o++)
-        {
-            double sum = 0;
-            for (int i = 0; i < inputDim; i++)
-            {
-                int idx = w1Offset + o * inputDim + i;
-                if (idx < _denoiserParams.Length)
-                    sum += input[i] * NumOps.ToDouble(_denoiserParams[idx]);
-            }
-            if (b1Offset + o < _denoiserParams.Length)
-                sum += NumOps.ToDouble(_denoiserParams[b1Offset + o]);
-            h[o] = Math.Max(0, sum); // ReLU
-        }
+        var w1 = Tensor<T>.FromVector(_denoiserParams.GetSubVector(0, b1Offset), new[] { hidden, inputDim });
+        var h = Engine.ReLU(Engine.Add(
+            Engine.TensorMatMul(w1, Tensor<T>.FromVector(input, new[] { inputDim, 1 })).ToVector(),
+            _denoiserParams.GetSubVector(b1Offset, hidden)));
 
         // Layer 2: hidden → output
         int w2Offset = b1Offset + hidden;
         int b2Offset = w2Offset + hidden * _compressedDim;
-        var output = new double[_compressedDim];
-        for (int o = 0; o < _compressedDim; o++)
-        {
-            double sum = 0;
-            for (int i = 0; i < hidden; i++)
-            {
-                int idx = w2Offset + o * hidden + i;
-                if (idx < _denoiserParams.Length)
-                    sum += h[i] * NumOps.ToDouble(_denoiserParams[idx]);
-            }
-            if (b2Offset + o < _denoiserParams.Length)
-                sum += NumOps.ToDouble(_denoiserParams[b2Offset + o]);
-            output[o] = sum;
-        }
-
-        return output;
+        var w2 = Tensor<T>.FromVector(_denoiserParams.GetSubVector(w2Offset, hidden * _compressedDim), new[] { _compressedDim, hidden });
+        return Engine.Add(
+            Engine.TensorMatMul(w2, Tensor<T>.FromVector(h, new[] { hidden, 1 })).ToVector(),
+            _denoiserParams.GetSubVector(b2Offset, _compressedDim));
     }
 
-    /// <summary>
-    /// Runs the reverse diffusion process (denoising) to generate task-specific weight deltas.
-    /// </summary>
+    /// <summary>√ᾱ_t * w_0 + √(1-ᾱ_t) * ε.</summary>
+    private Vector<T> AddNoise(Vector<T> clean, Vector<T> noise, int t)
+    {
+        T alphaBar = _alphasCumprod[t];
+        return Engine.Add(
+            Engine.Multiply(clean.GetSubVector(0, _compressedDim), NumOps.Sqrt(alphaBar)),
+            Engine.Multiply(noise, NumOps.Sqrt(NumOps.Subtract(NumOps.One, alphaBar))));
+    }
+
+    /// <summary>mean_i (a_i - b_i)^2.</summary>
+    private T MeanSquaredDifference(Vector<T> a, Vector<T> b)
+    {
+        var diff = Engine.Subtract(a, b);
+        return NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(diff.Length));
+    }
+
     private Vector<T> RunDenoisingInference(Vector<T> taskCondition, int numSteps)
     {
         // Start from pure noise
@@ -343,58 +323,53 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             int t = step;
             var predictedNoise = PredictNoise(wt, taskCondition, t);
 
-            double sqrtAlpha = Math.Sqrt(_alphas[t]);
-            double betaOverSqrt = _betas[t] / Math.Sqrt(1.0 - _alphasCumprod[t] + 1e-10);
+            T sqrtAlpha = NumOps.Sqrt(_alphas[t]);
+            T betaOverSqrt = NumOps.Divide(_betas[t],
+                NumOps.Sqrt(NumOps.Add(NumOps.Subtract(NumOps.One, _alphasCumprod[t]), NumOps.FromDouble(1e-10))));
 
-            for (int i = 0; i < _compressedDim; i++)
-                wt[i] = (wt[i] - betaOverSqrt * predictedNoise[i]) / sqrtAlpha;
+            wt = Engine.Divide(Engine.Subtract(wt, Engine.Multiply(predictedNoise, betaOverSqrt)), sqrtAlpha);
 
             // Add noise (except for t=0)
             if (t > 0)
             {
-                double sigma = Math.Sqrt(_betas[t]);
+                T sigma = NumOps.Sqrt(_betas[t]);
                 var z = SampleGaussianArray(_compressedDim);
-                for (int i = 0; i < _compressedDim; i++)
-                    wt[i] += sigma * z[i];
+                wt = Engine.Add(wt, Engine.Multiply(z, sigma));
             }
         }
 
-        var result = new Vector<T>(_compressedDim);
-        for (int i = 0; i < _compressedDim; i++)
-            result[i] = NumOps.FromDouble(wt[i]);
-        return result;
+        return wt;
     }
 
+    /// <summary>
+    /// theta + delta_i over [i * stride, (i + 1) * stride) for each compressed entry; the tail beyond
+    /// compressedDim * stride is unchanged.
+    /// </summary>
     private Vector<T> ApplyCompressedDelta(Vector<T> baseParams, Vector<T> compressedDelta)
     {
-        var result = new Vector<T>(_paramDim);
         int stride = Math.Max(1, _paramDim / _compressedDim);
-
-        for (int d = 0; d < _paramDim; d++)
-            result[d] = baseParams[d];
-
-        for (int i = 0; i < _compressedDim; i++)
-        {
-            int start = i * stride;
-            int end = Math.Min((i + 1) * stride, _paramDim);
-            for (int d = start; d < end; d++)
-                result[d] = NumOps.Add(result[d], compressedDelta[i]);
-        }
-        return result;
+        int covered = _compressedDim * stride;
+        var expanded = Engine.Reshape(Engine.TensorBroadcastTo(
+            Tensor<T>.FromVector(compressedDelta.GetSubVector(0, _compressedDim), new[] { _compressedDim, 1 }),
+            new[] { _compressedDim, stride }), new[] { covered }).ToVector();
+        if (covered < _paramDim)
+            expanded = Vector<T>.Concatenate(expanded, new Vector<T>(_paramDim - covered));
+        return Engine.Add(baseParams.GetSubVector(0, _paramDim), expanded);
     }
 
-    private double[] SampleGaussianArray(int length)
+    /// <summary>Standard-normal draws, one SampleNormal per entry in order (the seeded stream is unchanged).</summary>
+    private Vector<T> SampleGaussianArray(int length)
     {
-        var arr = new double[length];
+        var arr = new Vector<T>(length);
         for (int i = 0; i < length; i++)
-            arr[i] = SampleNormal();
+            arr[i] = NumOps.FromDouble(SampleNormal());
         return arr;
     }
 
     private double ComputeDiffusionLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var baseParams = ParamModel.GetParameters();
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -403,26 +378,16 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             int t = RandomGenerator.Next(_diffusionSteps);
             var noise = SampleGaussianArray(_compressedDim);
 
-            double sqrtAC = Math.Sqrt(_alphasCumprod[t]);
-            double sqrtOMAC = Math.Sqrt(1.0 - _alphasCumprod[t]);
-            var noised = new double[_compressedDim];
-            for (int i = 0; i < _compressedDim; i++)
-                noised[i] = sqrtAC * NumOps.ToDouble(targetDelta[i]) + sqrtOMAC * noise[i];
-
+            var noised = AddNoise(targetDelta, noise, t);
             var cond = ComputeTaskCondition(task.SupportInput);
             var pred = PredictNoise(noised, cond, t);
-
-            double mse = 0;
-            for (int i = 0; i < _compressedDim; i++)
-            {
-                double diff = noise[i] - pred[i];
-                mse += diff * diff;
-            }
-            totalLoss += mse / _compressedDim;
+            losses.Add(MeanSquaredDifference(noise, pred));
         }
 
         ParamModel.SetParameters(baseParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 
     private void InitGaussian(Vector<T> v, double stdDev)
