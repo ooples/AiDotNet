@@ -57,4 +57,26 @@ public class SparseEmbeddingOptimizerHelpersTests
 
         Assert.False(applied);
     }
+
+    [Fact]
+    public void SumOfSquares_HalfValuesWhoseSumExceedsHalfMax_ReturnsExactDoubleSum()
+    {
+        // 256^2 + 256^2 = 131072 is past Half.MaxValue (65504): a Half reduction overflows to
+        // infinity, which made sparse LAMB/LARS trust ratios and Adafactor RMS wrong.
+        var values = new Vector<Half>(new[] { (Half)256.0f, (Half)256.0f, (Half)(-3.0f) }).AsTensor();
+
+        double sum = SparseEmbeddingOptimizerHelpers.SumOfSquares(values);
+
+        // The rescaled reduction is still a Half sum, so it carries Half's ~1e-3 relative precision.
+        Assert.Equal(131081.0, sum, 2e-3 * 131081.0);
+    }
+
+    [Fact]
+    public void SumOfSquares_DoubleValues_MatchesDirectSum()
+    {
+        var values = new Vector<double>(new[] { 1.5, -2.0, 3.0 }).AsTensor();
+
+        Assert.Equal(15.25, SparseEmbeddingOptimizerHelpers.SumOfSquares(values), 1e-12);
+        Assert.Equal(6.25, SparseEmbeddingOptimizerHelpers.SumOfSquares(values, 2), 1e-12);
+    }
 }

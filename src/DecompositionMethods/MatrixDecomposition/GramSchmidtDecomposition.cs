@@ -115,48 +115,9 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> Q, Matrix<T> R) ComputeClassicalGramSchmidt(Matrix<T> matrix)
     {
-        int m = matrix.Rows;
-        int n = matrix.Columns;
-
-        var Q = new Matrix<T>(m, n);
-        var R = new Matrix<T>(n, n);
-
-        for (int j = 0; j < n; j++)
-        {
-            // Get the j-th column of the original matrix
-            var v = matrix.GetColumn(j);
-
-            // VECTORIZED: Subtract projections onto previous orthogonal vectors
-            for (int i = 0; i < j; i++)
-            {
-                // Calculate projection coefficient using dot product
-                R[i, j] = Q.GetColumn(i).DotProduct(matrix.GetColumn(j));
-
-                // VECTORIZED: Subtract the projection using Engine operations
-
-
-                var qCol = Q.GetColumn(i);
-
-
-                var projection = (Vector<T>)Engine.Multiply(qCol, R[i, j]);
-
-
-                v = (Vector<T>)Engine.Subtract(v, projection);
-            }
-
-            // Calculate the norm (length) of the resulting vector
-            R[j, j] = v.Norm();
-
-            // Normalize the vector and store it as a column in Q using Engine division
-
-
-            var normalized = (Vector<T>)Engine.Divide(v, R[j, j]);
-
-
-            Q.SetColumn(j, normalized);
-        }
-
-        return (Q, R);
+        // Classical Gram-Schmidt yields the unique thin QR factorization with R[j,j] = ‖v_j‖ > 0;
+        // the engine QR computes the same factors in one whole-matrix call.
+        return ComputePositiveDiagonalQr(matrix);
     }
 
     /// <summary>
@@ -175,48 +136,9 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> Q, Matrix<T> R) ComputeModifiedGramSchmidt(Matrix<T> matrix)
     {
-        int m = matrix.Rows;
-        int n = matrix.Columns;
-
-        var Q = new Matrix<T>(m, n);
-        var R = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            // Get the i-th column of the original matrix
-            var v = matrix.GetColumn(i);
-
-            // VECTORIZED: Subtract projections onto previous orthogonal vectors
-            for (int j = 0; j < i; j++)
-            {
-                // Calculate projection coefficient using dot product
-                R[j, i] = Q.GetColumn(j).DotProduct(v);
-
-                // VECTORIZED: Immediately update v using Engine operations
-
-
-                var qColJ = Q.GetColumn(j);
-
-
-                var projectionJ = (Vector<T>)Engine.Multiply(qColJ, R[j, i]);
-
-
-                v = (Vector<T>)Engine.Subtract(v, projectionJ);
-            }
-
-            // Calculate the norm (length) of the resulting vector
-            R[i, i] = v.Norm();
-
-            // Normalize the vector and store it as a column in Q using Engine division
-
-
-            var normalizedI = (Vector<T>)Engine.Divide(v, R[i, i]);
-
-
-            Q.SetColumn(i, normalizedI);
-        }
-
-        return (Q, R);
+        // Modified Gram-Schmidt computes the same factors as the classical variant (with better
+        // rounding); the engine's Householder QR is at least as stable.
+        return ComputePositiveDiagonalQr(matrix);
     }
 
     /// <summary>
@@ -238,60 +160,8 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
         // Solve Qy = b by computing y = Q^T * b
         var y = Q.Transpose().Multiply(b);
 
-        // Solve Rx = y using back-substitution
-        return BackSubstitution(R, y);
-    }
-
-    /// <summary>
-    /// Performs back-substitution to solve an upper triangular system Rx = y.
-    /// </summary>
-    /// <param name="R">The upper triangular matrix.</param>
-    /// <param name="y">The right-hand side vector.</param>
-    /// <returns>The solution vector x.</returns>
-    /// <remarks>
-    /// Back-substitution is an efficient method for solving triangular systems.
-    /// It works by:
-    /// 1. Starting with the last equation (bottom row) and solving for the last variable
-    /// 2. Moving upward, substituting known values to solve for each variable
-    ///
-    /// For example, in a 3x3 system:
-    /// - First solve for x3 from the last equation
-    /// - Then solve for x2 using the known value of x3
-    /// - Finally solve for x1 using the known values of x2 and x3
-    ///
-    /// This implementation uses vectorization to compute the sum of known terms
-    /// efficiently using DotProduct instead of a scalar loop.
-    /// </remarks>
-    private Vector<T> BackSubstitution(Matrix<T> R, Vector<T> y)
-    {
-        int n = R.Rows;
-        var x = new Vector<T>(n);
-
-        // Start from the bottom row and work upward
-        for (int i = n - 1; i >= 0; i--)
-        {
-            // VECTORIZED: Calculate the sum of known terms using dot product
-            T sum;
-            if (i + 1 < n)
-            {
-                // Get the row segment R[i, i+1:n] and the solution segment x[i+1:n]
-                var rowSegment = R.GetRowSegment(i, i + 1, n - i - 1);
-                var xSegment = x.GetRange(i + 1, n - i - 1);
-
-                // VECTORIZED: Compute dot product: sum = R[i, i+1:n] · x[i+1:n]
-                sum = rowSegment.DotProduct(xSegment);
-            }
-            else
-            {
-                // Last row, no terms to sum
-                sum = NumOps.Zero;
-            }
-
-            // Solve for the current variable: x[i] = (y[i] - sum) / R[i, i]
-            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), R[i, i]);
-        }
-
-        return x;
+        // Solve Rx = y with one engine triangular solve
+        return SolveTriangularSystem(R, y, upper: true);
     }
 
     /// <summary>

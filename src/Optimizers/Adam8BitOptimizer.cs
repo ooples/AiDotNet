@@ -255,7 +255,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _mFullPrecision = null;
 
             // m starts at zero: the signed dynamic codebook's zero entry.
-            for (int i = 0; i < length; i++) _mQuantized[i] = DynamicQuantizationMap.SignedZeroIndex;
+            _mQuantized.Fill(DynamicQuantizationMap.SignedZeroIndex);
         }
         else
         {
@@ -265,11 +265,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
 
         // Initialize scales (scale of 1.0 works with the zero-initialized state).
-        for (int b = 0; b < _numBlocks; b++)
-        {
-            if (_mScales is not null) _mScales[b] = 1.0;
-            _vScales[b] = 1.0;
-        }
+        _mScales?.Fill(1.0);
+        _vScales.Fill(1.0);
     }
 
     /// <summary>
@@ -1062,15 +1059,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         };
         // v starts at zero. Unsigned byte 0 maps to the zero quantization
         // bucket, so default-init is correct.
-        for (int b = 0; b < numBlocks; b++) state.VScales[b] = 1.0;
+        state.VScales.Fill(1.0);
 
         if (_options.CompressBothMoments)
         {
             state.MQuantized = new Vector<byte>(paramLength);
             state.MScales = new Vector<double>(numBlocks);
             // m starts at zero: the signed dynamic codebook's zero entry.
-            for (int i = 0; i < paramLength; i++) state.MQuantized[i] = DynamicQuantizationMap.SignedZeroIndex;
-            for (int b = 0; b < numBlocks; b++) state.MScales[b] = 1.0;
+            state.MQuantized.Fill(DynamicQuantizationMap.SignedZeroIndex);
+            state.MScales.Fill(1.0);
         }
         else
         {
@@ -1110,7 +1107,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         while (offset < total)
         {
             int n = Math.Min(chunk.Length, total - offset);
-            for (int i = 0; i < n; i++) chunk[i] = v[offset + i];
+            v.AsSpan().Slice(offset, n).CopyTo(chunk);
             writer.Write(chunk, 0, n);
             offset += n;
         }
@@ -1514,18 +1511,21 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (_vFullPrecision is not null)
         {
             // Below Min8BitSize: plain Adam on full-precision moments.
-            var mSpan = RequireMoment(_mFullPrecision, nameof(_mFullPrecision)).AsWritableSpan();
-            var vSpan = _vFullPrecision.AsWritableSpan();
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                T g = gradientSpan[i];
-                mSpan[i] = NumOps.Add(NumOps.Multiply(beta1, mSpan[i]), NumOps.Multiply(oneMinusBeta1, g));
-                vSpan[i] = NumOps.Add(NumOps.Multiply(beta2, vSpan[i]), NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(g, g)));
-                T denominator = NumOps.Add(NumOps.Sqrt(NumOps.Divide(vSpan[i], biasCorrection2)), epsilon);
-                T update = NumOps.Multiply(CurrentLearningRate, NumOps.Divide(NumOps.Divide(mSpan[i], biasCorrection1), denominator));
-                updatedSpan[i] = NumOps.Subtract(parameterSpan[i], update);
-            }
-            return updatedParameters;
+            var engine = Engine;
+            var gradientTensor = gradient.AsTensor();
+            var mState = RequireMoment(_mFullPrecision, nameof(_mFullPrecision)).AsTensor();
+            var vState = _vFullPrecision.AsTensor();
+            var mNew = engine.TensorAddScaled(mState, gradientTensor, beta1, oneMinusBeta1);
+            var vNew = engine.TensorAdd(
+                engine.TensorMultiplyScalar(vState, beta2),
+                engine.TensorMultiplyScalar(engine.TensorMultiply(gradientTensor, gradientTensor), oneMinusBeta2));
+            engine.TensorCopy(mNew, mState);
+            engine.TensorCopy(vNew, vState);
+            var fullDenominator = engine.TensorAddScalar(
+                engine.TensorSqrt(engine.TensorDivideScalar(vNew, biasCorrection2)), epsilon);
+            var fullUpdate = engine.TensorMultiplyScalar(
+                engine.TensorDivide(engine.TensorDivideScalar(mNew, biasCorrection1), fullDenominator), CurrentLearningRate);
+            return engine.TensorSubtract(parameters.AsTensor(), fullUpdate).AsVector();
         }
         // Resolved once, outside the per-element loop. The quantized first moment exists only when both moments are
         // compressed; otherwise m lives in _mFullPrecision.
@@ -1652,33 +1652,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         int totalSize = parameters.Rows * parameters.Columns;
 
         // Flatten matrix to vector
-        var paramVec = new Vector<T>(totalSize);
-        var gradVec = new Vector<T>(totalSize);
-        int idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                paramVec[idx] = parameters[i, j];
-                gradVec[idx] = gradient[i, j];
-                idx++;
-            }
-        }
+        var paramVec = parameters.ToRowVector();
+        var gradVec = gradient.ToRowVector();
 
         // Update using vector method
         var updatedVec = UpdateParameters(paramVec, gradVec);
 
         // Unflatten vector back to matrix
         var updatedMatrix = new Matrix<T>(parameters.Rows, parameters.Columns);
-        idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                updatedMatrix[i, j] = updatedVec[idx];
-                idx++;
-            }
-        }
+        updatedVec.AsSpan().CopyTo(updatedMatrix.AsWritableSpan());
 
         return updatedMatrix;
     }
@@ -2100,10 +2082,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (vector is null) return;
 
         writer.Write(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            writer.Write(vector[i]);
-        }
+        // Bounded chunks: a full-size copy of a large moment would double the checkpoint's memory.
+        WriteVectorBytesChunked(writer, vector);
     }
 
     // Reject a stream-declared element count that is negative OR larger than the bytes physically
@@ -2137,13 +2117,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         int length = reader.ReadInt32();
         ValidateDeclaredCount(reader, length, sizeof(byte), "byte-vector");
 
-        var vector = new Vector<byte>(length);
-        for (int i = 0; i < length; i++)
+        var bytes = reader.ReadBytes(length);
+        if (bytes.Length != length)
         {
-            vector[i] = reader.ReadByte();
+            throw new EndOfStreamException("Adam8BitOptimizer: byte-vector truncated.");
         }
 
-        return vector;
+        return Vector<byte>.Wrap(bytes);
     }
 
     private static void WriteDoubleVector(BinaryWriter writer, Vector<double>? vector)
