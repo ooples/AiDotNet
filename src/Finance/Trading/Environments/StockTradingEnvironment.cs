@@ -133,17 +133,11 @@ public sealed class StockTradingEnvironment<T> : TradingEnvironment<T>
             return (int)NumOps.ToDouble(action[0]);
         }
 
-        int maxIndex = 0;
-        T maxValue = action[0];
-        for (int i = 1; i < action.Length; i++)
-        {
-            if (NumOps.Compare(action[i], maxValue) > 0)
-            {
-                maxValue = action[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        // The first index of the largest score; a NaN score never wins (it ranks as -infinity).
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var scores = action.AsTensor();
+        var ranked = engine.TensorWhere(engine.TensorIsNan(scores),
+            engine.TensorFullLike(scores, NumOps.FromDouble(double.NegativeInfinity)), scores);
+        return engine.TensorArgMax(ranked, 0).ToArray()[0];
     }
 }

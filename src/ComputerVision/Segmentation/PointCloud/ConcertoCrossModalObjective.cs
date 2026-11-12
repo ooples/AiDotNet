@@ -113,6 +113,7 @@ public static class ConcertoCrossModalObjective<T>
         var similarities = new List<Tensor<T>>();
         var occupancies = new List<Tensor<T>>();
         T epsilonSquared = NumOps.FromDouble(CosineEpsilon * CosineEpsilon);
+        T one = NumOps.One, zero = NumOps.Zero;
 
         foreach (var view in views)
         {
@@ -126,7 +127,7 @@ public static class ConcertoCrossModalObjective<T>
                 engine.TensorBroadcastTo(engine.Reshape(visible, new[] { numPoints, 1 }), new[] { numPoints, featureDim }));
             var sums = engine.TensorScatterAdd(new Tensor<T>(new[] { patchCount, featureDim }), patchIndex, maskedFeatures, 0);
             var pooled = engine.TensorDivide(sums, engine.TensorBroadcastTo(
-                engine.Reshape(engine.TensorClampMin(counts, NumOps.One), new[] { patchCount, 1 }), new[] { patchCount, featureDim }));
+                engine.Reshape(engine.TensorClampMin(counts, one), new[] { patchCount, 1 }), new[] { patchCount, featureDim }));
 
             // Cosine similarity to the frozen image feature; each norm is clamped below at eps (on the
             // squared norm, so an empty patch's zero vector keeps a finite gradient).
@@ -136,7 +137,7 @@ public static class ConcertoCrossModalObjective<T>
                 engine.ReduceSum(engine.TensorMultiply(pooled, pooled), new[] { 1 }, false), epsilonSquared));
             var targetNorm = engine.TensorSqrt(engine.TensorClampMin(
                 engine.ReduceSum(engine.TensorMultiply(targets, targets), new[] { 1 }, false), epsilonSquared));
-            var occupied = engine.TensorGreaterThan(counts, NumOps.Zero);
+            var occupied = engine.TensorGreaterThan(counts, zero);
             similarities.Add(engine.TensorMultiply(
                 engine.TensorDivide(dot, engine.TensorMultiply(pooledNorm, targetNorm)), occupied));
             occupancies.Add(occupied);
