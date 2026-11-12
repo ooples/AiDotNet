@@ -375,6 +375,10 @@ internal static class TimeSeriesEngineOps<T>
     public static Vector<T> Destandardize(Vector<T> v, T scale, T mean)
         => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Tensor<T>.FromVector(v), scale), mean).ToVector();
 
+    /// <summary>Scalar <c>value · scale + mean</c> (one draw of a sequential sampler).</summary>
+    public static T Destandardize(T value, T scale, T mean)
+        => NumOps.Add(NumOps.Multiply(value, scale), mean);
+
     /// <summary>
     /// The <paramref name="length"/> values of <paramref name="y"/> ending just before index <paramref name="end"/>:
     /// element j is <c>y[end - length + j]</c>, or zero where that index is negative.

@@ -415,15 +415,8 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         if (_options.CovariateSize == 0 && n > 1)
             return PredictRowsBatched(input);
 
-        var predictions = new Vector<T>(n);
-
         // Each input row is an independent lookback window — forecast it from its own content.
-        for (int i = 0; i < n; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-
-        return predictions;
+        return TimeSeriesEngineOps<T>.PredictRows(input, PredictSingle);
     }
 
     /// <summary>
@@ -440,28 +433,37 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         int steps = Math.Max(cols, _options.LookbackWindow), pad = steps - cols;
         int h = _options.HiddenSize;
 
-        var sequence = new Tensor<T>(new[] { n, steps, 1 });
-        var lastNorm = new T[n];
-        for (int i = 0; i < n; i++)
-            for (int t = 0; t < steps; t++)
-            {
-                T raw = cols == 0 ? NumOps.Zero : input[i, t < pad ? 0 : t - pad];
-                T normValue = NumOps.Divide(NumOps.Subtract(raw, _normMean), _normStd);
-                sequence[i, t, 0] = normValue;
-                lastNorm[i] = normValue;
-            }
-        var top = FinalHidden(sequence);
-        var predictions = new Vector<T>(n);
-        var column = new Tensor<T>(new[] { h, 1 });
-        for (int i = 0; i < n; i++)
+        // Raw [n, steps] rows, left-padded with each row's first value (all zero when there are no columns)
+        Tensor<T> raw;
+        if (cols == 0)
         {
-            for (int r = 0; r < h; r++)
-                column[r, 0] = top[r, i];
-            var dist = _head.PredictNorm(column, lastNorm[i]);
-            predictions[i] = NumOps.Add(NumOps.Multiply(dist.MeanNorm, _normStd), _normMean);
+            raw = new Tensor<T>(new[] { n, steps });
+        }
+        else
+        {
+            raw = Tensor<T>.FromMatrix(input);
+            if (pad > 0)
+            {
+                var firstColumn = Engine.Reshape(Tensor<T>.FromVector(input.GetColumn(0)), new[] { n, 1 });
+                raw = Engine.TensorConcatenate(new[] { Engine.TensorBroadcastTo(firstColumn, new[] { n, pad }), raw }, 1);
+            }
         }
 
-        return predictions;
+        var normalized = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(raw, _normMean), _normStd).Contiguous();
+        var sequence = Engine.Reshape(normalized, new[] { n, steps, 1 });
+        T[] lastNorm = steps > 0
+            ? Engine.StridedGather(normalized.ToVector(), steps - 1, steps, n).ToArray()
+            : new T[n];
+        var top = FinalHidden(sequence);
+        var meansNorm = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            // Column i of the [h, n] final hidden state as an [h, 1] tensor
+            var column = Engine.TensorNarrow(top, 1, i, 1).Contiguous();
+            meansNorm[i] = _head.PredictNorm(column, lastNorm[i]).MeanNorm;
+        }
+
+        return TimeSeriesEngineOps<T>.Destandardize(new Vector<T>(meansNorm), _normStd, _normMean);
     }
 
     /// <inheritdoc />
@@ -507,29 +509,15 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         // test block. Never overwrite the caller's window with training data.
         if (input.Length < _options.LookbackWindow)
         {
-            var lb = new Vector<T>(_options.LookbackWindow);
+            // Left-pad with the first value (zero for an empty input)
             int pad = _options.LookbackWindow - input.Length;
             T fill = input.Length > 0 ? input[0] : NumOps.Zero;
-            for (int j = 0; j < pad; j++)
-            {
-                lb[j] = fill;
-            }
-
-            for (int j = 0; j < input.Length; j++)
-            {
-                lb[pad + j] = input[j];
-            }
-
-            input = lb;
+            input = Vector<T>.Concatenate(Engine.Fill(pad, fill), input);
         }
 
-        var sequence = new Tensor<T>(new[] { 1, input.Length, 1 });
-        T lastNorm = NumOps.Zero;
-        for (int t = 0; t < input.Length; t++)
-        {
-            lastNorm = NumOps.Divide(NumOps.Subtract(input[t], _normMean), _normStd);
-            sequence[0, t, 0] = lastNorm;
-        }
+        var normalized = TimeSeriesEngineOps<T>.Standardize(input, _normMean, _normStd);
+        T lastNorm = normalized.Length > 0 ? normalized[normalized.Length - 1] : NumOps.Zero;
+        var sequence = Tensor<T>.FromVector(normalized, new[] { 1, input.Length, 1 });
         return _head.PredictNorm(FinalHidden(sequence), lastNorm);
     }
 
@@ -546,6 +534,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         for (int s = 0; s < _options.NumSamples; s++)
         {
             var forecast = new Vector<T>(_options.ForecastHorizon);
+            var drawn = new List<T>(Math.Max(_options.ForecastHorizon, 0));
             Vector<T> context = history.Clone();
 
             for (int hStep = 0; hStep < _options.ForecastHorizon; hStep++)
@@ -553,16 +542,14 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                 var dist = PredictDistNorm(context);
                 // Denormalize a head-drawn sample into the original data scale.
                 T sampleNorm = dist.SampleNorm(_random);
-                T sample = NumOps.Add(NumOps.Multiply(sampleNorm, _normStd), _normMean);
-                forecast[hStep] = sample;
+                T sample = TimeSeriesEngineOps<T>.Destandardize(sampleNorm, _normStd, _normMean);
+                drawn.Add(sample);
 
-                var newContext = new Vector<T>(context.Length);
-                for (int i = 0; i < context.Length - 1; i++)
-                    newContext[i] = context[i + 1];
-                newContext[context.Length - 1] = sample;
-                context = newContext;
+                // Slide the window: drop the oldest value, append the sample
+                context = Vector<T>.Concatenate(context.GetSubVector(1, context.Length - 1), new Vector<T>(new[] { sample }));
             }
 
+            drawn.ToArray().AsSpan().CopyTo(forecast.AsWritableSpan());
             samples.Add(forecast);
         }
 
@@ -598,35 +585,23 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         for (int s = 0; s < _options.NumSamples; s++)
         {
             var winVals = history.Clone();
-            var winCov = new T[L][];
-            for (int i = 0; i < L; i++)
-            {
-                winCov[i] = new T[cov];
-                for (int c = 0; c < cov; c++)
-                    winCov[i][c] = historyCovariates[i, c];
-            }
+            var winCov = CovariateRows(historyCovariates, 0, L, cov);
 
             var forecast = new Vector<T>(horizon);
+            var drawn = new List<T>(Math.Max(horizon, 0));
             for (int hStep = 0; hStep < horizon; hStep++)
             {
                 var dist = PredictDistNormCov(winVals, winCov);
                 T sampleNorm = dist.SampleNorm(_random);
-                T sample = NumOps.Add(NumOps.Multiply(sampleNorm, _normStd), _normMean);
-                forecast[hStep] = sample;
+                T sample = TimeSeriesEngineOps<T>.Destandardize(sampleNorm, _normStd, _normMean);
+                drawn.Add(sample);
 
-                // Slide the window forward one step: drop the oldest (value, covariate row), append the drawn
-                // sample paired with the known-future covariate row for this step.
-                for (int i = 0; i < L - 1; i++)
-                {
-                    winVals[i] = winVals[i + 1];
-                    for (int c = 0; c < cov; c++)
-                        winCov[i][c] = winCov[i + 1][c];
-                }
-                winVals[L - 1] = sample;
-                for (int c = 0; c < cov; c++)
-                    winCov[L - 1][c] = futureCovariates[hStep, c];
+                // Slide both windows: drop the oldest step, append the sample and this step's future covariates
+                winVals = Vector<T>.Concatenate(winVals.GetSubVector(1, L - 1), new Vector<T>(new[] { sample }));
+                winCov = winCov.Skip(1).Concat(CovariateRows(futureCovariates, hStep, 1, cov)).ToArray();
             }
 
+            drawn.ToArray().AsSpan().CopyTo(forecast.AsWritableSpan());
             samples.Add(forecast);
         }
 
@@ -648,37 +623,36 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         if (historyCovariates.Rows != historyWindow.Length || historyCovariates.Columns < cov)
             throw new ArgumentException($"historyCovariates must be [{historyWindow.Length}, >={cov}]; got [{historyCovariates.Rows}, {historyCovariates.Columns}].");
 
-        var covWindow = new T[historyWindow.Length][];
-        for (int i = 0; i < historyWindow.Length; i++)
-        {
-            covWindow[i] = new T[cov];
-            for (int c = 0; c < cov; c++)
-                covWindow[i][c] = historyCovariates[i, c];
-        }
+        var covWindow = CovariateRows(historyCovariates, 0, historyWindow.Length, cov);
 
         var dist = PredictDistNormCov(historyWindow, covWindow);
         return NumOps.Add(NumOps.Multiply(dist.MeanNorm, _normStd), _normMean);
     }
 
     /// <summary>Empirical quantile extraction shared by the univariate and covariate forecast paths.</summary>
+    /// <summary>The first <paramref name="cov"/> columns of rows [start, start + count) as jagged arrays.</summary>
+    private static T[][] CovariateRows(Matrix<T> covariates, int start, int count, int cov)
+        => Enumerable.Range(start, count).Select(row => covariates.GetRow(row).GetSubVector(0, cov).ToArray()).ToArray();
+
     private Dictionary<double, Vector<T>> BuildQuantiles(List<Vector<T>> samples, double[] quantiles)
     {
         var result = new Dictionary<double, Vector<T>>();
+        double[][] sampleValues = samples.Select(sample => Array.ConvertAll(sample.ToArray(), v => Convert.ToDouble(v))).ToArray();
+        int horizonSteps = Math.Max(_options.ForecastHorizon, 0);
         foreach (var q in quantiles)
         {
-            var quantileForecast = new Vector<T>(_options.ForecastHorizon);
-            for (int hStep = 0; hStep < _options.ForecastHorizon; hStep++)
+            double[] quantileValues = Enumerable.Range(0, horizonSteps).Select(hStep =>
             {
-                var values = new List<double>(samples.Count);
-                foreach (var sample in samples)
-                    values.Add(Convert.ToDouble(sample[hStep]));
+                var values = sampleValues.Select(sample => sample[hStep]).ToList();
                 values.Sort();
 
                 int idx = (int)(q * values.Count);
                 idx = Math.Max(0, Math.Min(idx, values.Count - 1));
-                quantileForecast[hStep] = NumOps.FromDouble(values[idx]);
-            }
+                return values[idx];
+            }).ToArray();
 
+            var quantileForecast = new Vector<T>(_options.ForecastHorizon);
+            Array.ConvertAll(quantileValues, NumOps.FromDouble).AsSpan().CopyTo(quantileForecast.AsWritableSpan());
             result[q] = quantileForecast;
         }
 
@@ -693,15 +667,26 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     private DeepARPredictiveDist<T> PredictDistNormCov(Vector<T> seriesWindow, T[][] covWindow)
     {
         int cov = _options.CovariateSize;
-        var sequence = new Tensor<T>(new[] { 1, seriesWindow.Length, 1 + cov });
-        T lastNorm = NumOps.Zero;
-        for (int t = 0; t < seriesWindow.Length; t++)
+        int steps = seriesWindow.Length;
+        if (steps == 0)
         {
-            lastNorm = NumOps.Divide(NumOps.Subtract(seriesWindow[t], _normMean), _normStd);
-            sequence[0, t, 0] = lastNorm;
-            for (int c = 0; c < cov; c++)
-                sequence[0, t, 1 + c] = NumOps.Divide(NumOps.Subtract(covWindow[t][c], _covMean[c]), _covStd[c]);
+            return _head.PredictNorm(FinalHidden(new Tensor<T>(new[] { 1, 0, 1 + cov })), NumOps.Zero);
         }
+
+        // [steps, 1 + cov]: the normalized series, then each covariate normalized with its own statistics
+        var series = TimeSeriesEngineOps<T>.Standardize(seriesWindow, _normMean, _normStd);
+        T lastNorm = series[steps - 1];
+        var columns = new List<Tensor<T>> { Tensor<T>.FromVector(series, new[] { steps, 1 }) };
+        if (cov > 0)
+        {
+            var covariates = Tensor<T>.FromVector(
+                new Vector<T>(covWindow.Take(steps).SelectMany(row => row.Take(cov)).ToArray()), new[] { steps, cov });
+            var means = Engine.TensorBroadcastTo(Tensor<T>.FromVector(new Vector<T>(_covMean.Take(cov).ToArray()), new[] { 1, cov }), new[] { steps, cov });
+            var scales = Engine.TensorBroadcastTo(Tensor<T>.FromVector(new Vector<T>(_covStd.Take(cov).ToArray()), new[] { 1, cov }), new[] { steps, cov });
+            columns.Add(Engine.TensorDivide(Engine.TensorSubtract(covariates, means), scales));
+        }
+
+        var sequence = Engine.Reshape(Engine.TensorConcatenate(columns.ToArray(), 1).Contiguous(), new[] { 1, steps, 1 + cov });
         return _head.PredictNorm(FinalHidden(sequence), lastNorm);
     }
 
@@ -839,12 +824,10 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
 
         _wx = CreateRandomTensor(new[] { 4 * hiddenSize, inputSize }, stddevX, random);
         _wh = CreateRandomTensor(new[] { 4 * hiddenSize, hiddenSize }, stddevH, random);
-        _bias = new Tensor<T>(new[] { 4 * hiddenSize });
-
         // Forget-gate bias initialized to 1 (a standard LSTM trick that helps gradients flow
         // early in training). Gate order is (i, f, g, o), so forget occupies [H, 2H).
-        for (int i = _hiddenSize; i < 2 * _hiddenSize; i++)
-            _bias[i] = NumOps.One;
+        _bias = Tensor<T>.FromVector(Vector<T>.Concatenate(
+            new Vector<T>(hiddenSize), Engine.Fill(hiddenSize, NumOps.One), new Vector<T>(2 * hiddenSize)));
 
         RegisterTrainableParameter(_wx, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_wh, PersistentTensorRole.Weights);
@@ -853,11 +836,12 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
 
     private Tensor<T> CreateRandomTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        int total = tensor.Length;
-        for (int i = 0; i < total; i++)
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     /// <summary>
@@ -915,11 +899,10 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
         for (int d = 0; d < rank; d++)
             shape[d] = reader.ReadInt32();
         int total = shape.Aggregate(1, (a, bb) => a * bb);
-        for (int i = 0; i < total; i++)
-        {
-            double v = reader.ReadDouble();
-            if (i < tensor.Length)
-                tensor[i] = NumOps.FromDouble(v);
-        }
+
+        // Every stored value is read; the first tensor.Length of them overwrite the tensor
+        double[] stored = Enumerable.Range(0, Math.Max(total, 0)).Select(_ => reader.ReadDouble()).ToArray();
+        int used = Math.Min(stored.Length, tensor.Length);
+        Array.ConvertAll(stored, NumOps.FromDouble).AsSpan(0, used).CopyTo(tensor.Data.Span);
     }
 }
