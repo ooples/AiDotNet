@@ -27,13 +27,13 @@ public class PearsonCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nFeaturesToSelect;
     private readonly double _minCorrelation;
 
-    private double[]? _correlations;
+    private Vector<T>? _correlations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Correlations => _correlations;
+    public Vector<T>? Correlations => _correlations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,65 +66,15 @@ public class PearsonCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Compute target mean
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        _correlations = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute feature mean
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            // Compute Pearson correlation
-            double covariance = 0, xVar = 0, yVar = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                covariance += xDiff * yDiff;
-                xVar += xDiff * xDiff;
-                yVar += yDiff * yDiff;
-            }
-
-            double denominator = Math.Sqrt(xVar * yVar);
-            _correlations[j] = denominator > 1e-10 ? covariance / denominator : 0;
-        }
-
-        // Select features above threshold or top by absolute correlation
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (Math.Abs(_correlations[j]) >= _minCorrelation)
-                candidates.Add(j);
-
-        if (candidates.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidates
-                .OrderByDescending(j => Math.Abs(_correlations[j]))
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _correlations
-                .Select((c, idx) => (Corr: Math.Abs(c), Index: idx))
-                .OrderByDescending(x => x.Corr)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var y = FilterStatisticTensorOps.AsTensor(target);
+        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
+        var correlations = FilterStatisticTensorOps.GuardedDivide(
+            sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 1e-10, NumOps.Zero);
+        _correlations = correlations.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
+            Engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

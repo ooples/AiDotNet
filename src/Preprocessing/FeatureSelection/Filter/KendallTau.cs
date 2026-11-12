@@ -28,13 +28,13 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     private readonly int _nFeaturesToSelect;
     private readonly double _minCorrelation;
 
-    private double[]? _correlations;
+    private Vector<T>? _correlations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Correlations => _correlations;
+    public Vector<T>? Correlations => _correlations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,94 +69,42 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
-
-        // Extract target values
-        var targetValues = new double[n];
-        for (int i = 0; i < n; i++)
-            targetValues[i] = NumOps.ToDouble(target[i]);
-
-        _correlations = new double[p];
-
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        T tolerance = NumOps.FromDouble(1e-10);
+        T half = NumOps.FromDouble(0.5);
+        var (yTied, ySign) = PairSigns(FilterStatisticTensorOps.AsTensor(target), tolerance);
+        var signSums = new T[p];
+        var tieSums = new T[p];
         for (int j = 0; j < p; j++)
         {
-            // Extract feature values
-            var featureValues = new double[n];
-            for (int i = 0; i < n; i++)
-                featureValues[i] = NumOps.ToDouble(data[i, j]);
-
-            // Count concordant and discordant pairs
-            long concordant = 0;
-            long discordant = 0;
-            long tiesX = 0;
-            long tiesY = 0;
-
-            for (int i = 0; i < n - 1; i++)
-            {
-                for (int k = i + 1; k < n; k++)
-                {
-                    double xDiff = featureValues[k] - featureValues[i];
-                    double yDiff = targetValues[k] - targetValues[i];
-
-                    if (Math.Abs(xDiff) < 1e-10 && Math.Abs(yDiff) < 1e-10)
-                    {
-                        // Tie in both
-                        continue;
-                    }
-                    else if (Math.Abs(xDiff) < 1e-10)
-                    {
-                        // Tie in X only
-                        tiesX++;
-                    }
-                    else if (Math.Abs(yDiff) < 1e-10)
-                    {
-                        // Tie in Y only
-                        tiesY++;
-                    }
-                    else if ((xDiff > 0 && yDiff > 0) || (xDiff < 0 && yDiff < 0))
-                    {
-                        concordant++;
-                    }
-                    else
-                    {
-                        discordant++;
-                    }
-                }
-            }
-
-            // Kendall Tau-b (adjusted for ties)
-            long nPairs = (long)n * (n - 1) / 2;
-            double numerator = concordant - discordant;
-            double denominator = Math.Sqrt((nPairs - tiesX) * (double)(nPairs - tiesY));
-
-            _correlations[j] = denominator > 1e-10 ? numerator / denominator : 0;
+            var (xTied, xSign) = PairSigns(FeatureSelectionTensorOps.Column(x, j), tolerance);
+            signSums[j] = Engine.TensorSum(Engine.TensorMultiply(xSign, ySign));
+            tieSums[j] = Engine.TensorSum(xTied);
         }
 
-        // Select features above threshold or top by absolute correlation
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (Math.Abs(_correlations[j]) >= _minCorrelation)
-                candidates.Add(j);
-
-        if (candidates.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidates
-                .OrderByDescending(j => Math.Abs(_correlations[j]))
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _correlations
-                .Select((c, idx) => (Corr: Math.Abs(c), Index: idx))
-                .OrderByDescending(x => x.Corr)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-
+        T pairs = NumOps.FromDouble((double)n * (n - 1) / 2);
+        T diagonal = NumOps.FromDouble(n);
+        T yTies = NumOps.Multiply(NumOps.Subtract(Engine.TensorSum(yTied), diagonal), half);
+        var xTies = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(new Tensor<T>(tieSums, new[] { p }), diagonal), half);
+        var numerator = Engine.TensorMultiplyScalar(new Tensor<T>(signSums, new[] { p }), half);
+        var untiedX = Engine.TensorNegate(Engine.TensorSubtractScalar(xTies, pairs));
+        var denominator = Engine.TensorSqrt(Engine.TensorMultiplyScalar(untiedX, NumOps.Subtract(pairs, yTies)));
+        var correlations = FilterStatisticTensorOps.GuardedDivide(numerator, denominator, 1e-10, NumOps.Zero);
+        _correlations = correlations.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
+            Engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
+    }
+
+    // For every pair (i, k) of a 1-D tensor: 1 where |v[k] - v[i]| < tolerance, and the sign of v[k] - v[i] (0 when tied).
+    private (Tensor<T> Tied, Tensor<T> Sign) PairSigns(Tensor<T> values, T tolerance)
+    {
+        int n = values.Length;
+        var difference = Engine.TensorSubtract(
+            FilterStatisticTensorOps.RowBroadcast(values, n), FilterStatisticTensorOps.ColumnBroadcast(values, n));
+        var tied = Engine.TensorLessThan(Engine.TensorAbs(difference), tolerance);
+        return (tied, Engine.TensorMultiply(Engine.TensorSign(difference), FilterStatisticTensorOps.OneMinus(tied)));
     }
 
     /// <inheritdoc />

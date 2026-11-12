@@ -186,13 +186,13 @@ internal static class StatisticalTestHelper
     // sklearn.feature_selection.mutual_info_regression (n_neighbors = 3) without its 1e-10 tie-breaking noise:
     // MI = psi(n) + psi(k) - mean psi(n_x + 1) - mean psi(n_y + 1), the Kraskov et al. (2004) estimator 1,
     // on features and target scaled to unit (population) standard deviation.
-    private static Vector<T> MutualInfoRegression<T>(Matrix<T> data, Vector<T> target)
+    internal static Vector<T> MutualInfoRegression<T>(Matrix<T> data, Vector<T> target, int neighbors = MutualInfoNeighbors)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = data.Rows;
         int p = data.Columns;
-        if (n <= MutualInfoNeighbors)
+        if (n <= neighbors)
             return new Vector<T>(p);
 
         // digamma at the integers 1..n from the harmonic numbers: psi(m) = H(m - 1) - gamma
@@ -201,7 +201,7 @@ internal static class StatisticalTestHelper
             engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), harmonic }, 0), ops.FromDouble(-EulerGamma));
         T constant = ops.Add(
             ops.Subtract(ops.FromDouble(HarmonicNumber(n - 1)), ops.FromDouble(EulerGamma)),
-            ops.Subtract(ops.FromDouble(HarmonicNumber(MutualInfoNeighbors - 1)), ops.FromDouble(EulerGamma)));
+            ops.Subtract(ops.FromDouble(HarmonicNumber(neighbors - 1)), ops.FromDouble(EulerGamma)));
 
         var y = ScaleToUnitStd(FilterStatisticTensorOps.AsTensor(target));
         var self = engine.TensorEye<T>(n);
@@ -218,7 +218,7 @@ internal static class StatisticalTestHelper
             // distance to the k-th nearest neighbour in the joint space (max norm), self excluded
             var joint = engine.TensorMax(dx, dy);
             var radius = engine.TensorIndexSelect(
-                engine.TensorSort(joint, 1, false).Item1, new Tensor<int>(new[] { MutualInfoNeighbors - 1 }, new[] { 1 }), 1);
+                engine.TensorSort(joint, 1, false).Item1, new Tensor<int>(new[] { neighbors - 1 }, new[] { 1 }), 1);
             var radiusGrid = engine.TensorBroadcastTo(radius, new[] { n, n });
 
             // neighbours strictly inside that radius in each marginal space

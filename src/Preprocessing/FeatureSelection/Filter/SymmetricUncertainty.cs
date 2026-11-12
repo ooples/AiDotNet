@@ -28,13 +28,13 @@ public class SymmetricUncertainty<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _uncertaintyScores;
+    private Vector<T>? _uncertaintyScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? UncertaintyScores => _uncertaintyScores;
+    public Vector<T>? UncertaintyScores => _uncertaintyScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,120 +69,18 @@ public class SymmetricUncertainty<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        _uncertaintyScores = new double[p];
-
-        // Discretize target
-        var targetBins = Discretize(target, n);
-        double entropyY = ComputeEntropy(targetBins, n);
-
-        for (int j = 0; j < p; j++)
-        {
-            // Discretize feature
-            var featureValues = new double[n];
-            for (int i = 0; i < n; i++)
-                featureValues[i] = NumOps.ToDouble(data[i, j]);
-
-            var featureBins = Discretize(featureValues);
-            double entropyX = ComputeEntropy(featureBins, n);
-
-            // Compute joint entropy
-            var jointCounts = new Dictionary<(int, int), int>();
-            for (int i = 0; i < n; i++)
-            {
-                var key = (featureBins[i], targetBins[i]);
-                jointCounts[key] = jointCounts.GetValueOrDefault(key) + 1;
-            }
-
-            double jointEntropy = 0;
-            foreach (int count in jointCounts.Values)
-            {
-                if (count > 0)
-                {
-                    double prob = (double)count / n;
-                    jointEntropy -= prob * Math.Log(prob);
-                }
-            }
-
-            // Symmetric uncertainty = 2 * MI / (H(X) + H(Y))
-            double mi = entropyX + entropyY - jointEntropy;
-            double denominator = entropyX + entropyY;
-
-            _uncertaintyScores[j] = denominator > 1e-10 ? 2 * mi / denominator : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _uncertaintyScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // the target is binned on the same equal-width grid as the features
+        var targetCodes = FeatureSelectionTensorOps.RangeBins(
+            Engine.Reshape(FilterStatisticTensorOps.AsTensor(target), new[] { target.Length, 1 }), _nBins);
+        var info = new DiscreteInformation<T>(
+            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            Engine.Reshape(FeatureSelectionTensorOps.OneHot<T>(targetCodes, _nBins), new[] { target.Length, _nBins }));
+        var scores = info.SymmetricUncertainty();
+        _uncertaintyScores = scores.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private int[] Discretize(Vector<T> values, int n)
-    {
-        var result = new int[n];
-        double minVal = double.MaxValue;
-        double maxVal = double.MinValue;
-
-        for (int i = 0; i < n; i++)
-        {
-            double v = NumOps.ToDouble(values[i]);
-            minVal = Math.Min(minVal, v);
-            maxVal = Math.Max(maxVal, v);
-        }
-
-        double range = maxVal - minVal;
-        for (int i = 0; i < n; i++)
-        {
-            double v = NumOps.ToDouble(values[i]);
-            result[i] = range > 1e-10
-                ? Math.Min((int)((v - minVal) / range * (_nBins - 1)), _nBins - 1)
-                : 0;
-        }
-
-        return result;
-    }
-
-    private int[] Discretize(double[] values)
-    {
-        int n = values.Length;
-        var result = new int[n];
-        double minVal = values.Min();
-        double maxVal = values.Max();
-        double range = maxVal - minVal;
-
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = range > 1e-10
-                ? Math.Min((int)((values[i] - minVal) / range * (_nBins - 1)), _nBins - 1)
-                : 0;
-        }
-
-        return result;
-    }
-
-    private double ComputeEntropy(int[] bins, int n)
-    {
-        var counts = new Dictionary<int, int>();
-        foreach (int b in bins)
-            counts[b] = counts.GetValueOrDefault(b) + 1;
-
-        double entropy = 0;
-        foreach (int count in counts.Values)
-        {
-            if (count > 0)
-            {
-                double prob = (double)count / n;
-                entropy -= prob * Math.Log(prob);
-            }
-        }
-
-        return entropy;
     }
 
     /// <inheritdoc />
