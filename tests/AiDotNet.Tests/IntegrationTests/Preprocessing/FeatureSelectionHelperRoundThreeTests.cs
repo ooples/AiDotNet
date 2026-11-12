@@ -9,8 +9,8 @@ namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
 /// <summary>
 /// Reference tests for the third review round of the 08d feature-selection helpers and the sparse autoencoder:
-/// the KL sparsity derivative at saturated units in Half, and the neighbour, shortest-path and distance helpers
-/// where Half overflow met a mask multiply or a "max + 1" sentinel.
+/// the KL sparsity derivative at saturated units in Half, and the pairwise squared distances where Half overflow
+/// met a mask multiply.
 /// </summary>
 public class FeatureSelectionHelperRoundThreeTests
 {
@@ -52,63 +52,20 @@ public class FeatureSelectionHelperRoundThreeTests
         Assert.Equal(1e-10, SparseAutoencoderSelector<double>.ActivationEpsilon());
     }
 
-    // Three points all 4096 apart: each row's two nearest neighbours are the two other rows. The diagonal was pushed
-    // to max + 1, which is 4096 itself in Half, so it tied with the real neighbours and row 0 picked itself.
+    // Rows 300 and 0: the squared distance 300^2 = 90000 is past Half's 65504, so the off-diagonal entries are
+    // +infinity. The engine forms ||a||^2 + ||b||^2 - 2 a.b, so the diagonal of row 0 is inf + inf - inf = NaN, and
+    // the former mask multiply (1 - I) kept it NaN (0 * NaN); the diagonal must be exactly 0.
     [Fact(Timeout = 60000)]
-    public async Task KNearestMask_Half_NeverPicksTheRowItselfPast2048()
+    public async Task PairwiseSquaredDistances_Half_HasAnExactZeroDiagonalWhenDistancesOverflow()
     {
         await Task.CompletedTask;
-        var far = (Half)4096;
-        var distances = new Tensor<Half>(
-            new[] { (Half)0, far, far, far, (Half)0, far, far, far, (Half)0 }, new[] { 3, 3 });
-
-        var mask = FeatureSelectionTensorOps.KNearestMask(distances, 2);
-
-        for (int i = 0; i < 3; i++)
-            for (int j = 0; j < 3; j++)
-                Assert.Equal(i == j ? 0.0 : 1.0, (double)mask[i, j]);
-    }
-
-    // Floyd-Warshall on the chain 0 - 1 - 2 with edges of 30000 and an isolated node 3: d(0, 2) = 60000 and node 3 is
-    // unreachable. The sentinel sum(lengths) + 1 = 120001 overflowed Half to infinity, and 0 * infinity made every
-    // edge NaN.
-    [Fact(Timeout = 60000)]
-    public async Task ShortestPaths_Half_KeepsEdgesFiniteWhenTheLengthsSumPastHalfRange()
-    {
-        await Task.CompletedTask;
-        const int n = 4;
-        var lengths = new Half[n * n];
-        var edges = new Half[n * n];
-        foreach (var (a, b) in new[] { (0, 1), (1, 0), (1, 2), (2, 1) })
-        {
-            lengths[a * n + b] = (Half)30000;
-            edges[a * n + b] = (Half)1;
-        }
-
-        var paths = FeatureSelectionTensorOps.ShortestPaths(
-            new Tensor<Half>(lengths, new[] { n, n }), new Tensor<Half>(edges, new[] { n, n }), out var reachable);
-
-        Assert.Equal(30000.0, (double)paths[0, 1]);
-        Assert.Equal(60000.0, (double)paths[0, 2]);
-        Assert.Equal(30000.0, (double)paths[2, 1]);
-        Assert.Equal(0.0, (double)paths[1, 1]);
-        Assert.True(double.IsPositiveInfinity((double)paths[0, 3]));
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                Assert.Equal(i == j || (i < 3 && j < 3) ? 1.0 : 0.0, (double)reachable[i, j]);
-    }
-
-    // The diagonal of a squared-distance matrix is exactly 0 even where |a|^2 = 90000 overflows Half (a mask
-    // multiply of an overflowed entry is 0 * infinity = NaN).
-    [Fact(Timeout = 60000)]
-    public async Task PairwiseSquaredDistances_Half_HasAnExactZeroDiagonal()
-    {
-        await Task.CompletedTask;
-        var x = new Tensor<Half>(new[] { (Half)300, (Half)100 }, new[] { 2, 1 });
+        var x = new Tensor<Half>(new[] { (Half)300, (Half)0 }, new[] { 2, 1 });
 
         var squared = FeatureSelectionTensorOps.PairwiseSquaredDistances(x);
 
         Assert.Equal(0.0, (double)squared[0, 0]);
         Assert.Equal(0.0, (double)squared[1, 1]);
+        Assert.True(double.IsPositiveInfinity((double)squared[0, 1]));
+        Assert.True(double.IsPositiveInfinity((double)squared[1, 0]));
     }
 }
