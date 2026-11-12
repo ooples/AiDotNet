@@ -30,7 +30,8 @@ internal static class ResamplingTensorOps
         var membership = engine.TensorEquals(
             engine.TensorBroadcastTo(engine.Reshape(classes, new[] { c, 1 }), shape).Contiguous(),
             engine.TensorBroadcastTo(engine.Reshape(labels, new[] { 1, n }), shape).Contiguous());
-        var sizes = engine.ReduceSum(membership, new[] { 1 }, false).Cast<int>().AsSpan().ToArray();
+        // Summed as int: a sum in T stops counting at 2048 for Half
+        var sizes = engine.ReduceSum(membership.Cast<int>(), new[] { 1 }, false).AsSpan().ToArray();
         var first = PreprocessingTensorOps.FirstNonZeroPerRow(membership);
         var values = classes.AsSpan().ToArray();
         foreach (int k in Enumerable.Range(0, c).Where(k => sizes[k] > 0).OrderBy(k => first[k]))

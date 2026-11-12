@@ -191,11 +191,14 @@ internal static class ScalerTensorOps
         return result;
     }
 
-    /// <summary>Number of non-zero entries in each column of a 0/1 [n, p] mask.</summary>
+    /// <summary>
+    /// Number of non-zero entries in each column of a 0/1 [n, p] mask. The mask is summed as int: a sum in T
+    /// stops counting at 2048 for Half (2048 + 1 rounds back to 2048).
+    /// </summary>
     public static int[] CountPerColumn<T>(Tensor<T> mask) =>
         mask.Shape[0] == 0
             ? new int[mask.Shape[1]]
-            : Engine.ReduceSum(mask, new[] { 0 }, false).Cast<int>().AsSpan().ToArray();
+            : Engine.ReduceSum(mask.Cast<int>(), new[] { 0 }, false).AsSpan().ToArray();
 
     /// <summary>Converts a double hyper-parameter to T.</summary>
     public static T Scalar<T>(double value) => MathHelper.GetNumericOperations<T>().FromDouble(value);
