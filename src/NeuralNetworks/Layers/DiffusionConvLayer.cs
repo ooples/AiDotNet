@@ -478,12 +478,8 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
             return times;
         }
 
-        for (int i = 0; i < numTimeScales; i++)
-        {
-            double logT = logMin + (logMax - logMin) * i / (numTimeScales - 1);
-            times[i] = NumOps.FromDouble(Math.Exp(logT));
-        }
-
+        // exp(t) for t evenly spaced from log(minTime) to log(maxTime).
+        Engine.TensorLogspace<T>(logMin, logMax, numTimeScales, Math.E).CopyTo(times.AsSpan());
         return times;
     }
 
@@ -659,17 +655,15 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> ExtractBatchSlice(Tensor<T> batched, int batchIndex, int numVertices)
     {
         int channels = batched.Shape[2];
-        var data = new T[numVertices * channels];
+        if (numVertices == 0 || channels == 0) return new Tensor<T>([numVertices, channels]);
 
-        for (int v = 0; v < numVertices; v++)
+        // A plain copy of sample batchIndex (off the tape, as the element-wise copy was).
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int c = 0; c < channels; c++)
-            {
-                data[v * channels + c] = batched[batchIndex, v, c];
-            }
+            return Engine.Reshape(
+                Engine.TensorSlice(batched, [batchIndex, 0, 0], [1, numVertices, channels]),
+                [numVertices, channels]).Clone();
         }
-
-        return new Tensor<T>(data, [numVertices, channels]);
     }
 
     /// <summary>
@@ -861,30 +855,27 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
             var eigenValues = decomposition.EigenValues;
             var eigenVectors = decomposition.EigenVectors;
             int size = eigenValues.Length;
-            var pairs = new (double value, int index)[size];
-            for (int i = 0; i < size; i++)
-            {
-                pairs[i] = (NumOps.ToDouble(eigenValues[i]), i);
-            }
+            var eigenValueTensor = Tensor<T>.FromVector(eigenValues);
+            var keys = eigenValueTensor.Cast<double>().ToVector().ToArray();
+            var pairs = keys.Select((value, index) => (value, index)).ToArray();
 
             Array.Sort(pairs, (a, b) => a.value.CompareTo(b.value));
 
             int count = Math.Min(_numEigenvectors, size);
-            var selectedValues = new T[count];
-            var selectedVectors = new T[laplacianMatrix.Rows * count];
-
-            for (int col = 0; col < count; col++)
+            if (count == 0 || laplacianMatrix.Rows == 0)
             {
-                int srcIndex = pairs[col].index;
-                selectedValues[col] = eigenValues[srcIndex];
-                for (int row = 0; row < laplacianMatrix.Rows; row++)
-                {
-                    selectedVectors[row * count + col] = eigenVectors[row, srcIndex];
-                }
+                _eigenvalues = new T[count];
+                _eigenvectors = new Tensor<T>([laplacianMatrix.Rows, count]);
+                return;
             }
 
-            _eigenvalues = selectedValues;
-            _eigenvectors = new Tensor<T>(selectedVectors, [laplacianMatrix.Rows, count]);
+            // The eigenpairs in ascending eigenvalue order: values and the matching eigenvector columns.
+            var order = new Tensor<int>(pairs.Take(count).Select(pair => pair.index).ToArray(), [count]);
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                _eigenvalues = Engine.TensorGather(eigenValueTensor, order, axis: 0).ToVector().ToArray();
+                _eigenvectors = Engine.TensorGather(Tensor<T>.FromMatrix(eigenVectors), order, axis: 1).Clone();
+            }
         }
     }
 
@@ -1063,29 +1054,25 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
         // Project input to spectral domain once: [numEig, InputChannels]
         var spectralCoeffs = Engine.TensorMatMul(eigenvectorsTransposed, input);
 
+        var lambdas = new Tensor<T>(_eigenvalues.Take(numEig).ToArray(), [numEig, 1]);
+        var timeGradients = new T[NumTimeScales];
         for (int t = 0; t < NumTimeScales; t++)
         {
             T time = DiffusionTimes[t];
-            T timeGrad = NumOps.Zero;
+            T timeGrad;
 
             // For each eigenvalue, compute the derivative contribution
-            // d/dt(exp(-lambda * t)) = -lambda * exp(-lambda * t)
-            var derivativeCoeffs = new T[numEig * InputChannels];
-            for (int k = 0; k < numEig; k++)
+            // d/dt(exp(-lambda * t)) = -lambda * exp(-lambda * t), scaling that eigenvalue's coefficient row.
+            Tensor<T> derivTensor;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                T lambda = _eigenvalues[k];
-                T decay = NumOps.Exp(NumOps.Negate(NumOps.Multiply(lambda, time)));
-                T derivativeFactor = NumOps.Negate(NumOps.Multiply(lambda, decay));
-
-                for (int c = 0; c < InputChannels; c++)
-                {
-                    int idx = k * InputChannels + c;
-                    derivativeCoeffs[idx] = NumOps.Multiply(spectralCoeffs[k, c], derivativeFactor);
-                }
+                var decay = Engine.TensorExp(Engine.TensorNegate(Engine.TensorMultiplyScalar(lambdas, time)));
+                var derivativeFactor = Engine.TensorNegate(Engine.TensorMultiply(lambdas, decay));   // [numEig, 1]
+                derivTensor = Engine.TensorMultiply(
+                    Engine.TensorSlice(spectralCoeffs, [0, 0], [numEig, InputChannels]), derivativeFactor).Clone();
             }
 
             // Project derivative back to spatial domain: [numVertices, InputChannels]
-            var derivTensor = new Tensor<T>(derivativeCoeffs, [numEig, InputChannels]);
             var spatialDeriv = Engine.TensorMatMul(_eigenvectors, derivTensor);
 
             // Extract gradient slice for this time scale
@@ -1097,8 +1084,21 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
             var sumTensor = Engine.ReduceSum(product, [0, 1], keepDims: false);
             timeGrad = sumTensor.GetFlat(0);
 
-            _diffusionTimesGradient[t] = NumOps.Add(_diffusionTimesGradient[t], timeGrad);
+            timeGradients[t] = timeGrad;
         }
+
+        AccumulateTimeGradients(timeGradients);
+    }
+
+    /// <summary>Adds one time-gradient contribution per time scale to the accumulated time gradients.</summary>
+    private void AccumulateTimeGradients(T[] timeGradients)
+    {
+        if (_diffusionTimesGradient == null || timeGradients.Length == 0)
+            return;
+
+        int length = _diffusionTimesGradient.Length;
+        Engine.TensorAdd(new Tensor<T>(_diffusionTimesGradient.ToArray(), [length]), new Tensor<T>(timeGradients, [length]))
+            .CopyTo(_diffusionTimesGradient.AsSpan());
     }
 
     /// <summary>
@@ -1115,46 +1115,45 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
 
         // Use numerical differentiation for direct method
         T epsilon = NumOps.FromDouble(1e-5);
+        if (NumTimeScales == 0)
+            return;
+
+        var times = new Tensor<T>(DiffusionTimes.ToArray(), [NumTimeScales]);
+        var plusTimes = Engine.TensorAddScalar(times, epsilon).ToVector().ToArray();
+        var minusTimes = Engine.TensorSubtractScalar(times, epsilon).ToVector().ToArray();
+        T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+        // diffusedGrad element (v, t, c) sits at v * InputChannels * NumTimeScales + t * InputChannels + c.
+        var gradColumns = Engine.Reshape(diffusedGrad, [numVertices, NumTimeScales * InputChannels]);
+        var timeGradients = new T[NumTimeScales];
 
         for (int t = 0; t < NumTimeScales; t++)
         {
             T originalTime = DiffusionTimes[t];
 
             // Compute diffusion at t + epsilon
-            DiffusionTimes[t] = NumOps.Add(originalTime, epsilon);
+            DiffusionTimes[t] = plusTimes[t];
             var diffusedPlus = new T[numVertices * InputChannels];
             ComputeDiffusionDirectSingleTime(input, diffusedPlus, numVertices, t);
 
             // Compute diffusion at t - epsilon
-            DiffusionTimes[t] = NumOps.Subtract(originalTime, epsilon);
+            DiffusionTimes[t] = minusTimes[t];
             var diffusedMinus = new T[numVertices * InputChannels];
             ComputeDiffusionDirectSingleTime(input, diffusedMinus, numVertices, t);
 
             // Restore original time
             DiffusionTimes[t] = originalTime;
 
-            // Compute finite difference: (f(t+e) - f(t-e)) / (2*e)
-            T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-            T timeGrad = NumOps.Zero;
-
-            int baseOffset = t * InputChannels;
-            for (int v = 0; v < numVertices; v++)
-            {
-                for (int c = 0; c < InputChannels; c++)
-                {
-                    int localIdx = v * InputChannels + c;
-                    int gradIdx = v * InputChannels * NumTimeScales + baseOffset + c;
-
-                    T diff = NumOps.Divide(
-                        NumOps.Subtract(diffusedPlus[localIdx], diffusedMinus[localIdx]),
-                        twoEpsilon);
-                    T grad = diffusedGrad.GetFlat(gradIdx);
-                    timeGrad = NumOps.Add(timeGrad, NumOps.Multiply(grad, diff));
-                }
-            }
-
-            _diffusionTimesGradient[t] = NumOps.Add(_diffusionTimesGradient[t], timeGrad);
+            // Compute finite difference: (f(t+e) - f(t-e)) / (2*e), dotted with this time scale's gradient.
+            var diff = Engine.TensorDivideScalar(
+                Engine.TensorSubtract(
+                    new Tensor<T>(diffusedPlus, [numVertices, InputChannels]),
+                    new Tensor<T>(diffusedMinus, [numVertices, InputChannels])),
+                twoEpsilon);
+            var grad = Engine.TensorSlice(gradColumns, [0, t * InputChannels], [numVertices, InputChannels]);
+            timeGradients[t] = Engine.ReduceSum(Engine.TensorMultiply(grad, diff), [0, 1], keepDims: false).GetFlat(0);
         }
+
+        AccumulateTimeGradients(timeGradients);
     }
 
     /// <summary>
@@ -1341,16 +1340,18 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
         if (_diffusionTimesGradient != null)
         {
             T minTime = NumOps.FromDouble(1e-6); // Minimum allowed diffusion time
-            for (int t = 0; t < NumTimeScales; t++)
+            int count = NumTimeScales;
+            if (count > 0)
             {
-                T update = NumOps.Multiply(learningRate, _diffusionTimesGradient[t]);
-                DiffusionTimes[t] = NumOps.Subtract(DiffusionTimes[t], update);
+                var times = new Tensor<T>(DiffusionTimes.Take(count).ToArray(), [count]);
+                var update = Engine.TensorMultiplyScalar(new Tensor<T>(_diffusionTimesGradient.Take(count).ToArray(), [count]), learningRate);
+                var updated = Engine.TensorSubtract(times, update);
 
-                // Clamp to minimum positive value to ensure valid diffusion
-                if (NumOps.LessThan(DiffusionTimes[t], minTime))
-                {
-                    DiffusionTimes[t] = minTime;
-                }
+                // Clamp to minimum positive value to ensure valid diffusion (NaN is kept, as before).
+                var floor = new Tensor<T>([count]);
+                floor.Fill(minTime);
+                Engine.TensorWhere(Engine.TensorLessThan(updated, minTime), floor, updated)
+                    .CopyTo(DiffusionTimes.AsSpan(0, count));
             }
         }
     }
