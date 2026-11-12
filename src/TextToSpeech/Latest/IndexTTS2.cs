@@ -531,10 +531,9 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
 
     private int[] TokenIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(tensor.GetFlat(i)));
             if (ids[i] < 0 || ids[i] > _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"Text token ids lie in [0, {_options.VocabSize}].");
         }
@@ -607,8 +606,10 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
         if (frames < 1) return Array.Empty<double>();
         var condition = Engine.TensorConcatenate(new[] { promptCondition, SemanticToMel.Regulator.Forward(semantic, frames) }, 0);
         int total = condition.Shape[0];
-        var noise = new Tensor<T>(new[] { total, o.MelChannels });
-        for (int i = 0; i < noise.Length; i++) noise[i] = Ops.FromDouble(IndexTtsOps.Gaussian(random));
+        var draws = new T[total * o.MelChannels];
+        for (int i = 0; i < draws.Length; i++) draws[i] = Ops.FromDouble(IndexTtsOps.Gaussian(random));
+        var noise = new Tensor<T>(draws, new[] { total, o.MelChannels });
+
         var mel = SemanticToMel.Solve(condition, prompt.Mel, prompt.Style, noise, o.DiffusionSteps, o.Guidance);
         var wave = Vocoder.Forward(Engine.Reshape(Engine.TensorTranspose(mel), new[] { 1, o.MelChannels, mel.Shape[0] }));
         return Doubles(wave);
