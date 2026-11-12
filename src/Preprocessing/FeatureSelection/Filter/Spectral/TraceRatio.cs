@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -26,17 +27,17 @@ public class TraceRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
-    private double _traceRatioValue;
+    private T _traceRatioValue = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
-    public double TraceRatioValue => _traceRatioValue;
+    public T TraceRatioValue => _traceRatioValue;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
@@ -63,107 +64,46 @@ public class TraceRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        // Group samples by class
-        var classGroups = new Dictionary<double, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            double y = NumOps.ToDouble(target[i]);
-            if (!classGroups.ContainsKey(y))
-                classGroups[y] = new List<int>();
-            classGroups[y].Add(i);
-        }
+        // Diagonal between-class (Sb) and within-class (Sw) scatter of every feature, classes = distinct targets
+        var classOneHot = StatisticalTestHelper.ClassOneHot(target, out _);
+        var (sb, sw) = FilterStatisticTensorOps.AnovaSums(FilterStatisticTensorOps.AsTensor(data), classOneHot);
 
-        // Compute global mean
-        var globalMean = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                globalMean[j] += NumOps.ToDouble(data[i, j]);
-            globalMean[j] /= n;
-        }
+        // Feature scores Sb / Sw; with no within-class scatter a feature whose class means differ separates the
+        // classes exactly (+infinity), a constant one scores 0
+        var scores = FilterStatisticTensorOps.SeparationAwareRatio(sb, sw, 1e-10);
+        _featureScores = scores.ToVector();
 
-        // Compute between-class and within-class scatter (diagonal approximation)
-        var Sb = new double[p];  // Diagonal of between-class scatter
-        var Sw = new double[p];  // Diagonal of within-class scatter
-
-        foreach (var kvp in classGroups)
-        {
-            var classIndices = kvp.Value;
-            int nk = classIndices.Count;
-
-            // Class mean
-            var classMean = new double[p];
-            foreach (int i in classIndices)
-                for (int j = 0; j < p; j++)
-                    classMean[j] += NumOps.ToDouble(data[i, j]);
-            for (int j = 0; j < p; j++)
-                classMean[j] /= nk;
-
-            // Between-class scatter
-            for (int j = 0; j < p; j++)
-                Sb[j] += nk * Math.Pow(classMean[j] - globalMean[j], 2);
-
-            // Within-class scatter
-            foreach (int i in classIndices)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double diff = NumOps.ToDouble(data[i, j]) - classMean[j];
-                    Sw[j] += diff * diff;
-                }
-            }
-        }
-
-        // Compute feature scores (Sb / Sw per feature)
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = Sw[j] > 1e-10 ? Sb[j] / Sw[j] : 0;
-
-        // Greedy selection to maximize trace ratio
+        // Greedy selection to maximize the trace ratio sum(Sb) / sum(Sw) of the selected set (first feature on ties)
+        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
+        var taken = new Tensor<T>(new[] { p });
+        var sbSelected = new Tensor<T>(new[] { p });
+        var swSelected = new Tensor<T>(new[] { p });
         var selected = new List<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, p));
-
-        while (selected.Count < _nFeaturesToSelect && remaining.Count > 0)
+        var bestRatio = new Tensor<T>(new[] { 1 });
+        while (selected.Count < _nFeaturesToSelect && selected.Count < p)
         {
-            int bestFeature = -1;
-            double bestRatio = double.NegativeInfinity;
-
-            foreach (int f in remaining)
-            {
-                // Compute incremental trace ratio
-                double sbSum = 0, swSum = 0;
-                foreach (int s in selected)
-                {
-                    sbSum += Sb[s];
-                    swSum += Sw[s];
-                }
-                sbSum += Sb[f];
-                swSum += Sw[f];
-
-                double ratio = swSum > 1e-10 ? sbSum / swSum : 0;
-                if (ratio > bestRatio)
-                {
-                    bestRatio = ratio;
-                    bestFeature = f;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                selected.Add(bestFeature);
-                remaining.Remove(bestFeature);
-                _traceRatioValue = bestRatio;
-            }
-            else
-            {
-                break;
-            }
+            var ratio = FilterStatisticTensorOps.SeparationAwareRatio(
+                engine.TensorAdd(sbSelected, sb), engine.TensorAdd(swSelected, sw), 1e-10);
+            var candidates = FeatureSelectionTensorOps.KeepOrFill(ratio, FilterStatisticTensorOps.OneMinus(taken), negativeInfinity);
+            int bestFeature = FilterStatisticTensorOps.FirstArgMax(candidates);
+            var chosen = new[] { bestFeature };
+            selected.Add(bestFeature);
+            bestRatio = FeatureSelectionTensorOps.Entries(candidates, chosen);
+            taken = engine.TensorAdd(taken, engine.Reshape(engine.TensorOneHot<T>(new Tensor<int>(chosen, new[] { 1 }), p), new[] { p }));
+            sbSelected = engine.TensorBroadcastTo(engine.TensorAdd(
+                FeatureSelectionTensorOps.Entries(sbSelected, chosen), FeatureSelectionTensorOps.Entries(sb, chosen)), new[] { p });
+            swSelected = engine.TensorBroadcastTo(engine.TensorAdd(
+                FeatureSelectionTensorOps.Entries(swSelected, chosen), FeatureSelectionTensorOps.Entries(sw, chosen)), new[] { p });
         }
+
+        if (selected.Count > 0)
+            _traceRatioValue = engine.TensorSum(bestRatio);
 
         _selectedIndices = selected.OrderBy(x => x).ToArray();
+
         IsFitted = true;
     }
 

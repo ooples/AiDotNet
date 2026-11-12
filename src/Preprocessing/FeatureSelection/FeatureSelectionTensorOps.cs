@@ -301,6 +301,66 @@ internal static class FeatureSelectionTensorOps
         return engine.TensorMultiply(kernel, linked);
     }
 
+    /// <summary>
+    /// The 0/1 [n, n] mask of each row's <paramref name="k"/> nearest other rows by the given distances (ties to the
+    /// lower index); the diagonal is never set.
+    /// </summary>
+    public static Tensor<T> KnnMask<T>(Tensor<T> distances, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = distances.Shape[0];
+        var candidates = engine.TensorWhere(
+            engine.TensorEye<T>(n), FilterStatisticTensorOps.FilledLike(distances, ops.FromDouble(double.PositiveInfinity)), distances);
+        var mask = new Tensor<T>(new[] { n, n });
+        foreach (var (index, found) in NearestPerRow(candidates, k))
+        {
+            var oneHot = engine.TensorOneHot<T>(new Tensor<int>(index, new[] { n }), n);
+            mask = engine.TensorMax(mask, engine.TensorMultiply(oneHot, FilterStatisticTensorOps.ColumnBroadcast(found, n)));
+        }
+
+        return mask;
+    }
+
+    /// <summary>
+    /// Power iteration with deflation: for every start vector ([n, 1]) in turn, <paramref name="iterations"/> steps
+    /// of <c>v = M v</c>, made orthogonal to the vectors already found and normalised. A step whose norm is not above
+    /// 1e-10 keeps the previous vector when <paramref name="keepPreviousOnZeroNorm"/> is set, otherwise takes the
+    /// unnormalised product. Returns the [n, 1] vectors.
+    /// </summary>
+    public static List<Tensor<T>> PowerIteration<T>(
+        Tensor<T> matrix, IReadOnlyList<Tensor<T>> starts, int iterations, bool keepPreviousOnZeroNorm)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = matrix.Shape[0];
+        T tolerance = ops.FromDouble(1e-10);
+        var found = new List<Tensor<T>>();
+        foreach (var start in starts)
+        {
+            var v = start;
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                var product = engine.TensorMatMul(matrix, v);
+                foreach (var previous in found)
+                {
+                    var dot = engine.TensorMatMul(engine.TensorTranspose(previous), product);
+                    product = engine.TensorSubtract(product, engine.TensorMultiply(previous, engine.TensorBroadcastTo(dot, new[] { n, 1 })));
+                }
+
+                var norm = engine.TensorBroadcastTo(
+                    engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(product), new[] { 0 }, true)), new[] { n, 1 });
+                var moved = engine.TensorGreaterThan(norm, tolerance);
+                var safeNorm = engine.TensorWhere(moved, norm, FilterStatisticTensorOps.FilledLike(norm, ops.One));
+                v = engine.TensorWhere(moved, engine.TensorDivide(product, safeNorm), keepPreviousOnZeroNorm ? v : product);
+            }
+
+            found.Add(v);
+        }
+
+        return found;
+    }
+
     /// <summary>|rows - x[neighbour]| feature by feature ([m, p]).</summary>
     public static Tensor<T> NeighbourDifference<T>(Tensor<T> rows, Tensor<T> x, int[] neighbour)
     {

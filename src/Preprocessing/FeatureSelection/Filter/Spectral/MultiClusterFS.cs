@@ -32,14 +32,14 @@ public class MultiClusterFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
     private readonly double _sigma;
     private readonly int? _randomState;
 
-    private double[]? _mcfsScores;
+    private Vector<T>? _mcfsScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NClusters => _nClusters;
-    public double[]? McfsScores => _mcfsScores;
+    public Vector<T>? McfsScores => _mcfsScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,173 +70,48 @@ public class MultiClusterFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Build affinity matrix
-        var W = BuildAffinityMatrix(data, n, p);
+        // k-NN graph with Gaussian weights exp(-d^2 / (2 sigma^2)) and its normalised affinity D^-1/2 W D^-1/2
+        var W = FeatureSelectionTensorOps.KnnGaussianAffinity(x, _nNeighbors, 1.0 / (2 * _sigma * _sigma));
+        var D = engine.ReduceSum(W, new[] { 1 }, false);
+        var dInvSqrt = FilterStatisticTensorOps.GuardedDivide(
+            FilterStatisticTensorOps.FilledLike(D, NumOps.One), engine.TensorSqrt(D), Math.Sqrt(1e-10), NumOps.Zero);
+        var L = engine.TensorMultiply(W, engine.TensorOuter(dInvSqrt, dInvSqrt));
 
-        // Compute normalized Laplacian
-        var D = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                D[i] += W[i, j];
-        }
-
-        // Compute eigenvectors
+        // Eigenvectors by power iteration from random starts
         int k = Math.Min(_nClusters, n - 1);
-        var eigenvectors = ComputeBottomEigenvectors(W, D, n, k, random);
+        T lower = NumOps.FromDouble(-0.5);
+        T upper = NumOps.FromDouble(0.5);
+        var starts = Enumerable.Range(0, Math.Max(k, 0))
+            .Select(_ => engine.TensorRandomUniformRange<T>(new[] { n, 1 }, lower, upper, random.Next()))
+            .ToList();
+        var eigenvectors = FeatureSelectionTensorOps.PowerIteration(L, starts, 50, keepPreviousOnZeroNorm: true);
 
-        // For each feature, compute MCFS score using L1-regularized regression
-        _mcfsScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Extract feature column
-            var f = new double[n];
-            for (int i = 0; i < n; i++)
-                f[i] = NumOps.ToDouble(data[i, j]);
-
-            // Normalize feature
-            double mean = f.Average();
-            double std = Math.Sqrt(f.Select(x => (x - mean) * (x - mean)).Sum() / n);
-            if (std > 1e-10)
-            {
-                for (int i = 0; i < n; i++)
-                    f[i] = (f[i] - mean) / std;
-            }
-
-            // Compute maximum absolute correlation with eigenvectors
-            double maxCorr = 0;
-            foreach (var ev in eigenvectors)
-            {
-                double corr = 0;
-                for (int i = 0; i < n; i++)
-                    corr += f[i] * ev[i];
-                maxCorr = Math.Max(maxCorr, Math.Abs(corr / n));
-            }
-
-            _mcfsScores[j] = maxCorr;
-        }
+        // standardised features (population std); score = max_k |f' v_k| / n
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
+        var std = engine.TensorSqrt(FilterStatisticTensorOps.ColumnPopulationVariance(x));
+        var scale = FilterStatisticTensorOps.GuardedDivide(FilterStatisticTensorOps.FilledLike(std, NumOps.One), std, 1e-10, NumOps.One);
+        var spread = FilterStatisticTensorOps.RowBroadcast(engine.TensorGreaterThan(std, NumOps.FromDouble(1e-10)), n);
+        var standardized = engine.TensorWhere(
+            spread, engine.TensorMultiply(centered, FilterStatisticTensorOps.RowBroadcast(scale, n)), x);
+        var scores = eigenvectors.Count == 0
+            ? new Tensor<T>(new[] { p })
+            : engine.ReduceMax(engine.TensorDivideScalar(engine.TensorAbs(engine.TensorMatMul(
+                engine.TensorTranspose(standardized), engine.TensorConcatenate(eigenvectors.ToArray(), 1))), NumOps.FromDouble(n)),
+                new[] { 1 }, false);
+        scores = engine.TensorMax(scores, NumOps.Zero);
+        _mcfsScores = scores.ToVector();
 
         // Select features with highest MCFS scores
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _mcfsScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double[,] BuildAffinityMatrix(Matrix<T> data, int n, int p)
-    {
-        var W = new double[n, n];
-
-        // Compute pairwise distances
-        var distances = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int f = 0; f < p; f++)
-                {
-                    double diff = NumOps.ToDouble(data[i, f]) - NumOps.ToDouble(data[j, f]);
-                    dist += diff * diff;
-                }
-                distances[i, j] = Math.Sqrt(dist);
-                distances[j, i] = distances[i, j];
-            }
-        }
-
-        // Build k-NN graph with Gaussian kernel
-        for (int i = 0; i < n; i++)
-        {
-            var neighbors = new List<(int Index, double Distance)>();
-            for (int j = 0; j < n; j++)
-            {
-                if (j != i)
-                    neighbors.Add((j, distances[i, j]));
-            }
-
-            var kNearest = neighbors
-                .OrderBy(x => x.Distance)
-                .Take(_nNeighbors)
-                .ToList();
-
-            foreach (var neighbor in kNearest)
-            {
-                double weight = Math.Exp(-distances[i, neighbor.Index] * distances[i, neighbor.Index] /
-                    (2 * _sigma * _sigma));
-                W[i, neighbor.Index] = weight;
-                W[neighbor.Index, i] = weight;
-            }
-        }
-
-        return W;
-    }
-
-    private List<double[]> ComputeBottomEigenvectors(double[,] W, double[] D, int n, int k, Random random)
-    {
-        // Compute normalized Laplacian L = D^(-1/2) * W * D^(-1/2)
-        // We want bottom k eigenvectors (smallest eigenvalues except 0)
-        var L = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (D[i] > 1e-10 && D[j] > 1e-10)
-                    L[i, j] = W[i, j] / Math.Sqrt(D[i] * D[j]);
-            }
-        }
-
-        var eigenvectors = new List<double[]>();
-
-        // Use power iteration on (I - L) to get smallest eigenvectors of L
-        for (int ev = 0; ev < k; ev++)
-        {
-            var v = new double[n];
-            for (int i = 0; i < n; i++)
-                v[i] = random.NextDouble() - 0.5;
-
-            // Power iteration
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Lv = new double[n];
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < n; j++)
-                        Lv[i] += L[i, j] * v[j];
-
-                // Orthogonalize against previous eigenvectors
-                foreach (var prev in eigenvectors)
-                {
-                    double dot = 0;
-                    for (int i = 0; i < n; i++)
-                        dot += Lv[i] * prev[i];
-                    for (int i = 0; i < n; i++)
-                        Lv[i] -= dot * prev[i];
-                }
-
-                // Normalize
-                double norm = Math.Sqrt(Lv.Sum(x => x * x));
-                if (norm > 1e-10)
-                {
-                    for (int i = 0; i < n; i++)
-                        v[i] = Lv[i] / norm;
-                }
-            }
-
-            eigenvectors.Add((double[])v.Clone());
-        }
-
-        return eigenvectors;
     }
 
     /// <inheritdoc />
