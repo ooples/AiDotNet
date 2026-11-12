@@ -84,11 +84,12 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         var current = PopulationSearchOps.IndexMask<T>(
             PreprocessingTensorOps.TopKIndicesSorted(correlations, Math.Min(_nFeaturesToSelect, p)), p);
 
-        var currentEnergy = ComputeEnergy(correlations, current);
+        var currentEnergy = ComputeEnergy(correlations, current, _nFeaturesToSelect);
         var best = current;
         var bestEnergy = currentEnergy;
 
-        var selectionCounts = new Tensor<T>(new[] { p });
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        var selectionCounts = new Tensor<int>(new[] { p });
         var zero = new Tensor<T>(new[] { 1 });
 
         for (int step = 0; step < _nSteps; step++)
@@ -108,7 +109,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             if (!PopulationSearchOps.Any(proposal))
                 continue;
 
-            var newEnergy = ComputeEnergy(correlations, proposal);
+            var newEnergy = ComputeEnergy(correlations, proposal, _nFeaturesToSelect);
 
             // Accept or reject with quantum tunneling probability: 1 downhill, else max(exp(-|d| / gamma), exp(-d / temp))
             var delta = engine.TensorSubtract(newEnergy, currentEnergy);
@@ -130,12 +131,12 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             }
 
             // Track selection frequency
-            selectionCounts = engine.TensorAdd(selectionCounts, current);
+            selectionCounts = engine.TensorAdd(selectionCounts, current.Cast<int>());
         }
 
         // Compute feature scores: correlation + selection frequency + 1 for the best solution's features
         var featureScores = engine.TensorAdd(
-            engine.TensorAdd(correlations, engine.TensorDivideScalar(selectionCounts, NumOps.FromDouble(_nSteps))), best);
+            engine.TensorAdd(correlations, PopulationSearchOps.Frequency<T>(selectionCounts, _nSteps)), best);
         _featureScores = featureScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
@@ -148,13 +149,15 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     /// Energy of a 0/1 mask [p]: minus the summed correlations of its features plus 0.1 |count - target count|.
     /// Returns [1].
     /// </summary>
-    private Tensor<T> ComputeEnergy(Tensor<T> correlations, Tensor<T> solution)
+    internal static Tensor<T> ComputeEnergy(Tensor<T> correlations, Tensor<T> solution, int targetCount)
     {
-        var engine = Engine;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         var gain = engine.ReduceSum(engine.TensorMultiply(solution, correlations), new[] { 0 }, true);
-        var count = engine.ReduceSum(solution, new[] { 0 }, true);
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        var count = engine.ReduceSum(solution.Cast<int>(), new[] { 0 }, true).Cast<T>();
         var penalty = engine.TensorMultiplyScalar(
-            engine.TensorAbs(engine.TensorAddScalar(count, NumOps.FromDouble(-_nFeaturesToSelect))), NumOps.FromDouble(0.1));
+            engine.TensorAbs(engine.TensorAddScalar(count, ops.FromDouble(-targetCount))), ops.FromDouble(0.1));
         return engine.TensorSubtract(penalty, gain);
     }
 

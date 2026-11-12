@@ -38,7 +38,7 @@ internal static class NeuralSelectorOps
         var std = engine.TensorAddScalar(
             engine.TensorSqrt(engine.TensorDivideScalar(
                 engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, true), ops.FromDouble(n - 1))),
-            ops.FromDouble(1e-10));
+            PopulationSearchOps.Tiny<T>(1e-10));
         return engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { n, p }));
     }
 

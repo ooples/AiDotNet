@@ -160,10 +160,21 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        var uniform = PopulationSearchOps.Uniform<T>(rand, utility.Length);
-        var gumbel = engine.TensorNegate(engine.TensorLog(engine.TensorNegate(engine.TensorLog(uniform))));
+        var gumbel = GumbelNoise(rand, utility.Length);
         var noisy = engine.TensorAdd(utility, engine.TensorMultiplyScalar(gumbel, ops.FromDouble(scale)));
         return PreprocessingTensorOps.TopKIndicesSorted(noisy, k);
+    }
+
+    /// <summary>
+    /// <paramref name="length"/> standard Gumbel draws -log(-log U), U uniform in [0, 1), one draw per element.
+    /// U is drawn and transformed in double: in T a draw can round up to 1 (any U &gt;= 1 - 2^-12 for Half),
+    /// giving -log(-log 1) = +inf noise that would force its feature into the selection.
+    /// </summary>
+    internal static Tensor<T> GumbelNoise(Random rand, int length)
+    {
+        var engine = AiDotNetEngine.Current;
+        var uniform = PopulationSearchOps.Uniform<double>(rand, length);
+        return engine.TensorNegate(engine.TensorLog(engine.TensorNegate(engine.TensorLog(uniform)))).Cast<T>();
     }
 
     /// <inheritdoc />

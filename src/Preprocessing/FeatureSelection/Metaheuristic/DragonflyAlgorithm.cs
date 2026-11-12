@@ -182,10 +182,10 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
     /// <summary>
     /// Moves dragonfly <paramref name="i"/> as in DA. Neighbours are the dragonflies whose distance is at most r and
-    /// nonzero in every dimension. S = -sum(X_j - X), A = mean(dX_j) (dX when there is no neighbour),
-    /// C = mean(X_j) - X (0 without neighbours), F = food - X and E = enemy + X when food and enemy are within r in
+    /// nonzero in every dimension. S = -sum(X_j - X), A = mean(dX_j),
+    /// C = mean(X_j) - X (A = dX and C = 0 with at most one neighbour, as in DA.m), F = food - X and E = enemy + X when food and enemy are within r in
     /// every dimension (else 0). When the food is out of reach, a dragonfly with more than one neighbour steps
-    /// dX = w dX + rand A + rand C + rand S, and one without does a Levy flight X = X + Levy .* X with dX = 0;
+    /// dX = w dX + rand A + rand C + rand S (a fresh rand per dimension), and one without does a Levy flight X = X + Levy .* X with dX = 0;
     /// otherwise dX = s S + a A + c C + f F + e E + w dX. Steps are clamped to [-0.1, 0.1] and positions to [0, 1].
     /// </summary>
     internal static void MoveDragonfly(
@@ -213,8 +213,9 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         T count = ops.FromDouble(Math.Max(neighbourCount, 1));
         var separation = engine.TensorNegate(engine.TensorSubtract(
             positionSum, engine.TensorMultiplyScalar(x, ops.FromDouble(neighbourCount))));
-        var alignment = neighbourCount > 0 ? engine.TensorDivideScalar(stepSum, count) : step;
-        var cohesion = neighbourCount > 0
+        // DA.m averages the neighbours only when there is more than one; a lone neighbour leaves A = dX and C = 0
+        var alignment = neighbourCount > 1 ? engine.TensorDivideScalar(stepSum, count) : step;
+        var cohesion = neighbourCount > 1
             ? engine.TensorSubtract(engine.TensorDivideScalar(positionSum, count), x)
             : new Tensor<T>(new[] { p });
 
@@ -243,12 +244,14 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             Tensor<T> sum;
             if (!foodNear)
             {
-                var r = PopulationSearchOps.Uniform<T>(random, 3);
+                // DA.m draws rand for A, C and S per dimension: [p, 3] in that order
+                var r = PopulationSearchOps.Uniform<T>(random, p, 3);
+                Tensor<T> Column(int k) => engine.Reshape(engine.TensorSlice(r, new[] { 0, k }, new[] { p, 1 }), new[] { p });
                 sum = engine.TensorAdd(
                     engine.TensorAdd(
-                        PopulationSearchOps.Scale(alignment, PopulationSearchOps.At(r, 0)),
-                        PopulationSearchOps.Scale(cohesion, PopulationSearchOps.At(r, 1))),
-                    PopulationSearchOps.Scale(separation, PopulationSearchOps.At(r, 2)));
+                        engine.TensorMultiply(alignment, Column(0)),
+                        engine.TensorMultiply(cohesion, Column(1))),
+                    engine.TensorMultiply(separation, Column(2)));
             }
             else
             {

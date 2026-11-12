@@ -73,7 +73,7 @@ public class NMFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         T offset = NumOps.FromDouble(0.01);
         var w = engine.TensorAddScalar(PopulationSearchOps.Uniform<T>(rand, n, k), offset);
         var h = engine.TensorAddScalar(PopulationSearchOps.Uniform<T>(rand, k, p), offset);
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PopulationSearchOps.Tiny<T>(1e-10);
 
         // Multiplicative update rules (Lee and Seung 2001)
         for (int iter = 0; iter < _nIterations; iter++)

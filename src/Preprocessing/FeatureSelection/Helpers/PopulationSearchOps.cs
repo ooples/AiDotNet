@@ -184,6 +184,24 @@ internal static class PopulationSearchOps
     /// <summary>True when <paramref name="a"/>[0] &gt; <paramref name="b"/>[0] for two [1] tensors.</summary>
     public static bool Greater<T>(Tensor<T> a, Tensor<T> b) => Any(AiDotNetEngine.Current.TensorGreaterThan(a, b));
 
+    /// <summary>
+    /// Int <paramref name="counts"/> divided by <paramref name="total"/>, divided in double so counts and totals
+    /// beyond the exact integer range of T (2048 for Half) or its largest value (65504 for Half) stay exact.
+    /// </summary>
+    public static Tensor<T> Frequency<T>(Tensor<int> counts, double total) =>
+        AiDotNetEngine.Current.TensorDivideScalar(counts.Cast<double>(), total).Cast<T>();
+
+    /// <summary>
+    /// <paramref name="value"/> in T as a positive guard (added to a denominator or a log argument), raised to
+    /// 2^-24 when it rounds to 0 in T: 1e-10 underflows to 0 in Half, which turns x / (0 + eps) into 0 / 0 = NaN.
+    /// </summary>
+    public static T Tiny<T>(double value)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        T tiny = ops.FromDouble(value);
+        return ops.Equals(tiny, ops.Zero) ? ops.FromDouble(Math.Pow(2, -24)) : tiny;
+    }
+
     /// <summary>The single value of a one-element tensor.</summary>
     public static T Value<T>(Tensor<T> oneElement) => AiDotNetEngine.Current.TensorSum(oneElement);
 

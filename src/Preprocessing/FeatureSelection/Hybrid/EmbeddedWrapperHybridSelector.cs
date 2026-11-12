@@ -76,13 +76,7 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
 
         // Normalize features (sample standard deviation)
         var raw = Tensor<T>.FromMatrix(data);
-        var means = engine.TensorBroadcastTo(engine.ReduceMean(raw, new[] { 0 }, true), new[] { n, p });
-        var centered = engine.TensorSubtract(raw, means);
-        var stds = engine.TensorAddScalar(
-            engine.TensorSqrt(engine.TensorDivideScalar(
-                engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, true), NumOps.FromDouble(n - 1))),
-            NumOps.FromDouble(1e-10));
-        var x = engine.TensorDivide(centered, engine.TensorBroadcastTo(stds, new[] { n, p }));
+        var x = NeuralSelectorOps.StandardizeSample(raw);
 
         var y = Tensor<T>.FromVector(target);
         var yNorm = engine.TensorSubtract(y, engine.TensorBroadcastTo(engine.ReduceMean(y, new[] { 0 }, true), new[] { n }));

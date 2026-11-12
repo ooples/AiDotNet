@@ -227,8 +227,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             mask, engine.TensorBroadcastTo(engine.Reshape(instance, new[] { 1, p }), shape), sampled);
 
         // Exponential kernel on the fraction of replaced features
-        var distance = engine.TensorDivideScalar(
-            engine.ReduceSum(PreprocessingTensorOps.OneMinus(mask), new[] { 1 }, false), NumOps.FromDouble(p));
+        var distance = ReplacedFraction(mask);
         var weights = engine.TensorExp(engine.TensorMultiplyScalar(
             engine.TensorSquare(distance), NumOps.FromDouble(-1.0 / (_kernelWidth * _kernelWidth))));
 
@@ -242,6 +241,18 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var rhs = engine.TensorMatMul(transposed, engine.Reshape(predictions, new[] { count, 1 }));
         var coefficients = engine.Reshape(LinalgDispatch<T>.Solve(gram, rhs), new[] { p + 1 });
         return engine.TensorSlice(coefficients, new[] { 1 }, new[] { p });
+    }
+
+    /// <summary>
+    /// The fraction of replaced features of every perturbation row of a 0/1 keep-mask [m, p] ([m]); the replaced
+    /// features are counted in int (a 0/1 sum in T stops counting at 2048 for Half).
+    /// </summary>
+    internal static Tensor<T> ReplacedFraction(Tensor<T> mask)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = mask.Shape[1];
+        var replaced = engine.ReduceSum(PreprocessingTensorOps.OneMinus(mask).Cast<int>(), new[] { 1 }, false).Cast<T>();
+        return engine.TensorDivideScalar(replaced, MathHelper.GetNumericOperations<T>().FromDouble(p));
     }
 
     /// <summary>

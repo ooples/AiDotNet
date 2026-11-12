@@ -97,7 +97,8 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         var x = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
-        var selectionCounts = new Tensor<T>(new[] { p });
+        // selection counts kept in int: a count in T stops at 2048 for Half
+        var selectionCounts = new Tensor<int>(new[] { p });
 
         for (int b = 0; b < _nBootstraps; b++)
         {
@@ -117,11 +118,11 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
             // Count selections (each feature at most once per subsample)
             var valid = selected.Where(idx => idx >= 0 && idx < p).ToArray();
-            selectionCounts = engine.TensorAdd(selectionCounts, PopulationSearchOps.IndexMask<T>(valid, p));
+            selectionCounts = engine.TensorAdd(selectionCounts, PopulationSearchOps.IndexMask<T>(valid, p).Cast<int>());
         }
 
         // Compute selection probabilities
-        var probabilities = engine.TensorDivideScalar(selectionCounts, NumOps.FromDouble(_nBootstraps));
+        var probabilities = PopulationSearchOps.Frequency<T>(selectionCounts, _nBootstraps);
         _selectionProbabilities = probabilities.ToVector();
 
         // Select features above threshold, falling back to the top ones by probability

@@ -104,8 +104,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         // Main loop (Mirjalili 2016): every agent moves against the same destination, then the destination is updated
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            // r1 decreases linearly from a to 0
-            double r1 = _a - iter * _a / _nIterations;
+            double r1 = ExplorationScale(iter, _nIterations, _a);
 
             // Per agent and dimension: r2, r3 and r4, in the order of the scalar draws
             var draws = PopulationSearchOps.Uniform<T>(random, _populationSize, p, 3);
@@ -127,6 +126,13 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
 
         IsFitted = true;
     }
+
+    /// <summary>
+    /// r1 = a - t a / T of Mirjalili (2016) for the 1-based iteration t = <paramref name="iter"/> + 1, so it falls
+    /// linearly to exactly 0 on the last of the <paramref name="iterations"/> updates (SCA.m counts the
+    /// initialisation as iteration 1 and its updates as t = 2 .. T).
+    /// </summary>
+    internal static double ExplorationScale(int iter, int iterations, double a) => a - (iter + 1) * a / iterations;
 
     /// <summary>
     /// The sine-cosine update X = X + r1 sin(r2) |r3 P - X| when r4 &lt; 0.5 and X + r1 cos(r2) |r3 P - X| otherwise,

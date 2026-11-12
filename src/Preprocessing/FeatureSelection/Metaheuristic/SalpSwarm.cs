@@ -101,7 +101,7 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         // Main loop (Mirjalili et al. 2017): the chain moves against the food found up to the previous iteration
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            double c1 = 2 * Math.Exp(-Math.Pow(4.0 * iter / _nIterations, 2));
+            double c1 = LeaderCoefficient(iter, _nIterations);
 
             // Per leader and dimension: c2 then c3, in the order of the scalar draws
             var draws = nLeaders > 0 ? PopulationSearchOps.Uniform<T>(random, nLeaders, p, 2) : null;
@@ -123,6 +123,13 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
 
         IsFitted = true;
     }
+
+    /// <summary>
+    /// c1 = 2 exp(-(4 l / L)^2) of Mirjalili et al. (2017, eq. 3.2) for the 1-based iteration l =
+    /// <paramref name="iter"/> + 1 of <paramref name="iterations"/>.
+    /// </summary>
+    internal static double LeaderCoefficient(int iter, int iterations) =>
+        2 * Math.Exp(-Math.Pow(4.0 * (iter + 1) / iterations, 2));
 
     /// <summary>
     /// One move of the salp chain. The first <c>draws.Shape[0]</c> salps lead: x_j = F_j + c1 c2 when c3 &lt; 0.5

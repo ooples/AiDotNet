@@ -64,11 +64,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
 
         // Normalize to [0, 1]
         var raw = Tensor<T>.FromMatrix(data);
-        var min = PreprocessingTensorOps.ColumnMin(raw);
-        var range = engine.TensorAddScalar(engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(raw), min), NumOps.FromDouble(1e-10));
-        var x = engine.TensorDivide(
-            engine.TensorSubtract(raw, engine.TensorBroadcastTo(engine.Reshape(min, new[] { 1, p }), new[] { n, p })),
-            engine.TensorBroadcastTo(engine.Reshape(range, new[] { 1, p }), new[] { n, p }));
+        var x = MinMaxScale(raw);
         var rows = NeuralSelectorOps.SplitRows(x);
 
         int z = Math.Min(_latentDim, p - 1);
@@ -104,15 +100,36 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
     /// <summary>The weight of the KL term in the per-sample loss.</summary>
     internal const double KlWeight = 0.01;
 
+    /// <summary>Columns of x [n, p] mapped to [0, 1] as (x - min) / (max - min + 1e-10); a constant column maps to 0.</summary>
+    internal static Tensor<T> MinMaxScale(Tensor<T> raw)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = raw.Shape[0];
+        int p = raw.Shape[1];
+        var min = PreprocessingTensorOps.ColumnMin(raw);
+        var range = engine.TensorAddScalar(
+            engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(raw), min), PopulationSearchOps.Tiny<T>(1e-10));
+        return engine.TensorDivide(
+            engine.TensorSubtract(raw, engine.TensorBroadcastTo(engine.Reshape(min, new[] { 1, p }), new[] { n, p })),
+            engine.TensorBroadcastTo(engine.Reshape(range, new[] { 1, p }), new[] { n, p }));
+    }
+
     /// <summary>
-    /// Box-Muller standard normals [z] from uniform pairs [z, 2]: sqrt(-2 ln(1 - u1)) sin(2 pi (1 - u2)).
+    /// Box-Muller standard normals [z] from uniform pairs [z, 2]: sqrt(-2 ln(1 - u1)) sin(2 pi (1 - u2)). In float
+    /// and Half a draw just below 1 rounds to 1, so 1 - u1 is floored at the smallest positive value a draw can leave
+    /// (2^-53, or 2^-24 where T cannot hold that) instead of giving ln 0 and an infinite noise value.
     /// </summary>
-    private static Tensor<T> StandardNormal(Tensor<T> uniforms)
+    internal static Tensor<T> StandardNormal(Tensor<T> uniforms)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int z = uniforms.Shape[0];
-        var u1 = PreprocessingTensorOps.OneMinus(engine.Reshape(engine.TensorSlice(uniforms, new[] { 0, 0 }, new[] { z, 1 }), new[] { z }));
+        T floor = ops.FromDouble(Math.Pow(2, -53));
+        if (ops.Equals(floor, ops.Zero))
+            floor = ops.FromDouble(Math.Pow(2, -24));
+        var u1 = engine.TensorMax(
+            PreprocessingTensorOps.OneMinus(engine.Reshape(engine.TensorSlice(uniforms, new[] { 0, 0 }, new[] { z, 1 }), new[] { z })),
+            floor);
         var u2 = PreprocessingTensorOps.OneMinus(engine.Reshape(engine.TensorSlice(uniforms, new[] { 0, 1 }, new[] { z, 1 }), new[] { z }));
         var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(engine.TensorLog(u1), ops.FromDouble(-2)));
         return engine.TensorMultiply(radius, engine.TensorSin(engine.TensorMultiplyScalar(u2, ops.FromDouble(2 * Math.PI))));

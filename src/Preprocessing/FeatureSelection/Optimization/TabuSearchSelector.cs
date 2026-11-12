@@ -91,12 +91,13 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var bestScore = currentScore;
 
         // Tabu list: the iteration until which each feature may not be swapped in or out
-        var tabuUntil = new Tensor<T>(new[] { p });
+        // (kept in int: iteration numbers in T stop being exact past 2048 for Half)
+        var tabuUntil = new int[p];
         var importances = new Tensor<T>(new[] { p });
 
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            var tabu = engine.TensorGreaterThan(tabuUntil, FeatureSelectionTensorOps.Count<T>(iter));
+            var tabu = TabuMask(tabuUntil, iter);
             var move = BestSwap(current, scores, tabu, bestScore, out var moveScore);
             if (move is not null)
             {
@@ -104,8 +105,8 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
                 current = engine.TensorAdd(
                     engine.TensorSubtract(current, FeatureSelectionTensorOps.OneHot<T>(toRemove, p)),
                     FeatureSelectionTensorOps.OneHot<T>(toAdd, p));
-                var until = PreprocessingTensorOps.Filled(new[] { 2 }, FeatureSelectionTensorOps.Count<T>(iter + _tabuTenure));
-                tabuUntil = PopulationSearchOps.ScatterAt(tabuUntil, new[] { toRemove, toAdd }, until);
+                tabuUntil[toRemove] = iter + _tabuTenure;
+                tabuUntil[toAdd] = iter + _tabuTenure;
                 currentScore = moveScore;
 
                 if (PopulationSearchOps.Greater(currentScore, bestScore))
@@ -135,6 +136,11 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private Tensor<T> Score(Tensor<T> mask, Tensor<T> scores) =>
         PopulationSearchOps.SubsetFitness(Engine.Reshape(mask, new[] { 1, mask.Length }), scores, 0, NumOps.Zero, NumOps.Zero);
 
+    /// <summary>The 0/1 [p] mask of the features still tabu at <paramref name="iter"/> (tabuUntil[j] &gt; iter).</summary>
+    internal static Tensor<T> TabuMask(int[] tabuUntil, int iter) =>
+        AiDotNetEngine.Current.TensorGreaterThan(
+            new Tensor<int>((int[])tabuUntil.Clone(), new[] { tabuUntil.Length }), iter).Cast<T>();
+
     /// <summary>
     /// The best admissible swap of tabu search (Glover 1989): every pair of a selected feature r and an unselected
     /// feature a is scored by the mean score of the swapped subset, (S - s_r + s_a) / k. A swap is admissible when
@@ -150,7 +156,8 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var square = new[] { p, p };
         moveScore = new Tensor<T>(new[] { 1 });
 
-        var count = engine.ReduceSum(current, new[] { 0 }, true);
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        var count = engine.ReduceSum(current.Cast<int>(), new[] { 0 }, true).Cast<T>();
         var total = engine.ReduceSum(engine.TensorMultiply(current, scores), new[] { 0 }, true);
         var removed = engine.TensorBroadcastTo(engine.Reshape(scores, new[] { p, 1 }), square);
         var added = engine.TensorBroadcastTo(engine.Reshape(scores, new[] { 1, p }), square);

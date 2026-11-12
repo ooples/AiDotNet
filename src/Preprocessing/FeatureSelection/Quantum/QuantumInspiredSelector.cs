@@ -88,7 +88,8 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         // Best solution tracking
         var bestSolution = new Tensor<T>(new[] { p });
         Tensor<T>? bestFitness = null;
-        var selectionCounts = new Tensor<T>(new[] { p });
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        var selectionCounts = new Tensor<int>(new[] { p });
 
         for (int gen = 0; gen < _nGenerations; gen++)
         {
@@ -108,7 +109,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 }
 
                 // Update selection counts
-                selectionCounts = engine.TensorAdd(selectionCounts, solution);
+                selectionCounts = engine.TensorAdd(selectionCounts, solution.Cast<int>());
 
                 // Quantum rotation gate update towards the best solution
                 qubits[i] = Rotate(qubits[i], solution, bestSolution, _rotationAngle);
@@ -117,7 +118,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         // Compute feature scores from selection counts and best solution
         var featureScores = engine.TensorAdd(
-            engine.TensorDivideScalar(selectionCounts, NumOps.FromDouble((double)_populationSize * _nGenerations)),
+            PopulationSearchOps.Frequency<T>(selectionCounts, (double)_populationSize * _nGenerations),
             bestSolution);
         _featureScores = featureScores.ToVector();
 

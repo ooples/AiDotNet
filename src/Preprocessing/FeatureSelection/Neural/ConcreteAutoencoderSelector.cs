@@ -186,7 +186,8 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         {
             var engine = AiDotNetEngine.Current;
             var ops = MathHelper.GetNumericOperations<T>();
-            T tiny = ops.FromDouble(1e-20);
+            // 1e-20 is 0 in Half, where a draw rounded up to 1 would give log(0) and an infinite Gumbel value
+            T tiny = PopulationSearchOps.Tiny<T>(1e-20);
             var gumbel = engine.TensorNegate(engine.TensorLog(engine.TensorAddScalar(
                 engine.TensorNegate(engine.TensorLog(engine.TensorAddScalar(uniforms, tiny))), tiny)));
             selection = engine.TensorSoftmax(PopulationSearchOps.Affine(engine.TensorAdd(Logits, gumbel), 1 / temperature, 0), 1);

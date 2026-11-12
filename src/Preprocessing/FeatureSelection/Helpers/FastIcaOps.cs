@@ -26,7 +26,7 @@ internal static class FastIcaOps
         var vectors = FeatureSelectionTensorOps.TopEigenpairs(covariance, dimensions, out var values);
         var inverseRoot = engine.TensorDivide(
             PreprocessingTensorOps.Filled(new[] { dimensions }, ops.One),
-            engine.TensorSqrt(engine.TensorMax(values, ops.FromDouble(1e-10))));
+            engine.TensorSqrt(engine.TensorMax(values, PopulationSearchOps.Tiny<T>(1e-10))));
         whitening = engine.TensorMultiply(
             vectors, engine.TensorBroadcastTo(engine.Reshape(inverseRoot, new[] { 1, dimensions }), new[] { p, dimensions }));
         return engine.TensorMatMul(centered, whitening);

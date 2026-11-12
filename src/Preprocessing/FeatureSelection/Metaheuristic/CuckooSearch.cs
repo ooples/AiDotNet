@@ -183,15 +183,16 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     /// Box-Muller normals sqrt(-2 ln(u1 + 1e-10)) cos(2 pi u2) from columns <paramref name="column"/> and
     /// <paramref name="column"/> + 1 of a [p, k] uniform tensor.
     /// </summary>
-    private Tensor<T> GaussianFromUniforms(Tensor<T> draws, int column)
+    internal static Tensor<T> GaussianFromUniforms(Tensor<T> draws, int column)
     {
-        var engine = Engine;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         int p = draws.Shape[0];
         var u1 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, column }, new[] { p, 1 }), new[] { p });
         var u2 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, column + 1 }, new[] { p, 1 }), new[] { p });
         var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(
-            engine.TensorLog(engine.TensorAddScalar(u1, NumOps.FromDouble(1e-10))), NumOps.FromDouble(-2)));
-        return engine.TensorMultiply(radius, engine.TensorCos(engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2 * Math.PI))));
+            engine.TensorLog(engine.TensorAddScalar(u1, PopulationSearchOps.Tiny<T>(1e-10))), ops.FromDouble(-2)));
+        return engine.TensorMultiply(radius, engine.TensorCos(engine.TensorMultiplyScalar(u2, ops.FromDouble(2 * Math.PI))));
     }
 
     private static double LogGamma(double x)
