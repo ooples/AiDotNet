@@ -268,19 +268,15 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     public TtsVoice<T> CreateVoice(string stylePrompt)
     {
         if (string.IsNullOrWhiteSpace(stylePrompt)) throw new ArgumentException("Describe the style.", nameof(stylePrompt));
-        var ids = TokenizeStyle(stylePrompt);
-        var tensor = new Tensor<T>(new[] { ids.Length });
-        for (int i = 0; i < ids.Length; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return new TtsVoice<T> { Description = tensor };
+        return new TtsVoice<T> { Description = IdTensor(TokenizeStyle(stylePrompt)) };
     }
 
     private int[] StyleIds(Tensor<T> prompt, string name)
     {
         if (prompt.Length == 0) throw new ArgumentException("The style prompt is empty.", name);
-        var ids = new int[prompt.Length];
+        var ids = RoundedIds(prompt);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(NumOps.ToDouble(prompt[i]));
             if (ids[i] < 0 || ids[i] >= _options.StyleVocabularySize)
                 throw new ArgumentOutOfRangeException(name, $"Style prompt ids lie in [0, {_options.StyleVocabularySize}).");
         }
@@ -294,8 +290,7 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
         if (_options.StyleFineTuning != PromptStyleFineTuning.PTuningV2) return null;
         var o = _options;
         int h = o.StyleHiddenDim;
-        var positions = new Tensor<T>(new[] { o.PrefixLength });
-        for (int i = 0; i < o.PrefixLength; i++) positions[i] = NumOps.FromDouble(i);
+        var positions = Engine.TensorArange<T>(0, o.PrefixLength);
         var table = _prefixEmbedding!.Forward(positions);                                                 // [P, ·]
         if (_prefixHidden is not null) table = _prefixOutput!.Forward(_prefixHidden.Forward(table));      // [P, 2·L·h]
         if (training && o.StyleDropout > 0) table = T5Seq2Seq<T>.Dropout(Engine, table, o.StyleDropout, random);
@@ -382,8 +377,7 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
             int classes = _options.StyleFactorClasses[f];
             if (labels[f] < 0 || labels[f] >= classes)
                 throw new ArgumentOutOfRangeException(nameof(labels), $"Factor {f} has {classes} classes.");
-            var selection = new Tensor<T>(new[] { 1, classes });
-            selection[0, labels[f]] = NumOps.FromDouble(-1.0);
+            var selection = Engine.TensorNegate(Engine.TensorOneHot<T>(new Tensor<int>(new[] { labels[f] }, new[] { 1 }), classes));
             var term = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorLogSoftmax(logits[f], axis: -1), selection), new[] { 0, 1 }, keepDims: false);
             total = total is null ? term : Engine.TensorAdd(total, term);
         }
@@ -432,13 +426,8 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
         Guard.NotNull(stylePrompt);
         using var _ = new NoGradScope<T>();
         var logits = FactorLogits(StyleIds(stylePrompt, nameof(stylePrompt)), false, _trainingRandom);
-        return logits.Select(row =>
-        {
-            int best = 0;
-            for (int c = 1; c < row.Shape[1]; c++)
-                if (NumOps.ToDouble(row[0, c]) > NumOps.ToDouble(row[0, best])) best = c;
-            return best;
-        }).ToArray();
+        return logits.Select(row => FirstArgMax(Engine.TensorSlice(row, new[] { 0, 0 }, new[] { 1, row.Shape[1] }))).ToArray();
+
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> StyleOptimizer()
