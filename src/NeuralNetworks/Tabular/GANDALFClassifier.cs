@@ -149,12 +149,24 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, Vector<int> targets, T learningRate)
     {
-        var probabilities = PredictProbabilities(features);
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
+        // Mean cross-entropy -1/B * sum(onehot * log(softmax(logits) + eps)), differentiated on the
+        // tape through the head, the trees and the gating network. (This step used to compute the
+        // loss and call UpdateParameters with no gradients, so nothing ever trained.)
+        int batchSize = features.Shape[0];
+        if (batchSize == 0 || targets.Length != batchSize)
+            throw new ArgumentException("Targets must match a nonempty input batch.", nameof(targets));
+        var targetIndex = Tensor<int>.FromVector(targets, new[] { batchSize });
+        if (Engine.TensorMinValue(targetIndex) < 0 || Engine.TensorMaxValue(targetIndex) >= _numClasses)
+            throw new ArgumentOutOfRangeException(nameof(targets), "Target class is out of range.");
+        var labels = Engine.TensorOneHot<T>(targetIndex, _numClasses);
 
-        return loss;
+        return TrainWithTape(() =>
+        {
+            var probabilities = ApplySoftmax(Forward(features));
+            var logProbabilities = Engine.TensorLog(Engine.TensorAddScalar(probabilities, NumOps.FromDouble(1e-15)));
+            var sum = Engine.ReduceSum(Engine.TensorMultiply(labels, logProbabilities), new[] { 0, 1 }, keepDims: false);
+            return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(-1.0 / batchSize));
+        }, learningRate);
     }
 
     /// <summary>
