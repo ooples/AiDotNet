@@ -109,8 +109,8 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     #endregion
 
     #region Graph Fields
-    private readonly double[,]? _adjacencyMatrix;
-    private readonly double[,]? _normalizedLaplacian;
+    private readonly Tensor<T>? _adjacencyMatrix;
+    private readonly Tensor<T>? _normalizedLaplacian;
     private readonly Random _random;
     #endregion
 
@@ -235,7 +235,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         TemporalGCNOptions<T>? options = null,
-        double[,]? adjacencyMatrix = null,
+        Tensor<T>? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -268,7 +268,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         _useResidualConnections = _options.UseResidualConnections;
         _useBatchNormalization = _options.UseBatchNormalization;
 
-        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
+        RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
         _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
         _normalizedLaplacian = ComputeNormalizedLaplacian(_adjacencyMatrix);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
@@ -291,7 +291,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     public TemporalGCN(
         NeuralNetworkArchitecture<T> architecture,
         TemporalGCNOptions<T>? options = null,
-        double[,]? adjacencyMatrix = null,
+        Tensor<T>? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -317,7 +317,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         _useResidualConnections = _options.UseResidualConnections;
         _useBatchNormalization = _options.UseBatchNormalization;
 
-        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
+        RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
         _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
         _normalizedLaplacian = ComputeNormalizedLaplacian(_adjacencyMatrix);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
@@ -409,28 +409,42 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// you should provide a real adjacency matrix based on actual relationships.
     /// </para>
     /// </remarks>
-    private double[,] CreateDefaultAdjacencyMatrix(int numNodes)
+    private Tensor<T> CreateDefaultAdjacencyMatrix(int numNodes)
     {
-        var adj = new double[numNodes, numNodes];
-
-        // Create sparse adjacency with nearby connections
+        // Self-connections weigh 1; nodes within range = max(1, n / 10) of each other weigh
+        // exp(-|i - j| / range); everything else is unconnected.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int range = Math.Max(1, numNodes / 10);
+        var distance = new int[numNodes * numNodes];
+        var near = new int[numNodes * numNodes];
         for (int i = 0; i < numNodes; i++)
-        {
-            adj[i, i] = 1.0; // Self-connections
-
-            // Connect to nearby nodes (simulate spatial proximity)
-            int range = Math.Max(1, numNodes / 10);
-            for (int j = Math.Max(0, i - range); j <= Math.Min(numNodes - 1, i + range); j++)
+            for (int j = 0; j < numNodes; j++)
             {
-                if (i != j)
-                {
-                    double distance = Math.Abs(i - j);
-                    adj[i, j] = Math.Exp(-distance / range);
-                }
+                int d = Math.Abs(i - j);
+                distance[i * numNodes + j] = d;
+                near[i * numNodes + j] = d <= range ? 1 : 0;
             }
-        }
+        var square = new[] { numNodes, numNodes };
+        var distances = new Tensor<int>(square, new Vector<int>(distance)).Cast<T>();
+        var weights = Engine.TensorExp(Engine.TensorDivideScalar(Engine.TensorNegate(distances), NumOps.FromDouble(range)));
+        var connected = Engine.TensorWhere(
+            new Tensor<int>(square, new Vector<int>(near)).Cast<T>(), weights, Engine.TensorZerosLike(weights));
+        return Engine.TensorWhere(Engine.TensorEquals(distances, NumOps.Zero), Engine.TensorFullLike(weights, NumOps.One), connected);
+    }
 
-        return adj;
+    /// <summary>Requires a numNodes x numNodes adjacency matrix when one is given.</summary>
+    private static void RequireNodeCount(Tensor<T>? adjacency, int numNodes, string paramName)
+    {
+        if (adjacency is null) return;
+        int rows = adjacency.Rank > 0 ? adjacency.Shape[0] : 0;
+        int columns = adjacency.Rank > 1 ? adjacency.Shape[1] : 0;
+        if (adjacency.Rank != 2 || rows != numNodes || columns != numNodes)
+        {
+            throw new ArgumentException(
+                $"The adjacency matrix is {rows} x {columns}, but the model has {numNodes} " +
+                $"nodes (NumNodes). Pass a {numNodes} x {numNodes} matrix, or set NumNodes to the node count of the graph.",
+                paramName);
+        }
     }
 
     /// <summary>
@@ -446,49 +460,26 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// Formula: L_norm = 2 * (D^(-1/2) * L * D^(-1/2)) / lambda_max - I
     /// </para>
     /// </remarks>
-    private double[,] ComputeNormalizedLaplacian(double[,] adjacencyMatrix)
+    private Tensor<T> ComputeNormalizedLaplacian(Tensor<T> adjacencyMatrix)
     {
-        int n = adjacencyMatrix.GetLength(0);
-        var laplacian = new double[n, n];
-        var degree = new double[n];
-
-        // Compute degree matrix
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                degree[i] += adjacencyMatrix[i, j];
-            }
-        }
-
-        // Compute normalized Laplacian: L_norm = I - D^(-1/2) * A * D^(-1/2)
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    laplacian[i, j] = 1.0;
-                }
-                else if (degree[i] > 0 && degree[j] > 0)
-                {
-                    double dInvSqrtI = 1.0 / Math.Sqrt(degree[i]);
-                    double dInvSqrtJ = 1.0 / Math.Sqrt(degree[j]);
-                    laplacian[i, j] = -adjacencyMatrix[i, j] * dInvSqrtI * dInvSqrtJ;
-                }
-            }
-        }
-
-        // Scale to [-1, 1] for Chebyshev (approximate lambda_max as 2)
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                laplacian[i, j] = laplacian[i, j] - (i == j ? 1.0 : 0.0);
-            }
-        }
-
-        return laplacian;
+        // I - D^(-1/2) A D^(-1/2), then minus I (lambda_max taken as 2): the diagonal is 0 and an
+        // off-diagonal entry is -a_ij / sqrt(d_i) / sqrt(d_j) where both degrees are positive, else 0.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int n = adjacencyMatrix.Shape[0];
+        var square = new[] { n, n };
+        var adjacency = Engine.Reshape(adjacencyMatrix.Contiguous(), square);
+        var degree = Engine.ReduceSum(adjacency, new[] { 1 }, false);
+        var positive = Engine.TensorGreaterThan(degree, NumOps.Zero);
+        var safeDegree = Engine.TensorWhere(positive, degree, Engine.TensorFullLike(degree, NumOps.One));
+        var invSqrt = Engine.TensorDivide(Engine.TensorFullLike(degree, NumOps.One), Engine.TensorSqrt(safeDegree));
+        var rowScale = Engine.TensorBroadcastTo(Engine.Reshape(invSqrt, new[] { n, 1 }), square);
+        var columnScale = Engine.TensorBroadcastTo(Engine.Reshape(invSqrt, new[] { 1, n }), square);
+        var scaled = Engine.TensorMultiply(Engine.TensorMultiply(Engine.TensorNegate(adjacency), rowScale), columnScale);
+        var rowPositive = Engine.TensorBroadcastTo(Engine.Reshape(positive, new[] { n, 1 }), square);
+        var columnPositive = Engine.TensorBroadcastTo(Engine.Reshape(positive, new[] { 1, n }), square);
+        var bothPositive = Engine.TensorMultiply(rowPositive, columnPositive);
+        var offDiagonal = Engine.TensorSubtract(Engine.TensorFullLike(scaled, NumOps.One), Engine.TensorEye<T>(n));
+        return Engine.TensorWhere(Engine.TensorMultiply(bothPositive, offDiagonal), scaled, Engine.TensorZerosLike(scaled));
     }
 
     /// <summary>
@@ -602,11 +593,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         // caching a Tensor<T> copy would need threading a mutable
         // field. The cost is O(numNodes^2) per step, which is small
         // relative to a transformer-block forward.
-        var lapData = new T[_numNodes * _numNodes];
-        for (int i = 0; i < _numNodes; i++)
-            for (int j = 0; j < _numNodes; j++)
-                lapData[i * _numNodes + j] = NumOps.FromDouble(_normalizedLaplacian[i, j]);
-        var laplacian = new Tensor<T>(new[] { _numNodes, _numNodes }, new Vector<T>(lapData));
+        var laplacian = _normalizedLaplacian;
 
         // Reshape features to [numNodes, featuresPerNode] via the
         // tape-aware Engine.Reshape so the eventual output is still
@@ -907,40 +894,19 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         if (_normalizedLaplacian is null)
             return nodeFeatures;
 
-        var featureVec = nodeFeatures.ToVector();
-        int totalSize = featureVec.Length;
+        int totalSize = nodeFeatures.Length;
         int featuresPerNode = totalSize / _numNodes;
 
         if (featuresPerNode * _numNodes != totalSize)
             return nodeFeatures;
 
-        var result = new T[totalSize];
-
-        // Apply simplified Chebyshev convolution (K=2)
-        // T_0 term: just the features
-        // T_1 term: L * features
-        for (int node = 0; node < _numNodes; node++)
-        {
-            for (int f = 0; f < featuresPerNode; f++)
-            {
-                double t0 = NumOps.ToDouble(featureVec[node * featuresPerNode + f]);
-                double t1 = 0;
-
-                // Compute L * x for T_1
-                for (int neighbor = 0; neighbor < _numNodes; neighbor++)
-                {
-                    double laplacianValue = _normalizedLaplacian[node, neighbor];
-                    double neighborFeature = NumOps.ToDouble(featureVec[neighbor * featuresPerNode + f]);
-                    t1 += laplacianValue * neighborFeature;
-                }
-
-                // Combine terms with equal weighting
-                double combined = 0.5 * t0 + 0.5 * t1;
-                result[node * featuresPerNode + f] = NumOps.FromDouble(combined);
-            }
-        }
-
-        return new Tensor<T>(nodeFeatures._shape, new Vector<T>(result));
+        // Simplified Chebyshev convolution (K=2): 0.5 * x + 0.5 * (L x), detached as before.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var half = NumOps.FromDouble(0.5);
+        var x = Engine.Reshape(nodeFeatures.Contiguous(), new[] { _numNodes, featuresPerNode });
+        var combined = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(x, half), Engine.TensorMultiplyScalar(Engine.TensorMatMul(_normalizedLaplacian, x), half));
+        return Engine.Reshape(combined, nodeFeatures._shape);
     }
 
     #endregion
