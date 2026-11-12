@@ -105,10 +105,7 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
         foreach (var layerName in layerNames)
         {
             var result = new T[referenceModel[layerName].Length];
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Zero;
-            }
+            Vector<T>.Wrap(result).Fill(NumOps.Zero);
 
             aggregated[layerName] = result;
         }
@@ -134,10 +131,8 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
                         nameof(clientModels));
                 }
 
-                for (int i = 0; i < rp.Length; i++)
-                {
-                    rp[i] = NumOps.Add(rp[i], NumOps.Multiply(cp[i], normalizedWeight));
-                }
+                Engine.Add(Vector<T>.Wrap(rp), Engine.Multiply(Vector<T>.Wrap(cp, 0, rp.Length), normalizedWeight))
+                    .AsSpan().CopyTo(rp);
             }
         }
 
