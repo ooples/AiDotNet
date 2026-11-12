@@ -28,13 +28,13 @@ public class CoefficientOfVariation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nFeaturesToSelect;
     private readonly double _minCV;
 
-    private double[]? _cvValues;
+    private Vector<T>? _cvValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? CVValues => _cvValues;
+    public Vector<T>? CVValues => _cvValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -60,52 +60,32 @@ public class CoefficientOfVariation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int n = data.Rows;
         int p = data.Columns;
 
-        _cvValues = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute mean
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            // Compute standard deviation
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            double std = Math.Sqrt(variance / n);
-
-            // Coefficient of variation (handle near-zero mean)
-            _cvValues[j] = Math.Abs(mean) > 1e-10 ? std / Math.Abs(mean) : 0;
-        }
+        // Coefficient of variation std / |mean| (population std; 0 for a near-zero mean)
+        var absMeans = engine.TensorAbs(engine.ReduceMean(X, new[] { 0 }, false));
+        var usable = engine.TensorGreaterThan(absMeans, NumOps.FromDouble(1e-10));
+        var cvValues = engine.TensorWhere(usable, engine.TensorDivide(FeatureSelectionTensorOps.ColumnStd(X),
+            engine.TensorWhere(usable, absMeans, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))),
+            new Tensor<T>(new[] { p }));
+        _cvValues = cvValues.ToVector();
 
         // Select features above threshold or top by CV
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_cvValues[j] >= _minCV)
-                candidates.Add(j);
+        var candidates = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.AtLeast(cvValues, NumOps.FromDouble(_minCV))));
 
         if (candidates.Count >= _nFeaturesToSelect)
         {
-            _selectedIndices = candidates
-                .OrderByDescending(j => _cvValues[j])
+            _selectedIndices = PreprocessingTensorOps.StableOrder(cvValues, descending: true)
+                .Where(j => candidates.Contains(j))
                 .Take(_nFeaturesToSelect)
                 .OrderBy(x => x)
                 .ToArray();
         }
         else
         {
-            _selectedIndices = _cvValues
-                .Select((cv, idx) => (CV: cv, Index: idx))
-                .OrderByDescending(x => x.CV)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(cvValues, Math.Min(_nFeaturesToSelect, p));
         }
 
         IsFitted = true;
