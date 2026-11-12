@@ -226,16 +226,16 @@ public class ScalersDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MinMaxScaler_ConstantColumn_ScalesToMidpoint()
+    public async Task MinMaxScaler_ConstantColumn_ScalesToFeatureRangeMin()
     {
-        // When min == max, should map to midpoint of feature range
+        // When min == max: scikit-learn MinMaxScaler treats a zero data range as 1 (_handle_zeros_in_scale), so a constant column maps to the feature-range minimum
         var scaler = new MinMaxScaler<double>();
         var data = CreateMatrix(new double[,] { { 7 }, { 7 }, { 7 } });
         var transformed = scaler.FitTransform(data);
 
-        // Default range [0,1], midpoint = 0.5
+        // Default range [0,1], minimum = 0
         for (int i = 0; i < 3; i++)
-            Assert.Equal(0.5, transformed[i, 0], Tolerance);
+            Assert.Equal(0.0, transformed[i, 0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]

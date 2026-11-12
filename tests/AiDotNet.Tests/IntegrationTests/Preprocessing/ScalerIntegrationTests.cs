@@ -285,7 +285,7 @@ public class ScalerIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MinMaxScaler_ConstantColumn_MapsToMiddleOfRange()
+    public async Task MinMaxScaler_ConstantColumn_MapsToFeatureRangeMin()
     {
         // Arrange
         var scaler = new MinMaxScaler<double>();
@@ -294,10 +294,10 @@ public class ScalerIntegrationTests
         // Act
         var result = scaler.FitTransform(data);
 
-        // Assert - Constant column should map to middle of range (0.5)
-        Assert.True(Math.Abs(result[0, 0] - 0.5) < 1e-10);
-        Assert.True(Math.Abs(result[1, 0] - 0.5) < 1e-10);
-        Assert.True(Math.Abs(result[2, 0] - 0.5) < 1e-10);
+        // Assert - scikit-learn MinMaxScaler treats a zero data range as 1 (_handle_zeros_in_scale), so a constant column maps to the feature-range minimum (0)
+        Assert.True(Math.Abs(result[0, 0] - 0.0) < 1e-10);
+        Assert.True(Math.Abs(result[1, 0] - 0.0) < 1e-10);
+        Assert.True(Math.Abs(result[2, 0] - 0.0) < 1e-10);
     }
 
     [Fact(Timeout = 120000)]
