@@ -286,7 +286,7 @@ public class TextDetectionMetrics<T> where T : struct
             }
         }
 
-        return kept.OrderByDescending(r => _numOps.ToDouble(r.Confidence)).ToList();
+        return kept.OrderByDescending(r => r.Confidence, Comparer<T>.Create(_numOps.Compare)).ToList();
     }
 
     private static double SignedArea(IReadOnlyList<(double X, double Y)> polygon)
