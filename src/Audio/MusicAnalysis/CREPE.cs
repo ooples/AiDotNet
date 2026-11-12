@@ -149,20 +149,9 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         ThrowIfDisposed();
         Tensor<T> logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(audioFrame) : Predict(audioFrame);
 
-        // Find the bin with maximum activation
-        int bestBin = 0;
-        double bestVal = double.NegativeInfinity;
-        for (int i = 0; i < Math.Min(_options.NumBins, logits.Length); i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > bestVal) { bestVal = v; bestBin = i; }
-        }
-
-        // Compute confidence via softmax normalization
-        double sumExp = 0;
-        for (int i = 0; i < Math.Min(_options.NumBins, logits.Length); i++)
-            sumExp += Math.Exp(NumOps.ToDouble(logits[i]) - bestVal);
-        double confidence = 1.0 / sumExp;
+        // Find the bin with maximum activation; confidence via softmax normalization
+        var (bestBin, confidenceT) = AudioEngineOps.PeakBinWithSoftmaxConfidence(Engine, logits, _options.NumBins);
+        double confidence = NumOps.ToDouble(confidenceT);
 
         if (confidence < _options.VoicingThreshold) return null;
 
@@ -171,7 +160,7 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 
         if (pitchHz < MinPitch || pitchHz > MaxPitch) return null;
 
-        return (NumOps.FromDouble(pitchHz), NumOps.FromDouble(confidence));
+        return (NumOps.FromDouble(pitchHz), confidenceT);
     }
 
     /// <inheritdoc />
@@ -192,10 +181,11 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         var results = new List<PitchFrame<T>>();
         int hopSamples = _options.SampleRate * hopSizeMs / 1000;
 
+        var samples = AudioEngineOps.Flatten(Engine, audio);
+        T zero = NumOps.Zero;
         for (int start = 0; start + _options.FrameSize <= audio.Length; start += hopSamples)
         {
-            var frame = new Tensor<T>([_options.FrameSize]);
-            for (int i = 0; i < _options.FrameSize; i++) frame[i] = audio[start + i];
+            var frame = Engine.TensorSlice(samples, [start], [_options.FrameSize]);
 
             var detection = DetectPitchWithConfidence(frame);
             double time = start / (double)_options.SampleRate;
@@ -215,8 +205,8 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
                 results.Add(new PitchFrame<T>
                 {
                     Time = time,
-                    Pitch = NumOps.Zero,
-                    Confidence = NumOps.Zero,
+                    Pitch = zero,
+                    Confidence = zero,
                     IsVoiced = false
                 });
             }
@@ -319,20 +309,26 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 
     private double BinToFrequency(int bin, Tensor<T> logits)
     {
-        // Weighted average around the peak for sub-bin accuracy
+        // Weighted average around the peak for sub-bin accuracy: weights exp(logit) over bins
+        // bin-4 .. bin+4 (clipped to the bin range)
         double centsBin = bin * _options.CentsPerBin;
-        double weightedSum = 0;
-        double weightTotal = 0;
         int windowSize = 4;
+        int first = Math.Max(0, bin - windowSize);
+        int last = Math.Min(_options.NumBins - 1, bin + windowSize);
 
-        for (int i = Math.Max(0, bin - windowSize); i <= Math.Min(_options.NumBins - 1, bin + windowSize); i++)
+        double cents = centsBin;
+        if (last >= first)
         {
-            double w = Math.Exp(NumOps.ToDouble(logits[i]));
-            weightedSum += w * (i * _options.CentsPerBin);
-            weightTotal += w;
+            int count = last - first + 1;
+            if (first + count > logits.Length)
+                throw new IndexOutOfRangeException("The logits do not cover the frequency window.");
+            var weights = Engine.TensorExp(Engine.TensorSlice(AudioEngineOps.Flatten(Engine, logits), [first], [count]));
+            var binCents = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(first, first + count, 1), NumOps.FromDouble(_options.CentsPerBin));
+            double weightedSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(weights, binCents)));
+            double weightTotal = NumOps.ToDouble(Engine.TensorSum(weights));
+            cents = weightTotal > 0 ? weightedSum / weightTotal : centsBin;
         }
 
-        double cents = weightTotal > 0 ? weightedSum / weightTotal : centsBin;
         // C1 = MIDI 24 = 32.70 Hz, cents are relative to C1
         return _options.MinFrequency * Math.Pow(2.0, cents / 1200.0);
     }

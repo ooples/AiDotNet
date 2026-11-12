@@ -511,4 +511,23 @@ internal static class AudioEngineOps
             engine.TensorGreaterEqual(bHead, Tensor<T>.CreateDefault(shape, numOps.FromDouble(bThreshold))));
         return engine.TensorNonzero(both).ToArray();
     }
+
+    /// <summary>
+    /// The scan <c>best = -inf; for i &lt; count: if (v[i] &gt; best) { best = v[i]; bin = i; }</c>
+    /// (first strict maximum, NaN never wins; bin 0 with value -inf when nothing beats -inf) and
+    /// the softmax confidence <c>1 / sum_i exp(v[i] - best)</c> over the same prefix.
+    /// </summary>
+    internal static (int Bin, T Confidence) PeakBinWithSoftmaxConfidence<T>(IEngine engine, Tensor<T> logits, int count)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = Math.Max(0, Math.Min(count, logits.Length));
+        if (n == 0) return (0, numOps.Divide(numOps.One, numOps.Zero));
+        var head = FitLength(engine, logits, n);
+        var candidates = engine.Concat(new[] { Tensor<T>.CreateDefault(new[] { 1 }, numOps.FromDouble(double.NegativeInfinity)), head }, 0);
+        int best = FirstArgMaxSequential(engine, candidates);
+        int bin = best > 0 ? best - 1 : 0;
+        T bestValue = best > 0 ? Head(engine, engine.TensorSlice(head, new[] { bin }, new[] { 1 }), 1)[0] : numOps.FromDouble(double.NegativeInfinity);
+        T sumExp = engine.TensorSum(engine.TensorExp(engine.TensorSubtractScalar(head, bestValue)));
+        return (bin, numOps.Divide(numOps.One, sumExp));
+    }
 }
