@@ -221,40 +221,52 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         if (_diffusionSteps <= 0)
             throw new ArgumentOutOfRangeException(nameof(_diffusionSteps), "DiffusionSteps must be positive.");
 
-        _betas = new Vector<T>(_diffusionSteps);
-        _alphas = new Vector<T>(_diffusionSteps);
-        _alphasCumprod = new Vector<T>(_diffusionSteps);
-        _alphasCumprodPrev = new Vector<T>(_diffusionSteps);
-        _sqrtAlphasCumprod = new Vector<T>(_diffusionSteps);
-        _sqrtOneMinusAlphasCumprod = new Vector<T>(_diffusionSteps);
+        int steps = _diffusionSteps;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        T one = NumOps.One;
 
-        double cumulative = 1.0;
-        double rawPrevious = CosineAlphaBar(0);
-        for (int k = 0; k < _diffusionSteps; k++)
-        {
-            double raw = CosineAlphaBar(k + 1);
-            double beta = rawPrevious > 0.0 ? 1.0 - raw / rawPrevious : _betaEnd;
-            if (beta < _betaStart) beta = _betaStart;
-            if (beta > _betaEnd) beta = _betaEnd;
-            rawPrevious = raw;
+        // Squared-cosine alpha-bar at steps 0..K; beta_k = 1 - raw(k+1)/raw(k), the end beta when
+        // raw(k) is not positive, clipped to [betaStart, betaEnd].
+        var raw = CosineAlphaBar(Engine.TensorArange<T>(0, steps + 1, 1));
+        var next = Engine.TensorNarrow(raw, 0, 1, steps);
+        var previous = Engine.TensorNarrow(raw, 0, 0, steps);
+        var ratioBeta = Engine.TensorSubtract(Engine.TensorFullLike(next, one), Engine.TensorDivide(next, previous));
+        var betas = Engine.TensorClamp(
+            Engine.TensorWhere(
+                Engine.TensorGreaterThan(previous, NumOps.Zero),
+                ratioBeta,
+                Engine.TensorFullLike(ratioBeta, NumOps.FromDouble(_betaEnd))),
+            NumOps.FromDouble(_betaStart),
+            NumOps.FromDouble(_betaEnd));
 
-            _betas[k] = NumOps.FromDouble(beta);
-            _alphas[k] = NumOps.FromDouble(1.0 - beta);
-            _alphasCumprodPrev[k] = NumOps.FromDouble(cumulative);
-            cumulative *= 1.0 - beta;
-            _alphasCumprod[k] = NumOps.FromDouble(cumulative);
-            _sqrtAlphasCumprod[k] = NumOps.FromDouble(Math.Sqrt(cumulative));
-            _sqrtOneMinusAlphasCumprod[k] = NumOps.FromDouble(Math.Sqrt(Math.Max(0.0, 1.0 - cumulative)));
-        }
+        var alphas = Engine.TensorSubtract(Engine.TensorFullLike(betas, one), betas);
+        var alphasCumprod = Engine.TensorCumProd(alphas, 0);
+        var leadingOne = Engine.TensorFullLike(Engine.TensorNarrow(alphasCumprod, 0, 0, 1), one);
+        var alphasCumprodPrev = steps == 1
+            ? leadingOne
+            : Engine.TensorConcatenate(new[] { leadingOne, Engine.TensorNarrow(alphasCumprod, 0, 0, steps - 1) }, 0);
+        _betas = betas.ToVector();
+        _alphas = alphas.ToVector();
+        _alphasCumprod = alphasCumprod.ToVector();
+        _alphasCumprodPrev = alphasCumprodPrev.ToVector();
+        _sqrtAlphasCumprod = Engine.TensorSqrt(alphasCumprod).ToVector();
+        _sqrtOneMinusAlphasCumprod = Engine.TensorSqrt(Engine.TensorMax(
+            Engine.TensorSubtract(Engine.TensorFullLike(alphasCumprod, one), alphasCumprod), NumOps.Zero)).ToVector();
     }
 
     /// <summary>The unnormalized cosine alpha_bar of Nichol and Dhariwal 2021, Equation 17.</summary>
-    private double CosineAlphaBar(int step)
+    private Tensor<T> CosineAlphaBar(Tensor<T> steps)
     {
         const double Offset = 0.008;
-        double angle = ((double)step / _diffusionSteps + Offset) / (1.0 + Offset) * Math.PI / 2.0;
-        double cosine = Math.Cos(angle);
-        return cosine * cosine;
+        var angle = Engine.TensorDivideScalar(
+            Engine.TensorMultiplyScalar(
+                Engine.TensorDivideScalar(
+                    Engine.TensorAddScalar(Engine.TensorDivideScalar(steps, NumOps.FromDouble(_diffusionSteps)), NumOps.FromDouble(Offset)),
+                    NumOps.FromDouble(1.0 + Offset)),
+                NumOps.FromDouble(Math.PI)),
+            NumOps.FromDouble(2.0));
+        var cosine = Engine.TensorCos(angle);
+        return Engine.TensorMultiply(cosine, cosine);
     }
 
     private T SampleStandardNormal(Random rand)
