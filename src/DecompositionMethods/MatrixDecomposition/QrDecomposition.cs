@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Exceptions;
 
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
@@ -237,8 +238,26 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
             return new Vector<T>(0);
         }
 
+        if (R.Rows < n || y.Length < n)
+        {
+            throw new MatrixFactorizationException(
+                $"QR Solve needs at least as many rows as columns (R is {R.Rows}x{n}); " +
+                "use LqDecomposition for underdetermined systems.");
+        }
+
         // Only the leading n x n upper-triangular block and the first n entries of y take part.
         var square = R.Rows == n ? R : R.GetSubMatrix(0, 0, n, n);
+
+        // A zero (or NaN) diagonal entry of R means A is rank deficient; the triangular solve would
+        // divide by it and return Inf/NaN.
+        var diagonal = Engine.TensorDiagonal(Tensor<T>.FromMatrix(square));
+        int usablePivots = Engine.TensorCountNonzero(Engine.TensorGreaterThan(Engine.TensorAbs(diagonal), NumOps.Zero));
+        if (usablePivots < n)
+        {
+            throw new MatrixFactorizationException(
+                "R has a zero diagonal entry: the matrix is rank deficient and Solve has no unique solution.");
+        }
+
         var rhs = y.Length == n ? y : y.GetSubVector(0, n);
         return SolveTriangularSystem(square, rhs, upper: true);
     }
