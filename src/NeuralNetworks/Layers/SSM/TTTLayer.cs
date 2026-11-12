@@ -131,7 +131,6 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _lnBeta;  // [modelDim]
 
     // Cached values for backward pass
-    [Scratch]
     private int[]? _originalInputShape;
 
     // Gradients

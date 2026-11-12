@@ -130,9 +130,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    [Scratch]
-    [Scratch]
-    [Scratch]
     private int[]? _originalInputShape;
 
     // Gradients

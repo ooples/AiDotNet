@@ -113,7 +113,6 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
-    [Scratch]
     private int[]? _originalInputShape;
 
     // Gradients

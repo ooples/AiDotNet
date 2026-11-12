@@ -139,8 +139,6 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    [Scratch]
-    [Scratch]
     private Tensor<T>? _lastGroupNormMean;
     [Scratch]
     private Tensor<T>? _lastGroupNormVar;

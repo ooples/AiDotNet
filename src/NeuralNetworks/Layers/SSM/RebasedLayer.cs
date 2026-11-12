@@ -111,11 +111,6 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastKey;
     [Scratch]
     private Tensor<T>? _lastValue;
-    [Scratch]
-    [Scratch]
-    [Scratch]
-    [Scratch]
-    [Scratch]
     private int[]? _originalInputShape;
 
     // Gradients

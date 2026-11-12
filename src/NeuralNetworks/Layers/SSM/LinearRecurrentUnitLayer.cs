@@ -135,8 +135,6 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    [Scratch]
-    [Scratch]
     private Tensor<T>? _lastLambdaReal;
     [Scratch]
     private Tensor<T>? _lastLambdaImag;

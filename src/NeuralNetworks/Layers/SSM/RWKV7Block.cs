@@ -280,9 +280,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     // Previous tokens per timestep reconstructed from _cachedTimeMixNormed1 during backward
 
     // Channel mixing forward caches
-    [Scratch]
-    [Scratch]
-    [Scratch]
 
     // ============ Gradients ============
 

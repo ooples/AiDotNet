@@ -118,8 +118,6 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _logDelta;
 
     // Cached values for backward pass
-    [Scratch]
-    [Scratch]
     private int[]? _originalInputShape;
 
     // Gradients

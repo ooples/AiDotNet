@@ -137,7 +137,6 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
     // Cached forward pass values
     [Scratch]
     private Tensor<T>? _lastEmaInput;
-    [Scratch]
     private int[]? _originalInputShape;
 
     // Gradients
