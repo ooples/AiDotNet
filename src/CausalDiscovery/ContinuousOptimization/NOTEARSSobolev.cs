@@ -52,6 +52,12 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ResearchPaper("Learning Sparse Nonparametric DAGs", "https://proceedings.mlr.press/v108/zheng20a.html", Year = 2020, Authors = "Xun Zheng, Chen Dan, Bryon Aragam, Pradeep Ravikumar, Eric Xing")]
 public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
 {
+    /// <summary>
+    /// Maximum number of entries of one [rows, d, h] activation or [d, rows, d] Jacobian block in the
+    /// gradient pass; samples are processed in blocks of at most this many entries.
+    /// </summary>
+    private const int MaxSampleBlockElements = 1 << 22;
+
     private const double DEFAULT_RHO_MAX = 1e+16;
     private const double DEFAULT_RHO_INIT = 1.0;
     private const double RHO_MULTIPLY_FACTOR = 10.0;
@@ -279,55 +285,78 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         ComputeAugLagGradientWithSobolev(Matrix<T> data, int n, int d, int h, double alpha, double rho)
     {
         var x = Tensor<T>.FromMatrix(data);
-        var unitShape = new[] { n, d, h };
         T invN = NumOps.FromDouble(1.0 / n);
-
-        var (pred, hidden) = ForwardMLP(x, n, d, h);
-        var residual = Engine.TensorSubtract(pred, x);
-        double totalLoss = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(residual)));
-
-        // Data gradient: dL/d(pred) = residual / n
-        var dOutput = Engine.TensorMultiplyScalar(residual, invN);
-        var gB2 = Engine.ReduceSum(dOutput, new[] { 0 }, false);
-        var dOutputPerUnit = Engine.TensorBroadcastTo(dOutput.Reshape(new[] { n, d, 1 }), unitShape);
-
-        // dL/dW2[k] = dOutput * hidden[k]
-        var gW2 = Engine.ReduceSum(Engine.TensorMultiply(dOutputPerUnit, hidden), new[] { 0 }, false);
-
-        // sigmoid'(z) = h(1-h); dHidden = dOutput * (W2 * sigmoid'(z))
-        var sigDeriv = Engine.TensorMultiply(hidden, Engine.ScalarMinusTensor(NumOps.One, hidden));
-        var w2PerSample = Engine.TensorBroadcastTo(_W2.Reshape(new[] { 1, d, h }), unitShape);
-        var w2SigDeriv = Engine.TensorMultiply(w2PerSample, sigDeriv); // [n, j, k]
-        var dHidden = Engine.TensorMultiply(dOutputPerUnit, w2SigDeriv);
-        var gB1 = Engine.ReduceSum(dHidden, new[] { 0 }, false);
-
-        // gW1[j, i, k] += sum_s dHidden[s, j, k] * x[s, i]
-        var gradByInput = Engine.TensorMatMul(Engine.TensorTranspose(x), dHidden.Reshape(new[] { n, d * h }));
-        var gW1 = Engine.Reshape(Engine.TensorPermute(gradByInput.Reshape(new[] { d, d, h }), new[] { 1, 0, 2 }),
-            new[] { d, d, h });
-
-        // Sobolev penalty: penalize ||df_j/dx||^2 with df_j/dx_i = sum_k W2[j][k] * sigmoid'(z_k) * W1[j][i,k],
-        // for i != j. Batched over j: q[j, s, k] = W2[j, k] * sigmoid'(z[s, j, k]).
-        var q = Engine.Reshape(Engine.TensorPermute(w2SigDeriv, new[] { 1, 0, 2 }), new[] { d, n, h });
+        T sobolevScale = NumOps.FromDouble(2.0 * _sobolevWeight / n);
         var w1Transposed = Engine.Reshape(Engine.TensorPermute(_W1, new[] { 0, 2, 1 }), new[] { d, h, d });
-        var jacobian = Engine.TensorMatMul(q, w1Transposed); // [j, s, i]
-        var selfInput = Engine.TensorBroadcastTo(OffDiagonalMask(d).Reshape(new[] { d, 1, d }), new[] { d, n, d });
-        jacobian = Engine.TensorWhere(selfInput, jacobian, Engine.TensorZerosLike(jacobian));
-        double totalSobolev = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(jacobian)));
+        var selfInputMask = OffDiagonalMask(d).Reshape(new[] { d, 1, d });
 
-        // Gradient of Sobolev penalty: sobCoeff = (2 * weight / n) * J
-        var sobCoeff = Engine.TensorMultiplyScalar(jacobian, NumOps.FromDouble(2.0 * _sobolevWeight / n)); // [j, s, i]
+        // Data term, Sobolev penalty and their gradients, summed over samples. The samples are processed in
+        // blocks so the [rows, d, h] activations and the [d, rows, d] Jacobian stay bounded
+        // (MaxSampleBlockElements) for large n; every normalization still uses the full sample count.
+        var squaredError = new Tensor<T>(new[] { d });
+        var sobolevSquares = new Tensor<T>(new[] { d, d });
+        var gB2 = new Tensor<T>(new[] { d });
+        var gW2 = new Tensor<T>(new[] { d, h });
+        var gB1 = new Tensor<T>(new[] { d, h });
+        var gradByInput = new Tensor<T>(new[] { d, d * h });
+        var sobGradW1 = new Tensor<T>(new[] { d, d, h });
+        int blockRows = Math.Max(1, Math.Min(n, MaxSampleBlockElements / Math.Max(1, d * Math.Max(d, h))));
+        for (int b0 = 0; b0 < n; b0 += blockRows)
+        {
+            int rows = Math.Min(blockRows, n - b0);
+            var unitShape = new[] { rows, d, h };
+            var xb = Engine.TensorSlice(x, new[] { b0, 0 }, new[] { rows, d });
+            var (pred, hidden) = ForwardMLP(xb, rows, d, h);
+            var residual = Engine.TensorSubtract(pred, xb);
+            squaredError = Engine.TensorAdd(squaredError, Engine.ReduceSum(Engine.TensorSquare(residual), new[] { 0 }, false));
 
-        // d(J^2)/dW1[j][i,k] = 2*J * W2[k] * sig'(z_k), summed over samples
-        var sobGradW1 = Engine.TensorMatMul(
-            Engine.Reshape(Engine.TensorPermute(sobCoeff, new[] { 0, 2, 1 }), new[] { d, d, n }), q); // [j, i, k]
-        gW1 = Engine.TensorAdd(gW1, sobGradW1);
+            // Data gradient: dL/d(pred) = residual / n
+            var dOutput = Engine.TensorMultiplyScalar(residual, invN);
+            gB2 = Engine.TensorAdd(gB2, Engine.ReduceSum(dOutput, new[] { 0 }, false));
+            var dOutputPerUnit = Engine.TensorBroadcastTo(dOutput.Reshape(new[] { rows, d, 1 }), unitShape);
 
-        // d(J^2)/dW2[k] = 2*J * sig'(z_k) * W1[j][i,k], summed over inputs and samples
-        var coeffTimesW1 = Engine.TensorMatMul(sobCoeff, _W1); // [j, s, k]
-        var sigDerivByVariable = Engine.Reshape(Engine.TensorPermute(sigDeriv, new[] { 1, 0, 2 }), new[] { d, n, h });
-        gW2 = Engine.TensorAdd(gW2,
-            Engine.ReduceSum(Engine.TensorMultiply(coeffTimesW1, sigDerivByVariable), new[] { 1 }, false));
+            // dL/dW2[k] = dOutput * hidden[k]
+            gW2 = Engine.TensorAdd(gW2, Engine.ReduceSum(Engine.TensorMultiply(dOutputPerUnit, hidden), new[] { 0 }, false));
+
+            // sigmoid'(z) = h(1-h); dHidden = dOutput * (W2 * sigmoid'(z))
+            var sigDeriv = Engine.TensorMultiply(hidden, Engine.ScalarMinusTensor(NumOps.One, hidden));
+            var w2PerSample = Engine.TensorBroadcastTo(_W2.Reshape(new[] { 1, d, h }), unitShape);
+            var w2SigDeriv = Engine.TensorMultiply(w2PerSample, sigDeriv); // [s, j, k]
+            var dHidden = Engine.TensorMultiply(dOutputPerUnit, w2SigDeriv);
+            gB1 = Engine.TensorAdd(gB1, Engine.ReduceSum(dHidden, new[] { 0 }, false));
+
+            // gW1[j, i, k] += sum_s dHidden[s, j, k] * x[s, i]
+            gradByInput = Engine.TensorAdd(gradByInput,
+                Engine.TensorMatMul(Engine.TensorTranspose(xb), dHidden.Reshape(new[] { rows, d * h })));
+
+            // Sobolev penalty: penalize ||df_j/dx||^2 with df_j/dx_i = sum_k W2[j][k] * sigmoid'(z_k) * W1[j][i,k],
+            // for i != j. Batched over j: q[j, s, k] = W2[j, k] * sigmoid'(z[s, j, k]).
+            var q = Engine.Reshape(Engine.TensorPermute(w2SigDeriv, new[] { 1, 0, 2 }), new[] { d, rows, h });
+            var jacobian = Engine.TensorMatMul(q, w1Transposed); // [j, s, i]
+            var selfInput = Engine.TensorBroadcastTo(selfInputMask, new[] { d, rows, d });
+            jacobian = Engine.TensorWhere(selfInput, jacobian, Engine.TensorZerosLike(jacobian));
+            sobolevSquares = Engine.TensorAdd(sobolevSquares,
+                Engine.ReduceSum(Engine.TensorSquare(jacobian), new[] { 1 }, false));
+
+            // Gradient of Sobolev penalty: sobCoeff = (2 * weight / n) * J
+            var sobCoeff = Engine.TensorMultiplyScalar(jacobian, sobolevScale); // [j, s, i]
+
+            // d(J^2)/dW1[j][i,k] = 2*J * W2[k] * sig'(z_k), summed over samples
+            sobGradW1 = Engine.TensorAdd(sobGradW1, Engine.TensorMatMul(
+                Engine.Reshape(Engine.TensorPermute(sobCoeff, new[] { 0, 2, 1 }), new[] { d, d, rows }), q)); // [j, i, k]
+
+            // d(J^2)/dW2[k] = 2*J * sig'(z_k) * W1[j][i,k], summed over inputs and samples
+            var coeffTimesW1 = Engine.TensorMatMul(sobCoeff, _W1); // [j, s, k]
+            var sigDerivByVariable = Engine.Reshape(Engine.TensorPermute(sigDeriv, new[] { 1, 0, 2 }), new[] { d, rows, h });
+            gW2 = Engine.TensorAdd(gW2,
+                Engine.ReduceSum(Engine.TensorMultiply(coeffTimesW1, sigDerivByVariable), new[] { 1 }, false));
+        }
+
+        var gW1 = Engine.TensorAdd(
+            Engine.Reshape(Engine.TensorPermute(gradByInput.Reshape(new[] { d, d, h }), new[] { 1, 0, 2 }), new[] { d, d, h }),
+            sobGradW1);
+        double totalLoss = NumOps.ToDouble(Engine.TensorSum(squaredError));
+        double totalSobolev = NumOps.ToDouble(Engine.TensorSum(sobolevSquares));
 
         totalLoss *= 0.5 / n;
 
