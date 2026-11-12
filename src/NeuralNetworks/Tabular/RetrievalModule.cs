@@ -88,50 +88,27 @@ public class RetrievalModule<T>
             throw new InvalidOperationException("Training data must be stored before retrieval");
         }
 
+        var engine = AiDotNetEngine.Current;
         int batchSize = queryKeys.Shape[0];
         int actualNeighbors = Math.Min(_numNeighbors, _numTrainingSamples);
         int labelDim = _trainingLabels.Shape[1];
 
-        var neighborIndices = new int[batchSize, actualNeighbors];
-        var neighborDistances = new Matrix<T>(batchSize, actualNeighbors);
-        var attentionWeights = new Tensor<T>([batchSize, actualNeighbors]);
-        var retrievedValues = new Tensor<T>([batchSize, actualNeighbors, _embeddingDim]);
-        var retrievedLabels = new Tensor<T>([batchSize, actualNeighbors, labelDim]);
+        // For each query, find k nearest neighbors (stable: equal distances keep training order)
+        var distances = ComputeDistances(queryKeys);
+        var neighborIndices = TieBreakArgMax.StableSmallestK(distances, actualNeighbors);
+        var neighborDistances = engine.TensorTakeAlongDim(distances, neighborIndices, 1);
 
-        // For each query, find k nearest neighbors
-        for (int b = 0; b < batchSize; b++)
-        {
-            var distances = ComputeDistances(queryKeys, b);
-            var topK = GetTopKIndices(distances, actualNeighbors);
+        // Compute softmax attention weights over exp(-distance / temperature)
+        var attentionWeights = ComputeAttentionWeights(neighborDistances);
 
-            for (int k = 0; k < actualNeighbors; k++)
-            {
-                neighborIndices[b, k] = topK[k].index;
-                neighborDistances[b, k] = topK[k].distance;
-            }
-
-            // Compute softmax attention weights
-            var weights = ComputeAttentionWeights(neighborDistances, b, actualNeighbors);
-            for (int k = 0; k < actualNeighbors; k++)
-            {
-                attentionWeights[b * actualNeighbors + k] = weights[k];
-
-                // Copy retrieved values
-                int trainIdx = neighborIndices[b, k];
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    retrievedValues[b * actualNeighbors * _embeddingDim + k * _embeddingDim + d] =
-                        _trainingValues[trainIdx * _embeddingDim + d];
-                }
-
-                // Copy retrieved labels
-                for (int l = 0; l < labelDim; l++)
-                {
-                    retrievedLabels[b * actualNeighbors * labelDim + k * labelDim + l] =
-                        _trainingLabels[trainIdx * labelDim + l];
-                }
-            }
-        }
+        // Copy retrieved values and labels
+        var flatIndices = neighborIndices.Reshape(batchSize * actualNeighbors);
+        var retrievedValues = engine.TensorIndexSelect(
+                _trainingValues.Reshape(_numTrainingSamples, _embeddingDim), flatIndices, 0)
+            .Reshape(batchSize, actualNeighbors, _embeddingDim);
+        var retrievedLabels = engine.TensorIndexSelect(
+                _trainingLabels.Reshape(_numTrainingSamples, labelDim), flatIndices, 0)
+            .Reshape(batchSize, actualNeighbors, labelDim);
 
         return new RetrievalContext<T>
         {
@@ -142,63 +119,48 @@ public class RetrievalModule<T>
         };
     }
 
-    private Vector<T> ComputeDistances(Tensor<T> queryKeys, int batchIdx)
+    /// <summary>
+    /// Squared Euclidean distance from every query to every stored training key: [batchSize, numTrainingSamples].
+    /// </summary>
+    /// <remarks>
+    /// Each query row is differenced against all keys and squared directly (no ||q||^2 - 2 q.k + ||k||^2
+    /// expansion, which cancels catastrophically for close points), one query row at a time so the
+    /// intermediate stays [numTrainingSamples, embeddingDim].
+    /// </remarks>
+    private Tensor<T> ComputeDistances(Tensor<T> queryKeys)
     {
-        var distances = new Vector<T>(_numTrainingSamples);
+        var engine = AiDotNetEngine.Current;
+        var trainingKeys = (_trainingKeys ?? throw new InvalidOperationException("_trainingKeys has not been initialized."))
+            .Reshape(_numTrainingSamples, _embeddingDim);
+        int batchSize = queryKeys.Shape[0];
+        var queries = TabularMetrics.Flat(queryKeys, batchSize * _embeddingDim).Reshape(batchSize, _embeddingDim);
 
-        for (int t = 0; t < _numTrainingSamples; t++)
+        var rows = new Tensor<T>[batchSize];
+        for (int b = 0; b < batchSize; b++)
         {
-            var dist = NumOps.Zero;
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                var diff = NumOps.Subtract(
-                    queryKeys[batchIdx * _embeddingDim + d],
-                    (_trainingKeys ?? throw new InvalidOperationException("_trainingKeys has not been initialized."))[t * _embeddingDim + d]);
-                dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
-            }
-            distances[t] = dist;
+            var diff = engine.TensorSubtract(engine.TensorNarrow(queries, 0, b, 1), trainingKeys);
+            rows[b] = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, false)
+                .Reshape(1, _numTrainingSamples);
         }
 
-        return distances;
+        return batchSize == 0
+            ? new Tensor<T>(new[] { 0, _numTrainingSamples })
+            : engine.TensorConcatenate(rows, 0);
     }
 
-    private (int index, T distance)[] GetTopKIndices(Vector<T> distances, int k)
+    /// <summary>
+    /// Softmax of -distance / temperature over each row of neighbour distances.
+    /// </summary>
+    /// <remarks>
+    /// The softmax subtracts each row's largest logit, i.e. its SMALLEST distance. Shifting by the largest
+    /// distance instead (as this method once did) gives exp((d_max - d) / temperature) &gt;= 1, which
+    /// overflows to infinity for widely spread distances and turns the weights into NaN.
+    /// </remarks>
+    private Tensor<T> ComputeAttentionWeights(Tensor<T> distances)
     {
-        var indexed = distances.Select((d, i) => (index: i, distance: d)).ToArray();
-        Array.Sort(indexed, (a, b) => NumOps.Compare(a.distance, b.distance));
-        return indexed.Take(k).ToArray();
-    }
-
-    private Vector<T> ComputeAttentionWeights(Matrix<T> distances, int batchIdx, int numNeighbors)
-    {
-        var weights = new Vector<T>(numNeighbors);
+        var engine = AiDotNetEngine.Current;
         var tempScale = NumOps.FromDouble(-1.0 / _temperature);
-
-        // Compute exp(-distance / temperature)
-        var maxVal = distances[batchIdx, 0];
-        for (int k = 1; k < numNeighbors; k++)
-        {
-            if (NumOps.Compare(distances[batchIdx, k], maxVal) > 0)
-                maxVal = distances[batchIdx, k];
-        }
-
-        var sumExp = NumOps.Zero;
-        for (int k = 0; k < numNeighbors; k++)
-        {
-            var scaledDist = NumOps.Multiply(
-                NumOps.Subtract(distances[batchIdx, k], maxVal),
-                tempScale);
-            weights[k] = NumOps.Exp(scaledDist);
-            sumExp = NumOps.Add(sumExp, weights[k]);
-        }
-
-        // Normalize
-        for (int k = 0; k < numNeighbors; k++)
-        {
-            weights[k] = NumOps.Divide(weights[k], sumExp);
-        }
-
-        return weights;
+        return engine.Softmax(engine.TensorMultiplyScalar(distances, tempScale), -1);
     }
 
     /// <summary>
