@@ -61,21 +61,15 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
         if (maxLag <= 0 || maxLag >= n)
             throw new ArgumentOutOfRangeException(nameof(maxLag), $"maxLag must be in [1, {n - 1}].");
 
+        // laggedX[t, lag * d + col] = data[t + maxLag - lag - 1, col]; target[t] = data[t + maxLag, targetCol]
         int effectiveN = n - maxLag;
-        var laggedX = new Matrix<T>(effectiveN, d * maxLag);
-        var target = new Vector<T>(effectiveN);
-
-        for (int t = 0; t < effectiveN; t++)
-        {
-            target[t] = data[t + maxLag, targetCol];
-            for (int lag = 0; lag < maxLag; lag++)
-            {
-                for (int col = 0; col < d; col++)
-                {
-                    laggedX[t, lag * d + col] = data[t + maxLag - lag - 1, col];
-                }
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
+        var lagBlocks = new Tensor<T>[maxLag];
+        for (int lag = 0; lag < maxLag; lag++)
+            lagBlocks[lag] = Engine.TensorSlice(x, new[] { maxLag - lag - 1, 0 }, new[] { effectiveN, d });
+        var laggedX = Engine.TensorConcatenate(lagBlocks, 1).ToMatrix();
+        var target = Engine.TensorSlice(x, new[] { maxLag, targetCol }, new[] { effectiveN, 1 })
+            .Reshape(new[] { effectiveN }).ToVector();
 
         return (laggedX, target);
     }
@@ -85,41 +79,19 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double ComputeRSS(Matrix<T> X, Vector<T> y, int n, int p)
     {
-        // Build normal equations: XtX * beta = Xty
-        var XtX = new Matrix<T>(p, p);
-        var Xty = new Vector<T>(p);
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(X[k, i], X[k, j]));
-                XtX[i, j] = sum;
-            }
-            T sumY = NumOps.Zero;
-            for (int k = 0; k < n; k++)
-                sumY = NumOps.Add(sumY, NumOps.Multiply(X[k, i], y[k]));
-            Xty[i] = sumY;
-        }
+        // Build normal equations: XtX * beta = Xty over the first n rows and p columns
+        var design = Engine.TensorSlice(Tensor<T>.FromMatrix(X), new[] { 0, 0 }, new[] { n, p });
+        var response = Engine.TensorSlice(y.AsTensor(), new[] { 0 }, new[] { n }).Reshape(new[] { n, 1 });
+        var designT = Engine.TensorTranspose(design);
+        var XtX = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(designT, design));
 
         // Ridge regularization
-        T ridge = NumOps.FromDouble(1e-6);
-        for (int i = 0; i < p; i++)
-            XtX[i, i] = NumOps.Add(XtX[i, i], ridge);
+        XtX = Engine.TensorAdd(XtX, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(1e-6)));
+        var Xty = Engine.TensorMatMul(designT, response).Reshape(new[] { p }).ToVector();
 
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX.ToMatrix(), Xty, MatrixDecompositionType.Lu);
 
-        double rss = 0;
-        for (int i = 0; i < n; i++)
-        {
-            T pred = NumOps.Zero;
-            for (int j = 0; j < p; j++)
-                pred = NumOps.Add(pred, NumOps.Multiply(beta[j], X[i, j]));
-            double err = NumOps.ToDouble(NumOps.Subtract(y[i], pred));
-            rss += err * err;
-        }
-
-        return rss;
+        var residual = Engine.TensorSubtract(response, Engine.TensorMatMul(design, beta.AsTensor().Reshape(new[] { p, 1 })));
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(residual)));
     }
 }
