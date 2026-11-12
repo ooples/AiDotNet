@@ -227,14 +227,13 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 
     private static Tensor<T> Wave(double[] samples) => new(new[] { samples.Length }, new Vector<T>(samples.Select(v => Ops.FromDouble(v)).ToArray()));
 
-    private static Tensor<T> Ids(IReadOnlyList<int> ids) => new(new[] { ids.Count }, new Vector<T>(ids.Select(i => Ops.FromDouble(i)).ToArray()));
+    private static Tensor<T> Ids(IReadOnlyList<int> ids) => IdTensor(ids);
 
     private int[] PhoneIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(tensor.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"Phone ids lie in [0, {_options.VocabSize}).");
         }
@@ -264,11 +263,7 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
         if (audio is null) throw new ArgumentNullException(nameof(audio));
-        var codes = AcousticCodec.Encode(Doubles(audio));
-        var tokens = new Tensor<T>(new[] { codes.GetLength(0), codes.GetLength(1) });
-        for (int f = 0; f < codes.GetLength(0); f++)
-            for (int q = 0; q < codes.GetLength(1); q++) tokens[f, q] = Ops.FromDouble(codes[f, q]);
-        return tokens;
+        return IntMatrixTensor(AcousticCodec.Encode(Doubles(audio)));
     }
 
     /// <inheritdoc />
@@ -285,11 +280,10 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         if (tokens is null) throw new ArgumentNullException(nameof(tokens));
         if (tokens.Rank != 2 || tokens.Shape[1] != _options.NumQuantizers)
             throw new ArgumentException($"MaskGCT's acoustic codes are [frames, {_options.NumQuantizers}].", nameof(tokens));
-        var codes = new int[tokens.Shape[0], tokens.Shape[1]];
+        var codes = RoundedIdMatrix(tokens);
         for (int f = 0; f < codes.GetLength(0); f++)
             for (int q = 0; q < codes.GetLength(1); q++)
             {
-                codes[f, q] = (int)Math.Round(Ops.ToDouble(tokens[f, q]));
                 if (codes[f, q] < 0 || codes[f, q] >= _options.CodebookSize)
                     throw new ArgumentException($"Acoustic codes lie in [0, {_options.CodebookSize}).", nameof(tokens));
             }
@@ -339,7 +333,8 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     private (int Samples16k, int[] Semantic) Prompt(TtsVoice<T> voice)
     {
         var audio = voice.ReferenceAudio ?? throw new InvalidOperationException($"{GetType().Name} continues a recording; set ReferenceAudio on the voice.");
-        int[]? semantic = voice.ReferenceCodecTokens is { } codes ? codes.ToArray().Select(v => (int)Math.Round(Ops.ToDouble(v))).ToArray() : null;
+        int[]? semantic = voice.ReferenceCodecTokens is { } codes ? RoundedIds(codes) : null;
+
         if (_prompts.TryGetValue(voice, out var info) && semantic is not null) return (info.Samples16k, semantic);
         var audio16k = SoxrResampler.LibrosaResample(Doubles(audio), _options.SampleRate, _options.SemanticSampleRate);
         return (audio16k.Length, semantic ?? SemanticTokens(audio16k));
