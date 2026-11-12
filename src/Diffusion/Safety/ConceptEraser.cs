@@ -72,24 +72,17 @@ public class ConceptEraser<T>
     /// <returns>The embedding with erased concepts.</returns>
     public Vector<T> EraseFromEmbedding(Vector<T> embedding)
     {
-        var result = new Vector<T>(embedding.Length);
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            result[i] = embedding[i];
-        }
+        var result = embedding.Clone();
+        var strength = NumOps.FromDouble(_erasureStrength);
 
         foreach (var direction in _conceptDirections)
         {
             // Project embedding onto concept direction
             var dot = DotProduct(result, direction);
-            var scaledDot = NumOps.Multiply(NumOps.FromDouble(_erasureStrength), dot);
+            var scaledDot = NumOps.Multiply(strength, dot);
 
-            // Subtract projection: result = result - strength * (result . d) * d
-            for (int i = 0; i < result.Length && i < direction.Length; i++)
-            {
-                var projection = NumOps.Multiply(scaledDot, direction[i]);
-                result[i] = NumOps.Subtract(result[i], projection);
-            }
+            // Subtract projection: result = result - strength * (result . d) * d (d zero-padded to the embedding)
+            result = Engine.Subtract(result, Engine.Multiply(DiffusionVectorOps.Fit(direction, result.Length), scaledDot));
         }
 
         return result;
@@ -110,7 +103,7 @@ public class ConceptEraser<T>
 
         var direction = _conceptDirections[conceptIndex];
         var dot = NumOps.ToDouble(DotProduct(embedding, direction));
-        var normEmb = VectorNorm(embedding);
+        var normEmb = NumOps.ToDouble(VectorNorm(embedding));
 
         return normEmb > 1e-10 ? Math.Abs(dot) / normEmb : 0.0;
     }
@@ -123,29 +116,16 @@ public class ConceptEraser<T>
         return sum;
     }
 
-    private double VectorNorm(Vector<T> v)
+    private T VectorNorm(Vector<T> v)
     {
-        double sumSq = 0;
-        for (int i = 0; i < v.Length; i++)
-        {
-            var val = NumOps.ToDouble(v[i]);
-            sumSq += val * val;
-        }
-        return Math.Sqrt(sumSq);
+        return Engine.Norm(v);
     }
 
     private Vector<T> NormalizeVector(Vector<T> v)
     {
         var norm = VectorNorm(v);
-        if (norm < 1e-10) return v;
-
-        var result = new Vector<T>(v.Length);
-        var invNorm = NumOps.FromDouble(1.0 / norm);
-        for (int i = 0; i < v.Length; i++)
-        {
-            result[i] = NumOps.Multiply(invNorm, v[i]);
-        }
-        return result;
+        if (NumOps.LessThan(norm, NumOps.FromDouble(1e-10))) return v;
+        return Engine.Divide(v, norm);
     }
 
     /// <summary>

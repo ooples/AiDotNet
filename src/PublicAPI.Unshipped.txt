@@ -22565,3 +22565,5 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.Diffusion.Safety.SGRACEEraser<T>.MeasureStylePresence(AiDotNet.Tensors.LinearAlgebra.Vector<T>! currentParameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! baseParameters, int styleIndex) -> double
+AiDotNet.Diffusion.Safety.SGRACEEraser<T>.MeasureStylePresence(AiDotNet.Tensors.LinearAlgebra.Vector<T>! currentParameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! baseParameters, int styleIndex) -> T
