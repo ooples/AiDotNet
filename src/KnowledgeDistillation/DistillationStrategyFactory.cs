@@ -73,7 +73,7 @@ public static class DistillationStrategyFactory<T>
         // Provide default attention layers if none specified
         var defaultLayers = new[] { "layer.0.attention", "layer.1.attention", "layer.2.attention" };
         var layersArray = attentionLayers != null ?
-            Enumerable.Range(0, attentionLayers.Length).Select(i => attentionLayers[i]).ToArray() :
+            attentionLayers.ToArray() :
             defaultLayers;
 
         return new AttentionDistillationStrategy<T>(
@@ -218,8 +218,8 @@ public static class DistillationStrategyFactory<T>
             {
                 // Equal weights if not specified
                 double equalWeight = 1.0 / strategies.Length;
-                strategyTuples = Enumerable.Range(0, strategies.Length)
-                    .Select(i => (strategies[i], equalWeight))
+                strategyTuples = strategies
+                    .Select(strategy => (strategy, equalWeight))
                     .ToArray();
             }
             else
@@ -230,8 +230,8 @@ public static class DistillationStrategyFactory<T>
                         $"Number of strategies ({strategies.Length}) must match number of weights ({strategyWeights.Length})");
                 }
                 // Zip strategies with weights from Vector
-                strategyTuples = Enumerable.Range(0, strategies.Length)
-                    .Select(i => (strategies[i], Convert.ToDouble(strategyWeights[i])))
+                strategyTuples = strategies
+                    .Zip(strategyWeights, (strategy, weight) => (strategy, Convert.ToDouble(weight)))
                     .ToArray();
             }
         }
