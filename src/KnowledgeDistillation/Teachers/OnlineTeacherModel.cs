@@ -201,14 +201,11 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         var currentOutput = GetLogits(input);
 
         // Compute EMA update: new = alpha * current + (1-alpha) * target
-        var gradient = new Vector<T>(currentOutput.Length);
-        for (int i = 0; i < currentOutput.Length; i++)
-        {
-            // Gradient pushes teacher toward target
-            var diff = NumOps.Subtract(targetOutput[i], currentOutput[i]);
-            var scaled = NumOps.Multiply(diff, NumOps.FromDouble(1.0 - _updateRate));
-            gradient[i] = scaled;
-        }
+        // Gradient pushes teacher toward target
+        var gradient = Engine.Multiply(
+            Engine.Subtract(Leading(targetOutput, currentOutput.Length), currentOutput),
+            NumOps.FromDouble(1.0 - _updateRate));
+
 
         _teacherUpdate?.Invoke(input, gradient);
     }
@@ -222,13 +219,10 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         var currentOutput = GetLogits(input);
 
         // Compute MSE gradient: 2 * (current - target)
-        var gradient = new Vector<T>(currentOutput.Length);
-        for (int i = 0; i < currentOutput.Length; i++)
-        {
-            var diff = NumOps.Subtract(currentOutput[i], targetOutput[i]);
-            var scaled = NumOps.Multiply(diff, NumOps.FromDouble(2.0 * _updateRate));
-            gradient[i] = scaled;
-        }
+        var gradient = Engine.Multiply(
+            Engine.Subtract(currentOutput, Leading(targetOutput, currentOutput.Length)),
+            NumOps.FromDouble(2.0 * _updateRate));
+
 
         _teacherUpdate?.Invoke(input, gradient);
     }
@@ -241,15 +235,23 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         // Similar to EMA but with momentum factor
         var currentOutput = GetLogits(input);
 
-        var gradient = new Vector<T>(currentOutput.Length);
-        for (int i = 0; i < currentOutput.Length; i++)
-        {
-            var diff = NumOps.Subtract(targetOutput[i], currentOutput[i]);
-            var scaled = NumOps.Multiply(diff, NumOps.FromDouble(_updateRate));
-            gradient[i] = scaled;
-        }
+        var gradient = Engine.Multiply(
+            Engine.Subtract(Leading(targetOutput, currentOutput.Length), currentOutput),
+            NumOps.FromDouble(_updateRate));
+
 
         _teacherUpdate?.Invoke(input, gradient);
+    }
+
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// The first <paramref name="count"/> entries of <paramref name="values"/> (the vector itself when
+    /// it already has that length); throws when it is shorter.
+    /// </summary>
+    private static Vector<T> Leading(Vector<T> values, int count)
+    {
+        return values.Length == count ? values : values.GetSubVector(0, count);
     }
 
     /// <summary>
