@@ -110,7 +110,7 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
 
         var sources = new int[numSynthetic];
         var targets = new int[numSynthetic];
-        var gaps = new double[numSynthetic];
+        var gaps = new Vector<T>(numSynthetic);
         int syntheticIndex = 0;
 
         // Compute pairwise distances for k-NN
@@ -132,7 +132,7 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
 
             sources[syntheticIndex] = sampleIdx;
             targets[syntheticIndex] = neighborIdx;
-            gaps[syntheticIndex] = gap;
+            gaps[syntheticIndex] = NumOps.FromDouble(gap);
 
             syntheticIndex++;
         }

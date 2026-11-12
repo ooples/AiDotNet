@@ -208,7 +208,7 @@ public class BorderlineSmoteAugmenter<T> : TabularAugmenterBase<T>
         int numSynthetic = (int)Math.Ceiling(dangerIndices.Count * SamplingRatio);
         var sources = new int[numSynthetic];
         var targets = new int[numSynthetic];
-        var gaps = new double[numSynthetic];
+        var gaps = new Vector<T>(numSynthetic);
 
         // Minority rows followed by majority rows, so a majority neighbor index
         // (minorityCount + majority row) addresses this matrix directly
@@ -253,7 +253,7 @@ public class BorderlineSmoteAugmenter<T> : TabularAugmenterBase<T>
 
             sources[syntheticIndex] = dangerIdx;
             targets[syntheticIndex] = neighborIdx;
-            gaps[syntheticIndex] = gap;
+            gaps[syntheticIndex] = NumOps.FromDouble(gap);
 
             syntheticIndex++;
         }

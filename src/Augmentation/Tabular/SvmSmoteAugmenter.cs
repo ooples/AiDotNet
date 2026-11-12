@@ -126,7 +126,7 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
         int numSynthetic = (int)Math.Ceiling(supportVectorIndices.Count * SamplingRatio);
         var sources = new int[numSynthetic];
         var targets = new int[numSynthetic];
-        var gaps = new double[numSynthetic];
+        var gaps = new Vector<T>(numSynthetic);
 
         // Precompute minority distances for neighbor finding
         var minorityDistances = ComputeDistanceMatrix(minorityData);
@@ -147,7 +147,7 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
 
             sources[syntheticIndex] = svIdx;
             targets[syntheticIndex] = neighborIdx;
-            gaps[syntheticIndex] = gap;
+            gaps[syntheticIndex] = NumOps.FromDouble(gap);
 
             syntheticIndex++;
         }
