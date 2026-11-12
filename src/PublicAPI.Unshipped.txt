@@ -22640,3 +22640,11 @@ AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(AiDo
 AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! p, int d) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! p, int d, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sourceScore) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.CausalDiscovery.TimeSeries.TiMINoAlgorithm<T>.ModelFitRejected.get -> bool
+AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100, double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42, double adversarialWeight = 1, double contextualWeight = 50, double encoderWeight = 1) -> void
+*REMOVED*AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.SCiForest(int numTrees = 100, int maxSamples = 256, double sparsity = 0.2, double contamination = 0.1, int randomSeed = 42) -> void
+*REMOVED*AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.Sparsity.get -> double
+AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.SCiForest(int numTrees = 100, int maxSamples = 256, int attributesPerHyperplane = 2, int hyperplanesPerNode = 10, double contamination = 0.1, int randomSeed = 42) -> void
+AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.AttributesPerHyperplane.get -> int
+AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.HyperplanesPerNode.get -> int
+*REMOVED*AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100, double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42) -> void
+AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim, int hiddenDim, int epochs, double learningRate, double contamination, int randomSeed) -> void
