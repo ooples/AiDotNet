@@ -144,29 +144,25 @@ public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
 
     private Tensor<T> ToTokenTensorForFacade(IReadOnlyList<int> tokens)
     {
-        var tensor = new Tensor<T>([tokens.Count]);
-        for (int index = 0; index < tokens.Count; index++)
-            tensor[index] = NumOps.FromDouble(tokens[index]);
-        return tensor;
+        return IdTensor(tokens);
     }
 
-    private Tensor<T> ToTensor(int[,] tokens)
-    {
-        var tensor = new Tensor<T>([tokens.GetLength(0), tokens.GetLength(1)]);
-        for (int codebook = 0; codebook < tokens.GetLength(0); codebook++)
-            for (int frame = 0; frame < tokens.GetLength(1); frame++)
-                tensor[codebook, frame] = NumOps.FromDouble(tokens[codebook, frame]);
-        return tensor;
-    }
+    private Tensor<T> ToTensor(int[,] tokens) => IntMatrixTensor(tokens);
 
     private int[,] ToArray(Tensor<T> tokens)
     {
         if (tokens.Shape.Length != 2)
             throw new ArgumentException("Bark codec tokens must have shape [codebook, frame].", nameof(tokens));
-        var result = new int[tokens.Shape[0], tokens.Shape[1]];
-        for (int codebook = 0; codebook < result.GetLength(0); codebook++)
-            for (int frame = 0; frame < result.GetLength(1); frame++)
-                result[codebook, frame] = Convert.ToInt32(NumOps.ToDouble(tokens[codebook, frame]));
-        return result;
+        if (tokens.Length > 0)
+        {
+            // Convert.ToInt32's contract: NaN or a value outside Int32 after rounding half to even overflows.
+            var rounded = Engine.TensorRound(tokens);
+            if (NumOps.IsNaN(Engine.TensorSum(rounded))
+                || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(rounded), NumOps.FromDouble(2147483648.0))
+                || NumOps.LessThan(Engine.TensorMinValue(rounded), NumOps.FromDouble(-2147483648.0)))
+                throw new OverflowException("Value was either too large or too small for an Int32.");
+        }
+        return RoundedIdMatrix(tokens);
+
     }
 }
