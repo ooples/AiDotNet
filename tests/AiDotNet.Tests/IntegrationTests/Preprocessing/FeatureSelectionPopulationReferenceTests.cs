@@ -756,4 +756,152 @@ public class FeatureSelectionPopulationReferenceTests
 
         Assert.Throws<System.ArgumentException>(() => new MOEADSelector<double>(populationSize: 1));
     }
+
+    // ---------------------------------------------------------------- Simulated annealing and tabu search
+
+    private static double MeanScore(bool[] mask, double[] scores)
+    {
+        double total = 0;
+        int count = 0;
+        for (int j = 0; j < mask.Length; j++)
+        {
+            if (mask[j])
+            {
+                total += scores[j];
+                count++;
+            }
+        }
+
+        return count == 0 ? 0 : total / count;
+    }
+
+    [Fact]
+    public void SimulatedAnnealing_MatchesMetropolisWithSameSeed()
+    {
+        var (x, y) = Problem(13, 50, 9);
+        int k = 3, iterations = 200, seed = 17;
+        double t0 = 1.0, cooling = 0.97;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Optimization.SimulatedAnnealingSelector<double>(
+            k, t0, cooling, iterations, seed);
+        selector.Fit(x, y);
+
+        var rng = new System.Random(seed);
+        int p = x.Columns;
+        var scores = AbsCorrelations(x, y, 0);
+        var current = new bool[p];
+        foreach (int j in Enumerable.Range(0, p).OrderBy(_ => rng.Next()).Take(k)) current[j] = true;
+        double energy = -MeanScore(current, scores);
+        var best = (bool[])current.Clone();
+        double bestEnergy = energy, temperature = t0;
+        for (int it = 0; it < iterations; it++)
+        {
+            var neighbor = (bool[])current.Clone();
+            var selected = Enumerable.Range(0, p).Where(j => neighbor[j]).ToList();
+            if (rng.NextDouble() < 0.5 && selected.Count > 1)
+            {
+                neighbor[selected[rng.Next(selected.Count)]] = false;
+                var unselected = Enumerable.Range(0, p).Where(j => !neighbor[j]).ToList();
+                if (unselected.Count > 0) neighbor[unselected[rng.Next(unselected.Count)]] = true;
+            }
+            else
+            {
+                int flip = rng.Next(p);
+                neighbor[flip] = !neighbor[flip];
+            }
+
+            double neighborEnergy = -MeanScore(neighbor, scores);
+            double delta = neighborEnergy - energy;
+            if (delta < 0 || rng.NextDouble() < System.Math.Exp(-delta / temperature))
+            {
+                current = neighbor;
+                energy = neighborEnergy;
+                if (energy < bestEnergy)
+                {
+                    best = (bool[])current.Clone();
+                    bestEnergy = energy;
+                }
+            }
+
+            temperature *= cooling;
+        }
+
+        Assert.Equal(Enumerable.Range(0, p).Where(j => best[j]).ToArray(), selector.SelectedIndices);
+    }
+
+    [Fact]
+    public void TabuSearch_AppliesTheEvaluatedSwapAndHonoursTabuWithAspiration()
+    {
+        var swap = AiDotNet.Preprocessing.FeatureSelection.Optimization.TabuSearchSelector<double>.BestSwap(
+            Tensor1D(1, 1, 0, 0), Tensor1D(0.1, 0.5, 0.9, 0.3), Tensor1D(1, 0, 0, 0), Tensor1D(0.6), out var moveScore);
+
+        // Removing 0 for 2 is best ((0.6 - 0.1 + 0.9) / 2 = 0.7) and 0 is tabu, but 0.7 beats the best 0.6
+        Assert.Equal((0, 2), swap ?? (-1, -1));
+        Assert.Equal(0.7, ToArray(moveScore)[0], 12);
+
+        // Without aspiration the tabu feature 0 cannot leave: the best free swap is 1 -> 2
+        swap = AiDotNet.Preprocessing.FeatureSelection.Optimization.TabuSearchSelector<double>.BestSwap(
+            Tensor1D(1, 1, 0, 0), Tensor1D(0.1, 0.5, 0.9, 0.3), Tensor1D(1, 0, 0, 0), Tensor1D(0.9), out moveScore);
+        Assert.Equal((1, 2), swap ?? (-1, -1));
+        Assert.Equal(0.5, ToArray(moveScore)[0], 12);
+    }
+
+    [Fact]
+    public void TabuSearch_MatchesGloverSwapSearchWithSameSeed()
+    {
+        var (x, y) = Problem(14, 50, 8);
+        int k = 3, tenure = 2, iterations = 12, seed = 23;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Optimization.TabuSearchSelector<double>(
+            k, tenure, iterations, seed);
+        selector.Fit(x, y);
+
+        var rng = new System.Random(seed);
+        int p = x.Columns;
+        var scores = AbsCorrelations(x, y, 0);
+        var current = new bool[p];
+        foreach (int j in Enumerable.Range(0, p).OrderBy(_ => rng.Next()).Take(k)) current[j] = true;
+        double currentScore = MeanScore(current, scores);
+        var best = (bool[])current.Clone();
+        double bestScore = currentScore;
+        var tabuUntil = new int[p];
+        for (int it = 0; it < iterations; it++)
+        {
+            int bestR = -1, bestA = -1;
+            double bestMove = double.MinValue;
+            for (int r = 0; r < p; r++)
+            {
+                if (!current[r]) continue;
+                for (int a = 0; a < p; a++)
+                {
+                    if (current[a]) continue;
+                    var neighbor = (bool[])current.Clone();
+                    neighbor[r] = false;
+                    neighbor[a] = true;
+                    double score = MeanScore(neighbor, scores);
+                    bool admissible = (tabuUntil[r] <= it && tabuUntil[a] <= it) || score > bestScore;
+                    if (admissible && score > bestMove)
+                    {
+                        bestMove = score;
+                        bestR = r;
+                        bestA = a;
+                    }
+                }
+            }
+
+            if (bestR >= 0)
+            {
+                current[bestR] = false;
+                current[bestA] = true;
+                tabuUntil[bestR] = it + tenure;
+                tabuUntil[bestA] = it + tenure;
+                currentScore = bestMove;
+                if (currentScore > bestScore)
+                {
+                    best = (bool[])current.Clone();
+                    bestScore = currentScore;
+                }
+            }
+        }
+
+        Assert.Equal(Enumerable.Range(0, p).Where(j => best[j]).ToArray(), selector.SelectedIndices);
+    }
 }

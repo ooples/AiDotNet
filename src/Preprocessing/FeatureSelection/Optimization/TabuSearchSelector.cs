@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Optimization;
 
@@ -28,14 +29,14 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int TabuTenure => _tabuTenure;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,160 +73,109 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
+        var scores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
         // Initialize current solution
-        var current = new HashSet<int>();
-        var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(numToSelect).ToList();
-        foreach (int idx in indices)
-            current.Add(idx);
+        var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(numToSelect).ToArray();
+        var current = PopulationSearchOps.IndexMask<T>(indices, p);
+        var currentScore = Score(current, scores);
+        var best = current;
+        var bestScore = currentScore;
 
-        double currentScore = EvaluateFitness(X, y, current, n, p);
-        var best = new HashSet<int>(current);
-        double bestScore = currentScore;
-
-        // Tabu list: feature -> iteration when it becomes non-tabu
-        var tabuList = new Dictionary<int, int>();
-
-        _featureImportances = new double[p];
+        // Tabu list: the iteration until which each feature may not be swapped in or out
+        var tabuUntil = new Tensor<T>(new[] { p });
+        var importances = new Tensor<T>(new[] { p });
 
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            int bestMoveFeature = -1;
-            double bestMoveScore = double.MinValue;
-
-            // Try all possible moves
-            // 1. Remove a feature and add another
-            foreach (int toRemove in current)
+            var tabu = engine.TensorGreaterThan(tabuUntil, FeatureSelectionTensorOps.Count<T>(iter));
+            var move = BestSwap(current, scores, tabu, bestScore, out var moveScore);
+            if (move is not null)
             {
-                if (tabuList.TryGetValue(toRemove, out int tabuUntil) && iter < tabuUntil)
-                    continue; // Tabu
+                var (toRemove, toAdd) = move.Value;
+                current = engine.TensorAdd(
+                    engine.TensorSubtract(current, FeatureSelectionTensorOps.OneHot<T>(toRemove, p)),
+                    FeatureSelectionTensorOps.OneHot<T>(toAdd, p));
+                var until = FeatureSelectionTensorOps.Filled(new[] { 2 }, FeatureSelectionTensorOps.Count<T>(iter + _tabuTenure));
+                tabuUntil = PopulationSearchOps.ScatterAt(tabuUntil, new[] { toRemove, toAdd }, until);
+                currentScore = moveScore;
 
-                foreach (int toAdd in Enumerable.Range(0, p).Except(current))
+                if (PopulationSearchOps.Greater(currentScore, bestScore))
                 {
-                    if (tabuList.TryGetValue(toAdd, out int addTabuUntil) && iter < addTabuUntil)
-                        continue; // Tabu
-
-                    var neighbor = new HashSet<int>(current);
-                    neighbor.Remove(toRemove);
-                    neighbor.Add(toAdd);
-
-                    double score = EvaluateFitness(X, y, neighbor, n, p);
-
-                    // Aspiration criterion: accept if better than best
-                    if (score > bestMoveScore || score > bestScore)
-                    {
-                        bestMoveScore = score;
-                        bestMoveFeature = toAdd;
-                    }
-                }
-            }
-
-            // Apply best move
-            if (bestMoveFeature >= 0)
-            {
-                // Find which feature to swap out
-                int toRemove = -1;
-                double lowestContrib = double.MaxValue;
-                foreach (int j in current)
-                {
-                    var test = new HashSet<int>(current);
-                    test.Remove(j);
-                    double contrib = currentScore - EvaluateFitness(X, y, test, n, p);
-                    if (contrib < lowestContrib)
-                    {
-                        lowestContrib = contrib;
-                        toRemove = j;
-                    }
-                }
-
-                if (toRemove >= 0)
-                {
-                    current.Remove(toRemove);
-                    current.Add(bestMoveFeature);
-                    tabuList[toRemove] = iter + _tabuTenure;
-                    tabuList[bestMoveFeature] = iter + _tabuTenure;
-
-                    currentScore = bestMoveScore;
-
-                    if (currentScore > bestScore)
-                    {
-                        best = new HashSet<int>(current);
-                        bestScore = currentScore;
-                    }
+                    best = current;
+                    bestScore = currentScore;
                 }
             }
 
             // Track feature importance
-            foreach (int j in current)
-                _featureImportances[j] += currentScore;
+            importances = engine.TensorAdd(importances, PopulationSearchOps.Scale(current, currentScore));
         }
 
-        _selectedIndices = best.OrderBy(x => x).ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.MaskPositions(best);
 
         // Normalize feature importances
-        double maxImportance = _featureImportances.Max();
-        if (maxImportance > 0)
-        {
-            for (int j = 0; j < p; j++)
-                _featureImportances[j] /= maxImportance;
-        }
+        var zero = new Tensor<T>(new[] { 1 });
+        var maxImportance = ParetoOps.Max(importances);
+        if (PopulationSearchOps.Greater(maxImportance, zero))
+            importances = engine.TensorDivide(importances, engine.TensorBroadcastTo(maxImportance, new[] { p }));
+        _featureImportances = importances.ToVector();
 
         IsFitted = true;
     }
 
-    private double EvaluateFitness(double[,] X, double[] y, HashSet<int> selected, int n, int p)
+    /// <summary>The mean absolute target correlation of the features of a 0/1 mask [p] (0 when empty), as [1].</summary>
+    private Tensor<T> Score(Tensor<T> mask, Tensor<T> scores) =>
+        PopulationSearchOps.SubsetFitness(Engine.Reshape(mask, new[] { 1, mask.Length }), scores, 0, NumOps.Zero, NumOps.Zero);
+
+    /// <summary>
+    /// The best admissible swap of tabu search (Glover 1989): every pair of a selected feature r and an unselected
+    /// feature a is scored by the mean score of the swapped subset, (S - s_r + s_a) / k. A swap is admissible when
+    /// neither feature is tabu, or by aspiration when its score beats <paramref name="bestScore"/>. The first
+    /// highest-scoring admissible swap (by r, then a) is returned with its score, or null when none is admissible.
+    /// </summary>
+    internal static (int Remove, int Add)? BestSwap(
+        Tensor<T> current, Tensor<T> scores, Tensor<T> tabu, Tensor<T> bestScore, out Tensor<T> moveScore)
     {
-        if (selected.Count == 0) return 0;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = current.Length;
+        var square = new[] { p, p };
+        moveScore = new Tensor<T>(new[] { 1 });
 
-        double totalCorr = 0;
-        foreach (int j in selected)
-        {
-            double corr = ComputeCorrelation(X, y, j, n);
-            totalCorr += Math.Abs(corr);
-        }
+        var count = engine.ReduceSum(current, new[] { 0 }, true);
+        var total = engine.ReduceSum(engine.TensorMultiply(current, scores), new[] { 0 }, true);
+        var removed = engine.TensorBroadcastTo(engine.Reshape(scores, new[] { p, 1 }), square);
+        var added = engine.TensorBroadcastTo(engine.Reshape(scores, new[] { 1, p }), square);
+        var swapScore = engine.TensorDivide(
+            engine.TensorAdd(engine.TensorSubtract(engine.TensorBroadcastTo(engine.Reshape(total, new[] { 1, 1 }), square), removed), added),
+            engine.TensorBroadcastTo(engine.Reshape(count, new[] { 1, 1 }), square));
 
-        return totalCorr / selected.Count;
-    }
+        var outOf = engine.TensorBroadcastTo(engine.Reshape(current, new[] { p, 1 }), square);
+        var into = engine.TensorBroadcastTo(engine.Reshape(FeatureSelectionTensorOps.OneMinus(current), new[] { 1, p }), square);
+        var free = FeatureSelectionTensorOps.OneMinus(engine.TensorClamp(
+            engine.TensorAdd(
+                engine.TensorBroadcastTo(engine.Reshape(tabu, new[] { p, 1 }), square),
+                engine.TensorBroadcastTo(engine.Reshape(tabu, new[] { 1, p }), square)),
+            ops.Zero, ops.One));
+        var aspiration = engine.TensorGreaterThan(swapScore, engine.TensorBroadcastTo(engine.Reshape(bestScore, new[] { 1, 1 }), square));
+        var admissible = engine.TensorMultiply(
+            engine.TensorMultiply(outOf, into), engine.TensorClamp(engine.TensorAdd(free, aspiration), ops.Zero, ops.One));
+        if (!PopulationSearchOps.Any(admissible))
+            return null;
 
-    private double ComputeCorrelation(double[,] X, double[] y, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += X[i, j];
-            yMean += y[i];
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xd = X[i, j] - xMean;
-            double yd = y[i] - yMean;
-            sxy += xd * yd;
-            sxx += xd * xd;
-            syy += yd * yd;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        var candidates = engine.Reshape(
+            engine.TensorWhere(admissible, swapScore, FeatureSelectionTensorOps.Filled(square, ops.MinValue)), new[] { p * p });
+        int flat = PopulationSearchOps.ArgMax(candidates);
+        moveScore = PopulationSearchOps.At(candidates, flat);
+        return (flat / p, flat % p);
     }
 
     /// <inheritdoc />
@@ -241,15 +191,7 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("TabuSearchSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
