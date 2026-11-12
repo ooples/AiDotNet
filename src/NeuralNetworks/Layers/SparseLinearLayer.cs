@@ -128,8 +128,10 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastOutput;
 
     /// <summary>
-    /// Gradient for weights, stored during backward pass.
-    /// Stored as a dense [OutputFeatures, InputFeatures] tensor, then sparsified on update.
+    /// Gradient for weights, stored during backward pass: one value per stored non-zero, aligned with
+    /// the sparse weight's (row, column) order. The weight gradient is only ever applied at the sparse
+    /// pattern, so it is computed only there (SDDMM) rather than as a dense [OutputFeatures, InputFeatures]
+    /// matrix.
     /// </summary>
     [Scratch]
     private Tensor<T>? _weightsGradient;
@@ -357,13 +359,21 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         var gradient2d = Engine.Reshape(preActGradient, new[] { batchSize, OutputFeatures });   // [batch, Out]
         var input2d = Engine.Reshape(_lastInput, new[] { batchSize, InputFeatures });         // [batch, In]
 
-        // dB[o] = sum_b g[b, o]; dW[o, i] = sum_b g[b, o] x[b, i] (dense, sparsified on update).
+        // dB[o] = sum_b g[b, o].
         _biasesGradient = Engine.ReduceSum(gradient2d, new[] { 0 });
-        _weightsGradient = Engine.TensorMatMul(Engine.TensorTranspose(gradient2d), input2d);   // [Out, In]
 
-        // dX = g @ W; the zero entries of the sparse weight contribute nothing.
-        var inputGradient = Engine.TensorMatMul(gradient2d, _weights.ToDense());              // [batch, In]
-        return Engine.Reshape(inputGradient, _lastInput._shape);
+        // dW is only ever applied at the stored non-zeros, so sample it there: for each stored (o, i),
+        // dW[o, i] = sum_b g[b, o] x[b, i], the (o, i) entry of g^T x (sampled dense-dense matmul).
+        // O(nnz * batch) work and O(nnz) storage; no [Out, In] product.
+        var gradientRows = Engine.TensorTranspose(gradient2d).Contiguous();                    // [Out, batch]
+        var inputRows = Engine.TensorTranspose(input2d).Contiguous();                          // [In, batch]
+        var sampled = AiDotNet.Tensors.LinearAlgebra.Sparse.SparseOps.SDDMM(
+            _weights.RowIndices, _weights.ColumnIndices, gradientRows, inputRows);
+        _weightsGradient = new Tensor<T>(sampled, new[] { sampled.Length });                   // [nnz]
+
+        // dX = g W, i.e. dX^T = W^T g^T, with the sparse transpose: no dense copy of W.
+        var inputGradientT = _engine.SparseMatMul(_engine.SparseTranspose(_weights), gradientRows); // [In, batch]
+        return Engine.Reshape(Engine.TensorTranspose(inputGradientT), _lastInput._shape);
     }
 
     private Tensor<T> ComputeActivationDerivative(Tensor<T> output, Tensor<T> upstream)
@@ -398,18 +408,20 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorCopy(
             Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate)), _biases);
 
-        // Update only the non-zero weight positions (maintain sparsity): gather the dense gradient at
-        // each stored (row, col) and subtract it from the stored values.
+        // Update only the non-zero weight positions (maintain sparsity): the gradient already holds one
+        // value per stored (row, col), in the same order as the stored values.
         // Write into the sparse tensor's own value storage rather than constructing a new
         // SparseTensor — same reasoning as biases. A new instance would leave any ParameterBuffer
         // view aliasing the OLD _weights stale. SparseTensor.Values returns a COPY of the values, so
         // the previous `_weights.Values[nz] = ...` loop updated a temporary and never changed a weight.
         int nonZeroCount = _weights.NonZeroCount;
-        var rows = new Tensor<int>(_weights.RowIndices, new[] { nonZeroCount });
-        var columns = new Tensor<int>(_weights.ColumnIndices, new[] { nonZeroCount });
-        var flatPositions = Engine.TensorAdd(Engine.TensorMultiplyScalar(rows, InputFeatures), columns);
-        var storedGradients = Engine.TensorIndexSelect(
-            Engine.Reshape(_weightsGradient, new[] { OutputFeatures * InputFeatures }), flatPositions, 0);
+        if (_weightsGradient.Length != nonZeroCount)
+        {
+            throw new InvalidOperationException(
+                $"Weight gradient holds {_weightsGradient.Length} values but the weight stores {nonZeroCount} non-zeros.");
+        }
+
+        var storedGradients = _weightsGradient;
         var storedValues = new Tensor<T>(_weights.Values, new[] { nonZeroCount });
         var updatedValues = Engine.TensorSubtract(storedValues, Engine.TensorMultiplyScalar(storedGradients, learningRate));
         updatedValues.AsSpan().CopyTo(_weights.DataVector.AsWritableSpan());
