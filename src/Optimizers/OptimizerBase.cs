@@ -2776,7 +2776,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         T countValue = NumOps.FromDouble(count);
         int blockWidth = Math.Max(1, Math.Min(dimension, MaxPopulationBlockElements / count));
         var buffer = new Vector<T>(count * blockWidth);
-        double total = 0.0;
+        // The block sums stay on the engine and convert to double once, after the loop.
+        Tensor<T>? total = null;
         for (int start = 0; start < dimension; start += blockWidth)
         {
             int width = Math.Min(blockWidth, dimension - start);
@@ -2790,10 +2791,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             var members = engine.Reshape(block.AsTensor(), new[] { count, width });
             var mean = engine.TensorDivideScalar(engine.ReduceSum(members, new[] { 0 }, keepDims: true), countValue);
             var centered = engine.TensorSubtract(members, engine.TensorBroadcastTo(mean, new[] { count, width }));
-            total += NumOps.ToDouble(engine.TensorSum(engine.TensorAbs(centered)));
+            var blockTotal = engine.ReduceSum(engine.TensorAbs(centered), null);
+            total = total is null ? blockTotal : engine.TensorAdd(total, blockTotal);
         }
 
-        return total / ((double)count * dimension);
+        return total is null ? 0.0 : NumOps.ToDouble(total.GetFlat(0)) / ((double)count * dimension);
     }
 
     /// <summary>Upper bound on the population values one convergence-check block copies (4 MB of doubles).</summary>
