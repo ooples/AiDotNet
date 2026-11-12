@@ -52,6 +52,11 @@ namespace AiDotNet.CausalDiscovery.Specialized;
 [ResearchPaper("Bayesian Network Learning with Cutting Planes", "https://auai.org/uai2012/papers/162.pdf", Year = 2012, Authors = "James Cussens")]
 public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
 {
+    /// <summary>
+    /// Parent variance at or below which the OLS weight p -> j is undefined and the edge gets weight 1.
+    /// </summary>
+    private const double MinParentVariance = 1e-10;
+
     /// <inheritdoc/>
     public override string Name => "GOBNILP";
 
@@ -91,14 +96,6 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         var bestAssignment = SolveILP(parentSets, d);
 
         // Phase 3: Convert selected parent sets to adjacency matrix with OLS weights.
-        // OLS weight of every p -> j: cov[p, j] / cov[p, p], or 1 when cov[p, p] is not above 1e-10.
-        var cov = Tensor<T>.FromMatrix(ComputeCovarianceMatrix(data));
-        var varianceRows = Engine.TensorBroadcastTo(Engine.TensorDiagonal(cov).Reshape(new[] { d, 1 }), new[] { d, d });
-        var usable = Engine.TensorGreaterThan(varianceRows, NumOps.FromDouble(1e-10));
-        var olsWeights = Engine.TensorWhere(usable,
-            Engine.TensorDivide(cov, Engine.TensorWhere(usable, varianceRows, Engine.TensorOnesLike(cov))),
-            Engine.TensorOnesLike(cov));
-
         // Collect the selected parent->child edges (row-major positions p * d + j).
         var candidates = new List<int>();
         for (int j = 0; j < d; j++)
@@ -117,6 +114,15 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         // assignment (incl. the empty DAG, which is a valid ILP optimum) is preserved unchanged.
         if (candidates.Count == 0)
             return new Matrix<T>(d, d);
+
+        // OLS weight of every p -> j: cov[p, j] / cov[p, p], or 1 when cov[p, p] is not above
+        // MinParentVariance. Computed only once some edge is selected.
+        var cov = Tensor<T>.FromMatrix(ComputeCovarianceMatrix(data));
+        var varianceRows = Engine.TensorBroadcastTo(Engine.TensorDiagonal(cov).Reshape(new[] { d, 1 }), new[] { d, d });
+        var usable = Engine.TensorGreaterThan(varianceRows, NumOps.FromDouble(MinParentVariance));
+        var olsWeights = Engine.TensorWhere(usable,
+            Engine.TensorDivide(cov, Engine.TensorWhere(usable, varianceRows, Engine.TensorOnesLike(cov))),
+            Engine.TensorOnesLike(cov));
 
         // Strongest |weight| first; equal strengths keep their collection order.
         var strengths = Engine.TensorIndexSelect(Engine.TensorAbs(olsWeights).Reshape(new[] { d * d }),
