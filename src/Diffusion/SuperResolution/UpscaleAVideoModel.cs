@@ -806,14 +806,18 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int height = latents.Shape[3];
         int width = latents.Shape[4];
         int stride = windowSize - overlap;
-        // Every window that covers a frame contributes equally to it (a uniform mean over the overlapping
-        // windows, as in MultiDiffusion-style fusion), rather than a running pairwise average that would
-        // weight the last window of a thrice-covered frame twice as much as the others.
-        var contributions = new List<Tensor<T>>[frames];
-        for (int frame = 0; frame < frames; frame++)
-            contributions[frame] = new List<Tensor<T>>();
-        foreach (int start in TemporalWindowStarts(frames, windowSize, stride))
+        var predictions = new Tensor<T>?[frames];
+        T half = NumOps.FromDouble(0.5);
+        int previousStart = -1;
+
+        for (int candidate = 0; candidate < frames; candidate += stride)
         {
+            int end = System.Math.Min(frames, candidate + windowSize);
+            int start = end - candidate < windowSize ? end - windowSize : candidate;
+            if (start == previousStart)
+                continue;
+            previousStart = start;
+
             var latentWindow = Engine.TensorSlice(latents,
                 [0, 0, start, 0, 0], [batch, latentChannels, windowSize, height, width]);
             var conditionWindow = Engine.TensorSlice(condition,
@@ -826,46 +830,19 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
                 int frame = start + offset;
                 var framePrediction = Engine.TensorSlice(windowPrediction,
                     [0, 0, offset, 0, 0], [batch, latentChannels, 1, height, width]);
-                contributions[frame].Add(framePrediction);
+                var existing = predictions[frame];
+                predictions[frame] = existing is null
+                    ? framePrediction
+                    : Engine.TensorMultiplyScalar(Engine.TensorAdd(existing, framePrediction), half);
             }
         }
 
-        if (contributions.Any(static c => c.Count == 0))
+        if (predictions.Any(static p => p is null))
             throw new InvalidOperationException("Temporal window schedule did not cover every frame.");
-        var predictions = new Tensor<T>[frames];
-        for (int frame = 0; frame < frames; frame++)
-            predictions[frame] = FuseWindowPredictions(Engine, contributions[frame]);
-        return Engine.TensorConcatenate(predictions, axis: 2);
-    }
-
-    /// <summary>
-    /// Start frames of the temporal windows: every <paramref name="stride"/> frames, with the last window
-    /// shifted back so it ends on the final frame (a shifted window equal to the previous one is skipped).
-    /// </summary>
-    internal static List<int> TemporalWindowStarts(int frames, int windowSize, int stride)
-    {
-        var starts = new List<int>();
-        int previousStart = -1;
-        for (int candidate = 0; candidate < frames; candidate += stride)
-        {
-            int end = System.Math.Min(frames, candidate + windowSize);
-            int start = end - candidate < windowSize ? end - windowSize : candidate;
-            if (start == previousStart)
-                continue;
-            previousStart = start;
-            starts.Add(start);
-        }
-        return starts;
-    }
-
-    /// <summary>
-    /// The uniform mean of the predictions every covering window made for one frame.
-    /// </summary>
-    internal static Tensor<T> FuseWindowPredictions(IEngine engine, List<Tensor<T>> covering)
-    {
-        return covering.Count == 1
-            ? covering[0]
-            : engine.ReduceMean(engine.TensorStack(covering.ToArray(), 0), new[] { 0 }, false);
+        return Engine.TensorConcatenate(
+            predictions.Select(static p => p ?? throw new InvalidOperationException(
+                "Temporal window schedule did not cover every frame.")).ToArray(),
+            axis: 2);
     }
 
     private Tensor<T> PredictOriginalSample(
