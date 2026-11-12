@@ -3123,22 +3123,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         T eps = bn.GetEpsilon();
         int perChannel = kernels.Length / outC;   // inC * kH * kW
-        var kSpan = kernels.Data.Span;
-        var bSpan = biases.Data.Span;
-        var gSpan = gamma.Data.Span;
-        var beSpan = beta.Data.Span;
-        var mSpan = mean.Data.Span;
-        var vSpan = variance.Data.Span;
 
-        for (int oc = 0; oc < outC; oc++)
+        // s = γ / sqrt(var + ε);  W'[oc] = W[oc]·s;  b'[oc] = (b[oc] − μ)·s + β.
+        // The fold rewrites the live kernel/bias storage, so it runs off the tape and the
+        // results are copied back into the layer's own tensors.
+        using (new NoGradScope<T>())
         {
-            // s = γ / sqrt(var + ε);  W'[oc] = W[oc]·s;  b'[oc] = (b[oc] − μ)·s + β
-            T denom = NumOps.Sqrt(NumOps.Add(vSpan[oc], eps));
-            T scale = NumOps.Divide(gSpan[oc], denom);
-            int baseIdx = oc * perChannel;
-            for (int j = 0; j < perChannel; j++)
-                kSpan[baseIdx + j] = NumOps.Multiply(kSpan[baseIdx + j], scale);
-            bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
+            var scale = Engine.TensorDivide(
+                gamma.Reshape(new[] { outC }),
+                Engine.TensorSqrt(Engine.TensorAddScalar(variance.Reshape(new[] { outC }), eps)));
+            var foldedKernels = Engine.TensorMultiply(
+                kernels.Reshape(new[] { outC, perChannel }), scale.Reshape(new[] { outC, 1 }));
+            var foldedBiases = Engine.TensorAdd(
+                Engine.TensorMultiply(
+                    Engine.TensorSubtract(biases.Reshape(new[] { outC }), mean.Reshape(new[] { outC })), scale),
+                beta.Reshape(new[] { outC }));
+            foldedKernels.AsSpan().CopyTo(kernels.Data.Span);
+            foldedBiases.AsSpan().CopyTo(biases.Data.Span);
         }
 
         // Per-tensor invalidation of the GPU-resident persistent buffers keyed by
@@ -3176,22 +3177,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return false;
 
         T eps = bn.GetEpsilon();
-        var wSpan = weights.Data.Span;
-        var bSpan = biases.Data.Span;
-        var gSpan = gamma.Data.Span;
-        var beSpan = beta.Data.Span;
-        var mSpan = mean.Data.Span;
-        var vSpan = variance.Data.Span;
 
-        for (int oc = 0; oc < outSize; oc++)
+        // s = γ / sqrt(var + ε) scales column oc of the row-major [inputSize, outputSize]
+        // weights; b' = (b − μ)·s + β. Runs off the tape and writes back into the live storage.
+        using (new NoGradScope<T>())
         {
-            T scale = NumOps.Divide(gSpan[oc], NumOps.Sqrt(NumOps.Add(vSpan[oc], eps)));
-            for (int i = 0; i < inSize; i++)
-            {
-                int idx = i * outSize + oc;   // row-major [inputSize, outputSize]
-                wSpan[idx] = NumOps.Multiply(wSpan[idx], scale);
-            }
-            bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
+            var scale = Engine.TensorDivide(
+                gamma.Reshape(new[] { outSize }),
+                Engine.TensorSqrt(Engine.TensorAddScalar(variance.Reshape(new[] { outSize }), eps)));
+            var foldedWeights = Engine.TensorMultiply(
+                weights.Reshape(new[] { inSize, outSize }), scale.Reshape(new[] { 1, outSize }));
+            var foldedBiases = Engine.TensorAdd(
+                Engine.TensorMultiply(
+                    Engine.TensorSubtract(biases.Reshape(new[] { outSize }), mean.Reshape(new[] { outSize })), scale),
+                beta.Reshape(new[] { outSize }));
+            foldedWeights.AsSpan().CopyTo(weights.Data.Span);
+            foldedBiases.AsSpan().CopyTo(biases.Data.Span);
         }
 
         // Per-tensor invalidation of the GPU-resident persistent buffers keyed by
@@ -3675,7 +3676,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 $"Generated trainable vector '{memberName}' has incompatible source/clone storage.");
         }
 
-        for (int i = 0; i < source.Length; i++) destination[i] = source[i];
+        source.AsSpan().CopyTo(destination.AsWritableSpan());
     }
 
     /// <summary>Returns the replacement for one generated canonical-layer alias.</summary>
@@ -6679,18 +6680,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (specs[i].Loss is not LossFunctionBase<T> termLoss) continue;
             if (outputs[i] is null || targets[i] is null) continue;
 
-            var term = termLoss.ComputeTapeLoss(outputs[i], targets[i]);
-            if (Math.Abs(specs[i].Weight - 1.0) > double.Epsilon)
-            {
-                term = Engine.TensorMultiplyScalar(term, NumOps.FromDouble(specs[i].Weight));
-            }
-
+            var term = WeightDeclaredTerm(termLoss.ComputeTapeLoss(outputs[i], targets[i]), specs[i].Weight);
             total = total is null ? term : Engine.TensorAdd(total, term);
         }
 
         // Replaces rather than adds: the declaration IS the objective, and adding both would
         // double-count whichever head the single prediction already represented.
         return total ?? lossTensor;
+    }
+
+    /// <summary>
+    /// Scales one declared head's loss term by its declared weight on the tape (unit weights are
+    /// passed through unchanged so the tape records no extra node for them).
+    /// </summary>
+    private Tensor<T> WeightDeclaredTerm(Tensor<T> term, double weight)
+    {
+        if (Math.Abs(weight - 1.0) <= double.Epsilon) return term;
+        return Engine.TensorMultiplyScalar(term, NumOps.FromDouble(weight));
     }
 
     /// <summary>Whether the last target split produced at least one genuinely supervised term.</summary>
@@ -7728,8 +7734,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             int n = input.Shape[0];
             int nChunks = (n + batchSize - 1) / batchSize;
             Dictionary<Tensor<T>, Tensor<T>>? accumGrads = null;
-            T accumLoss = NumOps.Zero;
             int totalSamples = 0;
+
+            // Every chunk holds batchSize samples except possibly the last, so the per-chunk
+            // sample weight is one of two scalars. Each chunk's loss value is recorded into
+            // chunkLosses (allocated before the arena so Reset never recycles it) and the
+            // sample-weighted total is reduced once after the loop.
+            int tailSamples = n - (nChunks - 1) * batchSize;
+            T fullChunkSamplesT = NumOps.FromDouble(batchSize);
+            T tailChunkSamplesT = NumOps.FromDouble(tailSamples);
+            var chunkLosses = new Tensor<T>(new[] { nChunks });
+            var chunkSampleCounts = new int[nChunks];
 
             // #653: ONE arena for the whole batch; arena.Reset() at the top of each chunk
             // recycles the previous chunk's forward/backward intermediates instead of
@@ -7757,14 +7772,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
                 var lossTensor = ApplyCompositeObjective(
                     loss.ComputeTapeLoss(prediction, alignedTarget), xChunk);
-                T chunkLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+                if (lossTensor.Length > 0)
+                {
+                    lossTensor.AsSpan().Slice(0, 1).CopyTo(chunkLosses.AsWritableSpan().Slice(chunkIdx, 1));
+                }
 
                 // Weight each chunk's loss by its sample count so a final
                 // short chunk doesn't overweight the accumulator. Dividing
                 // by nChunks alone is only correct when every chunk is the
                 // same size, which is rarely true at the tail.
-                T chunkSamplesT = NumOps.FromDouble(chunkSamples);
-                accumLoss = NumOps.Add(accumLoss, NumOps.Multiply(chunkLoss, chunkSamplesT));
+                chunkSampleCounts[chunkIdx] = chunkSamples;
+                T chunkSamplesT = chunkSamples == batchSize ? fullChunkSamplesT : tailChunkSamplesT;
 
                 var trainableParams = CollectModelTrainableTensors();
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
@@ -7807,6 +7825,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // full batch even when the final chunk is short.
             if (totalSamples <= 0) return;
             T inverseSamples = NumOps.Divide(NumOps.One, NumOps.FromDouble(totalSamples));
+            T accumLoss = Engine.TensorSum(Engine.TensorMultiply(
+                chunkLosses, new Tensor<int>(chunkSampleCounts, new[] { nChunks }).Cast<T>()));
             var avgGrads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var kvp in accumGrads)
@@ -11061,15 +11081,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     {
                         for (int it = 0; it < maxIters; it++)
                         {
-                            double v = TensorVariance(outp);
-                            if (v <= 1e-12 || double.IsNaN(v) || double.IsInfinity(v)) break;
-                            double scale = Math.Sqrt(1.0 / v);
-                            if (Math.Abs(scale - 1.0) < 0.05) break;        // already ~unit → leave healthy inits untouched
-                            if (scale > 5.0) scale = 5.0; else if (scale < 0.2) scale = 0.2; // bound per-iter correction
-                            var scaleT = NumOps.FromDouble(scale);
-                            var arr = new T[ps.Length];
-                            for (int i = 0; i < ps.Length; i++) arr[i] = NumOps.Multiply(ps[i], scaleT);
-                            ps = new Vector<T>(arr);
+                            var rescaled = LsuvRescaledParameters(outp, ps);
+                            if (rescaled is null) break;
+                            ps = rescaled;
                             lb.SetParameters(ps);
                             outp = layer.Forward(current);
                         }
@@ -11096,17 +11110,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     internal void ApplyLsuvInitForTest(Tensor<T> calibrationInput) => ApplyLsuvInitOnce(calibrationInput);
 
-    private static double TensorVariance(Tensor<T> t)
+    /// <summary>
+    /// One LSUV step: the layer's parameters rescaled by 1/sqrt(Var(output)) (bounded to [0.2, 5]
+    /// per step), or null when the output variance is degenerate or already within 5% of unit.
+    /// </summary>
+    private Vector<T>? LsuvRescaledParameters(Tensor<T> output, Vector<T> parameters)
     {
-        var sp = t.Data.Span;
-        int n = sp.Length;
-        if (n == 0) return 0.0;
-        double s = 0.0;
-        for (int i = 0; i < n; i++) s += Convert.ToDouble(sp[i]);
-        double mean = s / n;
-        double s2 = 0.0;
-        for (int i = 0; i < n; i++) { double d = Convert.ToDouble(sp[i]) - mean; s2 += d * d; }
-        return s2 / n;
+        double v = TensorVariance(output);
+        if (v <= 1e-12 || double.IsNaN(v) || double.IsInfinity(v)) return null;
+        double scale = Math.Sqrt(1.0 / v);
+        if (Math.Abs(scale - 1.0) < 0.05) return null;        // already ~unit → leave healthy inits untouched
+        if (scale > 5.0) scale = 5.0; else if (scale < 0.2) scale = 0.2; // bound per-iter correction
+        return Engine.Multiply(parameters, NumOps.FromDouble(scale));
+    }
+
+    /// <summary>Population variance of every element of <paramref name="t"/>, computed off the tape.</summary>
+    private double TensorVariance(Tensor<T> t)
+    {
+        if (t.Length == 0) return 0.0;
+        using var _ = new NoGradScope<T>();
+        var centered = Engine.TensorSubtractScalar(t, Engine.TensorMean(t));
+        return NumOps.ToDouble(Engine.TensorMean(Engine.TensorMultiply(centered, centered)));
     }
 
     /// <summary>
@@ -11670,12 +11694,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             int inputStride = inputs[0].Length;
             int targetStride = targets[0].Length;
+            var batchedInputSpan = batchedInput.AsWritableSpan();
+            var batchedTargetSpan = batchedTarget.AsWritableSpan();
             for (int b = 0; b < batchSize; b++)
             {
-                int inputOffset = b * inputStride;
-                for (int j = 0; j < inputStride; j++) batchedInput[inputOffset + j] = inputs[b][j];
-                int targetOffset = b * targetStride;
-                for (int j = 0; j < targetStride; j++) batchedTarget[targetOffset + j] = targets[b][j];
+                inputs[b].Contiguous().AsSpan().CopyTo(batchedInputSpan.Slice(b * inputStride, inputStride));
+                targets[b].Contiguous().AsSpan().CopyTo(batchedTargetSpan.Slice(b * targetStride, targetStride));
             }
         }
         else
@@ -11697,12 +11721,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             int inputStride = inputs[0].Length;
             int targetStride = targets[0].Length;
+            var batchedInputSpan = batchedInput.AsWritableSpan();
+            var batchedTargetSpan = batchedTarget.AsWritableSpan();
             for (int b = 0; b < batchSize; b++)
             {
-                int inputOffset = b * inputStride;
-                for (int j = 0; j < inputStride; j++) batchedInput[inputOffset + j] = inputs[b][j];
-                int targetOffset = b * targetStride;
-                for (int j = 0; j < targetStride; j++) batchedTarget[targetOffset + j] = targets[b][j];
+                inputs[b].Contiguous().AsSpan().CopyTo(batchedInputSpan.Slice(b * inputStride, inputStride));
+                targets[b].Contiguous().AsSpan().CopyTo(batchedTargetSpan.Slice(b * targetStride, targetStride));
             }
         }
 
@@ -12024,10 +12048,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (double.IsNaN(maxValue) || maxValue <= 0.0 || double.IsInfinity(maxValue)) return;
         T upper = NumOps.FromDouble(maxValue);
         T lower = NumOps.FromDouble(-maxValue);
-        var span = grad.Data.Span;
-        int len = grad.Length;
-        for (int i = 0; i < len; i++)
-            span[i] = MathHelper.Max(lower, MathHelper.Min(upper, span[i]));
+        using var _ = new NoGradScope<T>();
+        Engine.TensorClampInPlace(grad, lower, upper);
+    }
+
+    /// <summary>Scales one gradient in place by <paramref name="scale"/>, off the tape.</summary>
+    private void ScaleGradientInPlaceOffTape(Tensor<T> grad, T scale)
+    {
+        using var _ = new NoGradScope<T>();
+        Engine.TensorMultiplyScalarInPlace(grad, scale);
     }
 
     protected void TrainWithTapeStreaming(
@@ -12233,10 +12262,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     {
                         // Extras skip the network clip, as in the eager path, but not the optimizer's.
                         T sourceScale = clipSet.Contains(source) ? scale : outsideClipSetScale;
-                        var span = grad.Data.Span;
-                        int len = grad.Length;
-                        for (int i = 0; i < len; i++)
-                            span[i] = NumOps.Multiply(span[i], sourceScale);
+                        ScaleGradientInPlaceOffTape(grad, sourceScale);
                     }
                     ClampStreamingGradientByValue(grad, optimizerClipValue);
                     if (regularizeAfterClip) grad = Regularize(source, grad);
@@ -13556,27 +13582,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (double.IsNaN(sq) || double.IsInfinity(sq)) { LastStepHadNonFiniteGradients = true; return; }
                     continue;
                 }
-                var span = g.Data.Span;
-                for (int i = 0; i < g.Length; i++)
+                if (!AllFiniteOffTape(g))
                 {
-                    double value = NumOps.ToDouble(span[i]);
-                    if (double.IsNaN(value) || double.IsInfinity(value))
-                    {
-                        LastStepHadNonFiniteGradients = true;
-                        return;
-                    }
+                    LastStepHadNonFiniteGradients = true;
+                    return;
                 }
             }
 
             T lower = NumOps.FromDouble(-maxNorm);
             T upper = NumOps.FromDouble(maxNorm);
-            for (int p = 0; p < iterationOrder.Count; p++)
+            using (new NoGradScope<T>())
             {
-                if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
-                if (g is null || g.Length == 0) continue;
-                var span = g.Data.Span;
-                for (int i = 0; i < g.Length; i++)
-                    span[i] = MathHelper.Max(lower, MathHelper.Min(upper, span[i]));
+                for (int p = 0; p < iterationOrder.Count; p++)
+                {
+                    if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+                    if (g is null || g.Length == 0) continue;
+                    // In place: the gradient tensor is shared with the published gradient set.
+                    Engine.TensorClampInPlace(g, lower, upper);
+                }
             }
 
             return;
@@ -13661,11 +13684,45 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
             if (g is null || g.Length == 0) continue;
             if (hostNorm && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(g, scaleValue)) continue;
-            var span = g.Data.Span;
-            int len = g.Length;
-            for (int i = 0; i < len; i++)
-                span[i] = NumOps.Multiply(span[i], scale);
+            ScaleGradientInPlaceOffTape(g, scale);
         }
+    }
+
+    /// <summary>
+    /// True when every element of <paramref name="tensor"/> is finite (no NaN or ±∞), tested
+    /// element-wise by the engine off the tape; no sum is formed, so finite values cannot overflow.
+    /// </summary>
+    private bool AllFiniteOffTape(Tensor<T> tensor)
+    {
+        if (tensor.Length == 0) return true;
+        using var _ = new NoGradScope<T>();
+        using var finiteMask = Engine.TensorIsFinite(tensor);
+        return Engine.TensorMinValue(finiteMask) != AiDotNet.Tensors.Bit.False;
+    }
+
+    /// <summary>
+    /// The first flat position where two equal-length tensors hold different values, or -1 when
+    /// every value matches. Values compare as <see cref="EqualityComparer{T}.Default"/> does, so a
+    /// NaN matches a NaN.
+    /// </summary>
+    private int FirstUnequalValueIndex(Tensor<T> first, Tensor<T> second)
+    {
+        int n = first.Length;
+        if (n == 0) return -1;
+
+        var engine = Engine;
+        using var _ = new NoGradScope<T>();
+        var a = first.Contiguous().Reshape(new[] { n });
+        var b = second.Contiguous().Reshape(new[] { n });
+
+        // same = 1 where the values are equal or both NaN (NaN never compares equal, so the two
+        // terms cannot both be 1); a differing position keeps its index, a matching one is pushed to >= n.
+        var same = engine.TensorAdd(
+            engine.TensorEquals(a, b).Cast<int>(),
+            engine.TensorMultiply(engine.TensorIsNan(a).Cast<int>(), engine.TensorIsNan(b).Cast<int>()));
+        var candidate = engine.TensorAdd(engine.TensorArange<int>(0, n, 1), engine.TensorMultiplyScalar(same, n));
+        int firstDifference = engine.TensorMinValue(candidate);
+        return firstDifference < n ? firstDifference : -1;
     }
 
     /// <summary>
@@ -14499,14 +14556,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (clipValue > 0.0)
         {
             T lower = NumOps.FromDouble(-clipValue), upper = NumOps.FromDouble(clipValue);
-            foreach (var g in grads.Values)
+            using (new NoGradScope<T>())
             {
-                if (g is null || g.Length == 0) continue;
-                var span = g.Data.Span;
-                for (int i = 0; i < span.Length; i++)
+                foreach (var g in grads.Values)
                 {
-                    if (NumOps.LessThan(span[i], lower)) span[i] = lower;
-                    else if (NumOps.GreaterThan(span[i], upper)) span[i] = upper;
+                    if (g is null || g.Length == 0) continue;
+                    Engine.TensorClampInPlace(g, lower, upper);
                 }
             }
             PublishParameterGradients(grads);
@@ -14532,8 +14587,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 EnsureLayerRandomSeedsWired();
                 var value = term();
-                if (value is null || value.Length != 1
-                    || double.IsNaN(NumOps.ToDouble(value[0])) || double.IsInfinity(NumOps.ToDouble(value[0])))
+                if (value is null || value.Length != 1 || !AllFiniteOffTape(value))
                     throw new InvalidOperationException("A custom training objective must return a finite scalar loss.");
                 return value;
             })).ToArray();
@@ -14786,17 +14840,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal void ClampTrainableParametersInPlace(T min, T max)
     {
-        // Element by element through each weight's own storage. Engine.TensorCopy(Engine.TensorClamp(p), p)
+        // In place through each weight's own storage (clamp_). Engine.TensorCopy(Engine.TensorClamp(p), p)
         // wrote an arena temporary back into the weight, and inside a TensorArena that corrupted the next
-        // backward ("Tensor shapes must match. Got [64, 1] and [1, 64]" in WGAN's critic step). The weights are
-        // leaves and the clip happens off the tape, so nothing needs this write recorded.
-        foreach (var parameter in CollectModelTrainableTensors())
+        // backward ("Tensor shapes must match. Got [64, 1] and [1, 64]" in WGAN's critic step); the in-place
+        // clamp allocates no temporary. The weights are leaves and the clip happens off the tape, so nothing
+        // needs this write recorded.
+        using (new NoGradScope<T>())
         {
-            var values = parameter.AsWritableSpan();
-            for (int i = 0; i < values.Length; i++)
+            foreach (var parameter in CollectModelTrainableTensors())
             {
-                if (NumOps.LessThan(values[i], min)) values[i] = min;
-                else if (NumOps.GreaterThan(values[i], max)) values[i] = max;
+                Engine.TensorClampInPlace(parameter, min, max);
             }
         }
 
@@ -17482,34 +17535,74 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         int outputSize = outputShape[0];
 
         // Calculate feature importance by summing absolute weights per input feature
-        var featureImportance = new Dictionary<int, T>();
+        var featureImportance = FirstLayerFeatureImportance(weights, inputSize, outputSize);
 
-        for (int i = 0; i < inputSize; i++)
-        {
-            T importance = NumOps.Zero;
-
-            // For each neuron in the first layer, add the absolute weight for this feature
-            for (int j = 0; j < outputSize; j++)
-            {
-                // In most layers, weights are organized as [input1-neuron1, input2-neuron1, ..., input1-neuron2, ...]
-                int weightIndex = j * inputSize + i;
-
-                if (weightIndex < weights.Length)
-                {
-                    importance = NumOps.Add(importance, NumOps.Abs(weights[weightIndex]));
-                }
-            }
-
-            featureImportance[i] = importance;
-        }
-
-        // Sort features by importance and get the top 50% (or at least 1)
+        // Sort features by importance (descending, ties in feature order) and get the top 50% (or at least 1)
         int featuresCount = Math.Max(1, inputSize / 2);
 
-        return featureImportance
-            .OrderByDescending(pair => Convert.ToDouble(pair.Value))
-            .Take(featuresCount)
-            .Select(pair => pair.Key);
+        return StableDescendingOrder(featureImportance).Take(featuresCount);
+    }
+
+    /// <summary>
+    /// Per-input-feature importance of a first layer: the sum over output neurons j of
+    /// |weights[j * inputSize + i]|, counting only indices inside <paramref name="weights"/>
+    /// (weights are laid out [input1-neuron1, input2-neuron1, ..., input1-neuron2, ...]).
+    /// </summary>
+    private Tensor<T> FirstLayerFeatureImportance(Vector<T> weights, int inputSize, int outputSize)
+    {
+        var engine = Engine;
+        using var _ = new NoGradScope<T>();
+
+        // Rows j with j * inputSize >= weights.Length contribute nothing, so only the first
+        // ceil(Length / inputSize) rows (at most outputSize) are summed; the last one is
+        // zero-padded where it runs past the end of the weights.
+        long coveredRows = ((long)weights.Length + inputSize - 1) / inputSize;
+        int rows = (int)Math.Min(outputSize, coveredRows);
+        if (rows <= 0) return Tensor<T>.CreateDefault(new[] { inputSize }, NumOps.Zero);
+
+        int gridLength = checked(rows * inputSize);
+        var flat = Tensor<T>.FromVector(weights);
+        Tensor<T> grid;
+        if (gridLength <= weights.Length)
+        {
+            grid = gridLength == weights.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { gridLength });
+        }
+        else
+        {
+            grid = engine.TensorConcatenate(
+                new[] { flat, Tensor<T>.CreateDefault(new[] { gridLength - weights.Length }, NumOps.Zero) }, 0);
+        }
+
+        return engine.ReduceSum(engine.TensorAbs(grid.Reshape(new[] { rows, inputSize })), new[] { 0 }, false);
+    }
+
+    /// <summary>
+    /// Positions of <paramref name="values"/> sorted by value descending, ties kept in position
+    /// order and NaN last - the order LINQ's stable OrderByDescending gives on the values as doubles.
+    /// </summary>
+    /// <remarks>
+    /// The engine's argsort is not documented as stable, so the sort key is the composite
+    /// (descending dense rank, position): distinct for every element, which makes any sort exact.
+    /// </remarks>
+    private int[] StableDescendingOrder(Tensor<T> values)
+    {
+        int n = values.Length;
+        if (n == 0) return Array.Empty<int>();
+
+        var engine = Engine;
+        using var _ = new NoGradScope<T>();
+
+        // Comparer<double> places NaN below every number, so NaN takes the lowest key.
+        var keyed = engine.TensorNanToNum(
+            values.Reshape(new[] { n }), double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var distinct = engine.TensorUnique(keyed, true);
+        long distinctCount = distinct.Length;
+        var ascendingRank = engine.TensorSearchSorted(distinct, keyed, false).Cast<long>();
+        var descendingRank = engine.TensorAddScalar(engine.TensorNegate(ascendingRank), distinctCount - 1);
+        var key = engine.TensorAdd(
+            engine.TensorMultiplyScalar(descendingRank, (long)n),
+            engine.TensorArange<long>(0, n, 1));
+        return engine.TensorArgsort(key, 0, false).ToArray();
     }
 
     /// <summary>
@@ -18484,7 +18577,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     $"declared-state restore changed standalone tensor {i} to shape " +
                     $"[{string.Join(",", dstTensor._shape)}], expected [{string.Join(",", srcTensor._shape)}]");
             }
-            for (int k = 0; k < srcTensor.Length; k++) dstTensor[k] = srcTensor[k];
+            using (new NoGradScope<T>())
+            {
+                Engine.TensorCopy(srcTensor, dstTensor);
+            }
         }
 
         CompleteDeclaredStateRestore(copyBase, copyOnWriteDeclaredStateEnvelope);
@@ -18525,13 +18621,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                         $"({sourceChunk.Tensor.Length}) vs clone '{cloneChunk.StableId}' ({cloneChunk.Tensor.Length})");
                 }
 
-                for (int valueIndex = 0; valueIndex < sourceChunk.Tensor.Length; valueIndex++)
+                int valueIndex = FirstUnequalValueIndex(sourceChunk.Tensor, cloneChunk.Tensor);
+                if (valueIndex >= 0)
                 {
-                    if (EqualityComparer<T>.Default.Equals(
-                            sourceChunk.Tensor[valueIndex],
-                            cloneChunk.Tensor[valueIndex]))
-                        continue;
-
                     return RejectCandidate(
                         $"completed manifest chunk '{sourceChunk.StableId}' first differs at value {valueIndex}");
                 }
@@ -19549,35 +19641,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         int outputSize = firstLayer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0];
 
         // Calculate feature importance by summing absolute weights per input feature
-        var featureScores = new Dictionary<int, T>();
-
-        for (int i = 0; i < featureCount; i++)
-        {
-            T score = NumOps.Zero;
-
-            // For each neuron in the first layer, add the absolute weight for this feature
-            for (int j = 0; j < outputSize; j++)
-            {
-                // In most layers, weights are organized as [input1-neuron1, input2-neuron1, ..., input1-neuron2, ...]
-                int weightIndex = j * featureCount + i;
-
-                if (weightIndex < weights.Length)
-                {
-                    score = NumOps.Add(score, NumOps.Abs(weights[weightIndex]));
-                }
-            }
-
-            featureScores[i] = score;
-        }
+        var featureScores = FirstLayerFeatureImportance(weights, featureCount, outputSize);
 
         // Normalize the scores to sum to 1
-        T totalScore = featureScores.Values.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
+        T totalScore = Engine.TensorSum(featureScores);
 
         if (NumOps.GreaterThan(totalScore, NumOps.Zero))
         {
-            foreach (var kvp in featureScores)
+            T[] normalized;
+            using (new NoGradScope<T>())
             {
-                importance[$"Feature_{kvp.Key}"] = NumOps.Divide(kvp.Value, totalScore);
+                normalized = Engine.TensorDivideScalar(featureScores, totalScore).ToArray();
+            }
+
+            for (int i = 0; i < normalized.Length; i++)
+            {
+                importance[$"Feature_{i}"] = normalized[i];
             }
         }
         else
@@ -19876,21 +19955,30 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     public virtual Vector<T> GetGradients()
     {
-        var allGradients = new List<T>();
+        var layerGradientVectors = new List<Vector<T>>();
+        int totalLength = 0;
 
         foreach (var layer in Layers)
         {
             var layerGradients = layer.GetParameterGradients();
             if (layerGradients != null && layerGradients.Length > 0)
             {
-                for (int i = 0; i < layerGradients.Length; i++)
-                {
-                    allGradients.Add(layerGradients[i]);
-                }
+                layerGradientVectors.Add(layerGradients);
+                totalLength = checked(totalLength + layerGradients.Length);
             }
         }
 
-        return new Vector<T>(allGradients.ToArray());
+        // One allocation, filled by bulk span copies in layer order.
+        var allGradients = new Vector<T>(totalLength);
+        var destination = allGradients.AsWritableSpan();
+        int offset = 0;
+        foreach (var layerGradients in layerGradientVectors)
+        {
+            layerGradients.AsSpan().CopyTo(destination.Slice(offset, layerGradients.Length));
+            offset += layerGradients.Length;
+        }
+
+        return allGradients;
     }
 
     /// <summary>
@@ -20316,16 +20404,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>Lays per-parameter gradients out in <see cref="GetParameterChunks"/> order (missing = zero).</summary>
     private Vector<T> FlattenParameterChunkGradients(Dictionary<Tensor<T>, Tensor<T>> grads)
     {
-        var flat = new List<T>();
+        var chunks = new List<Tensor<T>>();
+        int totalLength = 0;
         foreach (var chunk in GetParameterChunks())
         {
             if (chunk is null || chunk.Length == 0) continue;
-            if (grads.TryGetValue(chunk, out var g) && g.Length == chunk.Length)
-                for (int i = 0; i < g.Length; i++) flat.Add(g[i]);
-            else
-                for (int i = 0; i < chunk.Length; i++) flat.Add(NumOps.Zero);
+            chunks.Add(chunk);
+            totalLength = checked(totalLength + chunk.Length);
         }
-        return new Vector<T>(flat.ToArray());
+
+        // Bulk span copies into one allocation; a missing slot is filled with NumOps.Zero explicitly
+        // (default(T) is not guaranteed to be zero for a custom numeric type).
+        T zero = NumOps.Zero;
+        var flat = new Vector<T>(totalLength);
+        var destination = flat.AsWritableSpan();
+        int offset = 0;
+        foreach (var chunk in chunks)
+        {
+            var slot = destination.Slice(offset, chunk.Length);
+            if (grads.TryGetValue(chunk, out var g) && g.Length == chunk.Length)
+                g.Contiguous().AsSpan().CopyTo(slot);
+            else
+                slot.Fill(zero);
+            offset += chunk.Length;
+        }
+        return flat;
     }
 
     private Dictionary<Tensor<T>, Tensor<T>> UnflattenParameterChunkGradients(Vector<T> flat)
@@ -20338,8 +20441,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (offset + chunk.Length > flat.Length)
                 throw new InvalidOperationException(
                     $"Credit-rule gradient has {flat.Length} entries but the parameter chunks need more than {offset + chunk.Length}.");
-            var g = new Vector<T>(chunk.Length);
-            for (int i = 0; i < chunk.Length; i++) g[i] = flat[offset + i];
+            var g = flat.GetSubVector(offset, chunk.Length);
             result[chunk] = new Tensor<T>(chunk.Shape.ToArray(), g);
             offset += chunk.Length;
         }
@@ -20494,6 +20596,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // measured SLOWER than the List<T>.Add it replaced, giving back in time what the
         // single allocation won. The span is resolved once and written contiguously.
         var destination = flatGradients.AsWritableSpan();
+        T zero = NumOps.Zero;
         int writeOffset = 0;
         foreach (var chunk in chunks)
         {
@@ -20506,8 +20609,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 && grads.TryGetValue(gradientKey, out var grad)
                 && grad.Length == paramTensor.Length)
             {
-                for (int i = 0; i < grad.Length; i++)
-                    destination[writeOffset++] = grad[i];
+                grad.Contiguous().AsSpan().CopyTo(destination.Slice(writeOffset, grad.Length));
+                writeOffset += grad.Length;
             }
             else
             {
@@ -20515,8 +20618,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // backward never reached. Written explicitly rather than relying on the ctor's
                 // zero-init: default(T) is not guaranteed to be NumOps.Zero for a custom numeric
                 // type.
-                for (int i = 0; i < paramTensor.Length; i++)
-                    destination[writeOffset++] = NumOps.Zero;
+                destination.Slice(writeOffset, paramTensor.Length).Fill(zero);
+                writeOffset += paramTensor.Length;
             }
         }
         return flatGradients;
@@ -20588,14 +20691,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 nameof(gradients));
         }
 
-        var updated = new Vector<T>(parameters.Length);
-        var destination = updated.AsWritableSpan();
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            destination[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(learningRate, gradients[i]));
-        }
+        // theta' = theta - lr * g, as one engine update over the flat vectors.
+        var updated = Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
 
         SetParameters(updated);
 
