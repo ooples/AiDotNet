@@ -286,6 +286,113 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>
+    /// For every feature column d of <paramref name="x"/> ([n, p]) with its [n, n] kernel matrix
+    /// <c>K_d = columnKernel(x[:, d])</c> (the column passed as [n, 1]), the weighted sums
+    /// <c>sum_ij W[i, j] * K_d[i, j]</c> for each matrix in <paramref name="weights"/>, followed by
+    /// <c>sum_ij V[i, j] * K_d[i, j]^2</c> for each matrix in <paramref name="squaredWeights"/>.
+    /// Returns [p, weights + squaredWeights].
+    /// </summary>
+    public static Tensor<T> KernelWeightedSums<T>(
+        Tensor<T> x, Func<Tensor<T>, Tensor<T>> columnKernel, Tensor<T>[] weights, Tensor<T>[] squaredWeights)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        int r = weights.Length + squaredWeights.Length;
+        if (p == 0 || r == 0)
+            return new Tensor<T>(new[] { p, r });
+
+        var flat = weights.Concat(squaredWeights).Select(w => engine.Reshape(w, new[] { n * n })).ToArray();
+        var linear = weights.Length > 0 ? engine.TensorStack(flat.Take(weights.Length).ToArray(), 1) : null;
+        var quadratic = squaredWeights.Length > 0 ? engine.TensorStack(flat.Skip(weights.Length).ToArray(), 1) : null;
+        var rows = new Tensor<T>[p];
+        for (int d = 0; d < p; d++)
+        {
+            var kernel = engine.Reshape(columnKernel(engine.TensorSlice(x, new[] { 0, d }, new[] { n, 1 })), new[] { 1, n * n });
+            var parts = new List<Tensor<T>>(2);
+            if (linear is not null)
+                parts.Add(engine.TensorMatMul(kernel, linear));
+            if (quadratic is not null)
+                parts.Add(engine.TensorMatMul(engine.TensorSquare(kernel), quadratic));
+            rows[d] = parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
+        return engine.TensorConcatenate(rows, 0);
+    }
+
+    /// <summary>
+    /// Element-wise integer power <c>x^exponent</c> by repeated multiplication (exact for negative bases, like
+    /// <c>Math.Pow</c> with an integral exponent); a negative exponent gives the reciprocal.
+    /// </summary>
+    public static Tensor<T> IntegerPower<T>(Tensor<T> x, int exponent)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ones = Filled(x.Shape.ToArray(), MathHelper.GetNumericOperations<T>().One);
+        var result = ones;
+        int remaining = Math.Abs(exponent);
+        var factor = x;
+        while (remaining > 0)
+        {
+            if ((remaining & 1) == 1)
+                result = engine.TensorMultiply(result, factor);
+            remaining >>= 1;
+            if (remaining > 0)
+                factor = engine.TensorSquare(factor);
+        }
+
+        return exponent < 0 ? engine.TensorDivide(ones, result) : result;
+    }
+
+    /// <summary>
+    /// For every feature column d of <paramref name="x"/> ([n, p]), the row sums <c>sum_j K_d[i, j]</c> of its
+    /// [n, n] kernel matrix <c>K_d = columnKernel(x[:, d])</c>. Returns [n, p].
+    /// </summary>
+    public static Tensor<T> KernelRowSums<T>(Tensor<T> x, Func<Tensor<T>, Tensor<T>> columnKernel)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (p == 0)
+            return new Tensor<T>(new[] { n, 0 });
+
+        var columns = new Tensor<T>[p];
+        for (int d = 0; d < p; d++)
+            columns[d] = engine.ReduceSum(columnKernel(engine.TensorSlice(x, new[] { 0, d }, new[] { n, 1 })), new[] { 1 }, true);
+
+        return engine.TensorConcatenate(columns, 1);
+    }
+
+    /// <summary>The 0/1 mask of the strictly upper-triangular entries (i &lt; j) of an [n, n] matrix.</summary>
+    public static Tensor<T> StrictUpperMask<T>(int n) =>
+        AiDotNetEngine.Current.TensorTriu(Filled(new[] { n, n }, MathHelper.GetNumericOperations<T>().One), 1);
+
+    /// <summary>
+    /// Element-wise RBF kernel <c>exp(-gamma (a_i - a_j)^2)</c> between the entries of an [n, 1] column ([n, n]).
+    /// </summary>
+    public static Tensor<T> RbfColumnKernel<T>(Tensor<T> column, T negativeGamma)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = column.Shape[0];
+        var difference = engine.TensorSubtract(
+            engine.TensorBroadcastTo(column, new[] { n, n }), engine.TensorBroadcastTo(engine.TensorTranspose(column), new[] { n, n }));
+        return engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(difference), negativeGamma));
+    }
+
+    /// <summary>Column-wise standardization (population std); columns whose std is not above 1e-10 are left as they are.</summary>
+    public static Tensor<T> StandardizeColumnsOrKeep<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var centered = CenterColumns(x, out _, out var std);
+        var varying = engine.TensorGreaterThan(std, ops.FromDouble(1e-10));
+        var safeStd = engine.Reshape(engine.TensorWhere(varying, std, Filled(new[] { p }, ops.One)), new[] { 1, p });
+        var mask = engine.TensorBroadcastTo(engine.Reshape(varying, new[] { 1, p }), new[] { n, p });
+        return engine.TensorWhere(mask, engine.TensorDivide(centered, safeStd), x);
+    }
+
+    /// <summary>
     /// The positions of the <paramref name="k"/> largest entries of a 1-D score tensor, returned in ascending
     /// index order; ties keep the lower index first (LINQ <c>OrderByDescending(...).Take(k).OrderBy(i)</c>).
     /// </summary>

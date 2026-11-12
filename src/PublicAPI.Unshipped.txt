@@ -22613,3 +22613,15 @@ AiDotNet.Preprocessing.FeatureSelection.Projection.SVDBasedSelector<T>.FeatureSc
 AiDotNet.Preprocessing.FeatureSelection.Projection.FactorAnalysisSelector<T>.Communalities.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.RandomProjectionSelector<T>.FeatureScores.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.Projection.RandomProjectionSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.HSICSelector<T>.HSICScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.HSICSelector<T>.HSICScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.MMDBasedSelector<T>.MMDScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.MMDBasedSelector<T>.MMDScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelFisherSelector<T>.FisherScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelFisherSelector<T>.FisherScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.RBFKernelSelector<T>.KernelScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.RBFKernelSelector<T>.KernelScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.PolynomialKernelSelector<T>.KernelScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.PolynomialKernelSelector<T>.KernelScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelPCASelector<T>.FeatureImportances.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelPCASelector<T>.FeatureImportances.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?

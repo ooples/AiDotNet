@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.FeatureSelection.Kernel;
 using AiDotNet.Preprocessing.FeatureSelection.Manifold;
 using AiDotNet.Preprocessing.FeatureSelection.Moment;
 using AiDotNet.Preprocessing.FeatureSelection.Morphological;
@@ -221,6 +222,43 @@ public class FeatureSelectionScipyReferenceTests
         Assert.Equal(new[] { 0 }, pca.SelectedIndices);
         Assert.Equal(new[] { 0 }, svd.SelectedIndices);
         Assert.Equal(new[] { 1, 2 }, factor.SelectedIndices);
+    }
+
+    private static Vector<double> SpiralClasses() => new Vector<double>(new[] { 0.0, 0, 1, 1, 2, 2, 0, 1, 2, 0 });
+
+    [Fact]
+    public void KernelSelectors_MatchNumpyKernelStatistics()
+    {
+        // k(a, b) = exp(-0.5 (a - b)^2) per feature; H = I - 1/n
+        // HSIC: trace(Kx H Ky H) / (n-1)^2; MMD: mean over class pairs of biased MMD^2;
+        // Fisher: between/within scatter of the kernel row sums; RBF/poly alignment on z-scored columns
+        // over the pairs i < j; kernel PCA: sklearn KernelPCA(2, kernel='rbf', gamma=0.5).eigenvectors_ V,
+        // importance_j = sum_k sum_ii' |V_ik V_i'k| (x_ij - x_i'j)^2 / n^2
+        var x = SpiralData();
+        var y = SpiralClasses();
+        var hsic = new HSICSelector<double>(nFeaturesToSelect: 1, gammaX: 0.5, gammaY: 0.5);
+        hsic.Fit(x, y);
+        var mmd = new MMDBasedSelector<double>(nFeaturesToSelect: 1, gamma: 0.5);
+        mmd.Fit(x, y);
+        var fisher = new KernelFisherSelector<double>(nFeaturesToSelect: 1, gamma: 0.5);
+        fisher.Fit(x, y);
+        var rbf = new RBFKernelSelector<double>(nFeaturesToSelect: 1, gamma: 0.5);
+        rbf.Fit(x, y);
+        var poly = new PolynomialKernelSelector<double>(nFeaturesToSelect: 1, degree: 3, coef0: 1.0);
+        poly.Fit(x, y);
+        var kernelPca = new KernelPCASelector<double>(nFeaturesToSelect: 1, gamma: 0.5, nComponents: 2);
+        kernelPca.Fit(x);
+
+        AssertValues(new[] { 0.04674325635262055, 0.08544211390443947, 0.0016084374149811273 }, hsic.HSICScores, 1e-9);
+        AssertValues(new[] { 0.5464649312352773, 0.8066777822109324, 0.020898895933488593 }, mmd.MMDScores, 1e-9);
+        AssertValues(new[] { 0.04976180952869986, 3.4641453265995543, 0.10499430026916166 }, fisher.FisherScores, 1e-9);
+        AssertValues(new[] { -3.254204875043939, -1.8410813889749136, -2.963950548001502 }, rbf.KernelScores, 1e-9);
+        AssertValues(new[] { 1.0341152591004186, 1.1676654798342967, 1.5716128973860009 }, poly.KernelScores, 1e-9);
+        AssertValues(new[] { 3.588857017343745, 2.4779158031076856, 0.017252035195986903 }, kernelPca.FeatureImportances, 1e-8);
+        Assert.Equal(new[] { 1 }, hsic.SelectedIndices);
+        Assert.Equal(new[] { 0 }, rbf.SelectedIndices);
+        Assert.Equal(new[] { 2 }, poly.SelectedIndices);
+        Assert.Equal(new[] { 0 }, kernelPca.SelectedIndices);
     }
 
     private static void AssertValues(double[] expected, Vector<double>? actual, double tolerance = Tolerance)
