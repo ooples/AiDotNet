@@ -22565,3 +22565,134 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.Metrics.CLIPScore<T>.ComputeCaptionScore(double[]! imageData, string! candidateCaption, System.Collections.Generic.IEnumerable<string!>? referenceCaptions = null) -> double
+AiDotNet.Metrics.CLIPScore<T>.ComputeCaptionScore(double[]! imageData, string! candidateCaption, System.Collections.Generic.IEnumerable<string!>? referenceCaptions = null) -> T
+*REMOVED*AiDotNet.Metrics.CLIPScore<T>.ComputeCombinedScore(double[]! generatedImageData, string! text, double[]? referenceImageData = null, double textWeight = 0.7) -> double
+AiDotNet.Metrics.CLIPScore<T>.ComputeCombinedScore(double[]! generatedImageData, string! text, double[]? referenceImageData = null, double textWeight = 0.7) -> T
+*REMOVED*AiDotNet.Metrics.CLIPScore<T>.ComputeDirectionalSimilarity(double[]! sourceImageData, double[]! editedImageData, string! sourceText, string! editText) -> double
+AiDotNet.Metrics.CLIPScore<T>.ComputeDirectionalSimilarity(double[]! sourceImageData, double[]! editedImageData, string! sourceText, string! editText) -> T
+*REMOVED*AiDotNet.Metrics.CLIPScore<T>.ComputeImageImageScore(double[]! generatedImageData, double[]! referenceImageData) -> double
+AiDotNet.Metrics.CLIPScore<T>.ComputeImageImageScore(double[]! generatedImageData, double[]! referenceImageData) -> T
+*REMOVED*AiDotNet.Metrics.CLIPScore<T>.ComputeScoreImprovement(double[]! beforeImageData, double[]! afterImageData, string! text) -> double
+AiDotNet.Metrics.CLIPScore<T>.ComputeScoreImprovement(double[]! beforeImageData, double[]! afterImageData, string! text) -> T
+*REMOVED*AiDotNet.Metrics.CLIPScore<T>.ComputeTextImageScore(double[]! imageData, string! text) -> double
+AiDotNet.Metrics.CLIPScore<T>.ComputeTextImageScore(double[]! imageData, string! text) -> T
+*REMOVED*AiDotNet.Metrics.CLIPScore<T>.ComputeTextImageScoreBatch(System.Collections.Generic.IList<double[]!>! images, System.Collections.Generic.IList<string!>! texts) -> double
+AiDotNet.Metrics.CLIPScore<T>.ComputeTextImageScoreBatch(System.Collections.Generic.IList<double[]!>! images, System.Collections.Generic.IList<string!>! texts) -> T
+*REMOVED*AiDotNet.Metrics.AestheticScore<T>.Compute(double[]! imageData) -> double
+AiDotNet.Metrics.AestheticScore<T>.Compute(double[]! imageData) -> T
+*REMOVED*AiDotNet.Metrics.AestheticScore<T>.ComputeBatch(System.Collections.Generic.IList<double[]!>! images) -> double[]!
+AiDotNet.Metrics.AestheticScore<T>.ComputeBatch(System.Collections.Generic.IList<double[]!>! images) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Metrics.AestheticScore<T>.AestheticScore(AiDotNet.Interfaces.IMultimodalEmbedding<T>! clipModel, AiDotNet.Tensors.LinearAlgebra.Vector<T>? aestheticWeights = null, string![]? positivePrompts = null, string![]? negativePrompts = null) -> void
+AiDotNet.Metrics.AestheticScore<T>.AestheticScore(AiDotNet.Interfaces.IMultimodalEmbedding<T>! clipModel, AiDotNet.Tensors.LinearAlgebra.Vector<T>? aestheticWeights = null, string![]? positivePrompts = null, string![]? negativePrompts = null, T? aestheticBias = null) -> void
+*REMOVED*AiDotNet.Metrics.StructuralSimilarity<T>.StructuralSimilarity(T? maxValue = null, double k1 = 0.01, double k2 = 0.03, int windowSize = 11) -> void
+AiDotNet.Metrics.StructuralSimilarity<T>.StructuralSimilarity(T? maxValue = null, double k1 = 0.01, double k2 = 0.03, int windowSize = 11, double gaussianSigma = 1.5) -> void
+AiDotNet.AutoML.NAS.FBNet<T>.LatencyExponent.get -> double
+AiDotNet.AutoML.NAS.FBNet<T>.LatencyExponent.set -> void
+AiDotNet.AutoML.NAS.AttentiveNAS<T>.CandidatePoolSize.get -> int
+AiDotNet.AutoML.NAS.AttentiveNAS<T>.CandidatePoolSize.set -> void
+AiDotNet.AutoML.NAS.AttentiveNAS<T>.SamplingStrategy.get -> AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
+AiDotNet.AutoML.NAS.AttentiveNAS<T>.SamplingStrategy.set -> void
+AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
+AiDotNet.AutoML.NAS.AttentiveSamplingStrategy.BestUp = 0 -> AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
+AiDotNet.AutoML.NAS.AttentiveSamplingStrategy.WorstUp = 1 -> AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
+*REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> (int[]![]! Indices, double[]![]! Weights)
+*REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.GridInterpolationKernel(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, double[]![]! gridCoordinates, int interpolationOrder = 4) -> void
+*REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector<T>! v, int[]![]! interpolationIndices, double[]![]! interpolationWeights) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*static AiDotNet.Kernels.GridInterpolationKernel<T>.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, (double Min, double Max)[]! bounds, int gridPointsPerDim, int interpolationOrder = 4) -> AiDotNet.Kernels.GridInterpolationKernel<T>!
+AiDotNet.Kernels.GridInterpolationKernel<T>.GridInterpolationKernel(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, AiDotNet.Tensors.LinearAlgebra.Vector<T>![]! gridCoordinates) -> void
+AiDotNet.Kernels.GridInterpolationKernel<T>.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<int>! Indices, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! Weights)
+AiDotNet.Kernels.GridInterpolationKernel<T>.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector<T>! v, AiDotNet.Tensors.LinearAlgebra.Tensor<int>! interpolationIndices, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! interpolationWeights) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+static AiDotNet.Kernels.GridInterpolationKernel<T>.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, (T Min, T Max)[]! bounds, int gridPointsPerDim) -> AiDotNet.Kernels.GridInterpolationKernel<T>!
+*REMOVED*AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.RandomSurvivalForest(int numTrees = 100, int maxDepth = 10, int minSamplesLeaf = 6, int maxFeatures = 0, int? seed = null) -> void
+AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.RandomSurvivalForest(int numTrees = 100, int maxDepth = 10, int minSamplesLeaf = 6, int maxFeatures = 0, int? seed = null, bool bootstrap = true) -> void
+AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.Bootstrap.get -> bool
+override AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.PredictCumulativeHazard(AiDotNet.Tensors.LinearAlgebra.Vector<T>! times, AiDotNet.Tensors.LinearAlgebra.Matrix<T>? features = null) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! degraded, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reference) -> T
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>.PerceptualSpeechQuality(int sampleRate = 16000) -> void
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>.ApproximatePerceptualSpeechQuality(int sampleRate = 16000) -> void
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! degraded, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reference) -> T
+AiDotNet.AutoML.NAS.ENASOptions
+AiDotNet.AutoML.NAS.ENASOptions.ENASOptions() -> void
+AiDotNet.AutoML.NAS.ENASOptions.NumNodes.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.NumNodes.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerHiddenSize.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.ControllerHiddenSize.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.BaselineDecay.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.BaselineDecay.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.EntropyWeight.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.EntropyWeight.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerInitRange.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerInitRange.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerTanhConstant.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerTanhConstant.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerTemperature.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerTemperature.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerLearningRate.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerLearningRate.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerBeta1.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerBeta1.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerBeta2.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerBeta2.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerEpsilon.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerEpsilon.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedMaxLearningRate.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedMaxLearningRate.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedMinLearningRate.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedMinLearningRate.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedMomentum.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedMomentum.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedWeightDecay.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedWeightDecay.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedGradientClipNorm.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedGradientClipNorm.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SearchSteps.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.SearchSteps.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.DeriveSamples.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.DeriveSamples.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.Seed.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.Seed.set -> void
+AiDotNet.AutoML.NAS.ENAS<T>.ENAS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.ENASOptions! options) -> void
+AiDotNet.AutoML.NAS.ENAS<T>.Options.get -> AiDotNet.AutoML.NAS.ENASOptions!
+AiDotNet.AutoML.DartsOptimizerOptions
+AiDotNet.AutoML.DartsOptimizerOptions.DartsOptimizerOptions() -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureLearningRate.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureLearningRate.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureBeta1.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureBeta1.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureBeta2.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureBeta2.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureEpsilon.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureEpsilon.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureWeightDecay.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureWeightDecay.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMaxLearningRate.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMaxLearningRate.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMinLearningRate.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMinLearningRate.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMomentum.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMomentum.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.WeightDecay.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.WeightDecay.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.GradientClipNorm.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.GradientClipNorm.set -> void
+AiDotNet.AutoML.NeuralArchitectureSearch<T>.NeuralArchitectureSearch(AiDotNet.Enums.NeuralArchitectureSearchStrategy strategy, int maxEpochs, AiDotNet.AutoML.DartsOptimizerOptions! optimizerOptions) -> void
+AiDotNet.AutoML.NeuralArchitectureSearch<T>.OptimizerOptions.get -> AiDotNet.AutoML.DartsOptimizerOptions!
+AiDotNet.AutoML.NAS.PCDARTS<T>.GetEdgeParameters() -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+AiDotNet.AutoML.NAS.PCDARTS<T>.GetEdgeGradients() -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+AiDotNet.AutoML.NAS.PCDARTS<T>.AccumulateArchitectureGradients(int nodeIndex, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! weightGradient) -> void
+AiDotNet.AutoML.NAS.PCDARTS<T>.UpdateArchitectureParameters(double learningRate = 0.0006, double beta1 = 0.5, double beta2 = 0.999, double weightDecay = 0.001, double epsilon = 1E-08) -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions
+AiDotNet.AutoML.NAS.PCDARTSOptions.PCDARTSOptions() -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.Epochs.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.Epochs.set -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.WarmupEpochs.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.WarmupEpochs.set -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.BatchSize.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.BatchSize.set -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.PartialChannelK.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.PartialChannelK.set -> void
+AiDotNet.AutoML.NAS.PCDARTS<T>.PCDARTS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.PCDARTSOptions! options, int numNodes = 4, bool useEdgeNormalization = true) -> void
+AiDotNet.AutoML.NAS.PCDARTS<T>.SearchOptions.get -> AiDotNet.AutoML.NAS.PCDARTSOptions!

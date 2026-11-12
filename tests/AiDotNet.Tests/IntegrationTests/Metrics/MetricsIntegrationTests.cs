@@ -708,15 +708,72 @@ public class MetricsIntegrationTests
     {
         var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
 
-        var data = new double[1600]; // 100ms at 16kHz
+        // 1 s at 16 kHz: STOI correlates 30-frame (384 ms) segments of 25.6 ms frames, so a 100 ms
+        // signal has no segment at all and Taal et al. / pystoi return 1e-5 for it.
+        var data = new double[16000];
         for (int i = 0; i < data.Length; i++) data[i] = Math.Sin(i * 0.1);
 
-        var degraded = new Tensor<double>(new[] { 1600 }, new Vector<double>(data));
-        var clean = new Tensor<double>(new[] { 1600 }, new Vector<double>(data));
+        var degraded = new Tensor<double>(new[] { 16000 }, new Vector<double>(data));
+        var clean = new Tensor<double>(new[] { 16000 }, new Vector<double>(data));
 
         var result = stoi.Compute(degraded, clean);
 
         Assert.True(result >= 0.9); // High STOI for identical signals
+    }
+
+    /// <summary>
+    /// Deterministic test speech: a modulated 220 Hz tone plus an FM 1250 Hz tone, silent for the first
+    /// 0.25 s and between 0.9 s and 1.1 s (so silent-frame removal is exercised); the degraded signal adds
+    /// a 500 Hz to 4100 Hz chirp.
+    /// </summary>
+    private static (Tensor<double> Clean, Tensor<double> Degraded) StoiReferenceSignals(int sampleRate, double seconds)
+    {
+        int n = (int)(sampleRate * seconds);
+        var clean = new double[n];
+        var degraded = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double t = (double)i / sampleRate;
+            double gate = t < 0.25 || (t > 0.9 && t < 1.1) ? 0.0 : 1.0;
+            clean[i] = gate * (Math.Sin(2 * Math.PI * 220 * t) * (0.6 + 0.4 * Math.Sin(2 * Math.PI * 3 * t))
+                + 0.3 * Math.Sin(2 * Math.PI * 1250 * t + 0.5 * Math.Sin(2 * Math.PI * 2 * t)));
+            degraded[i] = clean[i] + 0.3 * Math.Sin(2 * Math.PI * (500 * t + 900 * t * t));
+        }
+
+        return (new Tensor<double>(new[] { n }, new Vector<double>(clean)), new Tensor<double>(new[] { n }, new Vector<double>(degraded)));
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(16000, 0.7960788623927364)]
+    [InlineData(10000, 0.793824816546637)]
+    [InlineData(8000, 0.7713217073181784)]
+    public async Task STOI_MatchesPystoiReference(int sampleRate, double expected)
+    {
+        // pystoi 0.4.1: stoi(clean, degraded, sampleRate) on 2 s of the reference signals.
+        var (clean, degraded) = StoiReferenceSignals(sampleRate, 2.0);
+        var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: sampleRate);
+
+        Assert.Equal(expected, stoi.Compute(degraded, clean), 10);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task STOI_IdenticalReferenceSignals_MatchesPystoi()
+    {
+        // pystoi 0.4.1: stoi(clean, clean, 16000) = 0.9999999999998951 (the epsilon guards keep it below 1).
+        var (clean, _) = StoiReferenceSignals(16000, 2.0);
+        var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
+
+        Assert.Equal(0.9999999999998951, stoi.Compute(clean, clean), 10);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task STOI_TooFewFramesAfterSilenceRemoval_ReturnsPystoiFloor()
+    {
+        // 0.5 s whose first 0.25 s is silent leaves fewer than 30 frames; pystoi returns 1e-5.
+        var (clean, degraded) = StoiReferenceSignals(16000, 0.5);
+        var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
+
+        Assert.Equal(1e-5, stoi.Compute(degraded, clean), 15);
     }
 
     [Fact(Timeout = 120000)]
@@ -763,18 +820,20 @@ public class MetricsIntegrationTests
 
     #endregion
 
-    #region PerceptualSpeechQuality Tests
+    #region ApproximatePerceptualSpeechQuality Tests
 
     [Fact(Timeout = 120000)]
-    public async Task PESQ_IdenticalSignals_ReturnsHighScore()
+    public async Task ApproximatePesq_IdenticalSignals_ReturnsHighScore()
     {
-        var pesq = new PerceptualSpeechQuality<double>(sampleRate: 16000);
+        var pesq = new ApproximatePerceptualSpeechQuality<double>(sampleRate: 16000);
 
-        var data = new double[1600];
+        // 1 s at 16 kHz: P.862 rejects signals under 0.25 s, and the STOI term of this approximation
+        // needs 384 ms segments (pystoi returns 1e-5 for the 100 ms signal used before).
+        var data = new double[16000];
         for (int i = 0; i < data.Length; i++) data[i] = Math.Sin(i * 0.1);
 
-        var degraded = new Tensor<double>(new[] { 1600 }, new Vector<double>(data));
-        var reference = new Tensor<double>(new[] { 1600 }, new Vector<double>(data));
+        var degraded = new Tensor<double>(new[] { 16000 }, new Vector<double>(data));
+        var reference = new Tensor<double>(new[] { 16000 }, new Vector<double>(data));
 
         var result = pesq.Compute(degraded, reference);
 
@@ -782,17 +841,17 @@ public class MetricsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task PESQ_InvalidSampleRate_ThrowsArgumentException()
+    public async Task ApproximatePesq_InvalidSampleRate_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
-            new PerceptualSpeechQuality<double>(sampleRate: 44100));
+            new ApproximatePerceptualSpeechQuality<double>(sampleRate: 44100));
     }
 
     [Fact(Timeout = 120000)]
-    public async Task PESQ_ValidSampleRates_DoNotThrow()
+    public async Task ApproximatePesq_ValidSampleRates_DoNotThrow()
     {
-        var pesq8k = new PerceptualSpeechQuality<double>(sampleRate: 8000);
-        var pesq16k = new PerceptualSpeechQuality<double>(sampleRate: 16000);
+        var pesq8k = new ApproximatePerceptualSpeechQuality<double>(sampleRate: 8000);
+        var pesq16k = new ApproximatePerceptualSpeechQuality<double>(sampleRate: 16000);
 
         Assert.NotNull(pesq8k);
         Assert.NotNull(pesq16k);
@@ -1086,6 +1145,45 @@ public class MetricsIntegrationTests
         var result = iou.ComputeVoxelIoU(voxelsA, voxelsB);
 
         Assert.Equal(1.0, result, 3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task IoU3D_HalfPrecision_CountsVoxelsAboveTheHalfIntegerRange()
+    {
+        // 4096 occupied voxels in A, the first 2048 of them in B: IoU = 2048 / 4096. Summing the masks in Half
+        // stops at 2048 (increments of 1 are lost there), which gave 2048 / 2048 = 1.
+        var iou = new IoU3D<Half>();
+        var dataA = new Half[4096];
+        var dataB = new Half[4096];
+        for (int i = 0; i < dataA.Length; i++)
+        {
+            dataA[i] = (Half)1.0f;
+            dataB[i] = i < 2048 ? (Half)1.0f : (Half)0.0f;
+        }
+
+        var voxelsA = new Tensor<Half>(new[] { 64, 64, 1 }, new Vector<Half>(dataA));
+        var voxelsB = new Tensor<Half>(new[] { 64, 64, 1 }, new Vector<Half>(dataB));
+
+        var result = iou.ComputeVoxelIoU(voxelsA, voxelsB);
+
+        Assert.Equal(0.5f, (float)result, 3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MeanIoU_ConfusionCounts_IgnoreOutOfRangeLabelsPerSide()
+    {
+        // C = 3. Pixel 4 has an out-of-range prediction (5) and pixel 5 an out-of-range target (-1): each still
+        // counts on its valid side. Class 0: 1/1; class 1: pred {1, 5}, gt {1, 2}, both at pixel 1 -> 1/3;
+        // class 2: pred {2, 3}, gt {3, 4}, both at pixel 3 -> 1/3. mIoU = 5/9.
+        var miou = new MeanIntersectionOverUnion<double>(3);
+        var predicted = new Tensor<double>(new[] { 6 }, new Vector<double>(new double[] { 0, 1, 2, 2, 5, 1 }));
+        var groundTruth = new Tensor<double>(new[] { 6 }, new Vector<double>(new double[] { 0, 1, 1, 2, 2, -1 }));
+
+        var perClass = miou.ComputePerClass(predicted, groundTruth);
+        Assert.Equal(1.0, perClass[0], 12);
+        Assert.Equal(1.0 / 3.0, perClass[1], 12);
+        Assert.Equal(1.0 / 3.0, perClass[2], 12);
+        Assert.Equal(5.0 / 9.0, miou.Compute(predicted, groundTruth), 12);
     }
 
     [Fact(Timeout = 120000)]

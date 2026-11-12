@@ -312,7 +312,8 @@ public class CharacterErrorRate
 /// human listening tests and is commonly used to evaluate speech enhancement and separation.
 /// </para>
 /// <para>
-/// Values range from 0 to 1, where higher values indicate better intelligibility.
+/// Values are correlations, so they lie in [-1, 1]; in practice they fall between 0 and 1, where higher
+/// values indicate better intelligibility.
 /// - &gt;0.9: Excellent intelligibility
 /// - 0.7-0.9: Good intelligibility
 /// - 0.5-0.7: Fair intelligibility
@@ -320,25 +321,50 @@ public class CharacterErrorRate
 /// </para>
 /// <para>
 /// Based on "A short-time objective intelligibility measure for time-frequency weighted noisy speech"
-/// by Taal et al. (2011).
+/// by Taal et al. (2011), following the pystoi reference implementation: both signals are resampled to
+/// 10 kHz, frames more than 40 dB below the loudest clean frame are removed, the Hann-windowed STFT
+/// is grouped into one-third octave bands from 150 Hz, and the clipped, normalized degraded envelopes
+/// are correlated with the clean envelopes over 30-frame (384 ms) segments.
+/// </para>
+/// <para>
+/// When fewer than 30 frames remain after silence removal there is nothing to correlate, and the
+/// score is 1e-5 (as in pystoi).
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class ShortTimeObjectiveIntelligibility<T> where T : struct
 {
+    // Constants of Taal et al. (2011) as used by pystoi.
+    private const int InternalSampleRate = 10000;
+    private const int SegmentFrames = 30;
+    private const double LowestBandCenterHz = 150.0;
+    private const double ClipLowerBoundDb = -15.0;
+    private const double DynamicRangeDb = 40.0;
+    private const double NotEnoughFramesScore = 1e-5;
+
+    // numpy's float64 machine epsilon, the guard pystoi adds to every norm.
+    private const double Epsilon = 2.220446049250313e-16;
+
     private readonly INumericOperations<T> _numOps;
     private readonly int _sampleRate;
     private readonly int _frameLength;
     private readonly int _hopLength;
     private readonly int _numBands;
+    private readonly int _fftLength;
+    private readonly Tensor<T> _window;
+    private readonly Tensor<T> _bandMatrix;
+    private readonly int _upFactor;
+    private readonly int _downFactor;
+    private readonly int _filterHalfLength;
+    private readonly List<(Tensor<T> Taps, int TapCount, int Offset)> _phases = new List<(Tensor<T> Taps, int TapCount, int Offset)>();
 
     /// <summary>
     /// Initializes a new instance of STOI calculator.
     /// </summary>
-    /// <param name="sampleRate">Audio sample rate in Hz. Default is 16000.</param>
-    /// <param name="frameLength">Analysis frame length in samples. Default is 256 (16ms at 16kHz).</param>
-    /// <param name="hopLength">Hop length between frames. Default is 128 (8ms at 16kHz).</param>
-    /// <param name="numBands">Number of frequency bands. Default is 15.</param>
+    /// <param name="sampleRate">Audio sample rate in Hz. Default is 16000. Signals are resampled to 10 kHz.</param>
+    /// <param name="frameLength">Analysis frame length in samples at 10 kHz. Default is 256 (25.6 ms).</param>
+    /// <param name="hopLength">Hop length between frames at 10 kHz. Default is 128.</param>
+    /// <param name="numBands">Number of one-third octave bands. Default is 15.</param>
     public ShortTimeObjectiveIntelligibility(
         int sampleRate = 16000,
         int frameLength = 256,
@@ -370,6 +396,24 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
         _frameLength = frameLength;
         _hopLength = hopLength;
         _numBands = numBands;
+
+        // pystoi zero-pads each frame to an FFT twice the frame length (512 for 256-sample frames).
+        _fftLength = 1;
+        while (_fftLength < 2 * frameLength)
+        {
+            _fftLength *= 2;
+        }
+
+        var engine = AiDotNetEngine.Current;
+
+        // numpy.hanning(N + 2)[1:-1], the MATLAB hanning(N) window.
+        _window = engine.TensorNarrow(engine.TensorHannWindow<T>(frameLength + 2, false), 0, 1, frameLength);
+        _bandMatrix = BuildBandMatrix(engine);
+
+        int divisor = GreatestCommonDivisor(InternalSampleRate, sampleRate);
+        _upFactor = InternalSampleRate / divisor;
+        _downFactor = sampleRate / divisor;
+        _filterHalfLength = _upFactor != _downFactor ? BuildResamplingPhases(engine) : 0;
     }
 
     /// <summary>
@@ -377,7 +421,7 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
     /// </summary>
     /// <param name="degraded">The degraded/processed speech signal.</param>
     /// <param name="clean">The clean reference speech signal.</param>
-    /// <returns>STOI score between 0 and 1. Higher is better.</returns>
+    /// <returns>STOI score; 1 for identical signals and lower for less intelligible ones.</returns>
     public T Compute(Tensor<T> degraded, Tensor<T> clean)
     {
         if (degraded == null) throw new ArgumentNullException(nameof(degraded));
@@ -388,191 +432,286 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
             throw new ArgumentException("Degraded and clean signals must have the same length");
         }
 
-        // Compute short-time spectral envelopes
-        var degradedEnvelopes = ComputeSpectralEnvelopes(degraded);
-        var cleanEnvelopes = ComputeSpectralEnvelopes(clean);
-
-        // Compute intermediate intelligibility measure per frame
-        int numFrames = degradedEnvelopes.GetLength(0);
-        int numSegments = Math.Max(1, numFrames - 30 + 1); // 384ms segments
-
-        T sumCorrelation = _numOps.Zero;
-        int validSegments = 0;
-
-        for (int seg = 0; seg < numSegments; seg++)
+        if (clean.Length < 2)
         {
-            int startFrame = seg;
-            int endFrame = Math.Min(seg + 30, numFrames);
-            int segmentLength = endFrame - startFrame;
+            return _numOps.FromDouble(NotEnoughFramesScore);
+        }
 
-            // Compute normalized correlation for this segment
-            for (int band = 0; band < _numBands; band++)
+        var engine = AiDotNetEngine.Current;
+        var x = engine.Reshape(clean, new[] { clean.Length });
+        var y = engine.Reshape(degraded, new[] { degraded.Length });
+        if (_upFactor != _downFactor)
+        {
+            x = Resample(engine, x);
+            y = Resample(engine, y);
+        }
+
+        // Remove the frames of both signals where the clean signal is more than 40 dB below its loudest frame.
+        var cleanFrames = WindowedFrames(engine, x);
+        var degradedFrames = WindowedFrames(engine, y);
+        if (cleanFrames is null || degradedFrames is null)
+        {
+            return _numOps.FromDouble(NotEnoughFramesScore);
+        }
+
+        var energies = engine.TensorMultiplyScalar(
+            engine.TensorLog10(engine.TensorAddScalar(engine.TensorNorm(cleanFrames, 1, false), _numOps.FromDouble(Epsilon))),
+            _numOps.FromDouble(20.0));
+        var threshold = _numOps.Subtract(engine.TensorMaxValue(energies), _numOps.FromDouble(DynamicRangeDb));
+        var coordinates = engine.TensorNonzero(engine.TensorGreaterThan(energies, threshold));
+        var active = engine.Reshape(coordinates, new[] { coordinates.Shape[0] });
+        x = OverlapAdd(engine, engine.TensorIndexSelect(cleanFrames, active, 0));
+        y = OverlapAdd(engine, engine.TensorIndexSelect(degradedFrames, active, 0));
+
+        var cleanSpectrumFrames = WindowedFrames(engine, x);
+        var degradedSpectrumFrames = WindowedFrames(engine, y);
+        if (cleanSpectrumFrames is null || degradedSpectrumFrames is null || cleanSpectrumFrames.Shape[0] < SegmentFrames)
+        {
+            return _numOps.FromDouble(NotEnoughFramesScore);
+        }
+
+        // One-third octave band envelopes [frames, bands], then 30-frame segments [segments, bands, 30].
+        var cleanSegments = engine.TensorUnfold(OctaveBandEnvelopes(engine, cleanSpectrumFrames), 0, SegmentFrames, 1);
+        var degradedSegments = engine.TensorUnfold(OctaveBandEnvelopes(engine, degradedSpectrumFrames), 0, SegmentFrames, 1);
+        int[] segmentShape = cleanSegments.Shape.ToArray();
+
+        // Scale the degraded envelope to the clean energy, then clip it at -15 dB signal-to-distortion.
+        var scale = engine.TensorDivide(
+            engine.TensorNorm(cleanSegments, 2, true),
+            engine.TensorAddScalar(engine.TensorNorm(degradedSegments, 2, true), _numOps.FromDouble(Epsilon)));
+        var scaledDegraded = engine.TensorMultiply(degradedSegments, engine.TensorBroadcastTo(scale, segmentShape));
+        var clipFactor = _numOps.FromDouble(1.0 + Math.Pow(10.0, -ClipLowerBoundDb / 20.0));
+        var clippedDegraded = engine.TensorMin(scaledDegraded, engine.TensorMultiplyScalar(cleanSegments, clipFactor));
+
+        var correlations = engine.TensorMultiply(
+            CenterAndNormalize(engine, clippedDegraded, segmentShape),
+            CenterAndNormalize(engine, cleanSegments, segmentShape));
+        return _numOps.Divide(engine.TensorSum(correlations), _numOps.FromDouble(segmentShape[0] * segmentShape[1]));
+    }
+
+    /// <summary>
+    /// Subtracts each segment's mean and divides by its norm (plus epsilon), along the last axis.
+    /// </summary>
+    private Tensor<T> CenterAndNormalize(IEngine engine, Tensor<T> segments, int[] shape)
+    {
+        var centered = engine.TensorSubtract(
+            segments, engine.TensorBroadcastTo(engine.ReduceMean(segments, new[] { 2 }, true), shape));
+        var norms = engine.TensorAddScalar(engine.TensorNorm(centered, 2, true), _numOps.FromDouble(Epsilon));
+        return engine.TensorDivide(centered, engine.TensorBroadcastTo(norms, shape));
+    }
+
+    /// <summary>
+    /// Hann-windowed frames x[i:i + frameLength] for i in range(0, len(x) - frameLength, hop), as in pystoi.
+    /// </summary>
+    /// <returns>The [frames, frameLength] matrix, or null when the signal holds no frame.</returns>
+    private Tensor<T>? WindowedFrames(IEngine engine, Tensor<T> signal)
+    {
+        // range(0, len - frameLength, hop) stops before len - frameLength, which is unfolding x[0:len-1].
+        int usable = signal.Length - 1;
+        if (usable < _frameLength)
+        {
+            return null;
+        }
+
+        var frames = engine.TensorUnfold(engine.TensorNarrow(signal, 0, 0, usable), 0, _frameLength, _hopLength);
+        return engine.TensorMultiply(frames, engine.TensorBroadcastTo(_window, frames.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// Overlap-adds frames spaced by the hop length back into a signal.
+    /// </summary>
+    private Tensor<T> OverlapAdd(IEngine engine, Tensor<T> frames)
+    {
+        int frameCount = frames.Shape[0];
+        int frameLength = _frameLength;
+        int hop = _hopLength;
+        int outputLength = (frameCount - 1) * hop + frameLength;
+        var positions = Enumerable.Range(0, frameCount * frameLength)
+            .Select(k => k / frameLength * hop + k % frameLength)
+            .ToArray();
+        return engine.TensorIndexAdd(
+            new Tensor<T>(new[] { outputLength }),
+            0,
+            new Tensor<int>(positions, new[] { positions.Length }),
+            engine.Reshape(frames, new[] { frameCount * frameLength }));
+    }
+
+    /// <summary>
+    /// sqrt(OBM |X|^2): the one-third octave band magnitudes of each zero-padded frame's spectrum.
+    /// </summary>
+    private Tensor<T> OctaveBandEnvelopes(IEngine engine, Tensor<T> frames)
+    {
+        int frameCount = frames.Shape[0];
+        int bins = _fftLength / 2 + 1;
+        var padded = engine.Concat(
+            new[] { frames, new Tensor<T>(new[] { frameCount, _fftLength - _frameLength }) }, 1);
+
+        // RFFT returns interleaved (re, im) pairs per bin.
+        var spectrum = engine.Reshape(engine.RFFT(padded), new[] { frameCount, bins, 2 });
+        var power = engine.ReduceSum(engine.TensorSquare(spectrum), new[] { 2 }, false);
+        return engine.TensorSqrt(engine.TensorMatMul(power, _bandMatrix));
+    }
+
+    /// <summary>
+    /// The [bins, bands] one-third octave band matrix of pystoi's thirdoct: band k covers the FFT bins from
+    /// the bin nearest 150 * 2^((2k - 1) / 6) Hz up to, not including, the bin nearest 150 * 2^((2k + 1) / 6) Hz.
+    /// </summary>
+    private Tensor<T> BuildBandMatrix(IEngine engine)
+    {
+        int bins = _fftLength / 2 + 1;
+        double binWidth = InternalSampleRate / (double)_fftLength;
+        var entries = new List<int>();
+        for (int band = 0; band < _numBands; band++)
+        {
+            int low = NearestBin(LowestBandCenterHz * Math.Pow(2.0, (2.0 * band - 1) / 6.0), bins, binWidth);
+            int high = NearestBin(LowestBandCenterHz * Math.Pow(2.0, (2.0 * band + 1) / 6.0), bins, binWidth);
+            for (int bin = low; bin < high; bin++)
             {
-                T correlation = ComputeNormalizedCorrelation(
-                    degradedEnvelopes, cleanEnvelopes, band, startFrame, segmentLength);
-
-                // Clamp correlation to [-1, 1]
-                double corrDouble = _numOps.ToDouble(correlation);
-                corrDouble = Math.Max(-1.0, Math.Min(1.0, corrDouble));
-
-                sumCorrelation = _numOps.Add(sumCorrelation, _numOps.FromDouble(corrDouble));
-                validSegments++;
+                entries.Add(bin * _numBands + band);
             }
         }
 
-        if (validSegments == 0)
+        var matrix = new Tensor<T>(new[] { bins * _numBands });
+        if (entries.Count > 0)
         {
-            return _numOps.Zero;
+            matrix = engine.TensorIndexAdd(
+                matrix,
+                0,
+                new Tensor<int>(entries.ToArray(), new[] { entries.Count }),
+                Tensor<T>.CreateDefault(new[] { entries.Count }, _numOps.One));
         }
 
-        // Average correlation
-        T avgCorrelation = _numOps.Divide(sumCorrelation, _numOps.FromDouble(validSegments));
-
-        // Map to [0, 1] range: (correlation + 1) / 2
-        T one = _numOps.One;
-        T two = _numOps.FromDouble(2.0);
-        return _numOps.Divide(_numOps.Add(avgCorrelation, one), two);
+        return engine.Reshape(matrix, new[] { bins, _numBands });
     }
 
     /// <summary>
-    /// Computes spectral envelopes using one-third octave band analysis.
+    /// numpy.argmin((f - frequency)^2) over the bin frequencies f = k * binWidth (first index on ties).
     /// </summary>
-    private T[,] ComputeSpectralEnvelopes(Tensor<T> signal)
+    private static int NearestBin(double frequency, int bins, double binWidth)
     {
-        int numFrames = (signal.Length - _frameLength) / _hopLength + 1;
-        numFrames = Math.Max(1, numFrames);
-
-        var envelopes = new T[numFrames, _numBands];
-
-        // Define center frequencies for one-third octave bands (150 Hz to 4.3 kHz)
-        double[] centerFreqs = GetOneThirdOctaveCenterFrequencies();
-
-        for (int frame = 0; frame < numFrames; frame++)
+        int best = 0;
+        double bestDistance = double.PositiveInfinity;
+        for (int bin = 0; bin < bins; bin++)
         {
-            int startSample = frame * _hopLength;
-            int endSample = Math.Min(startSample + _frameLength, signal.Length);
-
-            // Extract frame and compute power spectrum (simplified - using energy in time domain)
-            for (int band = 0; band < _numBands; band++)
+            double difference = bin * binWidth - frequency;
+            double distance = difference * difference;
+            if (distance < bestDistance)
             {
-                double bandLow = centerFreqs[band] / Math.Pow(2, 1.0 / 6.0);
-                double bandHigh = centerFreqs[band] * Math.Pow(2, 1.0 / 6.0);
-
-                // Compute band energy using a simple bandpass approximation
-                T bandEnergy = ComputeBandEnergy(signal, startSample, endSample, bandLow, bandHigh);
-                envelopes[frame, band] = bandEnergy;
+                bestDistance = distance;
+                best = bin;
             }
         }
 
-        return envelopes;
+        return best;
+    }
+
+    private static int GreatestCommonDivisor(int a, int b)
+    {
+        while (b != 0)
+        {
+            int remainder = a % b;
+            a = b;
+            b = remainder;
+        }
+
+        return a;
     }
 
     /// <summary>
-    /// Gets center frequencies for one-third octave bands.
+    /// Builds the polyphase form of pystoi's Octave-compatible resampler (resample_oct): a Kaiser-windowed
+    /// sinc low-pass h with 60 dB rejection, normalized to unit sum and scaled by the up factor, as passed to
+    /// scipy.signal.resample_poly. Output k is sum_m h[m] * up(x)[k * down + m - half], where up(x) inserts
+    /// up - 1 zeros between samples; only the taps m with k * down + m - half divisible by up touch a sample,
+    /// so each output phase k mod up is a strided correlation of x with every up-th tap.
     /// </summary>
-    private double[] GetOneThirdOctaveCenterFrequencies()
+    private int BuildResamplingPhases(IEngine engine)
     {
-        var freqs = new double[_numBands];
-        double startFreq = 150.0; // Starting frequency in Hz
+        int up = _upFactor;
+        int down = _downFactor;
+        double cutoff = 1.0 / (2 * Math.Max(up, down));
+        double rejectionDb = 60.0;
+        double rollOffWidth = cutoff / 10.0;
+        int half = (int)Math.Ceiling((rejectionDb - 8.0) / (28.714 * rollOffWidth));
+        double beta = 0.1102 * (rejectionDb - 8.7);
+        int taps = 2 * half + 1;
 
-        for (int i = 0; i < _numBands; i++)
+        var positions = engine.TensorArange<T>(-half, half + 1, 1);
+        var ideal = engine.TensorMultiplyScalar(
+            engine.TensorSinc(engine.TensorMultiplyScalar(positions, _numOps.FromDouble(2 * cutoff))),
+            _numOps.FromDouble(2 * up * cutoff));
+        var filter = engine.TensorMultiply(engine.TensorKaiserWindow<T>(taps, false, beta), ideal);
+        filter = engine.TensorMultiplyScalar(
+            engine.TensorDivideScalar(filter, engine.TensorSum(filter)), _numOps.FromDouble(up));
+
+        for (int phase = 0; phase < up; phase++)
         {
-            freqs[i] = startFreq * Math.Pow(2, i / 3.0);
+            int firstTap = ((half - phase * down) % up + up) % up;
+            var tapIndices = Enumerable.Range(0, (taps - firstTap + up - 1) / up)
+                .Select(j => firstTap + j * up)
+                .ToArray();
+            var phaseTaps = engine.Reshape(
+                engine.TensorIndexSelect(filter, new Tensor<int>(tapIndices, new[] { tapIndices.Length }), 0),
+                new[] { tapIndices.Length, 1 });
+            _phases.Add((phaseTaps, tapIndices.Length, (phase * down + firstTap - half) / up));
         }
 
-        return freqs;
+        return half;
     }
 
     /// <summary>
-    /// Computes weighted energy approximation for a frequency band.
+    /// Resamples a signal from the configured rate to 10 kHz (scipy resample_poly with pystoi's filter).
     /// </summary>
-    /// <remarks>
-    /// This is a simplified approximation that computes RMS energy with frequency-dependent
-    /// weighting based on band position. It does NOT perform actual bandpass filtering.
-    /// The bandLow and bandHigh parameters are used only for computing a perceptual weight.
-    /// For production use with strict accuracy requirements, consider using FFT-based
-    /// bandpass filtering instead.
-    /// </remarks>
-    private T ComputeBandEnergy(Tensor<T> signal, int startSample, int endSample, double bandLow, double bandHigh)
+    private Tensor<T> Resample(IEngine engine, Tensor<T> signal)
     {
-        // Simplified: compute RMS energy weighted by approximate band response
-        // Note: This does not perform actual bandpass filtering - it applies
-        // frequency-dependent weighting based on band center frequency
-        T sum = _numOps.Zero;
-        int count = 0;
+        int up = _upFactor;
+        int down = _downFactor;
+        int length = signal.Length;
+        int outputLength = (int)(((long)length * up + down - 1) / down);
+        int perPhase = (outputLength + up - 1) / up;
+        int leftPad = (_filterHalfLength + up - 1) / up + 1;
 
-        for (int i = startSample; i < endSample; i++)
+        var spans = new List<(int Start, int Count, int Span)>();
+        int needed = leftPad + length;
+        for (int phase = 0; phase < up; phase++)
         {
-            T sample = signal[i];
-            sum = _numOps.Add(sum, _numOps.Multiply(sample, sample));
-            count++;
+            int count = phase < outputLength ? (outputLength - phase + up - 1) / up : 0;
+            int tapCount = _phases[phase].TapCount;
+            int start = _phases[phase].Offset + leftPad;
+            int span = count > 0 ? (count - 1) * down + tapCount : 0;
+            spans.Add((start, count, span));
+            needed = Math.Max(needed, start + span);
         }
 
-        if (count == 0)
-        {
-            return _numOps.Zero;
-        }
-
-        // Apply frequency-dependent weighting based on band position
-        // Higher frequencies get higher weights to approximate perceptual importance
-        double bandCenter = (bandLow + bandHigh) / 2.0;
-        double weight = Math.Log10(bandCenter / 100.0 + 1.0);
-
-        T energy = _numOps.Divide(sum, _numOps.FromDouble(count));
-        return _numOps.Multiply(energy, _numOps.FromDouble(weight));
-    }
-
-    /// <summary>
-    /// Computes normalized correlation between two envelope sequences.
-    /// </summary>
-    private T ComputeNormalizedCorrelation(
-        T[,] degraded, T[,] clean, int band, int startFrame, int segmentLength)
-    {
-        T sumDeg = _numOps.Zero;
-        T sumClean = _numOps.Zero;
-        T sumDegSq = _numOps.Zero;
-        T sumCleanSq = _numOps.Zero;
-        T sumProduct = _numOps.Zero;
-
-        for (int f = 0; f < segmentLength; f++)
-        {
-            int frame = startFrame + f;
-            // Check bounds for both degraded and clean arrays
-            if (frame >= degraded.GetLength(0) || frame >= clean.GetLength(0))
+        var padded = engine.Concat(
+            new[]
             {
-                break;
+                new Tensor<T>(new[] { leftPad }),
+                signal,
+                new Tensor<T>(new[] { needed - leftPad - length + 1 }),
+            },
+            0);
+
+        var phaseOutputs = new Tensor<T>[up];
+        for (int phase = 0; phase < up; phase++)
+        {
+            var (start, count, span) = spans[phase];
+            var output = new Tensor<T>(new[] { perPhase });
+            if (count > 0)
+            {
+                var windows = engine.TensorUnfold(
+                    engine.TensorNarrow(padded, 0, start, span), 0, _phases[phase].TapCount, down);
+                var values = engine.Reshape(engine.TensorMatMul(windows, _phases[phase].Taps), new[] { count });
+                output = count == perPhase
+                    ? values
+                    : engine.Concat(new[] { values, new Tensor<T>(new[] { perPhase - count }) }, 0);
             }
 
-            T d = degraded[frame, band];
-            T c = clean[frame, band];
-
-            sumDeg = _numOps.Add(sumDeg, d);
-            sumClean = _numOps.Add(sumClean, c);
-            sumDegSq = _numOps.Add(sumDegSq, _numOps.Multiply(d, d));
-            sumCleanSq = _numOps.Add(sumCleanSq, _numOps.Multiply(c, c));
-            sumProduct = _numOps.Add(sumProduct, _numOps.Multiply(d, c));
+            phaseOutputs[phase] = output;
         }
 
-        T n = _numOps.FromDouble(segmentLength);
-
-        // Compute Pearson correlation coefficient
-        T meanDeg = _numOps.Divide(sumDeg, n);
-        T meanClean = _numOps.Divide(sumClean, n);
-
-        T numerator = _numOps.Subtract(sumProduct, _numOps.Multiply(_numOps.Multiply(n, meanDeg), meanClean));
-
-        T varDeg = _numOps.Subtract(sumDegSq, _numOps.Multiply(_numOps.Multiply(n, meanDeg), meanDeg));
-        T varClean = _numOps.Subtract(sumCleanSq, _numOps.Multiply(_numOps.Multiply(n, meanClean), meanClean));
-
-        T denominator = _numOps.Sqrt(_numOps.Multiply(varDeg, varClean));
-
-        double denomDouble = _numOps.ToDouble(denominator);
-        if (denomDouble < 1e-10)
-        {
-            return _numOps.Zero;
-        }
-
-        return _numOps.Divide(numerator, denominator);
+        // Interleave the phases: output k = phase k mod up, position k / up.
+        var interleaved = engine.Reshape(engine.TensorStack(phaseOutputs, 1), new[] { perPhase * up });
+        return engine.TensorNarrow(interleaved, 0, 0, outputLength);
     }
 }
 
@@ -632,30 +771,15 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
         }
 
         // Zero-mean the signals
-        T estMean = ComputeMean(estimated);
-        T tarMean = ComputeMean(target);
-
-        var estCentered = new Tensor<T>(estimated._shape);
-        var tarCentered = new Tensor<T>(target._shape);
-
-        for (int i = 0; i < estimated.Length; i++)
-        {
-            estCentered[i] = _numOps.Subtract(estimated[i], estMean);
-            tarCentered[i] = _numOps.Subtract(target[i], tarMean);
-        }
+        var engine = AiDotNetEngine.Current;
+        var estCentered = engine.TensorSubtractScalar(engine.Reshape(estimated, new[] { estimated.Length }), ComputeMean(estimated));
+        var tarCentered = engine.TensorSubtractScalar(engine.Reshape(target, new[] { target.Length }), ComputeMean(target));
 
         // Compute <s_est, s_tar> / <s_tar, s_tar>
-        T dotProduct = _numOps.Zero;
-        T tarNormSq = _numOps.Zero;
+        T dotProduct = engine.TensorSum(engine.TensorMultiply(estCentered, tarCentered));
+        T tarNormSq = engine.TensorSum(engine.TensorSquare(tarCentered));
 
-        for (int i = 0; i < estimated.Length; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(estCentered[i], tarCentered[i]));
-            tarNormSq = _numOps.Add(tarNormSq, _numOps.Multiply(tarCentered[i], tarCentered[i]));
-        }
-
-        double tarNormSqDouble = _numOps.ToDouble(tarNormSq);
-        if (tarNormSqDouble < 1e-10)
+        if (_numOps.LessThan(tarNormSq, _numOps.FromDouble(1e-10)))
         {
             return _numOps.FromDouble(-100.0); // Return very low SI-SDR for zero target
         }
@@ -664,29 +788,18 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
 
         // s_target = alpha * s_tar (projection of estimate onto target)
         // e_noise = s_est - s_target
-        T sTargetNormSq = _numOps.Zero;
-        T eNoiseNormSq = _numOps.Zero;
+        var sTarget = engine.TensorMultiplyScalar(tarCentered, alpha);
+        var eNoise = engine.TensorSubtract(estCentered, sTarget);
+        T sTargetNormSq = engine.TensorSum(engine.TensorSquare(sTarget));
+        T eNoiseNormSq = engine.TensorSum(engine.TensorSquare(eNoise));
 
-        for (int i = 0; i < estimated.Length; i++)
-        {
-            T sTarget = _numOps.Multiply(alpha, tarCentered[i]);
-            T eNoise = _numOps.Subtract(estCentered[i], sTarget);
-
-            sTargetNormSq = _numOps.Add(sTargetNormSq, _numOps.Multiply(sTarget, sTarget));
-            eNoiseNormSq = _numOps.Add(eNoiseNormSq, _numOps.Multiply(eNoise, eNoise));
-        }
-
-        double eNoiseDouble = _numOps.ToDouble(eNoiseNormSq);
-        if (eNoiseDouble < 1e-10)
+        if (_numOps.LessThan(eNoiseNormSq, _numOps.FromDouble(1e-10)))
         {
             return _numOps.FromDouble(100.0); // Near-perfect reconstruction
         }
 
         // SI-SDR = 10 * log10(||s_target||^2 / ||e_noise||^2)
-        double ratio = _numOps.ToDouble(sTargetNormSq) / eNoiseDouble;
-        double siSdr = 10.0 * Math.Log10(ratio);
-
-        return _numOps.FromDouble(siSdr);
+        return Decibels(_numOps, _numOps.Divide(sTargetNormSq, eNoiseNormSq));
     }
 
     /// <summary>
@@ -705,14 +818,13 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
     }
 
     private T ComputeMean(Tensor<T> tensor)
-    {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            sum = _numOps.Add(sum, tensor[i]);
-        }
-        return _numOps.Divide(sum, _numOps.FromDouble(tensor.Length));
-    }
+        => _numOps.Divide(AiDotNetEngine.Current.TensorSum(tensor), _numOps.FromDouble(tensor.Length));
+
+    /// <summary>
+    /// 10 * log10(ratio).
+    /// </summary>
+    internal static T Decibels(INumericOperations<T> numOps, T ratio)
+        => numOps.Multiply(numOps.FromDouble(10.0 / Math.Log(10.0)), numOps.Log(ratio));
 }
 
 /// <summary>
@@ -755,26 +867,18 @@ public class SignalToNoiseRatio<T> where T : struct
             throw new ArgumentException("Clean and noisy signals must have the same length");
         }
 
-        T signalPower = _numOps.Zero;
-        T noisePower = _numOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var cleanFlat = engine.Reshape(clean, new[] { clean.Length });
+        var noise = engine.TensorSubtract(engine.Reshape(noisy, new[] { noisy.Length }), cleanFlat);
+        T signalPower = engine.TensorSum(engine.TensorSquare(cleanFlat));
+        T noisePower = engine.TensorSum(engine.TensorSquare(noise));
 
-        for (int i = 0; i < clean.Length; i++)
-        {
-            T noise = _numOps.Subtract(noisy[i], clean[i]);
-            signalPower = _numOps.Add(signalPower, _numOps.Multiply(clean[i], clean[i]));
-            noisePower = _numOps.Add(noisePower, _numOps.Multiply(noise, noise));
-        }
-
-        double noiseDouble = _numOps.ToDouble(noisePower);
-        if (noiseDouble < 1e-10)
+        if (_numOps.LessThan(noisePower, _numOps.FromDouble(1e-10)))
         {
             return _numOps.FromDouble(100.0); // Near-perfect match
         }
 
-        double ratio = _numOps.ToDouble(signalPower) / noiseDouble;
-        double snr = 10.0 * Math.Log10(ratio);
-
-        return _numOps.FromDouble(snr);
+        return ScaleInvariantSignalToDistortionRatio<T>.Decibels(_numOps, _numOps.Divide(signalPower, noisePower));
     }
 
     /// <summary>
@@ -792,65 +896,52 @@ public class SignalToNoiseRatio<T> where T : struct
             return Compute(clean, noisy);
         }
 
-        double sumSnr = 0.0;
-        int validFrames = 0;
+        // Non-overlapping frames [numFrames, frameLength]; a trailing partial frame is ignored.
+        var engine = AiDotNetEngine.Current;
+        int used = numFrames * frameLength;
+        var cleanFrames = engine.Reshape(
+            engine.TensorNarrow(engine.Reshape(clean, new[] { clean.Length }), 0, 0, used), new[] { numFrames, frameLength });
+        var noisyFrames = engine.Reshape(
+            engine.TensorNarrow(engine.Reshape(noisy, new[] { noisy.Length }), 0, 0, used), new[] { numFrames, frameLength });
+        var signalPower = engine.ReduceSum(engine.TensorSquare(cleanFrames), new[] { 1 }, false);
+        var noisePower = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(noisyFrames, cleanFrames)), new[] { 1 }, false);
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * frameLength;
-            int end = Math.Min(start + frameLength, clean.Length);
-
-            T signalPower = _numOps.Zero;
-            T noisePower = _numOps.Zero;
-
-            for (int i = start; i < end; i++)
-            {
-                T noise = _numOps.Subtract(noisy[i], clean[i]);
-                signalPower = _numOps.Add(signalPower, _numOps.Multiply(clean[i], clean[i]));
-                noisePower = _numOps.Add(noisePower, _numOps.Multiply(noise, noise));
-            }
-
-            double sigDouble = _numOps.ToDouble(signalPower);
-            double noiseDouble = _numOps.ToDouble(noisePower);
-
-            // Skip silent frames
-            if (sigDouble > 1e-10 && noiseDouble > 1e-10)
-            {
-                double snr = 10.0 * Math.Log10(sigDouble / noiseDouble);
-                // Clamp to reasonable range [-10, 35] dB
-                snr = Math.Max(-10.0, Math.Min(35.0, snr));
-                sumSnr += snr;
-                validFrames++;
-            }
-        }
-
-        if (validFrames == 0)
+        // Skip silent frames (and frames reproduced exactly)
+        T floor = _numOps.FromDouble(1e-10);
+        var valid = engine.TensorMultiply(engine.TensorGreaterThan(signalPower, floor), engine.TensorGreaterThan(noisePower, floor));
+        T validFrames = engine.TensorSum(valid);
+        if (_numOps.Equals(validFrames, _numOps.Zero))
         {
             return _numOps.Zero;
         }
 
-        return _numOps.FromDouble(sumSnr / validFrames);
+        var ones = Tensor<T>.CreateDefault(new[] { numFrames }, _numOps.One);
+        var ratios = engine.TensorDivide(engine.TensorWhere(valid, signalPower, ones), engine.TensorWhere(valid, noisePower, ones));
+        var snr = engine.TensorMultiplyScalar(engine.TensorLog10(ratios), _numOps.FromDouble(10.0));
+
+        // Clamp to reasonable range [-10, 35] dB
+        snr = engine.TensorClamp(snr, _numOps.FromDouble(-10.0), _numOps.FromDouble(35.0));
+        return _numOps.Divide(engine.TensorSum(engine.TensorMultiply(snr, valid)), validFrames);
     }
 }
 
 /// <summary>
-/// Perceptual Evaluation of Speech Quality (PESQ) approximation metric.
+/// A PESQ-like speech quality approximation. This is NOT ITU-T P.862 (PESQ) and does not reproduce its scores.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is a simplified approximation of the ITU-T P.862 PESQ algorithm.
-/// For production use, consider using an official PESQ implementation.
+/// This metric blends STOI and segmental SNR into a number on the MOS-LQO range (-0.5 to 4.5) using an
+/// empirical mapping. It does not implement the ITU-T P.862 / P.862.2 perceptual model (level and IRS
+/// filtering, time alignment, auditory transform, disturbance aggregation), and its values do not match
+/// the official reference implementation or the python <c>pesq</c> package. Do not report its output as
+/// PESQ or compare it with published PESQ results.
 /// </para>
 /// <para>
-/// PESQ scores range from -0.5 to 4.5, where higher values indicate better quality.
-/// - &gt;4.0: Excellent quality
-/// - 3.5-4.0: Good quality
-/// - 3.0-3.5: Fair quality
-/// - &lt;3.0: Poor quality
+/// Use it only as a rough relative quality indicator; higher values indicate better quality.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class PerceptualSpeechQuality<T> where T : struct
+public class ApproximatePerceptualSpeechQuality<T> where T : struct
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _sampleRate;
@@ -858,10 +949,10 @@ public class PerceptualSpeechQuality<T> where T : struct
     private readonly SignalToNoiseRatio<T> _snr;
 
     /// <summary>
-    /// Initializes a new instance of PESQ approximation calculator.
+    /// Initializes a new instance of the PESQ-like approximation (not ITU-T P.862).
     /// </summary>
     /// <param name="sampleRate">Audio sample rate (8000 or 16000 Hz supported).</param>
-    public PerceptualSpeechQuality(int sampleRate = 16000)
+    public ApproximatePerceptualSpeechQuality(int sampleRate = 16000)
     {
         if (sampleRate != 8000 && sampleRate != 16000)
         {
@@ -875,15 +966,15 @@ public class PerceptualSpeechQuality<T> where T : struct
     }
 
     /// <summary>
-    /// Computes an approximation of PESQ score between degraded and reference speech.
+    /// Computes the PESQ-like approximation between degraded and reference speech (not an ITU-T P.862 score).
     /// </summary>
     /// <param name="degraded">The degraded speech signal.</param>
     /// <param name="reference">The clean reference speech signal.</param>
-    /// <returns>Approximated PESQ score (MOS-LQO scale, -0.5 to 4.5).</returns>
+    /// <returns>A PESQ-like score on the MOS-LQO range (-0.5 to 4.5); not comparable with P.862 scores.</returns>
     public T Compute(Tensor<T> degraded, Tensor<T> reference)
     {
         // This is a simplified approximation combining STOI and segmental SNR
-        // For accurate PESQ, use the official ITU-T P.862 implementation
+        // It is not ITU-T P.862 and does not match P.862 scores
 
         // Get STOI score (0-1)
         T stoiScore = _stoi.Compute(degraded, reference);
@@ -895,15 +986,15 @@ public class PerceptualSpeechQuality<T> where T : struct
 
         // Approximate PESQ using empirical mapping from STOI and SNR
         // This is based on observed correlations between PESQ and these metrics
-        double pesqApprox = MapToPesqScale(stoi, snr);
+        double pesqApprox = MapToPesqLikeScale(stoi, snr);
 
         return _numOps.FromDouble(pesqApprox);
     }
 
     /// <summary>
-    /// Maps STOI and SNR to an approximate PESQ score.
+    /// Maps STOI and SNR to a PESQ-like score.
     /// </summary>
-    private double MapToPesqScale(double stoi, double snr)
+    private double MapToPesqLikeScale(double stoi, double snr)
     {
         // Normalize SNR to [0, 1] range (assuming -5 to 30 dB range)
         double snrNorm = Math.Max(0, Math.Min(1, (snr + 5) / 35));

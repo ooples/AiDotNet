@@ -188,7 +188,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             await loader.LoadAsync();
         }
 
-        T sum = numOps.Zero;
+        var batchLosses = new List<T>();
         int batches = 0;
         try
         {
@@ -225,16 +225,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
                 else
                 {
-                    T sampleSum = numOps.Zero;
-                    for (int i = 0; i < processedInputs.Length; i++)
-                    {
-                        sampleSum = numOps.Add(sampleSum, SampleLoss(model, lossFunction, processedInputs[i], processedOutputs[i]));
-                    }
-
-                    batchLoss = numOps.Divide(sampleSum, numOps.FromDouble(processedInputs.Length));
+                    // Mean of the per-sample losses (each sample is scored in order).
+                    var sampleLosses = processedInputs
+                        .Select((input, i) => SampleLoss(model, lossFunction, input, processedOutputs[i]))
+                        .ToArray();
+                    batchLoss = AiDotNetEngine.Current.TensorMean(Vector<T>.FromArray(sampleLosses).AsTensor());
                 }
 
-                sum = numOps.Add(sum, batchLoss);
+                batchLosses.Add(batchLoss);
                 batches++;
             }
         }
@@ -246,7 +244,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        T mean = batches > 0 ? numOps.Divide(sum, numOps.FromDouble(batches)) : numOps.Zero;
+        T mean = batches > 0 ? AiDotNetEngine.Current.TensorMean(Vector<T>.FromArray(batchLosses.ToArray()).AsTensor()) : numOps.Zero;
         if (_trainingMonitor is not null && monitorSessionId is not null)
         {
             _trainingMonitor.LogMetric(monitorSessionId, "validation_loss", mean, checked((int)globalStep));
