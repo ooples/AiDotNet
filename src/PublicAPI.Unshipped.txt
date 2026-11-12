@@ -22596,3 +22596,32 @@ AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.SecondMatchThreshold.get ->
 AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.SecondMatchThreshold.set -> void
 AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.UnconfirmedMatchThreshold.get -> T
 AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.UnconfirmedMatchThreshold.set -> void
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.InitialGuess(double sampleVariance) -> double[]!
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.NextVariance(double prevVariance, double prevReturn, double[]! natural) -> double
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToNatural(double[]! unconstrained) -> double[]!
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToUnconstrained(double[]! natural) -> double[]!
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.UnconditionalVariance(double[]! natural) -> double
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.FitReturns(System.Collections.Generic.IReadOnlyList<double>! returns) -> void
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.FittedUnconditionalVariance.get -> double
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ForecastAnnualizedVol(System.Collections.Generic.IReadOnlyList<double>! returns, double periodsPerYear = 252) -> double
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ForecastNextVariance(System.Collections.Generic.IReadOnlyList<double>! returns) -> double
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Parameters.get -> double[]?
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToDoubles(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! t) -> double[]!
+*REMOVED*virtual AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.MeanReversionSpeed(double[]! natural) -> double
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.InitialGuess(T sampleVariance) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.NextVariance(T prevVariance, T prevResidual, AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> T
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToNatural(AiDotNet.Tensors.LinearAlgebra.Vector<T>! unconstrained) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToUnconstrained(AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.UnconditionalVariance(AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> T
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.VariancePath(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! residuals, T backcast, AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.FitReturns(AiDotNet.Tensors.LinearAlgebra.Vector<T>! returns) -> void
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.FittedUnconditionalVariance.get -> T
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ForecastAnnualizedVol(AiDotNet.Tensors.LinearAlgebra.Vector<T>! returns, double periodsPerYear = 252) -> T
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ForecastNextVariance(AiDotNet.Tensors.LinearAlgebra.Vector<T>! returns) -> T
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Parameters.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ReturnsVector(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! t) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.LinearRecurrence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! drive, T decay, T initial) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Lagged(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! values, T presample) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.VolatilityParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+virtual AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Backcast(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! residuals) -> T
+virtual AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.MeanReversionSpeed(AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> T

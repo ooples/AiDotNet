@@ -1,4 +1,5 @@
 using AiDotNet.Finance.Interfaces;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -21,9 +22,12 @@ public sealed class ClassicalVolatilityModelOptions : ModelOptions
 /// conditional-variance recurrence + parameter set to the concrete subclass.
 /// </summary>
 /// <remarks>
-/// Estimation maximizes the Gaussian quasi-log-likelihood of the return series under the model's conditional
-/// variance path, optimized with a derivative-free Nelder–Mead simplex over the (constrained, via transform)
-/// parameters — the standard approach in econometric packages (e.g. <c>arch</c>, <c>rugarch</c>).
+/// <para>Estimation follows the <c>arch</c> package's defaults: a constant mean (<c>ConstantMean</c>), so the
+/// parameter vector is <c>[mu, volatility parameters...]</c>; the variance recursion runs on the residuals
+/// <c>r - mu</c> and is seeded with arch's backcast, an exponentially weighted average of the first
+/// <c>min(75, n)</c> squared residuals with weights <c>0.94^i</c>; and the Gaussian quasi-log-likelihood is
+/// maximised with a derivative-free Nelder–Mead simplex over the (constrained, via transform) parameters.</para>
+/// <para>All arithmetic is generic in <typeparamref name="T"/> and runs as whole-tensor engine operations.</para>
 /// </remarks>
 public abstract class ClassicalVolatilityModelBase<T> :
     IVolatilityModel<T>,
@@ -38,21 +42,37 @@ public abstract class ClassicalVolatilityModelBase<T> :
     /// <summary>Relative convergence tolerance on the spread of log-likelihood values.</summary>
     private const double FitTolerance = 1e-10;
 
+    /// <summary>Number of leading squared residuals in arch's variance backcast.</summary>
+    private const int BackcastLength = 75;
+
+    /// <summary>Decay of arch's backcast weights.</summary>
+    private const double BackcastDecay = 0.94;
+
+    /// <summary>Block length of the blocked linear-recurrence evaluation.</summary>
+    private const int RecurrenceBlock = 256;
+
     /// <summary>Numeric operations for <typeparamref name="T"/>.</summary>
     protected INumericOperations<T> NumOps { get; } = MathHelper.GetNumericOperations<T>();
 
-    /// <summary>The fitted parameters in NATURAL (constrained) space; null until trained.</summary>
-    protected double[]? Parameters { get; private set; }
+    /// <summary>The fitted parameters in NATURAL (constrained) space, <c>[mu, volatility parameters...]</c>;
+    /// null until trained.</summary>
+    protected Vector<T>? Parameters { get; private set; }
 
     /// <summary>Long-run (unconditional) variance implied by the fitted parameters — the forecast anchor.</summary>
-    protected double FittedUnconditionalVariance { get; private set; }
+    protected T FittedUnconditionalVariance { get; private set; }
+
+    /// <summary>Creates the model.</summary>
+    protected ClassicalVolatilityModelBase()
+    {
+        FittedUnconditionalVariance = NumOps.Zero;
+    }
 
     // ---- Model-specific contract (each GARCH variant implements these) -------------------------------
 
     /// <summary>Human-readable model name (e.g. "GARCH(1,1)").</summary>
     public abstract string ModelName { get; }
 
-    /// <summary>Number of free parameters.</summary>
+    /// <summary>Number of free parameters, including the constant mean.</summary>
     public abstract int ParameterCount { get; }
 
     /// <inheritdoc/>
@@ -61,46 +81,133 @@ public abstract class ClassicalVolatilityModelBase<T> :
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
-    /// <summary>A reasonable starting guess in natural space, given the sample variance.</summary>
-    protected abstract double[] InitialGuess(double sampleVariance);
+    /// <summary>A reasonable starting guess for the volatility parameters in natural space, given the
+    /// sample variance.</summary>
+    protected abstract Vector<T> InitialGuess(T sampleVariance);
 
-    /// <summary>Maps an UNCONSTRAINED optimizer vector to NATURAL parameters honoring the model's
+    /// <summary>Maps an UNCONSTRAINED optimizer vector to NATURAL volatility parameters honoring the model's
     /// constraints (positivity, stationarity). This is how MLE is done with a box-free optimizer.</summary>
-    protected abstract double[] ToNatural(double[] unconstrained);
+    protected abstract Vector<T> ToNatural(Vector<T> unconstrained);
 
     /// <summary>Inverse of <see cref="ToNatural"/> — natural → unconstrained (for the initial simplex).</summary>
-    protected abstract double[] ToUnconstrained(double[] natural);
+    protected abstract Vector<T> ToUnconstrained(Vector<T> natural);
 
-    /// <summary>The conditional-variance recurrence σ²_t given the previous variance and return.</summary>
-    protected abstract double NextVariance(double prevVariance, double prevReturn, double[] natural);
+    /// <summary>The conditional-variance recurrence σ²_t given the previous variance and residual.</summary>
+    protected abstract T NextVariance(T prevVariance, T prevResidual, Vector<T> natural);
 
-    /// <summary>Unconditional variance implied by the parameters (used to seed σ²_0 and long-run forecasts).</summary>
-    protected abstract double UnconditionalVariance(double[] natural);
+    /// <summary>Unconditional variance implied by the volatility parameters (used for long-run forecasts).</summary>
+    protected abstract T UnconditionalVariance(Vector<T> natural);
+
+    /// <summary>
+    /// The conditional variance σ²_t of every residual (<c>[n]</c>), with the pre-sample terms replaced by
+    /// <paramref name="backcast"/> as in arch's recursions.
+    /// </summary>
+    protected abstract Tensor<T> VariancePath(Tensor<T> residuals, T backcast, Vector<T> natural);
+
+    /// <summary>
+    /// arch's backcast: <c>sum(w_i * e_i^2)</c> over the first <c>min(75, n)</c> residuals with
+    /// <c>w_i ∝ 0.94^i</c> normalised to sum to one.
+    /// </summary>
+    protected virtual T Backcast(Tensor<T> residuals)
+    {
+        var engine = AiDotNetEngine.Current;
+        int tau = Math.Min(BackcastLength, residuals.Length);
+        var weights = engine.TensorExp(engine.TensorMultiplyScalar(
+            engine.TensorArange<T>(0, tau), NumOps.FromDouble(Math.Log(BackcastDecay))));
+        var head = engine.TensorSlice(residuals, new[] { 0 }, new[] { tau });
+        T weighted = engine.TensorSum(engine.TensorMultiply(engine.TensorSquare(head), weights));
+        return NumOps.Divide(weighted, engine.TensorSum(weights));
+    }
+
+    /// <summary>
+    /// Evaluates the first-order linear recurrence <c>s_t = drive_t + decay * s_(t-1)</c> with
+    /// <c>s_(-1) = initial</c>, as blocked lower-triangular Toeplitz products.
+    /// </summary>
+    protected Tensor<T> LinearRecurrence(Tensor<T> drive, T decay, T initial)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = drive.Length;
+        int block = Math.Min(RecurrenceBlock, Math.Max(1, n));
+
+        // q = (1, decay, decay^2, ...); toeplitz[i, j] = q[i - j] for i >= j; carry[i] = decay^(i + 1).
+        var decays = new Tensor<T>(new[] { block });
+        engine.TensorFill(decays, decay);
+        var carryPowers = engine.TensorCumProd(decays, 0);
+        var powers = engine.TensorConcatenate(new[]
+        {
+            new Tensor<T>(new[] { NumOps.One }, new[] { 1 }),
+            engine.TensorSlice(carryPowers, new[] { 0 }, new[] { block - 1 })
+        }, 0);
+        var lag = Enumerable.Range(0, block * block).Select(k => Math.Max(0, (k / block) - (k % block))).ToArray();
+        var toeplitz = engine.TensorTril(engine.Reshape(
+            engine.TensorTake(powers, new Tensor<int>(lag, new[] { block * block })), new[] { block, block }));
+
+        var carry = new Tensor<T>(new[] { initial }, new[] { 1 });
+        var pieces = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += block)
+        {
+            int len = Math.Min(block, n - start);
+            var segment = engine.Reshape(engine.TensorSlice(drive, new[] { start }, new[] { len }), new[] { len, 1 });
+            var operatorBlock = len == block ? toeplitz : engine.TensorSlice(toeplitz, new[] { 0, 0 }, new[] { len, len });
+            var homogeneous = engine.TensorMultiply(
+                engine.TensorSlice(carryPowers, new[] { 0 }, new[] { len }),
+                engine.TensorBroadcastTo(carry, new[] { len }));
+            var piece = engine.TensorAdd(
+                engine.Reshape(engine.TensorMatMul(operatorBlock, segment), new[] { len }), homogeneous);
+            pieces.Add(piece);
+            carry = engine.TensorSlice(piece, new[] { len - 1 }, new[] { 1 });
+        }
+
+        return pieces.Count == 1 ? pieces[0] : engine.TensorConcatenate(pieces.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// The series delayed by one step, <c>[presample, values_0, ..., values_(n-2)]</c>: the "previous"
+    /// value each step of the recursion sees, with arch's backcast standing in before the sample.
+    /// </summary>
+    protected static Tensor<T> Lagged(Tensor<T> values, T presample)
+    {
+        var engine = AiDotNetEngine.Current;
+        var head = new Tensor<T>(new[] { presample }, new[] { 1 });
+        return values.Length <= 1
+            ? head
+            : engine.TensorConcatenate(new[] { head, engine.TensorSlice(values, new[] { 0 }, new[] { values.Length - 1 }) }, 0);
+    }
+
+    /// <summary>Per-step persistence used for multi-step mean reversion (α+β for GARCH-type). Default 0.9.</summary>
+    protected virtual T MeanReversionSpeed(Vector<T> natural) => NumOps.FromDouble(0.9);
 
     // ---- Fitting (MLE) -------------------------------------------------------------------------------
 
     /// <summary>Fits the model to a return series by maximum likelihood (Nelder–Mead on the Gaussian QMLE).</summary>
-    public void FitReturns(IReadOnlyList<double> returns)
+    public void FitReturns(Vector<T> returns)
     {
-        if (returns is null || returns.Count < MinimumFitReturnCount)
+        if (returns is null || returns.Length < MinimumFitReturnCount)
         {
             throw new ArgumentException(
                 $"Need at least {MinimumFitReturnCount} returns to fit a GARCH-family model.",
                 nameof(returns));
         }
 
-        var r = returns is double[] arr ? arr : returns.ToArray();
-        double sampleVar = Variance(r);
-        var start = ToUnconstrained(InitialGuess(sampleVar));
+        var engine = AiDotNetEngine.Current;
+        var r = Tensor<T>.FromVector(returns);
+        T mean = engine.TensorMean(r);
+        var centered = engine.TensorSubtractScalar(r, mean);
+        T sampleVar = NumOps.Divide(engine.TensorSumOfSquares(centered), NumOps.FromDouble(Math.Max(1, r.Length - 1)));
 
-        double Objective(Vector<double> u) => NegLogLikelihood(ToNatural(u.ToArray()), r);
+        // The mean is searched in units of the sample standard deviation so the simplex steps scale
+        // with the data.
+        T scale = NumOps.Sqrt(NumOps.GreaterThan(sampleVar, NumOps.Zero) ? sampleVar : NumOps.One);
+        var start = new Vector<T>(new[] { NumOps.Divide(mean, scale) }.Concat(ToUnconstrained(InitialGuess(sampleVar))));
+
+        T Objective(Vector<T> u) => NegLogLikelihood(Natural(u, scale), r);
 
         // Uses the library's Nelder-Mead optimizer rather than a private copy. The options below
         // reproduce the estimation settings this module has always used: a 10% relative initial
         // simplex step, an absolute step for coordinates too small to perturb proportionally, and
         // fixed (non-adaptive) reflection/expansion/contraction/shrink coefficients.
-        var optimizer = new NelderMeadOptimizer<double, Tensor<double>, Tensor<double>>(
-            new NelderMeadOptimizerOptions<double, Tensor<double>, Tensor<double>>
+        var optimizer = new NelderMeadOptimizer<T, Tensor<T>, Tensor<T>>(
+            new NelderMeadOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialSimplexStep = 0.1,
                 ZeroCoordinateSimplexStep = 0.1,
@@ -108,90 +215,81 @@ public abstract class ClassicalVolatilityModelBase<T> :
                 UseAdaptiveParameters = false,
             });
 
-        var best = optimizer.Minimize(
-            Vector<double>.FromArray(start), Objective, MaximumFitIterations, FitTolerance);
+        var best = optimizer.Minimize(start, Objective, MaximumFitIterations, NumOps.FromDouble(FitTolerance));
 
-        Parameters = ToNatural(best.ToArray());
-        FittedUnconditionalVariance = UnconditionalVariance(Parameters);
+        Parameters = Natural(best, scale);
+        FittedUnconditionalVariance = UnconditionalVariance(VolatilityParameters(Parameters));
     }
 
     /// <summary>Negative Gaussian log-likelihood of the return series under the conditional-variance path.</summary>
-    private double NegLogLikelihood(double[] natural, double[] r)
+    private T NegLogLikelihood(Vector<T> natural, Tensor<T> returns)
     {
-        double var0 = UnconditionalVariance(natural);
-        if (!(var0 > 0) || double.IsNaN(var0) || double.IsInfinity(var0))
+        T invalid = NumOps.FromDouble(1e12);
+        var residuals = AiDotNetEngine.Current.TensorSubtractScalar(returns, natural[0]);
+        var volatility = VolatilityParameters(natural);
+        var sigma2 = VariancePath(residuals, Backcast(residuals), volatility);
+
+        var engine = AiDotNetEngine.Current;
+        T smallest = engine.TensorMinValue(sigma2);
+        if (!NumOps.GreaterThan(smallest, NumOps.FromDouble(1e-18)) || NumOps.IsNaN(smallest))
         {
-            return 1e12; // invalid parameters → reject
+            return invalid; // invalid parameters → reject
         }
 
-        double sigma2 = var0;
-        double nll = 0.0;
-        const double log2Pi = 1.8378770664093453;
-        for (int t = 0; t < r.Length; t++)
-        {
-            if (t > 0)
-            {
-                sigma2 = NextVariance(sigma2, r[t - 1], natural);
-            }
-
-            if (!(sigma2 > 1e-18) || double.IsNaN(sigma2) || double.IsInfinity(sigma2))
-            {
-                return 1e12;
-            }
-
-            nll += 0.5 * (log2Pi + Math.Log(sigma2) + (r[t] * r[t]) / sigma2);
-        }
-
-        return nll;
+        // 0.5 * sum(log 2π + log σ² + e² / σ²)
+        T logDet = engine.TensorSum(engine.TensorLog(sigma2));
+        T quadratic = engine.TensorSum(engine.TensorDivide(engine.TensorSquare(residuals), sigma2));
+        T constant = NumOps.FromDouble(1.8378770664093453 * residuals.Length);
+        T nll = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(constant, NumOps.Add(logDet, quadratic)));
+        return NumOps.IsNaN(nll) || NumOps.IsInfinity(nll) ? invalid : nll;
     }
 
     /// <summary>One-step-ahead conditional VARIANCE forecast given the observed return history.</summary>
-    public double ForecastNextVariance(IReadOnlyList<double> returns)
+    public T ForecastNextVariance(Vector<T> returns)
     {
         if (Parameters is null)
         {
             FitReturns(returns);
         }
 
-        var p = Parameters;
-        double sigma2 = UnconditionalVariance((p ?? throw new InvalidOperationException("p is null where it is required.")));
-        for (int t = 1; t < returns.Count; t++)
-        {
-            sigma2 = NextVariance(sigma2, returns[t - 1], p);
-        }
+        var p = Parameters ?? throw new InvalidOperationException("The model has no fitted parameters.");
+        var volatility = VolatilityParameters(p);
+        var residuals = AiDotNetEngine.Current.TensorSubtractScalar(Tensor<T>.FromVector(returns), p[0]);
+        var sigma2 = VariancePath(residuals, Backcast(residuals), volatility);
 
-        // step from the last observed return to t+1
-        sigma2 = NextVariance(sigma2, returns[^1], p);
-        return Math.Max(sigma2, 0);
+        // step from the last observed residual to t+1
+        T next = NextVariance(sigma2[sigma2.Length - 1], residuals[residuals.Length - 1], volatility);
+        return NumOps.GreaterThan(next, NumOps.Zero) ? next : NumOps.Zero;
     }
 
     /// <summary>One-step-ahead ANNUALIZED volatility forecast = √(variance × periodsPerYear).</summary>
-    public double ForecastAnnualizedVol(IReadOnlyList<double> returns, double periodsPerYear = 252)
-        => Math.Sqrt(ForecastNextVariance(returns) * Math.Max(1, periodsPerYear));
+    public T ForecastAnnualizedVol(Vector<T> returns, double periodsPerYear = 252)
+        => NumOps.Sqrt(NumOps.Multiply(ForecastNextVariance(returns), NumOps.FromDouble(Math.Max(1, periodsPerYear))));
 
-    // ---- IVolatilityModel<T> (Tensor surface; delegates to the double engine above) ------------------
+    // ---- IVolatilityModel<T> (Tensor surface) ---------------------------------------------------------
 
     /// <inheritdoc/>
     public Tensor<T> ForecastVolatility(Tensor<T> historicalReturns, int horizon)
     {
-        var r = ToDoubles(historicalReturns);
-        double var1 = ForecastNextVariance(r);
-        var p = Parameters;
-        double uncond = UnconditionalVariance((p ?? throw new InvalidOperationException("p is null where it is required.")));
-        var data = new T[Math.Max(1, horizon)];
-        double v = var1;
-        for (int h = 0; h < data.Length; h++)
+        var engine = AiDotNetEngine.Current;
+        T var1 = ForecastNextVariance(ReturnsVector(historicalReturns));
+        var p = Parameters ?? throw new InvalidOperationException("The model has no fitted parameters.");
+        var volatility = VolatilityParameters(p);
+        T uncond = UnconditionalVariance(volatility);
+        int steps = Math.Max(1, horizon);
+
+        // Multi-step variance mean-reverts toward the unconditional variance:
+        // v_h = uncond + (v_1 - uncond) * persistence^h.
+        var persistence = new Tensor<T>(new[] { steps });
+        engine.TensorFill(persistence, MeanReversionSpeed(volatility));
+        var decay = engine.TensorConcatenate(new[]
         {
-            // multi-step mean-reverts toward the unconditional variance
-            data[h] = NumOps.FromDouble(Math.Sqrt(Math.Max(v, 0)));
-            v = uncond + (v - uncond) * MeanReversionSpeed(p);
-        }
-
-        return new Tensor<T>(new[] { data.Length }, new Vector<T>(data));
+            new Tensor<T>(new[] { NumOps.One }, new[] { 1 }),
+            engine.TensorSlice(engine.TensorCumProd(persistence, 0), new[] { 0 }, new[] { steps - 1 })
+        }, 0);
+        var variance = engine.TensorAddScalar(engine.TensorMultiplyScalar(decay, NumOps.Subtract(var1, uncond)), uncond);
+        return engine.TensorSqrt(engine.TensorClampMin(variance, NumOps.Zero));
     }
-
-    /// <summary>Per-step persistence used for multi-step mean reversion (α+β for GARCH-type). Default 0.9.</summary>
-    protected virtual double MeanReversionSpeed(double[] natural) => 0.9;
 
     /// <inheritdoc/>
     public Tensor<T> EstimateCurrentVolatility(Tensor<T> recentReturns)
@@ -200,28 +298,20 @@ public abstract class ClassicalVolatilityModelBase<T> :
     /// <inheritdoc/>
     public Tensor<T> CalculateRealizedVolatility(Tensor<T> highFrequencyReturns)
     {
-        var r = ToDoubles(highFrequencyReturns);
-        double sumSq = 0;
-        for (int i = 0; i < r.Length; i++)
-        {
-            sumSq += r[i] * r[i];
-        }
-
-        double rv = Math.Sqrt(sumSq / Math.Max(1, r.Length));
-        return new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(rv) }));
+        var r = Tensor<T>.FromVector(ReturnsVector(highFrequencyReturns));
+        T meanSquare = NumOps.Divide(AiDotNetEngine.Current.TensorSumOfSquares(r), NumOps.FromDouble(Math.Max(1, r.Length)));
+        return new Tensor<T>(new[] { NumOps.Sqrt(meanSquare) }, new[] { 1 });
     }
 
     /// <inheritdoc/>
     public Tensor<T> ComputeCovarianceMatrix(Tensor<T> returns)
     {
-        var r = ToDoubles(returns);
-        double mean = 0;
-        for (int i = 0; i < r.Length; i++) mean += r[i];
-        mean /= Math.Max(1, r.Length);
-        double v = 0;
-        for (int i = 0; i < r.Length; i++) v += (r[i] - mean) * (r[i] - mean);
-        v /= Math.Max(1, r.Length - 1);
-        return new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.FromDouble(v) }));
+        var engine = AiDotNetEngine.Current;
+        var r = Tensor<T>.FromVector(ReturnsVector(returns));
+        T mean = r.Length == 0 ? NumOps.Zero : engine.TensorMean(r);
+        T v = NumOps.Divide(engine.TensorSumOfSquares(engine.TensorSubtractScalar(r, mean)),
+            NumOps.FromDouble(Math.Max(1, r.Length - 1)));
+        return new Tensor<T>(new[] { v }, new[] { 1, 1 });
     }
 
     /// <inheritdoc/>
@@ -242,7 +332,7 @@ public abstract class ClassicalVolatilityModelBase<T> :
     public int NumFeatures => 1;
 
     /// <inheritdoc/>
-    public void Train(Tensor<T> input, Tensor<T> expectedOutput) => FitReturns(ToDoubles(input));
+    public void Train(Tensor<T> input, Tensor<T> expectedOutput) => FitReturns(ReturnsVector(input));
 
     /// <inheritdoc/>
     public Tensor<T> Predict(Tensor<T> input) => ForecastVolatility(input, 1);
@@ -270,19 +360,26 @@ public abstract class ClassicalVolatilityModelBase<T> :
     /// <inheritdoc/>
     public Vector<T> GetParameters()
     {
-        var p = Parameters ?? new double[ParameterCount];
-        var v = new T[p.Length];
-        for (int i = 0; i < p.Length; i++) v[i] = NumOps.FromDouble(p[i]);
-        return new Vector<T>(v);
+        return Parameters is null ? new Vector<T>(ParameterCount) : Parameters.Clone();
     }
 
     /// <inheritdoc/>
     public void SetParameters(Vector<T> parameters)
     {
-        var p = new double[parameters.Length];
-        for (int i = 0; i < p.Length; i++) p[i] = Convert.ToDouble(parameters[i]);
-        Parameters = p;
-        FittedUnconditionalVariance = UnconditionalVariance(p);
+        if (parameters is null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"{ModelName} has {ParameterCount} parameters (mu first), but {parameters.Length} were given.",
+                nameof(parameters));
+        }
+
+        Parameters = parameters.Clone();
+        FittedUnconditionalVariance = UnconditionalVariance(VolatilityParameters(Parameters));
     }
 
     /// <inheritdoc/>
@@ -293,21 +390,15 @@ public abstract class ClassicalVolatilityModelBase<T> :
     /// <inheritdoc/>
     public byte[] Serialize()
     {
-        var p = Parameters ?? Array.Empty<double>();
-        var bytes = new byte[sizeof(int) + p.Length * sizeof(double)];
-        BitConverter.GetBytes(p.Length).CopyTo(bytes, 0);
-        Buffer.BlockCopy(p, 0, bytes, sizeof(int), p.Length * sizeof(double));
-        return bytes;
+        return SerializationHelper<T>.SerializeVector(Parameters ?? new Vector<T>(0));
     }
 
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
-        int n = BitConverter.ToInt32(data, 0);
-        var p = new double[n];
-        Buffer.BlockCopy(data, sizeof(int), p, 0, n * sizeof(double));
-        Parameters = n > 0 ? p : null;
-        if (Parameters is not null) FittedUnconditionalVariance = UnconditionalVariance(Parameters);
+        var p = SerializationHelper<T>.DeserializeVector(data);
+        Parameters = p.Length > 0 ? p : null;
+        if (Parameters is not null) FittedUnconditionalVariance = UnconditionalVariance(VolatilityParameters(Parameters));
     }
 
     /// <inheritdoc/>
@@ -365,16 +456,17 @@ public abstract class ClassicalVolatilityModelBase<T> :
     /// <inheritdoc/>
     public Dictionary<string, T> GetVolatilityMetrics()
     {
-        var p = Parameters ?? new double[ParameterCount];
+        var p = Parameters ?? new Vector<T>(ParameterCount);
         var m = new Dictionary<string, T>
         {
             ["ParameterCount"] = NumOps.FromDouble(ParameterCount),
-            ["Persistence"] = NumOps.FromDouble(Parameters is not null ? MeanReversionSpeed(p) : 0),
-            ["UnconditionalVariance"] = NumOps.FromDouble(FittedUnconditionalVariance),
+            ["Persistence"] = Parameters is not null ? MeanReversionSpeed(VolatilityParameters(p)) : NumOps.Zero,
+            ["UnconditionalVariance"] = FittedUnconditionalVariance,
         };
-        for (int i = 0; i < p.Length; i++)
+        int index = 0;
+        foreach (T value in p)
         {
-            m[$"theta{i}"] = NumOps.FromDouble(p[i]);
+            m[$"theta{index++}"] = value;
         }
 
         return m;
@@ -391,40 +483,32 @@ public abstract class ClassicalVolatilityModelBase<T> :
 
     // ---- helpers --------------------------------------------------------------------------------------
 
-    /// <summary>Flattens a univariate returns tensor ([n], [n,1], or [batch,n,1]) to a double array.</summary>
-    protected double[] ToDoubles(Tensor<T> t)
+    /// <summary>Flattens a univariate returns tensor ([n], [n,1], or [batch,n,1]) to a vector; with several
+    /// features the first one is taken.</summary>
+    protected Vector<T> ReturnsVector(Tensor<T> t)
     {
-        var span = t.Data.Span;
-        int featureCount = t.Shape.Length >= 2 ? Math.Max(1, t.Shape[^1]) : 1;
-
+        int featureCount = t.Shape.Length >= 2 ? Math.Max(1, t.Shape[t.Shape.Length - 1]) : 1;
         if (featureCount == 1)
         {
-            var flattened = new double[span.Length];
-            for (int i = 0; i < flattened.Length; i++)
-            {
-                flattened[i] = Convert.ToDouble(span[i]);
-            }
-
-            return flattened;
+            return t.ToVector();
         }
 
-        int n = span.Length / featureCount;
-        var r = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            r[i] = Convert.ToDouble(span[i * featureCount]);
-        }
-
-        return r;
+        var engine = AiDotNetEngine.Current;
+        int n = t.Length / featureCount;
+        var rows = engine.Reshape(t, new[] { n, featureCount });
+        return engine.TensorSlice(rows, new[] { 0, 0 }, new[] { n, 1 }).ToVector();
     }
 
-    private static double Variance(double[] r)
+    /// <summary>The volatility parameters (everything after the constant mean).</summary>
+    protected static Vector<T> VolatilityParameters(Vector<T> parameters)
     {
-        double mean = 0;
-        for (int i = 0; i < r.Length; i++) mean += r[i];
-        mean /= r.Length;
-        double v = 0;
-        for (int i = 0; i < r.Length; i++) v += (r[i] - mean) * (r[i] - mean);
-        return v / Math.Max(1, r.Length - 1);
+        return new Vector<T>(parameters.Skip(1));
+    }
+
+    /// <summary>Optimizer vector <c>[mu / scale, unconstrained...]</c> to natural <c>[mu, natural...]</c>.</summary>
+    private Vector<T> Natural(Vector<T> unconstrained, T scale)
+    {
+        return new Vector<T>(new[] { NumOps.Multiply(unconstrained[0], scale) }
+            .Concat(ToNatural(VolatilityParameters(unconstrained))));
     }
 }
