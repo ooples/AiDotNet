@@ -1007,4 +1007,71 @@ public class FeatureSelectionPopulationReferenceTests
                 $"pair without {missing}: expected {expected}, observed {(double)pairs[missing] / trials}");
         }
     }
+
+    // ---------------------------------------------------------------- SMOTE feature selection
+
+    [Fact]
+    public void SMOTE_MatchesChawlaOversamplingAndFisherScoresWithSameSeed()
+    {
+        var rng0 = new System.Random(51);
+        int n = 30, p = 4, k = 3, seed = 9;
+        var x = new Matrix<double>(n, p);
+        var y = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            y[i] = i < 8 ? 1 : 0;
+            for (int j = 0; j < p; j++) x[i, j] = rng0.NextDouble() + (y[i] > 0.5 ? 0.3 * j : 0);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Imbalanced.SMOTEFeatureSelector<double>(2, k, 1.0, seed);
+        selector.Fit(x, y);
+
+        // Reference: synthetic = base + lambda (neighbour - base) over the k nearest minority rows
+        var rng = new System.Random(seed);
+        var minority = Enumerable.Range(0, n).Where(i => y[i] >= 0.5).ToArray();
+        var majority = Enumerable.Range(0, n).Where(i => y[i] < 0.5).ToArray();
+        var rows1 = minority.Select(i => Enumerable.Range(0, p).Select(j => x[i, j]).ToArray()).ToList();
+        int nSynthetic = majority.Length - minority.Length;
+        for (int s = 0; s < nSynthetic; s++)
+        {
+            int b = minority[rng.Next(minority.Length)];
+            var neighbors = minority.Where(i => i != b)
+                .OrderBy(i => System.Math.Sqrt(Enumerable.Range(0, p).Sum(j => (x[b, j] - x[i, j]) * (x[b, j] - x[i, j]))))
+                .Take(k).ToArray();
+            int nb = neighbors[rng.Next(neighbors.Length)];
+            double lambda = rng.NextDouble();
+            rows1.Add(Enumerable.Range(0, p).Select(j => x[b, j] + lambda * (x[nb, j] - x[b, j])).ToArray());
+        }
+
+        var expected = new double[p];
+        for (int j = 0; j < p; j++)
+        {
+            double m0 = majority.Average(i => x[i, j]), m1 = rows1.Average(r => r[j]);
+            double v0 = majority.Average(i => (x[i, j] - m0) * (x[i, j] - m0));
+            double v1 = rows1.Average(r => (r[j] - m1) * (r[j] - m1));
+            expected[j] = (m0 - m1) * (m0 - m1) / (v0 + v1);
+        }
+
+        var scores = selector.FeatureScores;
+        Assert.NotNull(scores);
+        for (int j = 0; j < p; j++)
+            Assert.Equal(expected[j], scores?[j] ?? double.NaN, 9);
+    }
+
+    [Fact]
+    public void SMOTE_SingleMinoritySampleHasNoNeighbourToInterpolate()
+    {
+        var x = new Matrix<double>(5, 2);
+        var y = new Vector<double>(5);
+        for (int i = 0; i < 5; i++)
+        {
+            x[i, 0] = i;
+            x[i, 1] = i * i;
+        }
+
+        y[4] = 1;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Imbalanced.SMOTEFeatureSelector<double>(1, 1, 1.0, 2);
+        selector.Fit(x, y);
+        Assert.Equal(1, selector.SelectedIndices?.Length);
+    }
 }

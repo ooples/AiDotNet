@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Imbalanced;
 
@@ -31,7 +32,7 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly double _samplingRatio;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +40,7 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
     public double SamplingRatio => _samplingRatio;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -80,154 +81,123 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
         // Split data by class
-        var class0Indices = new List<int>();
-        var class1Indices = new List<int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
-                class0Indices.Add(i);
-            else
-                class1Indices.Add(i);
-        }
+        var x = Tensor<T>.FromMatrix(data);
+        var isClass0 = engine.TensorLessThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5));
+        var class0Indices = FeatureSelectionTensorOps.MaskPositions(isClass0);
+        var class1Indices = FeatureSelectionTensorOps.MaskPositions(FeatureSelectionTensorOps.OneMinus(isClass0));
 
         // Determine minority class
-        var (minorityIndices, majorityIndices) = class0Indices.Count < class1Indices.Count
+        var (minorityIndices, majorityIndices) = class0Indices.Length < class1Indices.Length
             ? (class0Indices, class1Indices)
             : (class1Indices, class0Indices);
 
-        // Generate synthetic samples using SMOTE
-        var synthData = new List<double[]>();
-        int nSynthetic = (int)((majorityIndices.Count - minorityIndices.Count) * _samplingRatio);
+        var minority = Rows(x, minorityIndices);
+        var majority = Rows(x, majorityIndices);
 
-        if (nSynthetic > 0 && minorityIndices.Count >= _nNeighbors)
+        // Generate synthetic samples using SMOTE (Chawla et al. 2002); each needs at least one minority neighbour
+        int nSynthetic = (int)((majorityIndices.Length - minorityIndices.Length) * _samplingRatio);
+        Tensor<T>? synthetic = null;
+        if (nSynthetic > 0 && minorityIndices.Length >= _nNeighbors && minorityIndices.Length > 1)
         {
+            var neighbors = MinorityNeighbors(minority, _nNeighbors);
+            var baseRows = new int[nSynthetic];
+            var neighborRows = new int[nSynthetic];
+            var lambdas = new Tensor<T>[nSynthetic];
             for (int s = 0; s < nSynthetic; s++)
             {
-                // Pick random minority sample
-                int baseIdx = minorityIndices[random.Next(minorityIndices.Count)];
-
-                // Find k nearest neighbors among minority
-                var neighbors = FindNeighbors(data, baseIdx, minorityIndices, p);
-
-                // Pick random neighbor and interpolate
-                int neighborIdx = neighbors[random.Next(Math.Min(_nNeighbors, neighbors.Count))];
-                double lambda = random.NextDouble();
-
-                var synthetic = new double[p];
-                for (int j = 0; j < p; j++)
-                {
-                    double baseVal = NumOps.ToDouble(data[baseIdx, j]);
-                    double neighborVal = NumOps.ToDouble(data[neighborIdx, j]);
-                    synthetic[j] = baseVal + lambda * (neighborVal - baseVal);
-                }
-                synthData.Add(synthetic);
+                // Pick random minority sample, then a random one of its k nearest minority neighbours
+                baseRows[s] = random.Next(minorityIndices.Length);
+                var own = neighbors[baseRows[s]];
+                neighborRows[s] = own[random.Next(own.Length)];
+                lambdas[s] = PopulationSearchOps.Uniform<T>(random, 1);
             }
+
+            synthetic = Interpolate(minority, baseRows, neighborRows, engine.TensorConcatenate(lambdas, 0));
         }
 
         // Compute feature scores on balanced data
-        _featureScores = ComputeBalancedScores(data, target, synthData, minorityIndices, majorityIndices, n, p);
+        var minorityAll = synthetic is null ? minority : engine.TensorConcatenate(new[] { minority, synthetic }, 0);
+        var scores = majorityIndices.Length == 0 || minorityAll.Shape[0] == 0
+            ? new Tensor<T>(new[] { p })
+            : FisherScores(majority, minorityAll);
+        _featureScores = scores.ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private List<int> FindNeighbors(Matrix<T> data, int baseIdx, List<int> candidates, int p)
+    private static Tensor<T> Rows(Tensor<T> x, int[] rows) =>
+        rows.Length == 0
+            ? new Tensor<T>(new[] { 0, x.Shape[1] })
+            : AiDotNetEngine.Current.TensorIndexSelect(x, new Tensor<int>((int[])rows.Clone(), new[] { rows.Length }), 0);
+
+    /// <summary>
+    /// For every minority row, the positions (within <paramref name="minority"/>) of its
+    /// <paramref name="k"/> nearest other minority rows by Euclidean distance, ties to the lower position.
+    /// </summary>
+    internal static int[][] MinorityNeighbors(Tensor<T> minority, int k)
     {
-        var distances = new List<(int Index, double Distance)>();
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = minority.Shape[0];
+        int count = Math.Min(k, m - 1);
 
-        foreach (int idx in candidates)
-        {
-            if (idx == baseIdx) continue;
-
-            double dist = 0;
-            for (int j = 0; j < p; j++)
-            {
-                double diff = NumOps.ToDouble(data[baseIdx, j]) - NumOps.ToDouble(data[idx, j]);
-                dist += diff * diff;
-            }
-            distances.Add((idx, Math.Sqrt(dist)));
-        }
-
-        return distances
-            .OrderBy(d => d.Distance)
-            .Take(_nNeighbors)
-            .Select(d => d.Index)
-            .ToList();
+        // The row itself is pushed past every other row so it is never its own neighbour
+        var eye = engine.TensorEye<T>(m);
+        var distances = engine.TensorAdd(
+            engine.TensorMultiply(FeatureSelectionTensorOps.PairwiseDistances(minority), FeatureSelectionTensorOps.OneMinus(eye)),
+            engine.TensorMultiplyScalar(eye, ops.MaxValue));
+        var neighbors = new int[m][];
+        for (int i = 0; i < m; i++)
+            neighbors[i] = FeatureSelectionTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
+                .Take(count)
+                .ToArray();
+        return neighbors;
     }
 
-    private double[] ComputeBalancedScores(
-        Matrix<T> data, Vector<T> target,
-        List<double[]> synthData,
-        List<int> minorityIndices, List<int> majorityIndices,
-        int n, int p)
+    /// <summary>
+    /// SMOTE samples base + lambda (neighbour - base) for row pairs (<paramref name="baseRows"/>[s],
+    /// <paramref name="neighborRows"/>[s]) of <paramref name="minority"/>, with lambda [s] in [0, 1).
+    /// </summary>
+    internal static Tensor<T> Interpolate(Tensor<T> minority, int[] baseRows, int[] neighborRows, Tensor<T> lambdas)
     {
-        var scores = new double[p];
+        var engine = AiDotNetEngine.Current;
+        int s = baseRows.Length;
+        int p = minority.Shape[1];
+        var bases = Rows(minority, baseRows);
+        var others = Rows(minority, neighborRows);
+        var step = engine.TensorBroadcastTo(engine.Reshape(lambdas, new[] { s, 1 }), new[] { s, p });
+        return engine.TensorAdd(bases, engine.TensorMultiply(step, engine.TensorSubtract(others, bases)));
+    }
 
-        // Combine original majority with original + synthetic minority
-        int totalN = majorityIndices.Count + minorityIndices.Count + synthData.Count;
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute mean for each class
-            double mean0 = 0, mean1 = 0;
-            int count0 = majorityIndices.Count, count1 = minorityIndices.Count + synthData.Count;
-
-            // Majority class mean
-            foreach (int idx in majorityIndices)
-                mean0 += NumOps.ToDouble(data[idx, j]);
-            mean0 /= count0;
-
-            // Minority class mean (original + synthetic)
-            foreach (int idx in minorityIndices)
-                mean1 += NumOps.ToDouble(data[idx, j]);
-            foreach (var synth in synthData)
-                mean1 += synth[j];
-            mean1 /= count1;
-
-            // Compute variance for each class
-            double var0 = 0, var1 = 0;
-
-            foreach (int idx in majorityIndices)
-            {
-                double diff = NumOps.ToDouble(data[idx, j]) - mean0;
-                var0 += diff * diff;
-            }
-            var0 /= count0;
-
-            foreach (int idx in minorityIndices)
-            {
-                double diff = NumOps.ToDouble(data[idx, j]) - mean1;
-                var1 += diff * diff;
-            }
-            foreach (var synth in synthData)
-            {
-                double diff = synth[j] - mean1;
-                var1 += diff * diff;
-            }
-            var1 /= count1;
-
-            // Fisher's discriminant ratio
-            double denom = var0 + var1;
-            scores[j] = denom > 1e-10 ? Math.Pow(mean0 - mean1, 2) / denom : 0;
-        }
-
-        return scores;
+    /// <summary>
+    /// Fisher's discriminant ratio (mean0 - mean1)^2 / (var0 + var1) per feature of two classes [n0, p] and
+    /// [n1, p], with population variances; 0 where the variances sum to at most 1e-10.
+    /// </summary>
+    private Tensor<T> FisherScores(Tensor<T> class0, Tensor<T> class1)
+    {
+        var engine = Engine;
+        int p = class0.Shape[1];
+        var mean0 = engine.ReduceMean(class0, new[] { 0 }, true);
+        var mean1 = engine.ReduceMean(class1, new[] { 0 }, true);
+        var var0 = engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(class0, engine.TensorBroadcastTo(mean0, class0.Shape.ToArray()))), new[] { 0 }, false);
+        var var1 = engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(class1, engine.TensorBroadcastTo(mean1, class1.Shape.ToArray()))), new[] { 0 }, false);
+        var denom = engine.TensorAdd(var0, var1);
+        var valid = engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
+        var safe = engine.TensorWhere(valid, denom, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var gap = engine.TensorSquare(engine.Reshape(engine.TensorSubtract(mean0, mean1), new[] { p }));
+        return engine.TensorWhere(valid, engine.TensorDivide(gap, safe), new Tensor<T>(new[] { p }));
     }
 
     /// <inheritdoc />
@@ -243,15 +213,7 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("SMOTEFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
