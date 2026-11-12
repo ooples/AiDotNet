@@ -51,8 +51,9 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
     private Matrix<T>? _trainingData;
     [Buffer]
     private Vector<T>? _localDensities;
-    // [n, n] 0/1 membership of training point j in the influence space (kNN union RkNN) of point i
-    private Tensor<T>? _influenceMatrix;
+    // [n, k] kNN of every training point (itself excluded). The influence space IS(j) = kNN(j) union RkNN(j)
+    // follows from it: i is in RkNN(j) exactly when j is in kNN(i).
+    private Tensor<int>? _knnIndices;
     private int _nFeatures;
 
     /// <summary>
@@ -100,11 +101,8 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
         var distances = AnomalyTensorOps.NearestNeighbors(data, data, _k, true, out var neighbors);
         _localDensities = LocalDensities(engine.ReduceSum(distances, new[] { 1 }, false), NumOps.FromDouble(_k)).ToVector();
 
-        // Influence space = kNN union RkNN: RkNN(i) = { j : i in kNN(j) } is row i of the transposed kNN matrix
-        var knnMatrix = engine.Scatter(
-            Tensor<T>.CreateZeros(new[] { n, n }), neighbors, Tensor<T>.CreateOnes(new[] { n, _k }), 1);
-        _influenceMatrix = engine.TensorClamp(
-            engine.TensorAdd(knnMatrix, engine.TensorTranspose(knnMatrix)), NumOps.Zero, NumOps.One);
+        // Influence spaces kNN union RkNN are derived from the kNN lists at scoring time (no [n, n] matrix)
+        _knnIndices = neighbors;
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -132,24 +130,24 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
         }
 
         var localDensities = _localDensities;
-        var influenceMatrix = _influenceMatrix;
+        var knnIndices = _knnIndices;
         var trainingData = _trainingData;
-        if (localDensities == null || influenceMatrix == null || trainingData == null)
+        if (localDensities == null || knnIndices == null || trainingData == null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        // Query rows are scored in bounded blocks (only [block, nTraining] and [block, k, nTraining] tensors
-        // are live)
+        // Query rows are scored in bounded blocks (only [block, nTraining * k] tensors are live)
         var training = AnomalyTensorOps.ToTensor(trainingData);
         int nTraining = trainingData.Rows;
         int slots = Math.Min(_k, nTraining);
-        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), (long)nTraining * Math.Max(1, slots),
-            query => ScoreBlock(query, training, localDensities.AsTensor(), influenceMatrix, slots)).ToVector();
+        long perRow = (long)nTraining * Math.Max(1, knnIndices.Shape[1]);
+        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), perRow,
+            query => ScoreBlock(query, training, localDensities.AsTensor(), knnIndices, slots)).ToVector();
     }
 
     // INFLO scores of one block of query rows.
-    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T> localDensities, Tensor<T> influenceMatrix,
+    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T> localDensities, Tensor<int> knnIndices,
         int slots)
     {
         var engine = Engine;
@@ -171,22 +169,29 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
             LocalDensities(engine.ReduceSum(engine.TensorMultiply(neighborMask, sorted), new[] { 1 }, false), count),
             Tensor<T>.CreateZeros(new[] { m }));
 
-        // For new data the influence space is the kNN plus the union of the precomputed influence spaces
-        // of those training neighbours. The (at most k) neighbours are moved to the first slots by a stable
-        // descending sort of the mask; their influence rows are gathered and combined with a max, which is
-        // O(m k n) instead of the dense [m, n] x [n, n] product.
+        // For new data the influence space is the kNN N(q) plus the union of the influence spaces
+        // IS(j) = kNN(j) union RkNN(j) of those training neighbours j:
+        // (a) i in kNN(j) for a neighbour j: scatter the kNN lists of the (at most k) neighbours, which a stable
+        //     descending sort of the mask moves to the first slots;
+        // (b) i in RkNN(j) for a neighbour j, i.e. kNN(i) meets N(q): gather N(q) at every kNN(i) and take the max.
         var knnMatrix = engine.TensorTakeAlongDim(neighborMask, engine.TensorArgsort(order, 1, false), 1);
+        int listLength = knnIndices.Shape[1];
         var (slotMask, slotPositions) = AnomalyTensorOps.StableSortRows(neighborMask, descending: true);
         var firstSlots = engine.TensorSlice(slotPositions, new[] { 0, 0 }, new[] { m, slots });
         var neighborIndices = engine.TensorTakeAlongDim(order, firstSlots, 1);
         var valid = engine.TensorSlice(slotMask, new[] { 0, 0 }, new[] { m, slots });
-        var influenceRows = engine.Reshape(
-            engine.TensorGather(influenceMatrix, engine.Reshape(neighborIndices, new[] { m * slots }), 0),
-            new[] { m, slots, nTraining });
-        var union = engine.ReduceMax(engine.TensorMultiply(influenceRows,
-            engine.TensorBroadcastTo(engine.Reshape(valid, new[] { m, slots, 1 }), new[] { m, slots, nTraining })),
-            new[] { 1 }, false);
-        var membership = engine.TensorClamp(engine.TensorAdd(knnMatrix, union), NumOps.Zero, NumOps.One);
+        var neighborLists = engine.Reshape(
+            engine.TensorGather(knnIndices, engine.Reshape(neighborIndices, new[] { m * slots }), 0),
+            new[] { m, slots * listLength });
+        var listWeights = engine.Reshape(engine.TensorBroadcastTo(engine.Reshape(valid, new[] { m, slots, 1 }),
+            new[] { m, slots, listLength }), new[] { m, slots * listLength });
+        var inNeighborKnn = engine.TensorGreaterThan(
+            engine.TensorScatterAdd(Tensor<T>.CreateZeros(new[] { m, nTraining }), neighborLists, listWeights, 1), NumOps.Zero);
+        var reverse = engine.ReduceMax(engine.Reshape(
+            engine.TensorGather(knnMatrix, engine.Reshape(knnIndices, new[] { nTraining * listLength }), 1),
+            new[] { m, nTraining, listLength }), new[] { 2 }, false);
+        var membership = engine.TensorClamp(
+            engine.TensorAdd(engine.TensorAdd(knnMatrix, inNeighborKnn), reverse), NumOps.Zero, NumOps.One);
         var influenceCount = engine.ReduceSum(membership, new[] { 1 }, false);
         var influenceSum = engine.Reshape(
             engine.TensorMatMul(membership, engine.Reshape(localDensities, new[] { nTraining, 1 })), new[] { m });
