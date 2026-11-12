@@ -342,20 +342,11 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         int stateDim = batch[0].State.Length;
         var gamma = NumOps.FromDouble(Convert.ToDouble(TradingOptions.DiscountFactor));
 
-        var statesData = new T[n * stateDim];
-        var nextStatesData = new T[n * stateDim];
-        for (int i = 0; i < n; i++)
-        {
-            var exp = batch[i];
-            for (int j = 0; j < stateDim; j++)
-            {
-                statesData[i * stateDim + j] = exp.State[j];
-                nextStatesData[i * stateDim + j] = exp.NextState[j];
-            }
-        }
-
-        using var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        using var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+        var engine = AiDotNetEngine.Current;
+        using var states = engine.TensorStack(
+            batch.Select(exp => Tensor<T>.FromVector(exp.State)).ToArray(), 0);
+        using var nextStates = engine.TensorStack(
+            batch.Select(exp => Tensor<T>.FromVector(exp.NextState)).ToArray(), 0);
 
         // Predict returns an owned tensor; ToVector copies out of it, so the tensor itself has to be
         // released or its pooled storage is held until finalization.
@@ -377,33 +368,39 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             onlineNextQ = onlineNextQTensor.ToVector();
         }
 
+        // Greedy next action per row over the LEGAL actions (first maximum wins, as a strict > scan does),
+        // scored by the target network.
+        var shape = new[] { n, actionCount };
+        var zeros = new Tensor<T>(shape);
+        var legal = batch
+            .SelectMany(exp => ActionMasking.Validate(exp.NextLegalActions, actionCount)
+                ?? Enumerable.Repeat(true, actionCount).ToArray())
+            .ToArray();
+        var selection = engine.Reshape(Tensor<T>.FromVector(onlineNextQ ?? nextQ), shape);
+        var negativeInfinity = engine.TensorAddScalar(zeros, NumOps.FromDouble(double.NegativeInfinity));
+        var bestAction = engine.TensorArgMax(engine.TensorWhere(legal, selection, negativeInfinity), 1).Cast<T>();
+        var classIds = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(0, actionCount), new[] { 1, actionCount }), shape);
+        var bestSlot = engine.TensorEquals(
+            classIds, engine.TensorBroadcastTo(engine.Reshape(bestAction, new[] { n, 1 }), shape));
+        var target = engine.Reshape(Tensor<T>.FromVector(nextQ), shape);
+        var maxNextQ = engine.ReduceSum(engine.TensorWhere(bestSlot, target, zeros), new[] { 1 }, keepDims: false);
+
+        // TD target r + gamma * maxNextQ, or r alone on terminal transitions.
+        var rewards = new Tensor<T>(batch.Select(exp => exp.Reward).ToArray(), new[] { n });
+        var done = batch.Select(exp => exp.Done).ToArray();
+        var tdTarget = engine.TensorWhere(
+            done, rewards, engine.TensorAdd(rewards, engine.TensorMultiplyScalar(maxNextQ, gamma)));
+
         // Targets = current Q with the taken-action slot overwritten by the TD target.
-        var expectedData = currentQ.Clone();
-        for (int i = 0; i < n; i++)
-        {
-            var exp = batch[i];
-            T maxNextQ = NumOps.Zero;
-            if (!exp.Done)
-            {
-                var selectionQ = onlineNextQ ?? nextQ;
-                var mask = ActionMasking.Validate(exp.NextLegalActions, actionCount);
-                int bestAction = -1;
-                for (int a = 0; a < actionCount; a++)
-                {
-                    if (mask is not null && !mask[a]) continue;
-                    if (bestAction < 0 || NumOps.GreaterThan(selectionQ[i * actionCount + a],
-                            selectionQ[i * actionCount + bestAction])) bestAction = a;
-                }
-                maxNextQ = nextQ[i * actionCount + bestAction];
-            }
-
-            T target = exp.Done
-                ? exp.Reward
-                : NumOps.Add(exp.Reward, NumOps.Multiply(gamma, maxNextQ));
-            expectedData[i * actionCount + GetActionIndex(exp.Action)] = target;
-        }
-
-        using var expected = new Tensor<T>([n, actionCount], expectedData);
+        var takenAction = engine.Reshape(
+            ActionIndices(engine.TensorStack(batch.Select(exp => Tensor<T>.FromVector(exp.Action)).ToArray(), 0)).Cast<T>(),
+            new[] { n, 1 });
+        var takenSlot = engine.TensorEquals(classIds, engine.TensorBroadcastTo(takenAction, shape));
+        using var expected = engine.TensorWhere(
+            takenSlot,
+            engine.TensorBroadcastTo(engine.Reshape(tdTarget, new[] { n, 1 }), shape),
+            engine.Reshape(currentQTensor, shape));
         _qNetwork.Train(states, expected);
 
         CompleteGradientUpdate();
@@ -474,40 +471,15 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     /// <summary>
-    /// Executes GetActionIndex for the FinancialDQNAgent.
+    /// Per row of one-hot actions <c>[rows, actions]</c>: the first slot within 1e-5 of 1, or 0 when none is.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, GetActionIndex performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private static int GetActionIndex(Vector<T> action)
+    private static Tensor<int> ActionIndices(Tensor<T> actions)
     {
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (Math.Abs(Convert.ToDouble(action[i]) - 1.0) < 1e-5)
-                return i;
-        }
-        return 0;
-    }
-
-    /// <summary>
-    /// Executes GetMaxQ for the FinancialDQNAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, GetMaxQ performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private T GetMaxQ(Tensor<T> qValues)
-    {
-        T max = qValues.Data.Span[0];
-        for (int i = 1; i < qValues.Length; i++)
-        {
-            if (NumOps.GreaterThan(qValues.Data.Span[i], max))
-                max = qValues.Data.Span[i];
-        }
-        return max;
+        var engine = AiDotNetEngine.Current;
+        var hit = engine.TensorLessThan(
+            engine.TensorAbs(engine.TensorSubtractScalar(actions, NumOps.One)), NumOps.FromDouble(1e-5));
+        var firstHit = engine.TensorMultiply(hit, engine.TensorEquals(engine.TensorCumSum(hit, 1), NumOps.One));
+        return engine.TensorArgMax(firstHit, 1);
     }
 
     #endregion
