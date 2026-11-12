@@ -131,14 +131,7 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
 
             // Sample data
             var sampleIndices = SampleIndices(X.Rows, nSamples, random);
-            var sampleData = new Matrix<T>(sampleIndices.Length, X.Columns);
-            for (int si = 0; si < sampleIndices.Length; si++)
-            {
-                for (int j = 0; j < X.Columns; j++)
-                {
-                    sampleData[si, j] = X[sampleIndices[si], j];
-                }
-            }
+            var sampleData = AnomalyTensorOps.SelectRows(AnomalyTensorOps.ToTensor(X), sampleIndices).ToMatrix();
 
             // Build tree
             var tree = new ExtendedIsolationTree(effectiveExtension, random, NumOps);
@@ -177,7 +170,6 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
         int nSamples = _trainingSampleSize;
 
         // Expected path length for BST (must use training subsample size, not test size)
@@ -185,31 +177,27 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
             ? 2 * (Math.Log(nSamples - 1) + 0.5772156649) - (2.0 * (nSamples - 1) / nSamples)
             : nSamples == 2 ? 1 : 0);
 
-        T two = NumOps.FromDouble(2);
         T half = NumOps.FromDouble(0.5);
         T nTreesT = NumOps.FromDouble(trees.Count);
 
-        for (int i = 0; i < X.Rows; i++)
+        if (!NumOps.GreaterThan(c, NumOps.Zero))
         {
-            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            // Average path length across all trees
-            T avgPathLength = NumOps.Zero;
-            foreach (var tree in trees)
-            {
-                avgPathLength = NumOps.Add(avgPathLength, tree.PathLength(point, 0));
-            }
-            avgPathLength = NumOps.Divide(avgPathLength, nTreesT);
-
-            // Anomaly score: s = 2^(-avgPathLength/c)
-            T score = NumOps.GreaterThan(c, NumOps.Zero)
-                ? NumOps.Power(two, NumOps.Negate(NumOps.Divide(avgPathLength, c)))
-                : half;
-
-            scores[i] = score;
+            return Engine.Fill(X.Rows, half);
         }
 
-        return scores;
+        // Average path length across all trees (summed in tree order for every point)
+        var data = AnomalyTensorOps.ToTensor(X);
+        var allRows = AnomalyTensorOps.Range(X.Rows);
+        var totalPathLength = Tensor<T>.CreateZeros(new[] { X.Rows });
+        foreach (var tree in trees)
+        {
+            totalPathLength = Engine.TensorAdd(totalPathLength, tree.PathLengths(data, allRows));
+        }
+
+        var avgPathLength = Engine.TensorDivideScalar(totalPathLength, nTreesT);
+
+        // Anomaly score: s = 2^(-avgPathLength/c)
+        return Engine.TensorExp2(Engine.TensorNegate(Engine.TensorDivideScalar(avgPathLength, c))).ToVector();
     }
 
     private int[] SampleIndices(int total, int sampleSize, Random random)
@@ -287,43 +275,23 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
                     _normal[d] = _numOps.FromDouble(z);
                 }
 
-                // Normalize using Engine-style manual dot product
-                T normSq = _numOps.Zero;
-                for (int i = 0; i < nFeatures; i++)
-                {
-                    normSq = _numOps.Add(normSq, _numOps.Multiply(_normal[i], _normal[i]));
-                }
-                T norm = _numOps.Sqrt(normSq);
+                // Normalize to unit length
+                T norm = _numOps.Sqrt(AiDotNetEngine.Current.DotProduct(_normal, _normal));
                 T eps = _numOps.FromDouble(1e-10);
                 if (_numOps.GreaterThan(norm, eps))
                 {
-                    for (int i = 0; i < nFeatures; i++)
-                    {
-                        _normal[i] = _numOps.Divide(_normal[i], norm);
-                    }
+                    _normal = AiDotNetEngine.Current.Divide(_normal, norm);
                 }
             }
 
             // Compute projections
-            var projections = new Vector<T>(data.Rows);
-            for (int i = 0; i < data.Rows; i++)
-            {
-                T proj = _numOps.Zero;
-                for (int j = 0; j < nFeatures; j++)
-                {
-                    proj = _numOps.Add(proj, _numOps.Multiply(data[i, j], _normal[j]));
-                }
-                projections[i] = proj;
-            }
+            var engine = AiDotNetEngine.Current;
+            var dataTensor = AnomalyTensorOps.ToTensor(data);
+            var projections = AnomalyTensorOps.Project(dataTensor, _normal);
 
             // Random intercept between min and max projection
-            T minProj = projections[0];
-            T maxProj = projections[0];
-            for (int i = 1; i < data.Rows; i++)
-            {
-                if (_numOps.LessThan(projections[i], minProj)) minProj = projections[i];
-                if (_numOps.GreaterThan(projections[i], maxProj)) maxProj = projections[i];
-            }
+            T minProj = engine.TensorMinValue(projections);
+            T maxProj = engine.TensorMaxValue(projections);
 
             T range = _numOps.Subtract(maxProj, minProj);
             T eps2 = _numOps.FromDouble(1e-10);
@@ -335,27 +303,20 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
 
             _intercept = _numOps.Add(minProj, _numOps.Multiply(_numOps.FromDouble(_random.NextDouble()), range));
 
-            // Split data
-            var leftIndices = new List<int>();
-            var rightIndices = new List<int>();
+            // Split data: projections below the intercept go left (order preserved)
+            var goesLeft = engine.TensorLessThan(projections, _intercept);
+            var leftIndices = AnomalyTensorOps.NonzeroIndices(goesLeft);
+            var rightIndices = AnomalyTensorOps.NonzeroIndices(engine.ScalarMinusTensor(_numOps.One, goesLeft));
 
-            for (int i = 0; i < data.Rows; i++)
-            {
-                if (_numOps.LessThan(projections[i], _intercept))
-                    leftIndices.Add(i);
-                else
-                    rightIndices.Add(i);
-            }
-
-            if (leftIndices.Count == 0 || rightIndices.Count == 0)
+            if (leftIndices.Length == 0 || rightIndices.Length == 0)
             {
                 _isLeaf = true;
                 return;
             }
 
             // Extract submatrices
-            var leftData = ExtractRows(data, leftIndices);
-            var rightData = ExtractRows(data, rightIndices);
+            var leftData = AnomalyTensorOps.SelectRows(dataTensor, leftIndices).ToMatrix();
+            var rightData = AnomalyTensorOps.SelectRows(dataTensor, rightIndices).ToMatrix();
 
             _isLeaf = false;
             _left = new ExtendedIsolationTree(_extensionLevel, _random, _numOps);
@@ -365,50 +326,52 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
             _right.Build(rightData, currentDepth + 1, maxDepth);
         }
 
-        public T PathLength(Vector<T> point, int currentDepth)
+        /// <summary>
+        /// The path length of each of the given rows of data in this (sub)tree, as a [rows.Length] tensor in
+        /// the order of <paramref name="rows"/>.
+        /// </summary>
+        public Tensor<T> PathLengths(Tensor<T> data, Tensor<int> rows)
         {
-            if (_isLeaf)
+            var leafRows = new List<Tensor<int>>();
+            var leafValues = new List<Tensor<T>>();
+            var positions = AnomalyTensorOps.Range(rows.Length);
+            Route(data, rows, positions, 0, leafRows, leafValues);
+            return AnomalyTensorOps.AssembleByRow(leafRows, leafValues);
+        }
+
+        // Routes rows (identified by their positions in the caller's row list) down the tree; each leaf
+        // contributes depth + c(size) for the rows that reach it.
+        private void Route(Tensor<T> data, Tensor<int> rows, Tensor<int> positions, int currentDepth,
+            List<Tensor<int>> leafRows, List<Tensor<T>> leafValues)
+        {
+            if (rows.Length == 0)
             {
-                return _numOps.FromDouble(currentDepth + EstimateC(_size));
+                return;
             }
 
             var normal = _normal;
             var left = _left;
             var right = _right;
 
-            if (normal == null || left == null || right == null)
+            if (_isLeaf || normal == null || left == null || right == null)
             {
-                return _numOps.FromDouble(currentDepth + EstimateC(_size));
+                leafRows.Add(positions);
+                leafValues.Add(AiDotNetEngine.Current.Fill(rows.Length, _numOps.FromDouble(currentDepth + EstimateC(_size))).AsTensor());
+                return;
             }
 
-            T projection = _numOps.Zero;
-            for (int i = 0; i < point.Length; i++)
-            {
-                projection = _numOps.Add(projection, _numOps.Multiply(point[i], normal[i]));
-            }
-
-            if (_numOps.LessThan(projection, _intercept))
-                return left.PathLength(point, currentDepth + 1);
-            else
-                return right.PathLength(point, currentDepth + 1);
+            var engine = AiDotNetEngine.Current;
+            var projections = AnomalyTensorOps.Project(engine.TensorIndexSelect(data, rows, 0), normal);
+            var goesLeft = engine.TensorLessThan(projections, _intercept);
+            left.Route(data, AnomalyTensorOps.SelectWhere(rows, goesLeft, _numOps.One),
+                AnomalyTensorOps.SelectWhere(positions, goesLeft, _numOps.One), currentDepth + 1, leafRows, leafValues);
+            right.Route(data, AnomalyTensorOps.SelectWhere(rows, goesLeft, _numOps.Zero),
+                AnomalyTensorOps.SelectWhere(positions, goesLeft, _numOps.Zero), currentDepth + 1, leafRows, leafValues);
         }
 
         private bool NumericOpsLessThanAbs(T value, T threshold)
         {
             return _numOps.LessThan(_numOps.Abs(value), threshold);
-        }
-
-        private static Matrix<T> ExtractRows(Matrix<T> data, List<int> indices)
-        {
-            var result = new Matrix<T>(indices.Count, data.Columns);
-            for (int i = 0; i < indices.Count; i++)
-            {
-                for (int j = 0; j < data.Columns; j++)
-                {
-                    result[i, j] = data[indices[i], j];
-                }
-            }
-            return result;
         }
 
         private static double EstimateC(int n)

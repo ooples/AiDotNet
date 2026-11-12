@@ -248,6 +248,15 @@ internal static class AnomalyTensorOps
         return engine.TensorGather(values, engine.TensorArgsort(rows, 0, false), 0);
     }
 
+    /// <summary>The projections rows · direction of every row of a [n, d] tensor onto a length-d vector.</summary>
+    internal static Tensor<T> Project<T>(Tensor<T> rows, Vector<T> direction)
+    {
+        var engine = Engine;
+        int n = rows.Shape[0];
+        var column = Tensor<T>.FromVector(direction, new[] { direction.Length, 1 });
+        return engine.Reshape(engine.TensorMatMul(rows, column), new[] { n });
+    }
+
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
     {
