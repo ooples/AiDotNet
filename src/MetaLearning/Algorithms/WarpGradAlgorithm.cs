@@ -206,17 +206,21 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 ? paramsPerLayer
                 : _warpOptions.WarpLayerHiddenDim;
 
-            var warpParams = new Vector<T>(layerDim);
-
-            // Initialize near identity: small random perturbation around 1.0 (identity scaling)
+            // Initialize near identity: U(1 - s, 1 + s). One NextDouble per warp parameter, in order; the
+            // loop only stores the draws.
+            var draws = new Vector<T>(layerDim);
             for (int j = 0; j < layerDim; j++)
-            {
-                double initValue = 1.0 + (RandomGenerator.NextDouble() - 0.5) * 2.0 * _warpOptions.WarpInitScale;
-                warpParams[j] = NumOps.FromDouble(initValue);
-            }
+                draws[j] = NumOps.FromDouble(RandomGenerator.NextDouble());
 
-            _warpLayerParams.Add(warpParams);
+            _warpLayerParams.Add(AroundIdentity(draws));
         }
+    }
+
+    /// <summary>Maps U(0, 1) draws u to 1 + (u - 0.5) * 2 * WarpInitScale.</summary>
+    private Vector<T> AroundIdentity(Vector<T> draws)
+    {
+        double s = _warpOptions.WarpInitScale;
+        return Engine.Add(Engine.Multiply(draws, NumOps.FromDouble(2.0 * s)), Engine.Fill(draws.Length, NumOps.FromDouble(1.0 - s)));
     }
 
     /// <summary>
@@ -258,38 +262,15 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Clone model and adapt with warped gradients
-            var taskParams = new Vector<T>(initParams.Length);
-            for (int i = 0; i < initParams.Length; i++)
-            {
-                taskParams[i] = initParams[i];
-            }
+            // Inner loop with warped gradients; the warp meta-gradient is accumulated along the trajectory.
+            var trajectory = WarpedTrajectory(task, initParams);
 
-            ParamModel.SetParameters(taskParams);
+            // Evaluate on query set (the model holds the adapted parameters)
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
-            // Inner loop: adapt with warped gradients
-            for (int step = 0; step < _warpOptions.AdaptationSteps; step++)
-            {
-                var rawGradients = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var warpedGradients = ApplyWarpLayers(rawGradients);
-                warpedGradients = ClipGradients(warpedGradients);
-
-                taskParams = ApplyInnerGradients(taskParams, warpedGradients, _warpOptions.InnerLearningRate, step == 0);
-                ParamModel.SetParameters(taskParams);
-            }
-
-            // Evaluate on query set
-            var queryLoss = ComputeLossFromOutput(
-                MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            losses.Add(queryLoss);
-
-            // Compute meta-gradients for initialization parameters
-            var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
-            metaGradients.Add(ClipGradients(metaGrad));
-
-            // Compute warp-layer gradients using finite differences on warp parameters
-            var warpGrads = ComputeWarpGradients(task, initParams);
-            warpGradientsList.Add(warpGrads);
+            // First-order meta-gradient for the initialization: the query gradient at the adapted parameters
+            metaGradients.Add(ClipGradients(trajectory.QueryGradient));
+            warpGradientsList.Add(trajectory.WarpGradients);
         }
 
         // Restore original params before applying outer update
@@ -387,123 +368,138 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// </para>
     /// </remarks>
     private Vector<T> ApplyWarpLayers(Vector<T> rawGradients)
+        => Engine.Multiply(rawGradients, WarpScale(rawGradients.Length));
+
+    /// <summary>
+    /// The per-coordinate preconditioner P: warp layer w covers the coordinates
+    /// [w * L / numLayers, (w + 1) * L / numLayers) (the last layer runs to the end), and coordinate i in it is scaled by
+    /// its warp parameter (i - start) mod |warp_w|.
+    /// </summary>
+    private Vector<T> WarpScale(int length)
     {
-        var warped = new Vector<T>(rawGradients.Length);
-        for (int i = 0; i < rawGradients.Length; i++)
-        {
-            warped[i] = rawGradients[i];
-        }
+        if (_warpLayerParams.Count == 0) return Engine.Fill(length, NumOps.One);
 
-        int numLayers = Math.Max(_warpOptions.NumWarpLayers, 1);
-        int paramsPerLayer = rawGradients.Length / numLayers;
-
+        var segments = new List<Vector<T>>(_warpLayerParams.Count);
         for (int w = 0; w < _warpLayerParams.Count; w++)
         {
-            var warpParams = _warpLayerParams[w];
-            int startIdx = w * paramsPerLayer;
-            // Last warp layer covers all remaining parameters (handles non-divisible lengths)
-            int endIdx = (w == _warpLayerParams.Count - 1)
-                ? rawGradients.Length
-                : Math.Min(startIdx + paramsPerLayer, rawGradients.Length);
-
-            for (int i = startIdx; i < endIdx; i++)
-            {
-                int warpIdx = (i - startIdx) % warpParams.Length;
-                // Element-wise scaling: warped_g = g * warp_param
-                warped[i] = NumOps.Multiply(warped[i], warpParams[warpIdx]);
-            }
+            var (_, span) = WarpSpan(w, length);
+            if (span > 0) segments.Add(Tile(_warpLayerParams[w], span));
         }
 
-        return warped;
+        return Vector<T>.Concatenate(segments);
+    }
+
+    /// <summary>The first coordinate and the number of coordinates warp layer <paramref name="w"/> scales.</summary>
+    private (int Start, int Span) WarpSpan(int w, int length)
+    {
+        int paramsPerLayer = length / Math.Max(_warpOptions.NumWarpLayers, 1);
+        int start = w * paramsPerLayer;
+        int end = (w == _warpLayerParams.Count - 1) ? length : Math.Min(start + paramsPerLayer, length);
+        return (start, Math.Max(0, end - start));
+    }
+
+    /// <summary>The first <paramref name="span"/> entries of <paramref name="warp"/> repeated end to end.</summary>
+    private Vector<T> Tile(Vector<T> warp, int span)
+    {
+        // An empty warp layer cannot scale anything: those coordinates pass through unwarped.
+        if (warp.Length == 0) return Engine.Fill(span, NumOps.One);
+        int repeats = (span + warp.Length - 1) / warp.Length;
+        var copies = new List<Vector<T>>(repeats);
+        for (int r = 0; r < repeats; r++) copies.Add(warp);
+        return Vector<T>.Concatenate(copies).GetSubVector(0, span);
     }
 
     /// <summary>
-    /// Computes gradients for warp-layer parameters using finite differences.
+    /// The adjoint of <see cref="WarpScale"/>: sums a per-coordinate gradient over the coordinates each warp parameter
+    /// scales, giving one gradient vector per warp layer.
+    /// </summary>
+    private List<Vector<T>> ReduceToWarpLayers(Vector<T> coordinateGradient)
+    {
+        var result = new List<Vector<T>>(_warpLayerParams.Count);
+        for (int w = 0; w < _warpLayerParams.Count; w++)
+        {
+            int size = _warpLayerParams[w].Length;
+            var (start, span) = WarpSpan(w, coordinateGradient.Length);
+            if (size == 0 || span == 0)
+            {
+                result.Add(new Vector<T>(size));
+                continue;
+            }
+
+            int repeats = (span + size - 1) / size;
+            var padded = Vector<T>.Concatenate(new[]
+            {
+                coordinateGradient.GetSubVector(start, span),
+                new Vector<T>((repeats * size) - span),
+            });
+            result.Add(Engine.ReduceSum(Tensor<T>.FromVector(padded, new[] { repeats, size }), new[] { 0 }, keepDims: false).ToVector());
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Runs the warped inner loop from <paramref name="initParams"/> and returns the adapted parameters, the query
+    /// gradient there, and the WarpGrad meta-gradient of the warp parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Flennerhag et al. (ICLR 2020), Eq. 7 / Algorithm 1: the warp meta-objective is
+    /// <c>J(P) = sum_k L_query(theta_k - alpha P g_k)</c> over the points <c>theta_k</c> of the task's adaptation
+    /// trajectory, each held fixed (stop-gradient), with <c>g_k</c> the support gradient there. So the warp is
+    /// meta-learned WITHOUT backpropagating through the inner loop, and its gradient is exact per step:
+    /// <c>dJ/dP = -alpha sum_k grad L_query(theta_{k+1}) * g_k</c>, summed over the coordinates each warp parameter
+    /// scales. (This replaces a finite-difference loop that re-ran the full inner loop once per warp parameter.)
+    /// Gradient clipping of the warped step, when enabled, is treated as the identity in this derivative.
+    /// </para>
+    /// </remarks>
+    private (Vector<T> Adapted, Vector<T> QueryGradient, List<Vector<T>> WarpGradients) WarpedTrajectory(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
+    {
+        var taskParams = initParams.Clone();
+        var scale = WarpScale(initParams.Length);
+        T negativeRate = NumOps.FromDouble(-_warpOptions.InnerLearningRate);
+        var coordinateGradient = new Vector<T>(initParams.Length);
+        ParamModel.SetParameters(taskParams);
+        Vector<T>? queryGradient = null;
+
+        for (int step = 0; step < _warpOptions.AdaptationSteps; step++)
+        {
+            var rawGradients = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+            var warpedGradients = ClipGradients(Engine.Multiply(rawGradients, scale));
+            taskParams = ApplyInnerGradients(taskParams, warpedGradients, _warpOptions.InnerLearningRate, step == 0);
+            ParamModel.SetParameters(taskParams);
+
+            queryGradient = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+            coordinateGradient = Engine.Add(
+                coordinateGradient, Engine.Multiply(Engine.Multiply(queryGradient, rawGradients), negativeRate));
+        }
+
+        if (queryGradient is null)
+            queryGradient = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+
+        return (taskParams, queryGradient, ReduceToWarpLayers(coordinateGradient));
+    }
+
+    /// <summary>
+    /// Computes the WarpGrad meta-gradient of each warp layer for one task (see <see cref="WarpedTrajectory"/>).
     /// </summary>
     /// <param name="task">The current task for gradient computation.</param>
     /// <param name="initParams">The initialization parameters before adaptation.</param>
     /// <returns>List of gradient vectors, one per warp-layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// Warp-layer gradients measure how changing the gradient preconditioning affects
-    /// the final query set loss after inner-loop adaptation. We use finite differences
-    /// because the warp parameters appear inside the inner loop optimization trajectory.
-    /// </para>
-    /// <para><b>For Beginners:</b> This figures out how to improve the gradient transformation.
-    /// For each warp parameter, we ask: "If I change this slightly, does the adapted model
-    /// perform better or worse on the query set?" This tells us which direction to adjust
-    /// the warp parameters.
-    /// </para>
-    /// </remarks>
-    private List<Vector<T>> ComputeWarpGradients(
+    internal List<Vector<T>> ComputeWarpGradients(
         IMetaLearningTask<T, TInput, TOutput> task,
         Vector<T> initParams)
     {
-        var warpGrads = new List<Vector<T>>();
-        double epsilon = 1e-5;
-
-        for (int w = 0; w < _warpLayerParams.Count; w++)
+        var restore = ParamModel.GetParameters();
+        try
         {
-            var warpParams = _warpLayerParams[w];
-            var grad = new Vector<T>(warpParams.Length);
-
-            // Compute baseline loss with current warp
-            double baselineLoss = NumOps.ToDouble(EvaluateWithWarp(task, initParams));
-
-            // Perturb each warp parameter
-            for (int j = 0; j < warpParams.Length; j++)
-            {
-                T original = warpParams[j];
-                warpParams[j] = NumOps.Add(original, NumOps.FromDouble(epsilon));
-
-                double perturbedLoss = NumOps.ToDouble(EvaluateWithWarp(task, initParams));
-                grad[j] = NumOps.FromDouble((perturbedLoss - baselineLoss) / epsilon);
-
-                warpParams[j] = original; // Restore
-            }
-
-            warpGrads.Add(grad);
+            return WarpedTrajectory(task, initParams).WarpGradients;
         }
-
-        return warpGrads;
-    }
-
-    /// <summary>
-    /// Evaluates a task with the current warp configuration by running inner-loop adaptation.
-    /// </summary>
-    /// <param name="task">The task to evaluate.</param>
-    /// <param name="initParams">Starting parameters.</param>
-    /// <returns>Query set loss after adaptation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This is a helper that runs the full inner-loop adaptation with the current warp
-    /// configuration and returns the query loss. Used by warp gradient computation
-    /// to measure the effect of warp parameter changes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This simulates the entire adaptation process with
-    /// specific warp settings and returns how well the adapted model performs.
-    /// It's used to figure out whether a change to the warp parameters helps or hurts.
-    /// </para>
-    /// </remarks>
-    private T EvaluateWithWarp(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
-    {
-        var taskParams = new Vector<T>(initParams.Length);
-        for (int i = 0; i < initParams.Length; i++)
+        finally
         {
-            taskParams[i] = initParams[i];
+            ParamModel.SetParameters(restore);
         }
-
-        ParamModel.SetParameters(taskParams);
-
-        for (int step = 0; step < _warpOptions.AdaptationSteps; step++)
-        {
-            var rawGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            var warpedGrad = ApplyWarpLayers(rawGrad);
-            taskParams = ApplyInnerGradients(taskParams, warpedGrad, _warpOptions.InnerLearningRate, step == 0);
-            ParamModel.SetParameters(taskParams);
-        }
-
-        return ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
     }
 
     /// <summary>
@@ -527,52 +523,24 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     {
         if (warpGradientsList.Count == 0) return;
 
+        T regularization = NumOps.FromDouble(_warpOptions.WarpRegularization);
+        T rate = NumOps.FromDouble(_warpOptions.WarpLearningRate);
+
         for (int w = 0; w < _warpLayerParams.Count; w++)
         {
-            var avgGrad = new Vector<T>(_warpLayerParams[w].Length);
+            var current = _warpLayerParams[w];
+            var avgGrad = AverageVectors(warpGradientsList.ConvertAll(taskGrads => taskGrads[w]));
 
-            // Average across tasks
-            foreach (var taskGrads in warpGradientsList)
-            {
-                if (w < taskGrads.Count)
-                {
-                    for (int j = 0; j < avgGrad.Length; j++)
-                    {
-                        avgGrad[j] = NumOps.Add(avgGrad[j], taskGrads[w][j]);
-                    }
-                }
-            }
-
-            double scale = 1.0 / warpGradientsList.Count;
-            for (int j = 0; j < avgGrad.Length; j++)
-            {
-                avgGrad[j] = NumOps.Multiply(avgGrad[j], NumOps.FromDouble(scale));
-            }
-
-            // Add L2 regularization gradient: reg_grad = lambda * (w - 1.0)
-            // This pulls warp params toward 1.0 (identity scaling)
+            // Add L2 regularization gradient: reg_grad = lambda * (w - 1.0), pulling warp params toward 1.0 (identity scaling)
             if (_warpOptions.WarpRegularization > 0)
             {
-                for (int j = 0; j < avgGrad.Length; j++)
-                {
-                    T regGrad = NumOps.Multiply(
-                        NumOps.FromDouble(_warpOptions.WarpRegularization),
-                        NumOps.Subtract(_warpLayerParams[w][j], NumOps.FromDouble(1.0)));
-                    avgGrad[j] = NumOps.Add(avgGrad[j], regGrad);
-                }
+                avgGrad = Engine.Add(
+                    avgGrad, Engine.Multiply(Engine.Subtract(current, Engine.Fill(current.Length, NumOps.One)), regularization));
             }
 
-            // Apply gradient clipping before update
+            // Apply gradient clipping, then the update
             avgGrad = ClipGradients(avgGrad);
-
-            // Apply update
-            double lr = _warpOptions.WarpLearningRate;
-            for (int j = 0; j < _warpLayerParams[w].Length; j++)
-            {
-                _warpLayerParams[w][j] = NumOps.Subtract(
-                    _warpLayerParams[w][j],
-                    NumOps.Multiply(NumOps.FromDouble(lr), avgGrad[j]));
-            }
+            _warpLayerParams[w] = Engine.Subtract(current, Engine.Multiply(avgGrad, rate));
         }
     }
 }
