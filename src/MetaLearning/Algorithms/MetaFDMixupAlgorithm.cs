@@ -90,8 +90,7 @@ public partial class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         for (int tIdx = 0; tIdx < tasks.Length; tIdx++)
         {
             var task = tasks[tIdx];
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -111,11 +110,9 @@ public partial class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
 
                     // Mix gradients: g' = λ*g_task + (1-λ)*g_partner
                     var partnerGrad = taskGradPool[partner];
-                    for (int d = 0; d < _paramDim; d++)
-                    {
-                        double mixed = lambda * NumOps.ToDouble(taskGrad[d]) + (1.0 - lambda) * NumOps.ToDouble(partnerGrad[d]);
-                        taskGrad[d] = NumOps.FromDouble(mixed);
-                    }
+                    taskGrad = Engine.Add(
+                        Engine.Multiply(taskGrad, NumOps.FromDouble(lambda)),
+                        Engine.Multiply(partnerGrad, NumOps.FromDouble(1.0 - lambda)));
                 }
 
                 adaptedParams = ApplyInnerGradients(adaptedParams, taskGrad, _algoOptions.InnerLearningRate, step == 0);
@@ -128,7 +125,7 @@ public partial class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         }
 
         // Compute feature distribution alignment penalty (gradient direction variance)
-        double alignmentPenalty = ComputeGradientAlignmentPenalty(taskGradPool);
+        T alignmentPenalty = ComputeGradientAlignmentPenalty(taskGradPool);
 
         // Outer loop
         ParamModel.SetParameters(initParams);
@@ -137,15 +134,13 @@ public partial class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             var avgGrad = AverageVectors(metaGradients);
             // Add alignment gradient: penalize high variance in gradient directions
             // Weighted consistently with the alignment penalty added to the loss
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double alignGrad = _algoOptions.AlignmentWeight * ComputeAlignmentGradient(taskGradPool, d);
-                avgGrad[d] = NumOps.Add(avgGrad[d], NumOps.FromDouble(alignGrad));
-            }
+            var alignGrad = ComputeAlignmentGradient(taskGradPool);
+            if (alignGrad is not null)
+                avgGrad = Engine.Add(avgGrad, Engine.Multiply(alignGrad, NumOps.FromDouble(_algoOptions.AlignmentWeight)));
             ParamModel.SetParameters(ApplyOuterGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
-        var totalLoss = NumOps.Add(ComputeMean(losses), NumOps.FromDouble(alignmentPenalty));
+        var totalLoss = NumOps.Add(ComputeMean(losses), alignmentPenalty);
         return totalLoss;
     }
 
@@ -153,8 +148,7 @@ public partial class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var currentParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = currentParams[d];
+        var adaptedParams = currentParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -170,48 +164,42 @@ public partial class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     /// <summary>
     /// Computes variance of gradient directions as alignment penalty.
     /// </summary>
-    private double ComputeGradientAlignmentPenalty(List<Vector<T>> gradients)
+    private T ComputeGradientAlignmentPenalty(List<Vector<T>> gradients)
     {
-        if (gradients.Count <= 1) return 0;
+        if (gradients.Count <= 1) return NumOps.Zero;
 
-        // Normalize gradients to unit vectors and compute variance of directions
-        var normalized = new List<double[]>();
-        foreach (var g in gradients)
+        // Normalize gradients to unit vectors (g / (||g|| + 1e-10)) and compute variance of directions
+        var rows = new Tensor<T>[gradients.Count];
+        for (int t = 0; t < rows.Length; t++)
         {
-            double norm = 0;
-            for (int d = 0; d < _paramDim; d++)
-                norm += NumOps.ToDouble(g[d]) * NumOps.ToDouble(g[d]);
-            norm = Math.Sqrt(norm) + 1e-10;
-
-            var n = new double[_paramDim];
-            for (int d = 0; d < _paramDim; d++)
-                n[d] = NumOps.ToDouble(g[d]) / norm;
-            normalized.Add(n);
+            var g = gradients[t].Length == _paramDim ? gradients[t] : gradients[t].GetSubVector(0, _paramDim);
+            T norm = NumOps.Add(NumOps.Sqrt(Engine.DotProduct(g, g)), NumOps.FromDouble(1e-10));
+            rows[t] = Tensor<T>.FromVector(Engine.Divide(g, norm));
         }
 
-        // Compute per-dimension variance of normalized gradients
-        double totalVar = 0;
-        for (int d = 0; d < _paramDim; d++)
-        {
-            double mean = 0;
-            foreach (var n in normalized) mean += n[d];
-            mean /= normalized.Count;
-            double var_d = 0;
-            foreach (var n in normalized) var_d += (n[d] - mean) * (n[d] - mean);
-            totalVar += var_d / normalized.Count;
-        }
+        // Sum over dimensions of the per-dimension population variance across tasks
+        var centered = CenterRows(Engine.TensorStack(rows, 0));
+        T totalVar = Engine.TensorSum(Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, keepDims: false));
 
-        return _algoOptions.AlignmentWeight * totalVar;
+        return NumOps.Multiply(NumOps.FromDouble(_algoOptions.AlignmentWeight), totalVar);
     }
 
-    private double ComputeAlignmentGradient(List<Vector<T>> gradients, int dim)
+    /// <summary>
+    /// Per dimension d: sum over tasks of 2 (g_t[d] - mean_d) / T, or null for fewer than two tasks.
+    /// </summary>
+    private Vector<T>? ComputeAlignmentGradient(List<Vector<T>> gradients)
     {
-        if (gradients.Count <= 1) return 0;
-        double mean = 0;
-        foreach (var g in gradients) mean += NumOps.ToDouble(g[dim]);
-        mean /= gradients.Count;
-        double gradVar = 0;
-        foreach (var g in gradients) gradVar += 2.0 * (NumOps.ToDouble(g[dim]) - mean) / gradients.Count;
-        return gradVar;
+        if (gradients.Count <= 1) return null;
+        var rows = new Tensor<T>[gradients.Count];
+        for (int t = 0; t < rows.Length; t++)
+            rows[t] = Tensor<T>.FromVector(gradients[t].Length == _paramDim ? gradients[t] : gradients[t].GetSubVector(0, _paramDim));
+        var centered = CenterRows(Engine.TensorStack(rows, 0));
+        var summed = Engine.ReduceSum(centered, new[] { 0 }, keepDims: false).ToVector();
+        return Engine.Multiply(summed, NumOps.FromDouble(2.0 / gradients.Count));
     }
+
+    /// <summary>Subtracts each column's mean from a [tasks, dims] stack.</summary>
+    private Tensor<T> CenterRows(Tensor<T> stacked)
+        => Engine.TensorSubtract(stacked, Engine.TensorBroadcastTo(
+            Engine.ReduceMean(stacked, new[] { 0 }, keepDims: true), stacked.Shape.ToArray()));
 }
