@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.SurvivalAnalysis;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -63,6 +64,23 @@ public class SurvivalReferenceValueTests
         var median = km.PredictMedianSurvivalTime();
 
         Assert.Equal(double.MaxValue, median[0]);
+    }
+
+    [Fact]
+    public void LogNormal_FarUpperTail_SurvivalDoesNotCancelToZero()
+    {
+        // S(t) = 1 - Phi(z) at z = 9 is 1.1285884059538422e-19 (scipy.stats.norm.sf(9)). Forming it as
+        // 1 - Phi(z) cancels to 0 in double; the A&S 7.1.26 tail used here is within 2% of it.
+        var model = new LogNormalAFT<double>();
+        var features = new Matrix<double>(6, 1);
+        var times = new Vector<double>(new double[] { 1, 2, 3, 4, 6, 9 });
+        var events = new Vector<int>(new[] { 1, 1, 0, 1, 1, 0 });
+        model.FitSurvival(features, times, events);
+
+        double farTime = Math.Exp(model.Intercept + 9.0 * model.Scale);
+        var survival = model.GetBaselineSurvival(new Vector<double>(new[] { farTime }));
+
+        Assert.InRange(survival[0] / 1.1285884059538422e-19, 0.98, 1.02);
     }
 
     private static double FitCoxCoefficient(int[] order)

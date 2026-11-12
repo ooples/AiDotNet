@@ -711,6 +711,23 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     }
 
     /// <summary>
+    /// Computes intercept + X beta for every row of the design matrix.
+    /// </summary>
+    /// <param name="design">The [n, p] covariate matrix.</param>
+    /// <param name="coefficients">The p coefficients.</param>
+    /// <param name="intercept">The intercept added to every row.</param>
+    /// <returns>The n linear predictors.</returns>
+    protected Tensor<T> LinearPredictor(Tensor<T> design, Vector<T> coefficients, T intercept)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = design.Shape[0];
+        var product = engine.TensorMatMul(design, coefficients.AsTensor().Reshape(new[] { coefficients.Length, 1 }))
+            .Reshape(new[] { n });
+
+        return engine.TensorAddScalar(product, intercept);
+    }
+
+    /// <summary>
     /// Builds the risk-set mask: entry (k, i) is 1 when subject i is still at risk at
     /// <paramref name="eventTimes"/>[k], that is when its observed time is &gt;= that time.
     /// </summary>
