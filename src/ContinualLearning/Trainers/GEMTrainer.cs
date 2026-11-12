@@ -209,12 +209,16 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         // Track accumulated task gradient for storing after training
         Vector<T>? accumulatedTaskGradient = null;
         int gradientAccumulationCount = 0;
+        var violatedFlag = NumOps.FromDouble(1.0);
+        var satisfiedFlag = NumOps.Zero;
 
         for (int epoch = 0; epoch < epochsPerTask; epoch++)
         {
             T epochLoss = NumOps.Zero;
             T epochViolations = NumOps.Zero;
             int batchCount = 0;
+            var batchLosses = new List<T>();
+            var batchViolationFlags = new List<T>();
 
             // Shuffle indices for this epoch
             var indices = Enumerable.Range(0, numSamples)
@@ -229,7 +233,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
                 // Accumulate gradients for the batch
                 Vector<T>? batchGradients = null;
-                T batchLoss = NumOps.Zero;
+                var sampleLosses = new List<T>(actualBatchSize);
 
                 for (int i = batchStart; i < batchEnd; i++)
                 {
@@ -255,7 +259,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
                     var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(target);
                     var sampleLoss = LossFunction.CalculateLoss(predictionVector, targetVector);
-                    batchLoss = NumOps.Add(batchLoss, sampleLoss);
+                    sampleLosses.Add(sampleLoss);
                 }
 
                 if (batchGradients == null)
@@ -278,9 +282,9 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     if (violatedConstraint)
                     {
                         totalConstraintViolations++;
-                        epochViolations = NumOps.Add(epochViolations, NumOps.FromDouble(1.0));
                     }
                 }
+                batchViolationFlags.Add(violatedConstraint ? violatedFlag : satisfiedFlag);
 
                 // Adjust gradients using strategy (GEM projects gradients if they violate constraints)
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
@@ -300,17 +304,16 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 }
                 gradientAccumulationCount++;
 
-                // Track loss
-                batchLoss = NumOps.Divide(batchLoss, NumOps.FromDouble(actualBatchSize));
-                epochLoss = NumOps.Add(epochLoss, batchLoss);
+                // Track loss: the batch loss is the mean sample loss
+                batchLosses.Add(Engine.Mean(new Vector<T>(sampleLosses)));
                 batchCount++;
             }
 
-            // Average epoch losses
+            // Average epoch losses; the violation rate is the mean of the per-batch 0/1 flags
             if (batchCount > 0)
             {
-                epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(batchCount));
-                epochViolations = NumOps.Divide(epochViolations, NumOps.FromDouble(batchCount));
+                epochLoss = Engine.Mean(new Vector<T>(batchLosses));
+                epochViolations = Engine.Mean(new Vector<T>(batchViolationFlags));
             }
 
             lossHistory.Add(epochLoss);
@@ -381,28 +384,20 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
     private Vector<T> CloneVector(Vector<T> source)
     {
         var result = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            result[i] = source[i];
-        }
+        source.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
 
     private void AccumulateGradients(Vector<T> target, Vector<T> source)
     {
-        for (int i = 0; i < target.Length; i++)
-        {
-            target[i] = NumOps.Add(target[i], source[i]);
-        }
+        // In place: target += source (over target's length)
+        Engine.TensorAdd(target.AsTensor(), HeadView(source, target.Length)).AsSpan().CopyTo(target.AsWritableSpan());
     }
 
     private void AverageGradients(Vector<T> gradients, int count)
     {
         var divisor = NumOps.FromDouble(count);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            gradients[i] = NumOps.Divide(gradients[i], divisor);
-        }
+        Engine.Divide(gradients, divisor).AsSpan().CopyTo(gradients.AsWritableSpan());
     }
 
     private void ClipGradients(Vector<T> gradients, double threshold)
@@ -413,10 +408,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         if (normValue > threshold)
         {
             var scale = NumOps.FromDouble(threshold / normValue);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scale);
-            }
+            Engine.Multiply(gradients, scale).AsSpan().CopyTo(gradients.AsWritableSpan());
         }
     }
 
