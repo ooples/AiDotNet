@@ -74,6 +74,9 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
                         + "1024.")]
 public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
 {
+    /// <summary>Added to each instance variance before the square root so a constant series has a nonzero scale.</summary>
+    private const double InstanceVarianceEpsilon = 1e-5;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -350,11 +353,10 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         int covered = Math.Min(batchSize * seqLen, input.Length);
         if (covered <= 0 || seqLen <= 0)
             return new Tensor<T>(input._shape);
+        // covered is batchSize * seqLen or the whole input, so it is always a whole number of rows.
         int fullRows = covered / seqLen;
-        int partial = covered - fullRows * seqLen;
-        int rowCount = fullRows + (partial > 0 ? 1 : 0);
-        var meanColumn = StatColumn(means, rowCount, NumOps.Zero);
-        var stdColumn = StatColumn(stds, rowCount, NumOps.One);
+        var meanColumn = StatColumn(means, fullRows, NumOps.Zero);
+        var stdColumn = StatColumn(stds, fullRows, NumOps.One);
         var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
         var pieces = new List<Tensor<T>>(3);
         if (fullRows > 0)
@@ -365,14 +367,6 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
                 Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(Engine.TensorNarrow(meanColumn, 0, 0, fullRows), shape)),
                 Engine.TensorBroadcastTo(Engine.TensorNarrow(stdColumn, 0, 0, fullRows), shape));
             pieces.Add(Engine.Reshape(normalized, new[] { normalized.Length }));
-        }
-
-        if (partial > 0)
-        {
-            var tail = Engine.TensorNarrow(flat, 0, fullRows * seqLen, partial).Contiguous();
-            T mean = meanColumn.AsSpan()[fullRows];
-            T std = stdColumn.AsSpan()[fullRows];
-            pieces.Add(Engine.TensorDivideScalar(Engine.TensorSubtractScalar(tail, mean), std));
         }
 
         if (covered < input.Length)
@@ -469,7 +463,7 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         var centered = Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(mean, rows._shape));
         var variance = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 1 }, true), count);
         means = mean.ToArray();
-        stds = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5))).ToArray();
+        stds = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(InstanceVarianceEpsilon))).ToArray();
     }
 
     /// <summary>

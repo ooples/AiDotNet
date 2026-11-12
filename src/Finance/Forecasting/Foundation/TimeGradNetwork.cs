@@ -249,17 +249,13 @@ internal sealed class TimeGradNetwork<T>
     {
         if (steps is null) throw new ArgumentNullException(nameof(steps));
         int n = steps.Shape[0];
-        var frequencies = new Tensor<T>(new[] { 1, _timeEmbeddingDim });
-        if (_timeEmbeddingDim > 0)
-        {
-            // 10^(4 i / E) for i = 0..E-1.
-            var exponents = engine.TensorDivideScalar(
-                engine.TensorMultiplyScalar(engine.TensorArange<T>(0, _timeEmbeddingDim, 1), _numOps.FromDouble(4.0)),
-                _numOps.FromDouble(_timeEmbeddingDim));
-            frequencies = engine.Reshape(
-                engine.TensorPower(engine.TensorFullLike(exponents, _numOps.FromDouble(10.0)), exponents),
-                new[] { 1, _timeEmbeddingDim });
-        }
+        // 10^(4 i / E) for i = 0..E-1 (the constructor requires E > 0).
+        var exponents = engine.TensorDivideScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, _timeEmbeddingDim, 1), _numOps.FromDouble(4.0)),
+            _numOps.FromDouble(_timeEmbeddingDim));
+        var frequencies = engine.Reshape(
+            engine.TensorPower(engine.TensorFullLike(exponents, _numOps.FromDouble(10.0)), exponents),
+            new[] { 1, _timeEmbeddingDim });
         var shape = new[] { n, _timeEmbeddingDim };
         var phase = engine.TensorMultiply(
             engine.TensorBroadcastTo(engine.Reshape(steps, new[] { n, 1 }), shape),

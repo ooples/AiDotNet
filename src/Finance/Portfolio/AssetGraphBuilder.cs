@@ -84,18 +84,26 @@ public class AssetGraphBuilder<T>
 
         int outSteps = steps - _volatilityLookback + 1;
 
-        // Window k of every output step is rows [k, k + outSteps) of the panel: stack the lookback shifts as
-        // [lookback, outSteps, assets] and take the two-pass population standard deviation down the first axis.
+        // Window k of every output step is rows [k, k + outSteps) of the panel. The two-pass population
+        // standard deviation accumulates those shifted [outSteps, assets] views one at a time, so memory
+        // stays at a few panels instead of lookback copies of it.
         var engine = AiDotNetEngine.Current;
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var shifts = new Tensor<T>[_volatilityLookback];
+        var count = NumOps.FromDouble(_volatilityLookback);
+        var sum = engine.TensorNarrow(returns, 0, 0, outSteps).Contiguous();
+        for (int k = 1; k < _volatilityLookback; k++)
+            sum = engine.TensorAdd(sum, engine.TensorNarrow(returns, 0, k, outSteps).Contiguous());
+        var mean = engine.TensorDivideScalar(sum, count);
+
+        Tensor<T>? squares = null;
         for (int k = 0; k < _volatilityLookback; k++)
-            shifts[k] = engine.TensorNarrow(returns, 0, k, outSteps);
-        var windows = engine.TensorStack(shifts, 0);
-        var mean = engine.ReduceMean(windows, new[] { 0 }, true);
-        var centred = engine.TensorSubtract(windows, mean);
-        var variance = engine.ReduceMean(engine.TensorMultiply(centred, centred), new[] { 0 }, false);
-        return engine.TensorSqrt(variance);
+        {
+            var centred = engine.TensorSubtract(engine.TensorNarrow(returns, 0, k, outSteps).Contiguous(), mean);
+            var square = engine.TensorMultiply(centred, centred);
+            squares = squares is null ? square : engine.TensorAdd(squares, square);
+        }
+
+        return engine.TensorSqrt(engine.TensorDivideScalar(squares ?? engine.TensorZerosLike(mean), count));
     }
 
     /// <summary>
@@ -213,9 +221,10 @@ public class AssetGraphBuilder<T>
         int steps = panel.Shape[0];
         int assets = panel.Shape[1];
 
-        // Each column is double-centred ONCE instead of once per partner. That loop called
+        // Columns are double-centred per block rather than once per partner. That loop called
         // DistanceCorrelation for every pair, and each of those calls centred BOTH of its arguments,
-        // so every column paid the O(steps^2) centring and its n x n allocation (assets - 1) times.
+        // so every column paid the O(steps^2) centring and its n x n allocation (assets - 1) times;
+        // here a column block is centred once for each row block at or before it.
         //
         // BOUNDED, because the cache is the trade: holding every column's centred matrix costs
         // assets * steps^2 * 8 bytes, which at 500 assets over a 250-step panel is about 250 MB and
@@ -232,44 +241,48 @@ public class AssetGraphBuilder<T>
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var series = engine.TensorTranspose(panel);                              // [assets, steps]
 
-        // Pass 1: each column's squared distance variance, one block of centred matrices at a time.
-        var variances = new List<Tensor<T>>();
-        for (int blockStart = 0; blockStart < assets; blockStart += blockSize)
+        // The squared distance covariance of every block pair on or above the diagonal, a block of rows
+        // against a block of columns at a time, so at most two blocks of centred matrices are resident.
+        // Each column's squared distance variance is the diagonal of its own diagonal block.
+        var starts = new List<int>();
+        for (int start = 0; start < assets; start += blockSize)
+            starts.Add(start);
+        int blocks = starts.Count;
+        int CountOf(int b) => Math.Min(assets, starts[b] + blockSize) - starts[b];
+        var covariances = new Tensor<T>[blocks, blocks];
+        var variances = new Tensor<T>[blocks];
+        for (int r = 0; r < blocks; r++)
         {
-            int count = Math.Min(assets, blockStart + blockSize) - blockStart;
-            var centred = DoubleCentredDistances(engine.TensorNarrow(series, 0, blockStart, count), steps);
-            variances.Add(engine.TensorDivideScalar(
-                engine.ReduceSum(engine.TensorMultiply(centred, centred), new[] { 1 }, false),
-                NumOps.FromDouble((double)steps * steps)));
-        }
-
-        var dvar = engine.TensorConcatenate(variances.ToArray(), 0);              // [assets]
-
-        // Pass 2: the squared distance covariance of every pair, a block of rows against a block of columns at a
-        // time, so at most two blocks of centred matrices are resident.
-        var rowBlocks = new List<Tensor<T>>();
-        for (int rowStart = 0; rowStart < assets; rowStart += blockSize)
-        {
-            int rowCount = Math.Min(assets, rowStart + blockSize) - rowStart;
-            var rowCentred = DoubleCentredDistances(engine.TensorNarrow(series, 0, rowStart, rowCount), steps);
-            var columnBlocks = new List<Tensor<T>>();
-            for (int colStart = 0; colStart < assets; colStart += blockSize)
+            var rowCentred = DoubleCentredDistances(engine.TensorNarrow(series, 0, starts[r], CountOf(r)), steps);
+            for (int c = r; c < blocks; c++)
             {
-                int colCount = Math.Min(assets, colStart + blockSize) - colStart;
-                var colCentred = colStart == rowStart
+                var colCentred = c == r
                     ? rowCentred
-                    : DoubleCentredDistances(engine.TensorNarrow(series, 0, colStart, colCount), steps);
-                columnBlocks.Add(DistanceCorrelationFromCentred(
-                    MeanProducts(rowCentred, colCentred, steps),
-                    engine.TensorNarrow(dvar, 0, rowStart, rowCount),
-                    engine.TensorNarrow(dvar, 0, colStart, colCount)));
+                    : DoubleCentredDistances(engine.TensorNarrow(series, 0, starts[c], CountOf(c)), steps);
+                covariances[r, c] = MeanProducts(rowCentred, colCentred, steps);
             }
 
-            rowBlocks.Add(engine.TensorConcatenate(columnBlocks.ToArray(), 1));
+            variances[r] = DiagonalOf(covariances[r, r], CountOf(r));
+        }
+
+        // Correlate the upper blocks and mirror each into the lower triangle with a transpose, so the
+        // matrix is exactly symmetric.
+        var correlations = new Tensor<T>[blocks, blocks];
+        for (int r = 0; r < blocks; r++)
+            for (int c = r; c < blocks; c++)
+                correlations[r, c] = DistanceCorrelationFromCentred(covariances[r, c], variances[r], variances[c]);
+
+        var rowBlocks = new Tensor<T>[blocks];
+        for (int r = 0; r < blocks; r++)
+        {
+            var columnBlocks = new Tensor<T>[blocks];
+            for (int c = 0; c < blocks; c++)
+                columnBlocks[c] = c >= r ? correlations[r, c] : engine.TensorTranspose(correlations[c, r]).Contiguous();
+            rowBlocks[r] = blocks == 1 ? columnBlocks[0] : engine.TensorConcatenate(columnBlocks, 1);
         }
 
         // A series is perfectly dependent on itself.
-        var dcor = engine.TensorConcatenate(rowBlocks.ToArray(), 0);
+        var dcor = blocks == 1 ? rowBlocks[0] : engine.TensorConcatenate(rowBlocks, 0);
         var identity = engine.TensorEye<T>(assets);
         return engine.TensorWhere(identity, identity, dcor);
     }

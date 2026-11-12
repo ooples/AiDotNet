@@ -114,8 +114,11 @@ public class GraphAttentionLayerCore<T>
 
         // Max-subtracted softmax over each row's neighbourhood only (adjacency != 0).
         var isNeighbour = engine.TensorNotEquals(adjacency, NumOps.Zero);
-        var negativeInfinity = engine.TensorFullLike(scores, NumOps.FromDouble(double.NegativeInfinity));
-        var rowMax = engine.ReduceMax(engine.TensorWhere(isNeighbour, scores, negativeInfinity), new[] { 1 }, true);
+        // Non-neighbours are masked to the smallest score rather than -infinity (which decimal cannot
+        // represent): that is still at or below every neighbour, so each row's maximum is unchanged, and
+        // isolated rows are zeroed below whatever their maximum is.
+        var floor = engine.TensorFullLike(scores, scores.Length > 0 ? engine.TensorMinValue(scores) : NumOps.Zero);
+        var rowMax = engine.ReduceMax(engine.TensorWhere(isNeighbour, scores, floor), new[] { 1 }, true);
         var zeros = engine.TensorZerosLike(scores);
         var exps = engine.TensorWhere(isNeighbour, engine.TensorExp(engine.TensorSubtract(scores, rowMax)), zeros);
         var rowSum = engine.ReduceSum(exps, new[] { 1 }, true);
