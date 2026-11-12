@@ -112,12 +112,17 @@ public class BayesianModelAveraging<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var modelSizes = engine.TensorMatMul(inclusion, PreprocessingTensorOps.Filled(new[] { p, 1 }, NumOps.One));
             var rSquared = engine.TensorMin(
                 engine.TensorDivide(engine.TensorMatMul(inclusion, rSquaredPerFeature), modelSizes), NumOps.FromDouble(0.99));
-            var bic = engine.TensorAdd(
-                engine.TensorMultiplyScalar(
-                    engine.TensorLog(engine.TensorAddScalar(engine.TensorNegate(rSquared), NumOps.FromDouble(1 + 1e-10))),
-                    NumOps.FromDouble(n)),
-                engine.TensorMultiplyScalar(modelSizes, NumOps.FromDouble(Math.Log(n))));
-            modelWeights = engine.TensorExp(engine.TensorMultiplyScalar(bic, NumOps.FromDouble(-0.5)));
+            // BIC = n log(1 - R^2 + 1e-10) + k log n, kept divided by n (bicPerSample) so it stays finite in T.
+            var bicPerSample = engine.TensorAdd(
+                engine.TensorLog(engine.TensorAddScalar(engine.TensorNegate(rSquared), NumOps.FromDouble(1 + 1e-10))),
+                engine.TensorMultiplyScalar(modelSizes, NumOps.FromDouble(Math.Log(n) / n)));
+
+            // Model weights exp(-BIC / 2) relative to the best model, exp(-n (bicPerSample - best) / 2): the weights only
+            // enter as ratios, and the absolute exp(-BIC / 2) overflows (n log(1 - R^2) is about -4.6 n for
+            // R^2 = 0.99) or underflows to 0 for every model, which made the inclusion probabilities NaN or all zero.
+            T bestBic = engine.TensorMinValue(bicPerSample);
+            modelWeights = engine.TensorExp(engine.TensorMultiplyScalar(
+                engine.TensorSubtractScalar(bicPerSample, bestBic), NumOps.FromDouble(-0.5 * n)));
         }
 
         // Posterior inclusion probabilities: weighted inclusion over the total model weight
