@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -315,14 +316,8 @@ public partial class SSMStateCache<T>
         }
 
         // Quantize-then-dequantize: reduces effective precision while keeping Tensor<T> storage
-        T minVal = state[0];
-        T maxVal = state[0];
-
-        for (int i = 1; i < state.Length; i++)
-        {
-            if (NumOps.LessThan(state[i], minVal)) minVal = state[i];
-            if (NumOps.GreaterThan(state[i], maxVal)) maxVal = state[i];
-        }
+        T minVal = Engine.TensorMinValue(state);
+        T maxVal = Engine.TensorMaxValue(state);
 
         T range = NumOps.Subtract(maxVal, minVal);
         if (NumOps.Equals(range, NumOps.Zero))
@@ -337,23 +332,15 @@ public partial class SSMStateCache<T>
             return CloneTensor(state);
         }
 
-        // Store quantized values (still as T, but with reduced effective precision)
+        // Store quantized values (still as T, but with reduced effective precision):
+        // q = round((x - min) / range * levels) (half to even), stored as q / levels * range + min.
         long levels = (1L << _compressionBitWidth) - 1;
         T levelsT = NumOps.FromDouble(levels);
-        var compressed = new Tensor<T>(state._shape);
-
-        for (int i = 0; i < state.Length; i++)
-        {
-            T normalized = NumOps.Divide(NumOps.Subtract(state[i], minVal), range);
-            T quantized = NumOps.FromDouble(Math.Round(
-                NumOps.ToDouble(NumOps.Multiply(normalized, levelsT))));
-            // Store: quantized/levels * range + min (dequantize immediately for simplicity)
-            compressed[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.Divide(quantized, levelsT), range),
-                minVal);
-        }
-
-        return compressed;
+        using var noGrad = new NoGradScope<T>();
+        var normalized = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(state, minVal), range);
+        var quantized = Engine.TensorRound(Engine.TensorMultiplyScalar(normalized, levelsT));
+        return Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(quantized, levelsT), range), minVal);
     }
 
     private Tensor<T> DecompressState(Tensor<T> state)
@@ -365,11 +352,6 @@ public partial class SSMStateCache<T>
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
     {
-        var clone = new Tensor<T>(source._shape);
-        for (int i = 0; i < source.Length; i++)
-        {
-            clone[i] = source[i];
-        }
-        return clone;
+        return source.Clone();
     }
 }
