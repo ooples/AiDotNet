@@ -96,8 +96,8 @@ public class RelationNetworkOptions<T, TInput, TOutput> : ModelOptions, IMetaLea
     /// <summary>
     /// Gets or sets the number of tasks to sample per meta-training iteration.
     /// </summary>
-    /// <value>Default is 4.</value>
-    public int MetaBatchSize { get; set; } = 4;
+    /// <value>Default is 1: Sung et al. (2018) take one optimisation step per training episode.</value>
+    public int MetaBatchSize { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the total number of meta-training iterations.
@@ -108,8 +108,8 @@ public class RelationNetworkOptions<T, TInput, TOutput> : ModelOptions, IMetaLea
     /// <summary>
     /// Gets or sets the maximum gradient norm for gradient clipping.
     /// </summary>
-    /// <value>Default is 10.0.</value>
-    public double? GradientClipThreshold { get; set; } = 10.0;
+    /// <value>Default is null: Sung et al. (2018) do not clip gradients.</value>
+    public double? GradientClipThreshold { get; set; } = null;
 
     /// <summary>
     /// Gets or sets the random seed for reproducibility.

@@ -119,7 +119,9 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Derives the discrete architecture by selecting the operation with highest weight
+        /// Derives the discrete architecture from the learned distribution: each edge takes its most probable
+        /// operation (argmax of softmax(alpha)) and each node keeps its two strongest incoming edges, as in GDAS
+        /// (Dong and Yang 2019, Sec. 3.3, following DARTS). Gumbel sampling is only used during the search.
         /// </summary>
         public Architecture<T> DeriveArchitecture()
         {
@@ -127,32 +129,46 @@ namespace AiDotNet.AutoML.NAS
 
             for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
             {
-                var alpha = _architectureParams[nodeIdx];
-                var weights = GumbelSoftmax(alpha, hard: true);
+                var probabilities = NasSamplingHelper.SoftmaxRows(_architectureParams[nodeIdx], _ops);
+                int[] bestOps = NasSamplingHelper.ArgMaxRows(probabilities, out T[] bestWeights);
 
+                var edgeScores = new List<(int prevNode, int opIdx, T score)>();
                 for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
                 {
-                    int bestOpIdx = 0;
-                    T bestWeight = weights[prevNodeIdx, 0];
+                    edgeScores.Add((prevNodeIdx, bestOps[prevNodeIdx], bestWeights[prevNodeIdx]));
+                }
 
-                    for (int opIdx = 1; opIdx < _numOperations; opIdx++)
-                    {
-                        if (_ops.GreaterThan(weights[prevNodeIdx, opIdx], bestWeight))
-                        {
-                            bestWeight = weights[prevNodeIdx, opIdx];
-                            bestOpIdx = opIdx;
-                        }
-                    }
+                // Keep the top-2 edges, ranked the same way as PC-DARTS and ProxylessNAS.
+                edgeScores.Sort((a, b) => CompareDescending(a.score, b.score));
+                int numEdgesToKeep = Math.Min(2, edgeScores.Count);
 
-                    if (_nasSearchSpace.Operations != null && bestOpIdx < _nasSearchSpace.Operations.Count)
+                for (int i = 0; i < numEdgesToKeep; i++)
+                {
+                    var (prevNode, opIdx, _) = edgeScores[i];
+                    if (_nasSearchSpace.Operations != null && opIdx < _nasSearchSpace.Operations.Count)
                     {
-                        var operation = _nasSearchSpace.Operations[bestOpIdx];
-                        architecture.AddOperation(nodeIdx + 1, prevNodeIdx, operation);
+                        var operation = _nasSearchSpace.Operations[opIdx];
+                        architecture.AddOperation(nodeIdx + 1, prevNode, operation);
                     }
                 }
             }
 
             return architecture;
+        }
+
+        private int CompareDescending(T left, T right)
+        {
+            if (_ops.GreaterThan(left, right))
+            {
+                return -1;
+            }
+
+            if (_ops.LessThan(left, right))
+            {
+                return 1;
+            }
+
+            return 0;
         }
 
         /// <summary>

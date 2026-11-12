@@ -101,38 +101,32 @@ public class SineWaveMetaDataset<T, TInput, TOutput> : MetaDatasetBase<T, TInput
         var queryX = new Matrix<T>(queryCount, 1);
         var queryY = new Vector<T>(queryCount);
 
-        int sIdx = 0, qIdx = 0;
+        var engine = AiDotNetEngine.Current;
         for (int w = 0; w < numWays; w++)
         {
             double amplitude = _amplitudeMin + Rng.NextDouble() * (_amplitudeMax - _amplitudeMin);
             double phase = _phaseMin + Rng.NextDouble() * (_phaseMax - _phaseMin);
 
-            // Generate random x values for this wave (uniform in [xMin, xMax])
-            var xValues = new double[totalPerWay];
+            // Generate random x values for this wave (uniform in [xMin, xMax]), drawn in the
+            // dataset's seeded stream order.
+            var xValues = new Tensor<T>(new[] { totalPerWay });
             for (int i = 0; i < totalPerWay; i++)
             {
-                xValues[i] = _xMin + Rng.NextDouble() * (_xMax - _xMin);
+                xValues[i] = NumOps.FromDouble(_xMin + Rng.NextDouble() * (_xMax - _xMin));
             }
 
-            // Support
-            for (int i = 0; i < numShots; i++)
-            {
-                double x = xValues[i];
-                double y = amplitude * Math.Sin(x + phase);
-                supportX[sIdx, 0] = NumOps.FromDouble(x);
-                supportY[sIdx] = NumOps.FromDouble(y);
-                sIdx++;
-            }
+            // y = A sin(x + phase) for the whole wave at once.
+            var yValues = engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorAddScalar(xValues, NumOps.FromDouble(phase))),
+                NumOps.FromDouble(amplitude));
 
-            // Query
-            for (int i = numShots; i < totalPerWay; i++)
-            {
-                double x = xValues[i];
-                double y = amplitude * Math.Sin(x + phase);
-                queryX[qIdx, 0] = NumOps.FromDouble(x);
-                queryY[qIdx] = NumOps.FromDouble(y);
-                qIdx++;
-            }
+            // The first numShots points are the support set, the rest the query set.
+            var xs = xValues.AsSpan();
+            var ys = yValues.AsSpan();
+            xs.Slice(0, numShots).CopyTo(supportX.AsWritableSpan().Slice(w * numShots, numShots));
+            ys.Slice(0, numShots).CopyTo(supportY.AsWritableSpan().Slice(w * numShots, numShots));
+            xs.Slice(numShots, numQueryPerClass).CopyTo(queryX.AsWritableSpan().Slice(w * numQueryPerClass, numQueryPerClass));
+            ys.Slice(numShots, numQueryPerClass).CopyTo(queryY.AsWritableSpan().Slice(w * numQueryPerClass, numQueryPerClass));
         }
 
         return BuildTask(supportX, supportY, queryX, queryY, numWays, numShots, numQueryPerClass);

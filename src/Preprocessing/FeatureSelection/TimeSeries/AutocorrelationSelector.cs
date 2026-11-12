@@ -27,13 +27,13 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _maxLag;
     private readonly double _significanceThreshold;
 
-    private double[]? _autocorrelationScores;
+    private Vector<T>? _autocorrelationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? AutocorrelationScores => _autocorrelationScores;
+    public Vector<T>? AutocorrelationScores => _autocorrelationScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,62 +64,37 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int p = data.Columns;
         int maxLag = Math.Min(_maxLag, n / 3);
 
-        _autocorrelationScores = new double[p];
+        var engine = Engine;
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var variance = engine.TensorDivideScalar(
+            SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
 
-        for (int j = 0; j < p; j++)
+        // Largest |ACF| over the lags, and how many lags pass the approximate 95% significance bound
+        T criticalValue = NumOps.FromDouble(1.96 / Math.Sqrt(n));
+        var maxAcf = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        var significantLags = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (maxLag >= 1)
         {
-            // Extract feature values
-            var values = new double[n];
-            for (int i = 0; i < n; i++)
-                values[i] = NumOps.ToDouble(data[i, j]);
-
-            // Compute mean
-            double mean = values.Average();
-
-            // Compute variance
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-                variance += Math.Pow(values[i] - mean, 2);
-            variance /= n;
-
-            if (variance < 1e-10)
-            {
-                _autocorrelationScores[j] = 0;
-                continue;
-            }
-
-            // Compute autocorrelations for different lags
-            double maxAcf = 0;
-            int significantLags = 0;
-
+            // |ACF(lag)| = |sum_{i<n-lag} c_i c_{i+lag}| / ((n - lag) * variance), all lags as rows of [maxLag, p]
+            var products = new List<Tensor<T>>();
             for (int lag = 1; lag <= maxLag; lag++)
-            {
-                double acf = 0;
-                for (int i = 0; i < n - lag; i++)
-                    acf += (values[i] - mean) * (values[i + lag] - mean);
-                acf /= (n - lag) * variance;
-
-                if (Math.Abs(acf) > maxAcf)
-                    maxAcf = Math.Abs(acf);
-
-                // Significance test (approximate)
-                double criticalValue = 1.96 / Math.Sqrt(n);
-                if (Math.Abs(acf) > criticalValue)
-                    significantLags++;
-            }
-
-            // Score based on max ACF and number of significant lags
-            _autocorrelationScores[j] = maxAcf * (1 + 0.1 * significantLags);
+                products.Add(engine.Reshape(SelectorTensorOps.LagProducts(centered, lag), new[] { 1, p }));
+            var counts = engine.Reshape(
+                engine.TensorAddScalar(engine.TensorNegate(engine.TensorArange<T>(1, maxLag + 1, 1)), NumOps.FromDouble(n)),
+                new[] { maxLag, 1 });
+            var acf = engine.TensorAbs(engine.TensorDivide(engine.Concat(products, 0),
+                engine.TensorMultiply(counts, engine.Reshape(variance, new[] { 1, p }))));
+            maxAcf = engine.TensorMax(maxAcf, engine.ReduceMax(acf, new[] { 0 }, false));
+            significantLags = engine.ReduceSum(engine.TensorGreaterThan(acf, criticalValue), new[] { 0 }, false);
         }
 
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _autocorrelationScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        // Score based on max ACF and number of significant lags (near-constant columns score 0)
+        var scores = SelectorTensorOps.ZeroUnless(
+            PreprocessingTensorOps.AtLeast(variance, NumOps.FromDouble(1e-10)),
+            engine.TensorMultiply(maxAcf,
+                engine.TensorAddScalar(engine.TensorMultiplyScalar(significantLags, NumOps.FromDouble(0.1)), NumOps.One)));
+        _autocorrelationScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -136,15 +111,7 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("AutocorrelationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -97,15 +97,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 nameof(treatment));
         }
 
-        for (int i = 0; i < treatment.Length; i++)
+        int invalid = FirstNonBinaryIndex(treatment);
+        if (invalid >= 0)
         {
-            if (treatment[i] != 0 && treatment[i] != 1)
-            {
-                throw new ArgumentException(
-                    $"Treatment assignment is 1 for the treated and 0 for the controls; found " +
-                    $"{treatment[i]} at index {i}.",
-                    nameof(treatment));
-            }
+            throw new ArgumentException(
+                $"Treatment assignment is 1 for the treated and 0 for the controls; found " +
+                $"{treatment[invalid]} at index {invalid}.",
+                nameof(treatment));
         }
 
         if (covariates is not TInput covariateInput || outcome is not TOutput outcomeOutput)

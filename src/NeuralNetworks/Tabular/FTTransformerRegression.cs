@@ -162,14 +162,9 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            var squaredError = NumOps.Multiply(diff, diff);
-            totalLoss = NumOps.Add(totalLoss, squaredError);
-        }
+        var flat = new[] { predictions.Length };
+        var diff = Engine.TensorSubtract(Engine.Reshape(predictions, flat), Engine.Reshape(targets, flat));
+        var totalLoss = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
     }
@@ -197,14 +192,9 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            var absError = NumOps.Abs(diff);
-            totalLoss = NumOps.Add(totalLoss, absError);
-        }
+        var flat = new[] { predictions.Length };
+        var diff = Engine.TensorSubtract(Engine.Reshape(predictions, flat), Engine.Reshape(targets, flat));
+        var totalLoss = Engine.TensorSum(Engine.TensorAbs(diff));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
     }
@@ -261,27 +251,18 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     public T ComputeR2Score(Tensor<T> numericalFeatures, Tensor<T> targets, Matrix<int>? categoricalIndices = null)
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
+        int n = targets.Length;
+        var y = Engine.Reshape(targets, new[] { n });
+        var yHat = Engine.TensorSlice(Engine.Reshape(predictions, new[] { predictions.Length }), new[] { 0 }, new[] { n });
 
         // Compute target mean
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
+        var targetMean = NumOps.Divide(Engine.TensorSum(y), NumOps.FromDouble(n));
 
         // Compute SS_res = Σ(y - ŷ)² and SS_tot = Σ(y - ȳ)²
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
+        var residual = Engine.TensorSubtract(y, yHat);
+        var ssRes = Engine.TensorSum(Engine.TensorMultiply(residual, residual));
+        var deviation = Engine.TensorSubtractScalar(y, targetMean);
+        var ssTot = Engine.TensorSum(Engine.TensorMultiply(deviation, deviation));
 
         // R² = 1 - (SS_res / SS_tot)
         // Handle case where SS_tot is zero (all targets are the same)
@@ -337,22 +318,19 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     public T ComputeMAPE(Tensor<T> numericalFeatures, Tensor<T> targets, Matrix<int>? categoricalIndices = null)
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
-        var totalAPE = NumOps.Zero;
-        int count = 0;
         var epsilon = NumOps.FromDouble(1e-10);  // Avoid division by zero
+        int n = targets.Length;
+        var y = Engine.Reshape(targets, new[] { n });
+        var yHat = Engine.TensorSlice(Engine.Reshape(predictions, new[] { predictions.Length }), new[] { 0 }, new[] { n });
 
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var targetAbs = NumOps.Abs(targets[i]);
-            // Skip if target is essentially zero
-            if (NumOps.Compare(targetAbs, epsilon) > 0)
-            {
-                var absError = NumOps.Abs(NumOps.Subtract(predictions[i], targets[i]));
-                var percentageError = NumOps.Divide(absError, targetAbs);
-                totalAPE = NumOps.Add(totalAPE, percentageError);
-                count++;
-            }
-        }
+        // Targets that are essentially zero (|y| <= eps, or NaN) are skipped.
+        var targetAbs = Engine.TensorAbs(y);
+        var keep = Engine.TensorGreaterThan(targetAbs, epsilon);
+        var percentageError = Engine.TensorDivide(Engine.TensorAbs(Engine.TensorSubtract(yHat, y)), targetAbs);
+        var totalAPE = Engine.TensorSum(Engine.TensorWhere(keep, percentageError, new Tensor<T>(new[] { n })));
+
+        // Counted as an integer: a T sum of the 0/1 mask stops at 2048 under Half.
+        int count = Engine.TensorCountNonzero(keep);
 
         if (count == 0)
         {

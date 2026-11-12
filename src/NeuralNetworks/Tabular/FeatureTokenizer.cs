@@ -178,14 +178,8 @@ public partial class FeatureTokenizer<T>
         int fanOut = tensor.Shape.Length > 1 ? tensor.Shape[1] : tensor.Shape[0];
         double stdDev = scale * Math.Sqrt(2.0 / (fanIn + fanOut));
 
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            // Box-Muller transform for normal distribution
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            tensor[i] = _numOps.FromDouble(normal * stdDev);
-        }
+        // N(0, stdDev^2) for every element in one engine call (unseeded secure source as before).
+        AiDotNetEngine.Current.TensorNormalInPlace(tensor, 0.0, stdDev, random.Next());
     }
 
     /// <summary>
@@ -219,55 +213,52 @@ public partial class FeatureTokenizer<T>
             throw new ArgumentException($"Expected {_numNumericalFeatures} numerical features, got {numNumerical}");
         }
 
-        // Output: [batch, seq_len, embed_dim] where seq_len = 1 (CLS) + numFeatures
-        int seqLen = SequenceLength;
-        var output = new Tensor<T>([batchSize, seqLen, _embeddingDimension]);
+        // Output: [batch, seq_len, embed_dim] where seq_len = 1 (CLS) + numFeatures. Built from
+        // engine ops so the tokenizer's weights are on the gradient tape: the FT-Transformer
+        // training step registers them via GetTrainableTensors and expects gradients for them.
+        var eng = AiDotNetEngine.Current;
+        int embDim = _embeddingDimension;
 
-        for (int b = 0; b < batchSize; b++)
+        // Position 0: [CLS] token, shared by every row.
+        var parts = new List<Tensor<T>>
         {
-            // Position 0: [CLS] token
-            for (int d = 0; d < _embeddingDimension; d++)
-            {
-                output[b * seqLen * _embeddingDimension + 0 * _embeddingDimension + d] = _clsToken[d];
-            }
+            eng.TensorBroadcastTo(eng.Reshape(_clsToken, new[] { 1, 1, embDim }), new[] { batchSize, 1, embDim })
+        };
 
-            // Positions 1 to numNumerical: numerical feature embeddings
-            for (int f = 0; f < _numNumericalFeatures; f++)
-            {
-                var featureValue = numericalFeatures[b * numNumerical + f];
-                int outputPos = 1 + f;
+        // Positions 1..numNumerical: x[b, f] * W[f, :] (+ bias[f, :]).
+        var numericalShape = new[] { batchSize, _numNumericalFeatures, embDim };
+        var numerical = eng.TensorMultiply(
+            eng.TensorBroadcastTo(eng.Reshape(numericalFeatures, new[] { batchSize, _numNumericalFeatures, 1 }), numericalShape),
+            eng.TensorBroadcastTo(eng.Reshape(_numericalWeights, new[] { 1, _numNumericalFeatures, embDim }), numericalShape));
+        if (_numericalBias != null)
+        {
+            numerical = eng.TensorAdd(numerical,
+                eng.TensorBroadcastTo(eng.Reshape(_numericalBias, new[] { 1, _numNumericalFeatures, embDim }), numericalShape));
+        }
 
-                for (int d = 0; d < _embeddingDimension; d++)
-                {
-                    int weightIdx = f * _embeddingDimension + d;
-                    var embedding = _numOps.Multiply(featureValue, _numericalWeights[weightIdx]);
-                    if (_numericalBias != null)
-                    {
-                        embedding = _numOps.Add(embedding, _numericalBias[weightIdx]);
-                    }
-                    output[b * seqLen * _embeddingDimension + outputPos * _embeddingDimension + d] = embedding;
-                }
-            }
+        parts.Add(numerical);
 
-            // Positions numNumerical+1 to end: categorical feature embeddings
-            if (categoricalIndices != null && _numCategoricalFeatures > 0)
+        // Remaining positions: categorical embedding rows looked up by index (zeros when no indices are given).
+        if (_numCategoricalFeatures > 0)
+        {
+            if (categoricalIndices != null)
             {
+                var indexTable = Tensor<int>.FromMatrix(categoricalIndices);
                 for (int f = 0; f < _numCategoricalFeatures; f++)
                 {
-                    int catIndex = categoricalIndices[b, f];
-                    int outputPos = 1 + _numNumericalFeatures + f;
-                    var embTable = _categoricalEmbeddings[f];
-
-                    for (int d = 0; d < _embeddingDimension; d++)
-                    {
-                        output[b * seqLen * _embeddingDimension + outputPos * _embeddingDimension + d] =
-                            embTable[catIndex * _embeddingDimension + d];
-                    }
+                    var columnIndices = eng.Reshape(
+                        eng.TensorSlice(indexTable, new[] { 0, f }, new[] { batchSize, 1 }), new[] { batchSize });
+                    var rows = eng.TensorEmbeddingLookup(_categoricalEmbeddings[f], columnIndices);
+                    parts.Add(eng.Reshape(rows, new[] { batchSize, 1, embDim }));
                 }
+            }
+            else
+            {
+                parts.Add(new Tensor<T>(new[] { batchSize, _numCategoricalFeatures, embDim }));
             }
         }
 
-        return output;
+        return eng.TensorConcatenate(parts.ToArray(), 1);
     }
 
     /// <summary>
@@ -285,39 +276,22 @@ public partial class FeatureTokenizer<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
-        var paramsList = new List<T>();
+        var eng = AiDotNetEngine.Current;
 
-        // Numerical weights
-        for (int i = 0; i < _numericalWeights.Length; i++)
-        {
-            paramsList.Add(_numericalWeights[i]);
-        }
-
-        // Numerical bias
+        // Order: numerical weights, numerical bias (if any), CLS token, categorical embeddings.
+        var parts = new List<Tensor<T>> { eng.Reshape(_numericalWeights, new[] { _numericalWeights.Length }) };
         if (_numericalBias != null)
         {
-            for (int i = 0; i < _numericalBias.Length; i++)
-            {
-                paramsList.Add(_numericalBias[i]);
-            }
+            parts.Add(eng.Reshape(_numericalBias, new[] { _numericalBias.Length }));
         }
 
-        // CLS token
-        for (int i = 0; i < _clsToken.Length; i++)
-        {
-            paramsList.Add(_clsToken[i]);
-        }
-
-        // Categorical embeddings
+        parts.Add(eng.Reshape(_clsToken, new[] { _clsToken.Length }));
         foreach (var emb in _categoricalEmbeddings)
         {
-            for (int i = 0; i < emb.Length; i++)
-            {
-                paramsList.Add(emb[i]);
-            }
+            parts.Add(eng.Reshape(emb, new[] { emb.Length }));
         }
 
-        return new Vector<T>([.. paramsList]);
+        return eng.TensorConcatenate(parts.ToArray(), 0).ToVector();
     }
 
     /// <summary>
@@ -343,36 +317,27 @@ public partial class FeatureTokenizer<T>
     /// </summary>
     public void SetParameters(Vector<T> parameters)
     {
+        var eng = AiDotNetEngine.Current;
         int idx = 0;
 
-        // Numerical weights
-        for (int i = 0; i < _numericalWeights.Length; i++)
+        // Copies the next block of the flat vector into the live tensor (in place, so tensors
+        // handed out by GetTrainableTensors stay the ones being updated).
+        void Load(Tensor<T> target)
         {
-            _numericalWeights[i] = parameters[idx++];
+            eng.TensorCopy(Tensor<T>.FromVector(parameters.GetSubVector(idx, target.Length)), target);
+            idx += target.Length;
         }
 
-        // Numerical bias
+        Load(_numericalWeights);
         if (_numericalBias != null)
         {
-            for (int i = 0; i < _numericalBias.Length; i++)
-            {
-                _numericalBias[i] = parameters[idx++];
-            }
+            Load(_numericalBias);
         }
 
-        // CLS token
-        for (int i = 0; i < _clsToken.Length; i++)
-        {
-            _clsToken[i] = parameters[idx++];
-        }
-
-        // Categorical embeddings
+        Load(_clsToken);
         foreach (var emb in _categoricalEmbeddings)
         {
-            for (int i = 0; i < emb.Length; i++)
-            {
-                emb[i] = parameters[idx++];
-            }
+            Load(emb);
         }
     }
 
@@ -381,77 +346,25 @@ public partial class FeatureTokenizer<T>
     /// </summary>
     public Vector<T> GetParameterGradients()
     {
-        var gradsList = new List<T>();
+        var eng = AiDotNetEngine.Current;
 
-        if (_numericalWeightsGrad != null)
-        {
-            for (int i = 0; i < _numericalWeightsGrad.Length; i++)
-            {
-                gradsList.Add(_numericalWeightsGrad[i]);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < _numericalWeights.Length; i++)
-            {
-                gradsList.Add(_numOps.Zero);
-            }
-        }
+        // Each block contributes its gradient when one exists, zeros of the parameter's size otherwise.
+        Tensor<T> Flat(Tensor<T>? grad, Tensor<T> param) =>
+            grad != null ? eng.Reshape(grad, new[] { grad.Length }) : new Tensor<T>(new[] { param.Length });
 
+        var parts = new List<Tensor<T>> { Flat(_numericalWeightsGrad, _numericalWeights) };
         if (_numericalBias != null)
         {
-            if (_numericalBiasGrad != null)
-            {
-                for (int i = 0; i < _numericalBiasGrad.Length; i++)
-                {
-                    gradsList.Add(_numericalBiasGrad[i]);
-                }
-            }
-            else
-            {
-                for (int i = 0; i < _numericalBias.Length; i++)
-                {
-                    gradsList.Add(_numOps.Zero);
-                }
-            }
+            parts.Add(Flat(_numericalBiasGrad, _numericalBias));
         }
 
-        if (_clsTokenGrad != null)
-        {
-            for (int i = 0; i < _clsTokenGrad.Length; i++)
-            {
-                gradsList.Add(_clsTokenGrad[i]);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < _clsToken.Length; i++)
-            {
-                gradsList.Add(_numOps.Zero);
-            }
-        }
-
+        parts.Add(Flat(_clsTokenGrad, _clsToken));
         for (int c = 0; c < _categoricalEmbeddings.Count; c++)
         {
-            var embGrad = _categoricalEmbeddingsGrad[c];
-            var emb = _categoricalEmbeddings[c];
-            if (embGrad != null)
-            {
-                for (int i = 0; i < embGrad.Length; i++)
-                {
-                    gradsList.Add(embGrad[i]);
-                }
-            }
-            else
-            {
-                for (int i = 0; i < emb.Length; i++)
-                {
-                    gradsList.Add(_numOps.Zero);
-                }
-            }
+            parts.Add(Flat(_categoricalEmbeddingsGrad[c], _categoricalEmbeddings[c]));
         }
 
-        return new Vector<T>([.. gradsList]);
+        return eng.TensorConcatenate(parts.ToArray(), 0).ToVector();
     }
 
     /// <summary>

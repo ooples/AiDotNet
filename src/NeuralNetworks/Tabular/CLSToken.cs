@@ -69,10 +69,9 @@ public partial class CLSToken<T>
 
     private void InitializeEmbedding(double scale)
     {
-        for (int i = 0; i < EmbeddingDimension; i++)
-        {
-            _clsEmbedding[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
-        }
+        // N(0, scale^2) draw for every embedding slot in one engine call, seeded from this
+        // token's (secure) Random so the stream stays owned by the instance.
+        Engine.TensorNormalInPlace(_clsEmbedding, 0.0, scale, _random.Next());
     }
 
     /// <summary>
@@ -113,32 +112,17 @@ public partial class CLSToken<T>
         outputShape[^2] = seqLen + 1;
         outputShape[^1] = embDim;
 
-        var output = new Tensor<T>(outputShape);
-
-        int srcStride = seqLen * embDim;
-        int dstStride = (seqLen + 1) * embDim;
-
-        for (int b = 0; b < totalBatchElements; b++)
+        // The output is a fresh, detached tensor (as before): CLS row at position 0, then the
+        // original sequence, per flattened batch element.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            // Add CLS token at position 0
-            for (int d = 0; d < embDim; d++)
-            {
-                output[b * dstStride + d] = _clsEmbedding[d];
-            }
-
-            // Copy original embeddings starting at position 1
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    int srcIdx = b * srcStride + s * embDim + d;
-                    int dstIdx = b * dstStride + (s + 1) * embDim + d;
-                    output[dstIdx] = embeddings[srcIdx];
-                }
-            }
+            var batched = Engine.Reshape(embeddings, new[] { totalBatchElements, seqLen, embDim });
+            var cls = Engine.TensorBroadcastTo(
+                Engine.Reshape(_clsEmbedding, new[] { 1, 1, embDim }),
+                new[] { totalBatchElements, 1, embDim });
+            var joined = Engine.TensorConcatenate(new[] { cls, batched }, 1);
+            return Engine.Reshape(joined, outputShape);
         }
-
-        return output;
     }
 
     /// <summary>
@@ -177,21 +161,14 @@ public partial class CLSToken<T>
         }
         outputShape[^1] = embDim;
 
-        var clsOutput = new Tensor<T>(outputShape);
-
-        int srcStride = seqLenPlus1 * embDim;
-
-        for (int b = 0; b < totalBatchElements; b++)
+        // CLS is at position 0 of every flattened batch element; the result is a fresh,
+        // detached tensor as before.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int d = 0; d < embDim; d++)
-            {
-                // CLS is at position 0
-                int srcIdx = b * srcStride + d;
-                clsOutput[b * embDim + d] = transformerOutput[srcIdx];
-            }
+            var batched = Engine.Reshape(transformerOutput, new[] { totalBatchElements, seqLenPlus1, embDim });
+            var cls = Engine.TensorSlice(batched, new[] { 0, 0, 0 }, new[] { totalBatchElements, 1, embDim });
+            return Engine.Reshape(cls, outputShape);
         }
-
-        return clsOutput;
     }
 
     /// <summary>
@@ -217,11 +194,6 @@ public partial class CLSToken<T>
     /// </summary>
     public Tensor<T> GetEmbedding()
     {
-        var copy = new Tensor<T>(_clsEmbedding._shape);
-        for (int i = 0; i < _clsEmbedding.Length; i++)
-        {
-            copy[i] = _clsEmbedding[i];
-        }
-        return copy;
+        return _clsEmbedding.Clone();
     }
 }

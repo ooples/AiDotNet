@@ -59,7 +59,7 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private readonly FreqPriorOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _lowFreqCutoff;
-    private readonly double[] _freqRegWeights;
+    private readonly Vector<T> _freqRegWeights;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.FreqPrior;
@@ -78,13 +78,10 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         // Assign frequency-dependent regularization weights
         // Parameters are treated as if arranged by "frequency" — early params = low freq
-        _freqRegWeights = new double[_paramDim];
-        for (int d = 0; d < _paramDim; d++)
-        {
-            _freqRegWeights[d] = d < _lowFreqCutoff
-                ? options.LowFreqRegWeight
-                : options.HighFreqRegWeight;
-        }
+        var low = Engine.Fill(_lowFreqCutoff, NumOps.FromDouble(options.LowFreqRegWeight));
+        _freqRegWeights = _lowFreqCutoff == _paramDim
+            ? low
+            : Vector<T>.Concatenate(low, Engine.Fill(_paramDim - _lowFreqCutoff, NumOps.FromDouble(options.HighFreqRegWeight)));
     }
 
     /// <inheritdoc/>
@@ -100,8 +97,7 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -109,13 +105,7 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Frequency-aware regularization
-                var stepGradient = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double diff = NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
-                    double reg = _freqRegWeights[d] * diff;
-                    stepGradient[d] = NumOps.FromDouble(NumOps.ToDouble(taskGrad[d]) + reg);
-                }
+                var stepGradient = RegularizedGradient(taskGrad, adaptedParams, initParams);
                 adaptedParams = ApplyInnerGradients(adaptedParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
@@ -129,12 +119,12 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         }
 
         // Compute frequency prior penalty: stronger for low-freq deviations across tasks
-        double freqPenalty = ComputeFrequencyPenalty(metaGradients);
+        T freqPenalty = ComputeFrequencyPenalty(metaGradients);
 
         // Outer loop
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
-        return NumOps.Add(ComputeMean(losses), NumOps.FromDouble(freqPenalty));
+        return NumOps.Add(ComputeMean(losses), freqPenalty);
     }
 
     /// <inheritdoc/>
@@ -142,21 +132,14 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             ParamModel.SetParameters(adaptedParams);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
-            var stepGradient = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double diff = NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
-                double reg = _freqRegWeights[d] * diff;
-                stepGradient[d] = NumOps.FromDouble(NumOps.ToDouble(taskGrad[d]) + reg);
-            }
+            var stepGradient = RegularizedGradient(taskGrad, adaptedParams, initParams);
             adaptedParams = ApplyInnerGradients(adaptedParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
 
@@ -168,19 +151,22 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// Computes frequency-based penalty: variance of low-freq gradient components
     /// should be small (consistent across tasks), high-freq can vary.
     /// </summary>
-    private double ComputeFrequencyPenalty(List<Vector<T>> gradients)
+    private T ComputeFrequencyPenalty(List<Vector<T>> gradients)
     {
-        if (gradients.Count <= 1) return 0;
-        double penalty = 0;
-        for (int d = 0; d < _lowFreqCutoff; d++)
-        {
-            double mean = 0;
-            foreach (var g in gradients) mean += NumOps.ToDouble(g[d]);
-            mean /= gradients.Count;
-            double var_d = 0;
-            foreach (var g in gradients) var_d += (NumOps.ToDouble(g[d]) - mean) * (NumOps.ToDouble(g[d]) - mean);
-            penalty += var_d / gradients.Count;
-        }
-        return _algoOptions.LowFreqRegWeight * _algoOptions.FrequencyPenaltyScale * penalty;
+        if (gradients.Count <= 1) return NumOps.Zero;
+
+        // Population variance across tasks of each low-frequency component, summed over components.
+        var rows = new Tensor<T>[gradients.Count];
+        for (int t = 0; t < rows.Length; t++)
+            rows[t] = Tensor<T>.FromVector(gradients[t].GetSubVector(0, _lowFreqCutoff));
+        var stacked = Engine.TensorStack(rows, 0);
+        var centered = Engine.TensorSubtract(stacked, Engine.TensorBroadcastTo(
+            Engine.ReduceMean(stacked, new[] { 0 }, keepDims: true), stacked.Shape.ToArray()));
+        T penalty = Engine.TensorSum(Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, keepDims: false));
+        return NumOps.Multiply(NumOps.FromDouble(_algoOptions.LowFreqRegWeight * _algoOptions.FrequencyPenaltyScale), penalty);
     }
+
+    /// <summary>g + w ⊙ (theta - theta0) with the per-component frequency weights w.</summary>
+    private Vector<T> RegularizedGradient(Vector<T> gradient, Vector<T> parameters, Vector<T> initParams)
+        => Engine.Add(gradient, Engine.Multiply(_freqRegWeights, Engine.Subtract(parameters, initParams)));
 }
