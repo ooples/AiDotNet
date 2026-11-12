@@ -316,4 +316,116 @@ public class FeatureSelectionSweepReferenceTests
         Assert.NotNull(selector.AMIScores);
         Assert.Equal(0.03951269381827764, selector.AMIScores[0], 1e-9);
     }
+
+    private static Tensor<Half> HalfTensor(int[] shape, Func<int, double> value)
+    {
+        int length = shape.Aggregate(1, (a, b) => a * b);
+        var data = new Half[length];
+        for (int i = 0; i < length; i++)
+            data[i] = (Half)value(i);
+        return new Tensor<Half>(data, shape);
+    }
+
+    // 500 rows of class 0 then 2500 of class 1: a Half sum of the 0/1 one-hot stops at 2048.
+    private static int[] ImbalancedClasses() => Enumerable.Range(0, 3000).Select(i => i < 500 ? 0 : 1).ToArray();
+
+    [Fact(Timeout = 120000)]
+    public async Task KendallTau_Half_SumsMoreThan2048PairSigns()
+    {
+        // scipy.stats.kendalltau(range(100), range(100)).statistic = 1 (tau-a and tau-b): 9900 ordered pairs, all
+        // concordant. Summed in Half the +1 signs stop at 2048.
+        await Task.CompletedTask;
+        var x = HalfTensor(new[] { 100, 1 }, i => i);
+        var y = HalfTensor(new[] { 100 }, i => i);
+
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.KendallTau(x, y, tauB: false).GetFlat(0), Tolerance);
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.KendallTau(x, y, tauB: true).GetFlat(0), Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ClassStatistics_Half_CountMoreThan2048PerClass()
+    {
+        // Class sizes 500 and 2500 of 3000: Gini 1 - (1/6)^2 - (5/6)^2 = 0.277778 and entropy
+        // -(1/6 ln 1/6 + 5/6 ln 5/6) = 0.450561 nats (scipy.stats.entropy([500, 2500])). A bin one-hot equal to the
+        // classes is perfectly associated, so scipy.stats.chi2_contingency(correction=False) gives n phi^2 = 3000.
+        await Task.CompletedTask;
+        var classes = ImbalancedClasses();
+        var oneHot = AiDotNet.Preprocessing.PreprocessingTensorOps.ClassOneHot<Half>(classes, 2);
+
+        Assert.Equal(0.277778, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.GiniImpurity(oneHot), 1e-3);
+        Assert.Equal(0.450561, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ClassEntropyNats(oneHot), 1e-3);
+
+        var counts = AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.BinCounts(oneHot, 2);
+        Assert.Equal(500.0, (double)counts.GetFlat(0), Tolerance);
+        Assert.Equal(2500.0, (double)counts.GetFlat(1), Tolerance);
+
+        var chiSquared = AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ContingencyChiSquared(oneHot, oneHot, 2, out var occupied);
+        Assert.Equal(3000.0, (double)chiSquared.GetFlat(0), 2.0);
+        Assert.Equal(2.0, (double)occupied.GetFlat(0), Tolerance);
+
+        // The split between the classes leaves two pure children, so the reduction is the parent Gini
+        var feature = HalfTensor(new[] { 3000, 1 }, i => classes[i]);
+        Assert.Equal(0.277778, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.BestGiniSplitReduction(feature, classes, 2).GetFlat(0), 1e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MeanPairwiseDifference_Half_ManyRowsDoNotOverflowThePairCount()
+    {
+        // Rows 0..299: the mean |i - j| over pairs is (k + 1) / 3 = 100.333. The ordered pair count
+        // k (k - 1) = 89700 overflows Half (max 65504).
+        await Task.CompletedTask;
+        var rows = HalfTensor(new[] { 300, 1 }, i => i);
+
+        Assert.Equal(301.0 / 3.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.MeanPairwiseDifference(rows, squared: false).GetFlat(0), 0.1);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NaiveBayesSelector_Half_CountsMoreThan2048PerClass()
+    {
+        // Class 0: {0, 2, 0, 2} (mean 1, variance 1). Class 1: 2500 rows, two at 8, two at -8, the rest 0 (mean 0,
+        // variance 256 / 2500 = 0.1024). Symmetric Gaussian KL = 0.5 (KL01 + KL10) with
+        // KL01 = 0.5 (ln 0.1024 + 1 / 0.1024 + 1 / 0.1024 - 1) = 8.126190 and KL10 = 0.5 (-ln 0.1024 + 0.1024) =
+        // 1.190635, so 4.658412. A Half class count of 2048 gives variance 0.125 and 3.78.
+        await Task.CompletedTask;
+        const int n = 2504;
+        var data = new Matrix<Half>(n, 1);
+        var target = new Vector<Half>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double value = i < 4 ? (i % 2) * 2 : i < 6 ? 8 : i < 8 ? -8 : 0;
+            data[i, 0] = (Half)value;
+            target[i] = (Half)(i < 4 ? 0 : 1);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Classification.NaiveBayesSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(data, target);
+
+        Assert.NotNull(selector.DiscriminativePower);
+        Assert.Equal(4.658412, (double)selector.DiscriminativePower[0], 0.02);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TreeBasedImportance_ImportanceStdIsAPopulationStdNeverNaN()
+    {
+        // numpy.std(importances, axis=0) is a mean squared deviation, never negative. E[x^2] - E[x]^2 can cancel to
+        // a tiny negative value when the trees agree, and its square root is NaN.
+        await Task.CompletedTask;
+        const int n = 60;
+        var data = new Matrix<double>(n, 2);
+        var target = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = i % 2 == 0 ? 0.1 * i : 10 + 0.1 * i;
+            data[i, 1] = (i * 7) % 5;
+            target[i] = i % 2;
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Embedded.TreeBasedImportance<double>(
+            nFeaturesToSelect: 1, nTrees: 20, randomState: 3);
+        selector.Fit(data, target);
+
+        Assert.NotNull(selector.ImportanceStds);
+        for (int j = 0; j < 2; j++)
+            Assert.True(selector.ImportanceStds[j] >= 0, $"std[{j}] = {selector.ImportanceStds[j]}");
+    }
 }
