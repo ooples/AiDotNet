@@ -25,14 +25,14 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nFeaturesToSelect;
     private readonly int _windowSize;
 
-    private double[]? _spectralEntropyScores;
+    private Vector<T>? _spectralEntropyScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int WindowSize => _windowSize;
-    public double[]? SpectralEntropyScores => _spectralEntropyScores;
+    public Vector<T>? SpectralEntropyScores => _spectralEntropyScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,78 +58,28 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _spectralEntropyScores = new double[p];
-
-        for (int j = 0; j < p; j++)
+        var engine = Engine;
+        int window = Math.Min(_windowSize, n);
+        int numWindows = window == 0 ? 0 : n / window;
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (numWindows > 0 && p > 0)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+            // Every window as a column block: [window, numWindows * p].
+            var rows = engine.TensorSlice(Tensor<T>.FromMatrix(data), new[] { 0, 0 }, new[] { numWindows * window, p });
+            var windows = engine.Reshape(
+                engine.TensorPermute(engine.Reshape(rows, new[] { numWindows, window, p }), new[] { 1, 0, 2 }),
+                new[] { window, numWindows * p });
 
-            _spectralEntropyScores[j] = ComputeSpectralEntropy(col, n);
+            // Spectral entropy (bits) of each window's power spectrum, averaged over the windows.
+            var entropy = SelectorTensorOps.ColumnEntropyBits(
+                SelectorTensorOps.DftPower(windows), 1e-10, 1e-10);
+            scores = engine.ReduceMean(engine.Reshape(entropy, new[] { numWindows, p }), new[] { 0 }, false);
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _spectralEntropyScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _spectralEntropyScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double ComputeSpectralEntropy(double[] signal, int n)
-    {
-        int effectiveWindow = Math.Min(_windowSize, n);
-        int numWindows = n / effectiveWindow;
-        if (numWindows == 0) numWindows = 1;
-
-        double totalEntropy = 0;
-
-        for (int w = 0; w < numWindows; w++)
-        {
-            int start = w * effectiveWindow;
-            int end = Math.Min(start + effectiveWindow, n);
-            int windowLen = end - start;
-
-            // Compute power spectrum using autocorrelation approximation
-            var power = new double[windowLen / 2 + 1];
-            double totalPower = 0;
-
-            for (int k = 0; k < power.Length; k++)
-            {
-                double re = 0, im = 0;
-                for (int i = start; i < end; i++)
-                {
-                    double angle = 2 * Math.PI * k * (i - start) / windowLen;
-                    re += signal[i] * Math.Cos(angle);
-                    im -= signal[i] * Math.Sin(angle);
-                }
-                power[k] = re * re + im * im;
-                totalPower += power[k];
-            }
-
-            // Normalize and compute entropy
-            if (totalPower > 1e-10)
-            {
-                double entropy = 0;
-                for (int k = 0; k < power.Length; k++)
-                {
-                    double p = power[k] / totalPower;
-                    if (p > 1e-10)
-                        entropy -= p * Math.Log(p) / Math.Log(2);
-                }
-                totalEntropy += entropy;
-            }
-        }
-
-        return totalEntropy / numWindows;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -144,15 +94,7 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("SpectralEntropySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -27,12 +27,12 @@ public class MissingValueRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
     private readonly double _threshold;
     private readonly double? _missingIndicator;
 
-    private double[]? _missingRatios;
+    private Vector<T>? _missingRatios;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Threshold => _threshold;
-    public double[]? MissingRatios => _missingRatios;
+    public Vector<T>? MissingRatios => _missingRatios;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,56 +58,33 @@ public class MissingValueRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-        _missingRatios = new double[p];
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        for (int j = 0; j < p; j++)
+        // Missing = NaN, +/-infinity, or within 1e-10 of the missing indicator when one is set
+        var ones = PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.One);
+        var missing = engine.TensorEquals(engine.TensorAbs(x), NumOps.FromDouble(double.PositiveInfinity));
+        if (_missingIndicator.HasValue)
         {
-            int missingCount = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (IsMissing(val))
-                    missingCount++;
-            }
-            _missingRatios[j] = (double)missingCount / n;
+            var near = engine.TensorLessThan(
+                engine.TensorAbs(engine.TensorSubtractScalar(x, NumOps.FromDouble(_missingIndicator.Value))),
+                NumOps.FromDouble(1e-10));
+            missing = engine.TensorMax(missing, near);
         }
 
+        missing = engine.TensorWhere(engine.TensorIsNan(x), ones, missing);
+        var ratios = engine.TensorDivideScalar(engine.ReduceSum(missing, new[] { 0 }, false), NumOps.FromDouble(n));
+        _missingRatios = ratios.ToVector();
+
         // Select features below threshold
-        _selectedIndices = _missingRatios
-            .Select((r, idx) => (Ratio: r, Index: idx))
-            .Where(x => x.Ratio <= _threshold)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(
+            engine.TensorLessEqual(ratios, PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(_threshold))));
 
         // If nothing selected, keep lowest missing ratio
         if (_selectedIndices.Length == 0)
-        {
-            int minIdx = 0;
-            double minRatio = _missingRatios[0];
-            for (int j = 1; j < p; j++)
-            {
-                if (_missingRatios[j] < minRatio)
-                {
-                    minRatio = _missingRatios[j];
-                    minIdx = j;
-                }
-            }
-            _selectedIndices = new[] { minIdx };
-        }
+            _selectedIndices = new[] { PreprocessingTensorOps.FirstArgMax(engine.TensorNegate(ratios)) };
 
         IsFitted = true;
-    }
-
-    private bool IsMissing(double value)
-    {
-        if (double.IsNaN(value) || double.IsInfinity(value))
-            return true;
-
-        if (_missingIndicator.HasValue)
-            return Math.Abs(value - _missingIndicator.Value) < 1e-10;
-
-        return false;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -122,15 +99,7 @@ public class MissingValueRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         if (_selectedIndices is null)
             throw new InvalidOperationException("MissingValueRatio has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -26,13 +26,13 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nFeaturesToSelect;
     private readonly int _nIterations;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,19 +58,11 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Transpose: treat features as points (p points in n-dimensional space)
-        var featureVectors = new double[p][];
-        for (int j = 0; j < p; j++)
-        {
-            featureVectors[j] = new double[n];
-            for (int i = 0; i < n; i++)
-                featureVectors[j][i] = X[i, j];
-        }
+        // Treat features as points (p points in n-dimensional space)
+        var featureVectors = engine.TensorTranspose(x);
 
         var rand = RandomHelper.CreateSecureRandom();
 
@@ -91,49 +83,44 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 break;
 
             // Bisect the largest cluster
-            var (c1, c2) = BisectCluster(featureVectors, clusters[largestIdx], n, rand);
+            var (c1, c2) = BisectCluster(featureVectors, clusters[largestIdx], rand);
 
             clusters.RemoveAt(largestIdx);
             if (c1.Count > 0) clusters.Add(c1);
             if (c2.Count > 0) clusters.Add(c2);
         }
 
-        // Score features based on variance within data
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += X[i, j];
-            mean /= n;
-            for (int i = 0; i < n; i++) _featureScores[j] += (X[i, j] - mean) * (X[i, j] - mean);
-            _featureScores[j] /= (n - 1);
-        }
+        // Score features by their sample variance
+        var centered = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        var scores = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, false), NumOps.FromDouble(n - 1));
+        _featureScores = scores.ToVector();
 
-        // Select best feature from each cluster
+        // Select best feature from each cluster (first of the highest-scoring members, in cluster order)
         var selected = new List<int>();
         foreach (var cluster in clusters)
         {
             if (cluster.Count == 0) continue;
-            int bestFeature = cluster.OrderByDescending(j => _featureScores[j]).First();
-            selected.Add(bestFeature);
+            var members = cluster.ToArray();
+            var memberScores = Tensor<T>.FromVector(PreprocessingTensorOps.SelectElements(_featureScores, members));
+            selected.Add(members[PreprocessingTensorOps.StableOrder(memberScores, descending: true)[0]]);
         }
 
         // If we need more features, add highest scoring remaining ones
-        while (selected.Count < numClusters)
+        if (selected.Count < numClusters)
         {
-            var remaining = Enumerable.Range(0, p)
-                .Where(j => !selected.Contains(j))
-                .OrderByDescending(j => _featureScores[j])
-                .ToArray();
-            if (remaining.Length == 0) break;
-            selected.Add(remaining[0]);
+            foreach (int j in PreprocessingTensorOps.StableOrder(scores, descending: true))
+            {
+                if (selected.Count >= numClusters) break;
+                if (!selected.Contains(j)) selected.Add(j);
+            }
         }
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _selectedIndices = selected.OrderBy(index => index).ToArray();
         IsFitted = true;
     }
 
-    private (List<int>, List<int>) BisectCluster(double[][] featureVectors, List<int> cluster, int dim, Random rand)
+    private (List<int>, List<int>) BisectCluster(Tensor<T> featureVectors, List<int> cluster, Random rand)
     {
         if (cluster.Count < 2)
             return (cluster, new List<int>());
@@ -144,27 +131,25 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         while (idx2 == idx1 && cluster.Count > 1)
             idx2 = cluster[rand.Next(cluster.Count)];
 
-        var centroid1 = (double[])featureVectors[idx1].Clone();
-        var centroid2 = (double[])featureVectors[idx2].Clone();
+        var engine = Engine;
+        var members = cluster.ToArray();
+        var points = engine.TensorIndexSelect(featureVectors, new Tensor<int>(members, new[] { members.Length }), 0);
+        var centroid1 = PreprocessingTensorOps.Row(featureVectors, idx1);
+        var centroid2 = PreprocessingTensorOps.Row(featureVectors, idx2);
 
         var c1 = new List<int>();
         var c2 = new List<int>();
 
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            c1.Clear();
-            c2.Clear();
-
-            // Assign
-            foreach (int j in cluster)
-            {
-                double d1 = ComputeDistance(featureVectors[j], centroid1);
-                double d2 = ComputeDistance(featureVectors[j], centroid2);
-                if (d1 <= d2)
-                    c1.Add(j);
-                else
-                    c2.Add(j);
-            }
+            // Assign each member to its nearer centroid (ties go to the first)
+            var d1 = RowDistances(points, centroid1);
+            var d2 = RowDistances(points, centroid2);
+            var nearFirst = engine.TensorLessEqual(d1, d2);
+            var firstPositions = PreprocessingTensorOps.MaskPositions(nearFirst);
+            var secondPositions = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(nearFirst));
+            c1 = firstPositions.Select(position => members[position]).ToList();
+            c2 = secondPositions.Select(position => members[position]).ToList();
 
             // Handle empty clusters
             if (c1.Count == 0 || c2.Count == 0)
@@ -175,32 +160,22 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             }
 
             // Update centroids
-            UpdateCentroid(featureVectors, c1, centroid1, dim);
-            UpdateCentroid(featureVectors, c2, centroid2, dim);
+            centroid1 = engine.ReduceMean(
+                engine.TensorIndexSelect(points, new Tensor<int>(firstPositions, new[] { firstPositions.Length }), 0),
+                new[] { 0 }, true);
+            centroid2 = engine.ReduceMean(
+                engine.TensorIndexSelect(points, new Tensor<int>(secondPositions, new[] { secondPositions.Length }), 0),
+                new[] { 0 }, true);
         }
 
         return (c1, c2);
     }
 
-    private double ComputeDistance(double[] a, double[] b)
+    private Tensor<T> RowDistances(Tensor<T> points, Tensor<T> centroid)
     {
-        double sum = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            double diff = a[i] - b[i];
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
-    }
-
-    private void UpdateCentroid(double[][] vectors, List<int> cluster, double[] centroid, int dim)
-    {
-        Array.Clear(centroid, 0, dim);
-        foreach (int j in cluster)
-            for (int i = 0; i < dim; i++)
-                centroid[i] += vectors[j][i];
-        for (int i = 0; i < dim; i++)
-            centroid[i] /= cluster.Count;
+        var engine = Engine;
+        var diff = engine.TensorSubtract(points, centroid);
+        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, false));
     }
 
     /// <inheritdoc />
@@ -209,15 +184,7 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("BisectingKMeansSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
