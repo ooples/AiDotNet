@@ -214,36 +214,8 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (featureIndices.Length == 0)
             return double.NegativeInfinity;
 
-        int n = data.Rows;
-        double totalCorr = 0;
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        foreach (int j in featureIndices)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-            totalCorr += Math.Abs(corr);
-        }
-
-        return totalCorr / featureIndices.Length;
+        // Correlation-based score: mean |Pearson r| with the target
+        return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, featureIndices);
     }
 
     /// <inheritdoc />
@@ -259,15 +231,7 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("ParticleSwarmFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

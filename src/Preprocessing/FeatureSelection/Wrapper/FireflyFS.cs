@@ -181,36 +181,8 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
 
     private double DefaultFitness(Matrix<T> data, Vector<T> target, int[] features)
     {
-        // Correlation-based fitness
-        int n = data.Rows;
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        double totalCorr = 0;
-        foreach (int j in features)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                totalCorr += Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-        }
-
-        return totalCorr / features.Length - 0.01 * features.Length;
+        // Correlation-based fitness: mean |Pearson r| with the target, minus 0.01 per selected feature
+        return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, features) - 0.01 * features.Length;
     }
 
     /// <inheritdoc />
@@ -226,15 +198,7 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         if (_selectedIndices is null)
             throw new InvalidOperationException("FireflyFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
