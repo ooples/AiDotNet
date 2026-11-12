@@ -683,6 +683,32 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         // Granularity levels: g=0 (coarsest, len/2^(G-1)) to g=G-1 (finest, full length)
         Tensor<T>? coarseGuidance = null;
 
+        // Per-step posterior coefficients (Ho et al. 2020, eqs. 6-7) and timestep embeddings, computed once
+        // for the whole schedule; the reverse loop reads step t from these tables.
+        T[] stepSin, coefX0Table, coefXtTable, sigmaTable;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            T eps10Table = NumOps.FromDouble(1e-10);
+            var steps = Engine.TensorArange<T>(0, _diffusionSteps, 1);
+            stepSin = Engine.TensorSin(Engine.TensorDivideScalar(
+                Engine.TensorMultiplyScalar(steps, NumOps.FromDouble(2.0 * Math.PI)),
+                NumOps.FromDouble(Math.Max(1, _diffusionSteps - 1)))).ToArray();
+
+            var betas = Tensor<T>.FromVector(_betas);
+            var alphas = Tensor<T>.FromVector(_alphas);
+            var abar = Tensor<T>.FromVector(_alphasCumprod);
+            var ones = Engine.TensorFullLike(abar, NumOps.One);
+            // alpha-bar_{t-1}, with alpha-bar_{-1} = 1.
+            var abarPrev = _diffusionSteps > 1
+                ? Engine.TensorConcatenate(new[] { Engine.TensorNarrow(ones, 0, 0, 1), Engine.TensorNarrow(abar, 0, 0, _diffusionSteps - 1) }, 0)
+                : Engine.TensorNarrow(ones, 0, 0, 1);
+            var oneMinusAbar = Engine.TensorAddScalar(Engine.TensorSubtract(ones, abar), eps10Table);
+            var oneMinusAbarPrev = Engine.TensorAddScalar(Engine.TensorSubtract(ones, abarPrev), eps10Table);
+            coefX0Table = Engine.TensorDivide(Engine.TensorMultiply(Engine.TensorSqrt(abarPrev), betas), oneMinusAbar).ToArray();
+            coefXtTable = Engine.TensorDivide(Engine.TensorMultiply(Engine.TensorSqrt(alphas), oneMinusAbarPrev), oneMinusAbar).ToArray();
+            sigmaTable = Engine.TensorSqrt(Engine.TensorDivide(Engine.TensorMultiply(betas, oneMinusAbarPrev), oneMinusAbar)).ToArray();
+        }
+
         for (int g = 0; g < _numGranularities; g++)
         {
             // Compute granularity-specific output length
@@ -749,7 +775,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 // Refresh only the per-step segments: x_t (zero-padded to segLen) and the
                 // timestep embedding. The padding region [xtFill, segLen) stays zero across steps.
                 xt.Data.Span.Slice(0, xtFill).CopyTo(denoiseSpan.Slice(0, xtFill));
-                denoiseSpan[timestepOffset] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
+                denoiseSpan[timestepOffset] = stepSin[t];
 
                 // The denoising network predicts the clean sample x̂_0 (x0-parameterization,
                 // matching the training objective in ForwardForTraining), NOT the noise ε.
@@ -760,20 +786,9 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 // Posterior q(x_{t-1} | x_t, x̂_0) mean + variance (Ho et al. 2020, eqs. 6–7):
                 //   μ = (√ᾱ_{t-1}·β_t / (1-ᾱ_t))·x̂_0 + (√α_t·(1-ᾱ_{t-1}) / (1-ᾱ_t))·x_t
                 //   σ² = β_t·(1-ᾱ_{t-1}) / (1-ᾱ_t)
-                T eps10 = NumOps.FromDouble(1e-10);
-                T betaT = _betas[t];
-                T alphaT = _alphas[t];
-                T abarT = _alphasCumprod[t];
-                T abarPrev = t > 0 ? _alphasCumprod[t - 1] : NumOps.One;
-                T oneMinusAbarT = NumOps.Add(NumOps.Subtract(NumOps.One, abarT), eps10);
-                // Apply the same eps10 stabilization as oneMinusAbarT for defensive consistency:
-                // although the linear beta schedule keeps ᾱ_{t-1} < 1 for t > 0 (and the t = 0 branch
-                // forces σ_t = 0 / z = 0, so the value is unused), this guards any future schedule
-                // whose ᾱ_{t-1} → 1 underflows the numerator/denominator below.
-                T oneMinusAbarPrev = NumOps.Add(NumOps.Subtract(NumOps.One, abarPrev), eps10);
-                T coefX0 = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(abarPrev), betaT), oneMinusAbarT);
-                T coefXt = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(alphaT), oneMinusAbarPrev), oneMinusAbarT);
-                T sigmaT = t > 0 ? NumOps.Sqrt(NumOps.Divide(NumOps.Multiply(betaT, oneMinusAbarPrev), oneMinusAbarT)) : NumOps.Zero;
+                T coefX0 = coefX0Table[t];
+                T coefXt = coefXtTable[t];
+                T sigmaT = t > 0 ? sigmaTable[t] : NumOps.Zero;
 
                 // Vectorised posterior step:
                 //   mean = coefX0·x̂_0 + coefXt·x_t

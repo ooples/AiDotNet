@@ -541,6 +541,20 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
         for (int i = 0; i < samples * outputLen; i++)
             xt.Data.Span[i] = SampleStandardNormal(rand);
 
+        // Per-step update coefficients, computed once for the whole schedule.
+        T eps10 = NumOps.FromDouble(1e-10);
+        T[] noiseCoeffTable, sqrtAlphaTable, sigmaTable;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var betas = Tensor<T>.FromVector(_betas);
+            var abar = Tensor<T>.FromVector(_alphasCumprod);
+            // beta_t / (sqrt(1 - alpha-bar_t) + eps), sqrt(alpha_t) and sigma_t = sqrt(beta_t).
+            var sqrtOneMinusAbar = Engine.TensorSqrt(Engine.TensorSubtract(Engine.TensorFullLike(abar, NumOps.One), abar));
+            noiseCoeffTable = Engine.TensorDivide(betas, Engine.TensorAddScalar(sqrtOneMinusAbar, eps10)).ToArray();
+            sqrtAlphaTable = Engine.TensorSqrt(Tensor<T>.FromVector(_alphas)).ToArray();
+            sigmaTable = Engine.TensorSqrt(betas).ToArray();
+        }
+
         // Iterative DDPM reverse process: t = T-1 ... 0
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
@@ -573,27 +587,46 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
             }
 
             // DDPM reverse step: x_{t-1} = (x_t - beta_t/sqrt(1-alpha_bar_t) * eps) / sqrt(alpha_t) + sigma_t * z
-            T alphaT = _alphas[t];
-            T betaT = _betas[t];
-            T eps10 = NumOps.FromDouble(1e-10);
-            T sqrtOneMinusAlphaBarT = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
-            T noiseCoeffT = NumOps.Divide(betaT, NumOps.Add(sqrtOneMinusAlphaBarT, eps10));
-            T sqrtAlphaT = NumOps.Sqrt(alphaT);
-            T sigmaT = t > 0 ? NumOps.Sqrt(betaT) : NumOps.Zero;
+            T noiseCoeffT = noiseCoeffTable[t];
+            T sqrtAlphaT = sqrtAlphaTable[t];
+            T sigmaT = t > 0 ? sigmaTable[t] : NumOps.Zero;
 
             int epsCols = samples > 0 ? epsGuided.Length / samples : 0;
-            for (int s = 0; s < samples; s++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                for (int i = 0; i < outputLen; i++)
+                // eps row s supplies its first outputLen columns (zero where it has fewer).
+                var gridShape = new[] { samples, outputLen };
+                int usedCols = Math.Min(epsCols, outputLen);
+                Tensor<T> epsAligned;
+                if (usedCols == 0)
                 {
-                    int flat = s * outputLen + i;
-                    if (flat >= xt.Length) break;
-                    int epsIdx = s * epsCols + i;
-                    T epsVal = i < epsCols && epsIdx < epsGuided.Length ? epsGuided[epsIdx] : NumOps.Zero;
-                    T meanT = NumOps.Divide(NumOps.Subtract(xt[flat], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
-                    T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                    xt.Data.Span[flat] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                    epsAligned = new Tensor<T>(gridShape);
                 }
+                else
+                {
+                    var epsGrid = Engine.Reshape(
+                        Engine.TensorNarrow(Engine.Reshape(epsGuided.Contiguous(), new[] { epsGuided.Length }), 0, 0, samples * epsCols),
+                        new[] { samples, epsCols });
+                    var head = usedCols == epsCols ? epsGrid : Engine.TensorNarrow(epsGrid, 1, 0, usedCols).Contiguous();
+                    epsAligned = usedCols == outputLen
+                        ? head
+                        : Engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { samples, outputLen - usedCols }) }, 1);
+                }
+
+                var meanT = Engine.TensorDivideScalar(
+                    Engine.TensorSubtract(xt, Engine.TensorMultiplyScalar(epsAligned, noiseCoeffT)),
+                    NumOps.Add(sqrtAlphaT, eps10));
+
+                // Noise in the same row-major draw order; none is drawn at the last step.
+                var z = new Tensor<T>(gridShape);
+                if (t > 0)
+                {
+                    var zSpan = z.Data.Span;
+                    for (int k = 0; k < samples * outputLen; k++)
+                        zSpan[k] = SampleStandardNormal(rand);
+                }
+
+                xt = Engine.TensorAdd(meanT, Engine.TensorMultiplyScalar(z, sigmaT));
             }
         }
 

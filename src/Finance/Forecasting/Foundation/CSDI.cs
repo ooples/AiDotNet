@@ -707,9 +707,26 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         int condLen = Math.Min(condFlat.Length, _hiddenDimension);
         T eps10 = NumOps.FromDouble(1e-10);
 
+        // Per-step timestep embeddings and update coefficients, computed once for the whole schedule.
+        T[] stepSin, noiseCoeffTable, sqrtAlphaTable, sigmaTable;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var steps = Engine.TensorArange<T>(0, _numDiffusionSteps, 1);
+            stepSin = Engine.TensorSin(Engine.TensorDivideScalar(
+                Engine.TensorMultiplyScalar(steps, NumOps.FromDouble(2.0 * Math.PI)),
+                NumOps.FromDouble(Math.Max(1, _numDiffusionSteps - 1)))).ToArray();
+            var betas = Tensor<T>.FromVector(_betas);
+            var abar = Tensor<T>.FromVector(_alphasCumprod);
+            // beta_t / (sqrt(1 - alpha-bar_t) + eps), sqrt(alpha_t) and sigma_t = sqrt(beta_t).
+            var sqrtOneMinusAbar = Engine.TensorSqrt(Engine.TensorSubtract(Engine.TensorFullLike(abar, NumOps.One), abar));
+            noiseCoeffTable = Engine.TensorDivide(betas, Engine.TensorAddScalar(sqrtOneMinusAbar, eps10)).ToArray();
+            sqrtAlphaTable = Engine.TensorSqrt(Tensor<T>.FromVector(_alphas)).ToArray();
+            sigmaTable = Engine.TensorSqrt(betas).ToArray();
+        }
+
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
-            T sinT = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            T sinT = stepSin[t];
             Tensor<T> denoisingInput;
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
@@ -730,12 +747,9 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             foreach (var layer in _residualLayers) eps = layer.Forward(eps);
             if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
 
-            T alphaT = _alphas[t];
-            T betaT = _betas[t];
-            T sqrtOneMinusAlphaBarT = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
-            T noiseCoeffT = NumOps.Divide(betaT, NumOps.Add(sqrtOneMinusAlphaBarT, eps10));
-            T sqrtAlphaT = NumOps.Sqrt(alphaT);
-            T sigmaT = t > 0 ? NumOps.Sqrt(betaT) : NumOps.Zero;
+            T noiseCoeffT = noiseCoeffTable[t];
+            T sqrtAlphaT = sqrtAlphaTable[t];
+            T sigmaT = t > 0 ? sigmaTable[t] : NumOps.Zero;
 
             int epsCols = samples > 0 ? eps.Length / samples : 0;
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
