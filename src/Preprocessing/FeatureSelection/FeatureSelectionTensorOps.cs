@@ -135,4 +135,29 @@ internal static class FeatureSelectionTensorOps
             PreprocessingTensorOps.Not(engine.TensorLessThan(denominator, ops.FromDouble(minDenominator))));
         return engine.TensorDivide(numerator, denominator);
     }
+
+    /// <summary>
+    /// Shannon entropy in bits of every row of histogram counts ([rows, bins] to [rows]) over
+    /// <paramref name="total"/> samples: <c>-sum p log2 p</c> over the non-empty bins.
+    /// </summary>
+    public static Tensor<T> EntropyBits<T>(Tensor<T> counts, int total)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var probabilities = engine.TensorDivideScalar(counts, ops.FromDouble(total));
+        var terms = engine.TensorWhere(engine.TensorGreaterThan(counts, ops.Zero),
+            engine.TensorMultiply(probabilities, engine.TensorLog(probabilities)), new Tensor<T>(counts.Shape.ToArray()));
+        return engine.TensorDivideScalar(
+            engine.TensorNegate(engine.ReduceSum(terms, new[] { 1 }, false)), ops.FromDouble(Math.Log(2)));
+    }
+
+    /// <summary>
+    /// Per-column bin counts of a one-hot binning ([n, p * bins] to [p, bins]).
+    /// </summary>
+    public static Tensor<T> BinCounts<T>(Tensor<T> oneHot, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = oneHot.Shape[1] / bins;
+        return engine.Reshape(engine.ReduceSum(oneHot, new[] { 0 }, false), new[] { p, bins });
+    }
 }

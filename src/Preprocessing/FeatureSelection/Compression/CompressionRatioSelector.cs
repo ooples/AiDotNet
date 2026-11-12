@@ -25,14 +25,14 @@ public class CompressionRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _entropyScores;
+    private Vector<T>? _entropyScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? EntropyScores => _entropyScores;
+    public Vector<T>? EntropyScores => _entropyScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,61 +58,20 @@ public class CompressionRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var X = Tensor<T>.FromMatrix(data);
 
-        _entropyScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Extract column
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Compute entropy as proxy for compressibility
-            _entropyScores[j] = ComputeEntropy(col, n);
-        }
+        // Compute equal-width histogram entropy (bits) of every column as proxy for compressibility;
+        // a (near-)constant column scores 0
+        var oneHot = PreprocessingTensorOps.EqualWidthBinOneHot(X, _nBins, out var varying);
+        var scores = Engine.TensorMultiply(
+            FeatureSelectionTensorOps.EntropyBits(FeatureSelectionTensorOps.BinCounts(oneHot, _nBins), n), varying);
+        _entropyScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _entropyScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
-
-    private double ComputeEntropy(double[] values, int n)
-    {
-        double minVal = values.Min(), maxVal = values.Max();
-        if (Math.Abs(maxVal - minVal) < 1e-10) return 0;
-
-        double binWidth = (maxVal - minVal) / _nBins + 1e-10;
-        var counts = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            int bin = Math.Min((int)((values[i] - minVal) / binWidth), _nBins - 1);
-            counts[bin]++;
-        }
-
-        double entropy = 0;
-        for (int b = 0; b < _nBins; b++)
-        {
-            if (counts[b] > 0)
-            {
-                double p = (double)counts[b] / n;
-                entropy -= p * Math.Log(p) / Math.Log(2);
-            }
-        }
-
-        return entropy;
-    }
-
     public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);
@@ -125,15 +84,7 @@ public class CompressionRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("CompressionRatioSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
