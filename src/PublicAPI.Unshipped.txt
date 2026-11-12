@@ -1219,3 +1219,78 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTracker<T>.Track(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Audio.MusicAnalysis.BeatTrackingResult!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTracker<T>.Track(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> AiDotNet.Audio.MusicAnalysis.BeatTrackingResult!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordRecognizer<T>.Recognize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.ChordSegment!>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordRecognizer<T>.Recognize(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.ChordSegment!>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.ChordSegment() -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Confidence.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Confidence.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Duration.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.EndTime.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.EndTime.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Name.get -> string!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Name.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.StartTime.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.StartTime.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Confidence.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Confidence.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Correlation.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Correlation.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.KeyDetectionResult() -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.KeyIndex.get -> int
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.KeyIndex.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Mode.get -> AiDotNet.Audio.MusicAnalysis.KeyMode
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Mode.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Name.get -> string!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Name.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.RelativeKey.get -> string!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.RelativeKey.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.RootNote.get -> string!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.RootNote.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Audio.MusicAnalysis.KeyDetectionResult!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> AiDotNet.Audio.MusicAnalysis.KeyDetectionResult!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.DetectAll(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.KeyDetectionResult!>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.GetTopKTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int k = 10) -> System.Collections.Generic.IReadOnlyList<(string! Tag, double Confidence)>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5) -> System.Collections.Generic.IReadOnlyList<(string! Tag, double Confidence)>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTagsAsync(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<(string! Tag, double Confidence)>!>!
+AiDotNet.Audio.MusicAnalysis.BeatTracker<T>.Track(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Interfaces.BeatTrackingResult<T>!
+AiDotNet.Audio.MusicAnalysis.BeatTracker<T>.Track(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> AiDotNet.Interfaces.BeatTrackingResult<T>!
+AiDotNet.Audio.MusicAnalysis.ChordRecognizer<T>.Recognize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.ChordSegment<T>!>!
+AiDotNet.Audio.MusicAnalysis.ChordRecognizer<T>.Recognize(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.ChordSegment<T>!>!
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.ChordSegment() -> void
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Confidence.get -> T
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Confidence.set -> void
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Duration.get -> double
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.EndTime.get -> double
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.EndTime.set -> void
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Name.get -> string!
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Name.set -> void
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.StartTime.get -> double
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.StartTime.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Confidence.get -> T
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Confidence.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Correlation.get -> T
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Correlation.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.KeyDetectionResult() -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.KeyIndex.get -> int
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.KeyIndex.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Mode.get -> AiDotNet.Audio.MusicAnalysis.KeyMode
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Mode.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Name.get -> string!
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Name.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.RelativeKey.get -> string!
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.RelativeKey.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.RootNote.get -> string!
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.RootNote.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>!
+AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>!
+AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.DetectAll(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>!>!
+AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.GetTopKTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int k = 10) -> System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!
+AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5) -> System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!
+AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTagsAsync(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!>!

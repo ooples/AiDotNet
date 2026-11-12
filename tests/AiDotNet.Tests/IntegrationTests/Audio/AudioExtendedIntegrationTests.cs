@@ -644,7 +644,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_DefaultValues()
     {
-        var segment = new ChordSegment();
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double>();
         Assert.Equal(string.Empty, segment.Name);
         Assert.Equal(0.0, segment.StartTime, Tolerance);
         Assert.Equal(0.0, segment.EndTime, Tolerance);
@@ -654,7 +654,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_Duration_Computed()
     {
-        var segment = new ChordSegment
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double>
         {
             Name = "Am",
             StartTime = 1.0,
@@ -667,7 +667,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_ZeroDuration()
     {
-        var segment = new ChordSegment { StartTime = 2.0, EndTime = 2.0 };
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double> { StartTime = 2.0, EndTime = 2.0 };
         Assert.Equal(0.0, segment.Duration, Tolerance);
     }
 
@@ -726,7 +726,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KeyDetectionResult_DefaultValues()
     {
-        var result = new KeyDetectionResult();
+        var result = new AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<double>();
         Assert.Equal(0, result.KeyIndex);
         Assert.Equal(string.Empty, result.Name);
         Assert.Equal(string.Empty, result.RootNote);
@@ -739,7 +739,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KeyDetectionResult_SetProperties()
     {
-        var result = new KeyDetectionResult
+        var result = new AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<double>
         {
             KeyIndex = 9,
             Name = "A minor",

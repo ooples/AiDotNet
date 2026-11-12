@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -97,7 +98,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
     /// </summary>
     /// <param name="audio">Audio samples as a tensor.</param>
     /// <returns>Beat tracking result with tempo and beat times.</returns>
-    public BeatTrackingResult Track(Tensor<T> audio)
+    public BeatTrackingResult<T> Track(Tensor<T> audio)
     {
         // Compute spectral flux (onset strength)
         var onsetEnvelope = ComputeOnsetEnvelopeInternal(audio);
@@ -108,11 +109,12 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         // Track beats using dynamic programming
         var beatTimes = TrackBeats(onsetEnvelope, tempo);
 
-        return new BeatTrackingResult
+        return new BeatTrackingResult<T>
         {
-            Tempo = tempo,
+            Tempo = NumOps.FromDouble(tempo),
+            TempoConfidence = ComputeConfidence(onsetEnvelope, beatTimes),
             BeatTimes = beatTimes,
-            ConfidenceScore = ComputeConfidence(onsetEnvelope, beatTimes)
+            BeatInterval = tempo > 0 ? 60.0 / tempo : 0.0
         };
     }
 
@@ -121,13 +123,13 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
     /// </summary>
     /// <param name="audio">Audio samples as a vector.</param>
     /// <returns>Beat tracking result.</returns>
-    public BeatTrackingResult Track(Vector<T> audio)
+    public BeatTrackingResult<T> Track(Vector<T> audio)
     {
         var tensor = new Tensor<T>([audio.Length], audio);
         return Track(tensor);
     }
 
-    private double[] ComputeOnsetEnvelopeInternal(Tensor<T> audio)
+    private Tensor<T> ComputeOnsetEnvelopeInternal(Tensor<T> audio)
     {
         // Use spectral flux as onset strength
         var features = _spectralExtractor.Extract(audio);
@@ -135,7 +137,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         // Features shape: [numFrames, numFeatures]
         int numFrames = features.Shape[0];
         if (numFrames == 0)
-            return new double[0];
+            return new Tensor<T>([0]);
 
         // Spectral flux (dynamically determined column), half-wave rectified to only keep increases:
         // max(0, flux), NaN propagating as Math.Max does
@@ -157,37 +159,37 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
                 : Engine.Concat(new[] { new Tensor<T>([-k]), Engine.TensorSlice(onsetEnvelope, [0], [numFrames + k]) }, 0);
             sum = Engine.TensorAdd(sum, shifted);
         }
-        var smoothed = Engine.TensorDivide(sum, new Tensor<int>(count, [numFrames]).Cast<T>());
-
-        // The beat tracker works on the double envelope
-        return smoothed.Cast<double>().ToArray();
+        return Engine.TensorDivide(sum, new Tensor<int>(count, [numFrames]).Cast<T>());
     }
 
-    private double EstimateTempoFromEnvelope(double[] onsetEnvelope)
+    private double EstimateTempoFromEnvelope(Tensor<T> onsetEnvelope)
     {
         // Compute autocorrelation of onset envelope
         int maxLag = (int)(_options.SampleRate / (double)_options.HopLength * 60.0 / _options.MinTempo);
         int minLag = (int)(_options.SampleRate / (double)_options.HopLength * 60.0 / _options.MaxTempo);
+        if (maxLag < 0)
+            throw new OverflowException("Arithmetic operation resulted in an overflow.");
 
-        var autocorr = new double[maxLag];
-        double maxCorr = 0;
+        // The best lag is the first whose correlation beats 0 and every earlier lag (NaN never wins)
         int bestLag = minLag;
-
-        for (int lag = minLag; lag < maxLag && lag < onsetEnvelope.Length; lag++)
+        int length = onsetEnvelope.Length;
+        int lagEnd = Math.Min(maxLag, length);
+        if (lagEnd > minLag)
         {
-            double corr = 0;
-            for (int i = 0; i < onsetEnvelope.Length - lag; i++)
+            if (minLag < 0)
+                throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+            var correlations = new T[lagEnd - minLag];
+            for (int lag = minLag; lag < lagEnd; lag++)
             {
-                corr += onsetEnvelope[i] * onsetEnvelope[i + lag];
+                int overlap = length - lag;
+                correlations[lag - minLag] = Engine.TensorSum(Engine.TensorMultiply(
+                    Engine.TensorSlice(onsetEnvelope, [0], [overlap]), Engine.TensorSlice(onsetEnvelope, [lag], [overlap])));
             }
 
-            autocorr[lag] = corr;
-
-            if (corr > maxCorr)
-            {
-                maxCorr = corr;
-                bestLag = lag;
-            }
+            var candidates = Engine.Concat(new[] { new Tensor<T>([1]), new Tensor<T>(correlations, [correlations.Length]) }, 0);
+            int best = AudioEngineOps.FirstArgMaxSequential(Engine, candidates);
+            if (best > 0)
+                bestLag = minLag + best - 1;
         }
 
         // Convert lag to tempo (BPM)
@@ -199,7 +201,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         return Math.Max(_options.MinTempo, Math.Min(tempo, _options.MaxTempo));
     }
 
-    private List<double> TrackBeats(double[] onsetEnvelope, double tempo)
+    private List<double> TrackBeats(Tensor<T> onsetEnvelope, double tempo)
     {
         var beatTimes = new List<double>();
 
@@ -209,7 +211,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
 
         // Dynamic programming beat tracking
         int numFrames = onsetEnvelope.Length;
-        var score = new double[numFrames];
+        var score = new T[numFrames];
         var predecessor = new int[numFrames];
 
         // Initialize
@@ -218,92 +220,108 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
             predecessor[i] = -1;
         }
 
-        // Forward pass
-        for (int i = 0; i < numFrames; i++)
+        // Gaussian penalty for tempo deviation by beat distance d (penalize deviation from the expected
+        // beat period), laid out for d = lookBack .. 1 so a window of previous frames lines up with it
+        int lookBack = (int)(beatPeriodFrames * 2);
+        int maxWindow = Math.Max(0, lookBack);
+        Tensor<T> penaltyByDistance = new Tensor<T>([0]);
+        if (maxWindow > 0)
         {
-            score[i] = onsetEnvelope[i];
-
-            // Look back for previous beat
-            int lookBack = (int)(beatPeriodFrames * 2);
-            double bestPrevScore = 0;
-            int bestPrev = -1;
-
-            for (int j = Math.Max(0, i - lookBack); j < i; j++)
-            {
-                // Compute transition score (penalize deviation from expected beat period)
-                double expectedDist = beatPeriodFrames;
-                double actualDist = i - j;
-                double deviation = Math.Abs(actualDist - expectedDist) / expectedDist;
-
-                // Gaussian penalty for tempo deviation
-                double penalty = Math.Exp(-0.5 * deviation * deviation / (_options.TempoFlexibility * _options.TempoFlexibility));
-
-                double transitionScore = score[j] * penalty;
-
-                if (transitionScore > bestPrevScore)
-                {
-                    bestPrevScore = transitionScore;
-                    bestPrev = j;
-                }
-            }
-
-            if (bestPrev >= 0)
-            {
-                score[i] += bestPrevScore;
-                predecessor[i] = bestPrev;
-            }
+            var distance = Engine.TensorAddScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, maxWindow, 1), NumOps.FromDouble(-1)), NumOps.FromDouble(maxWindow));
+            T expectedDist = NumOps.FromDouble(beatPeriodFrames);
+            var deviation = Engine.TensorDivideScalar(Engine.TensorAbs(Engine.TensorSubtractScalar(distance, expectedDist)), expectedDist);
+            T flexibility = NumOps.FromDouble(_options.TempoFlexibility * _options.TempoFlexibility);
+            penaltyByDistance = Engine.TensorExp(Engine.TensorDivideScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorSquare(deviation), NumOps.FromDouble(-0.5)), flexibility));
         }
 
-        // Backtrack to find beats
-        int current = 0;
-        double maxScore = 0;
-        for (int i = numFrames - 1; i >= Math.Max(0, numFrames - (int)beatPeriodFrames); i--)
+        // Forward pass: score[i] = envelope[i] + the first largest positive score[j] * penalty(i - j)
+        var noPrevious = new Tensor<T>([1]);
+        for (int i = 0; i < numFrames; i++)
         {
-            if (score[i] > maxScore)
+            var current = Engine.TensorSlice(onsetEnvelope, [i], [1]);
+            int start = Math.Max(0, i - lookBack);
+            int window = i - start;
+            if (window > 0)
             {
-                maxScore = score[i];
-                current = i;
+                var previous = new T[window];
+                Array.Copy(score, start, previous, 0, window);
+                var transition = Engine.TensorMultiply(
+                    new Tensor<T>(previous, [window]), Engine.TensorSlice(penaltyByDistance, [maxWindow - window], [window]));
+                int best = AudioEngineOps.FirstArgMaxSequential(Engine, Engine.Concat(new[] { noPrevious, transition }, 0));
+                if (best > 0)
+                {
+                    current = Engine.TensorAdd(current, Engine.TensorSlice(transition, [best - 1], [1]));
+                    predecessor[i] = start + best - 1;
+                }
             }
+            score[i] = Engine.TensorSum(current);
+        }
+
+        // Backtrack to find beats: start from the last frame (scanning backwards) with the largest positive score
+        int last = 0;
+        int firstScanned = Math.Max(0, numFrames - (int)beatPeriodFrames);
+        int scanned = numFrames - firstScanned;
+        if (scanned > 0)
+        {
+            var backwards = new T[scanned];
+            Array.Copy(score, firstScanned, backwards, 0, scanned);
+            Array.Reverse(backwards);
+            int best = AudioEngineOps.FirstArgMaxSequential(
+                Engine, Engine.Concat(new[] { noPrevious, new Tensor<T>(backwards, [scanned]) }, 0));
+            if (best > 0)
+                last = numFrames - best;
         }
 
         var beatFrames = new List<int>();
-        while (current >= 0)
+        int frame = last;
+        while (frame >= 0)
         {
-            beatFrames.Add(current);
-            current = predecessor[current];
+            beatFrames.Add(frame);
+            frame = predecessor[frame];
         }
 
         beatFrames.Reverse();
 
         // Convert to times
-        foreach (int frame in beatFrames)
+        foreach (int beatFrame in beatFrames)
         {
-            beatTimes.Add(frame / frameRate);
+            beatTimes.Add(beatFrame / frameRate);
         }
 
         return beatTimes;
     }
 
-    private double ComputeConfidence(double[] onsetEnvelope, List<double> beatTimes)
+    private T ComputeConfidence(Tensor<T> onsetEnvelope, List<double> beatTimes)
     {
-        if (beatTimes.Count < 2) return 0;
+        if (beatTimes.Count < 2) return NumOps.Zero;
 
         double frameRate = _options.SampleRate / (double)_options.HopLength;
 
-        // Compute how well beats align with onset peaks
-        double totalScore = 0;
-        double maxEnvelope = onsetEnvelope.Max();
-        if (maxEnvelope < 1e-10) return 0;
+        // Compute how well beats align with onset peaks: the mean of envelope[beat] / max(envelope)
+        // (the maximum skips NaN, as Enumerable.Max does, and is NaN only when every value is)
+        int length = onsetEnvelope.Length;
+        if (length == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
+        var isNaN = Engine.TensorIsNan(onsetEnvelope);
+        var ranked = Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault([length], NumOps.FromDouble(double.NegativeInfinity)), onsetEnvelope);
+        int nanCount = Engine.TensorNonzero(Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault([length], NumOps.One), new Tensor<T>([length]))).Length;
+        T maxEnvelope = nanCount == length ? NumOps.FromDouble(double.NaN) : Engine.TensorMaxValue(ranked);
+        if (NumOps.LessThan(maxEnvelope, NumOps.FromDouble(1e-10))) return NumOps.Zero;
 
+        var frames = new List<int>();
         foreach (double beatTime in beatTimes)
         {
             int frame = (int)(beatTime * frameRate);
-            if (frame >= 0 && frame < onsetEnvelope.Length)
-            {
-                totalScore += onsetEnvelope[frame] / maxEnvelope;
-            }
+            if (frame >= 0 && frame < length)
+                frames.Add(frame);
         }
 
-        return totalScore / beatTimes.Count;
+        T totalScore = frames.Count == 0
+            ? NumOps.Zero
+            : Engine.TensorSum(Engine.TensorDivideScalar(
+                Engine.TensorIndexSelect(onsetEnvelope, new Tensor<int>(frames.ToArray(), [frames.Count]), 0), maxEnvelope));
+        return NumOps.Divide(totalScore, NumOps.FromDouble(beatTimes.Count));
     }
 }
