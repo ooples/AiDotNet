@@ -75,8 +75,9 @@ public class InteractionStrengthSelector<T> : TransformerBase<T, Matrix<T>, Matr
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
         // Standardize features (population std; a constant column is only centred)
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
-        var safeStd = engine.TensorWhere(engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
+        var safeStd = engine.TensorWhere(engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), std);
         var X = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
 
         // Individual |correlations| with the target, as a [1, p] row
@@ -100,7 +101,7 @@ public class InteractionStrengthSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (p > 0 && top > 0)
         {
             var boosts = engine.TensorMax(engine.TensorConcatenate(boostRows, 0), NumOps.Zero);
-            boosts = engine.TensorMultiply(boosts, FeatureSelectionTensorOps.OneMinus(engine.TensorEye<T>(p)));
+            boosts = engine.TensorMultiply(boosts, PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(p)));
             var largest = engine.TensorTopK(boosts, top, 1, out _);
             scores = engine.ReduceSum(largest, new[] { 1 }, false);
         }
@@ -108,7 +109,7 @@ public class InteractionStrengthSelector<T> : TransformerBase<T, Matrix<T>, Matr
         _interactionScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -127,7 +128,7 @@ public class InteractionStrengthSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("InteractionStrengthSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

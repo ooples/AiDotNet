@@ -104,7 +104,7 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         _hybridScores = hybrid.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(hybrid, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hybrid, numToSelect);
 
         IsFitted = true;
     }
@@ -117,8 +117,8 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     {
         var engine = Engine;
         var class0 = engine.TensorLessThan(y, NumOps.FromDouble(0.5));
-        var class1 = FeatureSelectionTensorOps.OneMinus(class0);
-        int count0 = FeatureSelectionTensorOps.CountNonZero(class0);
+        var class1 = PreprocessingTensorOps.OneMinus(class0);
+        int count0 = PreprocessingTensorOps.CountNonZero(class0);
         int count1 = n - count0;
         if (count0 < 2 || count1 < 2)
             return new Tensor<T>(new[] { p });
@@ -130,7 +130,7 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var denom = engine.Reshape(engine.TensorAdd(var0, var1), new[] { p });
         var numerator = engine.Reshape(engine.TensorSquare(engine.TensorSubtract(mean0, mean1)), new[] { p });
         var defined = engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
-        var safeDenom = engine.TensorWhere(defined, denom, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeDenom = engine.TensorWhere(defined, denom, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         return engine.TensorWhere(defined, engine.TensorDivide(numerator, safeDenom), new Tensor<T>(new[] { p }));
     }
 
@@ -156,8 +156,8 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             return engine.Reshape(scores, new[] { p });
 
         // diff(A, I1, I2) = |I1[A] - I2[A]| / (max(A) - min(A)); a constant feature never differs
-        var range = engine.Reshape(engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(X), FeatureSelectionTensorOps.ColumnMin(X)), new[] { 1, p });
-        var safeRange = engine.TensorWhere(engine.TensorGreaterThan(range, NumOps.Zero), range, FeatureSelectionTensorOps.Filled(new[] { 1, p }, NumOps.One));
+        var range = engine.Reshape(engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), PreprocessingTensorOps.ColumnMin(X)), new[] { 1, p });
+        var safeRange = engine.TensorWhere(engine.TensorGreaterThan(range, NumOps.Zero), range, PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
         var scaled = engine.TensorDivide(X, safeRange);
 
         var classIds = FeatureSelectionInformationOps.ClassIndices(y, out int classCount);
@@ -166,14 +166,14 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var priors = engine.ReduceMean(membership, new[] { 0 }, false); // [C]
 
         // weight[c_R, C] = P(C) / (1 - P(c_R)) for C != c_R
-        var notOwn = FeatureSelectionTensorOps.OneMinus(engine.TensorEye<T>(classCount));
-        var rest = engine.TensorBroadcastTo(engine.Reshape(FeatureSelectionTensorOps.OneMinus(priors), new[] { classCount, 1 }), new[] { classCount, classCount });
-        var safeRest = engine.TensorWhere(engine.TensorGreaterThan(rest, NumOps.Zero), rest, FeatureSelectionTensorOps.Filled(new[] { classCount, classCount }, NumOps.One));
+        var notOwn = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(classCount));
+        var rest = engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.OneMinus(priors), new[] { classCount, 1 }), new[] { classCount, classCount });
+        var safeRest = engine.TensorWhere(engine.TensorGreaterThan(rest, NumOps.Zero), rest, PreprocessingTensorOps.Filled(new[] { classCount, classCount }, NumOps.One));
         var missWeights = engine.TensorMultiply(
             engine.TensorDivide(engine.TensorBroadcastTo(engine.Reshape(priors, new[] { 1, classCount }), new[] { classCount, classCount }), safeRest), notOwn);
 
         T perUpdate = NumOps.Multiply(FeatureSelectionTensorOps.Count<T>(sampleSize), FeatureSelectionTensorOps.Count<T>(_nNeighbors));
-        var everyRow = FeatureSelectionTensorOps.Filled(new[] { n }, NumOps.One);
+        var everyRow = PreprocessingTensorOps.Filled(new[] { n }, NumOps.One);
 
         for (int s = 0; s < sampleSize; s++)
         {
@@ -215,7 +215,7 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         T min = engine.TensorMinValue(scores);
         T range = NumOps.Subtract(engine.TensorMaxValue(scores), min);
         if (NumOps.LessThan(range, NumOps.FromDouble(1e-10)))
-            return FeatureSelectionTensorOps.Filled(scores.Shape.ToArray(), NumOps.FromDouble(0.5));
+            return PreprocessingTensorOps.Filled(scores.Shape.ToArray(), NumOps.FromDouble(0.5));
 
         return engine.TensorDivideScalar(engine.TensorSubtractScalar(scores, min), range);
     }
@@ -234,7 +234,7 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("FisherReliefHybrid has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

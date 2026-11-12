@@ -63,12 +63,13 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
             throw new InvalidOperationException("At least one sample is required to compute kurtosis.");
 
         var engine = Engine;
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
 
         // Constant columns (std < 1e-10) get 0; the others get the excess kurtosis E[(X-μ)⁴] / σ⁴ - 3
         // (Fisher's definition, scipy.stats.kurtosis(fisher=True, bias=True)).
         var constant = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
-        var safeStd = engine.TensorWhere(constant, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var safeStd = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), std);
         var z = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
         var moment4 = engine.ReduceMean(engine.TensorSquare(engine.TensorSquare(z)), new[] { 0 }, false);
         var excess = engine.TensorSubtractScalar(moment4, NumOps.FromDouble(3));
@@ -79,8 +80,8 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         var magnitude = engine.TensorAbs(kurtosis);
         _selectedIndices = _preferHighKurtosis
-            ? FeatureSelectionTensorOps.TopKIndicesSorted(magnitude, numToSelect)
-            : FeatureSelectionTensorOps.BottomKIndicesSorted(magnitude, numToSelect);
+            ? PreprocessingTensorOps.TopKIndicesSorted(magnitude, numToSelect)
+            : PreprocessingTensorOps.BottomKIndicesSorted(magnitude, numToSelect);
 
         IsFitted = true;
     }
@@ -97,7 +98,7 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("KurtosisSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

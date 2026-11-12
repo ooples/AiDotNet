@@ -70,7 +70,7 @@ public class IsomapBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var geodesic = FeatureSelectionTensorOps.ShortestPaths(euclidean, adjacency, out var reachable);
 
         // Feature importance: mean over the connected pairs of (single-feature distance x geodesic distance)
-        var pairs = engine.TensorMultiply(reachable, FeatureSelectionTensorOps.OneMinus(engine.TensorEye<T>(n)));
+        var pairs = engine.TensorMultiply(reachable, PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n)));
         T pairCount = engine.TensorSum(pairs);
         var scores = new Tensor<T>(new[] { p });
         if (NumOps.GreaterThan(pairCount, NumOps.Zero))
@@ -90,7 +90,7 @@ public class IsomapBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _featureScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -101,7 +101,7 @@ public class IsomapBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("IsomapBasedSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

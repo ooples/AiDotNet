@@ -64,11 +64,12 @@ public class BimodalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             throw new ArgumentException("At least 4 samples are required for bimodality calculation.");
 
         var engine = Engine;
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
 
         // Constant columns (std < 1e-10) get 0
         var constant = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
-        var safeStd = engine.TensorWhere(constant, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var safeStd = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), std);
         var z = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
         var z2 = engine.TensorSquare(z);
 
@@ -89,8 +90,8 @@ public class BimodalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var denominator = engine.TensorAddScalar(kurtosis, NumOps.FromDouble(sampleCorrection));
 
         // Avoid division by zero or negative
-        var nonPositive = FeatureSelectionTensorOps.OneMinus(engine.TensorGreaterThan(denominator, NumOps.Zero));
-        denominator = engine.TensorWhere(nonPositive, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.FromDouble(1e-10)), denominator);
+        var nonPositive = PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(denominator, NumOps.Zero));
+        denominator = engine.TensorWhere(nonPositive, PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(1e-10)), denominator);
         var coefficient = engine.TensorDivide(engine.TensorAddScalar(engine.TensorSquare(skewness), NumOps.One), denominator);
         var bimodality = engine.TensorWhere(constant, new Tensor<T>(new[] { p }), coefficient);
         _bimodalityValues = bimodality.ToVector();
@@ -99,8 +100,8 @@ public class BimodalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         // High bimodality suggests two-group structure; low bimodality means more unimodal
         _selectedIndices = _preferHighBimodality
-            ? FeatureSelectionTensorOps.TopKIndicesSorted(bimodality, numToSelect)
-            : FeatureSelectionTensorOps.BottomKIndicesSorted(bimodality, numToSelect);
+            ? PreprocessingTensorOps.TopKIndicesSorted(bimodality, numToSelect)
+            : PreprocessingTensorOps.BottomKIndicesSorted(bimodality, numToSelect);
 
         IsFitted = true;
     }
@@ -117,7 +118,7 @@ public class BimodalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("BimodalitySelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

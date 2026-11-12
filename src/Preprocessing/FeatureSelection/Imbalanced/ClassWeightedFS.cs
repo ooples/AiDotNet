@@ -101,7 +101,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -111,7 +111,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     {
         var engine = Engine;
         var ratio = engine.TensorDivide(
-            FeatureSelectionTensorOps.Filled(new[] { nClasses }, FeatureSelectionTensorOps.Count<T>(n)),
+            PreprocessingTensorOps.Filled(new[] { nClasses }, FeatureSelectionTensorOps.Count<T>(n)),
             engine.TensorMultiplyScalar(classCounts, FeatureSelectionTensorOps.Count<T>(nClasses)));
 
         return _weightingStrategy switch
@@ -147,7 +147,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var withinVar = engine.Reshape(engine.TensorMatMul(classMass, classVars), new[] { p });
 
         var defined = engine.TensorGreaterThan(withinVar, NumOps.FromDouble(1e-10));
-        var safeWithin = engine.TensorWhere(defined, withinVar, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeWithin = engine.TensorWhere(defined, withinVar, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         return engine.TensorWhere(defined, engine.TensorDivide(betweenVar, safeWithin), new Tensor<T>(new[] { p }));
     }
 
@@ -165,7 +165,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("ClassWeightedFS has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

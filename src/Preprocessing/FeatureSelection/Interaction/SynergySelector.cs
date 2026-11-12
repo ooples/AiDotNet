@@ -106,7 +106,7 @@ public class SynergySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
             // max(0, best synergy) over the partners other than the feature itself
             var synergy = engine.TensorMax(engine.TensorConcatenate(synergyRows, 0), NumOps.Zero);
-            var notSelf = FeatureSelectionTensorOps.OneMinus(engine.TensorSlice(engine.TensorEye<T>(p), new[] { 0, 0 }, new[] { p, partners }));
+            var notSelf = PreprocessingTensorOps.OneMinus(engine.TensorSlice(engine.TensorEye<T>(p), new[] { 0, 0 }, new[] { p, partners }));
             var maxSynergy = engine.ReduceMax(engine.TensorMultiply(synergy, notSelf), new[] { 1 }, false);
             scores = engine.TensorAdd(maxSynergy, individualMI); // Combine synergy with individual MI
         }
@@ -114,7 +114,7 @@ public class SynergySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         _synergyScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -133,7 +133,7 @@ public class SynergySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("SynergySelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

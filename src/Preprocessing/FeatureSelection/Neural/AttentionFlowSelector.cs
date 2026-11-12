@@ -79,7 +79,7 @@ public class AttentionFlowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Build attention matrix from feature |correlations| (1 on the diagonal)
         var eye = engine.TensorEye<T>(p);
         var correlations = engine.TensorAbs(FeatureSelectionTensorOps.ColumnCorrelations(X, X));
-        var attentionMatrix = engine.TensorAdd(engine.TensorMultiply(correlations, FeatureSelectionTensorOps.OneMinus(eye)), eye);
+        var attentionMatrix = engine.TensorAdd(engine.TensorMultiply(correlations, PreprocessingTensorOps.OneMinus(eye)), eye);
 
         // Softmax normalize rows
         var rowMax = engine.TensorMax(engine.ReduceMax(attentionMatrix, new[] { 1 }, true), NumOps.Zero);
@@ -91,7 +91,7 @@ public class AttentionFlowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Propagate attention flow: new[j1] = sum_j2 A[j2, j1] * attention[j2], normalized when the sum is above 1e-10
         T threshold = NumOps.FromDouble(1e-10);
-        var one = FeatureSelectionTensorOps.Filled(new[] { 1, 1 }, NumOps.One);
+        var one = PreprocessingTensorOps.Filled(new[] { 1, 1 }, NumOps.One);
         for (int iter = 0; iter < _nIterations; iter++)
         {
             var newAttention = engine.TensorMatMul(attention, attentionMatrix);
@@ -104,7 +104,7 @@ public class AttentionFlowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _attentionScores = attentionScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(attentionScores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(attentionScores, numToSelect);
 
         IsFitted = true;
     }
@@ -123,7 +123,7 @@ public class AttentionFlowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("AttentionFlowSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -90,14 +90,14 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var smoothness = engine.ReduceSum(engine.TensorMultiply(centered, engine.TensorMatMul(w, centered)), new[] { 0 }, false);
         var numerator = engine.TensorSubtract(denominator, smoothness);
         var defined = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
-        var safeDenominator = engine.TensorWhere(defined, denominator, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeDenominator = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var scores = engine.TensorWhere(
-            defined, engine.TensorDivide(numerator, safeDenominator), FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.MaxValue));
+            defined, engine.TensorDivide(numerator, safeDenominator), PreprocessingTensorOps.Filled(new[] { p }, NumOps.MaxValue));
         _laplacianScores = scores.ToVector();
 
         // Select features with LOWEST Laplacian scores
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.BottomKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -108,7 +108,7 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("LaplacianScoreSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

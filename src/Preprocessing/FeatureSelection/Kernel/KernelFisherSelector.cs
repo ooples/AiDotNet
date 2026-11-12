@@ -98,12 +98,12 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var within = engine.ReduceSum(
             engine.TensorSquare(engine.TensorSubtract(rowSums, engine.TensorMatMul(membership, classMeans))), new[] { 0 }, false);
         var defined = engine.TensorGreaterThan(within, NumOps.FromDouble(1e-10));
-        var safeWithin = engine.TensorWhere(defined, within, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeWithin = engine.TensorWhere(defined, within, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var scores = engine.TensorWhere(defined, engine.TensorDivide(between, safeWithin), new Tensor<T>(new[] { p }));
         _fisherScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -121,7 +121,7 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("KernelFisherSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

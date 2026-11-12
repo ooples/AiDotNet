@@ -100,7 +100,7 @@ public class InteractionInformationSelector<T> : TransformerBase<T, Matrix<T>, M
                     engine.TensorBroadcastTo(engine.Reshape(mi, new[] { p, 1 }), new[] { p, p }),
                     engine.TensorBroadcastTo(engine.Reshape(mi, new[] { 1, p }), new[] { p, p })),
                 joint));
-            var offDiagonal = FeatureSelectionTensorOps.OneMinus(engine.TensorEye<T>(p));
+            var offDiagonal = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(p));
             var total = engine.ReduceSum(engine.TensorMultiply(interaction, offDiagonal), new[] { 1 }, false);
             scores = engine.TensorAdd(mi, engine.TensorDivideScalar(total, FeatureSelectionTensorOps.Count<T>(p - 1)));
         }
@@ -108,7 +108,7 @@ public class InteractionInformationSelector<T> : TransformerBase<T, Matrix<T>, M
         _interactionScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -127,7 +127,7 @@ public class InteractionInformationSelector<T> : TransformerBase<T, Matrix<T>, M
         if (_selectedIndices is null)
             throw new InvalidOperationException("InteractionInformationSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

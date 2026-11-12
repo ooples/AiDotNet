@@ -18,8 +18,8 @@ internal static class FeatureSelectionInformationOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = x.Shape[1];
-        var min = engine.Reshape(FeatureSelectionTensorOps.ColumnMin(x), new[] { 1, p });
-        var max = engine.Reshape(FeatureSelectionTensorOps.ColumnMax(x), new[] { 1, p });
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
+        var max = engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p });
         var range = engine.TensorAddScalar(engine.TensorSubtract(max, min), ops.FromDouble(1e-10));
         var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(x, min), range), ops.FromDouble(bins));
         return engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1)).Cast<int>();
@@ -35,11 +35,11 @@ internal static class FeatureSelectionInformationOps
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int p = x.Shape[1];
-        var min = engine.Reshape(FeatureSelectionTensorOps.ColumnMin(x), new[] { 1, p });
-        var max = engine.Reshape(FeatureSelectionTensorOps.ColumnMax(x), new[] { 1, p });
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
+        var max = engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p });
         var range = engine.TensorSubtract(max, min);
         var spread = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, ops.FromDouble(1e-10)), new[] { n, p });
-        var safeRange = engine.TensorWhere(engine.TensorGreaterThan(range, ops.FromDouble(1e-10)), range, FeatureSelectionTensorOps.Filled(new[] { 1, p }, ops.One));
+        var safeRange = engine.TensorWhere(engine.TensorGreaterThan(range, ops.FromDouble(1e-10)), range, PreprocessingTensorOps.Filled(new[] { 1, p }, ops.One));
         var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(x, min), safeRange), ops.FromDouble(bins));
         var binned = engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1));
         return engine.TensorMultiply(binned, spread).Cast<int>();
@@ -54,8 +54,8 @@ internal static class FeatureSelectionInformationOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = x.Shape[1];
-        var min = engine.Reshape(FeatureSelectionTensorOps.ColumnMin(x), new[] { 1, p });
-        var max = engine.Reshape(FeatureSelectionTensorOps.ColumnMax(x), new[] { 1, p });
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
+        var max = engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p });
         var width = engine.TensorAddScalar(
             engine.TensorDivideScalar(engine.TensorSubtract(max, min), ops.FromDouble(bins)), ops.FromDouble(1e-10));
         var scaled = engine.TensorDivide(engine.TensorSubtract(x, min), width);
@@ -85,7 +85,7 @@ internal static class FeatureSelectionInformationOps
     public static Tensor<int> RankBins<T>(Tensor<T> values, int bins)
     {
         int n = values.Length;
-        var order = FeatureSelectionTensorOps.StableOrder(values, descending: false);
+        var order = PreprocessingTensorOps.StableOrder(values, descending: false);
         var ranks = AiDotNetEngine.Current.TensorArgsort(new Tensor<int>(order, new[] { n }), 0, false);
         var binOfRank = new int[n];
         for (int r = 0; r < n; r++)
@@ -172,7 +172,7 @@ internal static class FeatureSelectionInformationOps
         var ops = MathHelper.GetNumericOperations<T>();
         var probabilities = engine.TensorDivideScalar(counts, ops.FromDouble(n));
         var safe = engine.TensorWhere(
-            engine.TensorGreaterThan(counts, ops.Zero), probabilities, FeatureSelectionTensorOps.Filled(counts.Shape.ToArray(), ops.One));
+            engine.TensorGreaterThan(counts, ops.Zero), probabilities, PreprocessingTensorOps.Filled(counts.Shape.ToArray(), ops.One));
         var terms = engine.TensorMultiply(probabilities, engine.TensorLog(safe));
         return engine.TensorNegate(engine.ReduceSum(terms, new[] { counts.Rank - 1 }, false));
     }
@@ -192,12 +192,12 @@ internal static class FeatureSelectionInformationOps
         var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { p });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
         T syy = engine.TensorSum(engine.TensorSquare(yc));
-        var fallbackScores = FeatureSelectionTensorOps.Filled(new[] { p }, fallback);
+        var fallbackScores = PreprocessingTensorOps.Filled(new[] { p }, fallback);
         if (!ops.GreaterThan(syy, ops.FromDouble(1e-10)))
             return fallbackScores;
 
         var defined = engine.TensorGreaterThan(sxx, ops.FromDouble(1e-10));
-        var safeSxx = engine.TensorWhere(defined, sxx, FeatureSelectionTensorOps.Filled(new[] { p }, ops.One));
+        var safeSxx = engine.TensorWhere(defined, sxx, PreprocessingTensorOps.Filled(new[] { p }, ops.One));
         var correlation = engine.TensorAbs(engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(safeSxx, syy))));
         return engine.TensorWhere(defined, correlation, fallbackScores);
     }
@@ -227,13 +227,13 @@ internal static class FeatureSelectionInformationOps
         var ops = MathHelper.GetNumericOperations<T>();
         var shape = r.Shape.ToArray();
         if (dof < 1)
-            return FeatureSelectionTensorOps.Filled(shape, ops.FromDouble(double.NaN));
+            return PreprocessingTensorOps.Filled(shape, ops.FromDouble(double.NaN));
 
         var absR = engine.TensorMin(engine.TensorAbs(r), ops.One);
-        var cosSquared = engine.TensorSubtract(FeatureSelectionTensorOps.Filled(shape, ops.One), engine.TensorSquare(absR));
+        var cosSquared = engine.TensorSubtract(PreprocessingTensorOps.Filled(shape, ops.One), engine.TensorSquare(absR));
 
         // Series sum_k c_k cos^(2k) theta (even dof) or cos^(2k+1) theta (odd dof), k = 0 .. floor((dof - 2) / 2)
-        Tensor<T> term = dof % 2 == 0 ? FeatureSelectionTensorOps.Filled(shape, ops.One) : engine.TensorSqrt(cosSquared);
+        Tensor<T> term = dof % 2 == 0 ? PreprocessingTensorOps.Filled(shape, ops.One) : engine.TensorSqrt(cosSquared);
         var series = term;
         int terms = (dof - 2) / 2;
         for (int k = 1; k <= terms; k++)
@@ -258,7 +258,7 @@ internal static class FeatureSelectionInformationOps
             probability = engine.TensorMultiplyScalar(inner, ops.FromDouble(2 / Math.PI));
         }
 
-        var p = engine.TensorSubtract(FeatureSelectionTensorOps.Filled(shape, ops.One), probability);
+        var p = engine.TensorSubtract(PreprocessingTensorOps.Filled(shape, ops.One), probability);
         return engine.TensorMax(engine.TensorMin(p, ops.One), ops.Zero);
     }
 
@@ -274,10 +274,10 @@ internal static class FeatureSelectionInformationOps
         var shape = numerator.Shape.ToArray();
         var den = engine.TensorBroadcastTo(denominator, shape);
         var positive = engine.TensorGreaterThan(den, ops.Zero);
-        var safeDen = engine.TensorWhere(positive, den, FeatureSelectionTensorOps.Filled(shape, ops.One));
+        var safeDen = engine.TensorWhere(positive, den, PreprocessingTensorOps.Filled(shape, ops.One));
         var ratio = engine.TensorDivide(numerator, safeDen);
         var nonEmpty = engine.TensorGreaterThan(numerator, ops.Zero);
-        return engine.TensorWhere(nonEmpty, ratio, FeatureSelectionTensorOps.Filled(shape, ops.One));
+        return engine.TensorWhere(nonEmpty, ratio, PreprocessingTensorOps.Filled(shape, ops.One));
     }
 
     /// <summary>Sums <c>weight * logTerm</c> over the last two axes of [p, a, b], skipping the empty cells.</summary>

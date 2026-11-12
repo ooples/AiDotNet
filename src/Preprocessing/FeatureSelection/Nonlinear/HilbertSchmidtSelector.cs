@@ -75,7 +75,7 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var engine = Engine;
 
         // Pairs i < j, for the median heuristic
-        var upperPairs = new Tensor<int>(FeatureSelectionTensorOps.MaskPositions(FeatureSelectionTensorOps.StrictUpperMask<T>(n)),
+        var upperPairs = new Tensor<int>(PreprocessingTensorOps.MaskPositions(FeatureSelectionTensorOps.StrictUpperMask<T>(n)),
             new[] { n * (n - 1) / 2 });
 
         // Kernel matrix for Y, centered: K_c = HKH with H = I - 1/n * 11^T
@@ -94,7 +94,7 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _hsicValues = hsic.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(hsic, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hsic, numToSelect);
 
         IsFitted = true;
     }
@@ -113,20 +113,20 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         Tensor<T> median;
         if (upperPairs.Length == 0)
         {
-            median = FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.One);
+            median = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.One);
         }
         else
         {
             var distances = engine.TensorIndexSelect(engine.Reshape(engine.TensorAbs(difference), new[] { n * n }), upperPairs, 0);
             median = engine.TensorMax(
-                FeatureSelectionTensorOps.ColumnQuantile(engine.Reshape(distances, new[] { upperPairs.Length, 1 }), 0.5),
+                FilterStatisticTensorOps.ColumnQuantile(engine.Reshape(distances, new[] { upperPairs.Length, 1 }), 0.5),
                 NumOps.FromDouble(1e-10));
         }
 
         // gamma = 1 / (2 width^2)
         var width = engine.TensorMultiplyScalar(median, NumOps.FromDouble(_kernelWidth));
         var negativeGamma = engine.TensorDivide(
-            FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(-0.5)), engine.TensorSquare(width));
+            PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(-0.5)), engine.TensorSquare(width));
         var scale = engine.TensorBroadcastTo(engine.Reshape(negativeGamma, new[] { 1, 1 }), new[] { n, n });
         return engine.TensorExp(engine.TensorMultiply(engine.TensorSquare(difference), scale));
     }
@@ -145,7 +145,7 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("HilbertSchmidtSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

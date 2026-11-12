@@ -117,16 +117,16 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 
         // Fisher z factors sqrt(n - k - 3) for conditioning sets of size k = 0 .. max (sizes holds k + 1)
         int maxSize = _maxConditioningSetSize;
-        var sizes = engine.TensorCumSum(FeatureSelectionTensorOps.Filled(new[] { maxSize + 1 }, NumOps.One), 0);
+        var sizes = engine.TensorCumSum(PreprocessingTensorOps.Filled(new[] { maxSize + 1 }, NumOps.One), 0);
         var factors = engine.TensorSqrt(engine.TensorMax(
-            engine.TensorSubtract(FeatureSelectionTensorOps.Filled(new[] { maxSize + 1 }, NumOps.FromDouble(n - 2)), sizes),
+            engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { maxSize + 1 }, NumOps.FromDouble(n - 2)), sizes),
             NumOps.Zero));
         T alpha = NumOps.FromDouble(_alpha);
 
         // Online relevance analysis needs no conditioning set, so it is one test per feature
         var marginal = FisherPValues(withTarget, engine.TensorSlice(factors, new[] { 0 }, new[] { 1 }));
-        var relevant = FeatureSelectionTensorOps.MaskPositions(
-            FeatureSelectionTensorOps.OneMinus(engine.TensorGreaterThan(marginal, alpha)));
+        var relevant = PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(marginal, alpha)));
 
         var bestCandidates = new List<int>();
         foreach (int feature in relevant)
@@ -146,7 +146,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (kept.Length > _nFeaturesToSelect)
         {
             var keptScores = engine.TensorIndexSelect(scores, new Tensor<int>((int[])kept.Clone(), new[] { kept.Length }), 0);
-            var strongest = FeatureSelectionTensorOps.TopKIndicesSorted(keptScores, _nFeaturesToSelect);
+            var strongest = PreprocessingTensorOps.TopKIndicesSorted(keptScores, _nFeaturesToSelect);
             kept = strongest.Select(i => kept[i]).ToArray();
         }
 
@@ -191,7 +191,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
             var partial = PartialCorrelations(blocks, out var defined);
             var factor = engine.TensorSlice(factors, new[] { size }, new[] { 1 });
             var independent = engine.TensorMultiply(engine.TensorGreaterThan(FisherPValues(partial, factor), alpha), defined);
-            if (FeatureSelectionTensorOps.CountNonZero(independent) > 0)
+            if (PreprocessingTensorOps.CountNonZero(independent) > 0)
                 return true;
         }
 
@@ -219,7 +219,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var p11 = engine.Reshape(engine.TensorSlice(inverse, new[] { 0, 1, 1 }, new[] { count, 1, 1 }), new[] { count });
         var product = engine.TensorWhere(solved, engine.TensorMultiply(p00, p11), new Tensor<T>(new[] { count }));
         defined = engine.TensorGreaterThan(product, NumOps.Zero);
-        var safeScale = engine.TensorSqrt(engine.TensorWhere(defined, product, FeatureSelectionTensorOps.Filled(new[] { count }, NumOps.One)));
+        var safeScale = engine.TensorSqrt(engine.TensorWhere(defined, product, PreprocessingTensorOps.Filled(new[] { count }, NumOps.One)));
         var safeOffDiagonal = engine.TensorWhere(defined, p10, new Tensor<T>(new[] { count }));
         return engine.TensorNegate(engine.TensorDivide(safeOffDiagonal, safeScale));
     }
@@ -245,15 +245,16 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var engine = Engine;
         int n = x.Shape[0];
         int v = x.Shape[1];
-        var centered = FeatureSelectionTensorOps.CenterColumns(x, out _, out var std);
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
         var varying = engine.TensorGreaterThan(std, NumOps.Zero);
-        var safeStd = engine.Reshape(engine.TensorWhere(varying, std, FeatureSelectionTensorOps.Filled(new[] { v }, NumOps.One)), new[] { 1, v });
+        var safeStd = engine.Reshape(engine.TensorWhere(varying, std, PreprocessingTensorOps.Filled(new[] { v }, NumOps.One)), new[] { 1, v });
         var standardized = engine.TensorMultiply(
             engine.TensorDivide(centered, safeStd), engine.TensorBroadcastTo(engine.Reshape(varying, new[] { 1, v }), new[] { n, v }));
         var correlations = engine.TensorDivideScalar(
             engine.TensorMatMul(engine.TensorTranspose(standardized), standardized), NumOps.FromDouble(Math.Max(n, 1)));
         var eye = engine.TensorEye<T>(v);
-        return engine.TensorAdd(engine.TensorMultiply(correlations, FeatureSelectionTensorOps.OneMinus(eye)), eye);
+        return engine.TensorAdd(engine.TensorMultiply(correlations, PreprocessingTensorOps.OneMinus(eye)), eye);
     }
 
     /// <summary>All k-subsets of 0 .. count-1 in lexicographic order (MATLAB <c>nchoosek</c> order).</summary>
@@ -292,7 +293,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices is null)
             throw new InvalidOperationException("OSFS has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

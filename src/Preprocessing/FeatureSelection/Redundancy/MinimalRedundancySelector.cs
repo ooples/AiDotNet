@@ -81,11 +81,11 @@ public class MinimalRedundancySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (p > 0)
         {
             // First feature: highest relevance
-            int firstFeature = FeatureSelectionTensorOps.StableOrder(relevance, descending: true)[0];
+            int firstFeature = PreprocessingTensorOps.StableOrder(relevance, descending: true)[0];
             selected.Add(firstFeature);
             var chosen = FeatureSelectionTensorOps.OneHot<T>(firstFeature, p);
             mrmrScores = engine.TensorMultiply(chosen, relevance);
-            var remaining = FeatureSelectionTensorOps.OneMinus(chosen);
+            var remaining = PreprocessingTensorOps.OneMinus(chosen);
             var redundancySum = engine.Reshape(engine.TensorSlice(correlation, new[] { 0, firstFeature }, new[] { p, 1 }), new[] { p });
 
             // Subsequent features: maximize relevance - mean redundancy with the selected features
@@ -125,7 +125,7 @@ public class MinimalRedundancySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("MinimalRedundancySelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -67,7 +67,7 @@ public class FactorAnalysisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var std = engine.TensorSqrt(engine.TensorDivideScalar(
             engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, true), NumOps.FromDouble(n - 1)));
         var safeStd = engine.TensorWhere(
-            engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { 1, p }, NumOps.One), std);
+            engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One), std);
         var standardized = engine.TensorDivide(centered, safeStd);
         var correlation = engine.TensorDivideScalar(
             engine.TensorMatMul(engine.TensorTranspose(standardized), standardized), NumOps.FromDouble(n - 1));
@@ -76,7 +76,7 @@ public class FactorAnalysisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         // with another feature) replace the diagonal, and the factors are the top eigenpairs of that
         // reduced correlation matrix, with loadings sqrt(max(0, eigenvalue)) * eigenvector
         var eye = engine.TensorEye<T>(p);
-        var offDiagonal = engine.TensorMultiply(correlation, FeatureSelectionTensorOps.OneMinus(eye));
+        var offDiagonal = engine.TensorMultiply(correlation, PreprocessingTensorOps.OneMinus(eye));
         var maxCorrelation = engine.ReduceMax(engine.TensorAbs(offDiagonal), new[] { 1 }, true); // [p, 1]
         var initialCommunalities = engine.Reshape(engine.TensorSquare(maxCorrelation), new[] { 1, p });
         var reduced = engine.TensorAdd(offDiagonal, engine.TensorMultiply(eye, initialCommunalities));
@@ -95,7 +95,7 @@ public class FactorAnalysisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _communalities = communalities.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(communalities, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(communalities, numToSelect);
 
         IsFitted = true;
     }
@@ -112,7 +112,7 @@ public class FactorAnalysisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("FactorAnalysisSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

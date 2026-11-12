@@ -81,7 +81,7 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         // Select features with LOWEST conditional entropy (most information)
-        _selectedIndices = FeatureSelectionTensorOps.BottomKIndicesSorted(entropies, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(entropies, numToSelect);
 
         IsFitted = true;
     }
@@ -99,7 +99,7 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("ConditionalEntropySelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

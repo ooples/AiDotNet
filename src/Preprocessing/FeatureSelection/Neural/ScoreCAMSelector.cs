@@ -73,10 +73,10 @@ public class ScoreCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
         // Normalize every feature to [0, 1] as its activation map (all 0 for a constant feature)
-        var min = engine.Reshape(FeatureSelectionTensorOps.ColumnMin(X), new[] { 1, p });
-        var range = engine.TensorSubtract(engine.Reshape(FeatureSelectionTensorOps.ColumnMax(X), new[] { 1, p }), min);
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(X), new[] { 1, p });
+        var range = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(X), new[] { 1, p }), min);
         var varying = engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10));
-        var safeRange = engine.TensorWhere(varying, range, FeatureSelectionTensorOps.Filled(new[] { 1, p }, NumOps.One));
+        var safeRange = engine.TensorWhere(varying, range, PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
         var activationMaps = engine.TensorMultiply(
             engine.TensorDivide(engine.TensorSubtract(X, min), safeRange), engine.TensorBroadcastTo(varying, new[] { n, p }));
 
@@ -95,7 +95,7 @@ public class ScoreCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         _scoreWeights = scoreWeights.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scoreWeights, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scoreWeights, numToSelect);
 
         IsFitted = true;
     }
@@ -117,13 +117,13 @@ public class ScoreCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         var cov = engine.TensorMatMul(engine.TensorTranspose(centeredX), centeredY); // [p, 1]
         var varX = engine.Reshape(engine.ReduceSum(engine.TensorSquare(centeredX), new[] { 0 }, false), new[] { p, 1 });
         var defined = engine.TensorGreaterThan(varX, NumOps.FromDouble(1e-10));
-        var safeVarX = engine.TensorWhere(defined, varX, FeatureSelectionTensorOps.Filled(new[] { p, 1 }, NumOps.One));
+        var safeVarX = engine.TensorWhere(defined, varX, PreprocessingTensorOps.Filled(new[] { p, 1 }, NumOps.One));
         var beta = engine.TensorWhere(defined, engine.TensorDivide(cov, safeVarX), new Tensor<T>(new[] { p, 1 }));
 
         // pred - mean(y) = sum_j beta_j (x_j - mean_j); residual = (y - mean(y)) - that
         var residual = engine.TensorSubtract(centeredY, engine.TensorMatMul(centeredX, beta));
         T ssResid = engine.TensorSum(engine.TensorSquare(residual));
-        return FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.Subtract(NumOps.One, NumOps.Divide(ssResid, ssTotal)));
+        return PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.Subtract(NumOps.One, NumOps.Divide(ssResid, ssTotal)));
     }
 
     /// <inheritdoc />
@@ -140,7 +140,7 @@ public class ScoreCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("ScoreCAMSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

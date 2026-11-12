@@ -124,7 +124,7 @@ public class AdaptiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             return;
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(Tensor<T>.FromVector(_performanceScores), numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(Tensor<T>.FromVector(_performanceScores), numToSelect);
 
         IsFitted = true;
     }
@@ -150,7 +150,7 @@ public class AdaptiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("AdaptiveFeatureSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

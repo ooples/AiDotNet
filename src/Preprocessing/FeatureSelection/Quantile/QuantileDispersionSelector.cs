@@ -57,19 +57,19 @@ public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matri
 
         var engine = Engine;
         var x = Tensor<T>.FromMatrix(data);
-        var q1 = FeatureSelectionTensorOps.ColumnQuantile(x, 0.25);
-        var q3 = FeatureSelectionTensorOps.ColumnQuantile(x, 0.75);
+        var q1 = FilterStatisticTensorOps.ColumnQuantile(x, 0.25);
+        var q3 = FilterStatisticTensorOps.ColumnQuantile(x, 0.75);
 
         // QCD = (Q3 - Q1) / |Q3 + Q1|; where Q1 and Q3 cancel out (|Q3 + Q1| < 1e-10), the IQR itself
         var iqr = engine.TensorSubtract(q3, q1);
         var absSum = engine.TensorAbs(engine.TensorAdd(q3, q1));
         var cancels = engine.TensorLessThan(absSum, NumOps.FromDouble(1e-10));
-        var safeSum = engine.TensorWhere(cancels, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), absSum);
+        var safeSum = engine.TensorWhere(cancels, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), absSum);
         var qcd = engine.TensorWhere(cancels, iqr, engine.TensorDivide(iqr, safeSum));
         _qcdValues = qcd.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(qcd, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(qcd, numToSelect);
 
         IsFitted = true;
     }
@@ -86,7 +86,7 @@ public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("QuantileDispersionSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

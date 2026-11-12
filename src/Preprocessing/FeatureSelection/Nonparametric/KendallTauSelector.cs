@@ -80,19 +80,19 @@ public class KendallTauSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             x,
             SignDifferences,
             new[] { targetSigns },
-            new[] { FeatureSelectionTensorOps.Filled(new[] { n, n }, NumOps.One) });
+            new[] { PreprocessingTensorOps.Filled(new[] { n, n }, NumOps.One) });
         var concordance = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p });
         var featureUntied = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p });
         var denominator = engine.TensorMultiplyScalar(featureUntied, targetUntied);
         var defined = engine.TensorGreaterThan(denominator, NumOps.Zero);
-        var safeDenominator = engine.TensorWhere(defined, denominator, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeDenominator = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var tau = engine.TensorWhere(
             defined, engine.TensorDivide(concordance, engine.TensorSqrt(safeDenominator)), new Tensor<T>(new[] { p }));
         var scores = engine.TensorAbs(tau);
         _tauScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -118,7 +118,7 @@ public class KendallTauSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("KendallTauSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

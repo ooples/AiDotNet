@@ -85,7 +85,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _miValues = mi.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(mi, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(mi, numToSelect);
 
         IsFitted = true;
     }
@@ -104,7 +104,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("MutualInformationSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -105,8 +105,8 @@ public class MultiLabelMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
             miScores = _aggregation switch
             {
                 AggregationMethod.Average => engine.ReduceMean(miMatrix, new[] { 1 }, false),
-                AggregationMethod.Max => FeatureSelectionTensorOps.ColumnMax(engine.TensorTranspose(miMatrix)),
-                AggregationMethod.Min => FeatureSelectionTensorOps.ColumnMin(engine.TensorTranspose(miMatrix)),
+                AggregationMethod.Max => PreprocessingTensorOps.ColumnMax(engine.TensorTranspose(miMatrix)),
+                AggregationMethod.Min => PreprocessingTensorOps.ColumnMin(engine.TensorTranspose(miMatrix)),
                 _ => engine.ReduceSum(miMatrix, new[] { 1 }, false)
             };
         }
@@ -114,7 +114,7 @@ public class MultiLabelMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
         _miScores = miScores.ToVector();
 
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(miScores, nToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(miScores, nToSelect);
 
         IsFitted = true;
     }
@@ -131,7 +131,7 @@ public class MultiLabelMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("MultiLabelMutualInformation has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

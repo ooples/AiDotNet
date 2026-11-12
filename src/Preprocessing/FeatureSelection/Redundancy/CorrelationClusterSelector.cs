@@ -82,7 +82,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
         // cluster leads a new one and absorbs every unassigned feature correlated with it at the threshold or
         // more. A leader is the most relevant member of its cluster, so the leaders, in that order, are the
         // cluster representatives.
-        var order = FeatureSelectionTensorOps.StableOrder(relevance, descending: true);
+        var order = PreprocessingTensorOps.StableOrder(relevance, descending: true);
         var assigned = new Tensor<T>(new[] { p });
         var representatives = new List<int>();
         int position = 0;
@@ -96,7 +96,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
 
             int leader = order[position];
             representatives.Add(leader);
-            var absorbed = FeatureSelectionTensorOps.OneMinus(engine.TensorLessThan(
+            var absorbed = PreprocessingTensorOps.OneMinus(engine.TensorLessThan(
                 engine.Reshape(engine.TensorSlice(correlation, new[] { leader, 0 }, new[] { 1, p }), new[] { p }), threshold));
             assigned = engine.TensorMax(engine.TensorMax(assigned, absorbed), FeatureSelectionTensorOps.OneHot<T>(leader, p));
         }
@@ -123,7 +123,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("CorrelationClusterSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

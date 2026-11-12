@@ -121,7 +121,7 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(mutualInformation, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(mutualInformation, numToSelect);
 
         IsFitted = true;
     }
@@ -153,7 +153,7 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices is null)
             throw new InvalidOperationException("MLMI has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

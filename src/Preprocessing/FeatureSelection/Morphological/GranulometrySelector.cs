@@ -65,12 +65,12 @@ public class GranulometrySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var columns = engine.TensorTranspose(x);
 
         // Normalize each column to [0, 1] (columns whose range is not above 1e-10 stay as they are)
-        var min = engine.Reshape(FeatureSelectionTensorOps.ColumnMin(x), new[] { p, 1 });
-        var max = engine.Reshape(FeatureSelectionTensorOps.ColumnMax(x), new[] { p, 1 });
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { p, 1 });
+        var max = engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { p, 1 });
         var range = engine.TensorSubtract(max, min);
         var varying = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10)), new[] { p, n });
         var safeRange = engine.TensorWhere(
-            engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10)), range, FeatureSelectionTensorOps.Filled(new[] { p, 1 }, NumOps.One));
+            engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10)), range, PreprocessingTensorOps.Filled(new[] { p, 1 }, NumOps.One));
         var normalized = engine.TensorWhere(varying, engine.TensorDivide(engine.TensorSubtract(columns, min), safeRange), columns);
 
         // Pattern spectrum: the mass each opening (erosion then dilation) of growing size removes
@@ -92,10 +92,10 @@ public class GranulometrySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             var patternSpectrum = engine.TensorStack(spectrum.ToArray(), 1); // [p, sizes]
             var total = engine.ReduceSum(patternSpectrum, new[] { 1 }, true);
             var hasMass = engine.TensorGreaterThan(total, NumOps.FromDouble(1e-10));
-            var safeTotal = engine.TensorWhere(hasMass, total, FeatureSelectionTensorOps.Filled(new[] { p, 1 }, NumOps.One));
+            var safeTotal = engine.TensorWhere(hasMass, total, PreprocessingTensorOps.Filled(new[] { p, 1 }, NumOps.One));
             var prob = engine.TensorDivide(patternSpectrum, safeTotal);
             var counted = engine.TensorGreaterThan(prob, NumOps.FromDouble(1e-10));
-            var safeProb = engine.TensorWhere(counted, prob, FeatureSelectionTensorOps.Filled(prob.Shape.ToArray(), NumOps.One));
+            var safeProb = engine.TensorWhere(counted, prob, PreprocessingTensorOps.Filled(prob.Shape.ToArray(), NumOps.One));
             var terms = engine.TensorWhere(
                 counted,
                 engine.TensorDivideScalar(engine.TensorMultiply(prob, engine.TensorLog(safeProb)), NumOps.FromDouble(-Math.Log(2))),
@@ -107,7 +107,7 @@ public class GranulometrySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         _granulometryScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -124,7 +124,7 @@ public class GranulometrySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("GranulometrySelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

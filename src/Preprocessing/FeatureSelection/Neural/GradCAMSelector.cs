@@ -85,13 +85,13 @@ public class GradCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         // Combine positive contributions (GradCAM++ focuses on positive), ReLU on the final weights
         var defined = engine.TensorGreaterThan(posWeightSum, NumOps.FromDouble(1e-10));
-        var safeWeight = engine.TensorWhere(defined, posWeightSum, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeWeight = engine.TensorWhere(defined, posWeightSum, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var alpha = engine.TensorWhere(defined, engine.TensorDivide(posGradSum, safeWeight), new Tensor<T>(new[] { p }));
         var activationWeights = engine.TensorMax(alpha, NumOps.Zero);
         _activationWeights = activationWeights.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(activationWeights, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(activationWeights, numToSelect);
 
         IsFitted = true;
     }
@@ -110,7 +110,7 @@ public class GradCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("GradCAMSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -111,7 +111,7 @@ public class FederatedFSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
                 break;
             case FederatedScoreAggregation.Median:
                 // Robust aggregation using the median
-                aggregated = FeatureSelectionTensorOps.ColumnQuantile(scores, 0.5);
+                aggregated = FilterStatisticTensorOps.ColumnQuantile(scores, 0.5);
                 break;
             case FederatedScoreAggregation.TrimmedMean:
                 // Remove extreme values: drop the trimCount lowest and highest client scores
@@ -131,7 +131,7 @@ public class FederatedFSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _aggregatedScores = aggregated.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(aggregated, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(aggregated, numToSelect);
 
         IsFitted = true;
     }
@@ -150,7 +150,7 @@ public class FederatedFSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("FederatedFSSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

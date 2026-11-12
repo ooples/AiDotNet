@@ -94,12 +94,12 @@ public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
 
         // ReliefF differences are scaled by the feature range (Kononenko 1994); a constant feature never differs
         var X = Tensor<T>.FromMatrix(data);
-        var range = engine.Reshape(engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(X), FeatureSelectionTensorOps.ColumnMin(X)), new[] { 1, p });
-        var safeRange = engine.TensorWhere(engine.TensorGreaterThan(range, NumOps.Zero), range, FeatureSelectionTensorOps.Filled(new[] { 1, p }, NumOps.One));
+        var range = engine.Reshape(engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), PreprocessingTensorOps.ColumnMin(X)), new[] { 1, p });
+        var safeRange = engine.TensorWhere(engine.TensorGreaterThan(range, NumOps.Zero), range, PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
         var scaled = engine.TensorDivide(X, safeRange);
 
         var weights = new Tensor<T>(new[] { 1, p });
-        var everyRow = FeatureSelectionTensorOps.Filled(new[] { n }, NumOps.One);
+        var everyRow = PreprocessingTensorOps.Filled(new[] { n }, NumOps.One);
         T half = NumOps.FromDouble(0.5);
 
         // Main ReliefF loop
@@ -127,10 +127,10 @@ public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             // Nearest hits (similar labels) and nearest misses (dissimilar labels), ties by index
             var similar = engine.TensorGreaterThan(similarity, half);
             var hits = FeatureSelectionTensorOps.TopKWhere(closeness, engine.TensorMultiply(notSelf, similar), _nNeighbors);
-            var misses = FeatureSelectionTensorOps.TopKWhere(closeness, engine.TensorMultiply(notSelf, FeatureSelectionTensorOps.OneMinus(similar)), _nNeighbors);
+            var misses = FeatureSelectionTensorOps.TopKWhere(closeness, engine.TensorMultiply(notSelf, PreprocessingTensorOps.OneMinus(similar)), _nNeighbors);
 
             // Update feature weights: each neighbour's difference weighted by (1 - similarity)
-            var dissimilarity = FeatureSelectionTensorOps.OneMinus(similarity);
+            var dissimilarity = PreprocessingTensorOps.OneMinus(similarity);
             var hitContrib = NeighbourContribution(differences, dissimilarity, hits, p);
             var missContrib = NeighbourContribution(differences, dissimilarity, misses, p);
             weights = engine.TensorAdd(weights, engine.TensorSubtract(
@@ -144,7 +144,7 @@ public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(featureWeights, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(featureWeights, numToSelect);
 
         IsFitted = true;
     }
@@ -189,7 +189,7 @@ public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("MultiLabelReliefF has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -96,15 +96,15 @@ public class AlphaInvesting<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         _pValues = pValues.ToVector();
 
         // Order features by p-value for more efficient testing (ties by index)
-        var orderedFeatures = FeatureSelectionTensorOps.StableOrder(pValues, descending: false);
+        var orderedFeatures = PreprocessingTensorOps.StableOrder(pValues, descending: false);
 
         // Alpha-investing procedure (Foster & Stine 2008): each test spends alpha / (1 - alpha) of the wealth
         // when it fails and earns omega when it rejects; alpha = eta * w / (1 + eta * w) invests a fraction eta
         // of the current wealth w.
-        var wealth = FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(_initialWealth));
+        var wealth = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(_initialWealth));
         T eta = NumOps.FromDouble(_eta);
         T omega = NumOps.FromDouble(_omega);
-        var one = FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.One);
+        var one = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.One);
         var testAlphas = new Tensor<T>(new[] { p });
 
         foreach (int featureIdx in orderedFeatures)
@@ -112,7 +112,7 @@ public class AlphaInvesting<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             if (selected.Count >= _nFeaturesToSelect)
                 break;
 
-            if (FeatureSelectionTensorOps.CountNonZero(engine.TensorGreaterThan(wealth, NumOps.Zero)) == 0)
+            if (PreprocessingTensorOps.CountNonZero(engine.TensorGreaterThan(wealth, NumOps.Zero)) == 0)
                 break;
 
             // Compute alpha for this test
@@ -123,8 +123,8 @@ public class AlphaInvesting<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
             // Test: reject the null hypothesis (the feature is significant) when p <= alpha
             var pValue = engine.TensorSlice(pValues, new[] { featureIdx }, new[] { 1 });
-            bool rejected = FeatureSelectionTensorOps.CountNonZero(engine.TensorLessThan(pValue, alpha))
-                + FeatureSelectionTensorOps.CountNonZero(engine.TensorEquals(pValue, alpha)) > 0;
+            bool rejected = PreprocessingTensorOps.CountNonZero(engine.TensorLessThan(pValue, alpha))
+                + PreprocessingTensorOps.CountNonZero(engine.TensorEquals(pValue, alpha)) > 0;
             if (rejected)
             {
                 selected.Add(featureIdx);
@@ -179,7 +179,7 @@ public class AlphaInvesting<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("AlphaInvesting has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

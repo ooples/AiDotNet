@@ -84,7 +84,7 @@ public class CMIMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         // Greedy forward selection with the CMIM criterion (Fleuret 2004):
         // score_j = min over selected s of I(X_j; Y | X_s), and I(X_j; Y) before anything is selected
         var selected = new List<int>();
-        var remaining = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One);
+        var remaining = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
         var conditionalMI = miWithTarget;
         Tensor<T>? minConditionalMI = null;
         var cmimScores = new Tensor<T>(new[] { p });
@@ -100,7 +100,7 @@ public class CMIMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             int bestFeature = best[0];
             var chosen = FeatureSelectionTensorOps.OneHot<T>(bestFeature, p);
             selected.Add(bestFeature);
-            remaining = engine.TensorMultiply(remaining, FeatureSelectionTensorOps.OneMinus(chosen));
+            remaining = engine.TensorMultiply(remaining, PreprocessingTensorOps.OneMinus(chosen));
             cmimScores = engine.TensorAdd(cmimScores, engine.TensorMultiply(chosen, conditionalMI));
 
             // I(X_j; Y | X_s) = I(X_j, X_s; Y) - I(X_s; Y), with the joint variable X_s * nBins + X_j
@@ -131,7 +131,7 @@ public class CMIMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("CMIMSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

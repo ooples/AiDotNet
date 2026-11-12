@@ -92,7 +92,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
         _nInputFeatures = data.Columns;
         var scores = MaximalInformationCoefficient.Scores(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), _alpha, _c);
         _micScores = scores.ToVector();
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, _nFeaturesToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, _nFeaturesToSelect);
 
         IsFitted = true;
     }
@@ -110,7 +110,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("MaximalInformationCoefficientSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

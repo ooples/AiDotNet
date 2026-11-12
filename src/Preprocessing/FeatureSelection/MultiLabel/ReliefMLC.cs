@@ -87,15 +87,15 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCoun
 
         // Normalize features by their range; a feature whose range is below 1e-10 is ignored
         var X = Tensor<T>.FromMatrix(data);
-        var range = engine.Reshape(engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(X), FeatureSelectionTensorOps.ColumnMin(X)), new[] { 1, p });
-        var used = FeatureSelectionTensorOps.OneMinus(engine.TensorLessThan(range, NumOps.FromDouble(1e-10)));
-        var safeRange = engine.TensorWhere(used, range, FeatureSelectionTensorOps.Filled(new[] { 1, p }, NumOps.One));
+        var range = engine.Reshape(engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), PreprocessingTensorOps.ColumnMin(X)), new[] { 1, p });
+        var used = PreprocessingTensorOps.OneMinus(engine.TensorLessThan(range, NumOps.FromDouble(1e-10)));
+        var safeRange = engine.TensorWhere(used, range, PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
         var scaled = engine.TensorMultiply(engine.TensorDivide(X, safeRange), engine.TensorBroadcastTo(used, new[] { n, p }));
 
         // Extract label sets
         var labelSets = engine.TensorGreaterThan(Tensor<T>.FromMatrix(targets), NumOps.FromDouble(0.5)); // [n, L]
         var labelCounts = engine.ReduceSum(labelSets, new[] { 1 }, false); // [n]
-        var everyRow = FeatureSelectionTensorOps.Filled(new[] { n }, NumOps.One);
+        var everyRow = PreprocessingTensorOps.Filled(new[] { n }, NumOps.One);
         int k = Math.Min(_nNeighbors, Math.Max(n - 1, 0));
         var weights = new Tensor<T>(new[] { 1, p });
         T two = NumOps.FromDouble(2);
@@ -124,7 +124,7 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCoun
                     engine.TensorBroadcastTo(engine.TensorSlice(labelCounts, new[] { ri }, new[] { 1 }), new[] { neighbors.Length })),
                 intersection);
             var hasUnion = engine.TensorGreaterThan(union, NumOps.Zero);
-            var neighbourOnes = FeatureSelectionTensorOps.Filled(new[] { neighbors.Length }, NumOps.One);
+            var neighbourOnes = PreprocessingTensorOps.Filled(new[] { neighbors.Length }, NumOps.One);
             var similarity = engine.TensorWhere(hasUnion, engine.TensorDivide(intersection, engine.TensorWhere(hasUnion, union, neighbourOnes)), neighbourOnes);
 
             // Similar labels (hit) subtract the difference, different labels (miss) add it:
@@ -140,7 +140,7 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCoun
         _featureWeights = featureWeights.ToVector();
 
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(featureWeights, nToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(featureWeights, nToSelect);
 
         IsFitted = true;
     }
@@ -157,7 +157,7 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCoun
         if (_selectedIndices is null)
             throw new InvalidOperationException("ReliefMLC has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

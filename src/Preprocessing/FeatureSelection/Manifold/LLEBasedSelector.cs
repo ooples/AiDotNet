@@ -85,12 +85,12 @@ public class LLEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         // Feature score: mean over the points of 1 / (squared reconstruction error + 1e-10)
         var error = engine.TensorSquare(engine.TensorSubtract(x, engine.TensorMatMul(weights, x)));
         var inverse = engine.TensorDivide(
-            FeatureSelectionTensorOps.Filled(new[] { n, p }, NumOps.One), engine.TensorAddScalar(error, NumOps.FromDouble(1e-10)));
+            PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.One), engine.TensorAddScalar(error, NumOps.FromDouble(1e-10)));
         var scores = engine.ReduceMean(inverse, new[] { 0 }, false);
         _featureScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -101,7 +101,7 @@ public class LLEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("LLEBasedSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

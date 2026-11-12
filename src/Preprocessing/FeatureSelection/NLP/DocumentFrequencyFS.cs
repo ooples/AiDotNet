@@ -84,17 +84,17 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _documentFrequencies = df.Cast<int>().AsSpan().ToArray();
 
         // Filter by document frequency and select the most frequent terms
-        var atLeastMin = FeatureSelectionTensorOps.OneMinus(engine.TensorLessThan(df, NumOps.FromDouble(_minDf)));
-        var atMostMax = FeatureSelectionTensorOps.OneMinus(engine.TensorGreaterThan(df, NumOps.FromDouble(_maxDf)));
+        var atLeastMin = PreprocessingTensorOps.OneMinus(engine.TensorLessThan(df, NumOps.FromDouble(_minDf)));
+        var atMostMax = PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(df, NumOps.FromDouble(_maxDf)));
         var inRange = engine.TensorMultiply(atLeastMin, atMostMax);
 
-        if (FeatureSelectionTensorOps.CountNonZero(inRange) == 0 && p > 0)
+        if (PreprocessingTensorOps.CountNonZero(inRange) == 0 && p > 0)
         {
             // No features pass filter, select features closest to criteria
             _selectedIndices = FeatureSelectionTensorOps.TopKWhere(df, atLeastMin, Math.Min(_nFeaturesToSelect, p));
 
             if (_selectedIndices.Length == 0)
-                _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(df, Math.Min(_nFeaturesToSelect, p));
+                _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(df, Math.Min(_nFeaturesToSelect, p));
         }
         else
         {
@@ -110,7 +110,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("DocumentFrequencyFS has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

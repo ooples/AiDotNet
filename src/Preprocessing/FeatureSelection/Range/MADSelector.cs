@@ -57,13 +57,13 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         // MAD = median(|x - median(x)|) per column (scipy.stats.median_abs_deviation with scale 1)
         var engine = Engine;
         var x = Tensor<T>.FromMatrix(data);
-        var median = engine.Reshape(FeatureSelectionTensorOps.ColumnQuantile(x, 0.5), new[] { 1, p });
+        var median = engine.Reshape(FilterStatisticTensorOps.ColumnQuantile(x, 0.5), new[] { 1, p });
         var absDeviations = engine.TensorAbs(engine.TensorSubtract(x, median));
-        var mad = FeatureSelectionTensorOps.ColumnQuantile(absDeviations, 0.5);
+        var mad = FilterStatisticTensorOps.ColumnQuantile(absDeviations, 0.5);
         _madValues = mad.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(mad, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(mad, numToSelect);
 
         IsFitted = true;
     }
@@ -80,7 +80,7 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         if (_selectedIndices is null)
             throw new InvalidOperationException("MADSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

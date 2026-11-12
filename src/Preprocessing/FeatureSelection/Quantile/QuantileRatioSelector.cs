@@ -71,20 +71,20 @@ public class QuantileRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         var engine = Engine;
         var x = Tensor<T>.FromMatrix(data);
-        var upper = FeatureSelectionTensorOps.ColumnQuantile(x, _upperQuantile);
-        var lower = FeatureSelectionTensorOps.ColumnQuantile(x, _lowerQuantile);
+        var upper = FilterStatisticTensorOps.ColumnQuantile(x, _upperQuantile);
+        var lower = FilterStatisticTensorOps.ColumnQuantile(x, _lowerQuantile);
 
         // |upper / lower| (mixed signs give the same |upper| / |lower|); a lower quantile near zero
         // (|lower| < 1e-10) falls back to the difference upper - lower.
         var absLower = engine.TensorAbs(lower);
         var nearZero = engine.TensorLessThan(absLower, NumOps.FromDouble(1e-10));
-        var safeLower = engine.TensorWhere(nearZero, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), absLower);
+        var safeLower = engine.TensorWhere(nearZero, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), absLower);
         var ratio = engine.TensorDivide(engine.TensorAbs(upper), safeLower);
         var ratios = engine.TensorWhere(nearZero, engine.TensorSubtract(upper, lower), ratio);
         _ratioValues = ratios.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(ratios, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(ratios, numToSelect);
 
         IsFitted = true;
     }
@@ -101,7 +101,7 @@ public class QuantileRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("QuantileRatioSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

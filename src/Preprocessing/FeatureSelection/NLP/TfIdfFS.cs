@@ -89,10 +89,10 @@ public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
 
         // IDF = ln(n / df) + 1 (scikit-learn's TfidfTransformer with smooth_idf=False); 0 for unseen terms
         var seen = engine.TensorGreaterThan(docFreq, NumOps.Zero);
-        var safeDocFreq = engine.TensorWhere(seen, docFreq, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeDocFreq = engine.TensorWhere(seen, docFreq, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var idf = engine.TensorWhere(
             seen,
-            engine.TensorAddScalar(engine.TensorLog(engine.TensorDivide(FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.FromDouble(n)), safeDocFreq)), NumOps.One),
+            engine.TensorAddScalar(engine.TensorLog(engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(n)), safeDocFreq)), NumOps.One),
             new Tensor<T>(new[] { p }));
 
         // Average TF-IDF of each term over the documents; terms whose document-frequency ratio lies outside
@@ -100,14 +100,14 @@ public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
         var docFreqRatio = engine.TensorDivideScalar(docFreq, NumOps.FromDouble(n));
         var tooRare = engine.TensorLessThan(docFreqRatio, NumOps.FromDouble(_minDf));
         var tooCommon = engine.TensorGreaterThan(docFreqRatio, NumOps.FromDouble(_maxDf));
-        var kept = engine.TensorMultiply(FeatureSelectionTensorOps.OneMinus(tooRare), FeatureSelectionTensorOps.OneMinus(tooCommon));
+        var kept = engine.TensorMultiply(PreprocessingTensorOps.OneMinus(tooRare), PreprocessingTensorOps.OneMinus(tooCommon));
         var meanTf = engine.ReduceMean(x, new[] { 0 }, false);
         var scores = engine.TensorWhere(kept, engine.TensorMultiply(meanTf, idf), new Tensor<T>(new[] { p }));
         _tfidfScores = scores.ToVector();
 
         // Select top features by TF-IDF score
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -118,7 +118,7 @@ public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
         if (_selectedIndices is null)
             throw new InvalidOperationException("TfIdfFS has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

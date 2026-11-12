@@ -78,7 +78,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             Tensor<T>.FromMatrix(data),
             column => FeatureSelectionTensorOps.DoubleCenteredDistances(column),
             new[] { yCentered },
-            new[] { FeatureSelectionTensorOps.Filled(new[] { n, n }, NumOps.One) });
+            new[] { PreprocessingTensorOps.Filled(new[] { n, n }, NumOps.One) });
         var dcovSquared = engine.TensorDivideScalar(engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p }), pairCount);
         var xVar = engine.TensorDivideScalar(engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p }), pairCount);
 
@@ -86,8 +86,8 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         var scores = new Tensor<T>(new[] { p });
         if (!NumOps.LessThan(yVar, NumOps.FromDouble(1e-10)))
         {
-            var defined = FeatureSelectionTensorOps.OneMinus(engine.TensorLessThan(xVar, NumOps.FromDouble(1e-10)));
-            var safeXVar = engine.TensorWhere(defined, xVar, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+            var defined = PreprocessingTensorOps.OneMinus(engine.TensorLessThan(xVar, NumOps.FromDouble(1e-10)));
+            var safeXVar = engine.TensorWhere(defined, xVar, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
             var dcor = engine.TensorDivide(
                 engine.TensorSqrt(dcovSquared), engine.TensorSqrt(engine.TensorSqrt(engine.TensorMultiplyScalar(safeXVar, yVar))));
             scores = engine.TensorWhere(defined, dcor, scores);
@@ -96,7 +96,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         _dcorValues = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -114,7 +114,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("DistanceCorrelationSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

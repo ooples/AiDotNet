@@ -63,12 +63,14 @@ public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             throw new InvalidOperationException("At least one sample is required to compute the coefficient of variation.");
 
         var engine = Engine;
-        FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out var mean, out var std);
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = FilterStatisticTensorOps.ColumnMeans(x);
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(FilterStatisticTensorOps.CenterColumns(x));
 
         // CV = std / |mean| (absolute mean handles negative values); 0 where |mean| <= 1e-10
         var absMean = engine.TensorAbs(engine.Reshape(mean, new[] { p }));
         var defined = engine.TensorGreaterThan(absMean, NumOps.FromDouble(1e-10));
-        var safeMean = engine.TensorWhere(defined, absMean, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeMean = engine.TensorWhere(defined, absMean, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var cv = engine.TensorWhere(defined, engine.TensorDivide(std, safeMean), new Tensor<T>(new[] { p }));
         _cvValues = cv.ToVector();
 
@@ -76,16 +78,16 @@ public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         if (_preferHighCV)
         {
-            _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(cv, numToSelect);
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(cv, numToSelect);
         }
         else
         {
             // Lowest CV among the features whose CV is above 1e-10; the others rank last and are never taken
             var candidates = engine.TensorGreaterThan(cv, NumOps.FromDouble(1e-10));
-            int candidateCount = FeatureSelectionTensorOps.CountNonZero(candidates);
+            int candidateCount = PreprocessingTensorOps.CountNonZero(candidates);
             T beyond = p == 0 ? NumOps.One : NumOps.Add(engine.TensorMaxValue(cv), NumOps.One);
-            var ranked = engine.TensorWhere(candidates, cv, FeatureSelectionTensorOps.Filled(new[] { p }, beyond));
-            _selectedIndices = FeatureSelectionTensorOps.BottomKIndicesSorted(ranked, Math.Min(numToSelect, candidateCount));
+            var ranked = engine.TensorWhere(candidates, cv, PreprocessingTensorOps.Filled(new[] { p }, beyond));
+            _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(ranked, Math.Min(numToSelect, candidateCount));
         }
 
         IsFitted = true;
@@ -103,7 +105,7 @@ public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("CoefOfVariationSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

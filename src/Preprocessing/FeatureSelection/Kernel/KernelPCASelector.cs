@@ -97,7 +97,7 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         _featureImportances = importances.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importances, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, numToSelect);
 
         IsFitted = true;
     }
@@ -108,7 +108,7 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         if (_selectedIndices is null)
             throw new InvalidOperationException("KernelPCASelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

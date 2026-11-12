@@ -80,7 +80,7 @@ public class SaliencySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         var ssXY = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(dx), dy), new[] { p });
         var ssXX = engine.ReduceSum(engine.TensorSquare(dx), new[] { 0 }, false);
         var defined = engine.TensorGreaterThan(ssXX, NumOps.FromDouble(1e-10));
-        var safeSsXX = engine.TensorWhere(defined, ssXX, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeSsXX = engine.TensorWhere(defined, ssXX, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var coefficients = engine.TensorWhere(defined, engine.TensorDivide(ssXY, safeSsXX), new Tensor<T>(new[] { p }));
 
         // Saliency as the average absolute gradient x input, |coefficient| * mean |x|
@@ -90,7 +90,7 @@ public class SaliencySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
         // Select top features by saliency
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(saliency, nToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(saliency, nToSelect);
 
         IsFitted = true;
     }
@@ -109,7 +109,7 @@ public class SaliencySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("SaliencySelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

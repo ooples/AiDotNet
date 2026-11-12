@@ -80,7 +80,7 @@ public class PolynomialKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
         var targetGap = engine.TensorAbs(engine.TensorSubtract(
             engine.TensorBroadcastTo(y, new[] { n, n }), engine.TensorBroadcastTo(engine.TensorTranspose(y), new[] { n, n })));
-        var similarity = FeatureSelectionTensorOps.OneMinus(
+        var similarity = PreprocessingTensorOps.OneMinus(
             engine.TensorDivide(targetGap, engine.TensorAddScalar(targetGap, NumOps.One)));
         var upper = FeatureSelectionTensorOps.StrictUpperMask<T>(n);
 
@@ -95,12 +95,12 @@ public class PolynomialKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         var numerator = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p });
         var denominator = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p });
         var defined = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
-        var safeDenominator = engine.TensorWhere(defined, denominator, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeDenominator = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var scores = engine.TensorWhere(defined, engine.TensorDivide(numerator, engine.TensorSqrt(safeDenominator)), new Tensor<T>(new[] { p }));
         _kernelScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -118,7 +118,7 @@ public class PolynomialKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("PolynomialKernelSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

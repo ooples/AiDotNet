@@ -87,7 +87,7 @@ public class JointMISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         // Greedy forward selection with the JMI criterion (Yang & Moody 1999; Brown et al. 2012, eq. 14):
         // score_k = I(X_k;Y) - penalty / |S| * sum over selected j of [I(X_k;X_j) - I(X_k;X_j|Y)]
         var selected = new List<int>();
-        var remaining = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One);
+        var remaining = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
         var redundancy = new Tensor<T>(new[] { p });
         var scores = miWithTarget;
         var jmiScores = new Tensor<T>(new[] { p });
@@ -104,7 +104,7 @@ public class JointMISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             int bestFeature = best[0];
             var chosen = FeatureSelectionTensorOps.OneHot<T>(bestFeature, p);
             selected.Add(bestFeature);
-            remaining = engine.TensorMultiply(remaining, FeatureSelectionTensorOps.OneMinus(chosen));
+            remaining = engine.TensorMultiply(remaining, PreprocessingTensorOps.OneMinus(chosen));
             jmiScores = engine.TensorAdd(jmiScores, engine.TensorMultiply(chosen, scores));
 
             // I(X_k;X_j) for the newly selected j, and I(X_k;X_j|Y) = I(X_k; (X_j,Y)) - I(X_k;Y)
@@ -139,7 +139,7 @@ public class JointMISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("JointMISelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

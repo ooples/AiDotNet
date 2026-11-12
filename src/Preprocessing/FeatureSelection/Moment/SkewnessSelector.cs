@@ -63,12 +63,13 @@ public class SkewnessSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
             throw new InvalidOperationException("At least one sample is required to compute skewness.");
 
         var engine = Engine;
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
 
         // Constant columns (std < 1e-10) get 0; the others get the skewness E[(X-μ)³] / σ³
         // (scipy.stats.skew(bias=True)).
         var constant = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
-        var safeStd = engine.TensorWhere(constant, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var safeStd = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), std);
         var z = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
         var moment3 = engine.ReduceMean(engine.TensorMultiply(engine.TensorSquare(z), z), new[] { 0 }, false);
         var skewness = engine.TensorWhere(constant, new Tensor<T>(new[] { p }), moment3);
@@ -78,8 +79,8 @@ public class SkewnessSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         var magnitude = engine.TensorAbs(skewness);
         _selectedIndices = _preferHighSkewness
-            ? FeatureSelectionTensorOps.TopKIndicesSorted(magnitude, numToSelect)
-            : FeatureSelectionTensorOps.BottomKIndicesSorted(magnitude, numToSelect);
+            ? PreprocessingTensorOps.TopKIndicesSorted(magnitude, numToSelect)
+            : PreprocessingTensorOps.BottomKIndicesSorted(magnitude, numToSelect);
 
         IsFitted = true;
     }
@@ -96,7 +97,7 @@ public class SkewnessSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("SkewnessSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

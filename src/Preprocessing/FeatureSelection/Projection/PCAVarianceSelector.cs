@@ -73,7 +73,7 @@ public class PCAVarianceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             T totalVariance = engine.TensorSum(eigenvalues);
             var weights = NumOps.GreaterThan(totalVariance, NumOps.Zero)
                 ? engine.TensorDivideScalar(eigenvalues, totalVariance)
-                : FeatureSelectionTensorOps.Filled(new[] { numComponents }, NumOps.FromDouble(1.0 / numComponents));
+                : PreprocessingTensorOps.Filled(new[] { numComponents }, NumOps.FromDouble(1.0 / numComponents));
             scores = engine.Reshape(
                 engine.TensorMatMul(engine.TensorSquare(loadings), engine.Reshape(weights, new[] { numComponents, 1 })), new[] { p });
         }
@@ -81,7 +81,7 @@ public class PCAVarianceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _varianceContributions = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -98,7 +98,7 @@ public class PCAVarianceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("PCAVarianceSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

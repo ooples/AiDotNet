@@ -84,8 +84,9 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var engine = Engine;
 
         // Standardize (population std; a constant column is only centred) and centre the target
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
-        var safeStd = engine.TensorWhere(engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
+        var safeStd = engine.TensorWhere(engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), std);
         var X = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
         var yColumn = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
         var y = engine.TensorSubtract(yColumn, engine.ReduceMean(yColumn, new[] { 0 }, true));
@@ -130,7 +131,7 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         // Select features with largest coefficients
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(engine.TensorAbs(flat), numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(flat), numToSelect);
 
         IsFitted = true;
     }
@@ -149,7 +150,7 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("ElasticNetSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -108,7 +108,7 @@ public class MICorrelationHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _hybridScores = hybrid.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(hybrid, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hybrid, numToSelect);
 
         IsFitted = true;
     }
@@ -136,7 +136,7 @@ public class MICorrelationHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("MICorrelationHybrid has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

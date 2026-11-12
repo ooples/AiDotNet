@@ -78,20 +78,20 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             Tensor<T>.FromMatrix(data),
             column => FeatureSelectionTensorOps.DoubleCenteredDistances(column),
             new[] { centeredY },
-            new[] { FeatureSelectionTensorOps.Filled(new[] { n, n }, NumOps.One) });
+            new[] { PreprocessingTensorOps.Filled(new[] { n, n }, NumOps.One) });
         var dcovXY = engine.TensorDivideScalar(engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p }), pairCount);
         var dcovXX = engine.TensorDivideScalar(engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p }), pairCount);
 
         // dCor = sqrt(max(0, dCov^2(X, Y))) / sqrt(sqrt(dVar^2(X)) sqrt(dVar^2(Y))); 0 when that is not above 1e-10
         var denominator = engine.TensorMultiplyScalar(engine.TensorSqrt(dcovXX), NumOps.Sqrt(dcovYY));
         var defined = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
-        var safeDenominator = engine.TensorWhere(defined, denominator, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeDenominator = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var dcor = engine.TensorDivide(engine.TensorSqrt(engine.TensorMax(dcovXY, NumOps.Zero)), engine.TensorSqrt(safeDenominator));
         var scores = engine.TensorWhere(defined, dcor, new Tensor<T>(new[] { p }));
         _dcorScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -109,7 +109,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("DistanceCorrelationSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

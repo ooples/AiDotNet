@@ -85,14 +85,14 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
             // Features with low reconstruction error are more "locally linear": mean of 1 / (1 + |error|)
             var error = engine.TensorAbs(engine.TensorSubtract(x, engine.TensorMatMul(weights, x)));
             var closeness = engine.TensorDivide(
-                FeatureSelectionTensorOps.Filled(new[] { n, p }, NumOps.One), engine.TensorAddScalar(error, NumOps.One));
+                PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.One), engine.TensorAddScalar(error, NumOps.One));
             scores = engine.ReduceMean(closeness, new[] { 0 }, false);
         }
 
         _localLinearityScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -109,7 +109,7 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         if (_selectedIndices is null)
             throw new InvalidOperationException("LLESelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

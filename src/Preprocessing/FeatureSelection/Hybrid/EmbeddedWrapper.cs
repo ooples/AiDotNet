@@ -85,7 +85,7 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         _embeddedImportance = importance.ToVector();
 
         // Get initial candidates from embedded importance, highest first (ties by index)
-        var orderedCandidates = FeatureSelectionTensorOps.StableOrder(importance, descending: true)
+        var orderedCandidates = PreprocessingTensorOps.StableOrder(importance, descending: true)
             .Take(Math.Min(_nFeaturesToSelect * 2, p))
             .ToArray();
 
@@ -109,8 +109,9 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         int p = data.Columns;
 
         // Standardize data
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
-        var safeStd = engine.TensorWhere(engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
+        var safeStd = engine.TensorWhere(engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), std);
         var X = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
         var yColumn = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
         var y = engine.TensorSubtract(yColumn, engine.ReduceMean(yColumn, new[] { 0 }, true));
@@ -168,7 +169,7 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var candidateIndex = new Tensor<int>((int[])orderedCandidates.Clone(), new[] { c });
         var candidateContribution = engine.TensorIndexSelect(contribution, candidateIndex, 0);
 
-        var available = FeatureSelectionTensorOps.Filled(new[] { c }, NumOps.One);
+        var available = PreprocessingTensorOps.Filled(new[] { c }, NumOps.One);
         var selectedSum = new Tensor<T>(new[] { c });
         var currentScore = new Tensor<T>(new[] { c });
         var positionScores = new Tensor<T>(new[] { c });
@@ -189,7 +190,7 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             int position = best[0];
             var chosen = FeatureSelectionTensorOps.OneHot<T>(position, c);
             selected.Add(orderedCandidates[position]);
-            available = engine.TensorMultiply(available, FeatureSelectionTensorOps.OneMinus(chosen));
+            available = engine.TensorMultiply(available, PreprocessingTensorOps.OneMinus(chosen));
             var bestScore = engine.TensorBroadcastTo(engine.TensorSlice(scores, new[] { position }, new[] { 1 }), new[] { c });
             positionScores = engine.TensorAdd(positionScores, engine.TensorMultiply(chosen, bestScore));
             currentScore = bestScore;
@@ -218,7 +219,7 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("EmbeddedWrapper has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

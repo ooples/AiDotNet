@@ -71,12 +71,12 @@ public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         // Range between the configured percentiles per column (linear interpolation, as numpy does by default)
         var x = Tensor<T>.FromMatrix(data);
         var range = Engine.TensorSubtract(
-            FeatureSelectionTensorOps.ColumnQuantile(x, _upperPercentile),
-            FeatureSelectionTensorOps.ColumnQuantile(x, _lowerPercentile));
+            FilterStatisticTensorOps.ColumnQuantile(x, _upperPercentile),
+            FilterStatisticTensorOps.ColumnQuantile(x, _lowerPercentile));
         _rangeValues = range.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(range, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(range, numToSelect);
 
         IsFitted = true;
     }
@@ -93,7 +93,7 @@ public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("PercentileRangeSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

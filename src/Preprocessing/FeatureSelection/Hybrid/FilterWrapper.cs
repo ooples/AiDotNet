@@ -87,7 +87,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var filterScores = FeatureSelectionInformationOps.AbsCorrelationWithTarget(Tensor<T>.FromMatrix(data), y, NumOps.Zero);
         _filterScores = filterScores.ToVector();
         int numFilterSelect = Math.Min(_nFeaturesToSelect * _filterRatio, p);
-        var filterCandidates = FeatureSelectionTensorOps.StableOrder(filterScores, descending: true)
+        var filterCandidates = PreprocessingTensorOps.StableOrder(filterScores, descending: true)
             .Take(Math.Max(numFilterSelect, 0))
             .ToArray();
 
@@ -128,7 +128,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (c == 0)
             return selected;
 
-        var available = FeatureSelectionTensorOps.Filled(new[] { c }, NumOps.One);
+        var available = PreprocessingTensorOps.Filled(new[] { c }, NumOps.One);
         var selectedSum = new Tensor<T>(new[] { c });
         var currentScore = new Tensor<T>(new[] { c });
 
@@ -144,7 +144,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             int position = best[0];
             var chosen = FeatureSelectionTensorOps.OneHot<T>(position, c);
             selected.Add(position);
-            available = engine.TensorMultiply(available, FeatureSelectionTensorOps.OneMinus(chosen));
+            available = engine.TensorMultiply(available, PreprocessingTensorOps.OneMinus(chosen));
             var bestScore = engine.TensorBroadcastTo(engine.TensorSlice(scores, new[] { position }, new[] { 1 }), new[] { c });
             positionScores = engine.TensorAdd(positionScores, engine.TensorMultiply(chosen, bestScore));
             currentScore = bestScore;
@@ -164,7 +164,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     {
         var engine = Engine;
         int c = contribution.Length;
-        var kept = FeatureSelectionTensorOps.Filled(new[] { c }, NumOps.One);
+        var kept = PreprocessingTensorOps.Filled(new[] { c }, NumOps.One);
         int count = c;
 
         while (count > _nFeaturesToSelect)
@@ -177,12 +177,12 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             if (worst.Length == 0)
                 break;
 
-            kept = engine.TensorMultiply(kept, FeatureSelectionTensorOps.OneMinus(FeatureSelectionTensorOps.OneHot<T>(worst[0], c)));
+            kept = engine.TensorMultiply(kept, PreprocessingTensorOps.OneMinus(FeatureSelectionTensorOps.OneHot<T>(worst[0], c)));
             count--;
         }
 
         positionScores = engine.TensorMultiply(kept, candidateFilterScores);
-        return FeatureSelectionTensorOps.MaskPositions(kept).ToList();
+        return PreprocessingTensorOps.MaskPositions(kept).ToList();
     }
 
     /// <inheritdoc />
@@ -199,7 +199,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("FilterWrapper has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

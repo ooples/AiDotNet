@@ -57,11 +57,11 @@ public class IQRSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         // IQR = Q3 - Q1 per column (linear interpolation between order statistics, as numpy does by default)
         var x = Tensor<T>.FromMatrix(data);
         var iqr = Engine.TensorSubtract(
-            FeatureSelectionTensorOps.ColumnQuantile(x, 0.75), FeatureSelectionTensorOps.ColumnQuantile(x, 0.25));
+            FilterStatisticTensorOps.ColumnQuantile(x, 0.75), FilterStatisticTensorOps.ColumnQuantile(x, 0.25));
         _iqrValues = iqr.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(iqr, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(iqr, numToSelect);
 
         IsFitted = true;
     }
@@ -78,7 +78,7 @@ public class IQRSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         if (_selectedIndices is null)
             throw new InvalidOperationException("IQRSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

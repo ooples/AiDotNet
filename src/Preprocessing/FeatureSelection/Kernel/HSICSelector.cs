@@ -81,7 +81,7 @@ public class HSICSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
         var ky = FeatureSelectionTensorOps.RbfColumnKernel(y, NumOps.FromDouble(-_gammaY));
         var centering = engine.TensorSubtract(
-            engine.TensorEye<T>(n), FeatureSelectionTensorOps.Filled(new[] { n, n }, NumOps.FromDouble(1.0 / n)));
+            engine.TensorEye<T>(n), PreprocessingTensorOps.Filled(new[] { n, n }, NumOps.FromDouble(1.0 / n)));
         var centeredKy = engine.TensorMatMul(engine.TensorMatMul(centering, ky), centering);
 
         // Biased HSIC = trace(Kx H Ky H) / (n-1)^2 = sum(Kx .* (H Ky H)') / (n-1)^2, clamped at 0
@@ -96,7 +96,7 @@ public class HSICSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _hsicScores = hsic.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(hsic, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hsic, numToSelect);
 
         IsFitted = true;
     }
@@ -114,7 +114,7 @@ public class HSICSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("HSICSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

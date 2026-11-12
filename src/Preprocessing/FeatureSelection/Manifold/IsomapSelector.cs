@@ -72,7 +72,7 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
 
         // Each feature scores the Pearson correlation between its single-feature distances |x_i - x_j| and
         // the geodesic distances, over the connected pairs i != j
-        var pairs = engine.TensorMultiply(reachable, FeatureSelectionTensorOps.OneMinus(engine.TensorEye<T>(n)));
+        var pairs = engine.TensorMultiply(reachable, PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n)));
         T pairCount = engine.TensorSum(pairs);
         var scores = new Tensor<T>(new[] { p });
         if (NumOps.GreaterThan(pairCount, NumOps.Zero))
@@ -99,7 +99,7 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
             if (NumOps.GreaterThan(geodesicVariation, NumOps.FromDouble(1e-10)))
             {
                 var defined = engine.TensorGreaterThan(distanceVariation, NumOps.FromDouble(1e-10));
-                var safeVariation = engine.TensorWhere(defined, distanceVariation, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+                var safeVariation = engine.TensorWhere(defined, distanceVariation, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
                 var correlation = engine.TensorDivide(
                     covariation, engine.TensorSqrt(engine.TensorMultiplyScalar(safeVariation, geodesicVariation)));
                 scores = engine.TensorWhere(defined, correlation, scores);
@@ -109,7 +109,7 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         _manifoldScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -126,7 +126,7 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         if (_selectedIndices is null)
             throw new InvalidOperationException("IsomapSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

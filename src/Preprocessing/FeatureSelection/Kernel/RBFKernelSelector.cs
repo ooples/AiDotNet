@@ -90,12 +90,12 @@ public class RBFKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         var numerator = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p });
         var denominator = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p });
         var defined = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
-        var safeDenominator = engine.TensorWhere(defined, denominator, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeDenominator = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var scores = engine.TensorWhere(defined, engine.TensorDivide(numerator, engine.TensorSqrt(safeDenominator)), new Tensor<T>(new[] { p }));
         _kernelScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(engine.TensorAbs(scores), numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(scores), numToSelect);
 
         IsFitted = true;
     }
@@ -113,7 +113,7 @@ public class RBFKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("RBFKernelSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

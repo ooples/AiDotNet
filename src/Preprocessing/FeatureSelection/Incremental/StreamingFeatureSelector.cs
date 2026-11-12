@@ -111,10 +111,10 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             for (int i = 0; i < n; i++)
                 age[i] = n - 1 - i;
             var decayPowers = engine.TensorPower(
-                FeatureSelectionTensorOps.Filled(new[] { 1, n }, decay), new Tensor<int>(age, new[] { 1, n }).Cast<T>());
+                PreprocessingTensorOps.Filled(new[] { 1, n }, decay), new Tensor<int>(age, new[] { 1, n }).Cast<T>());
             var weights = engine.TensorMultiplyScalar(decayPowers, NumOps.FromDouble(1 - _decayFactor)); // [1, n]
             T carry = engine.TensorSum(engine.TensorPower(
-                FeatureSelectionTensorOps.Filled(new[] { 1 }, decay), FeatureSelectionTensorOps.Filled(new[] { 1 }, FeatureSelectionTensorOps.Count<T>(n))));
+                PreprocessingTensorOps.Filled(new[] { 1 }, decay), PreprocessingTensorOps.Filled(new[] { 1 }, FeatureSelectionTensorOps.Count<T>(n))));
 
             var X = Tensor<T>.FromMatrix(data);
             var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
@@ -151,18 +151,18 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         var meanX = Tensor<T>.FromVector(_runningMeanX);
         var meanY = Tensor<T>.FromVector(_runningMeanY);
         var varX = engine.TensorSubtract(Tensor<T>.FromVector(_runningMeanX2), engine.TensorSquare(meanX));
-        var varY = engine.TensorSubtract(FeatureSelectionTensorOps.Filled(new[] { p }, _runningMeanY2), engine.TensorSquare(meanY));
+        var varY = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, _runningMeanY2), engine.TensorSquare(meanY));
         var covXY = engine.TensorSubtract(Tensor<T>.FromVector(_runningMeanXY), engine.TensorMultiply(meanX, meanY));
 
         T threshold = NumOps.FromDouble(1e-10);
         var defined = engine.TensorMultiply(engine.TensorGreaterThan(varX, threshold), engine.TensorGreaterThan(varY, threshold));
-        var ones = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One);
+        var ones = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
         var safeVariance = engine.TensorWhere(defined, engine.TensorMultiply(varX, varY), ones);
         var scores = engine.TensorWhere(defined, engine.TensorAbs(engine.TensorDivide(covXY, engine.TensorSqrt(safeVariance))), new Tensor<T>(new[] { p }));
         _correlationScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -194,7 +194,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("StreamingFeatureSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
