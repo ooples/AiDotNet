@@ -190,14 +190,10 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int extensionSamples = (int)(extensionSeconds * SampleRate);
         var features = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(inputAudio) : Predict(inputAudio);
 
-        var continuation = new Tensor<T>([inputAudio.Length + extensionSamples]);
-        for (int i = 0; i < inputAudio.Length; i++) continuation[i] = inputAudio[i];
-        for (int i = 0; i < extensionSamples; i++)
-        {
-            double v = i < features.Length ? NumOps.ToDouble(features[i % features.Length]) : 0;
-            continuation[inputAudio.Length + i] = NumOps.FromDouble(Math.Tanh(v));
-        }
-        return continuation;
+        // [input | tanh(features) zero-padded or truncated to the extension length], a fresh tensor
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var extension = Engine.TensorTanh(AudioEngineOps.FitLength(Engine, features, extensionSamples));
+        return Engine.Concat(new[] { AudioEngineOps.Flatten(Engine, inputAudio), extension }, 0);
     }
 
     /// <inheritdoc />
@@ -316,38 +312,43 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         var output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(conditioning) : Predict(conditioning);
         int numTokens = (int)(durationSeconds * 50); // ~50 semantic tokens/sec
-        var result = new Tensor<T>([numTokens]);
-        for (int i = 0; i < numTokens; i++)
-            result[i] = i < output.Length ? output[i % output.Length] : NumOps.Zero;
-        return result;
+
+        // The first numTokens outputs, zero-padded (a fresh tensor)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AudioEngineOps.FitLength(Engine, output, numTokens).Clone();
     }
 
     private Tensor<T> GenerateAcousticTokens(Tensor<T> semanticTokens)
     {
-        int totalTokens = semanticTokens.Length * _options.NumAcousticQuantizers;
-        var result = new Tensor<T>([totalTokens]);
-        for (int i = 0; i < totalTokens; i++)
-        {
-            int si = i / _options.NumAcousticQuantizers;
-            if (si < semanticTokens.Length)
-                result[i] = semanticTokens[si];
-        }
-        return result;
+        // Each semantic token repeated once per acoustic quantizer
+        int quantizers = _options.NumAcousticQuantizers;
+        int totalTokens = semanticTokens.Length * quantizers;
+        if (totalTokens <= 0)
+            return new Tensor<T>([totalTokens]);
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var column = Engine.Reshape(semanticTokens, [semanticTokens.Length, 1]);
+        return Engine.Reshape(Engine.TensorTile(column, [1, quantizers]), [totalTokens]);
     }
 
     private Tensor<T> DecodeToWaveform(Tensor<T> tokens, int numSamples)
     {
-        var waveform = new Tensor<T>([numSamples]);
+        // waveform[i] = tanh(tokens[i * |tokens| / numSamples]) (nearest-lower token)
+        if (numSamples <= 0 || tokens.Length == 0)
+            return new Tensor<T>([numSamples]);
+
+        var tokenIndex = new int[numSamples];
         for (int i = 0; i < numSamples; i++)
         {
             int ti = i * tokens.Length / numSamples;
-            if (ti < tokens.Length)
-            {
-                double v = NumOps.ToDouble(tokens[ti]);
-                waveform[i] = NumOps.FromDouble(Math.Tanh(v));
-            }
+            if (ti < 0)
+                throw new IndexOutOfRangeException("Token index overflowed for this output length.");
+            tokenIndex[i] = ti;
         }
-        return waveform;
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var picked = Engine.TensorIndexSelect(AudioEngineOps.Flatten(Engine, tokens), new Tensor<int>(tokenIndex, [numSamples]), 0);
+        return Engine.TensorTanh(picked);
     }
 
     #endregion
