@@ -245,16 +245,16 @@ public sealed class StockformerDualEncoder<T>
     private Tensor<T> AddEmbeddings(
         Tensor<T> x, Matrix<T> spatial, Matrix<T> temporal, int assets, int time)
     {
-        var bias = new Tensor<T>(new[] { assets, time, _features });
-        for (int a = 0; a < assets; a++)
-        {
-            for (int t = 0; t < time; t++)
-            {
-                int at = ((a * time) + t) * _features;
-                for (int f = 0; f < _features; f++)
-                    bias[at + f] = Ops.Add(spatial[a, f], temporal[t, f]);
-            }
-        }
+        // bias[a, t, f] = spatial[a, f] + temporal[t, f]: [assets, 1, F] + [1, time, F] broadcast.
+        var shape = new[] { assets, time, _features };
+        var spatialRows = Engine.Reshape(
+            Engine.TensorSlice(Tensor<T>.FromMatrix(spatial), new[] { 0, 0 }, new[] { assets, _features }),
+            new[] { assets, 1, _features });
+        var temporalRows = Engine.Reshape(
+            Engine.TensorSlice(Tensor<T>.FromMatrix(temporal), new[] { 0, 0 }, new[] { time, _features }),
+            new[] { 1, time, _features });
+        var bias = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(spatialRows, shape), Engine.TensorBroadcastTo(temporalRows, shape));
         // The bias is DATA, so building it by index costs no gradient; the add itself is recorded.
         return Engine.TensorAdd(x, bias);
     }
@@ -274,13 +274,16 @@ public sealed class StockformerDualEncoder<T>
     {
         if (_causalWindowOperators.TryGetValue(time, out var cached)) return cached;
 
-        var op = new Tensor<T>(new[] { time, time });
-        for (int t = 0; t < time; t++)
-        {
-            int first = Math.Max(0, t - _kernelWidth + 1);
-            var weight = Ops.FromDouble(1.0 / (t - first + 1));
-            for (int u = first; u <= t; u++) op[(t * time) + u] = weight;
-        }
+        // op[t, u] = 1 / (window size) for t - kernelWidth < u <= t: lag = t - u in [0, kernelWidth).
+        var positions = Engine.TensorArange<T>(0, time);
+        var lag = Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(Engine.Reshape(positions, new[] { time, 1 }), new[] { time, time }),
+            Engine.TensorBroadcastTo(Engine.Reshape(positions, new[] { 1, time }), new[] { time, time }));
+        var inWindow = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(lag, Ops.FromDouble(-0.5)),
+            Engine.TensorLessThan(lag, Ops.FromDouble(_kernelWidth - 0.5)));
+        var count = Engine.ReduceSum(inWindow, new[] { 1 }, keepDims: true);
+        var op = Engine.TensorDivide(inWindow, Engine.TensorBroadcastTo(count, new[] { time, time }));
 
         _causalWindowOperators[time] = op;
         return op;
