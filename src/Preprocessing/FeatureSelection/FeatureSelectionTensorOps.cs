@@ -21,6 +21,36 @@ internal static class FeatureSelectionTensorOps
         return ops.Equals(tiny, ops.Zero) ? ops.FromDouble(Math.Pow(2, -24)) : tiny;
     }
 
+    // The rank tests below (KruskalWallisCore, RankSumUCore, MannWhitneyCore, WilcoxonSignedRankCore) run in
+    // double, as master did, and return T: ranks pass 2048 (no longer exact) and rank sums, their squares and
+    // n0 n1 pass 65504 (overflow) in Half within a few hundred samples.
+
+    /// <summary>The Kruskal-Wallis H test of every column, computed in double (see KruskalWallisCore).</summary>
+    public static (Tensor<T> H, Tensor<T> PValues) KruskalWallis<T>(Tensor<T> x, Tensor<T> classOneHot)
+    {
+        var (h, pValues) = KruskalWallisCore(x.Cast<double>(), classOneHot.Cast<double>());
+        return (h.Cast<T>(), pValues.Cast<T>());
+    }
+
+    /// <summary>The Mann-Whitney U of group 0 for every column, computed in double (see RankSumUCore).</summary>
+    public static Tensor<T> RankSumU<T>(Tensor<T> x, Tensor<T> groupMask, int n0) =>
+        RankSumUCore(x.Cast<double>(), groupMask.Cast<double>(), n0).Cast<T>();
+
+    /// <summary>The Mann-Whitney U test of every column, computed in double (see MannWhitneyCore).</summary>
+    public static (Tensor<T> U, Tensor<T> PValues) MannWhitney<T>(Tensor<T> x, Tensor<T> groupMask, int n0, int n1)
+    {
+        var (u, pValues) = MannWhitneyCore(x.Cast<double>(), groupMask.Cast<double>(), n0, n1);
+        return (u.Cast<T>(), pValues.Cast<T>());
+    }
+
+    /// <summary>The Wilcoxon signed-rank test of every column, computed in double (see WilcoxonSignedRankCore).</summary>
+    public static (Tensor<T> W, Tensor<T> PValues, Tensor<T> NonZero) WilcoxonSignedRank<T>(
+        Tensor<T> x, Tensor<T> y, double zeroTolerance)
+    {
+        var (w, pValues, nonZero) = WilcoxonSignedRankCore(x.Cast<double>(), y.Cast<double>(), zeroTolerance);
+        return (w.Cast<T>(), pValues.Cast<T>(), nonZero.Cast<T>());
+    }
+
     /// <summary>
     /// A [p] tensor holding <paramref name="values"/> at the positions <paramref name="columns"/> and
     /// <paramref name="fill"/> everywhere else.
@@ -651,7 +681,7 @@ internal static class FeatureSelectionTensorOps
     /// <c>1 - sum (t^3 - t) / (n^3 - n)</c>, p-value from the chi-squared distribution with k - 1 degrees of freedom.
     /// Fewer than two classes give H = 0 and p = 1; a column of equal values gives H = 0.
     /// </summary>
-    public static (Tensor<T> H, Tensor<T> PValues) KruskalWallis<T>(Tensor<T> x, Tensor<T> classOneHot)
+    private static (Tensor<T> H, Tensor<T> PValues) KruskalWallisCore<T>(Tensor<T> x, Tensor<T> classOneHot)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
@@ -683,7 +713,7 @@ internal static class FeatureSelectionTensorOps
     /// the other <paramref name="n1"/> rows, for every column of <paramref name="x"/>: <c>U0 = R0 - n0 (n0 + 1) / 2</c>
     /// from tie-averaged ranks ([p]).
     /// </summary>
-    public static Tensor<T> RankSumU<T>(Tensor<T> x, Tensor<T> groupMask, int n0)
+    private static Tensor<T> RankSumUCore<T>(Tensor<T> x, Tensor<T> groupMask, int n0)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
@@ -698,14 +728,14 @@ internal static class FeatureSelectionTensorOps
     /// <c>s^2 = n0 n1 / 12 ((n + 1) - sum (t^3 - t) / (n (n - 1)))</c>, at most 1. Without spread (every value tied)
     /// the p-value is 1.
     /// </summary>
-    public static (Tensor<T> U, Tensor<T> PValues) MannWhitney<T>(Tensor<T> x, Tensor<T> groupMask, int n0, int n1)
+    private static (Tensor<T> U, Tensor<T> PValues) MannWhitneyCore<T>(Tensor<T> x, Tensor<T> groupMask, int n0, int n1)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = x.Shape[1];
         double n = n0 + n1;
         double product = (double)n0 * n1;
-        var u0 = RankSumU(x, groupMask, n0);
+        var u0 = RankSumUCore(x, groupMask, n0);
         var u1 = engine.TensorAddScalar(engine.TensorNegate(u0), ops.FromDouble(product));
         var uMin = engine.TensorMin(u0, u1);
         var uMax = engine.TensorMax(u0, u1);
@@ -732,7 +762,7 @@ internal static class FeatureSelectionTensorOps
     /// <c>s^2 = m (m + 1)(2m + 1) / 24 - sum (t^3 - t) / 48</c> over the m non-zero differences, and the two-sided
     /// normal p-value. Returns W, the p-values and m, all [p]; a column with no spread has p = 1.
     /// </summary>
-    public static (Tensor<T> W, Tensor<T> PValues, Tensor<T> NonZero) WilcoxonSignedRank<T>(
+    private static (Tensor<T> W, Tensor<T> PValues, Tensor<T> NonZero) WilcoxonSignedRankCore<T>(
         Tensor<T> x, Tensor<T> y, double zeroTolerance)
     {
         var engine = AiDotNetEngine.Current;

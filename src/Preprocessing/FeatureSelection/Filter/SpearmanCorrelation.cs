@@ -67,11 +67,13 @@ public class SpearmanCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         _nInputFeatures = data.Columns;
         int p = data.Columns;
-        var x = FeatureSelectionTensorOps.ColumnAverageRanks(FilterStatisticTensorOps.AsTensor(data));
-        var y = FeatureSelectionTensorOps.AverageRanks(FilterStatisticTensorOps.AsTensor(target));
+        // ranked and correlated in double, as master did: ranks pass 2048 and the rank sums of squares
+        // (about n^3 / 12) pass 65504 in Half once n > 91
+        var x = FeatureSelectionTensorOps.ColumnAverageRanks(FilterStatisticTensorOps.AsTensor(data).Cast<double>());
+        var y = FeatureSelectionTensorOps.AverageRanks(FilterStatisticTensorOps.AsTensor(target).Cast<double>());
         var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
         var correlations = FilterStatisticTensorOps.GuardedDivide(
-            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 1e-10, NumOps.Zero);
+            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), Math.Sqrt(syy)), 1e-10, 0.0).Cast<T>();
         _correlations = correlations.ToVector();
         _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
             Engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), Math.Min(_nFeaturesToSelect, p));
