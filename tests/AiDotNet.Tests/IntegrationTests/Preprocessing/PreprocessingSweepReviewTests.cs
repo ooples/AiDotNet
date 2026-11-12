@@ -326,4 +326,67 @@ public class PreprocessingSweepReviewTests
 
         Assert.Equal(new[] { 1 }, result.TestIndices);
     }
+
+    // WOE with regularization 0.5 over 3 events and 3 non-events, 2 categories: category 0 (2 events, 1 non-event)
+    // is ln((2.5 / 4) / (1.5 / 4)) = 0.510826 and category 1 the negative. The |y - 1| < 1e-10 event test needs a
+    // tolerance Half can hold: with 1e-10 rounded to 0 no target was an event and Fit rejected binary targets.
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_Half_RecognisesBinaryTargets()
+    {
+        await Task.CompletedTask;
+        double[] categories = { 0, 0, 0, 1, 1, 1 };
+        double[] labels = { 1, 1, 0, 1, 0, 0 };
+        var data = HalfColumn(6, i => categories[i]);
+        var encoder = new WOEEncoder<Half>();
+        encoder.Fit(data, HalfVector(6, i => labels[i]));
+
+        var encoded = encoder.Transform(data);
+        for (int i = 0; i < 6; i++)
+            Assert.Equal(i < 3 ? 0.510826 : -0.510826, (double)encoded[i, 0], 2e-3);
+    }
+
+    // Master compares with NumOps.Compare (double.CompareTo), which orders NaN below every number. Uniform: the NaN is
+    // the minimum, so every edge is NaN, no number is at most an edge (last bin) and the NaN is in bin 0.
+    [Fact(Timeout = 120000)]
+    public async Task KBinsDiscretizer_Uniform_NaNMakesEveryEdgeNaNAsInMaster()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,] { { 1 }, { double.NaN }, { 3 }, { 5 }, { 7 } });
+        var discretizer = new AiDotNet.Preprocessing.Discretizers.KBinsDiscretizer<double>(
+            nBins: 2, strategy: AiDotNet.Preprocessing.Discretizers.BinningStrategy.Uniform);
+
+        var bins = discretizer.FitTransform(data);
+
+        Assert.Equal(new[] { 1.0, 0.0, 1.0, 1.0, 1.0 }, Enumerable.Range(0, 5).Select(i => bins[i, 0]).ToArray());
+    }
+
+    // Quantile: master sorts NaN first, [NaN, 1, 3, 5, 7], so the edges at positions 0, 2, 4 are [NaN, 3, 7] and the
+    // upper edges 3 and 7 give bins 0, 0, 0, 1, 1 (the NaN value is in bin 0).
+    [Fact(Timeout = 120000)]
+    public async Task KBinsDiscretizer_Quantile_SortsNaNFirstAsInMaster()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,] { { 1 }, { double.NaN }, { 3 }, { 5 }, { 7 } });
+        var discretizer = new AiDotNet.Preprocessing.Discretizers.KBinsDiscretizer<double>(
+            nBins: 2, strategy: AiDotNet.Preprocessing.Discretizers.BinningStrategy.Quantile);
+
+        var bins = discretizer.FitTransform(data);
+
+        Assert.Equal(new[] { 0.0, 0.0, 0.0, 1.0, 1.0 }, Enumerable.Range(0, 5).Select(i => bins[i, 0]).ToArray());
+    }
+
+    // Master's inverse takes (int)NaN, clamped to bin 0: edges [1, 5, 9] give the bin 0 midpoint 3.
+    [Fact(Timeout = 120000)]
+    public async Task KBinsDiscretizer_InverseOfNaNCodeIsTheFirstBinMidpoint()
+    {
+        await Task.CompletedTask;
+        var discretizer = new AiDotNet.Preprocessing.Discretizers.KBinsDiscretizer<double>(
+            nBins: 2, strategy: AiDotNet.Preprocessing.Discretizers.BinningStrategy.Quantile);
+        discretizer.Fit(M(new double[,] { { 1 }, { 3 }, { 5 }, { 7 }, { 9 } }));
+
+        var restored = discretizer.InverseTransform(M(new double[,] { { double.NaN }, { 1 } }));
+
+        Assert.Equal(3.0, restored[0, 0], Tolerance);
+        Assert.Equal(7.0, restored[1, 0], Tolerance);
+    }
 }
