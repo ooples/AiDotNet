@@ -517,6 +517,7 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                  + v11 * dxw * dyw;
         return NumOps.FromDouble(v);
     }
+
     private Tensor<T> Rotate90(Tensor<T> input)
         // 90 degrees clockwise: output[b, c, w, height - 1 - h] = input[b, c, h, w], i.e. swap H and W, then
         // reverse the new width axis.

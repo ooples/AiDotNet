@@ -361,6 +361,7 @@ public static class SegmentationRenderer
             }
         }
     }
+
     private static void DrawBoxes<T>(
         Tensor<T> rgb,
         Tensor<T> boxes,

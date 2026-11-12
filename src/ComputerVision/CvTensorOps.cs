@@ -465,6 +465,54 @@ internal static class CvTensorOps<T>
     /// <param name="samplingRatio">Samples per bin side; 0 or less picks <c>ceil(roi size / outputSize)</c> per RoI.</param>
     /// <returns>Pooled features <c>[R, C, outputSize, outputSize]</c>.</returns>
     public static Tensor<T> RoIAlign(
+        Tensor<T> features, double[] boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio)
+    {
+        int rois = batchIndices.Length;
+        if (rois == 0)
+        {
+            return new Tensor<T>(new[] { 0, features.Shape[1], outputSize, outputSize });
+        }
+
+        // The engine's rows are (batch index, x1, y1, x2, y2).
+        var rows = new T[rois * 5];
+        for (int r = 0; r < rois; r++)
+        {
+            rows[5 * r] = NumOps.FromDouble(batchIndices[r]);
+            for (int k = 0; k < 4; k++)
+            {
+                rows[(5 * r) + 1 + k] = NumOps.FromDouble(boxes[(4 * r) + k]);
+            }
+        }
+
+        var boxTensor = new Tensor<T>(new[] { rois, 5 }, new Vector<T>(rows));
+        return Engine.RoIAlign(features, boxTensor, outputSize, outputSize, (float)spatialScale, samplingRatio, aligned: false);
+    }
+
+    /// <summary>
+    /// RoIAlign: pools each region of interest into an <c>outputSize x outputSize</c> grid by averaging
+    /// <c>samplingRatio^2</c> bilinear samples per bin, over an NCHW feature map - torchvision's <c>roi_align</c>
+    /// with <c>aligned = false</c>, as its <c>MultiScaleRoIAlign</c> runs it for Faster, Mask and Cascade R-CNN.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The boxes are constants: as in torchvision, the gradient flows into the features, not the box coordinates.
+    /// A RoI is at least one feature cell on each side, a sample outside <c>[-1, size]</c> contributes zero but still
+    /// counts in its bin's average, and coordinates in <c>(-1, 0]</c> clamp to the first cell.
+    /// </para>
+    /// <para>
+    /// The engine kernel builds each RoI's bilinear taps once and gathers them per channel. This used to be composed
+    /// from GridSample, a batched product and two permutes, which the tape held as four RoI-sized intermediates (about
+    /// 850 MB over five FasterRCNN training steps), and it averaged only the in-bounds samples, unlike torchvision.
+    /// </para>
+    /// </remarks>
+    /// <param name="features">Feature map <c>[N, C, H, W]</c>.</param>
+    /// <param name="boxes">Per-RoI <c>(x1, y1, x2, y2)</c> in image coordinates, length <c>4 * R</c>.</param>
+    /// <param name="batchIndices">Per-RoI image index into <paramref name="features"/>, length <c>R</c>.</param>
+    /// <param name="spatialScale">Image-to-feature-map scale.</param>
+    /// <param name="outputSize">Pooled grid side.</param>
+    /// <param name="samplingRatio">Samples per bin side; 0 or less picks <c>ceil(roi size / outputSize)</c> per RoI.</param>
+    /// <returns>Pooled features <c>[R, C, outputSize, outputSize]</c>.</returns>
+    public static Tensor<T> RoIAlign(
         Tensor<T> features, Tensor<T> boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio)
     {
         int rois = batchIndices.Length;
@@ -563,12 +611,6 @@ internal static class CvTensorOps<T>
     public static Tensor<T> Fill(int[] shape, double value) => Fill(shape, NumOps.FromDouble(value));
 
     /// <summary>
-    /// 1 where <paramref name="x"/> &gt;= <paramref name="threshold"/>, else 0 (NaN compares false).
-    /// </summary>
-    public static Tensor<T> GreaterOrEqual(Tensor<T> x, T threshold)
-        => Engine.TensorGreaterEqual(x, Fill(Dims(x), threshold));
-
-    /// <summary>
     /// Copies <paramref name="input"/> into a new ONNX Runtime <c>float</c> tensor of the same shape, converting
     /// the whole buffer in one bulk call.
     /// </summary>
@@ -589,15 +631,6 @@ internal static class CvTensorOps<T>
         var data = new T[dense.Length];
         NumOps.FromFloatSpan(dense.Buffer.Span, data);
         return new Tensor<T>(dense.Dimensions.ToArray(), new Vector<T>(data));
-    }
-
-    /// <summary>Stacks equal-length <c>[N]</c> columns into an <c>[N, columns.Length]</c> tensor.</summary>
-    public static Tensor<T> StackColumns(params Tensor<T>[] columns)
-    {
-        var reshaped = new Tensor<T>[columns.Length];
-        for (int k = 0; k < columns.Length; k++)
-            reshaped[k] = Engine.Reshape(columns[k], new[] { columns[k].Length, 1 });
-        return Engine.Concat(reshaped, 1);
     }
 
     /// <summary>A rank-2 <c>[rows.Count, columns]</c> tensor from per-row value arrays (no arithmetic).</summary>

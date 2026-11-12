@@ -487,6 +487,7 @@ internal class SwinTransformerBlock<T>
         yield return _mlpFc1;
         yield return _mlpFc2;
     }
+
     private readonly INumericOperations<T> _numOps;
     private readonly int _dim;
     private readonly int _numHeads;

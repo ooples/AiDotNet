@@ -352,7 +352,7 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
         return Engine.TensorSetSlice(cropped, inside, new[] { 0, 0 });
     }
 
-    private Tensor<T> PasteMask(Tensor<T> fullMask, Tensor<T> croppedMask, BoundingBox<T> box,
+    private void PasteMask(Tensor<T> fullMask, Tensor<T> croppedMask, BoundingBox<T> box,
         int imageH, int imageW)
     {
         int x1 = Math.Max(0, (int)NumOps.ToDouble(box.X1));
@@ -364,12 +364,17 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
         int boxH = y2 - y1;
 
         if (boxW <= 0 || boxH <= 0)
-            return fullMask;
+            return;
 
-        // Resize cropped mask to box size
+        // Resize cropped mask to box size, then write it into the box one row at a time (bulk row copies).
         var resized = ResizeMask(croppedMask, boxH, boxW);
-
-        return Engine.TensorSetSlice(fullMask, resized, new[] { y1, x1 });
+        var source = resized.AsSpan();
+        var destination = fullMask.AsWritableSpan();
+        int stride = fullMask.Shape[1];
+        for (int h = 0; h < boxH; h++)
+        {
+            source.Slice(h * boxW, boxW).CopyTo(destination.Slice(((y1 + h) * stride) + x1, boxW));
+        }
     }
 
     private double GetTensorValue(Tensor<T> tensor, int channel, int y, int x)
@@ -393,6 +398,7 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
         }
         return 0;
     }
+
     private static double Sigmoid(double x)
     {
         return 1.0 / (1.0 + Math.Exp(-x));

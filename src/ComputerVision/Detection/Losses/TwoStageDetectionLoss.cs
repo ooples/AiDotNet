@@ -271,6 +271,7 @@ public sealed class TwoStageDetectionLoss<T>
         var delta = EncodeDeltas(reference, gold);
         for (int k = 0; k < 4; k++) destination[offset + k] = NumOps.FromDouble(delta[k]);
     }
+
     /// <summary>Sum over selected rows of -log softmax(logits)[class], gathered to avoid 0 * -inf.</summary>
     private static Tensor<T> CrossEntropySum(Tensor<T> logits, int[] rows, int[] classes, int width)
     {
