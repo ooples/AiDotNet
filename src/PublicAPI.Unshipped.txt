@@ -22890,3 +22890,24 @@ static AiDotNet.Kernels.GridKernel<T>.WithRBF(AiDotNet.Tensors.LinearAlgebra.Vec
 AiDotNet.Metrics.TextDetectionMetrics<T>.Evaluate(System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! predictions, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! groundTruth, double iouThreshold = 0.5) -> (T Precision, T Recall, T HMean)
 static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonArea(System.Collections.Generic.IReadOnlyList<(T X, T Y)>! polygon) -> T
 static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonIoU(System.Collections.Generic.IReadOnlyList<(T X, T Y)>! first, System.Collections.Generic.IReadOnlyList<(T X, T Y)>! second) -> T
+AiDotNet.Enums.ReverseDiffusionVariance
+AiDotNet.Enums.ReverseDiffusionVariance.FixedLarge = 0 -> AiDotNet.Enums.ReverseDiffusionVariance
+AiDotNet.Enums.ReverseDiffusionVariance.FixedSmall = 1 -> AiDotNet.Enums.ReverseDiffusionVariance
+AiDotNet.NeuralNetworks.SyntheticData.GaussianDiffusion<T>.GaussianDiffusion(int numTimesteps, double betaStart, double betaEnd, AiDotNet.Enums.BetaSchedule schedule, AiDotNet.Enums.ReverseDiffusionVariance varianceType, System.Random! random) -> void
+AiDotNet.NeuralNetworks.SyntheticData.GaussianDiffusion<T>.VarianceType.get -> AiDotNet.Enums.ReverseDiffusionVariance
+AiDotNet.NeuralNetworks.SyntheticData.MultinomialDiffusion<T>.ComputeLossGradient(AiDotNet.Tensors.LinearAlgebra.Vector<T>! predictedLogProbs, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trueOneHot, AiDotNet.Tensors.LinearAlgebra.Vector<T>! noisyProbs, int t) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Models.Options.CTGANOptions<T>.GumbelTemperature.get -> double
+AiDotNet.Models.Options.CTGANOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.CopulaGANOptions<T>.GumbelTemperature.get -> double
+AiDotNet.Models.Options.CopulaGANOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.DPCTGANOptions<T>.GumbelTemperature.get -> double
+AiDotNet.Models.Options.DPCTGANOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.CTABGANPlusOptions<T>.GumbelTemperature.get -> double
+AiDotNet.Models.Options.CTABGANPlusOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.CTGANOptions<T>.CTGANOptions(AiDotNet.Models.Options.CTGANOptions<T>! other) -> void
+AiDotNet.Models.Options.CopulaGANOptions<T>.CopulaGANOptions(AiDotNet.Models.Options.CopulaGANOptions<T>! other) -> void
+AiDotNet.Models.Options.CTABGANPlusOptions<T>.CTABGANPlusOptions(AiDotNet.Models.Options.CTABGANPlusOptions<T>! other) -> void
+AiDotNet.Models.Options.DPCTGANOptions<T>.DPCTGANOptions(AiDotNet.Models.Options.DPCTGANOptions<T>! other) -> void
+AiDotNet.Models.Options.FinancialNeuralNetworkOptions.FinancialNeuralNetworkOptions(AiDotNet.Models.Options.FinancialNeuralNetworkOptions! other) -> void
+AiDotNet.Models.Options.RiskModelOptions<T>.RiskModelOptions(AiDotNet.Models.Options.RiskModelOptions<T>! other) -> void
+AiDotNet.Models.Options.SyntheticDataGeneratorOptions<T>.SyntheticDataGeneratorOptions(AiDotNet.Models.Options.SyntheticDataGeneratorOptions<T>! other) -> void
