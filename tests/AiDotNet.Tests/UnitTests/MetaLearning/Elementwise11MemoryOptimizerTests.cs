@@ -14,6 +14,36 @@ namespace AiDotNet.Tests.UnitTests.MetaLearning;
 public class Elementwise11MemoryOptimizerTests
 {
     [Fact]
+    public void Anp_HalfAttentionIsStableAndEmptyQueryUsesUniformWeights()
+    {
+        var algorithm = Uninitialized<ANPAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        typeof(ANPAlgorithm<Half, Matrix<Half>, Vector<Half>>).BaseType!
+            .GetField("RepresentationDim", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(algorithm, 2);
+        Field(algorithm, "_attentionParams", new Vector<Half>(new[] { (Half)1, (Half)1 }));
+        var context = new List<Vector<Half>>
+        {
+            new(new[] { (Half)1, (Half)2 }),
+            new(new[] { (Half)3, (Half)4 })
+        };
+        var moderate = Assert.IsType<Vector<Half>>(Call(algorithm, "CrossAttend",
+            new Vector<Half>(new[] { (Half)0.5, (Half)(-0.25) }), context));
+        double secondWeight = Math.Exp(0.5 / Math.Sqrt(2));
+        Assert.Equal((Half)((1 + 3 * secondWeight) / (1 + secondWeight)), moderate[0]);
+        Assert.Equal((Half)((2 + 4 * secondWeight) / (1 + secondWeight)), moderate[1]);
+        var result = Assert.IsType<Vector<Half>>(Call(algorithm, "CrossAttend",
+            new Vector<Half>(new[] { (Half)60000, (Half)60000 }), context));
+        Assert.Equal(new[] { (Half)3, (Half)4 }, result.ToArray());
+        var uniform = Assert.IsType<Vector<Half>>(Call(algorithm, "CrossAttend", new Vector<Half>(0), context));
+        Assert.Equal(new[] { (Half)2, (Half)3 }, uniform.ToArray());
+        double scale = Assert.IsType<double>(Call(algorithm, "ComputeScale",
+            new Vector<Half>(new[] { (Half)1, (Half)2 }), new Vector<Half>(new[] { (Half)3, (Half)4 })));
+        Assert.Equal(0.5 + 0.5 / (1 + Math.Exp(1 - Math.Sqrt(7.5))), scale, 12);
+        Assert.Equal(1.0, Assert.IsType<double>(Call(algorithm, "ComputeScale",
+            new Vector<Half>(new[] { (Half)60000 }), new Vector<Half>(new[] { (Half)60000 }))));
+    }
+
+
+    [Fact]
     public void Feat_HalfAttentionAndLayerNormalizationKeepIntermediatesWide()
     {
         var algorithm = Uninitialized<FEATAlgorithm<Half, Matrix<Half>, Vector<Half>>>();

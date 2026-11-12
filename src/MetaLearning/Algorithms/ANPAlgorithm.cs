@@ -124,41 +124,40 @@ public partial class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TIn
         if (queryFeatures == null || contextReps.Count == 0)
             return new Vector<T>(RepresentationDim);
 
-        // Simplified dot-product attention: query attends to context representations.
-        // Every context representation has RepresentationDim entries (EncodeContextPair), so they stack into C [n, R].
         int count = contextReps.Count;
         int width = contextReps[0].Length;
-        var context = Engine.TensorStack(contextReps.Select(r => Tensor<T>.FromVector(r)).ToArray(), 0);
-
-        // score_c = sum_{i < m} q_i * C[c, i] * a[i mod |a|], weight_c = exp(score_c / sqrt(R))
+        int used = Math.Min(RepresentationDim, width);
+        if (used == 0) return new Vector<T>(RepresentationDim);
+        var context = Engine.TensorStack(contextReps.Select(r => Tensor<T>.FromVector(r).Cast<double>()).ToArray(), 0);
         int m = Math.Min(queryFeatures.Length, width);
+        Tensor<double> weights;
         if (m == 0)
         {
-            return new Vector<T>(RepresentationDim);
+            // An empty query has zero dot products, hence uniform attention over the context.
+            weights = Engine.TensorFullLike(new Tensor<double>(new[] { count, 1 }), 1.0);
         }
-
-        var scaledQuery = Engine.Multiply(
-            queryFeatures.GetSubVector(0, m), ParameterModulation.Cycle(Engine, _attentionParams, m));
-        var scores = Engine.TensorMatMul(
-            Engine.TensorSlice(context, new[] { 0, 0 }, new[] { count, m }),
-            Engine.Reshape(Tensor<T>.FromVector(scaledQuery), new[] { m, 1 }));
-        var weights = Engine.TensorExp(Engine.TensorMultiplyScalar(scores, NumOps.FromDouble(1.0 / Math.Sqrt(RepresentationDim))));
-        T sumW = Engine.TensorSum(weights);
-
-        if (!NumOps.GreaterThan(sumW, NumOps.Zero))
+        else
         {
-            return new Vector<T>(RepresentationDim);
+            var query = Tensor<T>.FromVector(queryFeatures.GetSubVector(0, m)).Cast<double>().ToVector();
+            var attention = Tensor<T>.FromVector(ParameterModulation.Cycle(Engine, _attentionParams, m)).Cast<double>().ToVector();
+            var scaledQuery = Engine.Multiply(query, attention);
+            var scores = Engine.TensorMultiplyScalar(Engine.TensorMatMul(
+                Engine.TensorSlice(context, new[] { 0, 0 }, new[] { count, m }),
+                Engine.Reshape(Tensor<double>.FromVector(scaledQuery), new[] { m, 1 })),
+                1.0 / Math.Sqrt(RepresentationDim));
+            // Subtracting a shared maximum preserves normalized attention and prevents exponential overflow.
+            weights = Engine.TensorExp(Engine.TensorSubtractScalar(scores, Engine.TensorMaxValue(scores)));
         }
-
-        // result[i] = sum_c (weight_c / sumW) * C[c, i] for i < min(R, width), zero beyond.
-        int used = Math.Min(RepresentationDim, width);
+        double sumW = Engine.TensorSum(weights);
+        if (!(sumW > 0)) return new Vector<T>(RepresentationDim);
         var attended = Engine.TensorMatMul(
             Engine.Reshape(Engine.TensorDivideScalar(weights, sumW), new[] { 1, count }),
-            Engine.TensorSlice(context, new[] { 0, 0 }, new[] { count, used })).ToVector();
+            Engine.TensorSlice(context, new[] { 0, 0 }, new[] { count, used })).Cast<T>().ToVector();
         return used == RepresentationDim
             ? attended
             : Vector<T>.Concatenate(attended, new Vector<T>(RepresentationDim - used));
     }
+
 
     private (Vector<T> mean, Vector<T> logvar) ComputeLatent(Vector<T> representation)
     {
@@ -193,13 +192,11 @@ public partial class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TIn
 
     private double ComputeScale(Vector<T> z, Vector<T> attended)
     {
-        // RMS of [z, attended] through 0.5 + 0.5 * sigmoid(norm - 1); the scale feeds the double-valued
-        // ModulateParameters/ScaleVector API, so only the final scalar leaves T.
-        T squared = NumOps.Add(Engine.DotProduct(z, z), Engine.DotProduct(attended, attended));
-        T norm = NumOps.Sqrt(NumOps.Divide(squared, NumOps.FromDouble(Math.Max(z.Length + attended.Length, 1))));
-        T scale = NumOps.Add(NumOps.FromDouble(0.5),
-            NumOps.Multiply(NumOps.FromDouble(0.5), ScalarSigmoid(NumOps.Subtract(norm, NumOps.One))));
-        return NumOps.ToDouble(scale);
+        var wideZ = Tensor<T>.FromVector(z).Cast<double>().ToVector();
+        var wideAttended = Tensor<T>.FromVector(attended).Cast<double>().ToVector();
+        double squared = Engine.DotProduct(wideZ, wideZ) + Engine.DotProduct(wideAttended, wideAttended);
+        double norm = Math.Sqrt(squared / Math.Max((long)z.Length + attended.Length, 1));
+        return 0.5 + 0.5 / (1 + Math.Exp(1 - norm));
     }
 
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
