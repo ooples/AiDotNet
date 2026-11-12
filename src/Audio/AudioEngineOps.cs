@@ -20,39 +20,57 @@ internal static class AudioEngineOps
     /// <remarks>
     /// The engine's argsort is not documented as stable, so each element gets a distinct composite key
     /// <c>(rank, index)</c>: its rank is the number of elements strictly greater than it (NaN elements
-    /// rank after everything), and the key <c>rank * n + index</c> is sorted ascending.
+    /// rank after everything), and the key <c>rank * n + index</c> is sorted ascending. The rank comes
+    /// from one sort plus a binary search, so time is O(n log n) and memory O(n).
     /// </remarks>
     internal static int[] StableDescendingOrder<T>(IEngine engine, Tensor<T> values)
     {
         int n = values.Length;
         if (n == 0) return Array.Empty<int>();
         if (n == 1) return new[] { 0 };
+        var numOps = MathHelper.GetNumericOperations<T>();
         var v = Flatten(engine, values);
-        // greater[i, j] = 1 when v[j] > v[i] (false for any NaN operand).
-        var others = engine.TensorTile(engine.Reshape(v, new[] { 1, n }), new[] { n, 1 });
-        var self = engine.TensorTile(engine.Reshape(v, new[] { n, 1 }), new[] { 1, n });
-        var rank = engine.ReduceSum(engine.TensorGreaterThan(others, self), new[] { 1 }, keepDims: false);
-        var nanRank = engine.TensorWhere(engine.TensorIsNan(v),
-            Tensor<T>.CreateDefault(new[] { n }, MathHelper.GetNumericOperations<T>().FromDouble(n)),
-            new Tensor<T>(new[] { n }));
-        var rankInt = engine.TensorAdd(rank, nanRank).Cast<int>();
-        var key = engine.TensorAdd(engine.TensorMultiplyScalar(rankInt, n), engine.TensorArange<int>(0, n));
+        var isNan = engine.TensorIsNan(v);
+        bool anyNan = engine.TensorCountNonzero(isNan) > 0;
+        // NaN compares false with everything, so for ranking it behaves like a value no number exceeds
+        // from below: substitute -inf, which every number is >= (only floating types can hold NaN).
+        var comparable = anyNan
+            ? engine.TensorWhere(isNan, Tensor<T>.CreateDefault(new[] { n }, numOps.FromDouble(double.NegativeInfinity)), v)
+            : v;
+        var sorted = engine.TensorSort(comparable, 0, descending: false).Values;
+        // Elements strictly greater than v[i] = n - (elements <= v[i]).
+        var atMost = engine.TensorSearchSorted(sorted, comparable, right: true);
+        var rank = engine.TensorSubtract(Tensor<int>.CreateDefault(new[] { n }, n), atMost);
+        if (anyNan)
+            rank = engine.TensorWhere(isNan, Tensor<int>.CreateDefault(new[] { n }, n), rank);
+        var key = engine.TensorAdd(
+            engine.TensorMultiplyScalar(rank.Cast<long>(), (long)n),
+            engine.TensorArange<int>(0, n).Cast<long>());
         return engine.TensorArgsort(key, 0, descending: false).ToArray();
     }
 
     /// <summary>
     /// Index of the first maximum of <paramref name="values"/> (row-major) under the sequential scan
     /// <c>best = v[0]; if (v[i] &gt; best) best = v[i]</c>: later ties never replace, NaN never wins
-    /// against a number, and a leading NaN is kept.
+    /// against a number, and a leading NaN is kept. Linear time and memory.
     /// </summary>
     internal static int FirstArgMaxSequential<T>(IEngine engine, Tensor<T> values)
     {
         if (values.Length == 0) throw new ArgumentException("Cannot take the maximum of an empty tensor.", nameof(values));
         var numOps = MathHelper.GetNumericOperations<T>();
         var v = Flatten(engine, values);
+        int n = v.Length;
         T first = v[0];
         if (numOps.IsNaN(first)) return 0;
-        return StableDescendingOrder(engine, v)[0];
+        var isNan = engine.TensorIsNan(v);
+        var comparable = engine.TensorCountNonzero(isNan) > 0
+            ? engine.TensorWhere(isNan, Tensor<T>.CreateDefault(new[] { n }, numOps.FromDouble(double.NegativeInfinity)), v)
+            : v;
+        // v[0] is a number, so the maximum is a number and its first occurrence is the scan's answer.
+        T best = engine.TensorMaxValue(comparable);
+        var hit = engine.TensorEquals(comparable, best).Cast<int>();
+        var candidates = engine.TensorWhere(hit, engine.TensorArange<int>(0, n), Tensor<int>.CreateDefault(new[] { n }, n));
+        return engine.TensorMinValue(candidates);
     }
 
     /// <summary>
@@ -378,6 +396,9 @@ internal static class AudioEngineOps
             : embedding.ToArray();
     }
 
+    /// <summary>Most gathered values one block of <see cref="SlidingCosineScores"/> materializes.</summary>
+    private const long AlignedBlockBudget = 1L << 22;
+
     /// <summary>
     /// Cosine similarity of the query embedding frames against the reference frames starting at
     /// each offset <c>rStart = 0 .. refFrames - min(queryFrames, minMatchLength)</c>, over the
@@ -394,51 +415,63 @@ internal static class AudioEngineOps
         if (queryFrames <= 0 || refFrames <= 0 || starts <= 0) return new double[0];
         if (embDim <= 0) return new double[starts];
 
-        // Gram matrix G[f, j] = q_f . r_j and the per-frame squared norms
+        // Only the aligned pairs (start, f) -> reference frame start + f are needed, so the frame
+        // products are gathered per block of starts instead of forming the full Gram matrix; each
+        // block holds at most AlignedBlockBudget values (or one start when a single start is larger).
+        var numOps = MathHelper.GetNumericOperations<T>();
         var q = engine.Reshape(engine.TensorSlice(new Tensor<T>(query, new[] { query.Length }), new[] { 0 }, new[] { queryFrames * embDim }), new[] { queryFrames, embDim });
         var r = engine.Reshape(engine.TensorSlice(new Tensor<T>(reference, new[] { reference.Length }), new[] { 0 }, new[] { refFrames * embDim }), new[] { refFrames, embDim });
-        var gram = Flatten(engine, engine.TensorMatMul(q, engine.TensorTranspose(r)));
         var qNorm = engine.ReduceSum(engine.TensorSquare(q), new[] { 1 }, keepDims: false);
         var rNorm = engine.ReduceSum(engine.TensorSquare(r), new[] { 1 }, keepDims: false);
+        long perStart = (long)queryFrames * embDim;
+        int block = (int)Math.Max(1L, Math.Min(starts, AlignedBlockBudget / perStart));
 
-        // Pair (rStart, f) covers reference frame rStart + f while that frame exists
-        var gramIndex = new int[starts * queryFrames];
-        var queryIndex = new int[starts * queryFrames];
-        var refIndex = new int[starts * queryFrames];
-        var valid = new int[starts * queryFrames];
-        for (int start = 0; start < starts; start++)
+        var result = new double[starts];
+        for (int blockStart = 0; blockStart < starts; blockStart += block)
         {
-            for (int f = 0; f < queryFrames; f++)
+            int count = Math.Min(block, starts - blockStart);
+            var queryIndex = new int[count * queryFrames];
+            var refIndex = new int[count * queryFrames];
+            var valid = new int[count * queryFrames];
+            for (int s = 0; s < count; s++)
             {
-                int k = start * queryFrames + f;
-                int j = start + f;
-                queryIndex[k] = f;
-                if (j < refFrames)
+                for (int f = 0; f < queryFrames; f++)
                 {
-                    gramIndex[k] = f * refFrames + j;
-                    refIndex[k] = j;
-                    valid[k] = 1;
+                    int k = s * queryFrames + f;
+                    int j = blockStart + s + f;
+                    queryIndex[k] = f;
+                    if (j < refFrames)
+                    {
+                        refIndex[k] = j;
+                        valid[k] = 1;
+                    }
                 }
             }
+
+            var pairShape = new[] { count, queryFrames };
+            var mask = new Tensor<int>(valid, pairShape).Cast<T>();
+            var zeros = new Tensor<T>(pairShape);
+            var qIdx = new Tensor<int>(queryIndex, new[] { queryIndex.Length });
+            var rIdx = new Tensor<int>(refIndex, new[] { refIndex.Length });
+            Tensor<T> Gather(Tensor<T> source, Tensor<int> index) => engine.TensorWhere(
+                mask, engine.Reshape(engine.TensorIndexSelect(source, index, 0), pairShape), zeros);
+
+            // Row products q_f . r_(start+f), zeroed where the reference frame does not exist
+            var frameDots = engine.ReduceSum(
+                engine.TensorMultiply(engine.TensorIndexSelect(q, qIdx, 0), engine.TensorIndexSelect(r, rIdx, 0)),
+                new[] { 1 }, keepDims: false);
+            var sim = engine.ReduceSum(engine.TensorWhere(mask, engine.Reshape(frameDots, pairShape), zeros), new[] { 1 }, keepDims: false);
+            var normQ = engine.ReduceSum(Gather(qNorm, qIdx), new[] { 1 }, keepDims: false);
+            var normR = engine.ReduceSum(Gather(rNorm, rIdx), new[] { 1 }, keepDims: false);
+            var denom = engine.TensorMultiply(engine.TensorSqrt(normQ), engine.TensorSqrt(normR));
+            var cosine = engine.TensorWhere(
+                engine.TensorGreaterThan(denom, numOps.FromDouble(1e-8)),
+                engine.TensorDivide(sim, denom),
+                new Tensor<T>(new[] { count }));
+            Array.Copy(cosine.Cast<double>().ToArray(), 0, result, blockStart, count);
         }
 
-        var shape = new[] { starts, queryFrames };
-        var mask = new Tensor<int>(valid, shape).Cast<T>();
-        var zeros = new Tensor<T>(shape);
-        Tensor<T> Gather(Tensor<T> source, int[] index) => engine.TensorWhere(
-            mask, engine.Reshape(engine.TensorIndexSelect(source, new Tensor<int>(index, new[] { index.Length }), 0), shape), zeros);
-
-        var sim = engine.ReduceSum(Gather(gram, gramIndex), new[] { 1 }, keepDims: false);
-        var normQ = engine.ReduceSum(Gather(qNorm, queryIndex), new[] { 1 }, keepDims: false);
-        var normR = engine.ReduceSum(Gather(rNorm, refIndex), new[] { 1 }, keepDims: false);
-        var denom = engine.TensorMultiply(engine.TensorSqrt(normQ), engine.TensorSqrt(normR));
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var cosine = engine.TensorWhere(
-            engine.TensorGreaterThan(denom, numOps.FromDouble(1e-8)),
-            engine.TensorDivide(sim, denom),
-            new Tensor<T>(new[] { starts }));
-
-        return cosine.Cast<double>().ToArray();
+        return result;
     }
 
     /// <summary>
