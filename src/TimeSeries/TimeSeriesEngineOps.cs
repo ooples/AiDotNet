@@ -302,6 +302,47 @@ internal static class TimeSeriesEngineOps<T>
     public static IEnumerable<string> FormatCoefficients(Vector<T> coefficients, string label)
         => coefficients.Select((c, i) => $"  {label}[{i + 1}] = {FormatValue(c)}");
 
+    /// <summary>
+    /// Sums of every contiguous window of <paramref name="size"/> elements: element k is
+    /// <c>Σ v[k .. k + size - 1]</c> (length <c>v.Length - size + 1</c>, empty when no window fits).
+    /// </summary>
+    public static Vector<T> WindowSums(Vector<T> v, int size)
+    {
+        if (size <= 0 || size > v.Length)
+        {
+            return new Vector<T>(0);
+        }
+
+        var windows = Engine.TensorUnfold(Tensor<T>.FromVector(v), 0, size, 1);
+        return Engine.ReduceSum(windows, new[] { 1 }, keepDims: false).ToVector();
+    }
+
+    /// <summary>
+    /// Per-phase sums <c>Σ_{i ≡ phase (mod period)} v[i]</c> (ascending i) and element counts for
+    /// phases 0..period-1. Phases with no element have sum and count zero. Empty when period ≤ 0.
+    /// </summary>
+    public static (Vector<T> Sums, Vector<T> Counts) PhaseSums(Vector<T> v, int period)
+    {
+        if (period <= 0)
+        {
+            return (new Vector<T>(0), new Vector<T>(0));
+        }
+
+        int rows = (v.Length + period - 1) / period;
+        if (rows == 0)
+        {
+            return (new Vector<T>(period), new Vector<T>(period));
+        }
+
+        // [rows, period] phase grid, zero-padded at the end; the padding adds exact zeros.
+        int padding = rows * period - v.Length;
+        var values = Tensor<T>.FromVector(Vector<T>.Concatenate(v, new Vector<T>(padding)), new[] { rows, period });
+        var ones = Tensor<T>.FromVector(
+            Vector<T>.Concatenate(Engine.Fill(v.Length, NumOps.One), new Vector<T>(padding)), new[] { rows, period });
+        return (Engine.ReduceSum(values, new[] { 0 }, keepDims: false).ToVector(),
+                Engine.ReduceSum(ones, new[] { 0 }, keepDims: false).ToVector());
+    }
+
     private static string FormatValue(T value)
         => value is IFormattable formattable
             ? formattable.ToString("F4", System.Globalization.CultureInfo.CurrentCulture)

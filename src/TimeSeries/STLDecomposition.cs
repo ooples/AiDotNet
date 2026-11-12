@@ -205,23 +205,12 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
         // Step 2: Detrending
         Vector<T> detrended = SubtractVectors(y, _trend);
 
-        // Step 3: Initial Seasonal Estimation
-        _seasonal = new Vector<T>(n);
-        for (int i = 0; i < period; i++)
-        {
-            T seasonalValue = NumOps.Zero;
-            int count = 0;
-            for (int j = i; j < n; j += period)
-            {
-                seasonalValue = NumOps.Add(seasonalValue, detrended[j]);
-                count++;
-            }
-            seasonalValue = NumOps.Divide(seasonalValue, NumOps.FromDouble(count));
-            for (int j = i; j < n; j += period)
-            {
-                _seasonal[j] = seasonalValue;
-            }
-        }
+        // Step 3: Initial Seasonal Estimation: every position gets the mean of its phase
+        var (phaseSums, phaseCounts) = TimeSeriesEngineOps<T>.PhaseSums(detrended, period);
+        _seasonal = phaseSums.Length > 0 && n > 0
+            ? TimeSeriesEngineOps<T>.RepeatPeriodic(
+                Engine.Divide(phaseSums.GetSubVector(0, Math.Min(period, n)), phaseCounts.GetSubVector(0, Math.Min(period, n))), n)
+            : new Vector<T>(n);
 
         // Step 4: Seasonal Smoothing
         _seasonal = SmoothSeasonal(_seasonal, period, seasonalWindow);
@@ -260,19 +249,12 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> SmoothSeasonal(Vector<T> seasonal, int period, int window)
     {
+        // Moving average of each phase's subseries, written back to the phase positions
         Vector<T> smoothed = new Vector<T>(seasonal.Length);
-        for (int i = 0; i < period; i++)
+        for (int i = 0; i < Math.Min(period, seasonal.Length); i++)
         {
-            List<T> subseries = new List<T>();
-            for (int j = i; j < seasonal.Length; j += period)
-            {
-                subseries.Add(seasonal[j]);
-            }
-            Vector<T> smoothedSubseries = MovingAverage(new Vector<T>(subseries), window);
-            for (int j = 0; j < smoothedSubseries.Length; j++)
-            {
-                smoothed[i + j * period] = smoothedSubseries[j];
-            }
+            Vector<T> smoothedSubseries = MovingAverage(Engine.StridedGather(seasonal, i, period), window);
+            Engine.StridedScatter(smoothed, smoothedSubseries, i, period);
         }
 
         return smoothed;
@@ -322,48 +304,35 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
     private Vector<T> MovingAverage(Vector<T> data, int windowSize)
     {
         int n = data.Length;
-        Vector<T> result = new Vector<T>(n);
-        T windowSum = NumOps.Zero;
         int effectiveWindow = Math.Min(windowSize, n);
-
-        // Initialize the first window
-        // VECTORIZED: Use Vector slice and sum
-        if (effectiveWindow > 0)
+        if (n == 0)
         {
-            Vector<T> initialWindow = data.Slice(0, effectiveWindow);
-            windowSum = Engine.Sum(initialWindow);
+            return new Vector<T>(0);
         }
 
-        // Calculate moving average
-        for (int i = 0; i < n; i++)
+        if (effectiveWindow <= 0)
         {
-            if (i < effectiveWindow / 2 || i >= n - effectiveWindow / 2)
-            {
-                // Edge case: use available data points
-                int start = Math.Max(0, i - effectiveWindow / 2);
-                int end = Math.Min(n, i + effectiveWindow / 2 + 1);
-                // VECTORIZED: Use Vector slice and sum
-                int length = end - start;
-                Vector<T> windowSlice = data.Slice(start, length);
-                T sum = Engine.Sum(windowSlice);
-                result[i] = NumOps.Divide(sum, NumOps.FromDouble(length));
-            }
-            else
-            {
-                // Regular case: use full window
-                result[i] = NumOps.Divide(windowSum, NumOps.FromDouble(effectiveWindow));
-                if (i + effectiveWindow / 2 + 1 < n)
-                {
-                    windowSum = NumOps.Add(windowSum, data[i + effectiveWindow / 2 + 1]);
-                }
-                if (i - effectiveWindow / 2 >= 0)
-                {
-                    windowSum = NumOps.Subtract(windowSum, data[i - effectiveWindow / 2]);
-                }
-            }
+            // No window: every average divides by a non-positive count and is invalid.
+            return Engine.Fill(n, NumOps.Divide(NumOps.Zero, NumOps.FromDouble(effectiveWindow)));
         }
 
-        return result;
+        int half = effectiveWindow / 2;
+
+        // Edge positions (i < half or i >= n - half) average the available points of [i - half, i + half].
+        var padded = Vector<T>.Concatenate(new Vector<T>(half), data, new Vector<T>(half));
+        var paddedOnes = Vector<T>.Concatenate(new Vector<T>(half), Engine.Fill(n, NumOps.One), new Vector<T>(half));
+        var edgeAverages = Engine.Divide(
+            TimeSeriesEngineOps<T>.WindowSums(padded, 2 * half + 1),
+            TimeSeriesEngineOps<T>.WindowSums(paddedOnes, 2 * half + 1));
+
+        // Interior positions average the full window of effectiveWindow points starting at i - half.
+        int interior = n - 2 * half;
+        var interiorAverages = Engine.Divide(
+            TimeSeriesEngineOps<T>.WindowSums(data, effectiveWindow).GetSubVector(0, interior),
+            NumOps.FromDouble(effectiveWindow));
+
+        return Vector<T>.Concatenate(
+            edgeAverages.GetSubVector(0, half), interiorAverages, edgeAverages.GetSubVector(n - half, half));
     }
 
     /// <summary>
@@ -410,19 +379,19 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CycleSubseriesSmoothing(Vector<T> data, int period, int loessWindow)
     {
+        // LOESS over each phase's subseries. Neighbouring subseries points are `period` apart, so the
+        // weights depend only on the offset k: tri-cube(k · period / window) for k · period <= window.
         Vector<T> smoothed = new Vector<T>(data.Length);
-        for (int i = 0; i < period; i++)
+        int effectiveWindowSize = Math.Max(1, loessWindow);
+        T window = NumOps.FromDouble(effectiveWindowSize);
+        T spacing = NumOps.FromDouble(period);
+        for (int i = 0; i < Math.Min(period, data.Length); i++)
         {
-            List<(T x, T y)> subseries = new List<(T x, T y)>();
-            for (int j = i; j < data.Length; j += period)
-            {
-                subseries.Add((NumOps.FromDouble(j), data[j]));
-            }
-            Vector<T> smoothedSubseries = LoessSmoothing(subseries, loessWindow);
-            for (int j = 0; j < smoothedSubseries.Length; j++)
-            {
-                smoothed[i + j * period] = smoothedSubseries[j];
-            }
+            Vector<T> subseries = Engine.StridedGather(data, i, period);
+            int radius = Math.Min(subseries.Length - 1, effectiveWindowSize / period);
+            var distances = Engine.Multiply(Engine.TensorArange<T>(0, radius + 1, 1).ToVector(), spacing);
+            Vector<T> smoothedSubseries = KernelSmooth(subseries, TriCubeWeights(distances, window));
+            Engine.StridedScatter(smoothed, smoothedSubseries, i, period);
         }
 
         return smoothed;
@@ -544,10 +513,11 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Calculates the tri-cube weight function used in LOESS smoothing.
+    /// Calculates the tri-cube weight function used in LOESS smoothing for each distance.
     /// </summary>
-    /// <param name="x">The input value (typically a normalized distance).</param>
-    /// <returns>The tri-cube weight.</returns>
+    /// <param name="distances">The distances of the neighbouring points.</param>
+    /// <param name="window">The window the distances are normalized by.</param>
+    /// <returns>The tri-cube weight of each distance.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b>
@@ -561,18 +531,38 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// which helps LOESS produce smooth trend and seasonal estimates.
     /// </para>
     /// </remarks>
-    private T TriCube(T x)
+    private Vector<T> TriCubeWeights(Vector<T> distances, T window)
     {
-        T absX = NumOps.Abs(x);
-        if (NumOps.GreaterThan(absX, NumOps.One))
-        {
-            return NumOps.Zero;
-        }
+        // w(u) = ((1 - |u|)³)² for |u| <= 1, else 0, with u = distance / window
+        var absU = Engine.Abs(Engine.Divide(distances, window));
+        var oneMinusAbsU = Engine.Subtract(Engine.Fill(absU.Length, NumOps.One), absU);
+        var cube = Engine.Multiply(Engine.Multiply(oneMinusAbsU, oneMinusAbsU), oneMinusAbsU);
+        var weights = Tensor<T>.FromVector(Engine.Multiply(cube, cube));
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(Tensor<T>.FromVector(absU), NumOps.One),
+            Engine.TensorZerosLike(weights),
+            weights).ToVector();
+    }
 
-        T oneMinusAbsX = NumOps.Subtract(NumOps.One, absX);
-        T cube = NumOps.Multiply(NumOps.Multiply(oneMinusAbsX, oneMinusAbsX), oneMinusAbsX);
+    /// <summary>
+    /// Weighted average of every point's neighbours: <c>Σ_k w[|k|] y[i + k] / Σ_k w[|k|]</c> over the
+    /// offsets <c>|k| &lt;= r</c> that fall inside the series, where <paramref name="halfKernel"/> holds
+    /// <c>w[0..r]</c>.
+    /// </summary>
+    private Vector<T> KernelSmooth(Vector<T> y, Vector<T> halfKernel)
+    {
+        int n = y.Length;
+        int radius = halfKernel.Length - 1;
+        var kernel = radius > 0
+            ? Vector<T>.Concatenate(TimeSeriesEngineOps<T>.Reverse(halfKernel.GetSubVector(1, radius)), halfKernel)
+            : halfKernel;
 
-        return NumOps.Multiply(cube, cube);
+        // Zero padding: out-of-range neighbours add exact zeros to both sums.
+        var padded = Vector<T>.Concatenate(new Vector<T>(radius), y, new Vector<T>(radius));
+        var inRange = Vector<T>.Concatenate(new Vector<T>(radius), Engine.Fill(n, NumOps.One), new Vector<T>(radius));
+        var windows = Engine.TensorUnfold(Tensor<T>.FromVector(padded), 0, 2 * radius + 1, 1).ToMatrix();
+        var masks = Engine.TensorUnfold(Tensor<T>.FromVector(inRange), 0, 2 * radius + 1, 1).ToMatrix();
+        return Engine.Divide(Engine.MatrixVectorMultiply(windows, kernel), Engine.MatrixVectorMultiply(masks, kernel));
     }
 
     /// <summary>
@@ -599,125 +589,16 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
     private Vector<T> LoessSmoothing(Vector<T> data, int windowSize)
     {
         int n = data.Length;
-        Vector<T> result = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0 || windowSize < 0)
         {
-            T x = NumOps.FromDouble(i);
-            List<(T distance, T weight, T y)> weightedPoints = new List<(T distance, T weight, T y)>();
-
-            for (int j = 0; j < n; j++)
-            {
-                T distance = NumOps.Abs(NumOps.Subtract(NumOps.FromDouble(j), x));
-                if (NumOps.LessThanOrEquals(distance, NumOps.FromDouble(windowSize)))
-                {
-                    T weight = TriCube(NumOps.Divide(distance, NumOps.FromDouble(windowSize)));
-                    weightedPoints.Add((distance, weight, data[j]));
-                }
-            }
-
-            if (weightedPoints.Count > 0)
-            {
-                result[i] = WeightedLeastSquares(weightedPoints);
-            }
-            else
-            {
-                result[i] = data[i];
-            }
+            // No point lies within a negative window: every value is kept.
+            return data.Clone();
         }
 
-        return result;
-    }
-
-    /// <summary>
-    /// Calculates a weighted average of points based on their weights.
-    /// </summary>
-    /// <param name="weightedPoints">A list of points with their distances, weights, and values.</param>
-    /// <returns>The weighted average.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// A weighted average is like a regular average, but some values count more than others.
-    /// Each value is multiplied by its weight, then all these products are summed and divided
-    /// by the sum of the weights.
-    /// 
-    /// For example, if we have values [10, 20, 30] with weights [1, 2, 1]:
-    /// - The weighted sum is 10×1 + 20×2 + 30×1 = 80
-    /// - The sum of weights is 1 + 2 + 1 = 4
-    /// - The weighted average is 80 ÷ 4 = 20
-    /// 
-    /// In LOESS smoothing, this gives more influence to points that are closer to the one being estimated.
-    /// </para>
-    /// </remarks>
-    private T WeightedLeastSquares(List<(T distance, T weight, T y)> weightedPoints)
-    {
-        T sumWeights = NumOps.Zero;
-        T sumWeightedY = NumOps.Zero;
-
-        foreach (var point in weightedPoints)
-        {
-            sumWeights = NumOps.Add(sumWeights, point.weight);
-            sumWeightedY = NumOps.Add(sumWeightedY, NumOps.Multiply(point.weight, point.y));
-        }
-
-        return NumOps.Divide(sumWeightedY, sumWeights);
-    }
-
-    /// <summary>
-    /// Performs LOESS smoothing on a list of (x,y) points using a distance window.
-    /// </summary>
-    /// <param name="data">The list of (x,y) points.</param>
-    /// <param name="windowSize">The distance window for smoothing.</param>
-    /// <returns>The smoothed y-values.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// This version of LOESS smoothing works with arbitrary x-coordinates (not just evenly spaced points).
-    /// For each point, it:
-    ///
-    /// 1. Calculates the distance from this point to all other points
-    /// 2. Selects a proportion (span) of the closest points
-    /// 3. Assigns weights based on these distances
-    /// 4. Fits a weighted linear regression to estimate the smoothed value
-    ///
-    /// This is more flexible than the previous method because it can handle unevenly spaced data
-    /// and adapts the window size based on the data density.
-    /// </para>
-    /// </remarks>
-    private Vector<T> LoessSmoothing(List<(T x, T y)> data, int windowSize)
-    {
-        int n = data.Count;
-        Vector<T> result = new Vector<T>(n);
-
-        int effectiveWindowSize = Math.Max(1, windowSize);
-        T window = NumOps.FromDouble(effectiveWindowSize);
-
-        for (int i = 0; i < n; i++)
-        {
-            T x = data[i].x;
-            List<(T distance, T weight, T y)> weightedPoints = new List<(T distance, T weight, T y)>();
-
-            for (int j = 0; j < n; j++)
-            {
-                T distance = NumOps.Abs(NumOps.Subtract(data[j].x, x));
-                if (NumOps.LessThanOrEquals(distance, window))
-                {
-                    T weight = TriCube(NumOps.Divide(distance, window));
-                    weightedPoints.Add((distance, weight, data[j].y));
-                }
-            }
-
-            if (weightedPoints.Count > 0)
-            {
-                result[i] = WeightedLeastSquares(weightedPoints);
-            }
-            else
-            {
-                result[i] = data[i].y;
-            }
-        }
-
-        return result;
+        // Points within windowSize of i, weighted tri-cube(|j - i| / windowSize)
+        int radius = Math.Min(windowSize, n - 1);
+        var distances = Engine.TensorArange<T>(0, radius + 1, 1).ToVector();
+        return KernelSmooth(data, TriCubeWeights(distances, NumOps.FromDouble(windowSize)));
     }
 
     /// <summary>
@@ -805,36 +686,35 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
         int forecastHorizon = input.Rows;
         int n = _trend.Length;
         int seasonLength = _stlOptions.SeasonalPeriod;
-        Vector<T> forecast = new Vector<T>(forecastHorizon);
+        if (forecastHorizon <= 0)
+        {
+            return new Vector<T>(Math.Max(forecastHorizon, 0));
+        }
 
-        // Use last full season for seasonal component
+        if (seasonLength == 0)
+        {
+            throw new DivideByZeroException(); // the season index i % seasonLength is undefined
+        }
+
+        // Use last full season for seasonal component (zero-filled when the series is shorter)
         int seasonStart = Math.Max(0, _seasonal.Length - seasonLength);
-        Vector<T> lastSeason = new Vector<T>(seasonLength);
-        for (int i = 0; i < seasonLength && seasonStart + i < _seasonal.Length; i++)
+        int seasonCount = Math.Max(0, Math.Min(seasonLength, _seasonal.Length - seasonStart));
+        Vector<T> lastSeason = Vector<T>.Concatenate(
+            _seasonal.GetSubVector(seasonStart, seasonCount), new Vector<T>(seasonLength - seasonCount));
+
+        // In-sample: the decomposed trend; out-of-sample: linear extrapolation from the last two trend values
+        int inSample = Math.Min(forecastHorizon, n);
+        Vector<T> trend = _trend.GetSubVector(0, inSample);
+        if (forecastHorizon > inSample)
         {
-            lastSeason[i] = _seasonal[seasonStart + i];
+            T lastTrend = _trend[n - 1];
+            T slope = n > 1 ? NumOps.Subtract(_trend[n - 1], _trend[n - 2]) : NumOps.Zero;
+            var steps = Engine.TensorArange<T>(1, forecastHorizon - n + 1, 1).ToVector();
+            trend = Vector<T>.Concatenate(trend,
+                Engine.Add(Engine.Fill(forecastHorizon - n, lastTrend), Engine.Multiply(steps, slope)));
         }
 
-        for (int i = 0; i < forecastHorizon; i++)
-        {
-            T trendValue;
-            if (i < n)
-            {
-                // In-sample: use the decomposed trend at this time point
-                trendValue = _trend[i];
-            }
-            else
-            {
-                // Out-of-sample: linear extrapolation from last two trend values
-                T lastTrend = _trend[n - 1];
-                T slope = n > 1 ? NumOps.Subtract(_trend[n - 1], _trend[n - 2]) : NumOps.Zero;
-                trendValue = NumOps.Add(lastTrend, NumOps.Multiply(slope, NumOps.FromDouble(i - n + 1)));
-            }
-
-            forecast[i] = NumOps.Add(trendValue, lastSeason[i % seasonLength]);
-        }
-
-        return forecast;
+        return Engine.Add(trend, TimeSeriesEngineOps<T>.RepeatPeriodic(lastSeason, forecastHorizon));
     }
 
     /// <summary>
@@ -1198,10 +1078,7 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
             // This avoids breaking downstream workflows (e.g., JIT graph export) on benign inputs.
             System.Diagnostics.Debug.WriteLine(
                 $"Warning: STL decomposition failed with InvalidOperationException. Falling back to trivial decomposition (trend=series, seasonal=0, residual=0). Error: {ex.Message}");
-            for (int i = 0; i < n; i++)
-            {
-                _trend[i] = y[i];
-            }
+            y.AsSpan().Slice(0, n).CopyTo(_trend.AsWritableSpan());
 
             _seasonal.Fill(NumOps.Zero);
             _residual.Fill(NumOps.Zero);
@@ -1219,9 +1096,8 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
 
         // Populate ModelParameters from seasonal pattern (one period) for GetParameters()
         int period = _stlOptions.SeasonalPeriod;
-        ModelParameters = new Vector<T>(period);
-        for (int i = 0; i < period && i < _seasonal.Length; i++)
-            ModelParameters[i] = _seasonal[i];
+        int copied = Math.Max(0, Math.Min(period, _seasonal.Length));
+        ModelParameters = Vector<T>.Concatenate(_seasonal.GetSubVector(0, copied), new Vector<T>(period - copied));
     }
 
     /// <summary>
@@ -1255,12 +1131,13 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
         Vector<T> reconstructed = (Vector<T>)Engine.Add(trendPlusSeasonal, _residual);
 
         T maxError = NumOps.Zero;
-        for (int i = 0; i < originalSeries.Length; i++)
+        if (originalSeries.Length > 0)
         {
-            T error = NumOps.Abs(NumOps.Subtract(originalSeries[i], reconstructed[i]));
-            if (NumOps.GreaterThan(error, maxError))
+            var errors = Engine.Abs(Engine.Subtract(originalSeries, reconstructed.GetSubVector(0, originalSeries.Length)));
+            T largest = Engine.Max(errors);
+            if (NumOps.GreaterThan(largest, maxError))
             {
-                maxError = error;
+                maxError = largest;
             }
         }
 
@@ -1337,15 +1214,10 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
         T denominator = NumOps.Zero;
 
         // VECTORIZED: Calculate deviations using Engine operations
-        var meanVec = new Vector<T>(n);
-        for (int idx = 0; idx < n; idx++) meanVec[idx] = mean;
-        var deviations = (Vector<T>)Engine.Subtract(_seasonal, meanVec);
+        var deviations = (Vector<T>)Engine.Subtract(_seasonal, Engine.Fill(n, mean));
 
         // Calculate numerator with lagged products
-        for (int i = 0; i < n - lag; i++)
-        {
-            numerator = NumOps.Add(numerator, NumOps.Multiply(deviations[i], deviations[i + lag]));
-        }
+        numerator = Engine.DotProduct(deviations.GetSubVector(0, n - lag), deviations.GetSubVector(lag, n - lag));
 
         // VECTORIZED: Calculate denominator using dot product
         denominator = Engine.DotProduct(deviations, deviations);
@@ -1485,27 +1357,18 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
         int cycles = _seasonal.Length / period;
 
         var changes = new Vector<T>(cycles - 1);
-
-        for (int cycle = 0; cycle < cycles - 1; cycle++)
+        if (cycles < 2)
         {
-            T sum = NumOps.Zero;
-
-            for (int i = 0; i < period; i++)
-            {
-                int idx1 = cycle * period + i;
-                int idx2 = (cycle + 1) * period + i;
-
-                if (idx2 < _seasonal.Length)
-                {
-                    T diff = NumOps.Subtract(_seasonal[idx2], _seasonal[idx1]);
-                    sum = NumOps.Add(sum, NumOps.Square(diff));
-                }
-            }
-
-            changes[cycle] = NumOps.Sqrt(sum);
+            return changes;
         }
 
-        return changes;
+        // Euclidean distance between each pair of consecutive cycles in the [cycles, period] grid
+        var grid = Tensor<T>.FromVector(_seasonal.GetSubVector(0, cycles * period), new[] { cycles, period });
+        var next = Engine.TensorSlice(grid, new[] { 1, 0 }, new[] { cycles - 1, period });
+        var previous = Engine.TensorSlice(grid, new[] { 0, 0 }, new[] { cycles - 1, period });
+        var diff = Engine.TensorSubtract(next, previous);
+        var sums = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
+        return Engine.TensorSqrt(sums).ToVector();
     }
 
     /// <summary>
@@ -1578,44 +1441,26 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
             int end = Math.Min(n, center + windowSize / 2);
 
             // Create vector from the window
-            Vector<T> localWindow = new Vector<T>(end - start);
-            for (int i = 0; i < localWindow.Length; i++)
-            {
-                localWindow[i] = detrended[start + i];
-            }
+            Vector<T> localWindow = detrended.GetSubVector(start, end - start);
 
             // Extract seasonal pattern from this window
             Vector<T> localSeasonal = ExtractLocalSeasonalPattern(localWindow, period, adaptiveSeasonalWindow);
 
             // Apply the pattern to the center period
-            for (int i = 0; i < period && center - period / 2 + i < n; i++)
-            {
-                int targetIdx = center - period / 2 + i;
-                if (targetIdx >= 0 && targetIdx < n)
-                {
-                    _seasonal[targetIdx] = localSeasonal[i % localSeasonal.Length];
-                }
-            }
+            int targetStart = center - period / 2;
+            int applied = Math.Min(period, n - targetStart);
+            localSeasonal.AsSpan().Slice(0, applied).CopyTo(_seasonal.AsWritableSpan().Slice(targetStart, applied));
         }
 
         // Handle edge cases (beginning and end of series)
         // For beginning, use the first estimated seasonal pattern
-        for (int i = 0; i < period / 2; i++)
-        {
-            if (i < n)
-            {
-                _seasonal[i] = _seasonal[i + period];
-            }
-        }
+        int edge = Math.Min(period / 2, n);
+        _seasonal.AsSpan().Slice(period, edge).CopyTo(_seasonal.AsWritableSpan().Slice(0, edge));
 
         // For end, use the last estimated seasonal pattern
-        for (int i = n - period / 2; i < n; i++)
-        {
-            if (i >= 0 && i < n)
-            {
-                _seasonal[i] = _seasonal[i - period];
-            }
-        }
+        int tailStart = Math.Max(0, n - period / 2);
+        _seasonal.AsSpan().Slice(tailStart - period, n - tailStart)
+            .CopyTo(_seasonal.AsWritableSpan().Slice(tailStart, n - tailStart));
 
         // Smooth transitions between adjacent seasonal patterns
         _seasonal = SmoothSeasonalTransitions(_seasonal, period);
@@ -1647,22 +1492,15 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         // Get the seasonal pattern by averaging values at the same phase in the cycle
         Vector<T> pattern = new Vector<T>(period);
-        Vector<T> counts = new Vector<T>(period);
-
-        for (int i = 0; i < window.Length; i++)
+        if (window.Length > 0)
         {
-            int phase = i % period;
-            pattern[phase] = NumOps.Add(pattern[phase], window[i]);
-            counts[phase] = NumOps.Add(counts[phase], NumOps.One);
-        }
-
-        // Average the values for each phase
-        for (int i = 0; i < period; i++)
-        {
-            if (NumOps.GreaterThan(counts[i], NumOps.Zero))
-            {
-                pattern[i] = NumOps.Divide(pattern[i], counts[i]);
-            }
+            // Phases without values keep a zero sum
+            var (sums, counts) = TimeSeriesEngineOps<T>.PhaseSums(window, period);
+            var countsT = Tensor<T>.FromVector(counts);
+            var sumsT = Tensor<T>.FromVector(sums);
+            var hasValues = Engine.TensorGreaterThan(countsT, NumOps.Zero);
+            var divisors = Engine.TensorWhere(hasValues, countsT, Engine.TensorOnesLike(countsT));
+            pattern = Engine.TensorWhere(hasValues, Engine.TensorDivide(sumsT, divisors), sumsT).ToVector();
         }
 
         // Smooth the pattern
@@ -1670,12 +1508,7 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
 
         // Ensure the pattern sums to zero
         T mean = pattern.Average();
-        for (int i = 0; i < pattern.Length; i++)
-        {
-            pattern[i] = NumOps.Subtract(pattern[i], mean);
-        }
-
-        return pattern;
+        return Engine.Subtract(pattern, Engine.Fill(pattern.Length, mean));
     }
 
     /// <summary>
@@ -1694,40 +1527,13 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> SmoothSeasonalTransitions(Vector<T> seasonal, int period)
     {
-        int n = seasonal.Length;
-        Vector<T> smoothed = new Vector<T>(n);
-
-        // Use a moving average to smooth transitions between seasonal cycles
-        int halfWindow = period / 2;
-
-        for (int i = 0; i < n; i++)
+        // Averaging the same-phase points of [i - period / 2, i + period / 2] only ever finds i itself
+        // (the window is narrower than one period), so each value is its own average.
+        if (period == 0 && seasonal.Length > 0)
         {
-            int start = Math.Max(0, i - halfWindow);
-            int end = Math.Min(n, i + halfWindow + 1);
-
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            // Only average points with the same phase in the cycle
-            for (int j = start; j < end; j++)
-            {
-                if (j % period == i % period)
-                {
-                    sum = NumOps.Add(sum, seasonal[j]);
-                    count++;
-                }
-            }
-
-            if (count > 0)
-            {
-                smoothed[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-            }
-            else
-            {
-                smoothed[i] = seasonal[i];
-            }
+            throw new DivideByZeroException(); // the phase j % period is undefined
         }
 
-        return smoothed;
+        return seasonal.Clone();
     }
 }
