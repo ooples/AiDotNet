@@ -22639,3 +22639,7 @@ static AiDotNet.Finance.Trading.Factors.StockformerMultiTaskLoss<T>.MaskedMae(Ai
 AiDotNet.Finance.Trading.Agents.TradingAgentBase<T>.AddGaussianExplorationNoise(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, AiDotNet.Tensors.LinearAlgebra.Vector<T>! standardDeviations) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 *REMOVED*AiDotNet.Finance.Trading.Agents.TradingAgentBase<T>.GaussianLogProbability(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, AiDotNet.Tensors.LinearAlgebra.Vector<T>! mean, System.Collections.Generic.IReadOnlyList<double>! logStds) -> double
 AiDotNet.Finance.Trading.Agents.TradingAgentBase<T>.GaussianLogProbability(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, AiDotNet.Tensors.LinearAlgebra.Vector<T>! mean, AiDotNet.Tensors.LinearAlgebra.Vector<T>! logStds) -> T
+*REMOVED*AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Dequantize(int[]! tokens, double[]! binEdges) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Dequantize(int[]! tokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! binEdges) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Quantize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! series) -> (int[]! Tokens, double[]! BinEdges)
+AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Quantize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! series) -> (int[]! Tokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! BinEdges)
