@@ -956,32 +956,25 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             var features = EncodeImage(image);
 
             var attentionMap = Tensor<T>.CreateDefault([patchesPerSide, patchesPerSide], NumOps.Zero);
-            for (int i = 0; i < numPatches && i < features.Rows; i++)
+            // Patch i's magnitude is the L1 norm of its feature row, laid out row-major on the patch grid
+            int scored = Math.Min(numPatches, features.Rows);
+            if (scored > 0)
             {
-                T magnitude = NumOps.Zero;
-                for (int j = 0; j < features.Columns; j++)
-                {
-                    magnitude = NumOps.Add(magnitude, NumOps.Abs(features[i, j]));
-                }
-                int row = i / patchesPerSide;
-                int col = i % patchesPerSide;
-                attentionMap[row, col] = magnitude;
+                var magnitudes = features.Columns == 0
+                    ? new Tensor<T>(new[] { scored })
+                    : Engine.ReduceSum(
+                        Engine.TensorAbs(new Tensor<T>(features.AsSpan().Slice(0, scored * features.Columns).ToArray(),
+                            new[] { scored, features.Columns })),
+                        new[] { 1 }, keepDims: false);
+                magnitudes.CopyTo(attentionMap.AsWritableSpan().Slice(0, scored));
             }
 
             return NormalizeTensor(attentionMap);
         }
         else
         {
-            var attentionMap = Tensor<T>.CreateDefault([patchesPerSide, patchesPerSide], NumOps.Zero);
             T value = NumOps.Divide(NumOps.One, NumOps.FromDouble(numPatches));
-            for (int i = 0; i < patchesPerSide; i++)
-            {
-                for (int j = 0; j < patchesPerSide; j++)
-                {
-                    attentionMap[i, j] = value;
-                }
-            }
-            return attentionMap;
+            return Tensor<T>.CreateDefault([patchesPerSide, patchesPerSide], value);
         }
     }
 
@@ -1368,39 +1361,54 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Tensor<T> CreateTokenTensor(IEnumerable<int> tokens)
     {
-        var tokenList = tokens.ToList();
-        var tensor = Tensor<T>.CreateDefault([tokenList.Count], NumOps.Zero);
-        for (int i = 0; i < tokenList.Count; i++)
-        {
-            tensor[i] = NumOps.FromDouble(tokenList[i]);
-        }
-        return tensor;
+        var tokenArray = tokens.ToArray();
+        return new Tensor<int>(tokenArray, new[] { tokenArray.Length }).Cast<T>();
     }
 
     private Vector<T> PoolFeatures(Matrix<T> features)
     {
         var pooled = new Vector<T>(features.Columns);
-        for (int j = 0; j < features.Columns; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < features.Rows; i++)
-            {
-                sum = NumOps.Add(sum, features[i, j]);
-            }
-            pooled[j] = NumOps.Divide(sum, NumOps.FromDouble(features.Rows));
-        }
+        if (features.Columns == 0) return pooled;
+        // Column j is the mean of column j over the rows
+        var sums = features.Rows == 0
+            ? new Tensor<T>(new[] { features.Columns })
+            : Engine.ReduceSum(Tensor<T>.FromMatrix(features), new[] { 0 }, keepDims: false);
+        Engine.TensorDivideScalar(sums, NumOps.FromDouble(features.Rows)).CopyTo(pooled.AsWritableSpan());
         return pooled;
     }
 
 
     private List<T> Softmax(List<T> values)
     {
-        T maxVal = values.Max(v => NumOps.ToDouble(v)) is double m ? NumOps.FromDouble(m) : NumOps.Zero;
+        if (values.Count == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        var expValues = values.Select(v => NumOps.Exp(NumOps.Subtract(v, maxVal))).ToList();
-        T sum = expValues.Aggregate(NumOps.Zero, (acc, v) => NumOps.Add(acc, v));
+        // Enumerable.Max over doubles: NaN loses to every number, and is the max only when all are NaN
+        var logits = new Tensor<T>(values.ToArray(), new[] { values.Count });
+        var isNaN = Engine.TensorIsNan(logits);
+        var floor = new Tensor<T>(new[] { values.Count });
+        floor.Fill(NumOps.FromDouble(double.NegativeInfinity));
+        var numbers = Engine.TensorWhere(isNaN, floor, logits);
+        int maxIndex = Engine.TensorArgMax(numbers, 0)[0];
+        T maxVal = FirstNumberIndex(values) < 0
+            ? NumOps.FromDouble(double.NaN)
+            : NumOps.FromDouble(NumOps.ToDouble(numbers.GetFlat(maxIndex)));
 
-        return expValues.Select(v => NumOps.Divide(v, sum)).ToList();
+        var expValues = Engine.TensorExp(Engine.TensorSubtractScalar(logits, maxVal));
+        T sum = Engine.TensorSum(expValues);
+
+        return Engine.TensorDivideScalar(expValues, sum).ToArray().ToList();
+    }
+
+    /// <summary>The index of the first non-NaN value, or -1 when every value is NaN.</summary>
+    private int FirstNumberIndex(List<T> values)
+    {
+        var ones = new Tensor<T>(new[] { values.Count });
+        ones.Fill(NumOps.One);
+        var isNumber = Engine.TensorWhere(Engine.TensorIsNan(new Tensor<T>(values.ToArray(), new[] { values.Count })),
+            new Tensor<T>(new[] { values.Count }), ones);
+        int first = Engine.TensorArgMax(isNumber, 0)[0];
+        return NumOps.IsNaN(values[first]) ? -1 : first;
     }
 
     // SoftmaxVector + SampleFromDistribution were removed (#1632): GenerateTokens now uses the
@@ -1415,24 +1423,16 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     private Matrix<T> AppendTokenToContext(Matrix<T> context, int token)
     {
         var newContext = Matrix<T>.CreateDefault(context.Rows + 1, context.Columns, NumOps.Zero);
-
-        for (int i = 0; i < context.Rows; i++)
-        {
-            for (int j = 0; j < context.Columns; j++)
-            {
-                newContext[i, j] = context[i, j];
-            }
-        }
+        var newContextSpan = newContext.AsWritableSpan();
+        context.AsSpan().Slice(0, context.Rows * context.Columns).CopyTo(newContextSpan);
 
         if (_useNativeMode && _tokenEmbedding is not null)
         {
             var tokenTensor = Tensor<T>.CreateDefault([1], NumOps.Zero);
             tokenTensor[0] = NumOps.FromDouble(token);
             var embedding = _tokenEmbedding.Forward(tokenTensor);
-            for (int j = 0; j < context.Columns && j < embedding.Length; j++)
-            {
-                newContext[context.Rows, j] = embedding[j];
-            }
+            int copied = Math.Min(context.Columns, embedding.Length);
+            embedding.AsSpan().Slice(0, copied).CopyTo(newContextSpan.Slice(context.Rows * context.Columns, copied));
         }
 
         return newContext;
@@ -1440,14 +1440,14 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Tensor<T> ApplyGELU(Tensor<T> x)
     {
-        var result = Tensor<T>.CreateDefault(x._shape, NumOps.Zero);
-        for (int i = 0; i < x.Length; i++)
+        // gelu(x) = x * 0.5 * (1 + tanh(sqrt(2/pi) * (x + 0.044715 x^3))), as fresh values off the tape
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            double val = NumOps.ToDouble(x[i]);
-            double gelu = val * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (val + 0.044715 * val * val * val)));
-            result[i] = NumOps.FromDouble(gelu);
+            var cubic = Engine.TensorMultiply(Engine.TensorMultiply(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.044715)), x), x);
+            var inner = Engine.TensorMultiplyScalar(Engine.TensorAdd(x, cubic), NumOps.FromDouble(Math.Sqrt(2.0 / Math.PI)));
+            var onePlusTanh = Engine.TensorAddScalar(Engine.TensorTanh(inner), NumOps.One);
+            return Engine.TensorMultiply(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.5)), onePlusTanh);
         }
-        return result;
     }
 
     private Tensor<T> MatrixToTensor(Matrix<T> matrix)
@@ -1482,18 +1482,23 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Tensor<T> NormalizeTensor(Tensor<T> tensor)
     {
-        T min = tensor[0, 0];
-        T max = tensor[0, 0];
+        T first = tensor[0, 0];
+        T min = first;
+        T max = first;
 
-        for (int i = 0; i < tensor.Shape[0]; i++)
+        // The scan starts at [0, 0] and only moves to a strictly smaller (larger) value, so a NaN start
+        // is kept and a NaN later on is never taken: the extremes are those of the non-NaN values.
+        int count = tensor.Shape[0] * tensor.Shape[1];
+        if (!NumOps.IsNaN(first))
         {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                if (NumOps.LessThan(tensor[i, j], min))
-                    min = tensor[i, j];
-                if (NumOps.GreaterThan(tensor[i, j], max))
-                    max = tensor[i, j];
-            }
+            var grid = new Tensor<T>(tensor.ToArray().AsSpan(0, count).ToArray(), new[] { count });
+            var isNaN = Engine.TensorIsNan(grid);
+            var floor = new Tensor<T>(new[] { count });
+            floor.Fill(NumOps.FromDouble(double.NegativeInfinity));
+            var forMax = Engine.TensorWhere(isNaN, floor, grid);
+            var forMin = Engine.TensorWhere(isNaN, floor, Engine.TensorNegate(grid));
+            max = grid.GetFlat(Engine.TensorArgMax(forMax, 0)[0]);
+            min = grid.GetFlat(Engine.TensorArgMax(forMin, 0)[0]);
         }
 
         T range = NumOps.Subtract(max, min);
@@ -1502,16 +1507,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             return tensor;
         }
 
-        var normalized = Tensor<T>.CreateDefault(tensor._shape, NumOps.Zero);
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                normalized[i, j] = NumOps.Divide(NumOps.Subtract(tensor[i, j], min), range);
-            }
-        }
-
-        return normalized;
+        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(tensor, min), range);
     }
 
     #endregion
