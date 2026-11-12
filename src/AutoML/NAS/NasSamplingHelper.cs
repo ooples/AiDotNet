@@ -77,6 +77,15 @@ namespace AiDotNet.AutoML.NAS
             return engine.TensorArgMax(key, 1).ToArray();
         }
 
+        /// <summary>
+        /// First-index row argmax of a matrix as a [rows] index tensor (see <see cref="ArgMaxRows{T}(Tensor{T}, out T[])"/>).
+        /// </summary>
+        internal static Tensor<int> ArgMaxRowsTensor<T>(Matrix<T> values)
+        {
+            int[] indices = ArgMaxRows(Tensor<T>.FromMatrix(values), out _);
+            return Tensor<int>.FromVector(Vector<int>.FromArray(indices));
+        }
+
         internal static int[] ArgMaxRows<T>(Matrix<T> values, out T[] rowMax)
         {
             return ArgMaxRows(Tensor<T>.FromMatrix(values), out rowMax);
