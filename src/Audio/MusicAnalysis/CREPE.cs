@@ -309,7 +309,7 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 
     private double BinToFrequency(int bin, Tensor<T> logits)
     {
-        // Weighted average around the peak for sub-bin accuracy: weights exp(logit) over bins
+        // Weighted average around the peak for sub-bin accuracy: weights exp(logit - max) over bins
         // bin-4 .. bin+4 (clipped to the bin range)
         double centsBin = bin * _options.CentsPerBin;
         int windowSize = 4;
@@ -322,7 +322,11 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
             int count = last - first + 1;
             if (first + count > logits.Length)
                 throw new ArgumentOutOfRangeException("flatIndex", "The logits do not cover the frequency window.");
-            var weights = Engine.TensorExp(Engine.TensorSlice(AudioEngineOps.Flatten(Engine, logits), [first], [count]));
+            // Shift by the window's largest logit before exp: the weighted average is unchanged, but
+            // large logits no longer overflow to inf / inf = NaN and very negative ones do not all
+            // underflow to zero.
+            var window = Engine.TensorSlice(AudioEngineOps.Flatten(Engine, logits), [first], [count]);
+            var weights = Engine.TensorExp(Engine.TensorSubtractScalar(window, Engine.TensorMaxValue(window)));
             var binCents = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(first, first + count, 1), NumOps.FromDouble(_options.CentsPerBin));
             double weightedSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(weights, binCents)));
             double weightTotal = NumOps.ToDouble(Engine.TensorSum(weights));
