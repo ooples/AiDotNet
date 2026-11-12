@@ -36,6 +36,29 @@ internal static class SolverTensorOps<T>
             x,
             Tensor<T>.CreateDefault(x.Shape.ToArray(), NumOps.Zero));
 
+    /// <summary>
+    /// The index the scan <c>if (v &gt; best) { best = v; index = i; }</c> from <c>best = floor</c> ends on over a
+    /// rank-1 <paramref name="values"/>: NaN never wins and ties keep the lowest index. -1 when nothing beats
+    /// <paramref name="floor"/>.
+    /// </summary>
+    internal static int FirstStrictMaxIndex(Tensor<T> values, T floor)
+    {
+        var eligible = Engine.TensorGreaterThan(values, floor);
+        if (First(eligible) is null) return -1;
+        var candidates = Engine.TensorWhere(eligible, values, Tensor<T>.CreateDefault(values.Shape.ToArray(), floor));
+        T best = Engine.TensorMaxValue(candidates);
+        var winners = Engine.TensorMultiply(eligible, Engine.TensorEquals(candidates, best));
+        return First(winners)?[0] ?? -1;
+    }
+
+    /// <summary>0/1 values of <typeparamref name="T"/> for <paramref name="flags"/>.</summary>
+    internal static Tensor<T> Mask(IReadOnlyList<bool> flags)
+    {
+        var ids = new int[flags.Count];
+        for (int i = 0; i < ids.Length; i++) ids[i] = flags[i] ? 1 : 0;
+        return Engine.TensorTake(Engine.TensorArange<T>(0, 2, 1), new Tensor<int>(new[] { ids.Length }, new Vector<int>(ids)));
+    }
+
     /// <summary>The element-wise maximum of two 0/1 masks (logical or).</summary>
     internal static Tensor<T> Or(Tensor<T> a, Tensor<T> b) => Engine.TensorMax(a, b);
 
