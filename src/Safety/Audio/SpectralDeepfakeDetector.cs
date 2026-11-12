@@ -4,6 +4,8 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Audio;
 
@@ -52,7 +54,6 @@ internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
 {
 
     private readonly T _threshold;
-    private readonly FastFourierTransform<T> _fft;
 
     // Pre-computed constants
     private static readonly T Zero = NumOps.Zero;
@@ -82,7 +83,6 @@ internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         }
 
         _threshold = NumOps.FromDouble(threshold);
-        _fft = new FastFourierTransform<T>();
     }
 
     /// <inheritdoc />
@@ -120,6 +120,8 @@ internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
 
     private SpectralFeatures ComputeSpectralFeatures(Vector<T> samples, int sampleRate)
     {
+        using var noGrad = new NoGradScope<T>();
+        var engine = SafetyTensorOps<T>.Engine;
         int length = samples.Length;
         int frameSize = Math.Min(512, length);
         int hopSize = frameSize / 2;
@@ -130,88 +132,50 @@ internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         while (fftSize < frameSize) fftSize <<= 1;
         int specSize = fftSize / 2 + 1;
 
-        // Per-frame features stored as Vector<T>
-        var frameZCR = new Vector<T>(numFrames);
-        var frameEnergy = new Vector<T>(numFrames);
-        var frameSpectralFlatness = new Vector<T>(numFrames);
-        var frameSpectralFlux = new Vector<T>(numFrames);
-        var prevMagnitudes = new Vector<T>(specSize);
+        // Per-frame features, every frame at once: frames are [numFrames, frameSize]
+        // (frame f starts at f * hopSize and always fits inside the signal).
+        var frames = SafetyTensorOps<T>.Frames(SafetyTensorOps<T>.AsTensor(samples), frameSize, hopSize, numFrames);
+        var axis1 = new[] { 1 };
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * hopSize;
-            int end = Math.Min(start + frameSize, length);
-            int actualSize = end - start;
+        // Zero-crossing rate and energy (the energy sum starts at the frame's second sample)
+        var frameZCR = frameSize > 1
+            ? engine.TensorDivideScalar(SafetyTensorOps<T>.ZeroCrossings(frames, nanIsNegative: true),
+                NumOps.FromDouble(frameSize - 1))
+            : Tensor<T>.CreateZeros(numFrames);
+        var frameEnergy = frameSize > 1
+            ? engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorSquare(engine.TensorNarrow(frames, 1, 1, frameSize - 1)), axis1, false),
+                NumOps.FromDouble(frameSize))
+            : Tensor<T>.CreateZeros(numFrames);
 
-            // Zero-crossing rate for this frame
-            int zeroCrossings = 0;
-            T energySum = Zero;
-            T prevSample = samples[start];
+        // Compute power spectrum using FFT
+        var magnitudes = ComputeMagnitudeSpectrum(frames, fftSize, specSize);
 
-            for (int i = start + 1; i < end; i++)
-            {
-                T val = samples[i];
-                energySum = NumOps.Add(energySum, NumOps.Multiply(val, val));
+        // Spectral flatness: geometric mean / arithmetic mean of power spectrum
+        var frameSpectralFlatness = ComputeSpectralFlatness(magnitudes, specSize);
 
-                if (IsZeroCrossing(prevSample, val))
-                {
-                    zeroCrossings++;
-                }
-
-                prevSample = val;
-            }
-
-            frameZCR[f] = actualSize > 1
-                ? NumOps.Divide(NumOps.FromDouble(zeroCrossings), NumOps.FromDouble(actualSize - 1))
-                : Zero;
-            frameEnergy[f] = actualSize > 0
-                ? NumOps.Divide(energySum, NumOps.FromDouble(actualSize))
-                : Zero;
-
-            // Compute power spectrum using FFT
-            var magnitudes = ComputeMagnitudeSpectrum(samples, start, actualSize, fftSize, specSize);
-
-            // Spectral flatness: geometric mean / arithmetic mean of power spectrum
-            frameSpectralFlatness[f] = ComputeSpectralFlatness(magnitudes, specSize);
-
-            // Spectral flux: sum of squared differences between consecutive frames
-            if (f > 0)
-            {
-                T flux = Zero;
-                for (int k = 0; k < specSize; k++)
-                {
-                    T diff = NumOps.Subtract(magnitudes[k], prevMagnitudes[k]);
-                    flux = NumOps.Add(flux, NumOps.Multiply(diff, diff));
-                }
-
-                frameSpectralFlux[f] = NumOps.FromDouble(
-                    Math.Sqrt(NumOps.ToDouble(flux) / specSize));
-            }
-
-            // Copy magnitudes to prevMagnitudes
-            for (int k = 0; k < specSize; k++)
-            {
-                prevMagnitudes[k] = magnitudes[k];
-            }
-        }
+        // Spectral flux: RMS of the differences between consecutive frames (frames 1..)
+        var frameSpectralFlux = numFrames > 1
+            ? engine.TensorSqrt(engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorSquare(engine.TensorDiff(magnitudes, 1, 0)), axis1, false),
+                NumOps.FromDouble(specSize)))
+            : Tensor<T>.CreateZeros(0);
 
         // Compute aggregate features
-        T zcrMean = VectorMean(frameZCR, 0, numFrames);
-        T zcrVariance = VectorVariance(frameZCR, zcrMean, 0, numFrames);
+        var (zcrMean, zcrVariance) = MeanVariance(frameZCR, 0);
         T hundred = NumOps.FromDouble(100.0);
         T zcrConsistency = NumOps.GreaterThan(zcrVariance, Zero)
             ? NumOps.Divide(One, NumOps.Add(One, NumOps.Multiply(zcrVariance, hundred)))
             : One;
 
-        T spectralFlatnessMean = VectorMean(frameSpectralFlatness, 0, numFrames);
-        T spectralFlatnessVar = VectorVariance(frameSpectralFlatness, spectralFlatnessMean, 0, numFrames);
+        var (spectralFlatnessMean, spectralFlatnessVar) = MeanVariance(frameSpectralFlatness, 0);
 
-        T spectralFluxMean = numFrames > 1 ? VectorMean(frameSpectralFlux, 1, numFrames) : Zero;
-        T spectralFluxVar = numFrames > 1 ? VectorVariance(frameSpectralFlux, spectralFluxMean, 1, numFrames) : Zero;
+        var (spectralFluxMean, spectralFluxVar) = numFrames > 1
+            ? MeanVariance(frameSpectralFlux, 0)
+            : (Zero, Zero);
 
         // Energy dynamics
-        T energyMean = VectorMean(frameEnergy, 0, numFrames);
-        T energyVariance = VectorVariance(frameEnergy, energyMean, 0, numFrames);
+        var (energyMean, energyVariance) = MeanVariance(frameEnergy, 0);
         T energyDynamicRange = NumOps.GreaterThan(energyMean, Zero)
             ? NumOps.Divide(energyVariance, energyMean)
             : Zero;
@@ -296,72 +260,56 @@ internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         return Clamp01(score);
     }
 
-    private Vector<T> ComputeMagnitudeSpectrum(Vector<T> samples, int start, int frameLength, int fftSize, int specSize)
+    private static Tensor<T> ComputeMagnitudeSpectrum(Tensor<T> frames, int fftSize, int specSize)
     {
-        // Build windowed frame, zero-padded to fftSize
-        var frame = new Vector<T>(fftSize);
-        T frameLenMinusOne = NumOps.FromDouble(frameLength - 1);
-        T twoPi = NumOps.FromDouble(2.0 * Math.PI);
+        var engine = SafetyTensorOps<T>.Engine;
+        int frameCount = frames.Shape[0];
+        int frameLength = frames.Shape[1];
 
-        for (int n = 0; n < frameLength; n++)
+        // Apply Hann window to reduce spectral leakage, zero-padded to fftSize
+        var windowed = engine.TensorMultiply(frames, SafetyTensorOps<T>.SymmetricHann(frameLength));
+        if (fftSize > frameLength)
         {
-            int idx = start + n;
-            if (idx >= samples.Length) break;
-
-            // Apply Hann window to reduce spectral leakage
-            T nT = NumOps.FromDouble(n);
-            T windowAngle = NumOps.Divide(NumOps.Multiply(twoPi, nT), frameLenMinusOne);
-            T window = NumOps.Multiply(
-                NumOps.FromDouble(0.5),
-                NumOps.Subtract(One, NumOps.FromDouble(Math.Cos(NumOps.ToDouble(windowAngle)))));
-
-            frame[n] = NumOps.Multiply(samples[idx], window);
+            windowed = engine.TensorConcatenate(new[]
+            {
+                windowed, Tensor<T>.CreateZeros(frameCount, fftSize - frameLength)
+            }, 1);
         }
 
-        // Use FFT for spectral analysis
-        var complexSpectrum = _fft.Forward(frame);
-
-        // Extract magnitude for positive frequencies
-        var magnitudes = new Vector<T>(specSize);
-        for (int k = 0; k < specSize && k < complexSpectrum.Length; k++)
-        {
-            magnitudes[k] = complexSpectrum[k].Magnitude;
-        }
-
-        return magnitudes;
+        // Magnitude for positive frequencies
+        var magnitudes = SafetyTensorOps<T>.FftMagnitude(windowed);
+        return engine.TensorNarrow(magnitudes, 1, 0, Math.Min(specSize, fftSize));
     }
 
-    private static T ComputeSpectralFlatness(Vector<T> magnitudes, int specSize)
+    private static Tensor<T> ComputeSpectralFlatness(Tensor<T> magnitudes, int specSize)
     {
-        if (specSize <= 1) return Zero;
+        var engine = SafetyTensorOps<T>.Engine;
+        int frameCount = magnitudes.Shape[0];
+        int count = Math.Min(specSize, magnitudes.Shape[1]) - 1;
+        if (specSize <= 1 || count <= 0) return Tensor<T>.CreateZeros(frameCount);
 
-        // Geometric mean / arithmetic mean of power spectrum
+        // Geometric mean / arithmetic mean of power spectrum (skip DC).
         // Use log-domain for geometric mean to avoid overflow
-        double logSum = 0;
-        T sum = Zero;
-        int count = 0;
+        var axis1 = new[] { 1 };
+        var power = engine.TensorAddScalar(
+            engine.TensorSquare(engine.TensorNarrow(magnitudes, 1, 1, count)), Epsilon);
+        var logSum = engine.ReduceSum(engine.TensorLog(power), axis1, false);
+        var sum = engine.ReduceSum(power, axis1, false);
+        T countT = NumOps.FromDouble(count);
 
-        for (int i = 1; i < specSize && i < magnitudes.Length; i++) // Skip DC
-        {
-            T mag = magnitudes[i];
-            T power = NumOps.Add(NumOps.Multiply(mag, mag), Epsilon);
-            logSum += Math.Log(NumOps.ToDouble(power));
-            sum = NumOps.Add(sum, power);
-            count++;
-        }
-
-        if (count == 0 || NumOps.LessThan(sum, Epsilon)) return Zero;
-
-        double geometricMean = Math.Exp(logSum / count);
-        double arithmeticMean = NumOps.ToDouble(sum) / count;
-
-        if (arithmeticMean < 1e-10) return Zero;
-
-        return NumOps.FromDouble(geometricMean / arithmeticMean);
+        var geometricMean = engine.TensorExp(engine.TensorDivideScalar(logSum, countT));
+        var arithmeticMean = engine.TensorDivideScalar(sum, countT);
+        var valid = SafetyTensorOps<T>.And(
+            SafetyTensorOps<T>.Not(engine.TensorLessThan(sum, Epsilon)),
+            SafetyTensorOps<T>.Not(SafetyTensorOps<T>.Lt(arithmeticMean, 1e-10)));
+        var safeMean = SafetyTensorOps<T>.Where(valid, arithmeticMean, 1.0);
+        return SafetyTensorOps<T>.Where(valid, engine.TensorDivide(geometricMean, safeMean), 0.0);
     }
 
-    private T EstimateHNR(Vector<T> samples, int sampleRate)
+    private static T EstimateHNR(Vector<T> samples, int sampleRate)
     {
+        var engine = SafetyTensorOps<T>.Engine;
+
         // Estimate Harmonic-to-Noise Ratio using autocorrelation
         int maxLag = sampleRate / 80;  // Min pitch ~80 Hz
         int minLag = sampleRate / 500; // Max pitch ~500 Hz
@@ -371,74 +319,37 @@ internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         if (analysisLength < maxLag * 2) return midRange; // Default mid-range
 
         // Compute autocorrelation at lag 0 (total energy)
-        T r0 = Zero;
-        for (int i = 0; i < analysisLength; i++)
-        {
-            T val = samples[i];
-            r0 = NumOps.Add(r0, NumOps.Multiply(val, val));
-        }
+        var window = engine.Reshape(
+            engine.TensorNarrow(SafetyTensorOps<T>.AsTensor(samples), 0, 0, analysisLength),
+            new[] { 1, analysisLength });
+        T r0 = engine.TensorSumOfSquares(window);
 
         if (NumOps.LessThan(r0, Epsilon)) return Zero;
 
-        // Find peak autocorrelation in pitch range
-        T maxAutocorr = Zero;
-        for (int lag = minLag; lag <= maxLag && lag < analysisLength; lag++)
-        {
-            T rLag = Zero;
-            for (int i = 0; i < analysisLength - lag; i++)
-            {
-                rLag = NumOps.Add(rLag, NumOps.Multiply(samples[i], samples[i + lag]));
-            }
-
-            T normalizedAutocorr = NumOps.Divide(rLag, r0);
-            if (NumOps.GreaterThan(normalizedAutocorr, maxAutocorr))
-            {
-                maxAutocorr = normalizedAutocorr;
-            }
-        }
+        // Find peak autocorrelation in pitch range (first strictly larger positive value)
+        int lagEnd = Math.Min(maxLag + 1, analysisLength);
+        if (minLag >= lagEnd) return Zero;
+        SafetyTensorOps<T>.LaggedProducts(window, minLag, lagEnd, out var rLag, out _, out _);
+        var normalizedAutocorr = engine.TensorDivideScalar(rLag, r0);
+        var (best, _) = SafetyTensorOps<T>.FirstStrictMax(normalizedAutocorr, 0.0);
+        T maxAutocorr = best.GetFlat(0);
 
         // HNR in dB: 10 * log10(r_peak / (1 - r_peak))
-        double maxAC = NumOps.ToDouble(maxAutocorr);
-        if (maxAC >= 1.0) return NumOps.FromDouble(40.0); // Cap at 40 dB
-        if (maxAC <= 0.0) return Zero;
+        if (NumOps.GreaterThanOrEquals(maxAutocorr, One)) return NumOps.FromDouble(40.0); // Cap at 40 dB
+        if (NumOps.LessThanOrEquals(maxAutocorr, Zero)) return Zero;
 
-        return NumOps.FromDouble(10.0 * Math.Log10(maxAC / (1.0 - maxAC)));
+        T ratio = NumOps.Divide(maxAutocorr, NumOps.Subtract(One, maxAutocorr));
+        return NumOps.Multiply(NumOps.FromDouble(10.0 / Math.Log(10.0)), NumOps.Log(ratio));
     }
 
-    private static T VectorMean(Vector<T> values, int startIndex, int count)
+    private static (T Mean, T Variance) MeanVariance(Tensor<T> values, int startIndex)
     {
-        if (count <= startIndex) return Zero;
-        T sum = Zero;
-        int n = 0;
-        for (int i = startIndex; i < count; i++)
-        {
-            sum = NumOps.Add(sum, values[i]);
-            n++;
-        }
-
-        return n > 0 ? NumOps.Divide(sum, NumOps.FromDouble(n)) : Zero;
-    }
-
-    private static T VectorVariance(Vector<T> values, T mean, int startIndex, int count)
-    {
-        if (count <= startIndex) return Zero;
-        T sumSq = Zero;
-        int n = 0;
-        for (int i = startIndex; i < count; i++)
-        {
-            T diff = NumOps.Subtract(values[i], mean);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-            n++;
-        }
-
-        return n > 0 ? NumOps.Divide(sumSq, NumOps.FromDouble(n)) : Zero;
-    }
-
-    private static bool IsZeroCrossing(T prev, T current)
-    {
-        bool currentNonNeg = NumOps.GreaterThanOrEquals(current, Zero);
-        bool prevNonNeg = NumOps.GreaterThanOrEquals(prev, Zero);
-        return currentNonNeg != prevNonNeg;
+        int count = values.Length;
+        if (count <= startIndex) return (Zero, Zero);
+        var slice = startIndex == 0
+            ? values
+            : SafetyTensorOps<T>.Engine.TensorNarrow(values, 0, startIndex, count - startIndex);
+        return SafetyTensorOps<T>.MeanVariance(slice);
     }
 
     private static T Clamp01(T value)
