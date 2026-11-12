@@ -187,4 +187,23 @@ public class WaveletReferenceValueTests
             Assert.Equal(0.0, dot, 1e-8);
         }
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task BattleLemarie_ReconstructIsAdjointOfDecompose()
+    {
+        // Reconstructing a unit approximation impulse places the scaling filter at the start of the signal:
+        // x[m] = sum_j h[j] up(a)[m - j] = h[m]. The previous index arithmetic never matched, returning zeros.
+        var wavelet = new BattleLemarieWavelet<double>(order: 1);
+        var h = wavelet.GetScalingCoefficients();
+        var impulse = new Vector<double>(8);
+        impulse[0] = 1.0;
+
+        var reconstructed = wavelet.Reconstruct(impulse, new Vector<double>(8));
+        Assert.Equal(16, reconstructed.Length);
+        for (int m = 0; m < 16; m++)
+        {
+            double expected = m < h.Length ? h[m] : 0.0;
+            Assert.Equal(expected, reconstructed[m], 1e-12);
+        }
+    }
 }
