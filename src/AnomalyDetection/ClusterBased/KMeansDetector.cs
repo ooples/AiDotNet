@@ -132,7 +132,7 @@ public partial class KMeansDetector<T> : AnomalyDetectorBase<T>
 
         // Distance to the nearest centroid (first on ties) and that cluster
         var distances = AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(centroids));
-        var nearestCluster = engine.TensorArgMin(distances, 1);
+        var nearestCluster = AnomalyTensorOps.FirstArgMinRows(distances);
         var minDist = engine.TensorAmin(distances, new[] { 1 }, false);
 
         // Weight the distance by inverse cluster size fraction.
@@ -169,7 +169,7 @@ public partial class KMeansDetector<T> : AnomalyDetectorBase<T>
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // Assignment step: assign each point to nearest centroid (first on ties)
-            var nearest = engine.TensorArgMin(AnomalyTensorOps.PairwiseDistances(points, centroids), 1).ToArray();
+            var nearest = AnomalyTensorOps.FirstArgMinRows(AnomalyTensorOps.PairwiseDistances(points, centroids)).ToArray();
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
@@ -255,7 +255,7 @@ public partial class KMeansDetector<T> : AnomalyDetectorBase<T>
                 engine.TensorMultiply(engine.TensorSlice(uniform, new[] { c - 1 }, new[] { 1 }), total), new[] { n });
             var reached = engine.TensorAdd(
                 engine.TensorGreaterThan(cumulative, threshold), engine.TensorEquals(cumulative, threshold));
-            int selectedIdx = engine.TensorArgMax(reached, 0).ToArray()[0];
+            int selectedIdx = AnomalyTensorOps.FirstArgMax(reached);
             chosen[c] = engine.TensorSliceAxis(points, 0, selectedIdx);
         }
 

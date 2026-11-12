@@ -593,7 +593,7 @@ internal static class AnomalyTensorOps
             distances = engine.TensorMaskedFill(distances, self, numOps.MaxValue);
         }
 
-        var (sorted, order) = engine.TensorSort(distances, 1, false);
+        var (sorted, order) = StableSortRows(distances, descending: false);
         indices = engine.TensorSlice(order, new[] { 0, 0 }, new[] { m, k });
         return engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k });
     }
@@ -711,8 +711,118 @@ internal static class AnomalyTensorOps
     {
         var engine = Engine;
         var (values, vectors) = AiDotNet.Helpers.LinalgDispatch<T>.Eigh(symmetric);
-        var order = engine.TensorArgsort(values, 0, true);
-        return (engine.TensorGather(values, order, 0),
-            engine.TensorTranspose(engine.TensorIndexSelect(vectors, order, 1)));
+        var order = StableOrder(values, descending: true);
+        var rows = engine.TensorTranspose(engine.TensorIndexSelect(vectors, order, 1));
+        return (engine.TensorGather(values, order, 0), WithLargestComponentPositive(rows));
     }
+
+    /// <summary>
+    /// Fixes the sign of every row of a [r, d] tensor of eigenvectors / singular vectors so that its
+    /// largest-magnitude entry (the first one among equal magnitudes) is positive, as scikit-learn
+    /// svd_flip does. Eigen solvers return each vector only up to sign, so this makes the result
+    /// deterministic.
+    /// </summary>
+    internal static Tensor<T> WithLargestComponentPositive<T>(Tensor<T> rows)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int r = rows.Shape[0];
+        if (r == 0 || rows.Shape[1] == 0)
+        {
+            return rows;
+        }
+
+        var largest = FirstArgMaxRows(engine.TensorAbs(rows));
+        var pivots = engine.Reshape(engine.TensorTakeAlongDim(rows, engine.Reshape(largest, new[] { r, 1 }), 1), new[] { r });
+        var ones = Tensor<T>.CreateOnes(new[] { r });
+        var signs = engine.TensorWhere(engine.TensorLessThan(pivots, numOps.Zero), engine.TensorNegate(ones), ones);
+        return engine.TensorMultiply(rows, BroadcastColumn(signs, rows.Shape[1]));
+    }
+
+    /// <summary>
+    /// Sorts every row of a [m, k] tensor (ascending, or descending) with tied values kept in their original
+    /// index order, like LINQ <c>OrderBy</c>/<c>OrderByDescending</c>; with <paramref name="lastAmongTies"/> the
+    /// tied values come in reverse index order instead. The engine sort is not documented as stable, so the
+    /// order is taken from a distinct composite key (dense rank of the value within its row, then the index),
+    /// which no tie-breaking rule can reorder. Returns the sorted values and the source index of each.
+    /// </summary>
+    internal static (Tensor<T> Sorted, Tensor<int> Order) StableSortRows<T>(Tensor<T> values, bool descending,
+        bool lastAmongTies = false)
+    {
+        var engine = Engine;
+        int m = values.Shape[0];
+        int k = values.Shape[1];
+        if (m == 0 || k == 0)
+        {
+            return (values, new Tensor<int>(new int[m * k], new[] { m, k }));
+        }
+
+        var (sorted, order) = engine.TensorSort(values, 1, descending);
+        var positions = order.ToArray();
+        var groups = k > 1
+            ? engine.TensorCumSum(engine.TensorNotEquals(
+                engine.TensorSlice(sorted, new[] { 0, 1 }, new[] { m, k - 1 }),
+                engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k - 1 })), 1).Cast<int>().ToArray()
+            : Array.Empty<int>();
+
+        // keys[r, j] = (dense rank of values[r, j] in sort order) * k + (j, or k - 1 - j for the last among ties)
+        var keys = new long[m * k];
+        for (int row = 0; row < m; row++)
+        {
+            for (int p = 0; p < k; p++)
+            {
+                int j = positions[row * k + p];
+                long rank = p == 0 ? 0 : groups[row * (k - 1) + p - 1];
+                keys[row * k + j] = rank * k + (lastAmongTies ? k - 1 - j : j);
+            }
+        }
+
+        var stable = engine.TensorArgsort(new Tensor<long>(keys, new[] { m, k }), 1, false);
+        return (engine.TensorTakeAlongDim(values, stable, 1), stable);
+    }
+
+    /// <summary>
+    /// The indices that sort a 1-D tensor ascending (or descending) with tied values in original index order
+    /// (reverse index order with <paramref name="lastAmongTies"/>); see <see cref="StableSortRows{T}"/>.
+    /// </summary>
+    internal static Tensor<int> StableOrder<T>(Tensor<T> values, bool descending, bool lastAmongTies = false)
+    {
+        int n = values.Length;
+        var (_, order) = StableSortRows(Engine.Reshape(values, new[] { 1, n }), descending, lastAmongTies);
+        return Engine.Reshape(order, new[] { n });
+    }
+
+    /// <summary>
+    /// The index of the first (lowest-index) smallest entry of every row of a [m, k] tensor, as a loop that
+    /// replaces its best only on a strictly smaller value does.
+    /// </summary>
+    internal static Tensor<int> FirstArgMinRows<T>(Tensor<T> values)
+        => FirstArgMaxRows(Engine.TensorNegate(values));
+
+    /// <summary>
+    /// The index of the first (lowest-index) largest entry of every row of a [m, k] tensor, as a loop that
+    /// replaces its best only on a strictly larger value does. The positions holding the row maximum get the
+    /// distinct weights k - j (every other position 0), so the arg max of the weights is unique.
+    /// </summary>
+    internal static Tensor<int> FirstArgMaxRows<T>(Tensor<T> values)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int m = values.Shape[0];
+        int k = values.Shape[1];
+        var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(values, new[] { 1 }, true), new[] { m, k });
+        var weights = BroadcastRow(engine.ScalarMinusTensor(numOps.FromDouble(k), Range(k).Cast<T>()), m);
+        return engine.TensorArgMax(engine.TensorMultiply(engine.TensorEquals(values, rowMax), weights), 1);
+    }
+
+    /// <summary>The index of the first (lowest-index) smallest entry of a 1-D tensor.</summary>
+    internal static int FirstArgMin<T>(Tensor<T> values)
+        => FirstArgMinRows(Engine.Reshape(values, new[] { 1, values.Length })).ToArray()[0];
+
+    /// <summary>
+    /// The index of the first (lowest-index) largest entry of a 1-D tensor; for a 0/1 mask, the first set
+    /// position (or 0 when none is set).
+    /// </summary>
+    internal static int FirstArgMax<T>(Tensor<T> values)
+        => FirstArgMaxRows(Engine.Reshape(values, new[] { 1, values.Length })).ToArray()[0];
 }

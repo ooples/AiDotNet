@@ -197,6 +197,6 @@ public partial class PCADetector<T> : AnomalyDetectorBase<T>
             return count;
         }
 
-        return engine.TensorArgMax(reached, 0).ToArray()[0] + 1;
+        return AnomalyTensorOps.FirstArgMax(reached) + 1;
     }
 }

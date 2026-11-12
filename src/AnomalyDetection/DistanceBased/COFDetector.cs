@@ -155,7 +155,7 @@ public partial class COFDetector<T> : AnomalyDetectorBase<T>
             masked = engine.TensorMaskedFill(masked, engine.TensorEqScalar(engine.TensorEye<T>(m), NumOps.One), maxValue);
         }
 
-        var (sorted, order) = engine.TensorSort(masked, 1, false);
+        var (sorted, order) = AnomalyTensorOps.StableSortRows(masked, descending: false);
         neighbors = engine.TensorSlice(order, new[] { 0, 0 }, new[] { m, k });
         var edge = engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k });
 
@@ -171,7 +171,7 @@ public partial class COFDetector<T> : AnomalyDetectorBase<T>
         {
             // The remaining neighbour with the shortest edge to the chain, and that edge
             var candidates = engine.TensorWhere(remaining, edge, unavailable);
-            var chosen = engine.TensorArgMin(candidates, 1);
+            var chosen = AnomalyTensorOps.FirstArgMinRows(candidates);
             steps[s] = engine.TensorAmin(candidates, new[] { 1 }, false);
 
             // It leaves the remaining set, and every other neighbour's edge to the chain can now go

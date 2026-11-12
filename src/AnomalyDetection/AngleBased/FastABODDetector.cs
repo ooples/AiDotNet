@@ -132,7 +132,7 @@ public partial class FastABODDetector<T> : AnomalyDetectorBase<T>
                 engine.TensorEqScalar(engine.TensorEye<T>(m), NumOps.One), NumOps.Zero);
         }
 
-        var (sorted, order) = engine.TensorSort(distances, 1, false);
+        var (sorted, order) = AnomalyTensorOps.StableSortRows(distances, descending: false);
         var zeroCount = engine.ReduceSum(engine.TensorEquals(sorted, Tensor<T>.CreateZeros(new[] { m, nTraining })), new[] { 1 }, false);
         var slots = AnomalyTensorOps.BroadcastRow(engine.TensorArange<T>(0, k, 1), m);
         var available = engine.TensorSubtract(engine.Fill(m, NumOps.FromDouble(nTraining)).AsTensor(), zeroCount);

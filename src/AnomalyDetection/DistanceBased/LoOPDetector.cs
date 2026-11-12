@@ -145,8 +145,8 @@ public partial class LoOPDetector<T> : AnomalyDetectorBase<T>
 
         // Neighbourhood of every point: the k nearest training points at a positive distance. Distances
         // sort ascending, so after the zero distances the next (at most) k entries are the neighbours.
-        var (sortedSq, order) = engine.TensorSort(
-            AnomalyTensorOps.PairwiseSquaredDistances(AnomalyTensorOps.ToTensor(X), training), 1, false);
+        var (sortedSq, order) = AnomalyTensorOps.StableSortRows(
+            AnomalyTensorOps.PairwiseSquaredDistances(AnomalyTensorOps.ToTensor(X), training), descending: false);
         var positive = engine.TensorGreaterThan(sortedSq, NumOps.Zero);
         var neighborMask = engine.TensorMultiply(positive,
             engine.TensorLessThan(engine.TensorCumSum(positive, 1), NumOps.FromDouble(_k + 0.5)));

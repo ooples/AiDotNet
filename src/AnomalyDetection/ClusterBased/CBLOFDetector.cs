@@ -178,7 +178,7 @@ public partial class CBLOFDetector<T> : AnomalyDetectorBase<T>
 
         // Nearest cluster (first on ties) and the distance to it
         var distances = AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(centroids));
-        var nearestCluster = engine.TensorArgMin(distances, 1);
+        var nearestCluster = AnomalyTensorOps.FirstArgMinRows(distances);
         var nearestDist = engine.TensorAmin(distances, new[] { 1 }, false);
 
         // Distance to the nearest large cluster
@@ -255,7 +255,7 @@ public partial class CBLOFDetector<T> : AnomalyDetectorBase<T>
         for (int iter = 0; iter < maxIterations; iter++)
         {
             // Assignment step (first nearest on ties)
-            var nearest = engine.TensorArgMin(AnomalyTensorOps.PairwiseDistances(points, centroids), 1).ToArray();
+            var nearest = AnomalyTensorOps.FirstArgMinRows(AnomalyTensorOps.PairwiseDistances(points, centroids)).ToArray();
             bool changed = false;
             for (int i = 0; i < n; i++)
             {

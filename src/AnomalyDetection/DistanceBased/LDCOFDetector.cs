@@ -135,7 +135,7 @@ public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
         for (int iter = 0; iter < maxIterations; iter++)
         {
             // Assign points to nearest center (first on ties)
-            var nearest = engine.TensorArgMin(AnomalyTensorOps.PairwiseDistances(points, centers), 1).ToArray();
+            var nearest = AnomalyTensorOps.FirstArgMinRows(AnomalyTensorOps.PairwiseDistances(points, centers)).ToArray();
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
@@ -266,8 +266,8 @@ public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
         var points = AnomalyTensorOps.ToTensor(X);
 
         // Nearest cluster (first on ties)
-        var nearestCluster = engine.TensorArgMin(
-            AnomalyTensorOps.PairwiseDistances(points, AnomalyTensorOps.ToTensor(clusterCenters)), 1);
+        var nearestCluster = AnomalyTensorOps.FirstArgMinRows(
+            AnomalyTensorOps.PairwiseDistances(points, AnomalyTensorOps.ToTensor(clusterCenters)));
 
         // Local density 1 / (k-distance + eps), the k-distance being the effectiveK-th smallest distance to the
         // training points (the largest when effectiveK is 0)

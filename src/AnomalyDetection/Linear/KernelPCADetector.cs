@@ -142,7 +142,7 @@ public partial class KernelPCADetector<T> : AnomalyDetectorBase<T>
         var leading = engine.TensorSlice(allValues, new[] { 0 }, new[] { maxComponents });
         var belowFloor = engine.TensorLessThan(leading, NumOps.FromDouble(1e-10));
         int kept = NumOps.GreaterThan(engine.TensorSum(belowFloor), NumOps.Zero)
-            ? engine.TensorArgMax(belowFloor, 0).ToArray()[0]
+            ? AnomalyTensorOps.FirstArgMax(belowFloor)
             : maxComponents;
 
         // Select components based on variance ratio: the first count whose cumulative eigenvalue sum
@@ -159,7 +159,7 @@ public partial class KernelPCADetector<T> : AnomalyDetectorBase<T>
                     engine.TensorDivideScalar(cumulative, totalVariance), NumOps.FromDouble(_varianceRatio)));
                 if (NumOps.GreaterThan(engine.TensorSum(reached), NumOps.Zero))
                 {
-                    _nComponents = engine.TensorArgMax(reached, 0).ToArray()[0] + 1;
+                    _nComponents = AnomalyTensorOps.FirstArgMax(reached) + 1;
                 }
             }
         }

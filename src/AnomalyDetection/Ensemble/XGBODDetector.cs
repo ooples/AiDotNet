@@ -212,7 +212,7 @@ public partial class XGBODDetector<T> : AnomalyDetectorBase<T>
         var pseudoLabels = Tensor<T>.CreateZeros(new[] { n });
         if (nAnomaly > 0)
         {
-            var ranked = engine.TensorArgsort(avgTos, 0, true);
+            var ranked = AnomalyTensorOps.StableOrder(avgTos, descending: true);
             var anomalies = engine.TensorSlice(ranked, new[] { 0 }, new[] { nAnomaly });
             pseudoLabels = engine.TensorIndexFill(pseudoLabels, 0, anomalies, NumOps.One);
         }
@@ -237,7 +237,7 @@ public partial class XGBODDetector<T> : AnomalyDetectorBase<T>
             var error = engine.Reshape(
                 engine.TensorMatMul(mismatchByFeature, engine.Reshape(sampleWeights, new[] { n, 1 })), new[] { d });
             var gain = engine.ScalarMinusTensor(half, error);
-            int bestFeature = engine.TensorArgMax(gain, 0).ToArray()[0];
+            int bestFeature = AnomalyTensorOps.FirstArgMax(gain);
             T bestGain = engine.TensorMaxValue(gain);
 
             // Update weights

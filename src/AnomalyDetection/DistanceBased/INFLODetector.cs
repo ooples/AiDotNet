@@ -145,8 +145,8 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
 
         // k nearest training points at a positive distance (nearest first, by index on ties). Distances
         // sort ascending, so after the zero distances the next (at most) k entries are the neighbours.
-        var (sorted, order) = engine.TensorSort(
-            AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData)), 1, false);
+        var (sorted, order) = AnomalyTensorOps.StableSortRows(
+            AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData)), descending: false);
         var positive = engine.TensorGreaterThan(sorted, NumOps.Zero);
         var neighborMask = engine.TensorMultiply(positive,
             engine.TensorLessThan(engine.TensorCumSum(positive, 1), NumOps.FromDouble(_k + 0.5)));

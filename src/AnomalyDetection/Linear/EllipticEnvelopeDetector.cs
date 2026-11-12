@@ -148,7 +148,7 @@ public partial class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
         {
             var precision = LinalgDispatch<T>.Inv(covariance);
             var distances = AnomalyTensorOps.MahalanobisSquared(AnomalyTensorOps.SubtractRow(X, location), precision);
-            var order = engine.TensorArgsort(distances, 0, false);
+            var order = AnomalyTensorOps.StableOrder(distances, descending: false);
             var subset = engine.TensorGather(X, engine.TensorSlice(order, new[] { 0 }, new[] { h }), 0);
             location = engine.ReduceMean(subset, new[] { 0 }, false);
             covariance = RegularizedCovariance(AnomalyTensorOps.SubtractRow(subset, location), h - 1);

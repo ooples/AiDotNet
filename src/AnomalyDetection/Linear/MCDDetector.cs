@@ -142,7 +142,7 @@ public partial class MCDDetector<T> : AnomalyDetectorBase<T>
             for (int iter = 0; iter < 10; iter++)
             {
                 var distances = MahalanobisDistances(data, mean, LinalgDispatch<T>.Inv(cov));
-                var selected = engine.TensorSlice(engine.TensorArgsort(distances, 0, false), new[] { 0 }, new[] { h });
+                var selected = engine.TensorSlice(AnomalyTensorOps.StableOrder(distances, descending: false), new[] { 0 }, new[] { h });
                 (mean, cov) = ComputeMeanCovariance(data, selected);
             }
 
@@ -161,7 +161,7 @@ public partial class MCDDetector<T> : AnomalyDetectorBase<T>
         }
 
         var candidates = engine.TensorWhere(valid, dets, engine.Fill(nTrials, NumOps.MaxValue).AsTensor());
-        int best = engine.TensorArgMin(candidates, 0).ToArray()[0];
+        int best = AnomalyTensorOps.FirstArgMin(candidates);
         return (means[best], covariances[best]);
     }
 

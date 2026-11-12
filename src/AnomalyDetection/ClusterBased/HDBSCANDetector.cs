@@ -183,8 +183,8 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         {
             // The vertex outside the tree with the smallest edge to it (first on ties); none below MaxValue ends
             var candidates = engine.TensorWhere(inMST, unavailable, minEdge);
-            var uTensor = engine.TensorArgMin(candidates, 0);
-            int u = uTensor.ToArray()[0];
+            int u = AnomalyTensorOps.FirstArgMin(candidates);
+            var uTensor = new Tensor<int>(new[] { u }, new[] { 1 });
             var edge = engine.TensorSlice(candidates, new[] { u }, new[] { 1 });
             if (engine.TensorLessThan(edge, maxValue).Cast<int>().ToArray()[0] == 0) break;
 
@@ -241,7 +241,7 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             T cutoff = engine.TensorSlice(descending, new[] { takeCount - 1 }, new[] { 1 }).ToVector()[0];
 
             // Join the kept edges in ascending weight order (stable)
-            var ascending = engine.TensorArgsort(weights, 0, false).ToArray();
+            var ascending = AnomalyTensorOps.StableOrder(weights, descending: false).ToArray();
             var kept = engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(weights, cutoff)).Cast<int>().ToArray();
             foreach (int e in ascending)
             {
@@ -358,7 +358,7 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         // clamped to at most 1
         var engine = Engine;
         var distances = AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData));
-        var nearestIdx = engine.TensorArgMin(distances, 1);
+        var nearestIdx = AnomalyTensorOps.FirstArgMinRows(distances);
         var minDist = engine.TensorAmin(distances, new[] { 1 }, false);
         var score = engine.TensorWhere(engine.TensorGather(NoiseMask(labels), nearestIdx, 0),
             Tensor<T>.CreateOnes(new[] { X.Rows }), engine.TensorDivideScalar(minDist, _maxCoreDistance));

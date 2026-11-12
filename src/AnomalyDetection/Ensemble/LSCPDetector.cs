@@ -187,7 +187,7 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
         // Local region of every test point: its effectiveRegionSize nearest training points
         var distances = AnomalyTensorOps.PairwiseDistances(
             AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData));
-        var (sortedDistances, order) = engine.TensorSort(distances, 1, false);
+        var (sortedDistances, order) = AnomalyTensorOps.StableSortRows(distances, descending: false);
         var localDistances = engine.TensorSlice(sortedDistances, new[] { 0, 0 }, new[] { m, effectiveRegionSize });
         var localRegion = engine.Reshape(
             engine.TensorSlice(order, new[] { 0, 0 }, new[] { m, effectiveRegionSize }), new[] { m * effectiveRegionSize });
