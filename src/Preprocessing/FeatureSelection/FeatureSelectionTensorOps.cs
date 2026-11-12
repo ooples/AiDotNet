@@ -568,4 +568,150 @@ internal static class FeatureSelectionTensorOps
         var candidates = engine.TensorWhere(valid, reduction, new Tensor<T>(sizeShape));
         return engine.TensorMax(engine.ReduceMax(candidates, new[] { 1 }, false), ops.Zero);
     }
+
+    /// <summary>
+    /// Best single-threshold split of a tree node. <paramref name="nodeX"/> ([m, f]) holds the node's rows of the
+    /// candidate features (in candidate order). For <see cref="SplitCriterion.SumOfSquares"/>,
+    /// <paramref name="rowValues"/> is the [m] regression target and the gain is
+    /// <c>parentImpurity - SSE_left - SSE_right</c>; for <see cref="SplitCriterion.Gini"/> it is the [m, K] class
+    /// one-hot and the gain is <c>parentImpurity - (m_l gini_l + m_r gini_r) / m</c>. Thresholds are midpoints
+    /// between consecutive distinct values and both sides need at least <paramref name="minLeaf"/> rows. The
+    /// first (candidate order, then ascending threshold) strictly positive maximum gain wins, like the strict
+    /// <c>gain &gt; bestGain</c> scan starting at 0. Returns false when no split has a positive gain.
+    /// </summary>
+    public static bool TryBestSplit<T>(
+        Tensor<T> nodeX, Tensor<T> rowValues, SplitCriterion criterion, T parentImpurity, int minLeaf,
+        out int column, out T threshold, out Tensor<T> gain)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = nodeX.Shape[0];
+        int f = nodeX.Shape[1];
+        column = -1;
+        threshold = ops.Zero;
+        gain = new Tensor<T>(new[] { 1 });
+        if (m < 2 || f == 0)
+            return false;
+
+        int splits = m - 1;
+        var sizeShape = new[] { f, splits };
+        var sorted = engine.TensorTranspose(engine.TensorSort(nodeX, 0, false).Item1);
+        var flatOrder = engine.Reshape(engine.TensorTranspose(engine.TensorArgsort(nodeX, 0, false)), new[] { f * m });
+        var leftSizes = engine.TensorAddScalar(PreprocessingTensorOps.Range<T>(splits), ops.One);
+        var rightSizes = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { splits }, ops.FromDouble(m)), leftSizes);
+        var leftSize2 = engine.TensorBroadcastTo(engine.Reshape(leftSizes, new[] { 1, splits }), sizeShape);
+        var rightSize2 = engine.TensorBroadcastTo(engine.Reshape(rightSizes, new[] { 1, splits }), sizeShape);
+
+        Tensor<T> gains;
+        if (criterion == SplitCriterion.SumOfSquares)
+        {
+            var values = engine.Reshape(engine.TensorIndexSelect(rowValues, flatOrder, 0), new[] { f, m });
+            var sums = engine.TensorCumSum(values, 1);
+            var squares = engine.TensorCumSum(engine.TensorSquare(values), 1);
+            var leftSum = engine.TensorSlice(sums, new[] { 0, 0 }, sizeShape);
+            var leftSq = engine.TensorSlice(squares, new[] { 0, 0 }, sizeShape);
+            var rightSum = engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.TensorSlice(sums, new[] { 0, splits }, new[] { f, 1 }), sizeShape), leftSum);
+            var rightSq = engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.TensorSlice(squares, new[] { 0, splits }, new[] { f, 1 }), sizeShape), leftSq);
+            var leftSse = engine.TensorSubtract(leftSq, engine.TensorDivide(engine.TensorSquare(leftSum), leftSize2));
+            var rightSse = engine.TensorSubtract(rightSq, engine.TensorDivide(engine.TensorSquare(rightSum), rightSize2));
+            gains = engine.TensorAddScalar(engine.TensorNegate(engine.TensorAdd(leftSse, rightSse)), parentImpurity);
+        }
+        else
+        {
+            int classCount = rowValues.Shape[1];
+            var classShape = new[] { f, splits, classCount };
+            var classes = engine.Reshape(engine.TensorIndexSelect(rowValues, flatOrder, 0), new[] { f, m, classCount });
+            var left = engine.TensorSlice(engine.TensorCumSum(classes, 1), new[] { 0, 0, 0 }, classShape);
+            var totals = engine.Reshape(engine.ReduceSum(rowValues, new[] { 0 }, false), new[] { 1, 1, classCount });
+            var right = engine.TensorSubtract(engine.TensorBroadcastTo(totals, classShape), left);
+            var leftSize3 = engine.TensorBroadcastTo(engine.Reshape(leftSizes, new[] { 1, splits, 1 }), classShape);
+            var rightSize3 = engine.TensorBroadcastTo(engine.Reshape(rightSizes, new[] { 1, splits, 1 }), classShape);
+            var one = PreprocessingTensorOps.Filled(sizeShape, ops.One);
+            var leftGini = engine.TensorSubtract(one,
+                engine.ReduceSum(engine.TensorSquare(engine.TensorDivide(left, leftSize3)), new[] { 2 }, false));
+            var rightGini = engine.TensorSubtract(one,
+                engine.ReduceSum(engine.TensorSquare(engine.TensorDivide(right, rightSize3)), new[] { 2 }, false));
+            var weighted = engine.TensorDivideScalar(engine.TensorAdd(
+                engine.TensorMultiply(leftGini, leftSize2), engine.TensorMultiply(rightGini, rightSize2)), ops.FromDouble(m));
+            gains = engine.TensorAddScalar(engine.TensorNegate(weighted), parentImpurity);
+        }
+
+        // Valid splits: a boundary between distinct values with at least minLeaf rows on each side
+        T minimum = ops.FromDouble(minLeaf);
+        var lower = engine.TensorSlice(sorted, new[] { 0, 0 }, sizeShape);
+        var upper = engine.TensorSlice(sorted, new[] { 0, 1 }, sizeShape);
+        var valid = engine.TensorMultiply(engine.TensorGreaterThan(upper, lower), engine.TensorMultiply(
+            PreprocessingTensorOps.Not(engine.TensorLessThan(leftSize2, minimum)),
+            PreprocessingTensorOps.Not(engine.TensorLessThan(rightSize2, minimum))));
+        var candidates = engine.Reshape(engine.TensorWhere(valid, gains, new Tensor<T>(sizeShape)), new[] { f * splits });
+        if (!PreprocessingTensorOps.IsAbove(engine.TensorMaxValue(candidates), ops.Zero))
+            return false;
+
+        int best = PreprocessingTensorOps.FirstArgMax(candidates);
+        column = best / splits;
+        int position = best % splits;
+        gain = engine.TensorSlice(candidates, new[] { best }, new[] { 1 });
+        threshold = ops.Divide(
+            engine.TensorSum(engine.TensorSlice(sorted, new[] { column, position }, new[] { 1, 2 })), ops.FromDouble(2));
+        return true;
+    }
+
+    /// <summary>
+    /// Splits the node <paramref name="rows"/> by their values in <paramref name="nodeColumn"/>: at most
+    /// <paramref name="threshold"/> goes left, the rest right, each in node order.
+    /// </summary>
+    public static void PartitionRows<T>(Tensor<T> nodeColumn, T threshold, int[] rows, out int[] left, out int[] right)
+    {
+        var engine = AiDotNetEngine.Current;
+        var above = engine.TensorGreaterThan(nodeColumn, threshold);
+        left = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(above)).Select(i => rows[i]).ToArray();
+        right = PreprocessingTensorOps.MaskPositions(above).Select(i => rows[i]).ToArray();
+    }
+
+    /// <summary>
+    /// Sums [1] contributions into a [length] tensor at the given positions (repeated positions add up).
+    /// </summary>
+    public static Tensor<T> ScatterAdd<T>(IReadOnlyList<int> positions, IReadOnlyList<Tensor<T>> values, int length)
+    {
+        var engine = AiDotNetEngine.Current;
+        int count = positions.Count;
+        if (count == 0)
+            return new Tensor<T>(new[] { length });
+
+        var oneHot = engine.TensorOneHot<T>(new Tensor<int>(positions.ToArray(), new[] { count }), length);
+        var column = engine.Reshape(engine.TensorConcatenate(values.ToArray(), 0), new[] { count, 1 });
+        return engine.ReduceSum(
+            engine.TensorMultiply(oneHot, engine.TensorBroadcastTo(column, new[] { count, length })), new[] { 0 }, false);
+    }
+
+    /// <summary>Gini impurity <c>1 - sum_k p_k^2</c> of the rows of a [m, K] class one-hot (0 for no rows).</summary>
+    public static T GiniImpurity<T>(Tensor<T> oneHot)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = oneHot.Shape[0];
+        if (m == 0)
+            return ops.Zero;
+        var proportions = engine.TensorDivideScalar(engine.ReduceSum(oneHot, new[] { 0 }, false), ops.FromDouble(m));
+        return ops.Subtract(ops.One, engine.TensorSumOfSquares(proportions));
+    }
+
+    /// <summary>Sum of squared deviations from the mean of a 1-D tensor (two-pass).</summary>
+    public static T SumSquaredDeviations<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, engine.TensorMean(values)));
+    }
+}
+
+/// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>
+internal enum SplitCriterion
+{
+    /// <summary>Regression: sum of squared deviations from the node mean.</summary>
+    SumOfSquares,
+
+    /// <summary>Classification: Gini impurity.</summary>
+    Gini
 }
