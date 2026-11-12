@@ -30,16 +30,16 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     private readonly double _fdrThreshold;
     private readonly int? _randomState;
 
-    private double[]? _featureStatistics;
-    private double[]? _knockoffStatistics;
+    private Vector<T>? _featureStatistics;
+    private Vector<T>? _knockoffStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double FDRThreshold => _fdrThreshold;
-    public double[]? FeatureStatistics => _featureStatistics;
-    public double[]? KnockoffStatistics => _knockoffStatistics;
+    public Vector<T>? FeatureStatistics => _featureStatistics;
+    public Vector<T>? KnockoffStatistics => _knockoffStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -76,7 +76,6 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var random = _randomState.HasValue
@@ -84,52 +83,47 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             : RandomHelper.CreateSecureRandom();
 
         // Step 1: Generate knockoff features (simplified second-order knockoffs)
-        var knockoffs = GenerateKnockoffs(data, random);
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var knockoffs = GenerateKnockoffs(x, random);
 
-        // Step 2: Compute importance statistics for original and knockoff features
-        _featureStatistics = new double[p];
-        _knockoffStatistics = new double[p];
+        // Step 2: absolute correlation with the target for original and knockoff features
+        var y = FilterStatisticTensorOps.AsTensor(target);
+        var featureStatistics = AbsoluteCorrelation(x, y);
+        var knockoffStatistics = AbsoluteCorrelation(knockoffs, y);
+        _featureStatistics = featureStatistics.ToVector();
+        _knockoffStatistics = knockoffStatistics.ToVector();
 
-        // Use absolute correlation as the feature statistic
-        for (int j = 0; j < p; j++)
-        {
-            _featureStatistics[j] = ComputeFeatureStatistic(data, target, j);
-            _knockoffStatistics[j] = ComputeKnockoffStatistic(knockoffs, target, j);
-        }
+        // Step 3: W = |Z_j| - |Z_knockoff_j|
+        var w = Engine.TensorSubtract(featureStatistics, knockoffStatistics);
 
-        // Step 3: Compute knockoff statistic W = |Z_j| - |Z_knockoff_j|
-        var W = new double[p];
-        for (int j = 0; j < p; j++)
-            W[j] = _featureStatistics[j] - _knockoffStatistics[j];
+        // Step 4: knockoff+ threshold. For every candidate tau = W_k: #{j : W_j >= tau} and #{j : W_j <= -tau}
+        var order = FilterStatisticTensorOps.StableOrder(w, descending: true);
+        var wj = FilterStatisticTensorOps.RowBroadcast(w, p);
+        var tau = FilterStatisticTensorOps.ColumnBroadcast(w, p);
+        var positives = Engine.ReduceSum(FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(wj, tau)), new[] { 1 }, false);
+        var negatives = Engine.ReduceSum(
+            FilterStatisticTensorOps.OneMinus(Engine.TensorGreaterThan(wj, Engine.TensorNegate(tau))), new[] { 1 }, false);
 
-        // Step 4: Apply knockoff filter with FDR control
-        // Find threshold tau such that FDP <= fdrThreshold
-        var sortedW = W.Select((w, idx) => (W: w, Index: idx))
-            .OrderByDescending(x => x.W)
-            .ToList();
+        // estimated FDP = (1 + negatives) / max(1, positives)
+        var fdp = Engine.TensorDivide(Engine.TensorAddScalar(negatives, NumOps.One), Engine.TensorMax(positives, NumOps.One));
+        var controlled = FilterStatisticTensorOps.OneMinus(Engine.TensorGreaterThan(fdp, NumOps.FromDouble(_fdrThreshold)))
+            .Cast<int>().ToArray();
+        var positive = Engine.TensorGreaterThan(w, NumOps.Zero).Cast<int>().ToArray();
 
-        // Knockoff+ procedure: estimate FDR
         var selected = new List<int>();
-        for (int k = 0; k < sortedW.Count && selected.Count < _nFeaturesToSelect; k++)
+        for (int k = 0; k < order.Length && _nFeaturesToSelect > 0; k++)
         {
-            double tau = sortedW[k].W;
-            if (tau <= 0) break;
+            int candidate = order[k];
+            if (positive[candidate] == 0)
+                break;
 
-            // Count #{j : W_j >= tau} and #{j : W_j <= -tau}
-            int positives = W.Count(w => w >= tau);
-            int negatives = W.Count(w => w <= -tau);
-
-            // Estimated FDP = (1 + negatives) / max(1, positives)
-            double estimatedFDP = (1.0 + negatives) / Math.Max(1, positives);
-
-            if (estimatedFDP <= _fdrThreshold)
+            if (controlled[candidate] == 1)
             {
-                // Select all features with W >= tau
-                foreach (var item in sortedW.Where(x => x.W >= tau))
-                {
-                    if (!selected.Contains(item.Index))
-                        selected.Add(item.Index);
-                }
+                // Select all features with W >= tau: in descending order these are the ones not below W_candidate
+                var atLeast = FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(
+                    w, Engine.TensorBroadcastTo(FeatureSelectionTensorOps.Entries(w, new[] { candidate }), new[] { p })))
+                    .Cast<int>().ToArray();
+                selected.AddRange(order.Where(j => atLeast[j] == 1));
                 break;
             }
         }
@@ -137,91 +131,59 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         // If FDR control doesn't select enough, fall back to top W scores
         if (selected.Count == 0)
         {
-            _selectedIndices = sortedW
-                .Where(x => x.W > 0)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-
+            _selectedIndices = order.Where(j => positive[j] == 1).Take(_nFeaturesToSelect).OrderBy(j => j).ToArray();
             if (_selectedIndices.Length == 0)
-            {
-                _selectedIndices = sortedW
-                    .Take(_nFeaturesToSelect)
-                    .Select(x => x.Index)
-                    .OrderBy(x => x)
-                    .ToArray();
-            }
+                _selectedIndices = order.Take(_nFeaturesToSelect).OrderBy(j => j).ToArray();
         }
         else
         {
-            _selectedIndices = selected.Take(_nFeaturesToSelect).OrderBy(x => x).ToArray();
+            _selectedIndices = selected.Take(_nFeaturesToSelect).OrderBy(j => j).ToArray();
         }
-
         IsFitted = true;
     }
 
-    private Matrix<T> GenerateKnockoffs(Matrix<T> data, Random random)
+    // Each knockoff column is its feature permuted (rows ordered by one random key each, ties by row) plus uniform
+    // noise of half-width std / 4, where std is the population standard deviation. Per column the n permutation keys
+    // are drawn before the n noise draws, as the original generator did.
+    private Tensor<T> GenerateKnockoffs(Tensor<T> x, Random random)
     {
-        int n = data.Rows;
-        int p = data.Columns;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (p == 0)
+            return x;
 
-        // Simplified knockoff generation: permute within feature then add noise
-        var knockoffs = new T[n, p];
-
+        var noise = new double[p * n];
+        var columns = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            // Get original values
-            var values = new double[n];
+            var keys = new int[n];
             for (int i = 0; i < n; i++)
-                values[i] = NumOps.ToDouble(data[i, j]);
-
-            // Compute mean and std
-            double mean = values.Average();
-            double std = Math.Sqrt(values.Select(v => (v - mean) * (v - mean)).Average());
-
-            // Generate knockoff: add noise while preserving marginal distribution
-            var shuffled = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
+                keys[i] = random.Next();
             for (int i = 0; i < n; i++)
-            {
-                double noise = (random.NextDouble() - 0.5) * std * 0.5;
-                double knockoffVal = values[shuffled[i]] + noise;
-                knockoffs[i, j] = NumOps.FromDouble(knockoffVal);
-            }
+                noise[j * n + i] = random.NextDouble();
+            var shuffled = Enumerable.Range(0, n).OrderBy(i => keys[i]).ToArray();
+            columns[j] = Engine.TensorGather(FeatureSelectionTensorOps.Column(x, j), new Tensor<int>(shuffled, new[] { n }), 0);
         }
 
-        return new Matrix<T>(knockoffs);
+        var permuted = Engine.TensorStack(columns, 1);
+        var std = Engine.TensorSqrt(FilterStatisticTensorOps.ColumnPopulationVariance(x));
+        var uniform = Engine.TensorTranspose(new Tensor<double>(noise, new[] { p, n }).Cast<T>());
+        var offset = Engine.TensorMultiply(
+            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(uniform, NumOps.FromDouble(0.5)), NumOps.FromDouble(0.5)),
+            FilterStatisticTensorOps.RowBroadcast(std, n));
+        return Engine.TensorAdd(permuted, offset);
     }
 
-    private double ComputeFeatureStatistic(Matrix<T> data, Vector<T> target, int featureIdx)
+    // |Pearson r| of every column with the target; 0 when the column or the target is (near) constant
+    private Tensor<T> AbsoluteCorrelation(Tensor<T> x, Tensor<T> y)
     {
-        int n = data.Rows;
-
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, featureIdx]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, featureIdx]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-    }
-
-    private double ComputeKnockoffStatistic(Matrix<T> knockoffs, Vector<T> target, int featureIdx)
-    {
-        return ComputeFeatureStatistic(knockoffs, target, featureIdx);
+        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
+        T tolerance = NumOps.FromDouble(1e-10);
+        if (!NumOps.GreaterThan(syy, tolerance))
+            return FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
+        var correlation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
+            sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 0, NumOps.Zero));
+        return FeatureSelectionTensorOps.KeepOrFill(correlation, Engine.TensorGreaterThan(sxx, tolerance), NumOps.Zero);
     }
 
     /// <inheritdoc />

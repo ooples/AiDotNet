@@ -28,13 +28,13 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _maxFeatures;
     private readonly double _sigma;
 
-    private double[]? _fuzzyDependencies;
+    private Vector<T>? _fuzzyDependencies;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int MaxFeatures => _maxFeatures;
     public double Sigma => _sigma;
-    public double[]? FuzzyDependencies => _fuzzyDependencies;
+    public Vector<T>? FuzzyDependencies => _fuzzyDependencies;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,151 +69,90 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Convert to arrays
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        // Normalize features
-        NormalizeFeatures(X, n, p);
+        var x = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        var classOneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
+        var decision = Engine.TensorMatMul(classOneHot, Engine.TensorTranspose(classOneHot));
+        int n = data.Rows;
+        var similarity = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+            similarity[j] = FeatureSimilarity(x, j);
 
         // Compute individual feature fuzzy dependency
-        _fuzzyDependencies = new double[p];
+        var single = new T[p];
         for (int j = 0; j < p; j++)
-            _fuzzyDependencies[j] = ComputeFuzzyDependency(X, y, new[] { j }, n, p);
+            single[j] = FuzzyDependency(similarity[j], decision);
+        var individual = new Tensor<T>(single, new[] { p });
+        _fuzzyDependencies = individual.ToVector();
 
         // Greedy forward selection based on fuzzy dependency
+        var all = FilterStatisticTensorOps.Filled(new[] { n, n }, NumOps.One);
+        for (int j = 0; j < p; j++)
+            all = Engine.TensorMin(all, similarity[j]);
+        var fullDependency = Scalar(NumOps.Subtract(FuzzyDependency(all, decision), NumOps.FromDouble(1e-6)));
+        var current = Scalar(NumOps.Zero);
+        var selectedSimilarity = FilterStatisticTensorOps.Filled(new[] { n, n }, NumOps.One);
+        T excluded = NumOps.FromDouble(double.NegativeInfinity);
         var selected = new HashSet<int>();
-        double fullDependency = ComputeFuzzyDependency(X, y, Enumerable.Range(0, p).ToArray(), n, p);
-        double currentDependency = 0;
-
-        while (selected.Count < _maxFeatures && currentDependency < fullDependency - 1e-6)
+        while (selected.Count < _maxFeatures && Engine.TensorLessThan(current, fullDependency).Cast<int>().ToArray()[0] == 1)
         {
-            int bestFeature = -1;
-            double bestDependency = currentDependency;
-
+            var candidates = new T[p];
             for (int j = 0; j < p; j++)
-            {
-                if (selected.Contains(j)) continue;
+                candidates[j] = selected.Contains(j)
+                    ? excluded
+                    : FuzzyDependency(Engine.TensorMin(selectedSimilarity, similarity[j]), decision);
 
-                var testSet = selected.Union(new[] { j }).ToArray();
-                double testDependency = ComputeFuzzyDependency(X, y, testSet, n, p);
-
-                if (testDependency > bestDependency)
-                {
-                    bestDependency = testDependency;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature < 0)
+            // the first candidate with the highest dependency, if it improves on the current one
+            var scores = new Tensor<T>(candidates, new[] { p });
+            int bestFeature = FilterStatisticTensorOps.FirstArgMax(scores);
+            var best = FeatureSelectionTensorOps.Entries(scores, new[] { bestFeature });
+            if (Engine.TensorGreaterThan(best, current).Cast<int>().ToArray()[0] == 0)
                 break;
 
             selected.Add(bestFeature);
-            currentDependency = bestDependency;
+            selectedSimilarity = Engine.TensorMin(selectedSimilarity, similarity[bestFeature]);
+            current = best;
         }
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _selectedIndices = selected.OrderBy(j => j).ToArray();
 
         // If not enough features selected, add by individual dependency
         if (_selectedIndices.Length < Math.Min(_maxFeatures, p))
         {
-            var remaining = Enumerable.Range(0, p)
-                .Except(_selectedIndices)
-                .OrderByDescending(j => _fuzzyDependencies[j])
-                .Take(_maxFeatures - _selectedIndices.Length);
-            _selectedIndices = _selectedIndices.Concat(remaining).OrderBy(x => x).ToArray();
+            var chosen = _selectedIndices;
+            var remaining = FilterStatisticTensorOps.StableOrder(individual, descending: true)
+                .Except(chosen)
+                .Take(_maxFeatures - chosen.Length);
+            _selectedIndices = chosen.Concat(remaining).OrderBy(j => j).ToArray();
         }
-
         IsFitted = true;
     }
 
-    private void NormalizeFeatures(double[,] X, int n, int p)
+    // Gaussian similarity exp(-(x_i - x_k)^2 / (2 sigma^2)) of every pair of rows on feature j ([n, n])
+    private Tensor<T> FeatureSimilarity(Tensor<T> x, int j)
     {
-        for (int j = 0; j < p; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                min = Math.Min(min, X[i, j]);
-                max = Math.Max(max, X[i, j]);
-            }
-
-            double range = max - min;
-            if (range > 1e-10)
-            {
-                for (int i = 0; i < n; i++)
-                    X[i, j] = (X[i, j] - min) / range;
-            }
-        }
+        var column = FeatureSelectionTensorOps.Column(x, j);
+        int n = column.Length;
+        var difference = Engine.TensorSubtract(
+            FilterStatisticTensorOps.ColumnBroadcast(column, n), FilterStatisticTensorOps.RowBroadcast(column, n));
+        return Engine.TensorExp(Engine.TensorMultiplyScalar(
+            Engine.TensorSquare(difference), NumOps.FromDouble(-1.0 / (2 * _sigma * _sigma))));
     }
 
-    private double ComputeFuzzyDependency(double[,] X, int[] y, int[] features, int n, int p)
+    // Fuzzy dependency: the mean over objects of the lower approximation min_{k != i} min(1, 1 - S_ik + D_ik)
+    // (Lukasiewicz implication of the crisp decision relation D by the similarity S)
+    private T FuzzyDependency(Tensor<T> similarity, Tensor<T> decision)
     {
-        // Compute fuzzy similarity matrix for selected features
-        var similarity = new double[n, n];
-        for (int i1 = 0; i1 < n; i1++)
-        {
-            similarity[i1, i1] = 1.0;
-            for (int i2 = i1 + 1; i2 < n; i2++)
-            {
-                double sim = ComputeFuzzySimilarity(X, features, i1, i2);
-                similarity[i1, i2] = sim;
-                similarity[i2, i1] = sim;
-            }
-        }
-
-        // Compute decision similarity (crisp)
-        var decisionSim = new double[n, n];
-        for (int i1 = 0; i1 < n; i1++)
-        {
-            for (int i2 = 0; i2 < n; i2++)
-                decisionSim[i1, i2] = y[i1] == y[i2] ? 1.0 : 0.0;
-        }
-
-        // Compute fuzzy positive region
-        double positiveRegion = 0;
-        for (int i = 0; i < n; i++)
-        {
-            // Lower approximation of decision class for object i
-            double lowerApprox = 1.0;
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
-                double implication = FuzzyImplication(similarity[i, j], decisionSim[i, j]);
-                lowerApprox = Math.Min(lowerApprox, implication);
-            }
-            positiveRegion += lowerApprox;
-        }
-
-        return positiveRegion / n;
+        T one = NumOps.One;
+        int n = similarity.Shape[0];
+        var implication = Engine.TensorMin(Engine.TensorAddScalar(Engine.TensorSubtract(decision, similarity), one), one);
+        implication = Engine.TensorWhere(Engine.TensorEye<T>(n), FilterStatisticTensorOps.FilledLike(implication, one), implication);
+        var lower = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(implication), new[] { 1 }, false));
+        return Engine.TensorMean(lower);
     }
 
-    private double ComputeFuzzySimilarity(double[,] X, int[] features, int i1, int i2)
-    {
-        double minSim = 1.0;
-        foreach (int j in features)
-        {
-            double diff = Math.Abs(X[i1, j] - X[i2, j]);
-            double featureSim = Math.Exp(-diff * diff / (2 * _sigma * _sigma));
-            minSim = Math.Min(minSim, featureSim);
-        }
-        return minSim;
-    }
-
-    private double FuzzyImplication(double a, double b)
-    {
-        // Łukasiewicz implication: min(1, 1 - a + b)
-        return Math.Min(1.0, 1.0 - a + b);
-    }
+    private static Tensor<T> Scalar(T value) => new Tensor<T>(new[] { value }, new[] { 1 });
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
