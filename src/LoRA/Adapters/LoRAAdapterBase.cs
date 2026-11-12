@@ -685,6 +685,30 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     }
 
     /// <summary>
+    /// Adds a weight delta, laid out in the base layer's parameter order, to the leading weight block
+    /// of a flat parameter vector and keeps the trailing parameters (biases) unchanged.
+    /// </summary>
+    /// <param name="baseParams">The base layer's flat parameters ([weights..., biases...]).</param>
+    /// <param name="weightDelta">The weight delta whose row-major flattening matches the weight block.</param>
+    /// <param name="weightCount">The number of leading weight parameters.</param>
+    /// <returns>A new parameter vector with the delta added to the weights.</returns>
+    protected Vector<T> AddFlatWeightsToParameters(Vector<T> baseParams, Matrix<T> weightDelta, int weightCount)
+    {
+        if (weightDelta.Rows * weightDelta.Columns != weightCount)
+        {
+            throw new ArgumentException(
+                $"Weight delta has {weightDelta.Rows * weightDelta.Columns} elements but the weight block has {weightCount}.",
+                nameof(weightDelta));
+        }
+
+        Vector<T> mergedWeights = Engine.Add(baseParams.GetSubVector(0, weightCount), weightDelta.ToRowVector());
+        int trailingCount = baseParams.Length - weightCount;
+        return trailingCount > 0
+            ? Vector<T>.Concatenate(mergedWeights, baseParams.GetSubVector(weightCount, trailingCount))
+            : mergedWeights;
+    }
+
+    /// <summary>
     /// Merges LoRA weights into the base layer for DenseLayer or FullyConnectedLayer.
     /// </summary>
     /// <returns>A new layer with merged weights.</returns>
@@ -723,38 +747,12 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
         // Merge weights — loraWeights from MergeWeights() is [inputSize, outputSize].
         // DenseLayer stores weights as [inputSize, outputSize] (input-major).
         // FullyConnectedLayer stores weights as [outputSize, inputSize] (output-major).
         bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row, col;
-            if (isOutputMajor)
-            {
-                // FullyConnectedLayer: flat[i] = weights[outputIdx, inputIdx]
-                int outputIdx = i / inputSize;
-                int inputIdx = i % inputSize;
-                row = inputIdx;
-                col = outputIdx;
-            }
-            else
-            {
-                // DenseLayer: flat[i] = weights[inputIdx, outputIdx]
-                row = i / outputSize;
-                col = i % outputSize;
-            }
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
