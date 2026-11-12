@@ -422,4 +422,31 @@ public class FederatedElementwiseSweep29bReferenceTests
 
         Assert.Throws<ArgumentException>(() => fedCil.UpdatePrototype(3, new[] { 1.0 }));
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FederatedEWC_FisherIsThetaSquaredTimesColumnMeanSquareAndEmptyDataThrows()
+    {
+        await Task.Yield();
+
+        // F_j = (1/n) sum_i (theta_j x_{i, j mod C})^2 over the first n = min(fisherSamples, rows) rows.
+        // theta = [1, 2, 3], C = 2, rows [1, 2] and [3, 4] (third row ignored with fisherSamples = 2):
+        // mean x_0^2 = 5, mean x_1^2 = 10 -> F = [1 * 5, 4 * 10, 9 * 5].
+        var ewc = new AiDotNet.FederatedLearning.ContinualLearning.FederatedEWC<double>(fisherSamples: 2);
+        var data = new Matrix<double>(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 100.0, 100.0 } });
+        var fisher = ewc.ComputeImportance(new Vector<double>(new[] { 1.0, 2.0, 3.0 }), data);
+        Assert.Equal(new[] { 5.0, 40.0, 45.0 }, fisher.ToArray());
+
+        // Zero rows used to divide by zero and return NaN importances.
+        Assert.Throws<ArgumentException>(() => ewc.ComputeImportance(new Vector<double>(new[] { 1.0 }), new Matrix<double>(0, 2)));
+
+        // Weighted average: (1 * [2, 4] + 3 * [6, 8]) / 4 = [5, 7]; non-positive total weight is rejected.
+        var aggregated = ewc.AggregateImportance(
+            new Dictionary<int, Vector<double>> { [0] = new Vector<double>(new[] { 2.0, 4.0 }), [1] = new Vector<double>(new[] { 6.0, 8.0 }) },
+            new Dictionary<int, double> { [0] = 1.0, [1] = 3.0 });
+        Assert.Equal(5.0, aggregated[0], Precision);
+        Assert.Equal(7.0, aggregated[1], Precision);
+        Assert.Throws<ArgumentException>(() => ewc.AggregateImportance(
+            new Dictionary<int, Vector<double>> { [0] = new Vector<double>(new[] { 2.0 }) },
+            new Dictionary<int, double> { [0] = 0.0 }));
+    }
 }
