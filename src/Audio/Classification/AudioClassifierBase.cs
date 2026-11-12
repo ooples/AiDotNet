@@ -86,31 +86,13 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>,
             throw new ArgumentException($"Expected {NumClasses} logits but got {logits.Length}.");
         }
 
-        // Find max for numerical stability
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (NumOps.GreaterThan(logits[i], maxLogit))
-            {
-                maxLogit = logits[i];
-            }
-        }
+        // Numerically stable softmax (exp(logit - max) / sum) as one engine op.
+        T[] probabilities = Engine.Softmax(logits).ToArray();
 
-        // Compute exp(logit - max) and sum
-        T[] expValues = new T[logits.Length];
-        T expSum = NumOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            expValues[i] = NumOps.Exp(NumOps.Subtract(logits[i], maxLogit));
-            expSum = NumOps.Add(expSum, expValues[i]);
-        }
-
-        // Normalize and create result dictionary
         var result = new Dictionary<string, T>();
-        for (int i = 0; i < logits.Length; i++)
+        for (int i = 0; i < probabilities.Length; i++)
         {
-            T probability = NumOps.Divide(expValues[i], expSum);
-            result[ClassLabels[i]] = probability;
+            result[ClassLabels[i]] = probabilities[i];
         }
 
         return result;
@@ -136,10 +118,12 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>,
         Dictionary<string, T> probabilities,
         int k)
     {
-        var sorted = probabilities
-            .OrderByDescending(p => NumOps.ToDouble(p.Value))
+        var entries = probabilities.ToList();
+        if (entries.Count == 0) return new List<(string Label, T Probability, int Rank)>();
+        var values = new Tensor<T>(entries.Select(p => p.Value).ToArray(), [entries.Count]);
+        var sorted = AudioEngineOps.StableDescendingOrder(Engine, values)
             .Take(k)
-            .Select((p, index) => (p.Key, p.Value, index + 1))
+            .Select((i, index) => (entries[i].Key, entries[i].Value, index + 1))
             .ToList();
 
         return sorted;
@@ -152,19 +136,12 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>,
     /// <returns>Tuple of (predicted label, confidence).</returns>
     protected (string Label, T Confidence) GetPrediction(Dictionary<string, T> probabilities)
     {
-        string bestLabel = string.Empty;
-        T bestProb = NumOps.Zero;
+        if (probabilities.Count == 0) return (string.Empty, NumOps.Zero);
 
-        foreach (var (label, prob) in probabilities)
-        {
-            if (string.IsNullOrEmpty(bestLabel) || NumOps.GreaterThan(prob, bestProb))
-            {
-                bestLabel = label;
-                bestProb = prob;
-            }
-        }
-
-        return (bestLabel, bestProb);
+        var entries = probabilities.ToList();
+        var values = new Tensor<T>(entries.Select(p => p.Value).ToArray(), [entries.Count]);
+        var best = entries[AudioEngineOps.FirstArgMaxSequential(Engine, values)];
+        return (best.Key, best.Value);
     }
 
     /// <summary>
@@ -184,17 +161,16 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>,
         Dictionary<string, T> probabilities,
         T threshold)
     {
-        var result = new List<(string Label, T Probability)>();
-
-        foreach (var (label, prob) in probabilities)
-        {
-            if (NumOps.GreaterThanOrEquals(prob, threshold))
-            {
-                result.Add((label, prob));
-            }
-        }
-
-        return result.OrderByDescending(p => NumOps.ToDouble(p.Probability)).ToList();
+        var entries = probabilities.ToList();
+        if (entries.Count == 0) return new List<(string Label, T Probability)>();
+        var values = new Tensor<T>(entries.Select(p => p.Value).ToArray(), [entries.Count]);
+        var mask = Engine.TensorGreaterEqual(values, Tensor<T>.CreateDefault([entries.Count], threshold));
+        int[] kept = Engine.TensorNonzero(mask).ToArray();
+        if (kept.Length == 0) return new List<(string Label, T Probability)>();
+        var keptValues = new Tensor<T>(kept.Select(i => entries[i].Value).ToArray(), [kept.Length]);
+        return AudioEngineOps.StableDescendingOrder(Engine, keptValues)
+            .Select(j => (entries[kept[j]].Key, entries[kept[j]].Value))
+            .ToList();
     }
 
     /// <summary>
@@ -223,21 +199,28 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>,
         int totalSamples = nonZeroCounts.Sum(kvp => kvp.Value);
         int numClasses = nonZeroCounts.Count;
 
+        // Inverse frequency weighting: total / (numClasses * count), for every class at once.
+        var entries = classCounts.ToList();
+        var counts = new Tensor<int>(entries.Select(kvp => kvp.Value).ToArray(), [entries.Count]).Cast<T>();
+        var positive = Engine.TensorGreaterThan(counts, NumOps.Zero);
+        // Non-positive counts divide by one instead (their weight is replaced below), so a type whose
+        // division by zero throws (decimal) never sees a zero denominator.
+        var safeCounts = Engine.TensorWhere(positive, counts, Tensor<T>.CreateDefault([entries.Count], NumOps.One));
+        var inverse = Engine.TensorDivide(
+            Tensor<T>.CreateDefault([entries.Count], NumOps.FromDouble(totalSamples)),
+            Engine.TensorMultiplyScalar(safeCounts, NumOps.FromDouble(numClasses)));
+        // Classes with zero samples get the maximum weight (they need the most attention): the weight
+        // of the rarest non-empty class, total / (numClasses * minCount).
+        T maxWeight = NumOps.FromDouble((double)totalSamples / ((double)numClasses * nonZeroCounts.Min(kvp => kvp.Value)));
+        T[] weightValues = Engine.TensorWhere(
+            positive,
+            inverse,
+            Tensor<T>.CreateDefault([entries.Count], maxWeight)).ToArray();
+
         var weights = new Dictionary<string, T>();
-        foreach (var (label, count) in classCounts)
+        for (int i = 0; i < entries.Count; i++)
         {
-            if (count > 0)
-            {
-                // Inverse frequency weighting
-                double weight = (double)totalSamples / ((double)numClasses * count);
-                weights[label] = NumOps.FromDouble(weight);
-            }
-            else
-            {
-                // Assign maximum weight to classes with zero samples (they need the most attention)
-                double maxWeight = nonZeroCounts.Max(kvp => (double)totalSamples / ((double)numClasses * kvp.Value));
-                weights[label] = NumOps.FromDouble(maxWeight);
-            }
+            weights[entries[i].Key] = weightValues[i];
         }
 
         return weights;

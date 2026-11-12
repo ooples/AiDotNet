@@ -337,12 +337,13 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         var speakerTurns = CreateSpeakerTurns(segments, labels);
 
         // Convert to DiarizationResult<T> format
+        T confidence = NumOps.FromDouble(1.0); // Clustering doesn't provide per-segment confidence
         var speakerSegments = speakerTurns.Select(turn => new SpeakerSegment<T>
         {
             Speaker = turn.SpeakerId,
             StartTime = turn.StartTime,
             EndTime = turn.EndTime,
-            Confidence = NumOps.FromDouble(1.0) // Clustering doesn't provide per-segment confidence
+            Confidence = confidence
         }).ToList();
 
         var speakerLabels = speakerSegments.Select(s => s.Speaker).Distinct().ToList();
@@ -474,19 +475,11 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
 
                 if (segmentLength < _options.SampleRate * 0.5) continue; // Skip very short segments
 
-                var segmentAudio = new Tensor<T>([segmentLength]);
-                for (int i = 0; i < segmentLength; i++)
-                {
-                    segmentAudio[i] = audio[startSample + i];
-                }
+                var segmentAudio = AudioSpan(audio, startSample, segmentLength);
 
                 var embedding = _embeddingExtractor.Extract(segmentAudio);
-                // Convert embedding Vector to Tensor
-                var embeddingTensor = new Tensor<T>([embedding.Vector.Length]);
-                for (int j = 0; j < embedding.Vector.Length; j++)
-                {
-                    embeddingTensor[j] = embedding.Vector[j];
-                }
+                // Convert embedding Vector to Tensor (a copy)
+                var embeddingTensor = new Tensor<T>(embedding.Vector.ToArray(), [embedding.Vector.Length]);
                 speakerEmbeddings.Add(embeddingTensor);
             }
 
@@ -519,12 +512,13 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         // Merge consecutive same-speaker segments
         var speakerTurns = CreateSpeakerTurns(segments, labels);
 
+        T confidence = NumOps.FromDouble(1.0);
         var speakerSegments = speakerTurns.Select(turn => new SpeakerSegment<T>
         {
             Speaker = turn.SpeakerId,
             StartTime = turn.StartTime,
             EndTime = turn.EndTime,
-            Confidence = NumOps.FromDouble(1.0)
+            Confidence = confidence
         }).ToList();
 
         var speakerLabels = speakerSegments.Select(s => s.Speaker).Distinct().ToList();
@@ -566,11 +560,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
     /// <returns>Legacy diarization result.</returns>
     public DiarizationResult DiarizeLegacy(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>([audio.Length], audio);
         return DiarizeLegacy(tensor);
     }
 
@@ -642,6 +632,20 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
 
     #region Private Methods - Audio Processing
 
+    /// <summary>
+    /// A fresh copy of the <paramref name="length"/> samples (row-major) from <paramref name="start"/>;
+    /// a read outside the audio throws as the indexer does.
+    /// </summary>
+    private Tensor<T> AudioSpan(Tensor<T> audio, int start, int length)
+    {
+        if (length <= 0)
+            return new Tensor<T>([length]);
+        if (start < 0 || start + length > audio.Length)
+            throw new ArgumentOutOfRangeException("flatIndex", "Flat index is out of range.");
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.TensorSlice(AudioEngineOps.Flatten(Engine, audio), [start], [length]);
+    }
+
     private List<AudioSegment<T>> SegmentAudio(Tensor<T> audio)
     {
         var segments = new List<AudioSegment<T>>();
@@ -650,11 +654,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
 
         for (int start = 0; start + samplesPerWindow <= audio.Length; start += hopSamples)
         {
-            var segment = new Tensor<T>([samplesPerWindow]);
-            for (int i = 0; i < samplesPerWindow; i++)
-            {
-                segment[i] = audio[start + i];
-            }
+            var segment = AudioSpan(audio, start, samplesPerWindow);
 
             segments.Add(new AudioSegment<T>
             {
@@ -946,6 +946,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         var result = new List<SpeakerSegment<T>>();
         if (segments.Count == 0) return result;
 
+        T confidence = NumOps.FromDouble(1.0);
         string currentLabel = labels[0];
         double turnStart = segments[0].StartTime;
         double turnEnd = segments[0].EndTime;
@@ -965,7 +966,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
                         Speaker = currentLabel,
                         StartTime = turnStart,
                         EndTime = turnEnd,
-                        Confidence = NumOps.FromDouble(1.0)
+                        Confidence = confidence
                     });
                 }
 
@@ -982,7 +983,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
                 Speaker = currentLabel,
                 StartTime = turnStart,
                 EndTime = turnEnd,
-                Confidence = NumOps.FromDouble(1.0)
+                Confidence = confidence
             });
         }
 
