@@ -130,22 +130,11 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
         if (NumOps.Equals(norm, NumOps.Zero))
         {
             // Return a defensive copy to avoid aliasing issues
-            var copy = new Tensor<T>(embedding._shape);
-            for (int i = 0; i < data.Length; i++)
-            {
-                copy[i] = data[i];
-            }
-            return copy;
+            return new Tensor<T>(data, embedding._shape);
         }
 
-        // Create new tensor with same shape and copy normalized values
-        var result = new Tensor<T>(embedding._shape);
-        for (int i = 0; i < data.Length; i++)
-        {
-            result[i] = NumOps.Divide(data[i], norm);
-        }
-
-        return result;
+        // New tensor with the same shape holding the normalized values
+        return Engine.TensorDivideScalar(new Tensor<T>(data, embedding._shape), norm);
     }
 
     /// <summary>
@@ -185,37 +174,16 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
             }
         }
 
-        T[] sum = new T[totalSize];
-
-        // Initialize with zeros
-        for (int i = 0; i < totalSize; i++)
+        // Sum all embeddings (flattened, since only the lengths are required to match)
+        var sum = new Tensor<T>(embeddings[0].ToArray(), [totalSize]);
+        for (int e = 1; e < embeddings.Count; e++)
         {
-            sum[i] = NumOps.Zero;
+            sum = Engine.TensorAdd(sum, new Tensor<T>(embeddings[e].ToArray(), [totalSize]));
         }
 
-        // Sum all embeddings
-        foreach (var embedding in embeddings)
-        {
-            var data = embedding.ToArray();
-            for (int i = 0; i < totalSize; i++)
-            {
-                sum[i] = NumOps.Add(sum[i], data[i]);
-            }
-        }
-
-        // Compute mean
-        T count = NumOps.FromDouble(embeddings.Count);
-        for (int i = 0; i < totalSize; i++)
-        {
-            sum[i] = NumOps.Divide(sum[i], count);
-        }
-
-        // Create tensor and copy mean values
-        var meanTensor = new Tensor<T>(firstShape);
-        for (int i = 0; i < totalSize; i++)
-        {
-            meanTensor[i] = sum[i];
-        }
+        // Compute mean and restore the first embedding's shape
+        var mean = Engine.TensorDivideScalar(sum, NumOps.FromDouble(embeddings.Count));
+        var meanTensor = new Tensor<T>(mean.ToArray(), firstShape);
 
         return NormalizeEmbedding(meanTensor);
     }
