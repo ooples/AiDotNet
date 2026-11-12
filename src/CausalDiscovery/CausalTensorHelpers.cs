@@ -128,6 +128,39 @@ internal static class CausalTensorHelpers
     }
 
     /// <summary>
+    /// sum(a b) / sqrt(sum(a^2) sum(b^2)) without centering, or 0 unless both sums of squares are above 1e-10.
+    /// </summary>
+    internal static T UncenteredCorrelation<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T sab = engine.TensorSum(engine.TensorMultiply(a, b));
+        T saa = engine.TensorSum(engine.TensorSquare(a));
+        T sbb = engine.TensorSum(engine.TensorSquare(b));
+        T tiny = ops.FromDouble(1e-10);
+        return ops.GreaterThan(saa, tiny) && ops.GreaterThan(sbb, tiny)
+            ? ops.Divide(sab, ops.Sqrt(ops.Multiply(saa, sbb)))
+            : ops.Zero;
+    }
+
+    /// <summary>
+    /// Least-squares slope of <paramref name="child"/> on <paramref name="parent"/>: cov / var over the centered
+    /// columns, or 0 unless the parent's centered sum of squares is above 1e-10.
+    /// </summary>
+    internal static T RegressionSlope<T>(Matrix<T> data, int parent, int child)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var p = engine.GetColumn(data, parent).AsTensor();
+        var c = engine.GetColumn(data, child).AsTensor();
+        var dp = engine.TensorSubtractScalar(p, engine.TensorMean(p));
+        var dc = engine.TensorSubtractScalar(c, engine.TensorMean(c));
+        T cov = engine.TensorSum(engine.TensorMultiply(dp, dc));
+        T varP = engine.TensorSum(engine.TensorSquare(dp));
+        return ops.GreaterThan(varP, ops.FromDouble(1e-10)) ? ops.Divide(cov, varP) : ops.Zero;
+    }
+
+    /// <summary>
     /// Sum of squared deviations of a column from its mean.
     /// </summary>
     internal static T CenteredSumOfSquares<T>(Matrix<T> data, int column)
