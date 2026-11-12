@@ -26,20 +26,12 @@ public class BoxBlur<T> : ImageAugmenterBase<T>
         double weight = 1.0 / ((double)kSize * kSize);
         var result = data.Clone();
 
-        for (int c = 0; c < data.Channels; c++)
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double sum = 0;
-                    for (int ky = -half; ky <= half; ky++)
-                        for (int kx = -half; kx <= half; kx++)
-                        {
-                            int sy = Math.Max(0, Math.Min(data.Height - 1, y + ky));
-                            int sx = Math.Max(0, Math.Min(data.Width - 1, x + kx));
-                            sum += NumOps.ToDouble(data.GetPixel(sy, sx, c));
-                        }
-                    result.SetPixel(y, x, c, NumOps.FromDouble(sum * weight));
-                }
+        // Sum the k x k edge-replicated neighbourhood, then scale by 1 / k^2
+        var engine = Engine;
+        var ones = new Tensor<T>([kSize, kSize]);
+        engine.TensorFill(ones, NumOps.One);
+        var sums = ImageTensor<T>.Correlate(data.ToPlanarTensor(), ones, mirror: false);
+        result.SetFromPlanarTensor(engine.TensorMultiplyScalar(sums, NumOps.FromDouble(weight)));
 
         return result;
     }
