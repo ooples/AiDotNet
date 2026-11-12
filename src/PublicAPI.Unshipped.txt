@@ -22599,3 +22599,5 @@ AiDotNet.MetaLearning.Options.OMLOptions<T, TInput, TOutput>.OnlineInnerLoop.set
 *REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.TeacherEmaDecay.set -> void
 AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.EtaDecay.get -> double
 AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.EtaDecay.set -> void
+*REMOVED*AiDotNet.MetaLearning.Options.TaskCondHyperNetOptions<T, TInput, TOutput>.EmbeddingRegWeight.get -> double
+*REMOVED*AiDotNet.MetaLearning.Options.TaskCondHyperNetOptions<T, TInput, TOutput>.EmbeddingRegWeight.set -> void
