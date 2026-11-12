@@ -51,6 +51,7 @@ public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
     private readonly bool _appendDelta;
     private readonly bool _appendDeltaDelta;
     private readonly double[,] _dctMatrix;
+    private Tensor<T>? _dctTensor;
 
     /// <inheritdoc/>
     public override string Name => "MFCC";
@@ -98,99 +99,69 @@ public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Extract(Tensor<T> audio)
     {
+        // Features are computed from fresh values as before (not part of the autodiff graph).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
         // Compute log mel spectrogram
         var melSpec = _melSpectrogram.Forward(audio);
 
         int numFrames = melSpec.Shape[0];
         int numMels = melSpec.Shape[1];
 
-        // Apply DCT to get MFCCs
-        var mfccs = new double[numFrames, _numCoefficients];
+        // Apply DCT to get MFCCs: mfcc[frame, c] = sum_m dct[c, m] * mel[frame, m]
+        var mfccs = numFrames == 0 || numMels == 0 || _numCoefficients == 0
+            ? new Tensor<T>([numFrames, _numCoefficients])
+            : Engine.TensorMatMul(
+                melSpec,
+                Engine.TensorTranspose(Engine.TensorSlice(DctTensor(), [0, 0], [_numCoefficients, numMels])));
 
-        for (int frame = 0; frame < numFrames; frame++)
+        // Optionally replace first coefficient with energy: log(max(sum_m exp(mel), 1e-10))
+        if (_includeEnergy && numFrames > 0)
         {
-            for (int c = 0; c < _numCoefficients; c++)
-            {
-                double sum = 0;
-                for (int m = 0; m < numMels; m++)
-                {
-                    sum += _dctMatrix[c, m] * NumOps.ToDouble(melSpec[frame, m]);
-                }
-                mfccs[frame, c] = sum;
-            }
-        }
+            if (_numCoefficients == 0)
+                throw new IndexOutOfRangeException("Energy replaces the first coefficient, but no coefficients are computed.");
 
-        // Optionally replace first coefficient with energy
-        if (_includeEnergy)
-        {
-            for (int frame = 0; frame < numFrames; frame++)
-            {
-                double energy = 0;
-                for (int m = 0; m < numMels; m++)
-                {
-                    double val = NumOps.ToDouble(melSpec[frame, m]);
-                    energy += Math.Exp(val); // Undo log
-                }
-                mfccs[frame, 0] = Math.Log(Math.Max(energy, 1e-10));
-            }
+            var energy = numMels > 0
+                ? Engine.ReduceSum(Engine.TensorExp(melSpec), [1], keepDims: true) // Undo log
+                : new Tensor<T>([numFrames, 1]);
+            T floor = NumOps.FromDouble(1e-10);
+            var logEnergy = Engine.TensorLog(Engine.TensorWhere(
+                Engine.TensorLessThan(energy, floor), Tensor<T>.CreateDefault([numFrames, 1], floor), energy));
+            mfccs = _numCoefficients == 1
+                ? logEnergy
+                : Engine.Concat(new[] { logEnergy, Engine.TensorSlice(mfccs, [0, 1], [numFrames, _numCoefficients - 1]) }, 1);
         }
 
         // Compute delta and delta-delta if requested
         if (!_appendDelta && !_appendDeltaDelta)
         {
-            return CreateTensorFromArray(mfccs, numFrames, _numCoefficients);
+            return mfccs;
         }
 
-        double[,] delta = new double[numFrames, _numCoefficients];
-        double[,] deltaDelta = new double[numFrames, _numCoefficients];
+        var delta = ComputeDeltas(mfccs);
 
-        if (_appendDelta || _appendDeltaDelta)
+        // Combine features: [mfcc | delta | delta-delta]
+        var parts = new List<Tensor<T>> { mfccs };
+        if (_appendDelta) parts.Add(delta);
+        if (_appendDeltaDelta) parts.Add(ComputeDeltas(delta));
+
+        return parts.Count == 1 ? mfccs : Engine.Concat(parts, 1);
+    }
+
+    /// <summary>
+    /// The DCT matrix (a fixed table built once in the constructor) converted to
+    /// <typeparamref name="T"/> once, in bulk.
+    /// </summary>
+    private Tensor<T> DctTensor()
+    {
+        if (_dctTensor is null)
         {
-            ComputeDeltas(mfccs, delta, numFrames, _numCoefficients);
+            int rows = _dctMatrix.GetLength(0), cols = _dctMatrix.GetLength(1);
+            var values = new double[rows * cols];
+            Buffer.BlockCopy(_dctMatrix, 0, values, 0, values.Length * sizeof(double));
+            _dctTensor = new Tensor<double>(values, [rows, cols]).Cast<T>();
         }
-
-        if (_appendDeltaDelta)
-        {
-            ComputeDeltas(delta, deltaDelta, numFrames, _numCoefficients);
-        }
-
-        // Combine features
-        int totalFeatures = _numCoefficients;
-        if (_appendDelta) totalFeatures += _numCoefficients;
-        if (_appendDeltaDelta) totalFeatures += _numCoefficients;
-
-        var combined = new double[numFrames, totalFeatures];
-
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            int offset = 0;
-
-            // Copy MFCCs
-            for (int c = 0; c < _numCoefficients; c++)
-            {
-                combined[frame, offset++] = mfccs[frame, c];
-            }
-
-            // Copy deltas
-            if (_appendDelta)
-            {
-                for (int c = 0; c < _numCoefficients; c++)
-                {
-                    combined[frame, offset++] = delta[frame, c];
-                }
-            }
-
-            // Copy delta-deltas
-            if (_appendDeltaDelta)
-            {
-                for (int c = 0; c < _numCoefficients; c++)
-                {
-                    combined[frame, offset++] = deltaDelta[frame, c];
-                }
-            }
-        }
-
-        return CreateTensorFromArray(combined, numFrames, totalFeatures);
+        return _dctTensor;
     }
 
     private static double[,] CreateDctMatrix(int numMels, int numCoefficients)
@@ -225,42 +196,37 @@ public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
         return dct;
     }
 
-    private static void ComputeDeltas(double[,] features, double[,] deltas, int numFrames, int numFeatures)
+    private Tensor<T> ComputeDeltas(Tensor<T> features)
     {
+        // Regression deltas over +-2 frames with edge frames repeated:
+        // delta[t] = (1 * (x[t+1] - x[t-1]) + 2 * (x[t+2] - x[t-2])) / 10
         const int windowSize = 2;
         double denominator = 2 * (1 + 4); // sum of i^2 for i = 1,2
 
-        for (int frame = 0; frame < numFrames; frame++)
+        int numFrames = features.Shape[0];
+        int numFeatures = features.Shape[1];
+        if (numFrames == 0 || numFeatures == 0)
+            return new Tensor<T>([numFrames, numFeatures]);
+
+        var edge = new[] { windowSize, numFeatures };
+        var padded = Engine.Concat(new[]
         {
-            for (int f = 0; f < numFeatures; f++)
-            {
-                double numerator = 0;
+            Engine.TensorBroadcastTo(Engine.TensorSlice(features, [0, 0], [1, numFeatures]), edge),
+            features,
+            Engine.TensorBroadcastTo(Engine.TensorSlice(features, [numFrames - 1, 0], [1, numFeatures]), edge)
+        }, 0);
 
-                for (int i = 1; i <= windowSize; i++)
-                {
-                    int prevFrame = Math.Max(0, frame - i);
-                    int nextFrame = Math.Min(numFrames - 1, frame + i);
-
-                    numerator += i * (features[nextFrame, f] - features[prevFrame, f]);
-                }
-
-                deltas[frame, f] = numerator / denominator;
-            }
-        }
-    }
-
-    private Tensor<T> CreateTensorFromArray(double[,] array, int rows, int cols)
-    {
-        var tensor = new Tensor<T>([rows, cols]);
-
-        for (int r = 0; r < rows; r++)
+        var tapWeights = new[] { NumOps.One, NumOps.FromDouble(2) };
+        Tensor<T>? numerator = null;
+        for (int i = 1; i <= windowSize; i++)
         {
-            for (int c = 0; c < cols; c++)
-            {
-                tensor[r, c] = NumOps.FromDouble(array[r, c]);
-            }
+            var next = Engine.TensorSlice(padded, [windowSize + i, 0], [numFrames, numFeatures]);
+            var prev = Engine.TensorSlice(padded, [windowSize - i, 0], [numFrames, numFeatures]);
+            var difference = Engine.TensorSubtract(next, prev);
+            var term = i == 1 ? difference : Engine.TensorMultiplyScalar(difference, tapWeights[i - 1]);
+            numerator = numerator is null ? term : Engine.TensorAdd(numerator, term);
         }
 
-        return tensor;
+        return Engine.TensorDivideScalar(numerator ?? new Tensor<T>([numFrames, numFeatures]), NumOps.FromDouble(denominator));
     }
 }
