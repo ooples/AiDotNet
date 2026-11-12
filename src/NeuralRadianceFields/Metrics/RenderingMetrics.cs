@@ -46,7 +46,7 @@ public static class RenderingMetrics<T>
     {
         ValidateShapes(predicted, groundTruth);
 
-        double mse = ComputeMSE(predicted, groundTruth);
+        double mse = NumOps.ToDouble(ComputeMSE(predicted, groundTruth));
 
         if (mse < 1e-10)
         {
@@ -95,30 +95,19 @@ public static class RenderingMetrics<T>
 
         int height = predicted.Shape[0];
         int width = predicted.Shape[1];
-        int channels = predicted.Rank > 2 ? predicted.Shape[2] : 1;
-
-        double totalSsim = 0.0;
-        int numWindows = 0;
 
         int halfWindow = windowSize / 2;
-
-        for (int y = halfWindow; y < height - halfWindow; y++)
-        {
-            for (int x = halfWindow; x < width - halfWindow; x++)
-            {
-                double windowSsim = ComputeWindowSSIM(
-                    predicted, groundTruth, x, y, halfWindow, channels, c1, c2);
-                totalSsim += windowSsim;
-                numWindows++;
-            }
-        }
+        int numWindows = Math.Max(0, height - 2 * halfWindow) * Math.Max(0, width - 2 * halfWindow);
+        T c1T = NumOps.FromDouble(c1);
+        T c2T = NumOps.FromDouble(c2);
 
         if (numWindows == 0)
         {
-            return ComputeGlobalSSIM(predicted, groundTruth, c1, c2);
+            return NumOps.ToDouble(ComputeGlobalSSIM(predicted, groundTruth, c1T, c2T));
         }
 
-        return totalSsim / numWindows;
+        T totalSsim = SumWindowSSIM(predicted, groundTruth, halfWindow, c1T, c2T);
+        return NumOps.ToDouble(totalSsim) / numWindows;
     }
 
     /// <summary>
@@ -146,12 +135,12 @@ public static class RenderingMetrics<T>
         var predEdges = ComputeEdgeMagnitude(predicted);
         var gtEdges = ComputeEdgeMagnitude(groundTruth);
 
-        double edgeDifference = ComputeMSE(predEdges, gtEdges);
+        double edgeDifference = NumOps.ToDouble(ComputeMSE(predEdges, gtEdges));
 
         var predStats = ComputeLocalStatistics(predicted);
         var gtStats = ComputeLocalStatistics(groundTruth);
 
-        double statsDifference = ComputeMSE(predStats, gtStats);
+        double statsDifference = NumOps.ToDouble(ComputeMSE(predStats, gtStats));
 
         return Math.Sqrt(edgeDifference) + 0.5 * Math.Sqrt(statsDifference);
     }
@@ -165,7 +154,7 @@ public static class RenderingMetrics<T>
     public static double MSE(Tensor<T> a, Tensor<T> b)
     {
         ValidateShapes(a, b);
-        return ComputeMSE(a, b);
+        return NumOps.ToDouble(ComputeMSE(a, b));
     }
 
     /// <summary>
@@ -178,19 +167,7 @@ public static class RenderingMetrics<T>
     {
         ValidateShapes(a, b);
 
-        double sum = 0.0;
-        int total = a.Length;
-
-        var aData = a.ToArray();
-        var bData = b.ToArray();
-
-        for (int i = 0; i < total; i++)
-        {
-            double diff = Math.Abs(NumOps.ToDouble(aData[i]) - NumOps.ToDouble(bData[i]));
-            sum += diff;
-        }
-
-        return sum / total;
+        return NumOps.ToDouble(Engine.TensorMean(Engine.TensorAbs(Engine.TensorSubtract(a, b))));
     }
 
     #region Private Methods
@@ -219,255 +196,181 @@ public static class RenderingMetrics<T>
     /// <summary>
     /// Computes Mean Squared Error.
     /// </summary>
-    private static double ComputeMSE(Tensor<T> a, Tensor<T> b)
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    private static T ComputeMSE(Tensor<T> a, Tensor<T> b)
     {
-        double sum = 0.0;
-        int total = a.Length;
+        return Engine.TensorMean(Engine.TensorSquare(Engine.TensorSubtract(a, b)));
+    }
 
-        var aData = a.ToArray();
-        var bData = b.ToArray();
-
-        for (int i = 0; i < total; i++)
-        {
-            double diff = NumOps.ToDouble(aData[i]) - NumOps.ToDouble(bData[i]);
-            sum += diff * diff;
-        }
-
-        return sum / total;
+    /// <summary>Views a [H, W] image as [H, W, 1]; [H, W, C] images are returned unchanged.</summary>
+    private static Tensor<T> AsHeightWidthChannels(Tensor<T> image)
+    {
+        return image.Rank > 2 ? image : image.Reshape(image.Shape[0], image.Shape[1], 1);
     }
 
     /// <summary>
-    /// Computes SSIM for a single window.
+    /// Every (2h + 1) x (2h + 1) window of rows <paramref name="firstRow"/>.. of an [H, W, C] image whose centre
+    /// row lies in the block, as [rows, W - 2h, C, k, k].
     /// </summary>
-    private static double ComputeWindowSSIM(
-        Tensor<T> predicted,
-        Tensor<T> groundTruth,
-        int centerX,
-        int centerY,
-        int halfWindow,
-        int channels,
-        double c1,
-        double c2)
+    private static Tensor<T> Windows(Tensor<T> image, int halfWindow, int firstRow, int rows)
     {
-        double meanX = 0, meanY = 0;
-        double varX = 0, varY = 0, covXY = 0;
-        int count = 0;
-
-        for (int dy = -halfWindow; dy <= halfWindow; dy++)
-        {
-            for (int dx = -halfWindow; dx <= halfWindow; dx++)
-            {
-                int y = centerY + dy;
-                int x = centerX + dx;
-
-                for (int c = 0; c < channels; c++)
-                {
-                    double px = channels > 1
-                        ? NumOps.ToDouble(predicted[y, x, c])
-                        : NumOps.ToDouble(predicted[y, x]);
-                    double py = channels > 1
-                        ? NumOps.ToDouble(groundTruth[y, x, c])
-                        : NumOps.ToDouble(groundTruth[y, x]);
-
-                    meanX += px;
-                    meanY += py;
-                    count++;
-                }
-            }
-        }
-
-        meanX /= count;
-        meanY /= count;
-
-        for (int dy = -halfWindow; dy <= halfWindow; dy++)
-        {
-            for (int dx = -halfWindow; dx <= halfWindow; dx++)
-            {
-                int y = centerY + dy;
-                int x = centerX + dx;
-
-                for (int c = 0; c < channels; c++)
-                {
-                    double px = channels > 1
-                        ? NumOps.ToDouble(predicted[y, x, c])
-                        : NumOps.ToDouble(predicted[y, x]);
-                    double py = channels > 1
-                        ? NumOps.ToDouble(groundTruth[y, x, c])
-                        : NumOps.ToDouble(groundTruth[y, x]);
-
-                    varX += (px - meanX) * (px - meanX);
-                    varY += (py - meanY) * (py - meanY);
-                    covXY += (px - meanX) * (py - meanY);
-                }
-            }
-        }
-
-        varX /= (count - 1);
-        varY /= (count - 1);
-        covXY /= (count - 1);
-
-        double numerator = (2 * meanX * meanY + c1) * (2 * covXY + c2);
-        double denominator = (meanX * meanX + meanY * meanY + c1) * (varX + varY + c2);
-
-        return numerator / denominator;
+        int size = 2 * halfWindow + 1;
+        int width = image.Shape[1];
+        int channels = image.Shape[2];
+        var band = Engine.TensorSlice(image, new[] { firstRow, 0, 0 }, new[] { rows + size - 1, width, channels });
+        var rowWindows = Engine.TensorUnfold(band, 0, size, 1);
+        return Engine.TensorUnfold(rowWindows, 1, size, 1);
     }
 
     /// <summary>
-    /// Computes global SSIM when image is too small for windowed approach.
+    /// Sum of the per-window SSIM values over every window whose centre is at least <paramref name="halfWindow"/>
+    /// pixels from the border. Each window's mean, variances and covariance use the two-pass (centred) sums.
     /// </summary>
-    private static double ComputeGlobalSSIM(
+    private static T SumWindowSSIM(Tensor<T> predicted, Tensor<T> groundTruth, int halfWindow, T c1, T c2)
+    {
+        var x = AsHeightWidthChannels(predicted);
+        var y = AsHeightWidthChannels(groundTruth);
+        int size = 2 * halfWindow + 1;
+        int windowRows = x.Shape[0] - 2 * halfWindow;
+        int windowColumns = x.Shape[1] - 2 * halfWindow;
+        int perWindow = x.Shape[2] * size * size;
+        int blockRows = Math.Max(1, (1 << 22) / Math.Max(1, windowColumns * perWindow));
+        var axes = new[] { 2, 3, 4 };
+        T unbiased = NumOps.FromDouble(perWindow - 1);
+        T two = NumOps.FromDouble(2);
+
+        T total = NumOps.Zero;
+        for (int start = 0; start < windowRows; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, windowRows - start);
+            var px = Windows(x, halfWindow, start, rows);
+            var py = Windows(y, halfWindow, start, rows);
+            var meanX = Engine.ReduceMean(px, axes, true);
+            var meanY = Engine.ReduceMean(py, axes, true);
+            var dx = Engine.TensorSubtract(px, Engine.TensorBroadcastTo(meanX, px.Shape));
+            var dy = Engine.TensorSubtract(py, Engine.TensorBroadcastTo(meanY, py.Shape));
+            var varX = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorSquare(dx), axes, false), unbiased);
+            var varY = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorSquare(dy), axes, false), unbiased);
+            var covXY = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorMultiply(dx, dy), axes, false), unbiased);
+            var mx = meanX.Reshape(rows, windowColumns);
+            var my = meanY.Reshape(rows, windowColumns);
+            total = NumOps.Add(total, Engine.TensorSum(Ssim(mx, my, varX, varY, covXY, c1, c2, two)));
+        }
+
+        return total;
+    }
+
+    /// <summary>((2 mx my + c1)(2 cov + c2)) / ((mx^2 + my^2 + c1)(vx + vy + c2)), element-wise.</summary>
+    private static Tensor<T> Ssim(
+        Tensor<T> meanX, Tensor<T> meanY, Tensor<T> varX, Tensor<T> varY, Tensor<T> covXY, T c1, T c2, T two)
+    {
+        var luminance = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorMultiply(meanX, meanY), two), c1);
+        var structure = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(covXY, two), c2);
+        var meanEnergy = Engine.TensorAddScalar(
+            Engine.TensorAdd(Engine.TensorSquare(meanX), Engine.TensorSquare(meanY)), c1);
+        var varianceEnergy = Engine.TensorAddScalar(Engine.TensorAdd(varX, varY), c2);
+        return Engine.TensorDivide(
+            Engine.TensorMultiply(luminance, structure), Engine.TensorMultiply(meanEnergy, varianceEnergy));
+    }
+
+    private static T ComputeGlobalSSIM(
         Tensor<T> predicted,
         Tensor<T> groundTruth,
-        double c1,
-        double c2)
+        T c1,
+        T c2)
     {
-        var pData = predicted.ToArray();
-        var gData = groundTruth.ToArray();
-        int count = pData.Length;
-
-        double meanX = 0, meanY = 0;
-        for (int i = 0; i < count; i++)
-        {
-            meanX += NumOps.ToDouble(pData[i]);
-            meanY += NumOps.ToDouble(gData[i]);
-        }
-        meanX /= count;
-        meanY /= count;
-
-        double varX = 0, varY = 0, covXY = 0;
-        for (int i = 0; i < count; i++)
-        {
-            double px = NumOps.ToDouble(pData[i]);
-            double py = NumOps.ToDouble(gData[i]);
-            varX += (px - meanX) * (px - meanX);
-            varY += (py - meanY) * (py - meanY);
-            covXY += (px - meanX) * (py - meanY);
-        }
+        int count = predicted.Length;
+        T meanX = Engine.TensorMean(predicted);
+        T meanY = Engine.TensorMean(groundTruth);
+        var dx = Engine.TensorSubtractScalar(predicted, meanX);
+        var dy = Engine.TensorSubtractScalar(groundTruth, meanY);
+        T varX = Engine.TensorSum(Engine.TensorSquare(dx));
+        T varY = Engine.TensorSum(Engine.TensorSquare(dy));
+        T covXY = Engine.TensorSum(Engine.TensorMultiply(dx, dy));
 
         if (count > 1)
         {
-            varX /= (count - 1);
-            varY /= (count - 1);
-            covXY /= (count - 1);
+            T unbiased = NumOps.FromDouble(count - 1);
+            varX = NumOps.Divide(varX, unbiased);
+            varY = NumOps.Divide(varY, unbiased);
+            covXY = NumOps.Divide(covXY, unbiased);
         }
 
-        double numerator = (2 * meanX * meanY + c1) * (2 * covXY + c2);
-        double denominator = (meanX * meanX + meanY * meanY + c1) * (varX + varY + c2);
+        T two = NumOps.FromDouble(2);
+        T numerator = NumOps.Multiply(
+            NumOps.Add(NumOps.Multiply(two, NumOps.Multiply(meanX, meanY)), c1),
+            NumOps.Add(NumOps.Multiply(two, covXY), c2));
+        T denominator = NumOps.Multiply(
+            NumOps.Add(NumOps.Add(NumOps.Multiply(meanX, meanX), NumOps.Multiply(meanY, meanY)), c1),
+            NumOps.Add(NumOps.Add(varX, varY), c2));
 
-        return numerator / denominator;
+        return NumOps.Divide(numerator, denominator);
     }
 
     /// <summary>
-    /// Computes edge magnitude using Sobel-like operators.
+    /// Channel-averaged Sobel gradient magnitude, [H, W], zero on the one-pixel border. Sobel is linear, so the
+    /// per-channel responses summed over channels equal the response of the channel sum.
     /// </summary>
     private static Tensor<T> ComputeEdgeMagnitude(Tensor<T> image)
     {
-        int height = image.Shape[0];
-        int width = image.Shape[1];
-        int channels = image.Rank > 2 ? image.Shape[2] : 1;
-
-        var result = new T[height * width];
-
-        for (int y = 1; y < height - 1; y++)
+        var hwc = AsHeightWidthChannels(image);
+        int height = hwc.Shape[0];
+        int width = hwc.Shape[1];
+        int channels = hwc.Shape[2];
+        if (height < 3 || width < 3)
         {
-            for (int x = 1; x < width - 1; x++)
-            {
-                double gx = 0, gy = 0;
-
-                for (int c = 0; c < channels; c++)
-                {
-                    double p00 = GetPixel(image, y - 1, x - 1, c, channels);
-                    double p01 = GetPixel(image, y - 1, x, c, channels);
-                    double p02 = GetPixel(image, y - 1, x + 1, c, channels);
-                    double p10 = GetPixel(image, y, x - 1, c, channels);
-                    double p12 = GetPixel(image, y, x + 1, c, channels);
-                    double p20 = GetPixel(image, y + 1, x - 1, c, channels);
-                    double p21 = GetPixel(image, y + 1, x, c, channels);
-                    double p22 = GetPixel(image, y + 1, x + 1, c, channels);
-
-                    gx += (p02 + 2 * p12 + p22) - (p00 + 2 * p10 + p20);
-                    gy += (p20 + 2 * p21 + p22) - (p00 + 2 * p01 + p02);
-                }
-
-                gx /= channels;
-                gy /= channels;
-
-                double magnitude = Math.Sqrt(gx * gx + gy * gy);
-                result[y * width + x] = NumOps.FromDouble(magnitude);
-            }
+            return new Tensor<T>(new[] { height, width });
         }
 
-        return new Tensor<T>(result, [height, width]);
+        var sum = Engine.ReduceSum(hwc, new[] { 2 }, false);
+        int innerH = height - 2;
+        int innerW = width - 2;
+        Tensor<T> P(int dy, int dx) => Engine.TensorSlice(sum, new[] { dy, dx }, new[] { innerH, innerW });
+        Tensor<T> Twice(Tensor<T> t) => Engine.TensorAdd(t, t);
+
+        var gx = Engine.TensorSubtract(
+            Engine.TensorAdd(Engine.TensorAdd(P(0, 2), Twice(P(1, 2))), P(2, 2)),
+            Engine.TensorAdd(Engine.TensorAdd(P(0, 0), Twice(P(1, 0))), P(2, 0)));
+        var gy = Engine.TensorSubtract(
+            Engine.TensorAdd(Engine.TensorAdd(P(2, 0), Twice(P(2, 1))), P(2, 2)),
+            Engine.TensorAdd(Engine.TensorAdd(P(0, 0), Twice(P(0, 1))), P(0, 2)));
+
+        T channelCount = NumOps.FromDouble(channels);
+        gx = Engine.TensorDivideScalar(gx, channelCount);
+        gy = Engine.TensorDivideScalar(gy, channelCount);
+        var magnitude = Engine.TensorSqrt(Engine.TensorAdd(Engine.TensorSquare(gx), Engine.TensorSquare(gy)));
+        return Engine.TensorConstantPad(magnitude, new[] { 1, 1, 1, 1 }, NumOps.Zero);
     }
 
     /// <summary>
-    /// Gets a pixel value from an image tensor.
-    /// </summary>
-    private static double GetPixel(Tensor<T> image, int y, int x, int c, int channels)
-    {
-        if (channels > 1)
-        {
-            return NumOps.ToDouble(image[y, x, c]);
-        }
-        return NumOps.ToDouble(image[y, x]);
-    }
-
-    /// <summary>
-    /// Computes local statistics (mean, variance) as feature maps.
+    /// Local 3 x 3 (all channels) mean and population standard deviation, [H, W, 2], zero on the border. The
+    /// deviation uses the two-pass (centred) sum.
     /// </summary>
     private static Tensor<T> ComputeLocalStatistics(Tensor<T> image)
     {
-        int height = image.Shape[0];
-        int width = image.Shape[1];
-        int channels = image.Rank > 2 ? image.Shape[2] : 1;
-
-        var result = new T[height * width * 2];
-
-        int windowSize = 3;
-        int halfWindow = windowSize / 2;
-
-        for (int y = halfWindow; y < height - halfWindow; y++)
+        var hwc = AsHeightWidthChannels(image);
+        int height = hwc.Shape[0];
+        int width = hwc.Shape[1];
+        const int halfWindow = 1;
+        if (height < 3 || width < 3)
         {
-            for (int x = halfWindow; x < width - halfWindow; x++)
-            {
-                double mean = 0;
-                double variance = 0;
-                int count = 0;
-
-                for (int dy = -halfWindow; dy <= halfWindow; dy++)
-                {
-                    for (int dx = -halfWindow; dx <= halfWindow; dx++)
-                    {
-                        for (int c = 0; c < channels; c++)
-                        {
-                            double val = GetPixel(image, y + dy, x + dx, c, channels);
-                            mean += val;
-                            count++;
-                        }
-                    }
-                }
-                mean /= count;
-
-                for (int dy = -halfWindow; dy <= halfWindow; dy++)
-                {
-                    for (int dx = -halfWindow; dx <= halfWindow; dx++)
-                    {
-                        for (int c = 0; c < channels; c++)
-                        {
-                            double val = GetPixel(image, y + dy, x + dx, c, channels);
-                            variance += (val - mean) * (val - mean);
-                        }
-                    }
-                }
-                variance /= count;
-
-                int idx = y * width + x;
-                result[idx] = NumOps.FromDouble(mean);
-                result[height * width + idx] = NumOps.FromDouble(Math.Sqrt(variance));
-            }
+            return new Tensor<T>(new[] { height, width, 2 });
         }
 
-        return new Tensor<T>(result, [height, width, 2]);
+        var axes = new[] { 2, 3, 4 };
+        var windows = Windows(hwc, halfWindow, 0, height - 2 * halfWindow);
+        var mean = Engine.ReduceMean(windows, axes, true);
+        var centred = Engine.TensorSubtract(windows, Engine.TensorBroadcastTo(mean, windows.Shape));
+        var deviation = Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorSquare(centred), axes, false));
+
+        var padding = new[] { halfWindow, halfWindow, halfWindow, halfWindow };
+        var meanPlane = Engine.TensorConstantPad(mean.Reshape(height - 2, width - 2), padding, NumOps.Zero);
+        var deviationPlane = Engine.TensorConstantPad(deviation, padding, NumOps.Zero);
+        // Planar layout (all means, then all deviations) under the [H, W, 2] shape, as before.
+        var planes = Engine.TensorConcatenate(
+            new[] { meanPlane.Reshape(height * width), deviationPlane.Reshape(height * width) }, 0);
+        return planes.Reshape(height, width, 2);
     }
 
     #endregion
