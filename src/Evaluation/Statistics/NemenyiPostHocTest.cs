@@ -151,8 +151,9 @@ public class NemenyiResult<T>
             "Average Ranks:"
         };
 
+        var averageRanks = AverageRanks.ToArray();
         for (int i = 0; i < NumAlgorithms; i++)
-            lines.Add($"  Algorithm {i + 1}: {AverageRanks[i]:F4}");
+            lines.Add($"  Algorithm {i + 1}: {averageRanks[i]:F4}");
 
         var sigPairs = GetSignificantPairs().ToList();
         if (sigPairs.Count > 0)
