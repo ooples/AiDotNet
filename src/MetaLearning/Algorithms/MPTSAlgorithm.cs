@@ -97,18 +97,8 @@ public partial class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = AdaptWithPriorities(task, initParams);
-
-            ParamModel.SetParameters(adaptedParams);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-
-            // Group coherence regularization
-            T groupReg = GroupCoherence(adaptedParams, initParams);
-
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.Multiply(NumOps.FromDouble(_algoOptions.GroupRegWeight), groupReg));
-
-            losses.Add(totalLoss);
+            // Leaves the adapted parameters on the model for the query gradient below
+            losses.Add(TaskObjective(task, initParams));
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -196,19 +186,39 @@ public partial class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         return Engine.TensorSum(Engine.TensorMultiply(variance, Engine.TensorGreaterThan(count, NumOps.One)));
     }
 
-    private double ComputeMPTSLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    /// <summary>
+    /// One task's trained objective: the query loss after prioritized adaptation plus GroupRegWeight times the
+    /// group coherence of the adaptation. The adapted parameters are left on the model.
+    /// </summary>
+    private T TaskObjective(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
+    {
+        var adaptedParams = AdaptWithPriorities(task, initParams);
+
+        ParamModel.SetParameters(adaptedParams);
+        var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+
+        // Group coherence regularization
+        T groupReg = GroupCoherence(adaptedParams, initParams);
+        return NumOps.Add(queryLoss, NumOps.Multiply(NumOps.FromDouble(_algoOptions.GroupRegWeight), groupReg));
+    }
+
+    /// <summary>
+    /// The batch mean of the trained objective (query loss plus the group regularizer) at the current
+    /// parameters and priorities, restoring the model's parameters. This is what MetaTrain reports and what the
+    /// SPSA priority update must estimate; it used to drop the regularizer, so SPSA tuned the priorities against
+    /// a different objective from the one being trained.
+    /// </summary>
+    internal T ComputeMPTSObjective(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var losses = new List<T>(taskBatch.Tasks.Length);
         var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
-        {
-            var ap = AdaptWithPriorities(task, initParams);
-            ParamModel.SetParameters(ap);
-            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        }
+            losses.Add(TaskObjective(task, initParams));
         ParamModel.SetParameters(initParams);
-
-        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
-        return NumOps.ToDouble(ComputeMean(losses));
+        return ComputeMean(losses);
     }
+
+    // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+    private double ComputeMPTSLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+        => NumOps.ToDouble(ComputeMPTSObjective(taskBatch));
 }
