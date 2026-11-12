@@ -22921,3 +22921,5 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.FederatedLearning.ServerOptimizers.FedYogiServerOptimizer<T>.FedYogiServerOptimizer(double learningRate = 1, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1E-08) -> void
+AiDotNet.FederatedLearning.ServerOptimizers.FedYogiServerOptimizer<T>.FedYogiServerOptimizer(double learningRate = 1, double beta1 = 0.9, double beta2 = 0.99, double epsilon = 0.001) -> void
