@@ -73,7 +73,7 @@ public class KruskalWallisH<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         _pValues = pValues.ToVector();
 
         // Select the features with the smallest p-values
-        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

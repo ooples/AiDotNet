@@ -87,7 +87,7 @@ public class TraceRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         {
             var ratio = FilterStatisticTensorOps.SeparationAwareRatio(
                 engine.TensorAdd(sbSelected, sb), engine.TensorAdd(swSelected, sw), 1e-10);
-            var candidates = FeatureSelectionTensorOps.KeepOrFill(ratio, FilterStatisticTensorOps.OneMinus(taken), negativeInfinity);
+            var candidates = FeatureSelectionTensorOps.KeepOrFill(ratio, PreprocessingTensorOps.OneMinus(taken), negativeInfinity);
             int bestFeature = FilterStatisticTensorOps.FirstArgMax(candidates);
             var chosen = new[] { bestFeature };
             selected.Add(bestFeature);

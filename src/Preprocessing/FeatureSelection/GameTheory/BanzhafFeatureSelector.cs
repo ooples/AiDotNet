@@ -104,7 +104,7 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var swings = Engine.ReduceSum(Engine.TensorAbs(Engine.TensorSubtract(wins, flippedWins)), new[] { 0 }, false);
         var indices = Engine.TensorDivideScalar(swings, NumOps.FromDouble(_nSamples));
         _banzhafIndices = indices.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(indices, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(indices, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -114,7 +114,7 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
 
     // 1 where the value reaches the threshold, else 0
     private Tensor<T> OneMinusBelow(Tensor<T> values, T threshold) =>
-        FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(values, threshold));
+        PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(values, threshold));
 
     // |Pearson r| of every column with the target; 0 when the column or the target is (near) constant
     private Tensor<T> AbsoluteCorrelation(Tensor<T> x, Tensor<T> y)

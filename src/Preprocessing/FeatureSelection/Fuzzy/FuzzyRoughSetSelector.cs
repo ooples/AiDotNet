@@ -121,7 +121,7 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices.Length < Math.Min(_maxFeatures, p))
         {
             var chosen = _selectedIndices;
-            var remaining = FilterStatisticTensorOps.StableOrder(individual, descending: true)
+            var remaining = PreprocessingTensorOps.StableOrder(individual, descending: true)
                 .Except(chosen)
                 .Take(_maxFeatures - chosen.Length);
             _selectedIndices = chosen.Concat(remaining).OrderBy(j => j).ToArray();
@@ -132,7 +132,7 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     // Gaussian similarity exp(-(x_i - x_k)^2 / (2 sigma^2)) of every pair of rows on feature j ([n, n])
     private Tensor<T> FeatureSimilarity(Tensor<T> x, int j)
     {
-        var column = FeatureSelectionTensorOps.Column(x, j);
+        var column = PreprocessingTensorOps.ColumnVector(x, j);
         int n = column.Length;
         var difference = Engine.TensorSubtract(
             FilterStatisticTensorOps.ColumnBroadcast(column, n), FilterStatisticTensorOps.RowBroadcast(column, n));

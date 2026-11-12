@@ -75,7 +75,7 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             FeatureSelectionTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var scores = info.Relevance();
         _informationGains = scores.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

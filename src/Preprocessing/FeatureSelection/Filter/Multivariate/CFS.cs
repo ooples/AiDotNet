@@ -91,7 +91,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
                 int last = chosen[chosen.Count - 1];
                 selectedClass = Engine.TensorAdd(selectedClass, Broadcast(classCorrelation, last, p));
                 selectedPairs = Engine.TensorAdd(selectedPairs, Broadcast(withSelected, last, p));
-                withSelected = Engine.TensorAdd(withSelected, FeatureSelectionTensorOps.Column(interCorrelation, last));
+                withSelected = Engine.TensorAdd(withSelected, PreprocessingTensorOps.ColumnVector(interCorrelation, last));
                 count = Engine.TensorAddScalar(count, one);
             }
 

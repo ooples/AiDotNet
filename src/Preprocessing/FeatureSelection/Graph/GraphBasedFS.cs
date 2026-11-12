@@ -92,7 +92,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         // Combine centrality with target correlation
         var scores = Engine.TensorMultiply(centrality, targetCorrelations);
         _centralityScores = scores.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -108,9 +108,9 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var covariance = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
         var strength = Engine.TensorAbs(Engine.TensorDivide(
             covariance, Engine.TensorMultiplyScalar(Engine.TensorOuter(std, std), dof)));
-        var offDiagonal = FilterStatisticTensorOps.OneMinus(Engine.TensorEye<T>(p));
+        var offDiagonal = PreprocessingTensorOps.OneMinus(Engine.TensorEye<T>(p));
         var edge = Engine.TensorMultiply(
-            FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(strength, NumOps.FromDouble(_edgeThreshold))), offDiagonal);
+            PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(strength, NumOps.FromDouble(_edgeThreshold))), offDiagonal);
         return Engine.TensorMultiply(strength, edge);
     }
 
@@ -121,7 +121,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var outDegrees = Engine.ReduceSum(adjacency, new[] { 1 }, false);
         var transition = FilterStatisticTensorOps.GuardedDivide(
             adjacency, FilterStatisticTensorOps.ColumnBroadcast(outDegrees, p), 1e-10, NumOps.Zero);
-        var dangling = FilterStatisticTensorOps.OneMinus(Engine.TensorGreaterThan(outDegrees, NumOps.FromDouble(1e-10)));
+        var dangling = PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(outDegrees, NumOps.FromDouble(1e-10)));
         T d = NumOps.FromDouble(damping);
         T teleport = NumOps.FromDouble((1 - damping) / p);
         T spread = NumOps.FromDouble(damping / p);
@@ -185,8 +185,8 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var scores = new T[p];
         for (int v = 0; v < p; v++)
         {
-            var toV = FilterStatisticTensorOps.ColumnBroadcast(FeatureSelectionTensorOps.Column(distance, v), p);
-            var fromV = FilterStatisticTensorOps.RowBroadcast(FeatureSelectionTensorOps.Column(distance, v), p);
+            var toV = FilterStatisticTensorOps.ColumnBroadcast(PreprocessingTensorOps.ColumnVector(distance, v), p);
+            var fromV = FilterStatisticTensorOps.RowBroadcast(PreprocessingTensorOps.ColumnVector(distance, v), p);
             var onPath = Engine.TensorMultiply(Engine.TensorEquals(Engine.TensorAdd(toV, fromV), distance), upper);
             var notEnd = Engine.TensorMultiply(
                 FilterStatisticTensorOps.ColumnBroadcast(FeatureSelectionTensorOps.ScatterToFeatures(
@@ -194,8 +194,8 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
                 FilterStatisticTensorOps.RowBroadcast(FeatureSelectionTensorOps.ScatterToFeatures(
                     FilterStatisticTensorOps.Filled(new[] { 1 }, zero), new[] { v }, p, one), p));
             var through = Engine.TensorMultiply(
-                FilterStatisticTensorOps.ColumnBroadcast(FeatureSelectionTensorOps.Column(paths, v), p),
-                FilterStatisticTensorOps.RowBroadcast(FeatureSelectionTensorOps.Column(paths, v), p));
+                FilterStatisticTensorOps.ColumnBroadcast(PreprocessingTensorOps.ColumnVector(paths, v), p),
+                FilterStatisticTensorOps.RowBroadcast(PreprocessingTensorOps.ColumnVector(paths, v), p));
             var share = FilterStatisticTensorOps.GuardedDivide(through, paths, 0.5, zero);
             scores[v] = Engine.TensorSum(Engine.TensorMultiply(share, Engine.TensorMultiply(onPath, notEnd)));
         }

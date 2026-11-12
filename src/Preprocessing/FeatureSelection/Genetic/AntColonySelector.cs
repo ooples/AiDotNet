@@ -134,7 +134,7 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         _selectedIndices = FilterStatisticTensorOps.MaskPositions(bestSolution);
 
         // Normalize by the largest value when it is positive
-        var largest = FeatureSelectionTensorOps.ColumnMax(Engine.Reshape(pheromones, new[] { p, 1 }));
+        var largest = PreprocessingTensorOps.ColumnMax(Engine.Reshape(pheromones, new[] { p, 1 }));
         if (Engine.TensorGreaterThan(largest, NumOps.Zero).Cast<int>().ToArray()[0] == 1)
             pheromones = Engine.TensorDivide(pheromones, Engine.TensorBroadcastTo(largest, new[] { p }));
 
@@ -160,7 +160,7 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             var cumulative = Engine.TensorCumSum(candidates, 0);
             var threshold = Engine.TensorMultiplyScalar(Engine.ReduceSum(candidates, new[] { 0 }, true), u);
             var reached = Engine.TensorMultiply(
-                FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(cumulative, Engine.TensorBroadcastTo(threshold, new[] { p }))),
+                PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(cumulative, Engine.TensorBroadcastTo(threshold, new[] { p }))),
                 available);
 
             // the first available feature whose cumulative weight reaches the draw, else the first available one
@@ -170,7 +170,7 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
                 FilterStatisticTensorOps.Filled(new[] { 1 }, one), new[] { selected }, p, zero));
         }
 
-        return FilterStatisticTensorOps.OneMinus(available);
+        return PreprocessingTensorOps.OneMinus(available);
     }
 
     /// <inheritdoc />

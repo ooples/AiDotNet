@@ -82,7 +82,7 @@ public class InformationGainRatioSelector<T> : TransformerBase<T, Matrix<T>, Mat
         var ratios = FilterStatisticTensorOps.GuardedDivide(
             info.Relevance(), info.FeatureEntropy(), 1e-10 * Math.Log(2), NumOps.Zero);
         _gainRatios = ratios.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(ratios, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(ratios, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

@@ -137,7 +137,7 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         _pValues = pValues;
 
         // the K highest scores (NaN counts as the lowest score, equal scores go to the lower column)
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(FilterStatisticTensorOps.AsTensor(scores), Math.Min(_k, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(FilterStatisticTensorOps.AsTensor(scores), Math.Min(_k, p));
 
         IsFitted = true;
     }

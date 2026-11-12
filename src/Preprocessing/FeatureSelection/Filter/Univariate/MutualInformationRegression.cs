@@ -79,7 +79,7 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
             Engine.Reshape(FeatureSelectionTensorOps.OneHot<T>(targetCodes, _nBins), new[] { n, _nBins }));
         var scores = Engine.TensorMax(info.Relevance(), NumOps.Zero);
         _mutualInfoScores = scores.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

@@ -74,7 +74,7 @@ public class ChiSquare<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             FilterStatisticTensorOps.ClassOneHot<T>(classIndex, nClasses));
         var chiSquare = FeatureSelectionTensorOps.ContingencyChiSquare(observed);
         _chiSquareScores = chiSquare.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(chiSquare, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(chiSquare, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

@@ -34,7 +34,7 @@ internal static class FeatureSelectionTensorOps
 
         var candidateScores = AiDotNetEngine.Current.TensorIndexSelect(
             scores, new Tensor<int>((int[])columns.Clone(), new[] { columns.Length }), 0);
-        var order = FilterStatisticTensorOps.StableOrder(candidateScores, descending: true);
+        var order = PreprocessingTensorOps.StableOrder(candidateScores, descending: true);
         var selected = order.Take(Math.Min(k, columns.Length)).Select(position => columns[position]).ToArray();
         Array.Sort(selected);
         return selected;
@@ -95,8 +95,8 @@ internal static class FeatureSelectionTensorOps
         if (n == 0)
             return x;
 
-        var min = ColumnMin(x);
-        var range = engine.TensorSubtract(ColumnMax(x), min);
+        var min = PreprocessingTensorOps.ColumnMin(x);
+        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min);
         var scale = FilterStatisticTensorOps.GuardedDivide(
             FilterStatisticTensorOps.FilledLike(range, ops.One), range, minimumRange, ops.Zero);
         return engine.TensorMultiply(
@@ -198,9 +198,9 @@ internal static class FeatureSelectionTensorOps
         var distance = engine.TensorCDist(sampledRows, scaled, 1.0);
         var oneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
         var sampleOneHot = Rows(oneHot, samples);
-        var notSelf = FilterStatisticTensorOps.OneMinus(SelfMask<T>(samples, n));
+        var notSelf = PreprocessingTensorOps.OneMinus(SelfMask<T>(samples, n));
         var priors = engine.TensorDivideScalar(engine.ReduceSum(oneHot, new[] { 0 }, false), ops.FromDouble(n));
-        var otherMass = FilterStatisticTensorOps.OneMinus(
+        var otherMass = PreprocessingTensorOps.OneMinus(
             engine.Reshape(engine.TensorMatMul(sampleOneHot, engine.Reshape(priors, new[] { classCount, 1 })), new[] { m }));
 
         // nearest hits: same class, not the instance itself
@@ -212,8 +212,8 @@ internal static class FeatureSelectionTensorOps
         T zero = ops.Zero;
         for (int c = 0; c < classCount; c++)
         {
-            var inClass = Column(oneHot, c);
-            var otherClass = FilterStatisticTensorOps.OneMinus(Column(sampleOneHot, c));
+            var inClass = PreprocessingTensorOps.ColumnVector(oneHot, c);
+            var otherClass = PreprocessingTensorOps.OneMinus(PreprocessingTensorOps.ColumnVector(sampleOneHot, c));
             var classPrior = engine.TensorBroadcastTo(Entries(priors, new[] { c }), new[] { m });
             var factor = engine.TensorMultiply(
                 FilterStatisticTensorOps.GuardedDivide(classPrior, otherMass, 0.0, zero), otherClass);
@@ -241,7 +241,7 @@ internal static class FeatureSelectionTensorOps
         var perFeature = new Tensor<T>[p];
         for (int a = 0; a < p; a++)
         {
-            var column = Column(x, a);
+            var column = PreprocessingTensorOps.ColumnVector(x, a);
             var difference = engine.TensorAbs(engine.TensorSubtract(
                 FilterStatisticTensorOps.ColumnBroadcast(column, n), FilterStatisticTensorOps.RowBroadcast(column, n)));
             perFeature[a] = engine.ReduceSum(engine.Reshape(engine.TensorMultiply(difference, pairWeight), new[] { 1, n * n }), new[] { 1 }, false);
@@ -386,24 +386,6 @@ internal static class FeatureSelectionTensorOps
         return engine.Reshape(engine.TensorMatMul(engine.Reshape(weight, new[] { 1, m }), values), new[] { p });
     }
 
-    /// <summary>One column of an [n, p] tensor as an [n] tensor.</summary>
-    public static Tensor<T> Column<T>(Tensor<T> x, int column)
-    {
-        var engine = AiDotNetEngine.Current;
-        return engine.Reshape(
-            engine.TensorIndexSelect(x, new Tensor<int>(new[] { column }, new[] { 1 }), 1), new[] { x.Shape[0] });
-    }
-
-    /// <summary>Column minima of an [n, p] tensor ([p]).</summary>
-    public static Tensor<T> ColumnMin<T>(Tensor<T> x)
-    {
-        var engine = AiDotNetEngine.Current;
-        return engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(x), new[] { 0 }, false));
-    }
-
-    /// <summary>Column maxima of an [n, p] tensor ([p]).</summary>
-    public static Tensor<T> ColumnMax<T>(Tensor<T> x) => AiDotNetEngine.Current.ReduceMax(x, new[] { 0 }, false);
-
     /// <summary>
     /// Equal-width bin of every entry of an [n, p] tensor, per column:
     /// <c>min((int)((x - min) / width), bins - 1)</c> with <c>width = (max - min) / bins</c>, or width 1 when the
@@ -418,8 +400,8 @@ internal static class FeatureSelectionTensorOps
         if (n == 0)
             return new Tensor<int>(x.Shape.ToArray());
 
-        var min = ColumnMin(x);
-        var width = engine.TensorDivideScalar(engine.TensorSubtract(ColumnMax(x), min), ops.FromDouble(bins));
+        var min = PreprocessingTensorOps.ColumnMin(x);
+        var width = engine.TensorDivideScalar(engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min), ops.FromDouble(bins));
         var degenerate = engine.TensorLessThan(width, ops.FromDouble(minimumWidth));
         width = engine.TensorWhere(degenerate, FilterStatisticTensorOps.FilledLike(width, ops.One), width);
         return ToBinIndex(engine.TensorDivide(
@@ -578,7 +560,7 @@ internal static class FeatureSelectionTensorOps
 
         var columns = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
-            columns[j] = AverageRanks(Column(x, j));
+            columns[j] = AverageRanks(PreprocessingTensorOps.ColumnVector(x, j));
         return engine.TensorStack(columns, 1);
     }
 
@@ -594,7 +576,7 @@ internal static class FeatureSelectionTensorOps
         var sums = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            var (_, _, counts) = engine.TensorUniqueWithInfo(Column(x, j), true, false, true);
+            var (_, _, counts) = engine.TensorUniqueWithInfo(PreprocessingTensorOps.ColumnVector(x, j), true, false, true);
             if (counts is null)
                 throw new InvalidOperationException("The engine returned no counts for the tied values.");
             var t = counts.Cast<T>();
@@ -631,7 +613,7 @@ internal static class FeatureSelectionTensorOps
         var h = engine.TensorAddScalar(
             engine.TensorMultiplyScalar(weighted, ops.FromDouble(12.0 / (nd * (nd + 1)))), ops.FromDouble(-3.0 * (nd + 1)));
 
-        var correction = FilterStatisticTensorOps.OneMinus(
+        var correction = PreprocessingTensorOps.OneMinus(
             engine.TensorDivideScalar(ColumnTieCubeSums(x), ops.FromDouble(nd * nd * nd - nd)));
         // rounding can leave H a hair below 0 when the classes do not differ at all
         h = engine.TensorMax(FilterStatisticTensorOps.GuardedDivide(h, correction, 0.0, ops.Zero), ops.Zero);
@@ -705,7 +687,7 @@ internal static class FeatureSelectionTensorOps
         var difference = engine.TensorSubtract(x, FilterStatisticTensorOps.ColumnBroadcast(y, p));
         var nonZero = engine.TensorGreaterThan(engine.TensorAbs(difference), ops.FromDouble(zeroTolerance));
         var magnitude = engine.TensorMultiply(engine.TensorAbs(difference), nonZero);
-        var zeros = engine.ReduceSum(FilterStatisticTensorOps.OneMinus(nonZero), new[] { 0 }, false);
+        var zeros = engine.ReduceSum(PreprocessingTensorOps.OneMinus(nonZero), new[] { 0 }, false);
         var m = engine.TensorAddScalar(engine.TensorNegate(zeros), ops.FromDouble(n));
 
         // the dropped zeros take the lowest ranks 1..zeros, so a non-zero difference ranks (overall rank - zeros)
@@ -790,7 +772,7 @@ internal static class FeatureSelectionTensorOps
         var columns = new Tensor<int>[p];
         for (int j = 0; j < p; j++)
         {
-            var (values, inverse, _) = engine.TensorUniqueWithInfo(Column(x, j), true, true, false);
+            var (values, inverse, _) = engine.TensorUniqueWithInfo(PreprocessingTensorOps.ColumnVector(x, j), true, true, false);
             if (inverse is null)
                 throw new InvalidOperationException("The engine returned no inverse map for the distinct values.");
             levels = Math.Max(levels, values.Length);
@@ -841,7 +823,7 @@ internal static class FeatureSelectionTensorOps
             LogChoose(FilterStatisticTensorOps.FilledLike(row1, total), row1));
         var threshold = FilterStatisticTensorOps.ColumnBroadcast(
             engine.TensorMultiplyScalar(engine.TensorExp(observedLog), ops.FromDouble(1 + 1e-7)), n + 1);
-        var asExtreme = FilterStatisticTensorOps.OneMinus(engine.TensorGreaterThan(pmf, threshold));
+        var asExtreme = PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(pmf, threshold));
         var pValues = engine.TensorMin(
             engine.ReduceSum(engine.TensorMultiply(pmf, asExtreme), new[] { 1 }, false), ops.One);
 
@@ -894,14 +876,14 @@ internal static class FeatureSelectionTensorOps
         T parentGini = ops.Subtract(ops.One, engine.TensorSumOfSquares(engine.TensorDivideScalar(classCounts, total)));
         var allCounts = FilterStatisticTensorOps.RowBroadcast(classCounts, p);
 
-        var min = ColumnMin(x);
-        var range = engine.TensorSubtract(ColumnMax(x), min);
+        var min = PreprocessingTensorOps.ColumnMin(x);
+        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min);
         range = engine.TensorWhere(engine.TensorLessThan(range, ops.FromDouble(1e-10)),
             FilterStatisticTensorOps.FilledLike(range, ops.One), range);
         foreach (T step in engine.TensorArange<T>(1, bins, 1).ToArray())
         {
             var threshold = engine.TensorAdd(min, engine.TensorDivideScalar(engine.TensorMultiplyScalar(range, step), binCount));
-            var left = FilterStatisticTensorOps.OneMinus(
+            var left = PreprocessingTensorOps.OneMinus(
                 engine.TensorGreaterThan(x, FilterStatisticTensorOps.RowBroadcast(threshold, n)));
             var leftCounts = engine.TensorMatMul(engine.TensorTranspose(left), classOneHot);
             var rightCounts = engine.TensorSubtract(allCounts, leftCounts);
@@ -969,7 +951,7 @@ internal static class FeatureSelectionTensorOps
     {
         var ops = MathHelper.GetNumericOperations<T>();
         int p = values.Length;
-        var top = FilterStatisticTensorOps.StableOrder(values, descending: true).Take(k).ToArray();
+        var top = PreprocessingTensorOps.StableOrder(values, descending: true).Take(k).ToArray();
         return ScatterToFeatures(FilterStatisticTensorOps.Filled(new[] { top.Length }, ops.One), top, p, ops.Zero);
     }
 

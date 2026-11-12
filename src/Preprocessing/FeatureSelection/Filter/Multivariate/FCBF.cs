@@ -68,7 +68,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 
         // Relevant features (SU > threshold) by decreasing SU, ties by index
         var above = Engine.TensorGreaterThan(suTarget, NumOps.FromDouble(_threshold)).Cast<int>().ToArray();
-        var relevant = FilterStatisticTensorOps.StableOrder(suTarget, descending: true)
+        var relevant = PreprocessingTensorOps.StableOrder(suTarget, descending: true)
             .Where(j => above[j] == 1)
             .ToList();
 
@@ -95,7 +95,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices.Length == 0)
         {
             // Fall back to top by SU
-            _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(suTarget, Math.Min(10, p));
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(suTarget, Math.Min(10, p));
         }
         IsFitted = true;
     }

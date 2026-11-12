@@ -123,7 +123,7 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             columnsToProcess, _nInputFeatures, NumOps.One).ToVector();
 
         // Select top K features by variance
-        _selectedFeatures = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_k, _nInputFeatures));
+        _selectedFeatures = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_k, _nInputFeatures));
 
         IsFitted = true;
     }

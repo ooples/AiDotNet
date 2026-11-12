@@ -76,7 +76,7 @@ public class SymmetricUncertainty<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             FeatureSelectionTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var scores = info.SymmetricUncertainty();
         _suScores = scores.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

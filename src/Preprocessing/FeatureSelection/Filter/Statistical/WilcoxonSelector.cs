@@ -83,7 +83,7 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             _uStatistics = new Vector<T>(p);
         }
 
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
             FilterStatisticTensorOps.AsTensor(_uStatistics), Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;

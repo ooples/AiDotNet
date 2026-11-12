@@ -77,7 +77,7 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         _pValues = pValues.ToVector();
 
         // Select top features by H statistic
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(h, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(h, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

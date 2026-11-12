@@ -86,7 +86,7 @@ public class WilcoxonSignedRank<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         _pValues = pValues.ToVector();
 
         // Select features with smallest p-values
-        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

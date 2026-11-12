@@ -144,10 +144,10 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
 
         // Find best solution (the first with the highest fitness)
         int bestIdx = FilterStatisticTensorOps.FirstArgMax(Engine.TensorConcatenate(fitness, 0));
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(population[bestIdx], numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(population[bestIdx], numToSelect);
 
         // Normalize by the largest value when it is positive
-        var largest = FeatureSelectionTensorOps.ColumnMax(Engine.Reshape(importances, new[] { p, 1 }));
+        var largest = PreprocessingTensorOps.ColumnMax(Engine.Reshape(importances, new[] { p, 1 }));
         if (Engine.TensorGreaterThan(largest, NumOps.Zero).Cast<int>().ToArray()[0] == 1)
             importances = Engine.TensorDivide(importances, Engine.TensorBroadcastTo(largest, new[] { p }));
 

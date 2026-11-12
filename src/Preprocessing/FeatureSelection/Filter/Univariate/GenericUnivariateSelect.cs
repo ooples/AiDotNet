@@ -207,7 +207,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         switch (_mode)
         {
             case UnivariateSelectMode.KBest:
-                return FilterStatisticTensorOps.TopKIndicesSorted(scoreTensor, Math.Min(Convert.ToInt32(_param), p));
+                return PreprocessingTensorOps.TopKIndicesSorted(scoreTensor, Math.Min(Convert.ToInt32(_param), p));
 
             case UnivariateSelectMode.Percentile:
                 return FeatureSelectionTensorOps.PercentileSupport(scoreTensor, Convert.ToDouble(_param));

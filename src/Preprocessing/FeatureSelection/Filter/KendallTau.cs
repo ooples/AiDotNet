@@ -77,7 +77,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var tieSums = new T[p];
         for (int j = 0; j < p; j++)
         {
-            var (xTied, xSign) = PairSigns(FeatureSelectionTensorOps.Column(x, j), tolerance);
+            var (xTied, xSign) = PairSigns(PreprocessingTensorOps.ColumnVector(x, j), tolerance);
             signSums[j] = Engine.TensorSum(Engine.TensorMultiply(xSign, ySign));
             tieSums[j] = Engine.TensorSum(xTied);
         }
@@ -104,7 +104,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var difference = Engine.TensorSubtract(
             FilterStatisticTensorOps.RowBroadcast(values, n), FilterStatisticTensorOps.ColumnBroadcast(values, n));
         var tied = Engine.TensorLessThan(Engine.TensorAbs(difference), tolerance);
-        return (tied, Engine.TensorMultiply(Engine.TensorSign(difference), FilterStatisticTensorOps.OneMinus(tied)));
+        return (tied, Engine.TensorMultiply(Engine.TensorSign(difference), PreprocessingTensorOps.OneMinus(tied)));
     }
 
     /// <inheritdoc />

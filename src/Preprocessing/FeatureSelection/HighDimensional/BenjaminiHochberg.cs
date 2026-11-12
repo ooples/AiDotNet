@@ -87,7 +87,7 @@ public class BenjaminiHochberg<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         _adjustedPValues = adjusted;
 
         // Step 3: features with adjusted p-value <= alpha, by increasing p-value (ties by index)
-        var order = FilterStatisticTensorOps.StableOrder(pValues, descending: false);
+        var order = PreprocessingTensorOps.StableOrder(pValues, descending: false);
         var rejected = Engine.TensorGreaterThan(FilterStatisticTensorOps.AsTensor(adjusted), NumOps.FromDouble(_alpha))
             .Cast<int>().ToArray();
         var selected = order.Where(j => rejected[j] == 0).ToList();

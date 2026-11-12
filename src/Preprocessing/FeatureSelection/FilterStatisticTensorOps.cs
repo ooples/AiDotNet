@@ -4,7 +4,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Preprocessing.FeatureSelection;
 
 /// <summary>
-/// Whole-array engine helpers shared by the filter feature selectors: column gathers, stable rankings,
+/// Whole-array engine helpers shared by the filter feature selectors: column gathers, arg-min/arg-max picks,
 /// class one-hot encodings, per-feature test statistics (ANOVA, simple regression, two-sample moments)
 /// and the survival functions of the F, Student t, chi-squared and normal distributions.
 /// </summary>
@@ -63,64 +63,6 @@ internal static class FilterStatisticTensorOps
         return engine.TensorWhere(engine.TensorIsNan(values), FilledLike(values, MathHelper.GetNumericOperations<T>().MinValue), values);
     }
 
-    /// <summary>
-    /// The indices that sort a 1-D tensor ascending (or descending) with tied values kept in index order, like
-    /// LINQ <c>OrderBy</c>/<c>OrderByDescending</c>. The engine argsort is not documented as stable, so this
-    /// sorts a distinct composite key (rank of the value, then the index). NaN orders as the lowest value.
-    /// </summary>
-    public static int[] StableOrder<T>(Tensor<T> values, bool descending)
-    {
-        int count = values.Length;
-        if (count == 0)
-            return Array.Empty<int>();
-
-        var engine = AiDotNetEngine.Current;
-        var flat = NaNAsLowest(values.Rank == 1 ? values : engine.Reshape(values, new[] { count }));
-        var sorted = engine.TensorSort(flat, 0, false).Item1;
-
-        // ascending rank: #{m : v[m] < v[j]}; descending rank: #{m : v[m] > v[j]} = count - #{m : v[m] <= v[j]}
-        var less = engine.TensorSearchSorted(sorted, flat, false).ToArray();
-        var atMost = engine.TensorSearchSorted(sorted, flat, true).ToArray();
-        var keys = new long[count];
-        for (int j = 0; j < count; j++)
-        {
-            long rank = descending ? count - atMost[j] : less[j];
-            keys[j] = rank * count + j;
-        }
-
-        return engine.TensorArgsort(new Tensor<long>(keys, new[] { count }), 0, false).ToArray();
-    }
-
-    /// <summary>
-    /// The positions of the <paramref name="k"/> largest entries of a 1-D score tensor (ties to the lower index,
-    /// like <c>OrderByDescending(...).Take(k)</c>), returned in ascending index order.
-    /// </summary>
-    public static int[] TopKIndicesSorted<T>(Tensor<T> scores, int k)
-    {
-        int count = Math.Min(Math.Max(k, 0), scores.Length);
-        if (count == 0)
-            return Array.Empty<int>();
-
-        var selected = StableOrder(scores, descending: true).Take(count).ToArray();
-        Array.Sort(selected);
-        return selected;
-    }
-
-    /// <summary>
-    /// The positions of the <paramref name="k"/> smallest entries of a 1-D tensor (ties to the lower index, like
-    /// <c>OrderBy(...).Take(k)</c>), returned in ascending index order.
-    /// </summary>
-    public static int[] BottomKIndicesSorted<T>(Tensor<T> values, int k)
-    {
-        int count = Math.Min(Math.Max(k, 0), values.Length);
-        if (count == 0)
-            return Array.Empty<int>();
-
-        var selected = StableOrder(values, descending: false).Take(count).ToArray();
-        Array.Sort(selected);
-        return selected;
-    }
-
     /// <summary>The positions of the non-zero entries of a 0/1 mask, ascending.</summary>
     public static int[] MaskPositions<T>(Tensor<T> mask)
     {
@@ -129,11 +71,11 @@ internal static class FilterStatisticTensorOps
         return engine.TensorNonzero(flat).ToArray();
     }
 
-    /// <summary>The index of the first (lowest-index) largest entry of a 1-D tensor; NaN counts as the lowest value.</summary>
-    public static int FirstArgMax<T>(Tensor<T> values) => StableOrder(values, descending: true)[0];
+    /// <summary>The index of the first (lowest-index) largest entry of a 1-D tensor; NaN never wins over a number.</summary>
+    public static int FirstArgMax<T>(Tensor<T> values) => PreprocessingTensorOps.StableOrder(values, descending: true)[0];
 
-    /// <summary>The index of the first (lowest-index) smallest entry of a 1-D tensor; NaN counts as the lowest value.</summary>
-    public static int FirstArgMin<T>(Tensor<T> values) => StableOrder(values, descending: false)[0];
+    /// <summary>The index of the first (lowest-index) smallest entry of a 1-D tensor; NaN never wins over a number.</summary>
+    public static int FirstArgMin<T>(Tensor<T> values) => PreprocessingTensorOps.StableOrder(values, descending: false)[0];
 
     /// <summary>
     /// The common "significant features first" rule: when at least <paramref name="k"/> features have a p-value
@@ -148,10 +90,10 @@ internal static class FilterStatisticTensorOps
         if (engine.TensorCountNonzero(significant) >= k)
         {
             var key = engine.TensorWhere(significant, pValues, FilledLike(pValues, MathHelper.GetNumericOperations<T>().MaxValue));
-            return BottomKIndicesSorted(key, k);
+            return PreprocessingTensorOps.BottomKIndicesSorted(key, k);
         }
 
-        return TopKIndicesSorted(scores, k);
+        return PreprocessingTensorOps.TopKIndicesSorted(scores, k);
     }
 
     /// <summary>
@@ -162,12 +104,12 @@ internal static class FilterStatisticTensorOps
     public static int[] CandidatesOrTopK<T>(Tensor<T> scores, T minimum, int k)
     {
         var engine = AiDotNetEngine.Current;
-        var candidates = OneMinus(engine.TensorLessThan(NaNAsLowest(scores), minimum));
+        var candidates = PreprocessingTensorOps.OneMinus(engine.TensorLessThan(NaNAsLowest(scores), minimum));
         if (engine.TensorCountNonzero(candidates) >= k)
-            return TopKIndicesSorted(
+            return PreprocessingTensorOps.TopKIndicesSorted(
                 engine.TensorWhere(candidates, scores, FilledLike(scores, MathHelper.GetNumericOperations<T>().MinValue)), k);
 
-        return TopKIndicesSorted(scores, k);
+        return PreprocessingTensorOps.TopKIndicesSorted(scores, k);
     }
 
     /// <summary>
@@ -267,11 +209,14 @@ internal static class FilterStatisticTensorOps
     /// </summary>
     public static int PositiveFrequencyCount(int n) => Math.Max(0, (n + 1) / 2 - 1);
 
-    /// <summary>Every column of an [n, p] tensor minus its mean.</summary>
+    /// <summary>
+    /// Every column of an [n, p] tensor (or every entry of an [n] tensor) minus its mean along the first axis.
+    /// </summary>
     public static Tensor<T> CenterColumns<T>(Tensor<T> x)
     {
         var engine = AiDotNetEngine.Current;
-        return engine.TensorSubtract(x, RowBroadcast(ColumnMeans(x), x.Shape[0]));
+        var means = engine.ReduceMean(x, new[] { 0 }, true);
+        return engine.TensorSubtract(x, engine.TensorBroadcastTo(means, x.Shape.ToArray()));
     }
 
     /// <summary>Column sums of squared deviations from the column mean ([n, p] to [p]).</summary>
@@ -336,13 +281,6 @@ internal static class FilterStatisticTensorOps
         return (mean, sumSquares);
     }
 
-    /// <summary>Element-wise <c>1 - x</c>.</summary>
-    public static Tensor<T> OneMinus<T>(Tensor<T> x)
-    {
-        var engine = AiDotNetEngine.Current;
-        return engine.TensorAddScalar(engine.TensorNegate(x), MathHelper.GetNumericOperations<T>().One);
-    }
-
     /// <summary>
     /// The regularized incomplete beta function <c>I_x(a, b)</c> element-wise (scipy.special.betainc), by the
     /// Numerical Recipes continued fraction evaluated with the modified Lentz method on every element at once,
@@ -373,7 +311,7 @@ internal static class FilterStatisticTensorOps
             engine.TensorAdd(engine.TensorXlogy(aa, xx), engine.TensorXlogy(bb, yy)));
         var partial = engine.TensorDivide(
             engine.TensorMultiply(engine.TensorExp(logFront), BetaContinuedFraction(aa, bb, xx)), aa);
-        return engine.TensorWhere(direct, partial, OneMinus(partial));
+        return engine.TensorWhere(direct, partial, PreprocessingTensorOps.OneMinus(partial));
     }
 
     // Numerical Recipes betacf, every element advanced together; stops once every element has converged.
@@ -389,7 +327,7 @@ internal static class FilterStatisticTensorOps
         var qap = engine.TensorAddScalar(a, one);
         var qam = engine.TensorSubtractScalar(a, one);
         var c = FilledLike(x, one);
-        var d = AwayFromZero(OneMinus(engine.TensorDivide(engine.TensorMultiply(qab, x), qap)), floor);
+        var d = AwayFromZero(PreprocessingTensorOps.OneMinus(engine.TensorDivide(engine.TensorMultiply(qab, x), qap)), floor);
         d = engine.TensorReciprocal(d);
         var h = d;
         var m = FilledLike(x, ops.Zero);

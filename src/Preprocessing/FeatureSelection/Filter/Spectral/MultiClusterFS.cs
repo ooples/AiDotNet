@@ -109,7 +109,7 @@ public class MultiClusterFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         _mcfsScores = scores.ToVector();
 
         // Select features with highest MCFS scores
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

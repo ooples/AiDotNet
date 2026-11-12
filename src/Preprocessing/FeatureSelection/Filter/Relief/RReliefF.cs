@@ -103,7 +103,7 @@ public class RReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
         // k nearest neighbours by the sum of feature differences, the instance itself excluded
         var distance = FeatureSelectionTensorOps.KeepOrFill(
             engine.TensorCDist(sampledRows, scaled, 1.0),
-            FilterStatisticTensorOps.OneMinus(FeatureSelectionTensorOps.SelfMask<T>(sampleIndices, n)), infinity);
+            PreprocessingTensorOps.OneMinus(FeatureSelectionTensorOps.SelfMask<T>(sampleIndices, n)), infinity);
         var neighbours = FeatureSelectionTensorOps.NearestPerRow(distance, _nNeighbors);
 
         // every one of an instance's neighbours has the same influence d = 1 / (number of neighbours)
@@ -135,7 +135,7 @@ public class RReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
         var weights = engine.TensorSubtract(different, same);
         _featureWeights = weights.ToVector();
 
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

@@ -78,8 +78,8 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         // 2x2 table per feature: feature at or below its split value (the sorted value at n / 2) against class 0
         var x = FilterStatisticTensorOps.AsTensor(data);
         var split = FeatureSelectionTensorOps.Rows(Engine.TensorSort(x, 0, false).Item1, new[] { n / 2 });
-        var low = FilterStatisticTensorOps.OneMinus(Engine.TensorGreaterThan(x, Engine.TensorBroadcastTo(split, new[] { n, p })));
-        var firstClass = FeatureSelectionTensorOps.Column(classOneHot, 0);
+        var low = PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(x, Engine.TensorBroadcastTo(split, new[] { n, p })));
+        var firstClass = PreprocessingTensorOps.ColumnVector(classOneHot, 0);
         var a = Engine.Reshape(
             Engine.TensorMatMul(Engine.TensorTranspose(low), Engine.Reshape(firstClass, new[] { n, 1 })), new[] { p });
         var b = Engine.TensorSubtract(Engine.ReduceSum(low, new[] { 0 }, false), a);
@@ -88,7 +88,7 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var (pValues, oddsRatios) = FeatureSelectionTensorOps.FisherExact(a, b, c, d, n);
         _pValues = pValues.ToVector();
         _oddsRatios = oddsRatios.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

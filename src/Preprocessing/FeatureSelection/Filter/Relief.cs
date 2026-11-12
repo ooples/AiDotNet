@@ -102,9 +102,9 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
 
         // nearest hit (same class) and nearest miss (other class), first index on ties
         var (hit, hasHit) = FeatureSelectionTensorOps.FirstArgMinRows(FeatureSelectionTensorOps.KeepOrFill(
-            distance, engine.TensorMultiply(sameClass, FilterStatisticTensorOps.OneMinus(self)), infinity));
+            distance, engine.TensorMultiply(sameClass, PreprocessingTensorOps.OneMinus(self)), infinity));
         var (miss, hasMiss) = FeatureSelectionTensorOps.FirstArgMinRows(FeatureSelectionTensorOps.KeepOrFill(
-            distance, FilterStatisticTensorOps.OneMinus(sameClass), infinity));
+            distance, PreprocessingTensorOps.OneMinus(sameClass), infinity));
 
         // W += (|x - miss| - |x - hit|) / iterations for the instances that have both
         var diffHit = engine.TensorAbs(engine.TensorSubtract(sampledRows, FeatureSelectionTensorOps.Rows(scaled, hit)));
@@ -116,7 +116,7 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         _featureWeights = weights.ToVector();
 
         // Select top features
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

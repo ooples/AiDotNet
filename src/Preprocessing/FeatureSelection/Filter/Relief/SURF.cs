@@ -93,11 +93,11 @@ public class SURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         T threshold = NumOps.Multiply(avgDist, NumOps.FromDouble(_distanceThreshold));
 
         // Neighbours within the threshold, split into hits (same class) and misses; an instance is not its own
-        var others = FilterStatisticTensorOps.OneMinus(engine.TensorEye<T>(n));
-        var near = engine.TensorMultiply(FilterStatisticTensorOps.OneMinus(engine.TensorGreaterThan(distances, threshold)), others);
+        var others = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n));
+        var near = engine.TensorMultiply(PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(distances, threshold)), others);
         var sameClass = engine.TensorMatMul(classOneHot, engine.TensorTranspose(classOneHot));
         var hits = engine.TensorMultiply(near, sameClass);
-        var misses = engine.TensorMultiply(near, FilterStatisticTensorOps.OneMinus(sameClass));
+        var misses = engine.TensorMultiply(near, PreprocessingTensorOps.OneMinus(sameClass));
 
         // W -= diff(hit) / (n * #hits), W += diff(miss) / (n * #misses)
         var weights = FeatureSelectionTensorOps.PairWeightedDifference(
@@ -105,7 +105,7 @@ public class SURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         _featureWeights = weights.ToVector();
 
         // Select top features
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

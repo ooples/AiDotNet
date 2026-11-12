@@ -138,7 +138,7 @@ internal static class StatisticalTestHelper
         var informative = engine.TensorGreaterThan(sxx, ops.FromDouble(ZeroVariance));
 
         // F = r^2 / (1 - r^2) (n - 2); a perfect fit (r^2 within numpy.isclose of 1) is the largest finite value
-        var oneMinusR2 = FilterStatisticTensorOps.OneMinus(r2);
+        var oneMinusR2 = PreprocessingTensorOps.OneMinus(r2);
         var perfect = engine.TensorLessThan(engine.TensorAbs(oneMinusR2), ops.FromDouble(1e-8 + 1e-5));
         var f = engine.TensorMultiplyScalar(
             FilterStatisticTensorOps.GuardedDivide(r2, oneMinusR2, 0.0, ops.Zero), ops.FromDouble(df));
@@ -288,7 +288,7 @@ internal static class StatisticalTestHelper
             return new Vector<T>(0);
 
         var p = FilterStatisticTensorOps.AsTensor(pValues);
-        var order = FilterStatisticTensorOps.StableOrder(p, descending: false);
+        var order = PreprocessingTensorOps.StableOrder(p, descending: false);
         var orderTensor = new Tensor<int>(order, new[] { n });
         var sorted = engine.TensorGather(p, orderTensor, 0);
 

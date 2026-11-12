@@ -103,7 +103,7 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         // Average over samples
         var shapley = Engine.TensorDivideScalar(totals, NumOps.FromDouble(_nSamples));
         _shapleyValues = shapley.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(shapley, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(shapley, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

@@ -81,14 +81,14 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 
         // Step 2: features whose SU with the target reaches the threshold, by decreasing SU (ties by index)
         var below = Engine.TensorLessThan(suTarget, NumOps.FromDouble(_threshold)).Cast<int>().ToArray();
-        var candidates = FilterStatisticTensorOps.StableOrder(suTarget, descending: true)
+        var candidates = PreprocessingTensorOps.StableOrder(suTarget, descending: true)
             .Where(j => below[j] == 0)
             .ToList();
 
         if (candidates.Count == 0)
         {
             // If no features pass threshold, take top features by SU
-            _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(suTarget, Math.Min(_nFeaturesToSelect, p));
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(suTarget, Math.Min(_nFeaturesToSelect, p));
             IsFitted = true;
             return;
         }

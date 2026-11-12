@@ -90,7 +90,7 @@ public class SPEC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
                 engine.TensorTranspose(standardized), engine.TensorConcatenate(eigenvectors.ToArray(), 1))), new[] { 1 }, false);
         _specScores = scores.ToVector();
 
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, _nFeaturesToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, _nFeaturesToSelect);
 
         IsFitted = true;
     }

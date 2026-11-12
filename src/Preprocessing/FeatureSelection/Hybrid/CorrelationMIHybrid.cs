@@ -100,7 +100,7 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             Engine.TensorMultiplyScalar(MinMaxScaled(correlation), weight),
             Engine.TensorMultiplyScalar(MinMaxScaled(mi), NumOps.Subtract(NumOps.One, weight)));
         _hybridScores = hybrid.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(hybrid, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hybrid, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -110,7 +110,7 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (scores.Length == 0)
             return scores;
         var asColumn = Engine.Reshape(scores, new[] { scores.Length, 1 });
-        var range = Engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(asColumn), FeatureSelectionTensorOps.ColumnMin(asColumn));
+        var range = Engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(asColumn), PreprocessingTensorOps.ColumnMin(asColumn));
         if (NumOps.LessThan(range.ToArray()[0], NumOps.FromDouble(1e-10)))
             return FilterStatisticTensorOps.FilledLike(scores, NumOps.FromDouble(0.5));
         return Engine.Reshape(FeatureSelectionTensorOps.RangeScaled(asColumn), new[] { scores.Length });

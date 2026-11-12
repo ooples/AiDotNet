@@ -97,16 +97,16 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var w = Engine.TensorSubtract(featureStatistics, knockoffStatistics);
 
         // Step 4: knockoff+ threshold. For every candidate tau = W_k: #{j : W_j >= tau} and #{j : W_j <= -tau}
-        var order = FilterStatisticTensorOps.StableOrder(w, descending: true);
+        var order = PreprocessingTensorOps.StableOrder(w, descending: true);
         var wj = FilterStatisticTensorOps.RowBroadcast(w, p);
         var tau = FilterStatisticTensorOps.ColumnBroadcast(w, p);
-        var positives = Engine.ReduceSum(FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(wj, tau)), new[] { 1 }, false);
+        var positives = Engine.ReduceSum(PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(wj, tau)), new[] { 1 }, false);
         var negatives = Engine.ReduceSum(
-            FilterStatisticTensorOps.OneMinus(Engine.TensorGreaterThan(wj, Engine.TensorNegate(tau))), new[] { 1 }, false);
+            PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(wj, Engine.TensorNegate(tau))), new[] { 1 }, false);
 
         // estimated FDP = (1 + negatives) / max(1, positives)
         var fdp = Engine.TensorDivide(Engine.TensorAddScalar(negatives, NumOps.One), Engine.TensorMax(positives, NumOps.One));
-        var controlled = FilterStatisticTensorOps.OneMinus(Engine.TensorGreaterThan(fdp, NumOps.FromDouble(_fdrThreshold)))
+        var controlled = PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(fdp, NumOps.FromDouble(_fdrThreshold)))
             .Cast<int>().ToArray();
         var positive = Engine.TensorGreaterThan(w, NumOps.Zero).Cast<int>().ToArray();
 
@@ -120,7 +120,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             if (controlled[candidate] == 1)
             {
                 // Select all features with W >= tau: in descending order these are the ones not below W_candidate
-                var atLeast = FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(
+                var atLeast = PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(
                     w, Engine.TensorBroadcastTo(FeatureSelectionTensorOps.Entries(w, new[] { candidate }), new[] { p })))
                     .Cast<int>().ToArray();
                 selected.AddRange(order.Where(j => atLeast[j] == 1));
@@ -162,7 +162,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             for (int i = 0; i < n; i++)
                 noise[j * n + i] = random.NextDouble();
             var shuffled = Enumerable.Range(0, n).OrderBy(i => keys[i]).ToArray();
-            columns[j] = Engine.TensorGather(FeatureSelectionTensorOps.Column(x, j), new Tensor<int>(shuffled, new[] { n }), 0);
+            columns[j] = Engine.TensorGather(PreprocessingTensorOps.ColumnVector(x, j), new Tensor<int>(shuffled, new[] { n }), 0);
         }
 
         var permuted = Engine.TensorStack(columns, 1);

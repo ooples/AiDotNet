@@ -76,7 +76,7 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var scores = FilterStatisticTensorOps.SeparationAwareRatio(betweenClassVar, withinClassVar, 1e-10);
         _fisherScores = scores.ToVector();
 
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

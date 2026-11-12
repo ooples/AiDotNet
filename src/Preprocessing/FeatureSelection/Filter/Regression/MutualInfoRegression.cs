@@ -80,7 +80,7 @@ public class MutualInfoRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         // sklearn.feature_selection.mutual_info_regression (without its tie-breaking noise)
         var scores = StatisticalTestHelper.MutualInfoRegression(data, target, _nNeighbors);
         _miScores = scores;
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
             FilterStatisticTensorOps.AsTensor(scores), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }

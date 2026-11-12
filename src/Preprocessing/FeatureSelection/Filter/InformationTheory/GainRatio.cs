@@ -83,7 +83,7 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         _informationGains = gains.ToVector();
         _intrinsicValues = intrinsic.ToVector();
         _gainRatios = ratios.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(ratios, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(ratios, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

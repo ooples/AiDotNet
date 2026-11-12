@@ -74,7 +74,7 @@ public class MultiSURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
 
         // All pairwise distances; an instance is not its own neighbour
         var distances = engine.TensorCDist(scaled, scaled, 2.0);
-        var others = FilterStatisticTensorOps.OneMinus(engine.TensorEye<T>(n));
+        var others = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n));
         T otherCount = NumOps.FromDouble(n - 1);
 
         // Per-instance threshold: mean - 0.5 * std of its distances to the others (closer than average)
@@ -87,18 +87,18 @@ public class MultiSURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         var threshold = engine.TensorSubtract(meanDist, engine.TensorMultiplyScalar(stdDist, NumOps.FromDouble(0.5)));
 
         // Near neighbours (within the threshold), split into hits (same class) and misses
-        var near = engine.TensorMultiply(FilterStatisticTensorOps.OneMinus(engine.TensorGreaterThan(
+        var near = engine.TensorMultiply(PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(
             distances, FilterStatisticTensorOps.ColumnBroadcast(threshold, n))), others);
         var sameClass = engine.TensorMatMul(classOneHot, engine.TensorTranspose(classOneHot));
         var hits = engine.TensorMultiply(near, sameClass);
-        var misses = engine.TensorMultiply(near, FilterStatisticTensorOps.OneMinus(sameClass));
+        var misses = engine.TensorMultiply(near, PreprocessingTensorOps.OneMinus(sameClass));
 
         // W -= diff(hit) / (n * #hits), W += diff(miss) / (n * #misses)
         var weights = FeatureSelectionTensorOps.PairWeightedDifference(
             scaled, FeatureSelectionTensorOps.NearNeighbourPairWeight(hits, misses));
         _featureWeights = weights.ToVector();
 
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

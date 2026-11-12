@@ -85,7 +85,7 @@ public class LaplacianScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         _laplacianScores = scores.ToVector();
 
         // Lower is better
-        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

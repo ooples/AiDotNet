@@ -86,7 +86,7 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var selectedList = new List<int>();
         for (int c = 0; c < k; c++)
         {
-            var inCluster = FeatureSelectionTensorOps.Column(members, c);
+            var inCluster = PreprocessingTensorOps.ColumnVector(members, c);
             if (FilterStatisticTensorOps.MaskPositions(inCluster).Length > 0)
                 selectedList.Add(FilterStatisticTensorOps.FirstArgMax(FeatureSelectionTensorOps.KeepOrFill(variance, inCluster, excluded)));
         }

@@ -90,7 +90,7 @@ public class NormalizedMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
         };
         var scores = FilterStatisticTensorOps.GuardedDivide(info.Relevance(), norm, 1e-10, NumOps.Zero);
         _nmiScores = scores.ToVector();
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
