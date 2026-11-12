@@ -22817,3 +22817,76 @@ AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTagsAsync(AiDotNe
 *REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.ConfidenceScore.set -> void
 *REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.Tempo.get -> double
 *REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.Tempo.set -> void
+*REMOVED*AiDotNet.Kernels.ARDKernel<T>.ARDKernel(double[]! lengthScales, double variance = 1) -> void
+*REMOVED*AiDotNet.Kernels.ARDKernel<T>.GetLengthScales() -> double[]!
+AiDotNet.Kernels.ARDKernel<T>.ARDKernel(AiDotNet.Tensors.LinearAlgebra.Vector<T>! lengthScales) -> void
+AiDotNet.Kernels.ARDKernel<T>.ARDKernel(AiDotNet.Tensors.LinearAlgebra.Vector<T>! lengthScales, double variance) -> void
+AiDotNet.Kernels.ARDKernel<T>.GetLengthScales() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! componentKernels, int[]![]! featureGroups, double[]? weights = null) -> void
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, double[]? weights = null) -> void
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.CalculateComponent(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2, int componentIndex) -> double
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.GetComponentImportances(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double[]!
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.GetWeight(int componentIndex) -> double
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! componentKernels, int[]![]! featureGroups) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! componentKernels, int[]![]! featureGroups, AiDotNet.Tensors.LinearAlgebra.Vector<T>? weights) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, AiDotNet.Tensors.LinearAlgebra.Vector<T>? weights) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.CalculateComponent(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2, int componentIndex) -> T
+AiDotNet.Kernels.AdditiveStructureKernel<T>.GetComponentImportances(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Kernels.AdditiveStructureKernel<T>.GetWeight(int componentIndex) -> T
+*REMOVED*AiDotNet.Kernels.CylindricalKernel<T>.CylindricalKernel(AiDotNet.Interfaces.IKernelFunction<T>! regularKernel, int[]! regularDims, int[]! angularDims, double[]? periods = null, double[]? angularLengthScales = null) -> void
+*REMOVED*static AiDotNet.Kernels.CylindricalKernel<T>.WithRBF(int totalDims, int[]! angularDimIndices, double regularLengthScale = 1, double[]? periods = null, double[]? angularLengthScales = null) -> AiDotNet.Kernels.CylindricalKernel<T>!
+AiDotNet.Kernels.CylindricalKernel<T>.CylindricalKernel(AiDotNet.Interfaces.IKernelFunction<T>! regularKernel, int[]! regularDims, int[]! angularDims, AiDotNet.Tensors.LinearAlgebra.Vector<T>? periods = null, AiDotNet.Tensors.LinearAlgebra.Vector<T>? angularLengthScales = null) -> void
+static AiDotNet.Kernels.CylindricalKernel<T>.WithRBF(int totalDims, int[]! angularDimIndices, double regularLengthScale = 1, AiDotNet.Tensors.LinearAlgebra.Vector<T>? periods = null, AiDotNet.Tensors.LinearAlgebra.Vector<T>? angularLengthScales = null) -> AiDotNet.Kernels.CylindricalKernel<T>!
+*REMOVED*AiDotNet.Kernels.GibbsKernel<T>.GetLengthScale(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double
+*REMOVED*AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, double>! lengthScaleFunction, double variance = 1) -> void
+AiDotNet.Kernels.GibbsKernel<T>.GetLengthScale(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> T
+AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>! lengthScaleFunction, double variance = 1) -> void
+*REMOVED*AiDotNet.Kernels.RationalQuadraticKernel<T>.CalculateHyperparameterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Kernels.RationalQuadraticKernel<T>.CalculateHyperparameterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Kernels.ProductStructureKernel<T>.LogDeterminant(AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! groupKernelMatrices) -> double
+AiDotNet.Kernels.ProductStructureKernel<T>.LogDeterminant(AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! groupKernelMatrices) -> T
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.GetEigenvalues() -> double[]!
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> double
+AiDotNet.Kernels.GridKernel<T>.GetEigenvalues() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> T
+*REMOVED*AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> double
+AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> T
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeComprehensiveMetrics(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? realImages = null) -> (double isMean, double isStd, double? fid)
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeIS(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeISWithUncertainty(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> (double mean, double std)
+*REMOVED*AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFID(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+*REMOVED*AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFIDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+AiDotNet.Metrics.InceptionScore<T>.ComputeComprehensiveMetrics(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? realImages = null) -> (T isMean, T isStd, T fid, bool hasFid)
+AiDotNet.Metrics.InceptionScore<T>.ComputeIS(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+AiDotNet.Metrics.InceptionScore<T>.ComputeISWithUncertainty(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> (T mean, T std)
+AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFID(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFIDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+*REMOVED*AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVD(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realVideos, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> double
+*REMOVED*AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> double
+AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVD(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realVideos, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> T
+AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> T
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.CalculateForOutputs(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! input2, int output1, int output2) -> double
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.GetCoregMatrix(int componentIndex) -> double[,]!
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.GetTotalCorrelation() -> double[,]!
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.LCMKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! inputKernels, double[,]![]! coregMatrices) -> void
+AiDotNet.Kernels.LCMKernel<T>.CalculateForOutputs(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! input2, int output1, int output2) -> T
+AiDotNet.Kernels.LCMKernel<T>.GetCoregMatrix(int componentIndex) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.LCMKernel<T>.GetTotalCorrelation() -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.LCMKernel<T>.LCMKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! inputKernels, AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! coregMatrices) -> void
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X, AiDotNet.Interfaces.IKernelFunction<T>! exactKernel) -> double
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.GetFeatureMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> double[,]!
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.GetFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double[]!
+AiDotNet.Kernels.RFFKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X, AiDotNet.Interfaces.IKernelFunction<T>! exactKernel) -> T
+AiDotNet.Kernels.RFFKernel<T>.GetFeatureMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.RFFKernel<T>.GetFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.GridKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! dimensionKernels, double[]![]! gridCoordinates) -> void
+*REMOVED*static AiDotNet.Kernels.GridKernel<T>.WithRBF(double[]![]! gridCoordinates, double[]? lengthscales = null) -> AiDotNet.Kernels.GridKernel<T>!
+AiDotNet.Kernels.GridKernel<T>.GridKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! dimensionKernels, AiDotNet.Tensors.LinearAlgebra.Vector<T>![]! gridCoordinates) -> void
+static AiDotNet.Kernels.GridKernel<T>.WithRBF(AiDotNet.Tensors.LinearAlgebra.Vector<T>![]! gridCoordinates, double[]? lengthscales = null) -> AiDotNet.Kernels.GridKernel<T>!
+*REMOVED*AiDotNet.Metrics.TextDetectionMetrics<T>.Evaluate(System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! predictions, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! groundTruth, double iouThreshold = 0.5) -> (double Precision, double Recall, double HMean)
+*REMOVED*static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonArea(System.Collections.Generic.IReadOnlyList<(double X, double Y)>! polygon) -> double
+*REMOVED*static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonIoU(System.Collections.Generic.IReadOnlyList<(double X, double Y)>! first, System.Collections.Generic.IReadOnlyList<(double X, double Y)>! second) -> double
+AiDotNet.Metrics.TextDetectionMetrics<T>.Evaluate(System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! predictions, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! groundTruth, double iouThreshold = 0.5) -> (T Precision, T Recall, T HMean)
+static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonArea(System.Collections.Generic.IReadOnlyList<(T X, T Y)>! polygon) -> T
+static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonIoU(System.Collections.Generic.IReadOnlyList<(T X, T Y)>! first, System.Collections.Generic.IReadOnlyList<(T X, T Y)>! second) -> T
