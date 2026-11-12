@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.SelfSupervisedLearning;
@@ -70,15 +71,9 @@ internal static class SelfSupervisedLearningPretrainer
 
     private static Tensor<T> Slice<T>(Tensor<T> data, int start, int count, int d, INumericOperations<T> numOps)
     {
+        // Rows [start, start + count) of the data viewed as [n, d]
         var batch = new Tensor<T>(new[] { count, d });
-        for (int i = 0; i < count; i++)
-        {
-            int baseIdx = (start + i) * d;
-            for (int j = 0; j < d; j++)
-            {
-                batch[(i * d) + j] = data[baseIdx + j];
-            }
-        }
+        data.Contiguous().AsSpan().Slice(start * d, count * d).CopyTo(batch.AsWritableSpan());
 
         return batch;
     }
@@ -93,24 +88,14 @@ internal static class SelfSupervisedLearningPretrainer
             return 0.0;
         }
 
-        double total = 0;
-        for (int j = 0; j < k; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < rows; i++) mean += numOps.ToDouble(repr[(i * k) + j]);
-            mean /= rows;
+        // Mean over features of the unbiased per-feature standard deviation across the batch
+        var engine = AiDotNetEngine.Current;
+        var matrix = repr.Contiguous().Reshape(rows, k);
+        var centered = engine.TensorSubtract(matrix, engine.ReduceMean(matrix, new[] { 0 }, keepDims: true));
+        var variance = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, keepDims: false), numOps.FromDouble(rows - 1));
 
-            double var = 0;
-            for (int i = 0; i < rows; i++)
-            {
-                double v = numOps.ToDouble(repr[(i * k) + j]) - mean;
-                var += v * v;
-            }
-
-            total += Math.Sqrt(var / (rows - 1));
-        }
-
-        return total / k;
+        return numOps.ToDouble(engine.TensorMean(engine.TensorSqrt(variance)));
     }
 
     private static double LinearProbeR2<T>(ISelfSupervisedLearningMethod<T> method, Tensor<T> data, Vector<T> targets, INumericOperations<T> numOps)
@@ -124,97 +109,34 @@ internal static class SelfSupervisedLearningPretrainer
             return 0.0;
         }
 
+        var engine = AiDotNetEngine.Current;
+
         // Design matrix with a bias column: F[n, k+1].
         int p = k + 1;
-        var f = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++) f[i, j] = numOps.ToDouble(features[(i * k) + j]);
-            f[i, k] = 1.0;
-        }
+        var ones = engine.TensorAddScalar(new Tensor<T>(new[] { n, 1 }), numOps.One);
+        var f = engine.TensorConcatenate(new[] { features.Contiguous().Reshape(n, k), ones }, 1);
+        var y = engine.TensorSlice(targets.AsTensor(), new[] { 0 }, new[] { n }).Reshape(n, 1);
 
-        var y = new double[n];
-        for (int i = 0; i < n; i++) y[i] = numOps.ToDouble(targets[i]);
-
-        // Ridge normal equations: (FᵀF + λI) w = Fᵀy.
+        // Ridge normal equations: (FᵀF + λI) w = Fᵀy, solved by LU with partial pivoting.
         const double lambda = 1e-3;
-        var ata = new double[p, p];
-        var aty = new double[p];
-        for (int r = 0; r < p; r++)
-        {
-            for (int c = 0; c < p; c++)
-            {
-                double s = 0;
-                for (int i = 0; i < n; i++) s += f[i, r] * f[i, c];
-                ata[r, c] = s + (r == c ? lambda : 0.0);
-            }
+        var fT = engine.TensorTranspose(f);
+        var ata = engine.TensorAdd(
+            engine.TensorMatMul(fT, f), engine.TensorMultiplyScalar(engine.TensorEye<T>(p), numOps.FromDouble(lambda)));
+        var aty = engine.TensorMatMul(fT, y);
 
-            double sy = 0;
-            for (int i = 0; i < n; i++) sy += f[i, r] * y[i];
-            aty[r] = sy;
-        }
-
-        var w = SolveSymmetric(ata, aty, p);
-        if (w is null)
+        var (w, info) = LinalgDispatch<T>.SolveEx(ata, aty);
+        if (engine.TensorCountNonzero(info) != 0)
         {
             return 0.0;
         }
 
-        double meanY = 0;
-        for (int i = 0; i < n; i++) meanY += y[i];
-        meanY /= n;
+        var meanY = engine.TensorMean(y);
+        var pred = engine.TensorMatMul(f, w);
+        var ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, pred));
+        var ssTot = engine.TensorSumOfSquares(engine.TensorAddScalar(y, numOps.Negate(meanY)));
 
-        double ssRes = 0, ssTot = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double pred = 0;
-            for (int j = 0; j < p; j++) pred += f[i, j] * w[j];
-            ssRes += (y[i] - pred) * (y[i] - pred);
-            ssTot += (y[i] - meanY) * (y[i] - meanY);
-        }
-
-        return ssTot > 0 ? 1.0 - (ssRes / ssTot) : 0.0;
-    }
-
-    /// <summary>Solves A w = b for a small symmetric positive-definite A via Gaussian elimination.</summary>
-    private static double[]? SolveSymmetric(double[,] a, double[] b, int p)
-    {
-        var m = new double[p, p + 1];
-        for (int r = 0; r < p; r++)
-        {
-            for (int c = 0; c < p; c++) m[r, c] = a[r, c];
-            m[r, p] = b[r];
-        }
-
-        for (int col = 0; col < p; col++)
-        {
-            int pivot = col;
-            double best = Math.Abs(m[col, col]);
-            for (int r = col + 1; r < p; r++)
-            {
-                if (Math.Abs(m[r, col]) > best) { best = Math.Abs(m[r, col]); pivot = r; }
-            }
-
-            if (best < 1e-12)
-            {
-                return null;
-            }
-
-            if (pivot != col)
-            {
-                for (int c = 0; c <= p; c++) (m[col, c], m[pivot, c]) = (m[pivot, c], m[col, c]);
-            }
-
-            for (int r = 0; r < p; r++)
-            {
-                if (r == col) continue;
-                double factor = m[r, col] / m[col, col];
-                for (int c = col; c <= p; c++) m[r, c] -= factor * m[col, c];
-            }
-        }
-
-        var w = new double[p];
-        for (int r = 0; r < p; r++) w[r] = m[r, p] / m[r, r];
-        return w;
+        return numOps.GreaterThan(ssTot, numOps.Zero)
+            ? 1.0 - numOps.ToDouble(numOps.Divide(ssRes, ssTot))
+            : 0.0;
     }
 }
