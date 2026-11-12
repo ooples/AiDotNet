@@ -9,10 +9,23 @@
 -- heartbeats and FlexLM/JetBrains floating leases. AiDotNet.Serving's LicenseService enforces the same rule
 -- (LicenseService.ActivationLease).
 --
--- Idempotent: the column is added if missing; the function is replaced.
+-- Idempotent: the column and its check are added if missing; the function is replaced.
 
 alter table public.license_keys
     add column if not exists activation_lease interval not null default interval '7 days';
+
+-- A zero or negative lease would make every activation lapse at once (no seat is ever held).
+do $$
+begin
+    if not exists (
+        select 1 from pg_constraint
+        where conname = 'license_keys_activation_lease_positive' and conrelid = 'public.license_keys'::regclass
+    ) then
+        alter table public.license_keys
+            add constraint license_keys_activation_lease_positive check (activation_lease > interval '0');
+    end if;
+end;
+$$;
 
 comment on column public.license_keys.activation_lease is
     'How long an activation holds a seat after its machine last validated. Lapsed activations do not count toward max_activations.';
@@ -45,6 +58,18 @@ begin
         return jsonb_build_object('valid', false, 'error', 'invalid_key', 'message', 'License key not found.');
     end if;
 
+    -- Every lease decision for this key is serialized, and made on a time read AFTER the lock. Renewing before
+    -- the lock let a machine pass the lease check just before expiry, stall, and renew after another machine had
+    -- already taken the freed seat, leaving two leases on one seat. now() would not do even after the lock: it is
+    -- the transaction's start time, so a request that waited here would judge leases by a clock from before it
+    -- waited. One clock_timestamp() taken after the lock is used for every lease check and renewal below.
+    -- bigint advisory lock, not the uuid overload that doesn't exist.
+    perform pg_advisory_xact_lock(hashtextextended(v_license.id::text, 0));
+    v_now := clock_timestamp();
+
+    -- Status and expiry are judged after the lock, on a fresh read and the decision-time clock: a key revoked or
+    -- expiring while this request waited must not be admitted on the state read before it waited.
+    select * into v_license from public.license_keys where id = v_license.id;
     if v_license.status != 'active' then
         v_status_code := 403;
         v_response := jsonb_build_object('valid', false, 'error', 'license_' || v_license.status::text,
@@ -54,7 +79,7 @@ begin
         return v_response;
     end if;
 
-    if v_license.expires_at is not null and v_license.expires_at < now() then
+    if v_license.expires_at is not null and v_license.expires_at <= v_now then
         v_status_code := 403;
         v_response := jsonb_build_object('valid', false, 'error', 'license_expired', 'message', 'License has expired.');
         insert into public.api_usage (user_id, endpoint, status_code, latency_ms)
@@ -69,19 +94,24 @@ begin
         else jsonb_build_array()
     end;
 
-    -- Every lease decision for this key is serialized, and made on a time read AFTER the lock. Renewing before
-    -- the lock let a machine pass the lease check just before expiry, stall, and renew after another machine had
-    -- already taken the freed seat, leaving two leases on one seat. now() would not do even after the lock: it is
-    -- the transaction's start time, so a request that waited here would judge leases by a clock from before it
-    -- waited. One clock_timestamp() taken after the lock is used for every lease check and renewal below.
-    -- bigint advisory lock, not the uuid overload that doesn't exist.
-    perform pg_advisory_xact_lock(hashtextextended(v_license.id::text, 0));
-    v_now := clock_timestamp();
-
     select * into v_existing_activation from public.license_activations
     where license_key_id = v_license.id and machine_id_hash = p_machine_id_hash and is_active = true
       and last_seen_at >= v_now - v_license.activation_lease;
     if found then
+        -- Renewal re-checks the seat count: max_activations may have been lowered below the leases already held,
+        -- and a renewal must not keep an over-limit seat alive (this machine is among the counted leases).
+        select count(*) into v_activation_count from public.license_activations
+        where license_key_id = v_license.id and is_active = true
+          and last_seen_at >= v_now - v_license.activation_lease;
+        if v_activation_count > v_license.max_activations then
+            v_status_code := 429;
+            v_response := jsonb_build_object('valid', false, 'error', 'activation_limit',
+                'message', 'Maximum activations (' || v_license.max_activations || ') exceeded. Deactivate a machine first.',
+                'current_activations', v_activation_count, 'max_activations', v_license.max_activations);
+            insert into public.api_usage (user_id, endpoint, status_code, latency_ms)
+            values (v_license.user_id, v_endpoint, v_status_code, extract(milliseconds from clock_timestamp() - v_started)::int);
+            return v_response;
+        end if;
         update public.license_activations
         set last_seen_at = v_now, hostname = coalesce(p_hostname, hostname),
             os_description = coalesce(p_os_description, os_description),
@@ -130,5 +160,6 @@ begin
 end;
 $$;
 
+revoke execute on function public.validate_license_key(text, text, text, text, text) from public;
 revoke execute on function public.validate_license_key(text, text, text, text, text) from anon;
 grant execute on function public.validate_license_key(text, text, text, text, text) to service_role;

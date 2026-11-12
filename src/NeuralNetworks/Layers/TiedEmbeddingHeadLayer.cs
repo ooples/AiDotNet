@@ -211,8 +211,7 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
 
         var flat = Engine.Reshape(input, [rows, hidden]);
         Tensor<T> logits;
-        if (!training && DenseLayer<T>.Q8SpeedFavorable && typeof(T) == typeof(float) && rows <= 16 && IsQuantizedTableCurrent(table)
-            && _tableQ8 is { } q8 && _tableScalesQ8 is { } scales)
+        if (!training && UsesQuantizedTable(rows, table) && _tableQ8 is { } q8 && _tableScalesQ8 is { } scales)
         {
             var inF = (float[])(object)flat.ToArray();
             var outArr = new float[rows * _vocabularySize];
@@ -253,6 +252,12 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
         }
         return true;
     }
+
+    /// <summary>Whether an inference forward of <paramref name="rows"/> rows reads the int8 table instead of
+    /// <paramref name="table"/>.</summary>
+    private bool UsesQuantizedTable(int rows, Tensor<T> table) =>
+        DenseLayer<T>.Q8SpeedFavorable && typeof(T) == typeof(float) && rows <= 16 && IsQuantizedTableCurrent(table)
+        && _tableQ8 is not null && _tableScalesQ8 is not null;
 
     private void DropQuantizedTable()
     {
@@ -343,6 +348,9 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
         bool training = IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
             || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
         if (training) DropQuantizedTable();
+        // An inference forward this small reads the int8 table; the fused kernel would score the float table and
+        // disagree with the forward's logits, so the caller takes the decomposed path through the forward instead.
+        else if (UsesQuantizedTable(rows, table)) return null;
 
         var hidden = input.Rank == 2 ? input : Engine.Reshape(input, new[] { rows, _embeddingDimension });
         Tensor<T> weightToUse;

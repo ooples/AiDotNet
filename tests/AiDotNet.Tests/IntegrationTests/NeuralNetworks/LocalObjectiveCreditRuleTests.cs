@@ -578,12 +578,44 @@ public partial class LocalObjectiveCreditRuleTests
             out var repeatedCandidates, out var repeatedRemappedIds);
 
         Assert.Equal(16, candidateIds.Length);
+        AssertCandidatesMapTargets(targets, vocabSize: 64, candidateIds, remappedIds);
         Assert.Equal(
             Enumerable.Range(0, candidateIds.Length).Select(i => candidateIds.GetFlat(i)),
             Enumerable.Range(0, repeatedCandidates.Length).Select(i => repeatedCandidates.GetFlat(i)));
         Assert.Equal(
             Enumerable.Range(0, remappedIds.Length).Select(i => remappedIds.GetFlat(i)),
             Enumerable.Range(0, repeatedRemappedIds.Length).Select(i => repeatedRemappedIds.GetFlat(i)));
+    }
+
+    [Fact]
+    public void SampledCandidates_MoreDistinctTargetsThanMaxCandidates_KeepsEveryTarget()
+    {
+        // 20 distinct targets (some repeated) against a budget of 8: every target must stay a candidate, so the
+        // candidate set grows to the distinct-target count and no negatives are added.
+        var ids = Enumerable.Range(0, 30).Select(i => (i * 7) % 20 + 3).ToArray();
+        var targets = new Tensor<int>(ids, new[] { ids.Length });
+        LocalObjectiveGradientComputer<float>.BuildSampledCandidates(
+            targets, vocabSize: 64, maxCandidates: 8, stepSeed: 11, out var candidateIds, out var remappedIds);
+
+        Assert.Equal(20, candidateIds.Length);
+        AssertCandidatesMapTargets(targets, vocabSize: 64, candidateIds, remappedIds);
+    }
+
+    // Independent of BuildSampledCandidates: candidates are distinct in-range ids, and each remapped index points back
+    // at its row's original target.
+    private static void AssertCandidatesMapTargets(
+        Tensor<int> targets, int vocabSize, Tensor<int> candidateIds, Tensor<int> remappedIds)
+    {
+        var candidates = Enumerable.Range(0, candidateIds.Length).Select(i => candidateIds.GetFlat(i)).ToArray();
+        Assert.Equal(candidates.Length, candidates.Distinct().Count());
+        Assert.All(candidates, id => Assert.InRange(id, 0, vocabSize - 1));
+        Assert.Equal(targets.Length, remappedIds.Length);
+        for (int r = 0; r < targets.Length; r++)
+        {
+            int mapped = remappedIds.GetFlat(r);
+            Assert.InRange(mapped, 0, candidates.Length - 1);
+            Assert.Equal(targets.GetFlat(r), candidates[mapped]);
+        }
     }
 
     [Theory]

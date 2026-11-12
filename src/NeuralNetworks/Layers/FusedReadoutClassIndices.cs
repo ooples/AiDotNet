@@ -9,7 +9,8 @@ internal static class FusedReadoutClassIndices
 {
     /// <summary>
     /// The ids of <paramref name="target"/> in row order, or <c>null</c> when any value is not a whole number in
-    /// <c>[0, vocabularySize)</c> (the caller then takes the decomposed loss path, which reports the bad target).
+    /// <c>[0, vocabularySize)</c>: fusion is then declined and the caller takes the decomposed loss path, which
+    /// may ignore such an id (for instance an ignore index of <c>-1</c>) rather than report it.
     /// </summary>
     internal static Tensor<int>? TryRead<T>(Tensor<T> target, int vocabularySize)
     {
