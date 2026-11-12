@@ -291,13 +291,8 @@ public abstract class TabNetBase<T>
             if (step == 0)
             {
                 // First step: uniform attention (use all features equally)
-                attentionMask = CreateOnes(batchSize, InputDim);
-                // Normalize to sum to 1
-                var sum = NumOps.FromDouble(InputDim);
-                for (int i = 0; i < attentionMask.Length; i++)
-                {
-                    attentionMask[i] = NumOps.Divide(attentionMask[i], sum);
-                }
+                attentionMask = Tensor<T>.CreateDefault(
+                    [batchSize, InputDim], NumOps.Divide(NumOps.One, NumOps.FromDouble(InputDim)));
             }
             else
             {
@@ -359,13 +354,15 @@ public abstract class TabNetBase<T>
     /// </remarks>
     public T ComputeSparsityLoss()
     {
-        var totalLoss = NumOps.Zero;
+        var stepLosses = new Vector<T>(_attentiveTransformers.Count);
+        var stepLossValues = stepLosses.AsWritableSpan();
         for (int step = 0; step < _attentiveTransformers.Count; step++)
         {
             var mask = _stepAttentionMasks[step + 1]; // Skip first uniform mask
-            var stepLoss = _attentiveTransformers[step].ComputeSparsityLoss(mask);
-            totalLoss = NumOps.Add(totalLoss, stepLoss);
+            stepLossValues[step] = _attentiveTransformers[step].ComputeSparsityLoss(mask);
         }
+
+        var totalLoss = Engine.Sum(stepLosses);
         return NumOps.Multiply(totalLoss, NumOps.FromDouble(Options.SparsityCoefficient));
     }
 
@@ -401,10 +398,7 @@ public abstract class TabNetBase<T>
 
         // Normalize by number of steps
         var numSteps = NumOps.FromDouble(_stepAttentionMasks.Count);
-        for (int i = 0; i < importance.Length; i++)
-        {
-            importance[i] = NumOps.Divide(importance[i], numSteps);
-        }
+        importance = Engine.TensorDivideScalar(importance, numSteps);
 
         return importance;
     }
@@ -468,35 +462,20 @@ public abstract class TabNetBase<T>
     protected (Tensor<T> first, Tensor<T> second) SplitTensor(Tensor<T> tensor, int firstDim, int secondDim)
     {
         int batchSize = tensor.Shape[0];
-        var first = new Tensor<T>([batchSize, firstDim]);
-        var second = new Tensor<T>([batchSize, secondDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < firstDim; i++)
-            {
-                first[b * firstDim + i] = tensor[b * (firstDim + secondDim) + i];
-            }
-            for (int i = 0; i < secondDim; i++)
-            {
-                second[b * secondDim + i] = tensor[b * (firstDim + secondDim) + firstDim + i];
-            }
-        }
+        var rows = TabularMetrics.Flat(tensor, batchSize * (firstDim + secondDim)).Reshape(batchSize, firstDim + secondDim);
+        var first = Engine.TensorNarrow(rows, 1, 0, firstDim);
+        var second = Engine.TensorNarrow(rows, 1, firstDim, secondDim);
 
         return (first, second);
     }
 
     /// <summary>
-    /// Applies ReLU activation.
+    /// Applies ReLU activation: x where x &gt; 0, otherwise 0 (NaN included).
     /// </summary>
     protected Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
-        }
-        return result;
+        var zeros = Engine.TensorZerosLike(input);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(input, NumOps.Zero), input, zeros);
     }
 
     /// <summary>
@@ -504,12 +483,8 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> ApplyReLUDerivative(Tensor<T> gradient, Tensor<T> original)
     {
-        var result = new Tensor<T>(gradient._shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(original[i], NumOps.Zero) ? gradient[i] : NumOps.Zero;
-        }
-        return result;
+        var active = Engine.TensorGreaterThan(original.Reshape(gradient._shape), NumOps.Zero);
+        return Engine.TensorWhere(active, gradient, Engine.TensorZerosLike(gradient));
     }
 
     /// <summary>
@@ -517,12 +492,7 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a._shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = NumOps.Add(a[i], b[i]);
-        }
-        return result;
+        return Engine.TensorAdd(a, b.Reshape(a._shape));
     }
 
     #endregion
@@ -534,27 +504,27 @@ public abstract class TabNetBase<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
+        var parts = new List<Vector<T>>();
 
         // Initial BN
-        AddVectorToList(allParams, _initialBN.GetParameters());
+        parts.Add(_initialBN.GetParameters());
 
         // Feature Transformers
         foreach (var ft in _featureTransformers)
         {
-            AddVectorToList(allParams, ft.GetParameters());
+            parts.Add(ft.GetParameters());
         }
 
         // Attentive Transformers
         foreach (var at in _attentiveTransformers)
         {
-            AddVectorToList(allParams, at.GetParameters());
+            parts.Add(at.GetParameters());
         }
 
         // Output layer
-        AddVectorToList(allParams, _outputLayer.GetParameters());
+        parts.Add(_outputLayer.GetParameters());
 
-        return CreateVectorFromList(allParams);
+        return TabularMetrics.ConcatenateVectors(parts);
     }
 
     /// <summary>
@@ -583,32 +553,10 @@ public abstract class TabNetBase<T>
         SetComponentParameters(_outputLayer, parameters, offset);
     }
 
-    private void AddVectorToList(List<T> list, Vector<T> vector)
-    {
-        for (int i = 0; i < vector.Length; i++)
-        {
-            list.Add(vector[i]);
-        }
-    }
-
-    private Vector<T> CreateVectorFromList(List<T> list)
-    {
-        var vector = new Vector<T>(list.Count);
-        for (int i = 0; i < list.Count; i++)
-        {
-            vector[i] = list[i];
-        }
-        return vector;
-    }
-
     private int SetComponentParameters(ILayer<T> layer, Vector<T> parameters, int offset)
     {
         int count = checked((int)layer.ParameterCount);
-        var componentParams = new Vector<T>(count);
-        for (int i = 0; i < count; i++)
-        {
-            componentParams[i] = parameters[offset + i];
-        }
+        var componentParams = parameters.GetSubVector(offset, count);
         layer.SetParameters(componentParams);
         return offset + count;
     }
@@ -616,11 +564,7 @@ public abstract class TabNetBase<T>
     private int SetComponentParameters(GhostBatchNormalization<T> bn, Vector<T> parameters, int offset)
     {
         int count = checked((int)bn.ParameterCount);
-        var componentParams = new Vector<T>(count);
-        for (int i = 0; i < count; i++)
-        {
-            componentParams[i] = parameters[offset + i];
-        }
+        var componentParams = parameters.GetSubVector(offset, count);
         bn.SetParameters(componentParams);
         return offset + count;
     }
@@ -628,11 +572,7 @@ public abstract class TabNetBase<T>
     private int SetComponentParameters(FeatureTransformerLayer<T> ft, Vector<T> parameters, int offset)
     {
         int count = checked((int)ft.ParameterCount);
-        var componentParams = new Vector<T>(count);
-        for (int i = 0; i < count; i++)
-        {
-            componentParams[i] = parameters[offset + i];
-        }
+        var componentParams = parameters.GetSubVector(offset, count);
         ft.SetParameters(componentParams);
         return offset + count;
     }
@@ -640,11 +580,7 @@ public abstract class TabNetBase<T>
     private int SetComponentParameters(AttentiveTransformerLayer<T> at, Vector<T> parameters, int offset)
     {
         int count = checked((int)at.ParameterCount);
-        var componentParams = new Vector<T>(count);
-        for (int i = 0; i < count; i++)
-        {
-            componentParams[i] = parameters[offset + i];
-        }
+        var componentParams = parameters.GetSubVector(offset, count);
         at.SetParameters(componentParams);
         return offset + count;
     }

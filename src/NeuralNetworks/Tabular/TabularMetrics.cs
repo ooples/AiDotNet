@@ -149,4 +149,27 @@ internal static class TabularMetrics
         var flat = tensor.Reshape(tensor.Length);
         return length == tensor.Length ? flat : AiDotNetEngine.Current.TensorNarrow(flat, 0, 0, length);
     }
+
+    /// <summary>
+    /// Joins parameter or gradient vectors end to end with bulk copies.
+    /// </summary>
+    public static Vector<T> ConcatenateVectors<T>(IReadOnlyList<Vector<T>> parts)
+    {
+        int total = 0;
+        foreach (var part in parts)
+        {
+            total += part.Length;
+        }
+
+        var result = new Vector<T>(total);
+        var destination = result.AsWritableSpan();
+        int offset = 0;
+        foreach (var part in parts)
+        {
+            part.AsSpan().CopyTo(destination.Slice(offset, part.Length));
+            offset += part.Length;
+        }
+
+        return result;
+    }
 }

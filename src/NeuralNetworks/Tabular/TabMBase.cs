@@ -299,30 +299,7 @@ public abstract partial class TabMBase<T>
             parts.Add(extra.GetParameters());
         }
 
-        return ConcatenateVectors(parts);
-    }
-
-    /// <summary>
-    /// Joins parameter or gradient vectors end to end with bulk copies.
-    /// </summary>
-    private static Vector<T> ConcatenateVectors(List<Vector<T>> parts)
-    {
-        int total = 0;
-        foreach (var part in parts)
-        {
-            total += part.Length;
-        }
-
-        var result = new Vector<T>(total);
-        var destination = result.AsWritableSpan();
-        int offset = 0;
-        foreach (var part in parts)
-        {
-            part.AsSpan().CopyTo(destination.Slice(offset, part.Length));
-            offset += part.Length;
-        }
-
-        return result;
+        return TabularMetrics.ConcatenateVectors(parts);
     }
 
     /// <summary>
@@ -370,7 +347,7 @@ public abstract partial class TabMBase<T>
             parts.Add(layer.GetParameterGradients());
         }
 
-        return ConcatenateVectors(parts);
+        return TabularMetrics.ConcatenateVectors(parts);
     }
 
     /// <summary>
