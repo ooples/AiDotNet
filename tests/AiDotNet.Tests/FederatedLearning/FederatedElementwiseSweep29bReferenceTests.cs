@@ -780,4 +780,39 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(new[] { 3.0 }, masked["b"]);
         Assert.Equal(new[] { 4.0 }, masked["a"]);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task PrototypeFederatedGraphLearning_GlobalPrototypeIsSampleCountWeighted()
+    {
+        await Task.Yield();
+
+        // FedProto (Tan et al. 2022): p_c = sum_i |D_ic| p_ic / sum_i |D_ic|. Client 0 has 3 nodes of class 0 at
+        // [1, 1], client 1 has 1 node at [5, 9]: p_0 = (3 [1, 1] + [5, 9]) / 4 = [2, 3]. The unweighted mean
+        // gave [3, 5].
+        var learner = new AiDotNet.FederatedLearning.Graph.PrototypeFederatedGraphLearning<double>(
+            new AiDotNet.Models.Options.FederatedGraphOptions(), prototypeDim: 2, numClasses: 1);
+
+        var protos0 = learner.ComputePrototypes(
+            new Tensor<double>(new[] { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 }, new[] { 6 }),
+            new Tensor<double>(new[] { 0.0, 0.0, 0.0 }, new[] { 3 }),
+            embeddingDim: 2,
+            out var counts0);
+        Assert.Equal(3, counts0[0]);
+
+        learner.RegisterClientPrototypes(0, protos0, counts0);
+        learner.RegisterClientPrototypes(
+            1,
+            new Dictionary<int, Tensor<double>> { [0] = new Tensor<double>(new[] { 5.0, 9.0 }, new[] { 2 }) },
+            new Dictionary<int, int> { [0] = 1 });
+
+        var global = learner.AggregatePrototypes();
+        Assert.Equal(2.0, global[0][0], Precision);
+        Assert.Equal(3.0, global[0][1], Precision);
+
+        // A prototype without a positive sample count is rejected.
+        Assert.Throws<ArgumentException>(() => learner.RegisterClientPrototypes(
+            2,
+            new Dictionary<int, Tensor<double>> { [0] = new Tensor<double>(new[] { 1.0, 1.0 }, new[] { 2 }) },
+            new Dictionary<int, int>()));
+    }
 }

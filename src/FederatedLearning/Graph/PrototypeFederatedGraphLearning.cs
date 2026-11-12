@@ -36,6 +36,7 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
     private readonly int _prototypeDim;
     private readonly int _numClasses;
     private readonly Dictionary<int, Dictionary<int, Tensor<T>>> _clientPrototypes = new();
+    private readonly Dictionary<int, Dictionary<int, int>> _clientClassCounts = new();
     private Dictionary<int, Tensor<T>> _globalPrototypes = new();
 
     /// <summary>
@@ -64,12 +65,29 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
     /// <summary>
     /// Registers a client's class prototypes for the current round.
     /// </summary>
+    /// <remarks>
+    /// FedProto (Tan et al. 2022) weights each client's prototype of class c by the number of local samples of
+    /// that class, so the counts are part of the registration.
+    /// </remarks>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="prototypes">Class-to-prototype mapping from the client.</param>
-    public void RegisterClientPrototypes(int clientId, Dictionary<int, Tensor<T>> prototypes)
+    /// <param name="classSampleCounts">Number of local samples behind each prototype (one positive count per class).</param>
+    public void RegisterClientPrototypes(int clientId, Dictionary<int, Tensor<T>> prototypes, Dictionary<int, int> classSampleCounts)
     {
         if (prototypes is null) throw new ArgumentNullException(nameof(prototypes));
+        if (classSampleCounts is null) throw new ArgumentNullException(nameof(classSampleCounts));
+
+        foreach (int classId in prototypes.Keys)
+        {
+            if (!classSampleCounts.TryGetValue(classId, out int count) || count <= 0)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} must report a positive sample count for class {classId}.", nameof(classSampleCounts));
+            }
+        }
+
         _clientPrototypes[clientId] = prototypes;
+        _clientClassCounts[clientId] = new Dictionary<int, int>(classSampleCounts);
     }
 
     /// <summary>
@@ -82,11 +100,27 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
     public Dictionary<int, Tensor<T>> ComputePrototypes(
         Tensor<T> nodeEmbeddings, Tensor<T> labels, int embeddingDim)
     {
+        return ComputePrototypes(nodeEmbeddings, labels, embeddingDim, out _);
+    }
+
+    /// <summary>
+    /// Computes a client's class prototypes and the number of nodes behind each one (the weights used by
+    /// <see cref="RegisterClientPrototypes"/>).
+    /// </summary>
+    /// <param name="nodeEmbeddings">Node embedding matrix (flattened [numNodes * embDim]).</param>
+    /// <param name="labels">Node labels (integer class IDs).</param>
+    /// <param name="embeddingDim">Dimensionality of node embeddings.</param>
+    /// <param name="classSampleCounts">Number of nodes of each class.</param>
+    /// <returns>Class-to-prototype mapping.</returns>
+    public Dictionary<int, Tensor<T>> ComputePrototypes(
+        Tensor<T> nodeEmbeddings, Tensor<T> labels, int embeddingDim, out Dictionary<int, int> classSampleCounts)
+    {
         if (nodeEmbeddings is null) throw new ArgumentNullException(nameof(nodeEmbeddings));
         if (labels is null) throw new ArgumentNullException(nameof(labels));
 
         int numNodes = labels.Shape[0];
         var prototypes = new Dictionary<int, Tensor<T>>();
+        classSampleCounts = new Dictionary<int, int>();
         if (numNodes == 0 || embeddingDim <= 0)
         {
             return prototypes;
@@ -130,6 +164,7 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
         for (int s = 0; s < classOrder.Count; s++)
         {
             prototypes[classOrder[s]] = Engine.TensorSlice(means, new[] { s, 0 }, new[] { 1, embeddingDim }).Reshape(new[] { embeddingDim });
+            classSampleCounts[classOrder[s]] = classCounts[s];
         }
 
         return prototypes;
@@ -148,27 +183,38 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
 
         var newGlobal = new Dictionary<int, Tensor<T>>();
 
+        // FedProto: p_c = Σ_i |D_{i,c}| p_{i,c} / Σ_i |D_{i,c}|. Counts are normalized by their class total before
+        // scaling, so the running sum stays bounded for narrow T.
         for (int c = 0; c < _numClasses; c++)
         {
-            var sum = new Tensor<T>(new[] { _prototypeDim });
-            int clientsWithClass = 0;
-
-            foreach (var clientProtos in _clientPrototypes.Values)
+            long classTotal = 0;
+            foreach (var (clientId, clientProtos) in _clientPrototypes)
             {
-                if (clientProtos.TryGetValue(c, out var proto))
+                if (clientProtos.ContainsKey(c))
                 {
-                    clientsWithClass++;
-                    sum = Engine.TensorAdd(sum, FitToLength(proto, _prototypeDim));
+                    classTotal += _clientClassCounts[clientId][c];
                 }
             }
 
-            newGlobal[c] = clientsWithClass > 0
-                ? Engine.TensorDivideScalar(sum, NumOps.FromDouble(clientsWithClass))
-                : sum;
+            var sum = new Tensor<T>(new[] { _prototypeDim });
+            if (classTotal > 0)
+            {
+                foreach (var (clientId, clientProtos) in _clientPrototypes)
+                {
+                    if (clientProtos.TryGetValue(c, out var proto))
+                    {
+                        double share = (double)_clientClassCounts[clientId][c] / classTotal;
+                        sum = Engine.TensorAdd(sum, Engine.TensorMultiplyScalar(FitToLength(proto, _prototypeDim), NumOps.FromDouble(share)));
+                    }
+                }
+            }
+
+            newGlobal[c] = sum;
         }
 
         _globalPrototypes = newGlobal;
         _clientPrototypes.Clear(); // Reset for next round
+        _clientClassCounts.Clear();
 
         return _globalPrototypes;
     }
