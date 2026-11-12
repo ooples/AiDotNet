@@ -373,6 +373,26 @@ public class FeatureSelectionStatisticReferenceTests
         Assert.Equal(new[] { 1 }, selector.SelectedIndices);
     }
 
+    // ---------------------------------------------------------------- spread
+
+    [Fact(Timeout = 120000)]
+    public async Task MadThreshold_EvenSampleCount_UsesTrueMedian()
+    {
+        // scipy.stats.median_abs_deviation([1, 2, 3, 4, 10, 20]) = 2.0: median 3.5, |x - 3.5| =
+        // [2.5, 1.5, 0.5, 0.5, 6.5, 16.5], whose median is 2.0. Master took the upper middle value both times
+        // (median 4, MAD 3) and so kept this feature at threshold 2.5.
+        var data = M(new double[,] { { 1, 5 }, { 2, 5 }, { 3, 6 }, { 4, 6 }, { 10, 5 }, { 20, 6 } });
+
+        var selector = new MADThreshold<double>(threshold: 2.5);
+        selector.Fit(data);
+
+        Assert.NotNull(selector.MADValues);
+        Assert.Equal(2.0, selector.MADValues[0], Tolerance);
+        Assert.Equal(0.5, selector.MADValues[1], Tolerance);
+        Assert.NotNull(selector.SelectedIndices);
+        Assert.Empty(selector.SelectedIndices);
+    }
+
     // ---------------------------------------------------------------- FDR
 
     [Fact(Timeout = 120000)]
