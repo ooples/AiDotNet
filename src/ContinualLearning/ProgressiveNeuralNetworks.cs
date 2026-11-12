@@ -267,7 +267,7 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
             var resultHead = count == result.Length
                 ? result.AsTensor()
                 : Tensor<T>.FromMemory(result.AsWritableMemory().Slice(0, count), new[] { count });
-            Engine.TensorAddInPlace(resultHead, Engine.TensorMultiply(h, cyclicWeights));
+            Engine.TensorAdd(resultHead, Engine.TensorMultiply(h, cyclicWeights)).AsSpan().CopyTo(resultHead.AsWritableSpan());
         }
 
         return new Tensor<T>([1, outputSize], result);

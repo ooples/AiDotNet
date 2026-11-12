@@ -450,7 +450,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 int count = Math.Min(omega.Length, absGrads.Length);
                 if (count > 0)
                 {
-                    Engine.TensorAddInPlace(Head(omega, count), Head(absGrads, count));
+                    Engine.TensorAdd(Head(omega, count), Head(absGrads, count)).AsSpan().CopyTo(Head(omega, count).AsWritableSpan());
                 }
             }
             else
@@ -543,7 +543,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         var increments = count == expanded.Length
             ? expanded
             : Engine.TensorSlice(expanded, new[] { 0 }, new[] { count });
-        Engine.TensorAddInPlace(Head(omega, count), increments);
+        Engine.TensorAdd(Head(omega, count), increments).AsSpan().CopyTo(Head(omega, count).AsWritableSpan());
     }
 
     /// <summary>
@@ -780,7 +780,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 if (count > 0)
                 {
                     var weightedContrib = Engine.TensorMultiplyScalar(Engine.TensorAbs(Head(parameters, count)), outputMag);
-                    Engine.TensorAddInPlace(Head(paramContributions, count), weightedContrib);
+                    Engine.TensorAdd(Head(paramContributions, count), weightedContrib).AsSpan().CopyTo(Head(paramContributions, count).AsWritableSpan());
                 }
             }
             catch (Exception ex)

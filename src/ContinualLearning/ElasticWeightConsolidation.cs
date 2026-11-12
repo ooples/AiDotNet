@@ -200,12 +200,12 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
                 Math.Min(fisher.Length, optimal.Length));
 
             var diff = Engine.TensorSubtract(Head(currentParams, n), Head(optimal, n));
-            Engine.TensorAddInPlace(Head(ewcGrad, n), Engine.TensorMultiply(Head(fisher, n), diff));
+            Engine.TensorAdd(Head(ewcGrad, n), Engine.TensorMultiply(Head(fisher, n), diff)).AsSpan().CopyTo(Head(ewcGrad, n).AsWritableSpan());
         }
 
         // Scale by lambda and add to original gradients (in place, like master)
         var lambdaT = _numOps.FromDouble(_lambda);
-        Engine.TensorAddInPlace(gradients.AsTensor(), Engine.TensorMultiplyScalar(ewcGrad.AsTensor(), lambdaT));
+        Engine.TensorAdd(gradients.AsTensor(), Engine.TensorMultiplyScalar(ewcGrad.AsTensor(), lambdaT)).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }

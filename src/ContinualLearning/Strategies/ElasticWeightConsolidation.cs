@@ -407,7 +407,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
             }
 
             var g = Head(gradient, count);
-            Engine.TensorAddInPlace(Head(fisher, count), Engine.TensorMultiply(g, g));
+            Engine.TensorAdd(Head(fisher, count), Engine.TensorMultiply(g, g)).AsSpan().CopyTo(Head(fisher, count).AsWritableSpan());
         }
 
         // Average over samples

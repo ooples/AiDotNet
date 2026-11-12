@@ -231,7 +231,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         var pVar = Engine.TensorAddScalar(Engine.TensorExp(Head(_priorLogVar, n)), epsilon);
 
         var klGrad = Engine.TensorMultiplyScalar(Engine.TensorDivide(meanDiff, pVar), lambdaT);
-        Engine.TensorAddInPlace(gradients.AsTensor(), klGrad);
+        Engine.TensorAdd(gradients.AsTensor(), klGrad).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }

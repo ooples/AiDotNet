@@ -219,7 +219,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
                 var gradLength = _useSquaredLength
                     ? Engine.TensorMultiply(g, g)
                     : Engine.TensorAbs(g);
-                Engine.TensorAddInPlace(Head(_gradientLengthSum, count), gradLength);
+                Engine.TensorAdd(Head(_gradientLengthSum, count), gradLength).AsSpan().CopyTo(Head(_gradientLengthSum, count).AsWritableSpan());
             }
             _gradientCount++;
         }

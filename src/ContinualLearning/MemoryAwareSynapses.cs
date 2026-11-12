@@ -109,7 +109,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         var newOmega = Engine.Abs(grads); // Importance = |gradient|
 
         // Accumulate importance (in place)
-        Engine.TensorAddInPlace(_omega.AsTensor(), Head(newOmega, _omega.Length));
+        Engine.TensorAdd(_omega.AsTensor(), Head(newOmega, _omega.Length)).AsSpan().CopyTo(_omega.AsWritableSpan());
 
         // Store current parameters as optimal
         _optimalParameters = network.GetParameters().Clone();
@@ -157,7 +157,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         // Add MAS gradient: λ * Ω_i * (θ_i - θ*_i), in place like master
         var diff = Engine.TensorSubtract(Head(currentParams, n), Head(_optimalParameters, n));
         var masGrad = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Head(_omega, n), diff), lambdaT);
-        Engine.TensorAddInPlace(gradients.AsTensor(), masGrad);
+        Engine.TensorAdd(gradients.AsTensor(), masGrad).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }

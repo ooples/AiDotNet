@@ -245,7 +245,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
             int count = Math.Min(gradients.Length, _gradientImportance.Length);
             if (count > 0)
             {
-                Engine.TensorAddInPlace(Head(_gradientImportance, count), Engine.TensorAbs(Head(gradients, count)));
+                Engine.TensorAdd(Head(_gradientImportance, count), Engine.TensorAbs(Head(gradients, count))).AsSpan().CopyTo(Head(_gradientImportance, count).AsWritableSpan());
             }
             _gradientCount++;
         }
