@@ -12754,7 +12754,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ?? (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
                 ? _baseTrainOptimizer
                 : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer);
-        bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
         bool useStreamingDefaults = configuredOptimizer is null
             && resolvedOptimizer is not Optimizers.Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>
