@@ -52,7 +52,7 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// <summary>
     /// The weights for each component.
     /// </summary>
-    private readonly double[] _weights;
+    private readonly Vector<T> _weights;
 
     /// <summary>
     /// Number of components.
@@ -90,7 +90,7 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     public AdditiveStructureKernel(
         IKernelFunction<T>[] componentKernels,
         int[][] featureGroups,
-        double[]? weights = null)
+        Vector<T>? weights = null)
     {
         if (componentKernels is null) throw new ArgumentNullException(nameof(componentKernels));
         if (featureGroups is null) throw new ArgumentNullException(nameof(featureGroups));
@@ -113,27 +113,8 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
                 throw new ArgumentException($"Feature group {i} cannot be empty.");
         }
 
-        if (weights is null)
-        {
-            _weights = new double[_numComponents];
-            for (int i = 0; i < _numComponents; i++) _weights[i] = 1.0;
-        }
-        else
-        {
-            if (weights.Length != _numComponents)
-                throw new ArgumentException("Weights length must match number of components.");
-            // Validate weights to preserve kernel positive semi-definiteness
-            for (int i = 0; i < weights.Length; i++)
-            {
-                if (weights[i] < 0)
-                    throw new ArgumentException($"Weight at index {i} is negative ({weights[i]}). Weights must be non-negative to preserve kernel PSD property.");
-                if (double.IsNaN(weights[i]) || double.IsInfinity(weights[i]))
-                    throw new ArgumentException($"Weight at index {i} is not finite ({weights[i]}). Weights must be finite real numbers.");
-            }
-            _weights = (double[])weights.Clone();
-        }
-
         _numOps = MathHelper.GetNumericOperations<T>();
+        _weights = CreateValidatedWeights(weights, _numComponents, "Weights length must match number of components.", _numOps);
     }
 
     /// <summary>
@@ -152,7 +133,7 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// This is the simplest additive structure - no interactions between features.
     /// </para>
     /// </remarks>
-    public AdditiveStructureKernel(int numFeatures, IKernelFunction<T> baseKernel, double[]? weights = null)
+    public AdditiveStructureKernel(int numFeatures, IKernelFunction<T> baseKernel, Vector<T>? weights = null)
     {
         if (numFeatures < 1)
             throw new ArgumentException("Must have at least one feature.", nameof(numFeatures));
@@ -168,27 +149,34 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
             _featureGroups[i] = new[] { i };
         }
 
-        if (weights is null)
-        {
-            _weights = new double[_numComponents];
-            for (int i = 0; i < _numComponents; i++) _weights[i] = 1.0;
-        }
-        else
-        {
-            if (weights.Length != _numComponents)
-                throw new ArgumentException("Weights length must match number of features.");
-            // Validate weights to preserve kernel positive semi-definiteness
-            for (int i = 0; i < weights.Length; i++)
-            {
-                if (weights[i] < 0)
-                    throw new ArgumentException($"Weight at index {i} is negative ({weights[i]}). Weights must be non-negative to preserve kernel PSD property.");
-                if (double.IsNaN(weights[i]) || double.IsInfinity(weights[i]))
-                    throw new ArgumentException($"Weight at index {i} is not finite ({weights[i]}). Weights must be finite real numbers.");
-            }
-            _weights = (double[])weights.Clone();
-        }
-
         _numOps = MathHelper.GetNumericOperations<T>();
+        _weights = CreateValidatedWeights(weights, _numComponents, "Weights length must match number of features.", _numOps);
+    }
+
+    /// <summary>
+    /// Copies the component weights (all ones when none are given) after checking that they are
+    /// non-negative and finite, which keeps the weighted sum positive semi-definite.
+    /// </summary>
+    private static Vector<T> CreateValidatedWeights(Vector<T>? weights, int numComponents, string lengthMessage, INumericOperations<T> numOps)
+    {
+        if (weights is null)
+            return Vector<T>.CreateDefault(numComponents, numOps.One);
+
+        if (weights.Length != numComponents)
+            throw new ArgumentException(lengthMessage);
+
+        var engine = AiDotNetEngine.Current;
+        var weightTensor = weights.AsTensor();
+        if (numOps.LessThan(engine.TensorMinValue(weightTensor), numOps.Zero))
+            throw new ArgumentException("Weights must be non-negative to preserve kernel PSD property.", nameof(weights));
+
+        var ones = Tensor<T>.CreateDefault(new[] { numComponents }, numOps.One);
+        var zeros = Tensor<T>.CreateDefault(new[] { numComponents }, numOps.Zero);
+        T nonFiniteCount = engine.TensorSum(engine.TensorWhere(engine.TensorIsFinite(weightTensor), zeros, ones));
+        if (numOps.GreaterThan(nonFiniteCount, numOps.Zero))
+            throw new ArgumentException("Weights must be finite real numbers.", nameof(weights));
+
+        return weights.Clone();
     }
 
     /// <summary>
@@ -213,7 +201,7 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <param name="componentIndex">Index of the component.</param>
     /// <returns>The weight for that component.</returns>
-    public double GetWeight(int componentIndex)
+    public T GetWeight(int componentIndex)
     {
         if (componentIndex < 0 || componentIndex >= _numComponents)
             throw new ArgumentOutOfRangeException(nameof(componentIndex));
@@ -236,20 +224,11 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        double result = 0;
+        // Component kernel values k_c(x1[group_c], x2[group_c]), then their weighted sum.
+        var componentValues = new Vector<T>(Enumerable.Range(0, _numComponents)
+            .Select(c => _componentKernels[c].Calculate(ExtractFeatures(x1, _featureGroups[c]), ExtractFeatures(x2, _featureGroups[c]))));
 
-        for (int c = 0; c < _numComponents; c++)
-        {
-            // Extract features for this component
-            var subX1 = ExtractFeatures(x1, _featureGroups[c]);
-            var subX2 = ExtractFeatures(x2, _featureGroups[c]);
-
-            // Compute component kernel value
-            double kVal = _numOps.ToDouble(_componentKernels[c].Calculate(subX1, subX2));
-            result += _weights[c] * kVal;
-        }
-
-        return _numOps.FromDouble(result);
+        return AiDotNetEngine.Current.DotProduct(_weights, componentValues);
     }
 
     /// <summary>
@@ -265,7 +244,7 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// Useful for understanding how much each component (feature group) contributes.
     /// </para>
     /// </remarks>
-    public double CalculateComponent(Vector<T> x1, Vector<T> x2, int componentIndex)
+    public T CalculateComponent(Vector<T> x1, Vector<T> x2, int componentIndex)
     {
         if (componentIndex < 0 || componentIndex >= _numComponents)
             throw new ArgumentOutOfRangeException(nameof(componentIndex));
@@ -273,7 +252,7 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
         var subX1 = ExtractFeatures(x1, _featureGroups[componentIndex]);
         var subX2 = ExtractFeatures(x2, _featureGroups[componentIndex]);
 
-        return _weights[componentIndex] * _numOps.ToDouble(
+        return _numOps.Multiply(_weights[componentIndex],
             _componentKernels[componentIndex].Calculate(subX1, subX2));
     }
 
@@ -282,12 +261,7 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// </summary>
     private Vector<T> ExtractFeatures(Vector<T> x, int[] indices)
     {
-        var result = new Vector<T>(indices.Length);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            result[i] = x[indices[i]];
-        }
-        return result;
+        return x.GetElements(indices);
     }
 
     /// <summary>
@@ -303,23 +277,15 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// Higher values indicate the component explains more variance.
     /// </para>
     /// </remarks>
-    public double[] GetComponentImportances(Vector<T> x)
+    public Vector<T> GetComponentImportances(Vector<T> x)
     {
-        var importances = new double[_numComponents];
-        double total = 0;
+        var engine = AiDotNetEngine.Current;
+        var importances = new Vector<T>(Enumerable.Range(0, _numComponents).Select(c => CalculateComponent(x, x, c)));
+        T total = engine.Sum(importances);
 
-        for (int c = 0; c < _numComponents; c++)
+        if (_numOps.GreaterThan(total, _numOps.FromDouble(1e-10)))
         {
-            importances[c] = CalculateComponent(x, x, c);
-            total += importances[c];
-        }
-
-        if (total > 1e-10)
-        {
-            for (int c = 0; c < _numComponents; c++)
-            {
-                importances[c] /= total;
-            }
+            importances = engine.Divide(importances, total);
         }
 
         return importances;
