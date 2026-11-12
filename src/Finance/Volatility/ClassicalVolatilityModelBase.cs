@@ -184,7 +184,7 @@ public abstract class ClassicalVolatilityModelBase<T> :
     }
 
     /// <summary>Negative Gaussian log-likelihood of the return series under the conditional-variance path.</summary>
-    private T NegLogLikelihood(Vector<T> natural, Tensor<T> returns)
+    internal T NegLogLikelihood(Vector<T> natural, Tensor<T> returns)
     {
         T invalid = NumOps.FromDouble(1e12);
         var residuals = AiDotNetEngine.Current.TensorSubtractScalar(returns, natural[0]);
