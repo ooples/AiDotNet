@@ -238,4 +238,64 @@ public class WaveletReferenceValueTests
         Assert.Equal(-2.0 / (3.0 * Math.PI), h[56].Real / h[32].Real, Tolerance);
         Assert.Equal(0.0, h[40].Imaginary, Tolerance);
     }
+
+    // ================================================================
+    // EXTENSIBILITY: filters and transforms are built through the overridable scalar Calculate
+    // ================================================================
+
+    private sealed class FlatGaussianWavelet : GaussianWavelet<double>
+    {
+        public override double Calculate(double x) => 2.0;
+    }
+
+    private sealed class FlatMexicanHatWavelet : MexicanHatWavelet<double>
+    {
+        public override double Calculate(double x) => 3.0;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GaussianSubclass_OverridingCalculate_ShapesFiltersAndTransforms()
+    {
+        // The derivative filter is -(x / sigma^2) * Calculate(x), so it follows the override too.
+        var wavelet = new FlatGaussianWavelet();
+        var scaling = wavelet.GetScalingCoefficients();
+        var detailFilter = wavelet.GetWaveletCoefficients();
+        Assert.Equal(101, scaling.Length);
+        for (int i = 0; i < scaling.Length; i++)
+        {
+            Assert.Equal(2.0, scaling[i], Tolerance);
+            Assert.Equal(-(i - 50) * 2.0, detailFilter[i], Tolerance);
+        }
+
+        var (approximation, _) = wavelet.Decompose(new Vector<double>(new[] { 1.0, 2.0, 3.0 }));
+        Assert.Equal(2.0, approximation[0], Tolerance);
+        Assert.Equal(6.0, approximation[2], Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHatSubclass_OverridingCalculate_ShapesScalingFilter()
+    {
+        var wavelet = new FlatMexicanHatWavelet();
+        var scaling = wavelet.GetScalingCoefficients();
+        for (int i = 0; i < scaling.Length; i++)
+        {
+            Assert.Equal(3.0, scaling[i], Tolerance);
+        }
+
+        var (approximation, _) = wavelet.Decompose(new Vector<double>(new[] { 1.0, 2.0 }));
+        Assert.Equal(3.0, approximation[0], Tolerance);
+        Assert.Equal(6.0, approximation[1], Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GaussianWavelet_TensorCalculate_MatchesScalarCalculate()
+    {
+        var wavelet = new GaussianWavelet<double>(sigma: 1.5);
+        var x = new Tensor<double>(new[] { -2.0, -0.5, 0.0, 1.25, 3.0 }, new[] { 5 });
+        var values = wavelet.Calculate(x);
+        for (int i = 0; i < 5; i++)
+        {
+            Assert.Equal(wavelet.Calculate(x[i]), values[i], 1e-14);
+        }
+    }
 }

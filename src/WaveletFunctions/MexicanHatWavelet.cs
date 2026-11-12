@@ -49,6 +49,9 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private readonly T _sigma;
 
+    // A subclass that overrides the scalar Calculate must shape every filter, as the element loops did.
+    private readonly bool _overridesScalarCalculate;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MexicanHatWavelet{T}"/> class with the specified sigma.
     /// </summary>
@@ -74,6 +77,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
     public MexicanHatWavelet(double sigma = 1.0)
     {
         _sigma = NumOps.FromDouble(sigma);
+        _overridesScalarCalculate = OverridesScalarCalculateBelow(typeof(MexicanHatWavelet<T>));
     }
 
     /// <summary>
@@ -143,7 +147,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
         }
 
         var x = WaveletEngineOps<T>.CenteredGrid(size);
-        return WaveletEngineOps<T>.PointwiseDecompose(input, CalculateValues(x), CalculateDerivativeValues(x));
+        return WaveletEngineOps<T>.PointwiseDecompose(input, Calculate(x), CalculateDerivativeValues(x));
     }
 
     /// <summary>
@@ -172,7 +176,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
     {
         int size = 101; // Odd number to have a center point
         var x = AiDotNetEngine.Current.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(size), NumOps.FromDouble(size / 4.0));
-        return CalculateValues(x).ToVector();
+        return Calculate(x).ToVector();
     }
 
     /// <summary>
@@ -270,13 +274,23 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
         }
 
         var x = WaveletEngineOps<T>.CenteredGrid(size);
-        return WaveletEngineOps<T>.PointwiseReconstruct(approximation, detail, CalculateValues(x), CalculateDerivativeValues(x));
+        return WaveletEngineOps<T>.PointwiseReconstruct(approximation, detail, Calculate(x), CalculateDerivativeValues(x));
     }
 
     /// <summary>
     /// Evaluates <see cref="Calculate(T)"/> at every entry of <paramref name="x"/>.
     /// </summary>
-    private Tensor<T> CalculateValues(Tensor<T> x)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Evaluated as whole-tensor engine operations, identical to <see cref="Calculate(T)"/> element by element;
+    /// when a subclass overrides the scalar <see cref="Calculate(T)"/>, its override is used for every element.
+    /// </remarks>
+    public override Tensor<T> Calculate(Tensor<T> x)
+    {
+        return _overridesScalarCalculate ? base.Calculate(x) : EvaluateCalculate(x);
+    }
+
+    private Tensor<T> EvaluateCalculate(Tensor<T> x)
     {
         var engine = AiDotNetEngine.Current;
         var x2 = engine.TensorSquare(x);

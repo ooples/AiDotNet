@@ -1291,3 +1291,6 @@ virtual AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.PrintMembers(System.Te
 *REMOVED*virtual AiDotNet.Geometry.Preprocessing.MeshStatistics.EqualityContract.get -> System.Type!
 *REMOVED*virtual AiDotNet.Geometry.Preprocessing.MeshStatistics.Equals(AiDotNet.Geometry.Preprocessing.MeshStatistics? other) -> bool
 *REMOVED*virtual AiDotNet.Geometry.Preprocessing.MeshStatistics.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual AiDotNet.WaveletFunctions.WaveletFunctionBase<T>.Calculate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.WaveletFunctions.GaussianWavelet<T>.Calculate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.WaveletFunctions.MexicanHatWavelet<T>.Calculate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
