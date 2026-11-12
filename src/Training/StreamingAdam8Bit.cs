@@ -43,8 +43,11 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
     private readonly double _epsilon;
     private readonly double _weightDecay;
     private readonly bool _decoupledWeightDecay;
-    private readonly bool _useBf16Moments;
-    private readonly int _min8BitSize;
+    // The path each parameter's moments live on, fixed by its first step. The GPU state and the base class's CPU state
+    // are separate representations, so a parameter that switched paths would continue from moments that miss every
+    // update made on the other path.
+    private readonly Dictionary<Tensor<T>, bool> _keepsMomentsOnGpu =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly Dictionary<Tensor<T>, GpuMomentState> _gpuState =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly Dictionary<Tensor<float>, (Tensor<float> M, Tensor<float> V)> _gpuFp32SmallState =
@@ -61,7 +64,8 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         bool decoupledWeightDecay = false,
         bool useBf16Moments = false,
         int min8BitSize = 0)
-        : base(nameof(StreamingAdam8Bit<T>), learningRate, new[] { true, false }, blockSize, maxUpdateRatio)
+        : base(nameof(StreamingAdam8Bit<T>), learningRate, new[] { true, false }, blockSize, maxUpdateRatio,
+            useBf16Moments, min8BitSize)
     {
         if (double.IsNaN(weightDecay) || double.IsInfinity(weightDecay) || weightDecay < 0.0)
             throw new ArgumentOutOfRangeException(nameof(weightDecay), weightDecay,
@@ -71,8 +75,6 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         _epsilon = epsilon;
         _weightDecay = weightDecay;
         _decoupledWeightDecay = decoupledWeightDecay;
-        _useBf16Moments = useBf16Moments;
-        _min8BitSize = Math.Max(0, min8BitSize);
     }
 
     public override void Apply(Tensor<T> param, Tensor<T> grad)
@@ -80,15 +82,33 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         if (param is null) throw new ArgumentNullException(nameof(param));
         if (grad is null) throw new ArgumentNullException(nameof(grad));
 
-        if (typeof(T) == typeof(float)
+        bool gpuEligible = typeof(T) == typeof(float)
             && param.Length > 0
             && grad.Length == param.Length
-            && AiDotNetEngine.Current is DirectGpuTensorEngine
-            && TryApplyOnGpu(param, grad))
+            && AiDotNetEngine.Current is DirectGpuTensorEngine;
+
+        if (_keepsMomentsOnGpu.TryGetValue(param, out bool onGpu))
         {
-            return;
+            if (!onGpu)
+            {
+                base.Apply(param, grad);
+                return;
+            }
+            if (gpuEligible && TryApplyOnGpu(param, grad))
+                return;
+            throw new InvalidOperationException(
+                $"{nameof(StreamingAdam8Bit<T>)}: the GPU step failed for a parameter whose optimizer moments are on the " +
+                "GPU from earlier steps. Continuing on the CPU would restart it from zero moments, so the step is not taken.");
         }
 
+        // The first step picks the path for the parameter's lifetime: the GPU when it is available and its state
+        // allocates, the CPU (in the configured 8-bit, BF16 or FP32 layout) otherwise.
+        if (gpuEligible && TryApplyOnGpu(param, grad))
+        {
+            _keepsMomentsOnGpu[param] = true;
+            return;
+        }
+        _keepsMomentsOnGpu[param] = false;
         base.Apply(param, grad);
     }
 
@@ -105,7 +125,7 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         float wd = (float)_weightDecay;
         int step = Math.Max(1, Step);
 
-        if (!_useBf16Moments && length < _min8BitSize)
+        if (!UseBf16Moments && length < Min8BitSize)
         {
             if (!_gpuFp32SmallState.TryGetValue(pFloat, out var fp) || fp.M.Length != length)
             {
@@ -125,7 +145,7 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
             _gpuState.Remove(param);
             state?.Dispose();
             var fresh = new GpuMomentState { Length = length };
-            bool allocated = _useBf16Moments
+            bool allocated = UseBf16Moments
                 ? GpuOptimizer.TryAllocBf16MomentState(length, out fresh.MBf16, out fresh.VBf16)
                 : GpuOptimizer.TryAllocAdam8BitState(
                     length, BlockSize, out fresh.MQuant, out fresh.VQuant, out fresh.MScales, out fresh.VScales);
@@ -138,7 +158,7 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
             state = fresh;
         }
 
-        if (_useBf16Moments)
+        if (UseBf16Moments)
         {
             return GpuOptimizer.TryAdamBf16Step(
                 pFloat, gFloat, state.MBf16, state.VBf16, lr, b1, b2, eps, wd, step, _decoupledWeightDecay);
@@ -189,5 +209,6 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
             fp.V.Dispose();
         }
         _gpuFp32SmallState.Clear();
+        _keepsMomentsOnGpu.Clear();
     }
 }
