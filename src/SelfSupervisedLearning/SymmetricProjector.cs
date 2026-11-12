@@ -216,10 +216,16 @@ public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Paramete
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var all = new List<T>();
-        foreach (var block in GetTrainableTensors())
-            for (int i = 0; i < block.Length; i++) all.Add(block[i]);
-        return new Vector<T>([.. all]);
+        // Bulk copy of each trainable tensor, in GetTrainableTensors order
+        var blocks = GetTrainableTensors();
+        var all = new Vector<T>(blocks.Sum(block => block.Length));
+        int offset = 0;
+        foreach (var block in blocks)
+        {
+            block.Contiguous().AsSpan().CopyTo(all.AsWritableSpan().Slice(offset, block.Length));
+            offset += block.Length;
+        }
+        return all;
     }
 
     /// <inheritdoc />
@@ -238,7 +244,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Paramete
         int offset = 0;
         foreach (var block in GetTrainableTensors())
         {
-            for (int i = 0; i < block.Length; i++) block[i] = parameters[offset + i];
+            parameters.AsSpan().Slice(offset, block.Length).CopyTo(block.AsWritableSpan());
             offset += block.Length;
         }
     }
@@ -304,12 +310,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Paramete
 
     private static Tensor<T> InitializeOnes(int size)
     {
-        var ones = new Tensor<T>(new[] { size });
-        for (int i = 0; i < size; i++)
-        {
-            ones[i] = NumOps.One;
-        }
-        return ones;
+        return Engine.TensorAddScalar(new Tensor<T>(new[] { size }), NumOps.One);
     }
 
     // input [batch, in] @ weight [in, out] + bias [out].
@@ -328,25 +329,24 @@ public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Paramete
         {
             var output = Engine.BatchNorm(input, gamma, beta, BatchNormEpsilon, out var mean, out var variance);
             double unbias = batch > 1 ? batch / (batch - 1.0) : 1.0;
-            for (int d = 0; d < dim; d++)
-            {
-                runningMean[d] = NumOps.FromDouble((1 - BatchNormMomentum) * NumOps.ToDouble(runningMean[d])
-                    + BatchNormMomentum * NumOps.ToDouble(mean[d]));
-                runningVar[d] = NumOps.FromDouble((1 - BatchNormMomentum) * NumOps.ToDouble(runningVar[d])
-                    + BatchNormMomentum * NumOps.ToDouble(variance[d]) * unbias);
-            }
+            var keep = NumOps.FromDouble(1 - BatchNormMomentum);
+            Engine.TensorAdd(
+                    Engine.TensorMultiplyScalar(runningMean, keep),
+                    Engine.TensorMultiplyScalar(mean, NumOps.FromDouble(BatchNormMomentum)))
+                .AsSpan().CopyTo(runningMean.AsWritableSpan());
+            Engine.TensorAdd(
+                    Engine.TensorMultiplyScalar(runningVar, keep),
+                    Engine.TensorMultiplyScalar(variance, NumOps.FromDouble(BatchNormMomentum * unbias)))
+                .AsSpan().CopyTo(runningVar.AsWritableSpan());
             return output;
         }
 
         // y = x * scale + shift, scale = gamma / sqrt(var + eps), shift = beta - mean * scale.
-        var scale = new Tensor<T>(new[] { 1, dim });
-        var shift = new Tensor<T>(new[] { 1, dim });
-        for (int d = 0; d < dim; d++)
-        {
-            double s = NumOps.ToDouble(gamma[d]) / Math.Sqrt(NumOps.ToDouble(runningVar[d]) + BatchNormEpsilon);
-            scale[0, d] = NumOps.FromDouble(s);
-            shift[0, d] = NumOps.FromDouble(NumOps.ToDouble(beta[d]) - NumOps.ToDouble(runningMean[d]) * s);
-        }
+        var scale = Engine.TensorDivide(gamma,
+                Engine.TensorSqrt(Engine.TensorAddScalar(runningVar, NumOps.FromDouble(BatchNormEpsilon))))
+            .Reshape(1, dim);
+        var shift = Engine.TensorSubtract(beta.Reshape(1, dim),
+            Engine.TensorMultiply(runningMean.Reshape(1, dim), scale));
         var shape = new[] { batch, dim };
         return Engine.TensorAdd(Engine.TensorMultiply(input, Engine.TensorBroadcastTo(scale, shape)), Engine.TensorBroadcastTo(shift, shape));
     }
