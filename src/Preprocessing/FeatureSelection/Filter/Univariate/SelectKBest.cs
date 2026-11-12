@@ -468,20 +468,7 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Selector has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numOutputCols = _selectedFeatures.Length;
-        var result = new T[numRows, numOutputCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numOutputCols; j++)
-            {
-                int sourceCol = _selectedFeatures[j];
-                result[i, j] = data[i, sourceCol];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedFeatures);
     }
 
     /// <summary>
