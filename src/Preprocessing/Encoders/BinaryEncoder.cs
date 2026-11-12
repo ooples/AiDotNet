@@ -98,7 +98,7 @@ public class BinaryEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // Sorted unique values; category i gets ordinal i + 1 (0 is left for unknown)
             var column = PreprocessingTensorOps.Column(data, col);
             var categories = column.Length == 0 ? new Tensor<T>(new[] { 0 }) : PreprocessingTensorOps.SortedUnique(column);
-            _categories.Add(categories);
+            _categories.Add(CategoryValueMap<T>.Owned(categories));
 
             // Calculate bits needed: ceil(log2(n + 1)) where +1 is for unknown category
             int numCategories = categories.Length + 1; // +1 for unknown

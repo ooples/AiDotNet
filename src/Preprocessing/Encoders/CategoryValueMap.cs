@@ -30,11 +30,21 @@ public sealed class CategoryValueMap<T>
 
     internal CategoryValueMap(Tensor<T> sortedCategories, Tensor<T> values)
     {
-        SortedCategories = sortedCategories;
-        ValueTensor = values;
-        Categories = sortedCategories.ToVector();
-        Values = values.ToVector();
+        if (sortedCategories.Length != values.Length)
+            throw new ArgumentException("Each category needs exactly one encoded value.", nameof(values));
+
+        // The inputs are engine results; keep copies so later engine calls cannot reuse their buffers
+        SortedCategories = Owned(sortedCategories);
+        ValueTensor = Owned(values);
+        Categories = SortedCategories.ToVector();
+        Values = ValueTensor.ToVector();
     }
+
+    /// <summary>
+    /// A garbage-collected copy of <paramref name="value"/> for fitted state kept across calls: an engine result may
+    /// live in a tensor arena buffer that is handed out again after the fit returns.
+    /// </summary>
+    internal static Tensor<T> Owned(Tensor<T> value) => new Tensor<T>(value.Shape.ToArray(), value.ToVector());
 
     /// <summary>Gets the distinct category values, sorted ascending.</summary>
     public Vector<T> Categories { get; }

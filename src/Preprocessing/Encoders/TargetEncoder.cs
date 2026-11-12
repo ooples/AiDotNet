@@ -139,8 +139,8 @@ public class TargetEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         // Global mean per column (0 for columns that are not encoded)
-        _globalMeans = engine.TensorWhere(globalMeans,
-            PreprocessingTensorOps.Filled(new[] { _nInputFeatures }, globalTargetMean), new Tensor<T>(new[] { _nInputFeatures }));
+        _globalMeans = CategoryValueMap<T>.Owned(engine.TensorWhere(globalMeans,
+            PreprocessingTensorOps.Filled(new[] { _nInputFeatures }, globalTargetMean), new Tensor<T>(new[] { _nInputFeatures })));
         IsFitted = true;
     }
 

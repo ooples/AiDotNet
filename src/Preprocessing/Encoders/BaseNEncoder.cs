@@ -97,7 +97,7 @@ public class BaseNEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // Sorted unique values; category i gets index i
             var column = PreprocessingTensorOps.Column(data, col);
             var sortedValues = column.Length == 0 ? new Tensor<T>(new[] { 0 }) : PreprocessingTensorOps.SortedUnique(column);
-            _categoryToIndex[col] = sortedValues;
+            _categoryToIndex[col] = CategoryValueMap<T>.Owned(sortedValues);
 
             // Calculate number of digits needed
             int nCategories = sortedValues.Length;

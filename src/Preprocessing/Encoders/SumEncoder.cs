@@ -82,14 +82,14 @@ public class SumEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             var column = PreprocessingTensorOps.Column(data, col);
             var sortedCategories = column.Length == 0 ? new Tensor<T>(new[] { 0 }) : PreprocessingTensorOps.SortedUnique(column);
-            _categories[col] = sortedCategories;
+            _categories[col] = CategoryValueMap<T>.Owned(sortedCategories);
 
             // Sum coding: category c < k - 1 is 1 in column c and 0 elsewhere; the reference (last)
             // category is -1 in all columns
             int k = sortedCategories.Length;
-            _contrastMatrices[col] = PreprocessingTensorOps.RationalMatrix<T>(k, Math.Max(1, k - 1),
+            _contrastMatrices[col] = CategoryValueMap<T>.Owned(PreprocessingTensorOps.RationalMatrix<T>(k, Math.Max(1, k - 1),
                 (row, c) => row == k - 1 ? -1 : row == c ? 1 : 0,
-                _ => 1);
+                _ => 1));
         }
 
         // Calculate total output features

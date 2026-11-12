@@ -69,9 +69,9 @@ public class LabelEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _categories = new List<Tensor<T>>();
         for (int col = 0; col < numColumns; col++)
         {
-            _categories.Add(columnsToProcess.Contains(col)
+            _categories.Add(CategoryValueMap<T>.Owned(columnsToProcess.Contains(col)
                 ? PreprocessingTensorOps.SortedUnique(PreprocessingTensorOps.Column(data, col))
-                : new Tensor<T>(new[] { 0 }));
+                : new Tensor<T>(new[] { 0 })));
         }
     }
 

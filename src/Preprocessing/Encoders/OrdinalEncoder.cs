@@ -117,7 +117,7 @@ public class OrdinalEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             }
 
             // Sorted view of the categories (for lookups) with the ordinal of each sorted entry
-            _ordinalCategories.Add(categoryOrder);
+            _ordinalCategories.Add(CategoryValueMap<T>.Owned(categoryOrder));
             if (categoryOrder.Length == 0)
             {
                 _sortedCategories.Add(categoryOrder);
@@ -129,8 +129,8 @@ public class OrdinalEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 // ordered last index first, so the lookup finds the last occurrence
                 var orderIndex = PreprocessingTensorOps.StableOrder(categoryOrder, descending: false, lastAmongTies: true);
                 var order = new Tensor<int>(orderIndex, new[] { orderIndex.Length });
-                _sortedCategories.Add(Engine.TensorIndexSelect(categoryOrder, order, 0));
-                _sortedOrdinals.Add(order.Cast<T>());
+                _sortedCategories.Add(CategoryValueMap<T>.Owned(Engine.TensorIndexSelect(categoryOrder, order, 0)));
+                _sortedOrdinals.Add(CategoryValueMap<T>.Owned(order.Cast<T>()));
             }
         }
     }

@@ -236,9 +236,10 @@ public class LeaveOneOutEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         public CategoryStatistics(Tensor<T> categories, Tensor<T> sums, Tensor<T> counts)
         {
-            Categories = categories;
-            Sums = sums;
-            Counts = counts;
+            // Engine results kept across calls: copy them out of any tensor arena
+            Categories = CategoryValueMap<T>.Owned(categories);
+            Sums = CategoryValueMap<T>.Owned(sums);
+            Counts = CategoryValueMap<T>.Owned(counts);
         }
 
         public Tensor<T> Categories { get; }

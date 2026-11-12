@@ -90,11 +90,12 @@ public class HelmertEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             var column = PreprocessingTensorOps.Column(data, col);
             var sortedCategories = column.Length == 0 ? new Tensor<T>(new[] { 0 }) : PreprocessingTensorOps.SortedUnique(column);
-            _categories[col] = sortedCategories;
+            _categories[col] = CategoryValueMap<T>.Owned(sortedCategories);
 
             // Build the contrast matrix (one zero column when there are fewer than two levels)
             int k = sortedCategories.Length;
-            _contrastMatrices[col] = k > 1 ? (_reversed ? BuildReversedHelmertMatrix(k) : BuildHelmertMatrix(k)) : new Tensor<T>(new[] { k, 1 });
+            _contrastMatrices[col] = CategoryValueMap<T>.Owned(
+                k > 1 ? (_reversed ? BuildReversedHelmertMatrix(k) : BuildHelmertMatrix(k)) : new Tensor<T>(new[] { k, 1 }));
         }
 
         // Calculate total output features
