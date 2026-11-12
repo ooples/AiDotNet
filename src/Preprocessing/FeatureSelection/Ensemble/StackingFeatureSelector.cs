@@ -25,13 +25,13 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _stackedScores;
+    private Vector<T>? _stackedScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? StackedScores => _stackedScores;
+    public Vector<T>? StackedScores => _stackedScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,187 +65,79 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
 
         // Base scorers: correlation, variance, mutual information approximation
-        var correlationScores = ComputeCorrelationScores(X, y, n, p);
-        var varianceScores = ComputeVarianceScores(X, n, p);
+        var correlationScores = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, y));
+        var varianceScores = engine.TensorDivideScalar(FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X),
+            NumOps.FromDouble(n - 1));
         var miScores = ComputeMIScores(X, y, n, p);
 
         // Normalize scores to [0, 1]
-        NormalizeScores(correlationScores);
-        NormalizeScores(varianceScores);
-        NormalizeScores(miScores);
+        correlationScores = NormalizeScores(correlationScores);
+        varianceScores = NormalizeScores(varianceScores);
+        miScores = NormalizeScores(miScores);
 
         // Meta-learner: weighted combination (learn weights from data)
         // Use correlation between base scores and target variance explained
-        double wCorr = ComputeMetaWeight(X, y, correlationScores, n, p);
-        double wVar = ComputeMetaWeight(X, y, varianceScores, n, p);
-        double wMI = ComputeMetaWeight(X, y, miScores, n, p);
+        T wCorr = ComputeMetaWeight(X, y, correlationScores, n, p);
+        T wVar = ComputeMetaWeight(X, y, varianceScores, n, p);
+        T wMI = ComputeMetaWeight(X, y, miScores, n, p);
 
-        double totalWeight = wCorr + wVar + wMI + 1e-10;
-        wCorr /= totalWeight;
-        wVar /= totalWeight;
-        wMI /= totalWeight;
+        T totalWeight = NumOps.Add(NumOps.Add(NumOps.Add(wCorr, wVar), wMI), NumOps.FromDouble(1e-10));
 
         // Combine scores
-        _stackedScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _stackedScores[j] = wCorr * correlationScores[j] + wVar * varianceScores[j] + wMI * miScores[j];
+        var stackedScores = engine.TensorAdd(engine.TensorAdd(
+            engine.TensorMultiplyScalar(correlationScores, NumOps.Divide(wCorr, totalWeight)),
+            engine.TensorMultiplyScalar(varianceScores, NumOps.Divide(wVar, totalWeight))),
+            engine.TensorMultiplyScalar(miScores, NumOps.Divide(wMI, totalWeight)));
+        _stackedScores = stackedScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _stackedScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(stackedScores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeCorrelationScores(double[,] X, double[] y, int n, int p)
+    private Tensor<T> ComputeMIScores(Tensor<T> X, Tensor<T> y, int n, int p)
     {
-        var scores = new double[p];
-        double yMean = y.Average();
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++) xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xd = X[i, j] - xMean;
-                double yd = y[i] - yMean;
-                sxy += xd * yd;
-                sxx += xd * xd;
-                syy += yd * yd;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeVarianceScores(double[,] X, int n, int p)
-    {
-        var scores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += X[i, j];
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-                variance += (X[i, j] - mean) * (X[i, j] - mean);
-            scores[j] = variance / (n - 1);
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeMIScores(double[,] X, double[] y, int n, int p)
-    {
-        var scores = new double[p];
+        // sqrt(n) + 1 equal-width bins (width (max - min) / bins + 1e-10); MI in bits, clamped at 0
         int nBins = (int)Math.Sqrt(n) + 1;
-
-        double yMin = y.Min(), yMax = y.Max();
-        double yBinWidth = (yMax - yMin) / nBins + 1e-10;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMin = double.MaxValue, xMax = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                xMin = Math.Min(xMin, X[i, j]);
-                xMax = Math.Max(xMax, X[i, j]);
-            }
-            double xBinWidth = (xMax - xMin) / nBins + 1e-10;
-
-            var jointCounts = new int[nBins, nBins];
-            var xCounts = new int[nBins];
-            var yCounts = new int[nBins];
-
-            for (int i = 0; i < n; i++)
-            {
-                int xBin = Math.Min((int)((X[i, j] - xMin) / xBinWidth), nBins - 1);
-                int yBin = Math.Min((int)((y[i] - yMin) / yBinWidth), nBins - 1);
-                jointCounts[xBin, yBin]++;
-                xCounts[xBin]++;
-                yCounts[yBin]++;
-            }
-
-            double mi = 0;
-            for (int xb = 0; xb < nBins; xb++)
-            {
-                for (int yb = 0; yb < nBins; yb++)
-                {
-                    if (jointCounts[xb, yb] > 0 && xCounts[xb] > 0 && yCounts[yb] > 0)
-                    {
-                        double pxy = (double)jointCounts[xb, yb] / n;
-                        double px = (double)xCounts[xb] / n;
-                        double py = (double)yCounts[yb] / n;
-                        mi += pxy * Math.Log(pxy / (px * py) + 1e-10) / Math.Log(2);
-                    }
-                }
-            }
-            scores[j] = Math.Max(0, mi);
-        }
-
-        return scores;
+        var xBins = PreprocessingTensorOps.EqualWidthBinOneHot(X, nBins, out _);
+        var yBins = PreprocessingTensorOps.EqualWidthBinOneHot(Engine.Reshape(y, new[] { n, 1 }), nBins, out _);
+        return Engine.Reshape(PreprocessingTensorOps.HistogramMutualInformation(xBins, yBins, nBins), new[] { p });
     }
 
-    private void NormalizeScores(double[] scores)
+    private Tensor<T> NormalizeScores(Tensor<T> scores)
     {
-        double minVal = scores.Min();
-        double maxVal = scores.Max();
-        double range = maxVal - minVal + 1e-10;
-        for (int j = 0; j < scores.Length; j++)
-            scores[j] = (scores[j] - minVal) / range;
+        var shifted = Engine.TensorSubtractScalar(scores, Engine.TensorMinValue(scores));
+        return Engine.TensorDivideScalar(shifted, NumOps.Add(Engine.TensorMaxValue(shifted), NumOps.FromDouble(1e-10)));
     }
 
-    private double ComputeMetaWeight(double[,] X, double[] y, double[] scores, int n, int p)
+    private T ComputeMetaWeight(Tensor<T> X, Tensor<T> y, Tensor<T> scores, int n, int p)
     {
         // Weight based on how well the top-scored features explain target variance
-        var topFeatures = Enumerable.Range(0, p)
-            .OrderByDescending(j => scores[j])
-            .Take(Math.Min(5, p))
-            .ToList();
+        var engine = Engine;
+        var topFeatures = PreprocessingTensorOps.StableOrder(scores, descending: true).Take(Math.Min(5, p)).ToArray();
+        var top = new Tensor<int>(topFeatures, new[] { topFeatures.Length });
+        var topScores = engine.TensorIndexSelect(scores, top, 0);
 
-        double yMean = y.Average();
-        double ssTot = y.Sum(yi => (yi - yMean) * (yi - yMean));
+        T ssTot = FeatureSelectionTensorOps.SumSquaredDeviations(y);
 
-        // Simple weighted average prediction
-        double ssRes = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double pred = 0;
-            double weightSum = 0;
-            foreach (int j in topFeatures)
-            {
-                pred += scores[j] * X[i, j];
-                weightSum += scores[j];
-            }
-            if (weightSum > 1e-10) pred /= weightSum;
-            double err = y[i] - pred;
-            ssRes += err * err;
-        }
+        // Simple weighted average prediction (unnormalized when the weights sum to at most 1e-10)
+        var pred = engine.Reshape(engine.TensorMatMul(engine.TensorIndexSelect(X, top, 1),
+            engine.Reshape(topScores, new[] { topFeatures.Length, 1 })), new[] { n });
+        T weightSum = engine.TensorSum(topScores);
+        if (PreprocessingTensorOps.IsAbove(weightSum, NumOps.FromDouble(1e-10)))
+            pred = engine.TensorDivideScalar(pred, weightSum);
+        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, pred));
 
-        return ssTot > 1e-10 ? Math.Max(0, 1 - ssRes / ssTot) : 0;
+        return PreprocessingTensorOps.IsAbove(ssTot, NumOps.FromDouble(1e-10))
+            ? PreprocessingTensorOps.ScalarMax(NumOps.Zero, NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot)))
+            : NumOps.Zero;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
