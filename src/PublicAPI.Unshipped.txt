@@ -22565,3 +22565,21 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> (int[]![]! Indices, double[]![]! Weights)
+*REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.GridInterpolationKernel(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, double[]![]! gridCoordinates, int interpolationOrder = 4) -> void
+*REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector<T>! v, int[]![]! interpolationIndices, double[]![]! interpolationWeights) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*static AiDotNet.Kernels.GridInterpolationKernel<T>.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, (double Min, double Max)[]! bounds, int gridPointsPerDim, int interpolationOrder = 4) -> AiDotNet.Kernels.GridInterpolationKernel<T>!
+AiDotNet.Kernels.GridInterpolationKernel<T>.GridInterpolationKernel(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, AiDotNet.Tensors.LinearAlgebra.Vector<T>![]! gridCoordinates) -> void
+AiDotNet.Kernels.GridInterpolationKernel<T>.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<int>! Indices, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! Weights)
+AiDotNet.Kernels.GridInterpolationKernel<T>.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector<T>! v, AiDotNet.Tensors.LinearAlgebra.Tensor<int>! interpolationIndices, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! interpolationWeights) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+static AiDotNet.Kernels.GridInterpolationKernel<T>.WithUniformGrid(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, (T Min, T Max)[]! bounds, int gridPointsPerDim) -> AiDotNet.Kernels.GridInterpolationKernel<T>!
+*REMOVED*AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.RandomSurvivalForest(int numTrees = 100, int maxDepth = 10, int minSamplesLeaf = 6, int maxFeatures = 0, int? seed = null) -> void
+AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.RandomSurvivalForest(int numTrees = 100, int maxDepth = 10, int minSamplesLeaf = 6, int maxFeatures = 0, int? seed = null, bool bootstrap = true) -> void
+AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.Bootstrap.get -> bool
+override AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.PredictCumulativeHazard(AiDotNet.Tensors.LinearAlgebra.Vector<T>! times, AiDotNet.Tensors.LinearAlgebra.Matrix<T>? features = null) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! degraded, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reference) -> T
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>.PerceptualSpeechQuality(int sampleRate = 16000) -> void
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>.ApproximatePerceptualSpeechQuality(int sampleRate = 16000) -> void
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! degraded, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reference) -> T

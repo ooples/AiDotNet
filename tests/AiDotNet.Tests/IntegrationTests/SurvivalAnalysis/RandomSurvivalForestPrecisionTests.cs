@@ -69,4 +69,82 @@ public class RandomSurvivalForestPrecisionTests
         // Old int arithmetic gave 0.12597...; the correct statistic is 0.11383...
         Assert.Equal(reference, actual, 9);
     }
+    /// <summary>
+    /// scikit-survival 0.28.0 reference: RandomSurvivalForest(n_estimators=3, bootstrap=False,
+    /// max_features=None, min_samples_leaf=3, min_samples_split=6, max_depth=None) on this toy set.
+    /// Without bootstrap and with every feature considered, each tree is the same for any random_state
+    /// (checked for random_state 0..5), so the forest is deterministic.
+    /// </summary>
+    private static (Matrix<double> X, Vector<double> Times, Vector<int> Events, Matrix<double> Query, Vector<double> QueryTimes) ScikitSurvivalToySet()
+    {
+        double[,] x =
+        {
+            { 3, 11 }, { 7, 2 }, { 1, 14 }, { 12, 5 }, { 9, 9 }, { 15, 1 }, { 4, 13 }, { 10, 7 },
+            { 2, 16 }, { 13, 3 }, { 6, 12 }, { 16, 8 }, { 8, 4 }, { 11, 15 }, { 5, 6 }, { 14, 10 },
+        };
+        var times = new Vector<double>(new[] { 5.0, 12.0, 3.0, 18.0, 9.0, 21.0, 4.0, 14.0, 2.0, 20.0, 7.0, 16.0, 12.0, 10.0, 8.0, 17.0 });
+        var events = new Vector<int>(new[] { 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1 });
+        double[,] query = { { 3, 11 }, { 8, 8 }, { 14, 2 }, { 6, 15 } };
+
+        // scikit-survival unique_times_ (event and censoring times)
+        var queryTimes = new Vector<double>(new[] { 2.0, 3.0, 4.0, 5.0, 7.0, 8.0, 9.0, 10.0, 12.0, 14.0, 16.0, 17.0, 18.0, 20.0, 21.0 });
+        return (new Matrix<double>(x), times, events, new Matrix<double>(query), queryTimes);
+    }
+
+    private static RandomSurvivalForest<double> FitScikitSurvivalToyForest()
+    {
+        var (x, times, events, _, _) = ScikitSurvivalToySet();
+        var forest = new RandomSurvivalForest<double>(
+            numTrees: 3, maxDepth: 50, minSamplesLeaf: 3, maxFeatures: 2, seed: 0, bootstrap: false);
+        forest.FitSurvival(x, times, events);
+        return forest;
+    }
+
+    [Fact]
+    public void EnsembleMortality_MatchesScikitSurvival()
+    {
+        var (_, _, _, query, _) = ScikitSurvivalToySet();
+        var risk = FitScikitSurvivalToyForest().PredictHazardRatio(query);
+
+        // RandomSurvivalForest.predict: ensemble CHF summed over the event times (Ishwaran et al. 2008).
+        double[] expected = { 17.666666666666668, 8.833333333333332, 2.0, 11.0 };
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], risk[i], 12);
+    }
+
+    [Fact]
+    public void EnsembleCumulativeHazard_MatchesScikitSurvival()
+    {
+        var (_, _, _, query, queryTimes) = ScikitSurvivalToySet();
+        var chf = FitScikitSurvivalToyForest().PredictCumulativeHazard(queryTimes, query);
+
+        double[,] expected =
+        {
+            { 1.0 / 3, 0.8333333333333334, 0.8333333333333334, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333, 1.8333333333333333 },
+            { 0, 0, 0, 0, 0, 0, 0.25, 0.25, 0.9166666666666666, 1.9166666666666667, 1.9166666666666667, 1.9166666666666667, 1.9166666666666667, 1.9166666666666667, 1.9166666666666667 },
+            { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 1.5 },
+            { 0, 0, 0, 0, 0.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5 },
+        };
+        for (int i = 0; i < expected.GetLength(0); i++)
+            for (int j = 0; j < expected.GetLength(1); j++)
+                Assert.Equal(expected[i, j], chf[i, j], 12);
+    }
+
+    [Fact]
+    public void EnsembleSurvival_MatchesScikitSurvival()
+    {
+        var (_, _, _, query, queryTimes) = ScikitSurvivalToySet();
+        var survival = FitScikitSurvivalToyForest().PredictSurvivalProbability(query, queryTimes);
+
+        double[,] expected =
+        {
+            { 2.0 / 3, 1.0 / 3, 1.0 / 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 1, 1, 1, 1, 1, 1, 0.75, 0.75, 0.25, 0, 0, 0, 0, 0, 0 },
+            { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.5, 0 },
+            { 1, 1, 1, 1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        };
+        for (int i = 0; i < expected.GetLength(0); i++)
+            for (int j = 0; j < expected.GetLength(1); j++)
+                Assert.Equal(expected[i, j], survival[i, j], 12);
+    }
 }
