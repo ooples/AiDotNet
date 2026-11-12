@@ -604,15 +604,20 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             if (adjacencyMatrix.Shape.Length >= 3)
             {
                 int numNodes = adjacencyMatrix.Shape[1];
-                for (int i = 0; i < numNodes; i++)
+                if (numNodes > 0)
                 {
-                    for (int j = 0; j < numNodes; j++)
+                    // An edge is any entry of the first graph that is not within 1e-8 of zero (NaN counts as
+                    // an edge, as AlmostEqual's strict comparison did), in row-major order.
+                    var firstGraph = Engine.Reshape(
+                        Engine.TensorSlice(adjacencyMatrix, new[] { 0, 0, 0 }, new[] { 1, numNodes, numNodes }),
+                        new[] { numNodes, numNodes });
+                    var nearZero = Engine.TensorLessThan(Engine.TensorAbs(firstGraph), NumOps.FromDouble(1e-8));
+                    var ones = new Tensor<T>(nearZero._shape);
+                    ones.Fill(NumOps.One);
+                    int[] coordinates = Engine.TensorNonzero(Engine.TensorSubtract(ones, nearZero)).ToVector().ToArray();
+                    for (int k = 0; k + 1 < coordinates.Length; k += 2)
                     {
-                        // Check if there's an edge between nodes i and j
-                        if (!MathHelper.AlmostEqual(adjacencyMatrix[0, i, j], NumOps.Zero))
-                        {
-                            _graphEdges.Add((i, j));
-                        }
+                        _graphEdges.Add((coordinates[k], coordinates[k + 1]));
                     }
                 }
             }
@@ -756,10 +761,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                     "GraphConvolutionalLayer requires an adjacency matrix. Call " +
                     "SetAdjacencyMatrix(...) with the graph structure before Forward.");
 
-            var identity = new Tensor<T>(new[] { inferredNumNodes, inferredNumNodes });
-            for (int i = 0; i < inferredNumNodes; i++)
-                identity[i, i] = NumOps.One;
-            SetAdjacencyMatrix(identity);
+            SetAdjacencyMatrix(Engine.TensorEye<T>(inferredNumNodes));
             return;
         }
 
@@ -772,10 +774,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         if (mismatched2D)
         {
-            var identity = new Tensor<T>(new[] { inferredNumNodes, inferredNumNodes });
-            for (int i = 0; i < inferredNumNodes; i++)
-                identity[i, i] = NumOps.One;
-            SetAdjacencyMatrix(identity);
+            SetAdjacencyMatrix(Engine.TensorEye<T>(inferredNumNodes));
         }
     }
 
@@ -1101,12 +1100,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         else
         {
             // Default to identity adjacency (tensor built locally)
-            var identityTensor = new Tensor<T>([numNodes, numNodes]);
-            identityTensor.Fill(NumOps.Zero);
-            for (int i = 0; i < numNodes; i++)
-            {
-                identityTensor[i, i] = NumOps.One;
-            }
+            var identityTensor = Engine.TensorEye<T>(numNodes);
             adj = Engine.TensorRepeatElements(identityTensor.Reshape([1, numNodes, numNodes]), batchSize, axis: 0);
         }
 

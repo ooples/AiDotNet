@@ -345,9 +345,7 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
         // GetParameters and ParameterGradients share the generated registry's order (heads, then the stream
         // arrays), so one flat step covers every tensor without restating that order here.
         var parameters = GetParameters();
-        var stepped = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-            stepped[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, ParameterGradients[i]));
+        var stepped = Engine.Subtract(parameters, Engine.Multiply(ParameterGradients, learningRate));
         SetParameters(stepped);
     }
 

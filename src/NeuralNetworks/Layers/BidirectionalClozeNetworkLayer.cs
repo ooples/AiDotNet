@@ -126,24 +126,31 @@ public partial class BidirectionalClozeNetworkLayer<T> : LayerBase<T>, IShapeCon
         int heads = _numHeads, headDim = dim / heads;
 
         // PositionalEncoding: pe[p, 2i] = sin(p / 10000^(2i/d)), pe[p, 2i+1] = cos(p / 10000^(2i/d)).
-        var pe = new Tensor<T>(new[] { 1, length, dim });
-        for (int p = 0; p < length; p++)
-            for (int i = 0; i < dim; i += 2)
-            {
-                double angle = p / Math.Pow(10000, (double)i / dim);
-                pe[0, p, i] = NumOps.FromDouble(Math.Sin(angle));
-                if (i + 1 < dim) pe[0, p, i + 1] = NumOps.FromDouble(Math.Cos(angle));
-            }
+        // Column c uses the frequency of its even partner 2i = c - c % 2; even columns take sin, odd ones cos.
+        var pairBase = new Tensor<int>(Enumerable.Range(0, dim).Select(c => c - (c % 2)).ToArray(), new[] { dim }).Cast<T>();
+        var inverseFrequency = Engine.TensorExp(
+            Engine.TensorMultiplyScalar(pairBase, NumOps.FromDouble(-Math.Log(10000.0) / dim)));
+        var angles = Engine.TensorOuter(Engine.TensorArange<T>(0, length), inverseFrequency);   // [length, dim]
+        var oddColumns = new Tensor<int>(Enumerable.Range(0, dim).Select(c => c % 2).ToArray(), new[] { 1, dim }).Cast<T>();
+        var columnOnes = new Tensor<T>(new[] { 1, dim });
+        columnOnes.Fill(NumOps.One);
+        var evenColumns = Engine.TensorSubtract(columnOnes, oddColumns);
+        var pe = Engine.Reshape(
+            Engine.TensorAdd(
+                Engine.TensorMultiply(Engine.TensorSin(angles), evenColumns),
+                Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns)),
+            new[] { 1, length, dim });
         var position = Engine.TensorBroadcastTo(pe, new[] { batch, length, dim });
         var memory = Engine.TensorAdd(input, position);
         var target = position;
 
         // Location mask: a position never attends to itself (additive -1e9 on the diagonal).
-        var mask = new Tensor<T>(new[] { batch * heads, length, length });
+        // One [length, length] diagonal mask, broadcast over batch * heads.
+        var diagonalMask = new Tensor<T>(new[] { length, length });
         T blocked = NumOps.FromDouble(-1e9);
-        for (int b = 0; b < batch * heads; b++)
-            for (int i = 0; i < length; i++)
-                mask[b, i, i] = blocked;
+        Engine.TensorFillDiagonalInPlace(diagonalMask, blocked);
+        var mask = Engine.Reshape(diagonalMask, new[] { 1, length, length });
+        T scoreScale = NumOps.FromDouble(Math.Sqrt(headDim));
 
         Tensor<T> Split(Tensor<T> x) => Engine.Reshape(
             Engine.TensorPermute(Engine.Reshape(x, new[] { batch, length, heads, headDim }), new[] { 0, 2, 1, 3 }),
@@ -155,7 +162,7 @@ public partial class BidirectionalClozeNetworkLayer<T> : LayerBase<T>, IShapeCon
             var k = Split(_keys[l].Forward(memory));
             var v = Split(_values[l].Forward(memory));
             var scores = Engine.TensorDivideScalar(
-                Engine.TensorBatchMatMul<T>(q, Engine.TensorPermute(k, new[] { 0, 2, 1 })), NumOps.FromDouble(Math.Sqrt(headDim)));
+                Engine.TensorBatchMatMul<T>(q, Engine.TensorPermute(k, new[] { 0, 2, 1 })), scoreScale);
             var weights = Engine.TensorSoftmax(Engine.TensorAdd(scores, mask), axis: 2);
             var attended = Engine.Reshape(
                 Engine.TensorPermute(Engine.Reshape(Engine.TensorBatchMatMul<T>(weights, v), new[] { batch, heads, length, headDim }), new[] { 0, 2, 1, 3 }),

@@ -415,21 +415,25 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         int embeddingDim = _embeddingTensor.Shape[1];
         var result = new Matrix<T>(tokenIds.Count, embeddingDim);
 
-        for (int i = 0; i < tokenIds.Count; i++)
+        foreach (int tokenId in tokenIds)
         {
-            int tokenId = tokenIds[i];
             if (tokenId < 0 || tokenId >= vocabSize)
             {
                 throw new ArgumentOutOfRangeException(nameof(tokenIds), $"Token id {tokenId} is out of range 0..{vocabSize - 1}.");
             }
-
-            for (int d = 0; d < embeddingDim; d++)
-            {
-                result[i, d] = _embeddingTensor[tokenId, d];
-            }
         }
 
-        return result;
+        if (tokenIds.Count == 0)
+        {
+            return result;
+        }
+
+        // One row gather of the requested tokens, copied out as a matrix.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var ids = new Tensor<int>(tokenIds.ToArray(), new[] { tokenIds.Count });
+            return Engine.TensorIndexSelect(_embeddingTensor, ids, 0).ToMatrix();
+        }
     }
 
     /// <summary>
@@ -606,12 +610,13 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             // Eager / inference fast path: direct row gather avoids the
             // O(N*V) one-hot matmul. Pre-issue #1208 / pre-#1331 default.
+            // ValidateIndicesOrThrow accepted only values within 1e-6 of a non-negative integer, so
+            // truncation gives the integer Convert.ToInt32 rounded to.
             int totalIndices = input.Length;
-            var flatIndices = new Tensor<int>([totalIndices]);
-            for (int i = 0; i < totalIndices; i++)
+            Tensor<int> flatIndices;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
-                flatIndices[i] = index;
+                flatIndices = Engine.Reshape(Engine.TensorTrunc(input), [totalIndices]).Cast<int>();
             }
             flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
         }
@@ -671,20 +676,37 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     private void ValidateIndicesOrThrow(Tensor<T> input, int vocabularySize)
     {
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length == 0)
+            return;
+
+        // An element is rejected when it is not finite, is more than 1e-6 from its truncation, or truncates
+        // outside [0, vocabularySize). Values past the int range truncate outside it, as the (int) cast
+        // wrapped them negative.
+        int badIndex;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            double val = NumOps.ToDouble(input.Data.Span[i]);
-            bool bad = double.IsNaN(val) || double.IsInfinity(val);
-            int intVal = bad ? 0 : (int)val;
-            if (bad || Math.Abs(val - intVal) > 1e-6 || intVal < 0 || intVal >= vocabularySize)
-            {
-                throw new ArgumentException(
-                    $"EmbeddingLayer requires token indices, but element {i} is {val}, which is not in "
-                    + $"[0, {vocabularySize}). Use DenseLayer for continuous feature projection, or a "
-                    + "composite embedding layer when word, position, and token-type embeddings must be "
-                    + "looked up in parallel and combined.",
-                    nameof(input));
-            }
+            var flat = Engine.Reshape(input, new[] { input.Length });
+            var ones = new Tensor<T>(flat._shape);
+            ones.Fill(NumOps.One);
+            var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flat), new Tensor<T>(flat._shape), ones);
+            var truncated = Engine.TensorTrunc(flat);
+            var fractional = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(flat, truncated)), NumOps.FromDouble(1e-6));
+            var negative = Engine.TensorLessThan(truncated, NumOps.Zero);
+            var tooLarge = Engine.TensorGreaterThan(truncated, NumOps.FromDouble(vocabularySize - 1));
+            var bad = Engine.TensorMax(Engine.TensorMax(nonFinite, fractional), Engine.TensorMax(negative, tooLarge));
+            badIndex = NumOps.GreaterThan(Engine.TensorMaxValue(bad), NumOps.Zero) ? Engine.TensorArgMax(bad, 0)[0] : -1;
+        }
+
+        if (badIndex >= 0)
+        {
+            int i = badIndex;
+            double val = NumOps.ToDouble(input.GetFlat(i));
+            throw new ArgumentException(
+                $"EmbeddingLayer requires token indices, but element {i} is {val}, which is not in "
+                + $"[0, {vocabularySize}). Use DenseLayer for continuous feature projection, or a "
+                + "composite embedding layer when word, position, and token-type embeddings must be "
+                + "looked up in parallel and combined.",
+                nameof(input));
         }
     }
 
