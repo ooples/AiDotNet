@@ -374,22 +374,30 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         public int Count => Indices.Length;
     }
 
-    /// <summary>Camera-space-projected mean gradients of the visible Gaussians of one image step.</summary>
+    /// <summary>Projected-mean gradients of the visible Gaussians of one image step.</summary>
     private sealed class GaussianGradient
     {
-        public GaussianGradient(Tensor<int> indices, Tensor<T> gradients)
+        public GaussianGradient(Tensor<int> indices, Tensor<T> gradients, Tensor<T> screenGradients)
         {
             Guard.NotNull(indices);
             Indices = indices;
             Guard.NotNull(gradients);
             Gradients = gradients;
+            Guard.NotNull(screenGradients);
+            ScreenGradients = screenGradients;
         }
 
         /// <summary>Gaussian rows [M], in depth order.</summary>
         public Tensor<int> Indices { get; }
 
-        /// <summary>World-space position gradients [M, 3].</summary>
+        /// <summary>World-space gradients [M, 3] of the projected mean; their direction orients splits.</summary>
         public Tensor<T> Gradients { get; }
+
+        /// <summary>
+        /// Gradients [M, 2] with respect to the projected mean in normalised device coordinates (pixel gradient times
+        /// W / 2 and H / 2): the reference viewspace_point_tensor.grad[:, :2] whose norm densification thresholds.
+        /// </summary>
+        public Tensor<T> ScreenGradients { get; }
 
         public int Count => Indices.Length;
     }
@@ -2552,8 +2560,14 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         shGrad = engine.TensorIndexAdd(shGrad, 0, rows, gradSh.Reshape(m, basisCount * 3));
         PublishImageGradients(positionGrad, rotationGrad, scaleGrad, opacityGrad, shGrad);
 
-        // Densification keys off the gradient of the projected mean (the paper's view-space positional gradient).
-        gradients.Add(new GaussianGradient(rows, densificationGrad));
+        // Densification keys off the gradient of the projected mean (the paper's view-space positional gradient),
+        // in normalised device coordinates as the reference rasteriser reports it: d(pixel)/d(ndc) = (W / 2, H / 2).
+        var screenGrad = engine.TensorStack(new[]
+        {
+            engine.TensorMultiplyScalar(gradMeanX, NumOps.FromDouble(0.5 * imageWidth)),
+            engine.TensorMultiplyScalar(gradMeanY, NumOps.FromDouble(0.5 * imageHeight)),
+        }, 1);
+        gradients.Add(new GaussianGradient(rows, densificationGrad, screenGrad));
         return gradients;
     }
 
@@ -2757,7 +2771,8 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
                 Full(new[] { n, 1 }, NumOps.FromDouble(gradientsMagnitude)),
                 new Tensor<T>(new[] { n, 2 }),
             }, 1);
-            synthetic.Add(new GaussianGradient(indices, gradient));
+            var screen = engine.TensorSlice(gradient, new[] { 0, 0 }, new[] { n, 2 });
+            synthetic.Add(new GaussianGradient(indices, gradient, screen));
         }
 
         AccumulateDensificationStats(synthetic);
@@ -2765,20 +2780,31 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     }
 
     /// <summary>
-    /// Test-only hook: adds one step of world-space position gradients [N, 3] (every Gaussian visible) to the
-    /// densification statistics, as a training step does.
+    /// Test-only hook: adds one step of screen-space (NDC) projected-mean gradients [N, 2] (every Gaussian visible)
+    /// to the densification statistics, as a training step does; the split direction is taken as (gx, gy, 0).
     /// </summary>
-    internal void AccumulateGradientsForTest(Tensor<T> gradients)
+    internal void AccumulateGradientsForTest(Tensor<T> screenGradients)
     {
-        Guard.NotNull(gradients);
+        Guard.NotNull(screenGradients);
         int n = GaussianCount;
-        if (gradients.Rank != 2 || gradients.Shape[0] != n || gradients.Shape[1] != 3)
+        if (screenGradients.Rank != 2 || screenGradients.Shape[0] != n || screenGradients.Shape[1] != 2)
         {
-            throw new ArgumentException("Gradients must be [N, 3].", nameof(gradients));
+            throw new ArgumentException("Screen gradients must be [N, 2].", nameof(screenGradients));
         }
 
-        var indices = Engine.TensorArange<T>(0, n, 1).Cast<int>();
-        AccumulateDensificationStats(new List<GaussianGradient> { new GaussianGradient(indices, gradients) });
+        var engine = Engine;
+        var indices = engine.TensorArange<T>(0, n, 1).Cast<int>();
+        var world = engine.TensorConcatenate(new[] { screenGradients, new Tensor<T>(new[] { n, 1 }) }, 1);
+        AccumulateDensificationStats(new List<GaussianGradient> { new GaussianGradient(indices, world, screenGradients) });
+    }
+
+    /// <summary>Test-only hook: the accumulated densification statistic [N] (mean screen-gradient norm, 0 if unseen).</summary>
+    internal Tensor<T> DensificationStatisticForTest()
+    {
+        var engine = Engine;
+        var seen = Gt(_densifyVisibleCount, NumOps.Zero);
+        var denominator = Select(seen, _densifyVisibleCount, Full(_densifyVisibleCount._shape, NumOps.One));
+        return engine.TensorDivide(_densifyNormSum, denominator);
     }
 
     /// <summary>Test-only hook: densifies and prunes from the accumulated statistics at the given iteration.</summary>
@@ -2815,7 +2841,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
                 continue;
             }
 
-            var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(batch.Gradients, batch.Gradients), new[] { 1 }, false));
+            var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(batch.ScreenGradients, batch.ScreenGradients), new[] { 1 }, false));
             _densifyGradientSum = engine.TensorIndexAdd(_densifyGradientSum, 0, batch.Indices, batch.Gradients);
             _densifyNormSum = engine.TensorIndexAdd(_densifyNormSum, 0, batch.Indices, norms);
             _densifyVisibleCount = engine.TensorIndexAdd(_densifyVisibleCount, 0, batch.Indices, Full(new[] { batch.Count }, one));
@@ -3096,7 +3122,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         InvalidateParameterCountCache();
     }
 
-    /// <summary>Mean world-space position-gradient magnitude over the visible Gaussians of a step (0 when none).</summary>
+    /// <summary>Mean screen-space (NDC) projected-mean gradient magnitude over the visible Gaussians of a step (0 when none).</summary>
     private double MeanGradientNorm(List<GaussianGradient> gradients)
     {
         var engine = Engine;
@@ -3106,7 +3132,8 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             if (batch.Count > 0)
             {
                 magnitudes.Add(engine.TensorSqrt(engine.ReduceSum(
-                    engine.TensorMultiply(batch.Gradients, batch.Gradients), new[] { 1 }, false)));
+                    engine.TensorMultiply(batch.ScreenGradients, batch.ScreenGradients), new[] { 1 }, false)));
+
             }
         }
 

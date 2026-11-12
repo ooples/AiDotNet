@@ -44,9 +44,13 @@ public class GaussianSplattingOptions : ModelOptions
     /// <value>0.01 (legacy default).</value>
     public double PruneOpacityThreshold { get; set; } = 0.01;
 
-    /// <summary>Legacy gradient threshold above which a Gaussian is split. Superseded by <see cref="GradientNormThreshold"/>.</summary>
-    /// <value>0.1 (legacy default; paper τ_pos = 0.0002).</value>
-    public double SplitGradientThreshold { get; set; } = 0.1;
+    /// <summary>
+    /// Threshold on the mean screen-space positional gradient (the norm of the loss gradient with respect to the projected
+    /// mean in normalised device coordinates, averaged over the views a Gaussian was visible in) above which a Gaussian is
+    /// densified. Used when <see cref="GradientNormThreshold"/> is null.
+    /// </summary>
+    /// <value>0.0002 (paper τ_pos, reference densify_grad_threshold).</value>
+    public double SplitGradientThreshold { get; set; } = 0.0002;
 
     /// <summary>Position jitter magnitude applied to split children.</summary>
     /// <value>0.25 (fraction of the source Gaussian's scale).</value>
@@ -103,9 +107,10 @@ public class GaussianSplattingOptions : ModelOptions
     public int? DensificationEndIteration { get; set; }
 
     /// <summary>
-    /// Gradient magnitude threshold above which a Gaussian is deemed to cover too much space and is SPLIT into two children.
+    /// Threshold on the mean screen-space (NDC) positional gradient norm above which a Gaussian is densified (cloned when
+    /// small, split when large).
     /// </summary>
-    /// <value>Nullable. When null, the effective threshold falls back to the legacy <see cref="SplitGradientThreshold"/> field. To opt into the paper default (τ_pos = 0.0002), set explicitly.</value>
+    /// <value>Nullable. When null, the effective threshold falls back to <see cref="SplitGradientThreshold"/> (paper default τ_pos = 0.0002).</value>
     /// <remarks>Paper: 0.0002.</remarks>
     public double? GradientNormThreshold { get; set; }
 

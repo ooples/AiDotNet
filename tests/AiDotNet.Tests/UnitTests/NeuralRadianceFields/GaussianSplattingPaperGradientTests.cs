@@ -383,7 +383,7 @@ public class GaussianSplattingPaperGradientTests
 
     private static Tensor<double> XGradients(params double[] values)
     {
-        var gradients = new Tensor<double>(new[] { values.Length, 3 });
+        var gradients = new Tensor<double>(new[] { values.Length, 2 });
         for (int i = 0; i < values.Length; i++) gradients[i, 0] = values[i];
         return gradients;
     }
@@ -451,6 +451,87 @@ public class GaussianSplattingPaperGradientTests
         Assert.Equal(3, w.Count);
         Assert.True(Math.Abs(w[2].PosX - 1.0) < 0.5, $"the split child belongs to Gaussian 1 (x = {w[2].PosX})");
         Assert.Equal(0.0, w[0].PosX, 12);
+    }
+
+    [Fact]
+    public void DensificationStatistic_IsTheNdcGradientOfTheProjectedMean()
+    {
+        // Kerbl et al. 2023 section 5.2 / reference viewspace_point_tensor.grad[:, :2]: the statistic is the norm of
+        // dL/d(projected mean) in normalised device coordinates, d(pixel)/d(ndc) = (W / 2, H / 2), and the default
+        // threshold is the paper's 0.0002 on that quantity.
+        Assert.Equal(0.0002, new GaussianSplattingOptions().SplitGradientThreshold, 12);
+
+        var options = new GaussianSplattingOptions
+        {
+            UseSphericalHarmonics = false,
+            ShDegree = 0,
+            EnableSpatialIndex = false,
+            EnableDensification = true,
+            DensificationStartIteration = 1000,
+            DensificationEndIteration = 2000,
+            MaxGaussians = 4,
+        };
+        var cloud = new Matrix<double>(1, 3);
+        var model = new GaussianSplatting<double>(options, cloud, cloud, new MeanSquaredErrorLoss<double>());
+        Assert.Equal(0.0002, model.EffectiveGradientNormThreshold, 12);
+        model.PositionLearningRate = 0.0;
+        model.ColorLearningRate = 0.0;
+        model.OpacityLearningRate = 0.0;
+        model.ScaleLearningRate = 0.0;
+        model.RotationLearningRate = 0.0;
+
+        // One isotropic Gaussian on the optical axis: to first order a camera-space x/y shift moves only its
+        // projected mean (dmu/dx = f / z) -- the projected covariance is stationary there -- so the finite difference
+        // of the loss over the world position gives the pixel-space mean gradient.
+        const double z = 3.0;
+        var position = new Tensor<double>(new[] { 1, 3 });
+        position[0, 2] = z;
+        var rotation = new Tensor<double>(new[] { 1, 4 });
+        rotation[0, 0] = 1.0;
+        var logScale = new Tensor<double>(new[] { 1, 3 });
+        for (int j = 0; j < 3; j++) logScale[0, j] = Math.Log(0.3);
+        var opacity = new Tensor<double>(new[] { 1 });
+        opacity[0] = 0.4;
+        var sh = new Tensor<double>(new[] { 1, 1, 3 });
+        for (int c = 0; c < 3; c++) sh[0, 0, c] = 0.3 + 0.1 * c;
+        model.SetGaussianStateForTest(position, rotation, logScale, opacity, sh);
+
+        var target = new Tensor<double>(new[] { Height, Width, 3 });
+        for (int y = 0; y < Height; y++)
+            for (int x = 0; x < Width; x++)
+                for (int c = 0; c < 3; c++)
+                    target[y, x, c] = 0.05 + 0.03 * x + 0.02 * y;
+
+        var identity = new Matrix<double>(3, 3);
+        for (int i = 0; i < 3; i++) identity[i, i] = 1.0;
+        var input = new Tensor<double>(new double[] { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, Focal }, new[] { 1, 13 });
+        double LossAt(Vector<double> p)
+        {
+            model.SetParameters(p);
+            var image = model.RenderImage(new Vector<double>(3), identity, Width, Height, Focal);
+            return new MeanSquaredErrorLoss<double>().CalculateLoss(image.ToVector(), target.ToVector());
+        }
+
+        var parameters = model.GetParameters();
+        const double h = 1e-6;
+        var pixelGrad = new double[2];
+        for (int axis = 0; axis < 2; axis++)
+        {
+            var plus = parameters.Clone();
+            plus[axis] += h;
+            var minus = parameters.Clone();
+            minus[axis] -= h;
+            pixelGrad[axis] = (LossAt(plus) - LossAt(minus)) / (2.0 * h) * z / Focal;
+        }
+
+        model.SetParameters(parameters);
+        model.Train(input, target);
+
+        double gx = pixelGrad[0] * 0.5 * Width;
+        double gy = pixelGrad[1] * 0.5 * Height;
+        double expected = Math.Sqrt(gx * gx + gy * gy);
+        Assert.True(expected > 1e-4, $"fixture produces no screen-space gradient ({expected})");
+        AssertClose(expected, model.DensificationStatisticForTest()[0], "NDC densification statistic");
     }
 
     private static void AssertClose(double expected, double actual, string what)
