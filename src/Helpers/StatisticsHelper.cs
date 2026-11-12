@@ -3294,12 +3294,12 @@ public static class StatisticsHelper<T>
     public static (T skewness, T kurtosis) CalculateSkewnessAndKurtosis(Vector<T> sample, T mean, T stdDev, int n)
     {
         T skewnessSum = _numOps.Zero, kurtosisSum = _numOps.Zero;
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            T diff = _numOps.Divide(_numOps.Subtract(sample[i], mean), stdDev);
-            T diff3 = _numOps.Multiply(_numOps.Multiply(diff, diff), diff);
-            skewnessSum = _numOps.Add(skewnessSum, diff3);
-            kurtosisSum = _numOps.Add(kurtosisSum, _numOps.Multiply(diff3, diff));
+            var diff = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(Prefix(sample, n), mean), stdDev);
+            var diff3 = Engine.TensorMultiply(Engine.TensorMultiply(diff, diff), diff);
+            skewnessSum = Engine.TensorSum(diff3);
+            kurtosisSum = Engine.TensorSum(Engine.TensorMultiply(diff3, diff));
         }
 
         T skewness = n > 2 ? _numOps.Divide(skewnessSum, _numOps.Multiply(_numOps.FromDouble(n - 1), _numOps.FromDouble(n - 2))) : _numOps.Zero;
@@ -3785,15 +3785,11 @@ public static class StatisticsHelper<T>
             return _numOps.FromDouble(2.0);
         }
 
-        T sumSquaredDifferences = _numOps.Zero;
-        T sumSquaredErrors = _numOps.Zero;
-
-        for (int i = 1; i < residualList.Count; i++)
-        {
-            sumSquaredDifferences = _numOps.Add(sumSquaredDifferences, _numOps.Square(_numOps.Subtract(residualList[i], residualList[i - 1])));
-            sumSquaredErrors = _numOps.Add(sumSquaredErrors, _numOps.Square(residualList[i]));
-        }
-        sumSquaredErrors = _numOps.Add(sumSquaredErrors, _numOps.Square(residualList[0]));
+        var residuals = AsTensor(residualList);
+        int lagged = residualList.Count - 1;
+        T sumSquaredDifferences = SumOfSquaredDifferences(
+            Engine.TensorNarrow(residuals, 0, 1, lagged), Engine.TensorNarrow(residuals, 0, 0, lagged));
+        T sumSquaredErrors = Engine.TensorSum(Engine.TensorMultiply(residuals, residuals));
 
         // Check for zero residuals (perfect fit) - DW is undefined
         // Return 2.0 (ideal value indicating no autocorrelation) for perfect fit edge case
@@ -5760,11 +5756,7 @@ public static class StatisticsHelper<T>
         if (v1.Length != v2.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        T sum = _numOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Abs(_numOps.Subtract(v1[i], v2[i])));
-        }
+        T sum = v1.Length == 0 ? _numOps.Zero : SumOfAbsoluteDifferences(AsTensor(v1), AsTensor(v2));
 
         return sum;
     }
@@ -5826,10 +5818,13 @@ public static class StatisticsHelper<T>
         T intersection = _numOps.Zero;
         T union = _numOps.Zero;
 
-        for (int i = 0; i < v1.Length; i++)
+        if (v1.Length > 0)
         {
-            intersection = _numOps.Add(intersection, MathHelper.Min(v1[i], v2[i]));
-            union = _numOps.Add(union, MathHelper.Max(v1[i], v2[i]));
+            // MathHelper.Min/Max semantics: a when a < b (resp. a > b), otherwise b (so a NaN in v1 yields v2).
+            var a = AsTensor(v1);
+            var b = AsTensor(v2);
+            intersection = Engine.TensorSum(Engine.TensorWhere(Engine.TensorLessThan(a, b), a, b));
+            union = Engine.TensorSum(Engine.TensorWhere(Engine.TensorGreaterThan(a, b), a, b));
         }
 
         return _numOps.Divide(intersection, union);
@@ -5860,14 +5855,7 @@ public static class StatisticsHelper<T>
         if (v1.Length != v2.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        T distance = _numOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            if (!_numOps.Equals(v1[i], v2[i]))
-            {
-                distance = _numOps.Add(distance, _numOps.One);
-            }
-        }
+        T distance = v1.Length == 0 ? _numOps.Zero : Count(Engine.TensorNotEquals(AsTensor(v1), AsTensor(v2)));
 
         return distance;
     }
