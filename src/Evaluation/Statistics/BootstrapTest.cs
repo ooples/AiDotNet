@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -81,39 +82,46 @@ public class BootstrapTest<T> : IStatisticalTest<T>
             ? RandomHelper.CreateSeededRandom(_randomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var sample1 = new Tensor<T>(scores1, new[] { n });
+        var sample2 = new Tensor<T>(scores2, new[] { n });
+
         // Compute observed difference
-        double observedDiff = ComputeMeanDifference(scores1, scores2);
+        T observedDiffT = ComputeMeanDifference(sample1, sample2);
+        double observedDiff = NumOps.ToDouble(observedDiffT);
+        T observedMagnitude = NumOps.Abs(observedDiffT);
 
         // For paired data, compute pairwise differences
-        var differences = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            differences[i] = NumOps.ToDouble(scores1[i]) - NumOps.ToDouble(scores2[i]);
-        }
+        var differences = engine.TensorSubtract(sample1, sample2);
 
         // Paired permutation test: under null, signs of differences are random
-        // We randomly flip signs to generate null distribution
+        // We randomly flip signs to generate null distribution, a block of resamples at a time
         int moreExtreme = 0;
-        for (int b = 0; b < _numBootstraps; b++)
+        int blockSize = BlockSize(n);
+        for (int start = 0; start < _numBootstraps; start += blockSize)
         {
-            double permMeanDiff = 0;
-            for (int i = 0; i < n; i++)
+            int rows = Math.Min(blockSize, _numBootstraps - start);
+            var signs = new int[rows * n];
+            for (int s = 0; s < signs.Length; s++)
             {
                 // Randomly flip the sign of each difference (with 50% probability)
-                double sign = random.Next(2) == 0 ? 1.0 : -1.0;
-                permMeanDiff += sign * differences[i];
+                signs[s] = random.Next(2) == 0 ? 1 : -1;
             }
-            permMeanDiff /= n;
 
-            if (Math.Abs(permMeanDiff) >= Math.Abs(observedDiff))
-                moreExtreme++;
+            var signed = engine.TensorMultiply(
+                new Tensor<int>(signs, new[] { rows, n }).Cast<T>(),
+                engine.TensorBroadcastTo(engine.Reshape(differences, new[] { 1, n }), new[] { rows, n }));
+            var permMeanDiffs = engine.TensorDivideScalar(engine.ReduceSum(signed, new[] { 1 }, false), NumOps.FromDouble(n));
+            moreExtreme += EvaluationTensorOps<T>.Count(
+                EvaluationTensorOps<T>.GreaterOrEqualMask(engine.TensorAbs(permMeanDiffs), observedMagnitude));
         }
 
         double pValue = (double)(moreExtreme + 1) / (_numBootstraps + 1);
 
         // Compute effect size (Cohen's d)
-        double std1 = ComputeStd(scores1);
-        double std2 = ComputeStd(scores2);
+        double std1 = ComputeStd(sample1);
+        double std2 = ComputeStd(sample2);
         double pooledStd = Math.Sqrt((std1 * std1 + std2 * std2) / 2);
         double cohensD = pooledStd > 1e-10 ? observedDiff / pooledStd : 0;
 
@@ -148,44 +156,55 @@ public class BootstrapTest<T> : IStatisticalTest<T>
             ? RandomHelper.CreateSeededRandom(_randomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var diffs = new double[_numBootstraps];
-        for (int b = 0; b < _numBootstraps; b++)
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var sample1 = new Tensor<T>(scores1, new[] { n });
+        var sample2 = new Tensor<T>(scores2, new[] { n });
+        var nT = NumOps.FromDouble(n);
+        var blocks = new List<Tensor<T>>();
+        int blockSize = BlockSize(n);
+        for (int start = 0; start < _numBootstraps; start += blockSize)
         {
-            double sum1 = 0, sum2 = 0;
-            for (int i = 0; i < n; i++)
+            int rows = Math.Min(blockSize, _numBootstraps - start);
+            var indices = new int[rows * n];
+            for (int s = 0; s < indices.Length; s++)
             {
-                int idx = random.Next(n);
-                sum1 += NumOps.ToDouble(scores1[idx]);
-                sum2 += NumOps.ToDouble(scores2[idx]);
+                indices[s] = random.Next(n);
             }
-            diffs[b] = sum1 / n - sum2 / n;
+
+            var flat = new Tensor<int>(indices, new[] { rows * n });
+            var shape = new[] { rows, n };
+            var mean1 = engine.TensorDivideScalar(
+                engine.ReduceSum(engine.Reshape(engine.TensorGather(sample1, flat, 0), shape), new[] { 1 }, false), nT);
+            var mean2 = engine.TensorDivideScalar(
+                engine.ReduceSum(engine.Reshape(engine.TensorGather(sample2, flat, 0), shape), new[] { 1 }, false), nT);
+            blocks.Add(engine.TensorSubtract(mean1, mean2));
         }
 
-        Array.Sort(diffs);
+        var diffs = blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
         double alpha = 1 - confidenceLevel;
         int lowerIdx = Math.Max(0, (int)(alpha / 2 * _numBootstraps));
         int upperIdx = Math.Min(_numBootstraps - 1, (int)((1 - alpha / 2) * _numBootstraps) - 1);
 
-        return (diffs[lowerIdx], diffs[upperIdx]);
+        var (lower, upper) = EvaluationTensorOps<T>.OrderStatistics(diffs, lowerIdx, upperIdx);
+        return (NumOps.ToDouble(lower), NumOps.ToDouble(upper));
     }
 
-    private double ComputeMeanDifference(T[] scores1, T[] scores2)
+    // Resamples are processed in blocks of at most about one million drawn values to bound memory.
+    private static int BlockSize(int n) => Math.Max(1, (1 << 20) / n);
+
+    private static T ComputeMeanDifference(Tensor<T> scores1, Tensor<T> scores2)
     {
-        double sum1 = 0, sum2 = 0;
-        for (int i = 0; i < scores1.Length; i++)
-        {
-            sum1 += NumOps.ToDouble(scores1[i]);
-            sum2 += NumOps.ToDouble(scores2[i]);
-        }
-        return sum1 / scores1.Length - sum2 / scores2.Length;
+        var engine = AiDotNetEngine.Current;
+        return NumOps.Subtract(engine.TensorMean(scores1), engine.TensorMean(scores2));
     }
 
-    private double ComputeStd(T[] scores)
+    private static double ComputeStd(Tensor<T> scores)
     {
         int n = scores.Length;
         if (n < 2) return 0;
-        double mean = scores.Select(s => NumOps.ToDouble(s)).Average();
-        double sumSq = scores.Select(s => NumOps.ToDouble(s)).Sum(x => (x - mean) * (x - mean));
-        return Math.Sqrt(sumSq / (n - 1));
+        var engine = AiDotNetEngine.Current;
+        T sumSq = engine.TensorSumOfSquares(engine.TensorSubtractScalar(scores, engine.TensorMean(scores)));
+        return Math.Sqrt(NumOps.ToDouble(sumSq) / (n - 1));
     }
 }
