@@ -450,35 +450,51 @@ public class MeanIntersectionOverUnion<T> where T : struct
     }
 
     /// <summary>
-    /// Per-class intersection and union counts [numClasses] from one-hot class masks. Labels are truncated toward
+    /// Per-class intersection and union counts [numClasses] from the confusion matrix. Labels are truncated toward
     /// zero; labels outside [0, numClasses) count for no class.
     /// </summary>
+    /// <remarks>
+    /// The (numClasses + 1)^2 confusion matrix (the extra row and column collect out-of-range labels) is one
+    /// index-add (bincount) of ones at pred * (numClasses + 1) + target, so memory is O(pixels + classes^2) rather
+    /// than the O(pixels * classes) of one-hot masks. The intersection is its diagonal, the predicted and
+    /// ground-truth counts its row and column sums.
+    /// </remarks>
     private (Tensor<T> Intersection, Tensor<T> Union) ComputeIntersectionAndUnion(
         Tensor<T> predicted, Tensor<T> groundTruth)
     {
         var engine = AiDotNetEngine.Current;
-        var predMask = ClassMask(predicted);
-        var gtMask = ClassMask(groundTruth.Reshape(new[] { predicted.Length }));
+        int n = predicted.Length;
+        int bins = _numClasses + 1;
+        var predLabels = ClassIndex(predicted.Reshape(new[] { n }));
+        var gtLabels = ClassIndex(groundTruth.Reshape(new[] { n }));
 
-        var intersection = engine.ReduceSum(engine.TensorMultiply(predMask, gtMask), new[] { 0 }, false);
-        var predCount = engine.ReduceSum(predMask, new[] { 0 }, false);
-        var gtCount = engine.ReduceSum(gtMask, new[] { 0 }, false);
+        var cell = engine.TensorAdd(engine.TensorMultiplyScalar(predLabels, _numOps.FromDouble(bins)), gtLabels);
+        var confusion = engine.TensorIndexAdd(
+            new Tensor<T>(new[] { bins * bins }), 0, cell.Cast<int>(),
+            Tensor<T>.CreateDefault(new[] { n }, _numOps.One));
+
+        var diagonal = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, _numClasses, 1), _numOps.FromDouble(bins + 1));
+        var intersection = engine.TensorIndexSelect(confusion, diagonal.Cast<int>(), 0);
+        var matrix = confusion.Reshape(new[] { bins, bins });
+        var predCount = engine.ReduceSum(matrix, new[] { 1 }, false).Slice(0, 0, _numClasses).Contiguous();
+        var gtCount = engine.ReduceSum(matrix, new[] { 0 }, false).Slice(0, 0, _numClasses).Contiguous();
         var union = engine.TensorSubtract(engine.TensorAdd(predCount, gtCount), intersection);
         return (intersection, union);
     }
 
     /// <summary>
-    /// One-hot class mask [N, numClasses]: 1 where the truncated label equals the class index.
+    /// Class index [N] of each label: the label truncated toward zero when it lies in [0, numClasses), and
+    /// numClasses (no class) otherwise, including NaN.
     /// </summary>
-    private Tensor<T> ClassMask(Tensor<T> labels)
+    private Tensor<T> ClassIndex(Tensor<T> labels)
     {
         var engine = AiDotNetEngine.Current;
-        int n = labels.Length;
-        var truncated = engine.TensorTrunc(labels.Reshape(new[] { n, 1 }));
-        var classes = engine.TensorArange<T>(0, _numClasses, 1).Reshape(new[] { 1, _numClasses });
-        return engine.TensorEquals(
-            engine.TensorBroadcastTo(truncated, new[] { n, _numClasses }),
-            engine.TensorBroadcastTo(classes, new[] { n, _numClasses }));
+        var truncated = engine.TensorTrunc(labels);
+        var valid = engine.TensorMultiply(
+            engine.TensorGreaterThan(truncated, _numOps.FromDouble(-1.0)),
+            engine.TensorLessThan(truncated, _numOps.FromDouble(_numClasses)));
+        var noClass = Tensor<T>.CreateDefault(new[] { labels.Length }, _numOps.FromDouble(_numClasses));
+        return engine.TensorWhere(valid, truncated, noClass);
     }
 
     /// <summary>

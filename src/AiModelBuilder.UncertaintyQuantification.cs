@@ -502,6 +502,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// The smallest probability floor, starting at 1e-12, that is still positive in <typeparamref name="T"/>.
     /// 1e-12 underflows to 0 in Half, so a fixed 1e-12 floor would leave log(0) = -infinity there.
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Probes the representable margin of T on one scalar, a few iterations at most; no tensor data.")]
     internal static T ProbabilityFloor()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -519,6 +520,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <typeparamref name="T"/> as values strictly inside (0, 1). 1 - 1e-12 rounds to 1 in float (and 1e-12 to 0
     /// in Half), which would make logit(p) infinite; the margin grows to about the type's machine epsilon there.
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Probes the representable margin of T on one scalar, a few iterations at most; no tensor data.")]
     internal static (T Low, T High) ProbabilityClipBounds()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
