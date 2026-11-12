@@ -11,6 +11,12 @@ namespace AiDotNet.Preprocessing.FeatureSelection;
 internal static class FeatureSelectionTensorOps
 {
     /// <summary>
+    /// Whether <typeparamref name="T"/> is double. Count-based statistics are evaluated in double for every other T:
+    /// a 0/1 mask summed in Half stops counting at 2048 and products of counts overflow its 65504 maximum.
+    /// </summary>
+    private static bool IsDouble<T>() => typeof(T) == typeof(double);
+
+    /// <summary>
     /// Sum of squared differences between every row of <paramref name="a"/> ([m, p]) and every row of
     /// <paramref name="b"/> ([k, p]), as [m, k]. Uses the difference form (not the expanded dot-product form) so
     /// the values match a direct per-pair loop.
@@ -64,6 +70,13 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> GroupMeans<T>(Tensor<T> membership, Tensor<T> x, out Tensor<T> counts)
     {
+        if (!IsDouble<T>())
+        {
+            var means = GroupMeans(membership.Cast<double>(), x.Cast<double>(), out var doubleCounts);
+            counts = doubleCounts.Cast<T>();
+            return means.Cast<T>();
+        }
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int k = membership.Shape[1];
@@ -142,6 +155,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> EntropyBits<T>(Tensor<T> counts, int total)
     {
+        if (!IsDouble<T>())
+            return EntropyBits(counts.Cast<double>(), total).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var probabilities = engine.TensorDivideScalar(counts, ops.FromDouble(total));
@@ -158,7 +174,7 @@ internal static class FeatureSelectionTensorOps
     {
         var engine = AiDotNetEngine.Current;
         int p = oneHot.Shape[1] / bins;
-        return engine.Reshape(engine.ReduceSum(oneHot, new[] { 0 }, false), new[] { p, bins });
+        return engine.Reshape(engine.ReduceSum(oneHot.Cast<int>(), new[] { 0 }, false), new[] { p, bins }).Cast<T>();
     }
 
     /// <summary>
@@ -287,6 +303,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> MeanPairwiseDifference<T>(Tensor<T> rows, bool squared)
     {
+        if (!IsDouble<T>())
+            return MeanPairwiseDifference(rows.Cast<double>(), squared).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int k = rows.Shape[0];
@@ -300,8 +319,8 @@ internal static class FeatureSelectionTensorOps
             engine.TensorBroadcastTo(engine.Reshape(rows, new[] { k, 1, p }), shape),
             engine.TensorBroadcastTo(engine.Reshape(rows, new[] { 1, k, p }), shape));
         var magnitude = squared ? engine.TensorSquare(diff) : engine.TensorAbs(diff);
-        int pairCount = k * (k - 1) / 2;
-        return engine.TensorDivideScalar(engine.ReduceSum(magnitude, new[] { 0, 1 }, false), ops.FromDouble(2.0 * pairCount));
+        double orderedPairs = (double)k * (k - 1);
+        return engine.TensorDivideScalar(engine.ReduceSum(magnitude, new[] { 0, 1 }, false), ops.FromDouble(orderedPairs));
     }
 
     /// <summary>Column-wise median of a 2-D tensor ([m, p] to [p]); the mean of the two middle values for even m.</summary>
@@ -526,6 +545,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> BestGiniSplitReduction<T>(Tensor<T> x, int[] classIndex, int classCount)
     {
+        if (!IsDouble<T>())
+            return BestGiniSplitReduction(x.Cast<double>(), classIndex, classCount).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int m = x.Shape[0];
@@ -583,8 +605,17 @@ internal static class FeatureSelectionTensorOps
         Tensor<T> nodeX, Tensor<T> rowValues, SplitCriterion criterion, T parentImpurity, int minLeaf,
         out int column, out T threshold, out Tensor<T> gain)
     {
-        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
+        if (!IsDouble<T>())
+        {
+            bool found = TryBestSplit(nodeX.Cast<double>(), rowValues.Cast<double>(), criterion,
+                ops.ToDouble(parentImpurity), minLeaf, out column, out double doubleThreshold, out var doubleGain);
+            threshold = ops.FromDouble(doubleThreshold);
+            gain = doubleGain.Cast<T>();
+            return found;
+        }
+
+        var engine = AiDotNetEngine.Current;
         int m = nodeX.Shape[0];
         int f = nodeX.Shape[1];
         column = -1;
@@ -689,8 +720,11 @@ internal static class FeatureSelectionTensorOps
     /// <summary>Gini impurity <c>1 - sum_k p_k^2</c> of the rows of a [m, K] class one-hot (0 for no rows).</summary>
     public static T GiniImpurity<T>(Tensor<T> oneHot)
     {
-        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
+        if (!IsDouble<T>())
+            return ops.FromDouble(GiniImpurity(oneHot.Cast<double>()));
+
+        var engine = AiDotNetEngine.Current;
         int m = oneHot.Shape[0];
         if (m == 0)
             return ops.Zero;
@@ -778,6 +812,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> JointBinCounts<T>(Tensor<T> featureOneHot, Tensor<T> targetOneHot, int bins)
     {
+        if (!IsDouble<T>())
+            return JointBinCounts(featureOneHot.Cast<double>(), targetOneHot.Cast<double>(), bins).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         int p = featureOneHot.Shape[1] / bins;
         int targetBins = targetOneHot.Shape[1];
@@ -822,6 +859,13 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> ContingencyChiSquared<T>(Tensor<T> binOneHot, Tensor<T> classOneHot, int bins, out Tensor<T> occupiedBins)
     {
+        if (!IsDouble<T>())
+        {
+            var statistic = ContingencyChiSquared(binOneHot.Cast<double>(), classOneHot.Cast<double>(), bins, out var occupied);
+            occupiedBins = occupied.Cast<T>();
+            return statistic.Cast<T>();
+        }
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = binOneHot.Shape[0];
@@ -889,6 +933,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> KendallTau<T>(Tensor<T> x, Tensor<T> y, bool tauB)
     {
+        if (!IsDouble<T>())
+            return KendallTau(x.Cast<double>(), y.Cast<double>(), tauB).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
@@ -1000,6 +1047,13 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> BinEntropyNats<T>(Tensor<T> joint, int total, out Tensor<T> conditional)
     {
+        if (!IsDouble<T>())
+        {
+            var entropy = BinEntropyNats(joint.Cast<double>(), total, out var doubleConditional);
+            conditional = doubleConditional.Cast<T>();
+            return entropy.Cast<T>();
+        }
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = joint.Shape[0];
@@ -1026,6 +1080,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> WeightedBinGini<T>(Tensor<T> joint, int total)
     {
+        if (!IsDouble<T>())
+            return WeightedBinGini(joint.Cast<double>(), total).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = joint.Shape[0];
@@ -1043,8 +1100,11 @@ internal static class FeatureSelectionTensorOps
     /// <summary>Shannon entropy in nats of the class distribution of a one-hot class membership ([n, K]).</summary>
     public static T ClassEntropyNats<T>(Tensor<T> classOneHot)
     {
-        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
+        if (!IsDouble<T>())
+            return ops.FromDouble(ClassEntropyNats(classOneHot.Cast<double>()));
+
+        var engine = AiDotNetEngine.Current;
         var probabilities = engine.TensorDivideScalar(
             engine.ReduceSum(classOneHot, new[] { 0 }, false), ops.FromDouble(classOneHot.Shape[0]));
         var terms = engine.TensorWhere(engine.TensorGreaterThan(probabilities, ops.Zero),
@@ -1061,6 +1121,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> ExpectedMutualInformation<T>(Tensor<T> binCounts, Tensor<T> classCounts, int total)
     {
+        if (!IsDouble<T>())
+            return ExpectedMutualInformation(binCounts.Cast<double>(), classCounts.Cast<double>(), total).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = binCounts.Shape[0];
