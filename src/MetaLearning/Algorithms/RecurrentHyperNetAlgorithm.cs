@@ -87,59 +87,32 @@ public partial class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearne
         int concatDim = hidDim + inDim;
         // 3 gates (z, r, h̃), each concatDim × hidDim
         int totalWeights = 3 * concatDim * hidDim;
-        _gruWeights = new Vector<T>(totalWeights);
-        double scale = 1.0 / Math.Sqrt(concatDim);
+        // U(-0.5, 0.5) / sqrt(concatDim): one NextDouble per weight, in order; the loop only stores the draws.
+        var draws = new Vector<T>(totalWeights);
         for (int i = 0; i < totalWeights; i++)
-            _gruWeights[i] = NumOps.FromDouble(scale * (RandomGenerator.NextDouble() - 0.5));
+            draws[i] = NumOps.FromDouble(RandomGenerator.NextDouble());
+        _gruWeights = Engine.Multiply(
+            Engine.Subtract(draws, Engine.Fill(totalWeights, NumOps.FromDouble(0.5))),
+            NumOps.FromDouble(1.0 / Math.Sqrt(concatDim)));
     }
 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
-        int hidDim = _algoOptions.HiddenStateDim;
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-            // Initialize hidden state
-            var hidden = new double[hidDim];
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(adaptedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Compress gradient to input dim
-                var input = CompressVector(grad, _algoOptions.InputDim);
-
-                // GRU step
-                hidden = GRUStep(hidden, input);
-
-                // Compute per-parameter modulation from hidden state
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int h = d % hidDim;
-                    double modulation = 1.0 + Math.Tanh(hidden[h]); // [0, 2] range
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * modulation * NumOps.ToDouble(grad[d])));
-                }
-            }
+            var (adaptedParams, hidden) = AdaptRecurrent(initParams, task);
 
             ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-
-            // Cell state regularization
-            double cellNorm = 0;
-            for (int h = 0; h < hidDim; h++) cellNorm += hidden[h] * hidden[h];
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.FromDouble(_algoOptions.CellRegWeight * cellNorm / hidDim));
-
-            losses.Add(totalLoss);
+            losses.Add(NumOps.Add(queryLoss, CellRegularization(hidden)));
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -154,123 +127,91 @@ public partial class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearne
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var (adaptedParams, _) = AdaptRecurrent(initParams, task);
+        ParamModel.SetParameters(initParams);
+        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+    }
 
+    /// <summary>
+    /// The modulated inner loop: h_t = GRU(h_{t-1}, compress(grad_t)), then theta_d -= eta (1 + tanh(h_t[d % H])) grad_d.
+    /// </summary>
+    private (Vector<T> Adapted, Vector<T> Hidden) AdaptRecurrent(
+        Vector<T> initParams, IMetaLearningTask<T, TInput, TOutput> task)
+    {
         int hidDim = _algoOptions.HiddenStateDim;
-        var hidden = new double[hidDim];
+        var adaptedParams = initParams.Clone();
+        var hidden = new Vector<T>(hidDim);
+        var lr = NumOps.FromDouble(_algoOptions.InnerLearningRate);
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            var input = CompressVector(grad, _algoOptions.InputDim);
-            hidden = GRUStep(hidden, input);
+            hidden = GRUStep(hidden, CompressVector(grad, _algoOptions.InputDim));
 
-            for (int d = 0; d < _paramDim; d++)
-            {
-                int h = d % hidDim;
-                double modulation = 1.0 + Math.Tanh(hidden[h]);
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * modulation * NumOps.ToDouble(grad[d])));
-            }
+            // m_d = 1 + tanh(h[d % H]), in [0, 2]: the hidden modulation tiled across the parameters.
+            var perUnit = Engine.Add(Engine.Fill(hidDim, NumOps.One), Engine.Tanh(hidden));
+            int copies = (_paramDim + hidDim - 1) / hidDim;
+            var modulation = Vector<T>.Concatenate(Enumerable.Repeat(perUnit, copies).ToArray())
+                .GetSubVector(0, _paramDim);
+            adaptedParams = Engine.Subtract(adaptedParams, Engine.Multiply(Engine.Multiply(modulation, grad), lr));
         }
 
-        ParamModel.SetParameters(initParams);
-        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+        return (adaptedParams, hidden);
     }
 
-    private double[] GRUStep(double[] prevHidden, Vector<T> input)
+    /// <summary>CellRegWeight * ||h||^2 / H.</summary>
+    private T CellRegularization(Vector<T> hidden)
+        => NumOps.Multiply(
+            NumOps.FromDouble(_algoOptions.CellRegWeight / _algoOptions.HiddenStateDim),
+            Engine.DotProduct(hidden, hidden));
+
+    /// <summary>
+    /// One GRU step: z = sigmoid(W_z [h, x] + ForgetBias), r = sigmoid(W_r [h, x]),
+    /// h~ = tanh(W_h [r * h, x]), h' = (1 - z) h + z h~.
+    /// </summary>
+    private Vector<T> GRUStep(Vector<T> prevHidden, Vector<T> input)
     {
         int hidDim = _algoOptions.HiddenStateDim;
         int inDim = _algoOptions.InputDim;
         int concatDim = hidDim + inDim;
-
-        // Concatenate [h, x]
-        var concat = new double[concatDim];
-        Array.Copy(prevHidden, 0, concat, 0, hidDim);
-        for (int i = 0; i < inDim && i < input.Length; i++)
-            concat[hidDim + i] = NumOps.ToDouble(input[i]);
-
         int gateSize = concatDim * hidDim;
 
-        // Update gate: z = sigmoid(W_z · [h, x] + forgetBias)
-        var z = new double[hidDim];
-        for (int h = 0; h < hidDim; h++)
-        {
-            double sum = _algoOptions.ForgetBias;
-            for (int c = 0; c < concatDim; c++)
-                sum += NumOps.ToDouble(_gruWeights[h * concatDim + c]) * concat[c];
-            z[h] = 1.0 / (1.0 + Math.Exp(-sum));
-        }
+        // CompressVector returns exactly InputDim values.
+        var x = input.Length == inDim ? input : input.GetSubVector(0, Math.Min(inDim, input.Length));
+        if (x.Length < inDim) x = Vector<T>.Concatenate(new[] { x, new Vector<T>(inDim - x.Length) });
 
-        // Reset gate: r = sigmoid(W_r · [h, x])
-        var r = new double[hidDim];
-        int rOffset = gateSize;
-        for (int h = 0; h < hidDim; h++)
-        {
-            double sum = 0;
-            for (int c = 0; c < concatDim; c++)
-                sum += NumOps.ToDouble(_gruWeights[rOffset + h * concatDim + c]) * concat[c];
-            r[h] = 1.0 / (1.0 + Math.Exp(-sum));
-        }
+        var concat = Vector<T>.Concatenate(new[] { prevHidden, x });
+        var z = Engine.Sigmoid(Engine.Add(Gate(0, gateSize, concat), Engine.Fill(hidDim, NumOps.FromDouble(_algoOptions.ForgetBias))));
+        var r = Engine.Sigmoid(Gate(gateSize, gateSize, concat));
+        var resetConcat = Vector<T>.Concatenate(new[] { Engine.Multiply(r, prevHidden), x });
+        var candidate = Engine.Tanh(Gate(2 * gateSize, gateSize, resetConcat));
 
-        // Candidate: h̃ = tanh(W_h · [r ⊙ h, x])
-        var resetConcat = new double[concatDim];
-        for (int h = 0; h < hidDim; h++) resetConcat[h] = r[h] * prevHidden[h];
-        for (int i = 0; i < inDim && i < input.Length; i++)
-            resetConcat[hidDim + i] = NumOps.ToDouble(input[i]);
+        // h' = h + z (h~ - h).
+        return Engine.Add(prevHidden, Engine.Multiply(z, Engine.Subtract(candidate, prevHidden)));
+    }
 
-        var candidate = new double[hidDim];
-        int hOffset = 2 * gateSize;
-        for (int h = 0; h < hidDim; h++)
-        {
-            double sum = 0;
-            for (int c = 0; c < concatDim; c++)
-                sum += NumOps.ToDouble(_gruWeights[hOffset + h * concatDim + c]) * resetConcat[c];
-            candidate[h] = Math.Tanh(sum);
-        }
-
-        // New hidden: h_new = (1 - z) ⊙ h_prev + z ⊙ h̃
-        var newHidden = new double[hidDim];
-        for (int h = 0; h < hidDim; h++)
-            newHidden[h] = (1.0 - z[h]) * prevHidden[h] + z[h] * candidate[h];
-
-        return newHidden;
+    /// <summary>W · v for the [H, concatDim] row-major gate matrix stored at <paramref name="offset"/>.</summary>
+    private Vector<T> Gate(int offset, int size, Vector<T> v)
+    {
+        int hidDim = _algoOptions.HiddenStateDim;
+        var w = Tensor<T>.FromVector(_gruWeights.GetSubVector(offset, size), new[] { hidDim, v.Length });
+        return Engine.TensorMatMul(w, Tensor<T>.FromVector(v, new[] { v.Length, 1 })).ToVector();
     }
 
     private double ComputeRecurrentLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        // The SPSA objective is the training loss, cell regularization included.
+        var losses = new List<T>();
         var initParams = ParamModel.GetParameters();
-        int hidDim = _algoOptions.HiddenStateDim;
         foreach (var task in taskBatch.Tasks)
         {
-            var ap = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
-            var hid = new double[hidDim];
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(ap);
-                var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                var inp = CompressVector(g, _algoOptions.InputDim);
-                hid = GRUStep(hid, inp);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double mod = 1.0 + Math.Tanh(hid[d % hidDim]);
-                    ap[d] = NumOps.Subtract(ap[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * mod * NumOps.ToDouble(g[d])));
-                }
-            }
+            var (ap, hid) = AdaptRecurrent(initParams, task);
             ParamModel.SetParameters(ap);
-            double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-
-            // Include cell regularization in SPSA objective to match training loss
-            double cellNorm = 0;
-            for (int h = 0; h < hidDim; h++) cellNorm += hid[h] * hid[h];
-            totalLoss += queryLoss + _algoOptions.CellRegWeight * cellNorm / hidDim;
+            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+            losses.Add(NumOps.Add(queryLoss, CellRegularization(hid)));
         }
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }
