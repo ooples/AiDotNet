@@ -412,7 +412,8 @@ internal static class TimeSeriesEngineOps<T>
 
     /// <summary>
     /// Per-step empirical quantiles of sampled forecast paths: for each q, step h is the
-    /// <c>clamp(floor(q · count), 0, count - 1)</c>-th smallest of the samples' values at h.
+    /// <c>clamp(floor(q · count), 0, count - 1)</c>-th smallest of the samples' values at h, with NaN
+    /// samples ranked before every number (the order of a double sort).
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">No samples while a quantile and a step are requested.</exception>
     public static Dictionary<double, Vector<T>> SampleQuantiles(IReadOnlyList<Vector<T>> samples, double[] quantiles, int horizon)
@@ -433,15 +434,45 @@ internal static class TimeSeriesEngineOps<T>
             return result;
         }
 
-        // [count, horizon] sample matrix sorted ascending down each step's column
+        // [count, horizon] sample matrix; each step's column is ranked ascending
         var stacked = Engine.TensorSlice(
             Engine.TensorStack(samples.Select(sample => Tensor<T>.FromVector(sample)).ToArray(), 0),
             new[] { 0, 0 }, new[] { count, horizon });
-        var (sorted, _) = Engine.TensorSort(stacked, 0);
+
+        // Master ranked the samples as doubles, where NaN sorts before every number. NaN is split out
+        // explicitly so no sort path (including the SIMD float sort) ever sees it: NaN samples become +inf
+        // for the sort, so each column's numbers fill its first (count - nanCount) ranks, and rank r maps
+        // to NaN when r < nanCount and to sorted rank r - nanCount otherwise.
+        var nanMask = Engine.TensorIsNan(stacked);
+        var shape = new[] { count, horizon };
+        var nanFlags = Engine.TensorWhere(nanMask, Engine.TensorFullLike(new Tensor<int>(shape), 1), new Tensor<int>(shape));
+        int[] nanCounts = Engine.ReduceSum(nanFlags, new[] { 0 }, keepDims: false).ToArray();
+        bool anyNaN = nanCounts.Any(nanCount => nanCount > 0);
+
+        // Only a type that holds NaN reaches the infinity/NaN constants
+        var ranked = anyNaN
+            ? Engine.TensorWhere(nanMask, Engine.TensorFullLike(stacked, NumOps.FromDouble(double.PositiveInfinity)), stacked)
+            : stacked;
+        var (sorted, _) = Engine.TensorSort(ranked, 0);
+        var flatSorted = sorted.Reshape(new[] { count * horizon });
         foreach (var q in quantiles)
         {
             int idx = Math.Max(0, Math.Min((int)(q * count), count - 1));
-            result[q] = Engine.TensorSlice(sorted, new[] { idx, 0 }, new[] { 1, horizon }).ToVector();
+            if (!anyNaN)
+            {
+                result[q] = Engine.TensorSlice(sorted, new[] { idx, 0 }, new[] { 1, horizon }).ToVector();
+                continue;
+            }
+
+            int[] flatIndices = Enumerable.Range(0, horizon)
+                .Select(h => Math.Max(idx - nanCounts[h], 0) * horizon + h)
+                .ToArray();
+            var picked = Engine.TensorIndexSelect(
+                flatSorted, new Tensor<int>(new[] { horizon }, new Vector<int>(flatIndices)), 0);
+            int[] pickNaN = Enumerable.Range(0, horizon).Select(h => idx < nanCounts[h] ? 1 : 0).ToArray();
+            var pickNaNMask = Engine.TensorEqScalar(new Tensor<int>(new[] { horizon }, new Vector<int>(pickNaN)), 1);
+            result[q] = Engine.TensorWhere(
+                pickNaNMask, Engine.TensorFullLike(picked, NumOps.FromDouble(double.NaN)), picked).ToVector();
         }
 
         return result;
