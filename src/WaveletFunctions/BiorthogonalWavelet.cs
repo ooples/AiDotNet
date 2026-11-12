@@ -125,14 +125,19 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public override T Calculate(T x)
     {
-        T result = NumOps.Zero;
-        for (int k = 0; k < _decompositionCoefficients.Length; k++)
+        if (_decompositionCoefficients.Length == 0)
         {
-            T shiftedX = NumOps.Subtract(x, NumOps.FromDouble(k));
-            result = NumOps.Add(result, NumOps.Multiply(_decompositionCoefficients[k], ScalingFunction(shiftedX)));
+            return NumOps.Zero;
         }
 
-        return result;
+        var engine = AiDotNetEngine.Current;
+
+        // sum_k c[k] * phi(x - k) with the box scaling function phi(t) = 1 for 0 <= t < 1, else 0.
+        var shifts = engine.TensorArange<T>(0, _decompositionCoefficients.Length, 1);
+        var shifted = engine.ScalarMinusTensor(x, shifts);
+        var notNegative = engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(shifted, NumOps.Zero));
+        var box = engine.TensorMultiply(notNegative, engine.TensorLessThan(shifted, NumOps.One));
+        return engine.TensorSum(engine.TensorMultiply(Tensor<T>.FromVector(_decompositionCoefficients), box));
     }
 
     /// <summary>
@@ -325,33 +330,18 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </para>
     /// </remarks>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         if (input.Length % 2 != 0)
             throw new ArgumentException("Input length must be even for biorthogonal wavelet decomposition.");
 
         int halfLength = input.Length / 2;
-        var approximation = new Vector<T>(halfLength);
-        var detail = new Vector<T>(halfLength);
-
         var decompositionLowPass = GetDecompositionLowPassFilter();
         var decompositionHighPass = GetDecompositionHighPassFilter();
 
-        for (int i = 0; i < halfLength; i++)
-        {
-            T approx = NumOps.Zero;
-            T det = NumOps.Zero;
-
-            for (int j = 0; j < decompositionLowPass.Length; j++)
-            {
-                int index = (2 * i + j) % input.Length;
-                approx = NumOps.Add(approx, NumOps.Multiply(decompositionLowPass[j], input[index]));
-                det = NumOps.Add(det, NumOps.Multiply(decompositionHighPass[j], input[index]));
-            }
-
-            approximation[i] = approx;
-            detail[i] = det;
-        }
-
+        // a[i] = sum_j h[j] * x[(2i + j) mod n], d[i] = sum_j g[j] * x[(2i + j) mod n]
+        var approximation = WaveletEngineOps<T>.PeriodicCorrelate(input, decompositionLowPass, 2, halfLength);
+        var detail = WaveletEngineOps<T>.PeriodicCorrelate(input, decompositionHighPass, 2, halfLength);
         return (approximation, detail);
     }
 
@@ -378,34 +368,22 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
         int outputLength = approximation.Length * 2;
-        var reconstructed = new Vector<T>(outputLength);
-
-        var reconLowPass = GetReconstructionLowPassFilter();
-        var reconHighPass = GetReconstructionHighPassFilter();
-        int filterLength = reconLowPass.Length;
-
-        for (int i = 0; i < outputLength; i++)
+        if (outputLength == 0)
         {
-            T sum = NumOps.Zero;
-
-            for (int j = 0; j < filterLength; j++)
-            {
-                int k = i - j;
-                if (k >= 0 && k % 2 == 0)
-                {
-                    int coeffIndex = k / 2;
-                    if (coeffIndex < approximation.Length)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(reconLowPass[j], approximation[coeffIndex]));
-                        sum = NumOps.Add(sum, NumOps.Multiply(reconHighPass[j], detail[coeffIndex]));
-                    }
-                }
-            }
-
-            reconstructed[i] = sum;
+            return new Vector<T>(0);
         }
 
-        return reconstructed;
+        var engine = AiDotNetEngine.Current;
+        var reconLowPass = GetReconstructionLowPassFilter();
+        var reconHighPass = GetReconstructionHighPassFilter();
+
+        // x[i] = sum_j f[j] * c[(i - j) / 2] over even, in-range i - j: zero-insertion upsampling followed by a
+        // zero-padded linear convolution, keeping the first 2 * n outputs.
+        var lowBranch = WaveletEngineOps<T>.FullConvolve(WaveletEngineOps<T>.Upsample(approximation, 2), reconLowPass)
+            .GetSubVector(0, outputLength);
+        var highBranch = WaveletEngineOps<T>.FullConvolve(WaveletEngineOps<T>.Upsample(detail, 2), reconHighPass)
+            .GetSubVector(0, outputLength);
+        return engine.Add(lowBranch, highBranch);
     }
 
     /// <summary>
