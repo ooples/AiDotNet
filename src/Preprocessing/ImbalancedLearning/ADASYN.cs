@@ -93,12 +93,17 @@ public class ADASYN<T> : OversamplingBase<T>
     /// 1. For each minority sample, find k nearest neighbors from ALL classes
     /// 2. Calculate "difficulty ratio" = (# majority neighbors) / k
     /// 3. Normalize ratios so they sum to 1 (probability distribution)
-    /// 4. Each minority sample gets a number of synthetic samples proportional to its ratio
+    /// 4. Each minority sample gets round(ratio * numSamples) synthetic samples (half to even, as numpy's rint
+    ///    in imbalanced-learn); the rounded counts are not re-balanced, so their total can differ slightly
     /// 5. Generate synthetic samples using SMOTE-style interpolation
     ///
     /// Minority samples near the decision boundary (high difficulty) get more synthetic samples.
     /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// No minority sample has a neighbour of another class, or the rounded counts are all zero (as in
+    /// imbalanced-learn).
+    /// </exception>
     protected override List<Vector<T>> GenerateSyntheticSamples(Matrix<T> x, List<int> classIndices, int numSamples)
     {
         var syntheticSamples = new List<Vector<T>>();
@@ -108,89 +113,36 @@ public class ADASYN<T> : OversamplingBase<T>
             return syntheticSamples;
         }
 
+        var data = Tensor<T>.FromMatrix(x);
         int effectiveK = Math.Min(KNeighbors, x.Rows - 1);
+        var inClass = new HashSet<int>(classIndices);
+        var allIndices = Enumerable.Range(0, x.Rows).ToArray();
 
-        // Calculate difficulty ratio for each minority sample
-        var ratios = new double[classIndices.Count];
-        double sumRatios = 0;
+        // Difficulty ratio of each minority sample: the share of its k nearest neighbours (from ALL samples)
+        // that belong to another class.
+        var ratios = classIndices
+            .Select(idx => (double)ResamplingTensorOps.Nearest(data, idx, allIndices, effectiveK)
+                .Count(neighbor => !inClass.Contains(neighbor)) / effectiveK)
+            .ToArray();
+        double sumRatios = ratios.Sum();
 
-        for (int i = 0; i < classIndices.Count; i++)
+        // imbalanced-learn ADASYN (He et al., 2008): with no neighbour of another class the density
+        // distribution is undefined (division by zero), so ADASYN is not applicable.
+        if (sumRatios <= 0)
         {
-            int idx = classIndices[i];
-
-            // Find k nearest neighbors from ALL samples
-            var allIndices = Enumerable.Range(0, x.Rows).ToList();
-            var neighbors = FindKNearestNeighbors(x, idx, allIndices, effectiveK);
-
-            // Count majority neighbors (neighbors not in minority class)
-            int majorityCount = 0;
-            foreach (int neighborIdx in neighbors)
-            {
-                if (!classIndices.Contains(neighborIdx))
-                {
-                    majorityCount++;
-                }
-            }
-
-            // Difficulty ratio = proportion of majority neighbors
-            ratios[i] = (double)majorityCount / effectiveK;
-            sumRatios += ratios[i];
+            throw new InvalidOperationException(
+                "Not any neighbours belong to the majority class. This case will induce a NaN case with a " +
+                "division by zero. ADASYN is not suited for this specific dataset. Use SMOTE instead.");
         }
 
-        // Normalize ratios
-        if (sumRatios > 0)
+        // g_i = rint(r_i / sum(r) * G); like imbalanced-learn, the rounded counts are used as they are
+        // (their total may differ slightly from G).
+        var samplesPerMinority = ratios
+            .Select(ratio => (int)Math.Round(ratio / sumRatios * numSamples, MidpointRounding.ToEven))
+            .ToArray();
+        if (samplesPerMinority.Sum() == 0)
         {
-            for (int i = 0; i < ratios.Length; i++)
-            {
-                ratios[i] /= sumRatios;
-            }
-        }
-        else
-        {
-            // All samples have no majority neighbors - use uniform distribution
-            double uniform = 1.0 / classIndices.Count;
-            for (int i = 0; i < ratios.Length; i++)
-            {
-                ratios[i] = uniform;
-            }
-        }
-
-        // Calculate how many synthetic samples each minority sample should generate
-        var samplesPerMinority = new int[classIndices.Count];
-        int assignedSamples = 0;
-
-        for (int i = 0; i < classIndices.Count; i++)
-        {
-            samplesPerMinority[i] = (int)Math.Round(ratios[i] * numSamples);
-            assignedSamples += samplesPerMinority[i];
-        }
-
-        // Adjust for rounding errors
-        while (assignedSamples < numSamples)
-        {
-            int maxIdx = Array.IndexOf(ratios, ratios.Max());
-            samplesPerMinority[maxIdx]++;
-            assignedSamples++;
-        }
-        while (assignedSamples > numSamples)
-        {
-            int maxIdx = 0;
-            for (int i = 1; i < samplesPerMinority.Length; i++)
-            {
-                if (samplesPerMinority[i] > samplesPerMinority[maxIdx])
-                {
-                    maxIdx = i;
-                }
-            }
-            if (samplesPerMinority[maxIdx] > 0)
-            {
-                samplesPerMinority[maxIdx]--;
-                assignedSamples--;
-            }
-            else
-            {
-                break;
-            }
+            throw new InvalidOperationException("No samples will be generated with the provided ratio settings.");
         }
 
         // Generate synthetic samples
@@ -202,7 +154,7 @@ public class ADASYN<T> : OversamplingBase<T>
             var baseSample = x.GetRow(baseIdx);
 
             // Find nearest minority neighbors for interpolation
-            var minorityNeighbors = FindKNearestNeighbors(x, baseIdx, classIndices, minorityK);
+            var minorityNeighbors = ResamplingTensorOps.Nearest(data, baseIdx, classIndices, minorityK);
 
             if (minorityNeighbors.Count == 0) continue;
 
@@ -237,14 +189,6 @@ public class ADASYN<T> : OversamplingBase<T>
     private Vector<T> InterpolateSamples(Vector<T> sample1, Vector<T> sample2)
     {
         T t = NumOps.FromDouble(Random.NextDouble());
-        var synthetic = new Vector<T>(sample1.Length);
-
-        for (int j = 0; j < sample1.Length; j++)
-        {
-            T diff = NumOps.Subtract(sample2[j], sample1[j]);
-            synthetic[j] = NumOps.Add(sample1[j], NumOps.Multiply(t, diff));
-        }
-
-        return synthetic;
+        return ResamplingTensorOps.Interpolate(sample1, sample2, t);
     }
 }

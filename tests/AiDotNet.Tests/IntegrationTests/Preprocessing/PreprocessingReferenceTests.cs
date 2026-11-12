@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.ImbalancedLearning;
 using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.AnomalyDetection.Statistical;
 using AiDotNet.Preprocessing.OutlierHandling;
@@ -378,5 +379,134 @@ public class PreprocessingReferenceTests
         // transform replays the fitted models on new rows
         Assert.Equal(28.0 / 17.0 * 5 + 42.0 / 51.0,
             ridge.Transform(M(new double[,] { { 5, double.NaN } }))[0, 1], 1e-8);
+    }
+
+    private static Vector<double> Labels(params double[] values) => new Vector<double>(new List<double>(values));
+
+    // imbalanced-learn ADASYN: g_i = rint(r_i / sum(r) * G) with no re-balancing of the rounded counts.
+    // Minority (label 1) at (0,0), (0,10), (0,20), each with one majority sample at distance 1 and the other
+    // majority samples far away: with k = 2 every r_i = 1/2, so g_i = rint(4/3) = 1 and only 3 samples are
+    // generated for G = 7 - 3 = 4.
+    [Fact(Timeout = 120000)]
+    public async Task ADASYN_UsesRoundedCountsWithoutRebalancing()
+    {
+        await Task.CompletedTask;
+        var x = M(new double[,]
+        {
+            { 0, 0 }, { 0, 10 }, { 0, 20 },
+            { 1, 0 }, { 1, 10 }, { 1, 20 }, { 100, 100 }, { 100, 101 }, { 100, 102 }, { 100, 103 }
+        });
+        var y = Labels(1, 1, 1, 0, 0, 0, 0, 0, 0, 0);
+
+        var adasyn = new ADASYN<double>(kNeighbors: 2, seed: 7);
+        var (resampledX, resampledY) = adasyn.Resample(x, y);
+
+        Assert.Equal(13, resampledX.Rows);
+        Assert.Equal(13, resampledY.Length);
+        Assert.Equal(3, adasyn.GetStatistics().SamplesAddedPerClass[1.0]);
+    }
+
+    // imbalanced-learn ADASYN raises when no minority sample has a neighbour of another class (the density
+    // distribution would divide by zero).
+    [Fact(Timeout = 120000)]
+    public async Task ADASYN_NoMajorityNeighbours_Throws()
+    {
+        await Task.CompletedTask;
+        var x = M(new double[,] { { 0, 0 }, { 0, 1 }, { 0, 2 }, { 100, 100 }, { 100, 101 }, { 100, 102 }, { 100, 103 } });
+        var y = Labels(1, 1, 1, 0, 0, 0, 0);
+
+        Assert.Throws<InvalidOperationException>(() => new ADASYN<double>(kNeighbors: 2, seed: 7).Resample(x, y));
+    }
+
+    // imbalanced-learn BorderlineSMOTE (Han et al., 2005): DANGER is m/2 <= m' < m with real division, and
+    // with no DANGER sample nothing is generated. m = 3: each minority sample has m' = 1 < 1.5, so the data
+    // is returned unchanged (integer division would wrongly make 1 >= 3/2 = 1 a DANGER sample).
+    [Fact(Timeout = 120000)]
+    public async Task BorderlineSMOTE_OddM_UsesRealHalfAndGeneratesNothingWithoutDanger()
+    {
+        await Task.CompletedTask;
+        var x = M(new double[,] { { 0, 0 }, { 0, 1 }, { 0, 2 }, { 100, 100 }, { 100, 101 }, { 100, 102 }, { 100, 103 } });
+        var y = Labels(1, 1, 1, 0, 0, 0, 0);
+
+        var smote = new BorderlineSMOTE<double>(kNeighbors: 1, mNeighbors: 3, seed: 7);
+        var (resampledX, _) = smote.Resample(x, y);
+
+        Assert.Equal(7, resampledX.Rows);
+        Assert.Equal(0, smote.GetStatistics().SamplesAddedPerClass[1.0]);
+    }
+
+    // imbalanced-learn NearMiss(version=1, n_neighbors=3): minority {0, 10, 20}; majority {1, -3, 15, 12, 100}
+    // have summed distances to their 3 nearest minority samples 29, 39, 25, 22, 270, so the kept majority
+    // samples are 12, 15 and 1 (the single nearest distance would wrongly keep 1, 12 and -3).
+    [Fact(Timeout = 120000)]
+    public async Task NearMiss1_AveragesTheKNearestMinorityDistances()
+    {
+        await Task.CompletedTask;
+        var x = M(new double[,] { { 0 }, { 10 }, { 20 }, { 1 }, { -3 }, { 15 }, { 12 }, { 100 } });
+        var y = Labels(1, 1, 1, 0, 0, 0, 0, 0);
+
+        var (resampledX, _) = new NearMiss<double>(version: NearMissVersion.Version1, kNeighbors: 3).Resample(x, y);
+
+        Assert.Equal(new[] { 0.0, 10, 20, 1, 15, 12 }, resampledX.GetColumn(0).ToArray());
+    }
+
+    // imbalanced-learn NearMiss(version=2, n_neighbors=3): with 3 minority samples the 3 farthest are all of
+    // them, so the summed distances are again 29, 39, 25, 22, 270 and 12, 15 and 1 are kept.
+    [Fact(Timeout = 120000)]
+    public async Task NearMiss2_AveragesTheKFarthestMinorityDistances()
+    {
+        await Task.CompletedTask;
+        var x = M(new double[,] { { 0 }, { 10 }, { 20 }, { 1 }, { -3 }, { 15 }, { 12 }, { 100 } });
+        var y = Labels(1, 1, 1, 0, 0, 0, 0, 0);
+
+        var (resampledX, _) = new NearMiss<double>(version: NearMissVersion.Version2, kNeighbors: 3).Resample(x, y);
+
+        Assert.Equal(new[] { 0.0, 10, 20, 1, 15, 12 }, resampledX.GetColumn(0).ToArray());
+    }
+
+    // imbalanced-learn NearMiss(version=3, n_neighbors=2, n_neighbors_ver3=2): the 2 nearest majority samples
+    // of 0, 10, 20 short-list {1, -3, 15, 12}; their summed distances to the 2 nearest minority samples are
+    // 10, 16, 10, 10 and the largest are kept (ties in sample order): -3, 1, 15.
+    [Fact(Timeout = 120000)]
+    public async Task NearMiss3_KeepsTheShortListedSamplesFarthestFromTheMinority()
+    {
+        await Task.CompletedTask;
+        var x = M(new double[,] { { 0 }, { 10 }, { 20 }, { 1 }, { -3 }, { 15 }, { 12 }, { 100 } });
+        var y = Labels(1, 1, 1, 0, 0, 0, 0, 0);
+
+        var (resampledX, _) = new NearMiss<double>(version: NearMissVersion.Version3, kNeighbors: 2).Resample(x, y);
+
+        Assert.Equal(new[] { 0.0, 10, 20, 1, -3, 15 }, resampledX.GetColumn(0).ToArray());
+    }
+
+    // imbalanced-learn under-sampling with a float sampling_strategy keeps int(n_minority / ratio) majority
+    // samples: int(3 / 0.7) = 4 (not ceil = 5).
+    [Fact(Timeout = 120000)]
+    public async Task UnderSampling_TruncatesTheTargetMajorityCount()
+    {
+        await Task.CompletedTask;
+        var x = M(new double[,] { { 0 }, { 10 }, { 20 }, { 1 }, { -3 }, { 15 }, { 12 }, { 100 } });
+        var y = Labels(1, 1, 1, 0, 0, 0, 0, 0);
+
+        var (resampledX, _) = new RandomUnderSampler<double>(samplingStrategy: 0.7, seed: 3).Resample(x, y);
+
+        Assert.Equal(7, resampledX.Rows);
+    }
+
+    // imbalanced-learn EditedNearestNeighbours(kind_sel="all") removes a sample when ANY of its k neighbours
+    // has another class. Majority {0, 1, 2, 20, 21}, minority {3, 4}, k = 3: every majority sample has at
+    // least one minority neighbour, so only the minority remains; kind_sel="mode" keeps 0, 1 and 2.
+    [Fact(Timeout = 120000)]
+    public async Task EditedNearestNeighbors_AllRemovesOnAnyDisagreement()
+    {
+        await Task.CompletedTask;
+        var x = M(new double[,] { { 0 }, { 1 }, { 2 }, { 20 }, { 21 }, { 3 }, { 4 } });
+        var y = Labels(0, 0, 0, 0, 0, 1, 1);
+
+        var (all, _) = new EditedNearestNeighbors<double>(kNeighbors: 3, kind: ENNKind.All).Resample(x, y);
+        Assert.Equal(new[] { 3.0, 4 }, all.GetColumn(0).ToArray());
+
+        var (mode, _) = new EditedNearestNeighbors<double>(kNeighbors: 3, kind: ENNKind.Mode).Resample(x, y);
+        Assert.Equal(new[] { 0.0, 1, 2, 3, 4 }, mode.GetColumn(0).ToArray());
     }
 }

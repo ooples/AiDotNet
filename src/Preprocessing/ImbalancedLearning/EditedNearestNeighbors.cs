@@ -53,11 +53,6 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 public class EditedNearestNeighbors<T> : IResamplingStrategy<T>
 {
     /// <summary>
-    /// Numeric operations helper for generic math.
-    /// </summary>
-    private readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    /// <summary>
     /// Number of nearest neighbors to consider.
     /// </summary>
     private readonly int _kNeighbors;
@@ -91,7 +86,7 @@ public class EditedNearestNeighbors<T> : IResamplingStrategy<T>
     ///   - k=5: Remove if 3+ neighbors disagree (moderate)
     ///
     /// - kind:
-    ///   - All: Remove if majority of neighbors disagree (standard)
+    ///   - All: Remove if any neighbor disagrees (standard)
     ///   - Mode: Remove if most common neighbor class differs from sample class
     /// </para>
     /// </remarks>
@@ -117,7 +112,7 @@ public class EditedNearestNeighbors<T> : IResamplingStrategy<T>
     /// <para>
     /// <b>For Beginners:</b> This method:
     /// 1. For each majority sample, finds its k nearest neighbors
-    /// 2. Checks if the majority of neighbors have a different class
+    /// 2. Checks whether any neighbor (All) or the most common neighbor class (Mode) differs
     /// 3. If so, removes the sample
     /// 4. Keeps all minority samples (we don't want to lose any)
     /// </para>
@@ -142,37 +137,34 @@ public class EditedNearestNeighbors<T> : IResamplingStrategy<T>
 
         int effectiveK = Math.Min(_kNeighbors, x.Rows - 1);
 
-        // Find samples to remove
+        // Find samples to remove (imbalanced-learn EditedNearestNeighbours, Wilson 1972)
         var samplesToRemove = new HashSet<int>();
         var majorityIndices = GetClassIndices(y, majorityClass);
-        var allIndices = Enumerable.Range(0, x.Rows).ToList();
+        var allIndices = Enumerable.Range(0, x.Rows).ToArray();
+        var data = Tensor<T>.FromMatrix(x);
+        var labels = Tensor<T>.FromVector(y);
+        var engine = AiDotNetEngine.Current;
 
         foreach (int idx in majorityIndices)
         {
-            // Find k nearest neighbors
-            var neighbors = FindKNearestNeighbors(x, idx, allIndices, effectiveK);
-
-            // Count neighbor classes
-            int minorityNeighborCount = 0;
-            foreach (int neighborIdx in neighbors)
-            {
-                if (NumOps.Compare(y[neighborIdx], minorityClass) == 0)
-                {
-                    minorityNeighborCount++;
-                }
-            }
+            // Labels of the k nearest neighbors
+            var neighbors = ResamplingTensorOps.Nearest(data, idx, allIndices, effectiveK);
+            if (neighbors.Count == 0) continue;
+            var neighborLabels = engine.TensorIndexSelect(
+                labels, new Tensor<int>(neighbors.ToArray(), new[] { neighbors.Count }), 0);
 
             // Decide whether to remove based on kind
             bool shouldRemove;
             if (_kind == ENNKind.All)
             {
-                // Remove if majority of neighbors are minority class
-                shouldRemove = minorityNeighborCount > neighbors.Count / 2;
+                // All: keep the sample only if every neighbor shares its class
+                shouldRemove = PreprocessingTensorOps.CountNonZero(engine.TensorNotEquals(neighborLabels, majorityClass)) > 0;
             }
             else
             {
-                // Mode: Remove if most common neighbor class is different
-                shouldRemove = minorityNeighborCount >= (neighbors.Count + 1) / 2;
+                // Mode: remove if the most common neighbor class (ties to the smallest label, as scipy's
+                // mode) is not the sample's class
+                shouldRemove = !EqualityComparer<T>.Default.Equals(engine.TensorMode(neighborLabels).Item1, majorityClass);
             }
 
             if (shouldRemove)
@@ -181,29 +173,9 @@ public class EditedNearestNeighbors<T> : IResamplingStrategy<T>
             }
         }
 
-        // Build list of indices to keep
-        var indicesToKeep = new List<int>();
-        for (int i = 0; i < x.Rows; i++)
-        {
-            if (!samplesToRemove.Contains(i))
-            {
-                indicesToKeep.Add(i);
-            }
-        }
-
-        // Build result matrices
-        var resampledX = new Matrix<T>(indicesToKeep.Count, x.Columns);
-        var resampledY = new Vector<T>(indicesToKeep.Count);
-
-        for (int i = 0; i < indicesToKeep.Count; i++)
-        {
-            int originalIdx = indicesToKeep[i];
-            for (int j = 0; j < x.Columns; j++)
-            {
-                resampledX[i, j] = x[originalIdx, j];
-            }
-            resampledY[i] = y[originalIdx];
-        }
+        // Build result matrices from the rows to keep
+        var (resampledX, resampledY) = ResamplingTensorOps.KeepRows(
+            x, y, ResamplingTensorOps.RowsExcept(x.Rows, samplesToRemove));
 
         // Update statistics
         var minorityIndices = GetClassIndices(y, minorityClass);
@@ -218,66 +190,16 @@ public class EditedNearestNeighbors<T> : IResamplingStrategy<T>
         return (resampledX, resampledY);
     }
 
-    /// <summary>
-    /// Finds the k nearest neighbors of a sample.
-    /// </summary>
-    private List<int> FindKNearestNeighbors(Matrix<T> x, int sampleIndex, List<int> candidateIndices, int k)
-    {
-        var sample = x.GetRow(sampleIndex);
-        var distances = new List<(int index, T distance)>();
-
-        foreach (int candidateIndex in candidateIndices)
-        {
-            if (candidateIndex != sampleIndex)
-            {
-                var candidate = x.GetRow(candidateIndex);
-                T distance = VectorHelper.EuclideanDistance(sample, candidate);
-                distances.Add((candidateIndex, distance));
-            }
-        }
-
-        return distances
-            .OrderBy(d => NumOps.ToDouble(d.distance))
-            .Take(Math.Min(k, distances.Count))
-            .Select(d => d.index)
-            .ToList();
-    }
-
 
     /// <summary>
     /// Gets the count of samples per class.
     /// </summary>
-    private NumericDictionary<T, int> GetClassCounts(Vector<T> y)
-    {
-        var counts = new NumericDictionary<T, int>();
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (!counts.TryGetValue(y[i], out int count))
-            {
-                count = 0;
-            }
-            counts[y[i]] = count + 1;
-        }
-
-        return counts;
-    }
+    private NumericDictionary<T, int> GetClassCounts(Vector<T> y) => ResamplingTensorOps.ClassCounts(y);
 
     /// <summary>
     /// Gets the indices of samples belonging to a specific class.
     /// </summary>
-    private List<int> GetClassIndices(Vector<T> y, T targetClass)
-    {
-        var indices = new List<int>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (NumOps.Compare(y[i], targetClass) == 0)
-            {
-                indices.Add(i);
-            }
-        }
-        return indices;
-    }
+    private List<int> GetClassIndices(Vector<T> y, T targetClass) => ResamplingTensorOps.ClassIndices(y, targetClass);
 
     /// <summary>
     /// Gets statistics about the last resampling operation.
@@ -295,7 +217,7 @@ public class EditedNearestNeighbors<T> : IResamplingStrategy<T>
 public enum ENNKind
 {
     /// <summary>
-    /// Remove if majority of neighbors are of different class.
+    /// Remove if any neighbor is of a different class (imbalanced-learn kind_sel="all").
     /// </summary>
     All,
 
