@@ -264,19 +264,26 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         int experts = _numExperts;
         var probs = Engine.Softmax(routerOut, 1); // [n, E]
 
-        // Select top-k experts by probability with an exact (probability desc, index asc) key: expert e
-        // is kept when fewer than k experts f rank ahead of it, where f ranks ahead if p_f > p_e, or
-        // p_f == p_e and f < e. That is the lowest-index tie order of a first-max selection.
-        var pe = Engine.TensorBroadcastTo(Engine.Reshape(probs, new[] { n, experts, 1 }), new[] { n, experts, experts });
-        var pf = Engine.TensorBroadcastTo(Engine.Reshape(probs, new[] { n, 1, experts }), new[] { n, experts, experts });
-        var ones = new Tensor<T>(new[] { experts, experts });
-        ones.Fill(Ops.One);
-        var lowerIndex = Engine.Reshape(Engine.TensorTril(ones, -1), new[] { 1, experts, experts }); // f < e
-        var ahead = Engine.TensorAdd(
-            Engine.TensorGreaterThan(pf, pe),
-            Engine.TensorMultiply(Engine.TensorEquals(pf, pe), lowerIndex));
-        var rank = Engine.ReduceSum(ahead, new[] { 2 });                          // [n, E]
-        var chosen = Engine.TensorLessThan(rank, Ops.FromDouble(_topK));
+        // Select top-k experts by probability, ties broken toward the lower expert index (master's
+        // first-max selection). Only token-by-expert storage is used:
+        //   t     = the k-th largest probability per token (a value, so independent of TopK's tie order);
+        //   above = experts with p > t, all kept;
+        //   quota = k - |above| slots left for experts with p == t, filled in ascending index order by
+        //           keeping a tied expert when its inclusive running count of ties is <= quota.
+        int[] tokenByExpert = new[] { n, experts };
+        var topValues = Engine.TensorTopK(probs, _topK, 1, out Tensor<int> _);           // [n, k]
+        var kth = Engine.TensorBroadcastTo(
+            Engine.TensorNarrow(topValues, 1, _topK - 1, 1), tokenByExpert);              // [n, E]
+        var above = Engine.TensorGreaterThan(probs, kth);                                 // [n, E]
+        var tied = Engine.TensorEquals(probs, kth);                                       // [n, E]
+        var aboveCount = Engine.ReduceSum(above, new[] { 1 }, keepDims: true);            // [n, 1]
+        var quotaPlusOne = Engine.TensorBroadcastTo(
+            Engine.TensorSubtract(
+                Tensor<T>.CreateDefault(new[] { n, 1 }, Ops.FromDouble(_topK + 1)), aboveCount),
+            tokenByExpert);                                                               // [n, E]
+        var tiedRank = Engine.TensorCumSum(tied, 1);                                      // inclusive
+        var tiedKept = Engine.TensorMultiply(tied, Engine.TensorLessThan(tiedRank, quotaPlusOne));
+        var chosen = Engine.TensorAdd(above, tiedKept);
 
         var kept = Engine.TensorMultiply(probs, chosen);
         var topSum = Engine.ReduceSum(kept, new[] { 1 }, keepDims: true);
