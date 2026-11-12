@@ -612,7 +612,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         // pair it oscillates and returns a meaningless estimate (exactly 0 for a scaled rotation).
         var wide = matrix.Cast<double>();
         double scale = Engine.TensorMaxValue(Engine.TensorAbs(wide));
-        if (scale == 0) return NumOps.Zero;
+        // An all-zero (or non-finite) matrix has no usable spectral radius; avoids an exact float equality.
+        if (!(scale > 0) || double.IsInfinity(scale)) return NumOps.Zero;
         var normalized = Engine.TensorDivide(wide, Tensor<double>.CreateDefault(wide.Shape.ToArray(), scale));
         var eigenvalues = LinalgDispatch<double>.Eig(normalized).Values;
         var modulus = Engine.TensorSqrt(
