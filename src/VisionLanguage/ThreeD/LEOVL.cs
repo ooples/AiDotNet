@@ -239,15 +239,7 @@ public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguag
 
             // Hash-based voxel assignment → object cluster (integer arithmetic, as master):
             // |trunc(x / s) * 73856093 ^ trunc(y / s) * 19349669 ^ trunc(z / s) * 83492791| % maxObjects.
-            var cells = engine.TensorTrunc(engine.TensorDivideScalar(coords, NumOps.FromDouble(voxelSize))).Cast<int>();
-            var hashX = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 0], [readPoints, 1]), 73856093);
-            var hashY = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 1], [readPoints, 1]), 19349669);
-            var hashZ = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 2], [readPoints, 1]), 83492791);
-            var mixed = engine.TensorBitwiseXor(engine.TensorBitwiseXor(hashX, hashY), hashZ).Reshape([readPoints]);
-            if (engine.TensorSum(engine.TensorEquals(mixed, int.MinValue)) > 0)
-                throw new OverflowException("Negating the minimum value of a twos complement number is invalid.");
-            var objectIds = engine.TensorRemainder(
-                engine.TensorAbs(mixed), Tensor<int>.CreateDefault([readPoints], maxObjects));
+            var objectIds = HashPointCells(coords, 1.0 / voxelSize, 73856093, 19349669, 83492791, maxObjects);
 
             // Accumulate point features (color + normals): value c of a point goes to feature c % encoderDim.
             var objectSums = engine.ScatterAdd(
