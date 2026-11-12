@@ -75,6 +75,26 @@ internal static class AudioEngineOps
         return engine.TensorCountNonzero(crossings);
     }
 
+    /// <summary>
+    /// Number of adjacent sample pairs (row-major) where one is <c>&gt; 0</c> and the other
+    /// <c>&lt; 0</c>; zeros and NaN never count.
+    /// </summary>
+    internal static int StrictSignChangeCount<T>(IEngine engine, Tensor<T> audio)
+    {
+        int n = audio.Length;
+        if (n < 2) return 0;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var flat = Flatten(engine, audio);
+        var positive = engine.TensorGreaterThan(flat, numOps.Zero);
+        var negative = engine.TensorLessThan(flat, numOps.Zero);
+        var prevPos = engine.TensorSlice(positive, new[] { 0 }, new[] { n - 1 });
+        var prevNeg = engine.TensorSlice(negative, new[] { 0 }, new[] { n - 1 });
+        var nextPos = engine.TensorSlice(positive, new[] { 1 }, new[] { n - 1 });
+        var nextNeg = engine.TensorSlice(negative, new[] { 1 }, new[] { n - 1 });
+        var crossings = engine.TensorAdd(engine.TensorMultiply(prevPos, nextNeg), engine.TensorMultiply(prevNeg, nextPos));
+        return engine.TensorCountNonzero(crossings);
+    }
+
     /// <summary>Sum of squared samples.</summary>
     internal static T SumOfSquares<T>(IEngine engine, Tensor<T> x) => engine.TensorSum(engine.TensorSquare(x));
 
