@@ -167,22 +167,32 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
 
         // q-values (FDR-adjusted p-values): expected false positives (permuted |d| at or above the observed |d|,
         // per permutation) over the observed d-values at or above it
+        // A NaN |d| never compares >= anything (as in master), so NaNs become -1, below every |d| >= 0. The counts
+        // are int insertion indices and the ratio is formed from them in double: in T, nPermutations * p (and the
+        // counts themselves) overflow Half (max 65504) and stop being exact past 2048.
         var absD = engine.TensorAbs(dStatistics);
-        var (sortedObserved, _) = engine.TensorSort(absD, 0, false);
-        var truePositives = engine.TensorSubtract(
-            PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(p)),
-            engine.TensorSearchSorted(sortedObserved, absD, false).Cast<T>());
+        var minusOne = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(-1.0));
+        var observedIsNumber = engine.TensorEquals(absD, absD);
+        var observed = engine.TensorWhere(observedIsNumber, absD, minusOne);
+        var (sortedObserved, _) = engine.TensorSort(observed, 0, false);
+        var observedBelow = engine.TensorSearchSorted(sortedObserved, observed, false).AsSpan().ToArray();
 
         // nPermutations is at least 10 (validated in the constructor)
-        var permutedAbs = engine.Reshape(engine.TensorAbs(engine.TensorStack(permutedD, 0)), new[] { _nPermutations * p });
-        var (sortedPermuted, _) = engine.TensorSort(permutedAbs, 0, false);
-        var falsePositives = engine.TensorSubtract(
-            PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble((double)_nPermutations * p)),
-            engine.TensorSearchSorted(sortedPermuted, absD, false).Cast<T>());
-        var expectedFP = engine.TensorDivideScalar(falsePositives, NumOps.FromDouble(_nPermutations));
-        var fdr = engine.TensorWhere(engine.TensorGreaterThan(truePositives, NumOps.Zero),
-            engine.TensorMin(engine.TensorDivide(expectedFP, truePositives), NumOps.One),
-            PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        int permutedCount = _nPermutations * p;
+        var permutedAbs = engine.Reshape(engine.TensorAbs(engine.TensorStack(permutedD, 0)), new[] { permutedCount });
+        var permuted = engine.TensorWhere(engine.TensorEquals(permutedAbs, permutedAbs), permutedAbs,
+            PreprocessingTensorOps.Filled(new[] { permutedCount }, NumOps.FromDouble(-1.0)));
+        var (sortedPermuted, _) = engine.TensorSort(permuted, 0, false);
+        var permutedBelow = engine.TensorSearchSorted(sortedPermuted, observed, false).AsSpan().ToArray();
+        var isNumber = observedIsNumber.Cast<int>().AsSpan().ToArray();
+
+        // FDR = (false positives / nPermutations) / true positives, capped at 1; 1 when there is no true positive
+        var fdr = new Tensor<T>(Enumerable.Range(0, p).Select(j =>
+        {
+            int truePositives = isNumber[j] != 0 ? p - observedBelow[j] : 0;
+            double expectedFalsePositives = (double)(permutedCount - permutedBelow[j]) / _nPermutations;
+            return NumOps.FromDouble(truePositives > 0 ? Math.Min(expectedFalsePositives / truePositives, 1.0) : 1.0);
+        }).ToArray(), new[] { p });
 
         _fdr = fdr.ToVector();
         _qValues = fdr.ToVector();

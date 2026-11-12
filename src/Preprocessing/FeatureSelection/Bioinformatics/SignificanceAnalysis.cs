@@ -143,7 +143,8 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var zeros = new Tensor<T>(new[] { n });
         var allIndices = Enumerable.Range(0, n).ToArray();
         var inClass0 = new bool[n];
-        var exceedCounts = new Tensor<T>(new[] { p });
+        // Counted as int: a sum of 0/1 masks in T stops counting at 2048 for Half (2048 + 1 rounds back to 2048)
+        var exceedCounts = new Tensor<int>(new[] { p });
 
         for (int perm = 0; perm < _nPermutations; perm++)
         {
@@ -159,12 +160,12 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             var permScores = engine.TensorAbs(engine.TensorDivide(
                 engine.Reshape(engine.TensorSubtract(permMean1, permMean0), new[] { p }), denominator));
 
-            // Permuted scores at or above the observed score
-            exceedCounts = engine.TensorAdd(exceedCounts, PreprocessingTensorOps.Not(engine.TensorLessThan(permScores, absScores)));
+            // Permuted scores at or above the observed score (a NaN score is never at or above anything, as in master)
+            exceedCounts = engine.TensorAdd(exceedCounts, engine.TensorGreaterEqual(permScores, absScores).Cast<int>());
         }
 
         // Estimate q-values (FDR)
-        var qValues = engine.TensorDivideScalar(exceedCounts, NumOps.FromDouble(_nPermutations));
+        var qValues = engine.TensorDivideScalar(exceedCounts.Cast<T>(), NumOps.FromDouble(_nPermutations));
         _qValues = qValues.ToVector();
 
         // Select features passing the FDR threshold, by |score|; none passing falls back to the top scores
