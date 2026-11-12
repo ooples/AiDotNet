@@ -362,6 +362,23 @@ internal static class FeatureSelectionTensorOps
         return engine.TensorConcatenate(columns, 1);
     }
 
+    /// <summary>
+    /// The double-centred distance matrix of an [n, 1] column (distance covariance, Szekely et al. 2007):
+    /// <c>a_ij - mean_i. - mean_.j + mean_..</c> with <c>a_ij = |c_i - c_j|</c>.
+    /// </summary>
+    public static Tensor<T> DoubleCenteredDistances<T>(Tensor<T> column)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = column.Shape[0];
+        var distances = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(column, new[] { n, n }), engine.TensorBroadcastTo(engine.TensorTranspose(column), new[] { n, n })));
+        return engine.TensorAddScalar(
+            engine.TensorSubtract(
+                engine.TensorSubtract(distances, engine.ReduceMean(distances, new[] { 1 }, true)),
+                engine.ReduceMean(distances, new[] { 0 }, true)),
+            engine.TensorMean(distances));
+    }
+
     /// <summary>The 0/1 mask of the strictly upper-triangular entries (i &lt; j) of an [n, n] matrix.</summary>
     public static Tensor<T> StrictUpperMask<T>(int n) =>
         AiDotNetEngine.Current.TensorTriu(Filled(new[] { n, n }, MathHelper.GetNumericOperations<T>().One), 1);

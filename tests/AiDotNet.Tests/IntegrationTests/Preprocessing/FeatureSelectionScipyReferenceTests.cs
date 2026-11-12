@@ -274,6 +274,23 @@ public class FeatureSelectionScipyReferenceTests
         Assert.Equal(new[] { 2 }, kendall.SelectedIndices);
     }
 
+    [Fact]
+    public void DistanceCorrelationSelectors_MatchSzekelyDistanceCorrelation()
+    {
+        // A, B = double-centred |x_i - x_j| and |y_i - y_j|; dCor = sqrt(mean(A*B)) / sqrt(sqrt(mean(A*A) * mean(B*B)))
+        // (Szekely, Rizzo and Bakirov 2007; the same value as dcor.distance_correlation)
+        var nonlinear = new AiDotNet.Preprocessing.FeatureSelection.Nonlinear.DistanceCorrelationSelector<double>(nFeaturesToSelect: 1);
+        nonlinear.Fit(SpiralData(), SpiralClasses());
+        var nonparametric = new DistanceCorrelationSelector<double>(nFeaturesToSelect: 1);
+        nonparametric.Fit(SpiralData(), SpiralClasses());
+
+        var expected = new[] { 0.33735611474717664, 0.5793364927353657, 0.36195935229966436 };
+        AssertValues(expected, nonlinear.DCorValues, 1e-12);
+        AssertValues(expected, nonparametric.DcorScores, 1e-12);
+        Assert.Equal(new[] { 1 }, nonlinear.SelectedIndices);
+        Assert.Equal(new[] { 1 }, nonparametric.SelectedIndices);
+    }
+
     private static void AssertValues(double[] expected, Vector<double>? actual, double tolerance = Tolerance)
     {
         Assert.NotNull(actual);
