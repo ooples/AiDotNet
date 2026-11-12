@@ -202,27 +202,7 @@ public partial class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearner
 
             if (adaptedFeatures != null && supportFeatures != null && supportFeatures.Length > 0)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedFeatures.Length); i++)
-                {
-                    double raw = NumOps.ToDouble(supportFeatures[i]);
-                    double adapted = NumOps.ToDouble(adaptedFeatures[i]);
-                    if (Math.Abs(raw) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, adapted / raw));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
-                }
+                ParameterModulation.ScaleByMeanClampedRatio(Engine, ParamModel, supportFeatures, adaptedFeatures, 0.5, 2.0, 1e-10);
             }
 
             var queryPred = MetaModel.Predict(task.QueryInput);
@@ -246,44 +226,25 @@ public partial class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearner
 
         int numParts = _constellationOptions.NumParts;
         int n = features.Length;
-        var partFeatures = new Vector<T>(numParts);
-        int paramIdx = 0;
+        if (numParts <= 0) return new Vector<T>(0);
 
-        for (int k = 0; k < numParts; k++)
-        {
-            // Compute attention scores for this part across all feature positions
-            var scores = new double[n];
-            double maxScore = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double fi = NumOps.ToDouble(features[i]);
-                double w = NumOps.ToDouble(_partDetectorParams[paramIdx++ % _partDetectorParams.Length]);
-                scores[i] = fi * w;
-                maxScore = Math.Max(maxScore, scores[i]);
-            }
+        // Each part reads n attention weights then one bias from the detector parameters, cyclically:
+        // row k of the [numParts, n + 1] table is part k's weights followed by its bias.
+        var table = ParameterModulation.Table(Engine, _partDetectorParams, numParts, n + 1);
+        var weights = ParameterModulation.Columns(Engine, table, 0, n);
+        var bias = ParameterModulation.Column(Engine, table, n);
 
-            // Softmax attention
-            double sumExp = 0;
-            for (int i = 0; i < n; i++)
-            {
-                scores[i] = Math.Exp(Math.Min(scores[i] - maxScore, 10.0));
-                sumExp += scores[i];
-            }
+        // Attention scores s[k, i] = f_i * w[k, i], then a max-shifted softmax over positions.
+        var f = Engine.Reshape(Tensor<T>.FromVector(features), new[] { 1, n });
+        var scores = Engine.TensorMultiply(weights, Engine.TensorBroadcastTo(f, new[] { numParts, n }));
+        var maxScore = Engine.TensorBroadcastTo(Engine.ReduceMax(scores, new[] { 1 }, true), new[] { numParts, n });
+        var exps = Engine.TensorExp(Engine.TensorMin(Engine.TensorSubtract(scores, maxScore), NumOps.FromDouble(10.0)));
+        var sumExp = Engine.TensorMax(Engine.ReduceSum(exps, new[] { 1 }, false), NumOps.FromDouble(1e-10));
 
-            // Weighted aggregation to produce part feature
-            double partVal = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double weight = scores[i] / Math.Max(sumExp, 1e-10);
-                partVal += weight * NumOps.ToDouble(features[i]);
-            }
-
-            // Part bias
-            double bias = NumOps.ToDouble(_partDetectorParams[paramIdx++ % _partDetectorParams.Length]);
-            partFeatures[k] = NumOps.FromDouble(partVal + bias);
-        }
-
-        return partFeatures;
+        // Part feature = attention-weighted aggregate of the features plus the part bias.
+        var weighted = Engine.Reshape(
+            Engine.TensorMatMul(exps, Engine.Reshape(f, new[] { n, 1 })), new[] { numParts });
+        return Engine.Add(Engine.TensorDivide(weighted, sumExp).ToVector(), bias);
     }
 
     /// <summary>
@@ -298,30 +259,34 @@ public partial class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearner
             return parts;
 
         int K = parts.Length;
-        var constellation = new Vector<T>(K);
-        int paramIdx = 0;
 
-        // For each part, aggregate learned pairwise relationships with all other parts
+        // Each part i reads K - 1 relation weights (for j != i, in order) then one bias, cyclically: row i of the
+        // [K, K] table. Spreading row i's weights over columns j != i gives the relation matrix W, zero on the
+        // diagonal.
+        var table = ParameterModulation.Table(Engine, _relationParams, K, K);
+        var spread = new int[K * K];
         for (int i = 0; i < K; i++)
         {
-            double pi = NumOps.ToDouble(parts[i]);
-            double relSum = 0;
-
             for (int j = 0; j < K; j++)
             {
-                if (i == j) continue;
-                double pj = NumOps.ToDouble(parts[j]);
-                double w = NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]);
-                double diff = pi - pj;
-                relSum += w * diff * diff; // Learned distance-like relation
+                spread[i * K + j] = i * K + (j < i ? j : Math.Max(j - 1, 0));
             }
-
-            // Combine part feature with its relational context via tanh gate
-            double bias = NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]);
-            constellation[i] = NumOps.Add(parts[i], ScalarTanh(NumOps.FromDouble(relSum + bias)));
         }
 
-        return constellation;
+        var diagonal = Engine.Reshape(Engine.TensorEye<T>(K), new[] { K * K });
+        var relation = Engine.TensorMultiply(
+            Engine.TensorIndexSelect(Engine.Reshape(table, new[] { K * K }), new Tensor<int>(spread, new[] { K * K }), 0),
+            Engine.TensorSubtract(Engine.TensorOnesLike(diagonal), diagonal));
+        var bias = ParameterModulation.Column(Engine, table, K - 1);
+
+        // relSum_i = sum_j W[i, j] * (p_i - p_j)^2 (a learned distance-like relation), then a tanh gate.
+        var p = Engine.Reshape(Tensor<T>.FromVector(parts), new[] { K, 1 });
+        var diff = Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(p, new[] { K, K }),
+            Engine.TensorBroadcastTo(Engine.Reshape(p, new[] { 1, K }), new[] { K, K }));
+        var relSum = Engine.ReduceSum(
+            Engine.TensorMultiply(Engine.Reshape(relation, new[] { K, K }), Engine.TensorSquare(diff)), new[] { 1 }, false);
+        return Engine.Add(parts, Engine.Tanh(Engine.Add(relSum.ToVector(), bias)));
     }
 
     /// <inheritdoc/>

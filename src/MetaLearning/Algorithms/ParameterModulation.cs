@@ -91,4 +91,40 @@ internal static class ParameterModulation
         T sum = engine.TensorSum(engine.TensorWhere(mask, ratio, engine.TensorZerosLike(rawT)));
         return new Vector<T>(new[] { numOps.Divide(sum, count) });
     }
+
+    /// <summary>
+    /// Scales the model's parameters in place by <see cref="MeanClampedRatio"/> of the raw and adapted features,
+    /// leaving them unchanged when no raw entry passes the threshold.
+    /// </summary>
+    internal static void ScaleByMeanClampedRatio<T, TInput, TOutput>(
+        IEngine engine, IParameterizable<T, TInput, TOutput> model, Vector<T> raw, Vector<T> adapted,
+        double lower, double upper, double threshold)
+    {
+        var ratio = MeanClampedRatio(engine, raw, adapted, lower, upper, threshold);
+        if (ratio is not null)
+        {
+            model.SetParameters(Apply(engine, model.GetParameters(), ratio));
+        }
+    }
+
+    /// <summary>
+    /// Reads <paramref name="parameters"/> cyclically as a [rows, columns] table in row-major order, so entry
+    /// (r, c) is parameters[(r * columns + c) mod parameters.Length].
+    /// </summary>
+    internal static Tensor<T> Table<T>(IEngine engine, Vector<T> parameters, int rows, int columns)
+    {
+        return engine.Reshape(Tensor<T>.FromVector(Cycle(engine, parameters, rows * columns)), new[] { rows, columns });
+    }
+
+    /// <summary>Columns [start, start + count) of a [rows, columns] table, shape [rows, count].</summary>
+    internal static Tensor<T> Columns<T>(IEngine engine, Tensor<T> table, int start, int count)
+    {
+        return engine.TensorSlice(table, new[] { 0, start }, new[] { table.Shape[0], count });
+    }
+
+    /// <summary>Column <paramref name="column"/> of a [rows, columns] table as a vector.</summary>
+    internal static Vector<T> Column<T>(IEngine engine, Tensor<T> table, int column)
+    {
+        return Columns(engine, table, column, 1).ToVector();
+    }
 }
