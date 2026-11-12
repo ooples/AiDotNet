@@ -551,7 +551,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
 
             // === VECTORIZED Viterbi Algorithm ===
             var viterbi = new Tensor<T>([seqLen, _numClasses]);
-            var backpointers = new Matrix<int>(seqLen, _numClasses);
+            var backpointers = new int[seqLen][];
 
             // VECTORIZED: Initialize first timestep - startScores + emissions[0]
             var firstEmissions = batchSeq.GetSliceAlongDimension(0, 0); // [numClasses]
@@ -579,23 +579,10 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
                 // tape-tracked log-sum-exp implementation in
                 // ComputeNegativeLogLikelihood. So per-class Viterbi-max +
                 // backpointer recording is the only path we need here.
-                var maxScores = new Tensor<T>([_numClasses]);
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    T maxVal = NumOps.MinValue;
-                    int maxIdx = 0;
-                    for (int prevC = 0; prevC < _numClasses; prevC++)
-                    {
-                        T val = scoresWithTrans[prevC, c];
-                        if (NumOps.GreaterThan(val, maxVal))
-                        {
-                            maxVal = val;
-                            maxIdx = prevC;
-                        }
-                    }
-                    maxScores[c] = maxVal;
-                    backpointers[t, c] = maxIdx;
-                }
+                // Per class c: the first prevC with the largest score, scanning from MinValue and never
+                // taking a NaN. A MinValue row in front reproduces that scan with ArgMax (first of ties).
+                var (maxScores, bestPrevious) = ColumnMaxFromMinValue(scoresWithTrans);
+                backpointers[t] = bestPrevious;
 
                 // Add emissions: maxScores + currentEmissions
                 var currentViterbi = Engine.TensorAdd(maxScores, currentEmissions);
@@ -606,33 +593,21 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
             var lastViterbi = viterbi.GetSliceAlongDimension(seqLen - 1, 0);
             var finalScores = Engine.TensorAdd(lastViterbi, decodeEnd);
 
-            // Find argmax
-            T maxFinalScore = NumOps.MinValue;
-            int maxFinalClass = 0;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                if (NumOps.GreaterThan(finalScores[c], maxFinalScore))
-                {
-                    maxFinalScore = finalScores[c];
-                    maxFinalClass = c;
-                }
-            }
+            // Find argmax (same MinValue-start scan)
+            int maxFinalClass = ColumnMaxFromMinValue(Engine.Reshape(finalScores, [_numClasses, 1])).BestRow[0];
 
-            // Backtracking (inherently sequential)
+            // Backtracking (inherently sequential, over the integer backpointers)
             var bestPath = new int[seqLen];
             bestPath[seqLen - 1] = maxFinalClass;
             for (int t = seqLen - 2; t >= 0; t--)
             {
-                bestPath[t] = backpointers[t + 1, bestPath[t + 1]];
+                bestPath[t] = backpointers[t + 1][bestPath[t + 1]];
             }
 
             // Inference-only path (training-mode short-circuits at the top
             // of Forward and never reaches the Viterbi loop): write the
             // one-hot encoded best path into the output tensor.
-            for (int t = 0; t < seqLen; t++)
-            {
-                output[b, t, bestPath[t]] = NumOps.One;
-            }
+            output.SetSlice(0, b, Engine.TensorOneHot<T>(new Tensor<int>(bestPath, [seqLen]), _numClasses));
         }
 
         // Restore original rank if needed for any-rank tensor support
@@ -971,23 +946,59 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         // through int (within FP-representation tolerance) and reject
         // anything else with a clear diagnostic.
         const double IntegerTolerance = 1e-6;
-        var oh = new Tensor<T>([seqLen, numClasses]);
-        for (int t = 0; t < seqLen; t++)
+        if (seqLen == 0) return new Tensor<T>([0, numClasses]);
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var raw = Engine.Reshape(Engine.TensorSlice(labels2D, [b, 0], [1, seqLen]), [seqLen]);
+        var rounded = Engine.TensorRound(raw);   // half to even, as Math.Round
+        // Fractional: more than the tolerance from the rounded value (NaN is not, as before).
+        var fractional = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(raw, rounded)), NumOps.FromDouble(IntegerTolerance));
+        // Out of range: below 0, at or above numClasses, or NaN (whose int cast is negative).
+        var nanFlags = Engine.TensorWhere(Engine.TensorIsNan(raw), Ones(seqLen), new Tensor<T>([seqLen]));
+        var outOfRange = Engine.TensorMax(
+            Engine.TensorMax(Engine.TensorLessThan(rounded, NumOps.Zero), Engine.TensorGreaterThan(rounded, NumOps.FromDouble(numClasses - 1))),
+            nanFlags);
+        var invalid = Engine.TensorMax(fractional, outOfRange);
+        if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
         {
-            double rawLabel = NumOps.ToDouble(labels2D[b, t]);
-            double rounded = Math.Round(rawLabel);
-            if (Math.Abs(rawLabel - rounded) > IntegerTolerance)
+            // The first failing step reports, with the check the scalar loop ran first.
+            int t = Engine.TensorArgMax(invalid, 0)[0];
+            double rawLabel = NumOps.ToDouble(raw.GetFlat(t));
+            if (NumOps.GreaterThan(fractional.GetFlat(t), NumOps.Zero))
                 throw new ArgumentException(
                     $"Label at [b={b}, t={t}] is {rawLabel}, which is not an integer class index. " +
                     "CRF training requires integer label indices in [0, NumClasses); fractional values are not allowed.",
                     nameof(labels2D));
-            int label = (int)rounded;
-            if (label < 0 || label >= numClasses)
-                throw new ArgumentOutOfRangeException(nameof(labels2D),
-                    $"Label at [b={b}, t={t}] is {label}, must be in [0, {numClasses}).");
-            oh[t, label] = NumOps.One;
+            int label = (int)Math.Round(rawLabel);
+            throw new ArgumentOutOfRangeException(nameof(labels2D),
+                $"Label at [b={b}, t={t}] is {label}, must be in [0, {numClasses}).");
         }
-        return oh;
+
+        return Engine.TensorOneHot<T>(rounded.Cast<int>(), numClasses);
+    }
+
+    private Tensor<T> Ones(int length)
+    {
+        var ones = new Tensor<T>([length]);
+        ones.Fill(NumOps.One);
+        return ones;
+    }
+
+    /// <summary>
+    /// Column-wise maximum of a [rows, columns] score table as the scalar Viterbi scan computed it: start
+    /// from MinValue and move only to a strictly larger score (so ties keep the first row and NaN is never
+    /// taken). Returns the maxima [columns] and the chosen row per column.
+    /// </summary>
+    private (Tensor<T> Max, int[] BestRow) ColumnMaxFromMinValue(Tensor<T> scores)
+    {
+        int columns = scores.Shape[1];
+        var floor = new Tensor<T>([1, columns]);
+        floor.Fill(NumOps.MinValue);
+        var withFloor = Engine.TensorConcatenate(new[] { floor, scores }, 0);
+        var index = Engine.TensorArgMax(withFloor, 0);   // first of ties; 0 = the MinValue floor
+        var max = Engine.Reshape(Engine.TensorTakeAlongDim(withFloor, Engine.Reshape(index, [1, columns]), 0), [columns]);
+        var bestRow = Engine.TensorMax(Engine.TensorSubtractScalar(index, 1), 0).ToVector().ToArray();
+        return (max, bestRow);
     }
 
     /// <summary>
@@ -1001,14 +1012,9 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         // broadcast adds into a fresh tensor. Building the subrange directly
         // from the dense one-hot keeps it constant (no gradient needed).
         int numClasses = labelsOH.Shape[1];
-        var sub = new Tensor<T>([count, numClasses]);
-        for (int i = 0; i < count; i++)
-        {
-            int row = start + i;
-            for (int c = 0; c < numClasses; c++)
-                sub[i, c] = labelsOH[row, c];
-        }
-        return sub;
+        if (count == 0) return new Tensor<T>([0, numClasses]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.TensorSlice(labelsOH, [start, 0], [count, numClasses]).Clone();
     }
 
     /// <inheritdoc />
@@ -1053,8 +1059,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         if (span.Length != values.Length)
             throw new ArgumentException(
                 $"Cannot copy {values.Length} values into a tensor with {span.Length} elements.", nameof(values));
-        for (int i = 0; i < span.Length; i++)
-            span[i] = values[i];
+        values.AsSpan().CopyTo(span);
     }
 
     /// <summary>
@@ -1164,15 +1169,13 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
     {
         if (_allowedTransitions is not { } allowed) return _transitionMatrix;
         var masked = new Tensor<T>([_numClasses, _numClasses]);
-        var src = _transitionMatrix.Data.Span;
-        var dst = masked.Data.Span;
         var penalty = NumOps.FromDouble(IllegalTransitionPenalty);
-        for (int i = 0; i < _numClasses; i++)
-            for (int j = 0; j < _numClasses; j++)
-            {
-                int k = i * _numClasses + j;
-                dst[k] = allowed[i, j] ? src[k] : NumOps.Add(src[k], penalty);
-            }
+        var allowedMask = new Tensor<bool>(allowed.Cast<bool>().ToArray(), [_numClasses, _numClasses]);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var source = Engine.Reshape(_transitionMatrix, [_numClasses, _numClasses]);
+            Engine.TensorWhere(allowedMask, source, Engine.TensorAddScalar(source, penalty)).CopyTo(masked.AsWritableSpan());
+        }
         return masked;
     }
 
@@ -1186,11 +1189,13 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
     {
         if (allowed is null) return scores;
         var masked = new Tensor<T>([_numClasses]);
-        var src = scores.Data.Span;
-        var dst = masked.Data.Span;
         var penalty = NumOps.FromDouble(IllegalTransitionPenalty);
-        for (int c = 0; c < _numClasses; c++)
-            dst[c] = allowed[c] ? src[c] : NumOps.Add(src[c], penalty);
+        var allowedMask = new Tensor<bool>(allowed.Take(_numClasses).ToArray(), [_numClasses]);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var source = Engine.TensorSlice(Engine.Reshape(scores, [scores.Length]), [0], [_numClasses]);
+            Engine.TensorWhere(allowedMask, source, Engine.TensorAddScalar(source, penalty)).CopyTo(masked.AsWritableSpan());
+        }
         return masked;
     }
 
