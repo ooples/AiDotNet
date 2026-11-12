@@ -22921,3 +22921,6 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+override AiDotNet.Diffusion.Schedulers.FlowDPMSolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+override AiDotNet.Diffusion.Schedulers.PeRFlowScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+override AiDotNet.Diffusion.Schedulers.SASolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
