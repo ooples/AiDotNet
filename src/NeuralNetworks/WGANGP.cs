@@ -410,7 +410,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         Generator.SetTrainingMode(true);
         Critic.SetTrainingMode(true);
 
-        T totalCriticLoss = NumOps.Zero;
+        var criticStepLosses = new T[_criticIterations];
 
         // Train critic multiple times
         for (int i = 0; i < _criticIterations; i++)
@@ -425,10 +425,11 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
             // Train critic and get losses
             var (criticLoss, _) = TrainCriticBatchWithGP(realBatch, fakeImages, batchSize);
 
-            totalCriticLoss = NumOps.Add(totalCriticLoss, criticLoss);
+            criticStepLosses[i] = criticLoss;
         }
 
         // Average critic loss
+        T totalCriticLoss = Engine.Sum(new Vector<T>(criticStepLosses));
         T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
 
         // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective with GP)
@@ -835,11 +836,9 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         Critic.SetTrainingMode(false);
         var criticScores = Critic.Predict(generatedImages);
 
-        var scoresList = new List<double>(sampleSize);
-        for (int i = 0; i < sampleSize; i++)
-        {
-            scoresList.Add(NumOps.ToDouble(criticScores[i, 0]));
-        }
+        // First critic output of each sample, as the doubles the metrics report
+        var firstScores = Engine.TensorNarrow(Engine.TensorNarrow(criticScores, 0, 0, sampleSize), 1, 0, 1).Contiguous();
+        var scoresList = new List<double>(firstScores.Cast<double>().ToArray());
 
         metrics["AverageCriticScore"] = scoresList.Average();
         metrics["MinCriticScore"] = scoresList.Min();
