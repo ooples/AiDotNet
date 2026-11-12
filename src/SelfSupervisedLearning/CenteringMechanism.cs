@@ -54,7 +54,8 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 // The hand-written restore copied min(length, _dimension) so a short vector was
                 // tolerated. The base fold now rejects a wrong length outright, and this stays
                 // defensive for the equal-length case it is handed.
-                for (int i = 0; i < Math.Min(value.Length, _dimension); i++) _center[i] = value[i];
+                int count = Math.Min(value.Length, _dimension);
+                if (count > 0) value.AsSpan().Slice(0, count).CopyTo(_center.AsSpan(0, count));
             }));
     }
     // NumOps inherited from ModelBase
@@ -67,6 +68,36 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// Gets the dimension of the center vector.
     /// </summary>
     public int Dimension => _dimension;
+
+    /// <summary>
+    /// Zero-copy rank-1 tensor view of the center buffer.
+    /// </summary>
+    private Tensor<T> CenterTensor => Vector<T>.Wrap(_center).AsTensor();
+
+    /// <summary>
+    /// Sums the first <see cref="Dimension"/> columns of a [batch, dim] tensor over the batch axis.
+    /// </summary>
+    private Tensor<T> ColumnSums(Tensor<T> batch)
+    {
+        var batchSize = batch.Shape[0];
+        var columns = batch.Shape[1] == _dimension
+            ? batch
+            : Engine.TensorSlice(batch, new[] { 0, 0 }, new[] { batchSize, _dimension });
+        return Engine.ReduceSum(columns, new[] { 0 }, keepDims: false);
+    }
+
+    /// <summary>
+    /// EMA update of the center: center = m * center + (1 - m) * batchMean, written into the center buffer.
+    /// </summary>
+    private void BlendIntoCenter(Tensor<T> batchMean)
+    {
+        var momentum = NumOps.FromDouble(_momentum);
+        var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
+        var blended = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(CenterTensor, momentum),
+            Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum));
+        blended.AsSpan().CopyTo(_center);
+    }
 
     /// <summary>
     /// Gets the momentum for EMA updates.
@@ -107,17 +138,9 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (dim != _dimension)
             throw new ArgumentException($"Input dimension {dim} doesn't match center dimension {_dimension}");
 
-        var result = new T[batchSize * dim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                result[b * dim + d] = NumOps.Subtract(input[b, d], _center[d]);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        // input[b, d] - center[d], the center broadcast over the batch
+        var rows = input.Rank == 2 ? input : input.Reshape(batchSize, dim);
+        return Engine.TensorSubtract(rows, CenterTensor.Reshape(1, dim));
     }
 
     /// <summary>
@@ -134,25 +157,11 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (dim != _dimension)
             throw new ArgumentException($"Output dimension {dim} doesn't match center dimension {_dimension}");
 
-        var momentum = NumOps.FromDouble(_momentum);
-        var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
 
-        for (int d = 0; d < dim; d++)
-        {
-            // Compute batch mean for this dimension
-            T batchMean = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                batchMean = NumOps.Add(batchMean, batchOutput[b, d]);
-            }
-            batchMean = NumOps.Multiply(batchMean, invBatch);
-
-            // EMA update: center = m * center + (1-m) * batch_mean
-            _center[d] = NumOps.Add(
-                NumOps.Multiply(momentum, _center[d]),
-                NumOps.Multiply(oneMinusMomentum, batchMean));
-        }
+        // Batch mean per dimension, then EMA update: center = m * center + (1-m) * batch_mean
+        var batchMean = Engine.TensorMultiplyScalar(ColumnSums(batchOutput), invBatch);
+        BlendIntoCenter(batchMean);
     }
 
     /// <summary>
@@ -164,37 +173,20 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (outputs is null || outputs.Count == 0)
             throw new ArgumentException("Must provide at least one output tensor", nameof(outputs));
 
-        var momentum = NumOps.FromDouble(_momentum);
-        var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
-
         // Compute mean across all outputs
-        var meanValues = new T[_dimension];
+        Tensor<T>? columnTotals = null;
         int totalSamples = 0;
 
         foreach (var output in outputs)
         {
-            var batchSize = output.Shape[0];
-            totalSamples += batchSize;
-
-            for (int d = 0; d < _dimension; d++)
-            {
-                for (int b = 0; b < batchSize; b++)
-                {
-                    meanValues[d] = NumOps.Add(meanValues[d], output[b, d]);
-                }
-            }
+            totalSamples += output.Shape[0];
+            var sums = ColumnSums(output);
+            columnTotals = columnTotals is null ? sums : Engine.TensorAdd(columnTotals, sums);
         }
 
         var invTotal = NumOps.FromDouble(1.0 / totalSamples);
-
-        for (int d = 0; d < _dimension; d++)
-        {
-            var batchMean = NumOps.Multiply(meanValues[d], invTotal);
-
-            _center[d] = NumOps.Add(
-                NumOps.Multiply(momentum, _center[d]),
-                NumOps.Multiply(oneMinusMomentum, batchMean));
-        }
+        var totals = columnTotals ?? new Tensor<T>(new[] { _dimension });
+        BlendIntoCenter(Engine.TensorMultiplyScalar(totals, invTotal));
     }
 
     /// <summary>
@@ -213,7 +205,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// Gets the current center values.
     /// </summary>
     /// <returns>Copy of the center vector.</returns>
-    public T[] GetCenter() => (T[])_center.Clone();
+    public T[] GetCenter() => Vector<T>.Wrap(_center).ToArray();
 
     /// <summary>
     /// Sets the center values directly.
@@ -233,10 +225,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     public void Reset()
     {
-        for (int i = 0; i < _dimension; i++)
-        {
-            _center[i] = NumOps.Zero;
-        }
+        Engine.Fill(_dimension, NumOps.Zero).AsSpan().CopyTo(_center);
     }
 
     /// <summary>
@@ -244,11 +233,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     public T CenterNorm()
     {
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < _dimension; i++)
-        {
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(_center[i], _center[i]));
-        }
+        T sumSquared = Engine.TensorSumOfSquares(CenterTensor);
         return NumOps.Sqrt(sumSquared);
     }
 
@@ -260,25 +245,14 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (_dimension == 0)
             return (NumOps.Zero, NumOps.Zero, NumOps.Zero, NumOps.Zero);
 
-        T mean = NumOps.Zero;
-        T min = _center[0];
-        T max = _center[0];
+        var center = CenterTensor;
+        T min = Engine.TensorMinValue(center);
+        T max = Engine.TensorMaxValue(center);
+        T mean = NumOps.Divide(Engine.TensorSum(center), NumOps.FromDouble(_dimension));
 
-        for (int i = 0; i < _dimension; i++)
-        {
-            mean = NumOps.Add(mean, _center[i]);
-            if (NumOps.GreaterThan(min, _center[i])) min = _center[i];
-            if (NumOps.GreaterThan(_center[i], max)) max = _center[i];
-        }
-        mean = NumOps.Divide(mean, NumOps.FromDouble(_dimension));
-
-        T variance = NumOps.Zero;
-        for (int i = 0; i < _dimension; i++)
-        {
-            var diff = NumOps.Subtract(_center[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(_dimension));
+        // Population variance of the center values
+        var diff = Engine.TensorSubtractScalar(center, mean);
+        T variance = NumOps.Divide(Engine.TensorSumOfSquares(diff), NumOps.FromDouble(_dimension));
         var std = NumOps.Sqrt(variance);
 
         return (mean, std, min, max);
