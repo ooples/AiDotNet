@@ -230,6 +230,44 @@ internal static class TimeSeriesEngineOps<T>
         return Engine.Divide(sums, denominators);
     }
 
+    /// <summary>
+    /// The index a running "keep the first strictly smaller value" scan starting from
+    /// <paramref name="start"/> would end on: the first index of the smallest value below
+    /// <paramref name="start"/> (NaN never qualifies), or -1 when no value is below it.
+    /// </summary>
+    public static int FirstStrictMinimumBelow(Vector<T> values, T start)
+    {
+        if (values.Length == 0)
+        {
+            return -1;
+        }
+
+        var tensor = Tensor<T>.FromVector(values);
+        var below = Engine.TensorLessThan(tensor, start);
+        var candidates = Engine.TensorWhere(below, tensor, Engine.TensorFullLike(tensor, start));
+        T minimum = Engine.TensorMinValue(candidates);
+        if (!NumOps.LessThan(minimum, start))
+        {
+            return -1;
+        }
+
+        var hits = Engine.TensorEqScalar(candidates, minimum);
+        return Array.FindIndex(hits.ToArray(), bit => (bool)bit);
+    }
+
+    /// <summary>The first <paramref name="length"/> elements of <paramref name="pattern"/> repeated periodically.</summary>
+    public static Vector<T> RepeatPeriodic(Vector<T> pattern, int length)
+    {
+        if (length <= 0 || pattern.Length == 0)
+        {
+            return new Vector<T>(Math.Max(length, 0));
+        }
+
+        int copies = (length + pattern.Length - 1) / pattern.Length;
+        var tiled = Engine.TensorTile(Tensor<T>.FromVector(pattern), new[] { copies });
+        return Engine.TensorSlice(tiled, new[] { 0 }, new[] { length }).ToVector();
+    }
+
     /// <summary>Symmetric Toeplitz matrix <c>R[i, j] = values[|i - j|]</c> of size p × p.</summary>
     public static Matrix<T> Toeplitz(Vector<T> values, int p)
     {
