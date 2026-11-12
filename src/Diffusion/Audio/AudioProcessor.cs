@@ -292,8 +292,9 @@ public class AudioProcessor<T>
     {
         // dB = 10 * log10(power + epsilon)
         var engine = AiDotNetEngine.Current;
-        var shifted = engine.TensorAddScalar(power, NumOps.FromDouble(1e-10));
-        return engine.TensorMultiplyScalar(engine.TensorLog10(shifted), NumOps.FromDouble(10.0));
+        // Preserve the original wide arithmetic: Half cannot represent the positive silence floor.
+        var shifted = engine.TensorAddScalar(power.Cast<double>(), 1e-10);
+        return engine.TensorMultiplyScalar(engine.TensorLog10(shifted), 10.0).Cast<T>();
     }
 
     /// <summary>
@@ -407,14 +408,14 @@ public class AudioProcessor<T>
     {
         // Find current peak (NaN samples are ignored)
         var engine = AiDotNetEngine.Current;
-        var absolute = engine.TensorNanToNum(engine.TensorAbs(audio), 0.0, double.PositiveInfinity, double.NegativeInfinity);
-        T maxAbs = audio.Length == 0 ? NumOps.Zero : engine.TensorMaxValue(absolute);
-
-        if (NumOps.LessThan(maxAbs, NumOps.FromDouble(1e-8)))
+        var wide = audio.Cast<double>();
+        var absolute = engine.TensorNanToNum(engine.TensorAbs(wide), 0.0, double.PositiveInfinity, double.NegativeInfinity);
+        double peak = audio.Length == 0 ? 0 : engine.TensorMaxValue(absolute);
+        if (peak < 1e-8)
             return audio;
 
-        // Scale to target peak
-        return engine.TensorMultiplyScalar(audio, NumOps.Divide(NumOps.FromDouble(targetPeak), maxAbs));
+        // Compute the scale in double so low-precision silence and tiny peaks stay finite.
+        return engine.TensorMultiplyScalar(wide, targetPeak / peak).Cast<T>();
     }
 
     /// <summary>

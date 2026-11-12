@@ -69,13 +69,14 @@ internal static class MaskVectorOps
     {
         var engine = AiDotNetEngine.Current;
         var shape = new[] { height, width };
-        var dy = engine.TensorSquare(engine.TensorArange<T>(-centerY, height - centerY, 1));
-        var dx = engine.TensorSquare(engine.TensorArange<T>(-centerX, width - centerX, 1));
+        // Coordinates are geometry, independent of the mask storage type. Half squares overflow above 255.
+        var dy = engine.TensorSquare(engine.TensorArange<double>(-(double)centerY, (double)height - centerY, 1));
+        var dx = engine.TensorSquare(engine.TensorArange<double>(-(double)centerX, (double)width - centerX, 1));
         var distanceSq = engine.TensorAdd(
             engine.TensorBroadcastTo(engine.Reshape(dy, new[] { height, 1 }), shape),
             engine.TensorBroadcastTo(engine.Reshape(dx, new[] { 1, width }), shape));
-        var limit = Tensor<T>.CreateDefault(shape, MathHelper.GetNumericOperations<T>().FromDouble(radiusSquared));
-        return engine.TensorLessEqual(distanceSq, limit);
+        var limit = Tensor<double>.CreateDefault(shape, radiusSquared);
+        return engine.TensorLessEqual(distanceSq, limit).Cast<T>();
     }
 
     private static Tensor<T> Indicator<T>(int length, int start, int end)

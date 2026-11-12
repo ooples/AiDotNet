@@ -48,6 +48,12 @@ public class RescaledCFG<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
+        // Half cannot represent the degeneracy epsilon and can overflow variance reductions.
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+            return new RescaledCFG<double>(_rescaleWeight)
+                .Apply(unconditional.Cast<double>(), conditional.Cast<double>(), scale, timestep).Cast<T>();
+#endif
         var engine = AiDotNetEngine.Current;
 
         // Step 1: Standard CFG: guided = uncond + scale * (cond - uncond)

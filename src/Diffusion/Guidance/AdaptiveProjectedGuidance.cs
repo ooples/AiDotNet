@@ -50,6 +50,12 @@ public class AdaptiveProjectedGuidance<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
+        // The projection previously accumulated in double; Half squares overflow for ordinary finite logits.
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+            return new AdaptiveProjectedGuidance<double>(_projectionStrength)
+                .Apply(unconditional.Cast<double>(), conditional.Cast<double>(), scale, timestep).Cast<T>();
+#endif
         var engine = AiDotNetEngine.Current;
         int[] shape = conditional._shape;
         var axes = DiffusionVectorOps.SampleAxes(shape.Length);

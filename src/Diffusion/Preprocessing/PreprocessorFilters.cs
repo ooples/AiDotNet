@@ -68,9 +68,27 @@ internal static class PreprocessorFilters
     /// </summary>
     internal static Tensor<T> Interior3x3<T>(Tensor<T> map, int[] kernels)
     {
+        var engine = AiDotNetEngine.Current;
+        var typedKernels = new Tensor<int>(kernels, new[] { kernels.Length }).Cast<T>().ToArray();
         int count = kernels.Length / 9;
-        var kernel = new Tensor<int>(new[] { count, 1, 3, 3 }, new Vector<int>(kernels)).Cast<T>();
-        return AiDotNetEngine.Current.Conv2D(map, kernel, 1, 0, 1);
+        int height = map._shape[2] - 2, width = map._shape[3] - 2;
+        var responses = new Tensor<T>[count];
+        for (int filter = 0; filter < count; filter++)
+        {
+            var response = new Tensor<T>(new[] { map._shape[0], 1, height, width });
+            for (int position = 0; position < 9; position++)
+            {
+                int coefficient = kernels[filter * 9 + position];
+                // A zero coefficient does not read that pixel in the original stencil.
+                // Dense convolution would let 0 * NaN/Infinity poison unrelated derivatives.
+                if (coefficient == 0) continue;
+                var pixels = engine.TensorNarrow(engine.TensorNarrow(map, 2, position / 3, height),
+                    3, position % 3, width);
+                response = engine.TensorAdd(response, engine.TensorMultiplyScalar(pixels, typedKernels[filter * 9 + position]));
+            }
+            responses[filter] = response;
+        }
+        return engine.TensorConcatenate(responses, 1);
     }
 
     /// <summary>Zero-pads an interior [batch, c, height - 2, width - 2] result back to [batch, c, height, width].</summary>
@@ -173,24 +191,18 @@ internal static class PreprocessorFilters
     }
 
     /// <summary>
-    /// Stable ascending argsort (ties keep their original order): element i's position is
-    /// #{j : v_j &lt; v_i} + #{j &lt; i : v_j = v_i}, then the indices are ordered by that distinct rank.
+    /// Stable ascending argsort with linear auxiliary memory and O(n log n) comparisons.
+    /// NaNs sort first, matching Double.CompareTo; equal values keep their source order.
     /// </summary>
     internal static int[] StableArgsort<T>(Tensor<T> values)
     {
-        var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        int n = values.Length;
-        if (n == 0)
-            return new int[0];
-
-        var square = new[] { n, n };
-        var vi = engine.TensorBroadcastTo(engine.Reshape(values, new[] { n, 1 }), square);
-        var vj = engine.TensorBroadcastTo(engine.Reshape(values, new[] { 1, n }), square);
-        var earlier = engine.TensorTril(Tensor<T>.CreateDefault(square, ops.One), -1);
-        var before = engine.TensorAdd(engine.TensorLessThan(vj, vi), engine.TensorMultiply(engine.TensorEquals(vj, vi), earlier));
-        var rank = engine.ReduceSum(before, new[] { 1 }, false);
-        return engine.TensorArgsort(rank, 0, false).ToArray();
+        // The engine argsort does not promise stable ties. Sort native wide keys after one bulk cast
+        // rather than building quadratic pairwise comparison grids (gigabytes for ordinary image grids).
+        return values.Cast<double>().ToArray()
+            .Select((value, index) => (Value: value, Index: index))
+            .OrderBy(entry => entry.Value)
+            .Select(entry => entry.Index)
+            .ToArray();
     }
 
     /// <summary>C#-style integer remainder (truncated, sign of the dividend) of an integral-valued tensor.</summary>
@@ -204,6 +216,11 @@ internal static class PreprocessorFilters
     /// </summary>
     internal static Tensor<T> LabelColors<T>(Tensor<T> labels, int red, int green, int blue)
     {
+        // Half rounds integer color hashes before the remainder, changing ordinary label colors.
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+            return LabelColors(labels.Cast<double>(), red, green, blue).Cast<T>();
+#endif
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var scale = ops.FromDouble(1.0 / 255.0);
@@ -217,5 +234,5 @@ internal static class PreprocessorFilters
 
     /// <summary>One where <paramref name="values"/> &gt; <paramref name="threshold"/>, zero elsewhere.</summary>
     internal static Tensor<T> Above<T>(Tensor<T> values, double threshold)
-        => AiDotNetEngine.Current.TensorGreaterThan(values, MathHelper.GetNumericOperations<T>().FromDouble(threshold));
+        => AiDotNetEngine.Current.TensorGreaterThan(values.Cast<double>(), threshold).Cast<T>();
 }

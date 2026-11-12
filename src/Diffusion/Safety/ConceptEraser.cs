@@ -103,7 +103,7 @@ public class ConceptEraser<T>
 
         var direction = _conceptDirections[conceptIndex];
         var dot = NumOps.ToDouble(DotProduct(embedding, direction));
-        var normEmb = NumOps.ToDouble(VectorNorm(embedding));
+        var normEmb = VectorNorm(embedding);
 
         return normEmb > 1e-10 ? Math.Abs(dot) / normEmb : 0.0;
     }
@@ -116,16 +116,16 @@ public class ConceptEraser<T>
         return sum;
     }
 
-    private T VectorNorm(Vector<T> v)
+    private double VectorNorm(Vector<T> v)
     {
-        return Engine.Norm(v);
+        return Engine.Norm(v.AsTensor().Cast<double>().ToVector());
     }
 
     private Vector<T> NormalizeVector(Vector<T> v)
     {
         var norm = VectorNorm(v);
-        if (NumOps.LessThan(norm, NumOps.FromDouble(1e-10))) return v;
-        return Engine.Divide(v, norm);
+        if (norm < 1e-10) return v;
+        return Engine.TensorDivideScalar(v.AsTensor().Cast<double>(), norm).Cast<T>().ToVector();
     }
 
     /// <summary>
