@@ -180,26 +180,11 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             if (supportFeatures != null && adaptedPrototypes != null)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
+                var ratio = ParameterModulation.MeanClampedRatio(Engine, supportFeatures, adaptedPrototypes, 0.5, 2.0, 1e-10);
+                if (ratio is not null)
                 {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
                     var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
+                    ParamModel.SetParameters(ParameterModulation.Apply(Engine, currentParams, ratio));
                 }
             }
 
@@ -221,39 +206,33 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         if (supportFeatures == null || supportFeatures.Length == 0)
             return supportFeatures;
 
-        int ctxDim = Math.Max(_camlOptions.ContextDimension, 1);
-        var adapted = new Vector<T>(supportFeatures.Length);
+        int n = supportFeatures.Length;
 
         // Aggregate support features into a context vector (mean pooling)
-        T contextSum = NumOps.Zero;
-        for (int i = 0; i < supportFeatures.Length; i++)
-            contextSum = NumOps.Add(contextSum, supportFeatures[i]);
-        double contextMean = NumOps.ToDouble(contextSum) / Math.Max(supportFeatures.Length, 1);
+        T contextMean = Engine.Mean(supportFeatures);
 
-        // Apply context-conditioned projection
-        int paramIdx = 0;
-        for (int i = 0; i < supportFeatures.Length; i++)
-        {
-            double featureVal = NumOps.ToDouble(supportFeatures[i]);
+        // Each feature reads four context parameters in order - gate weight, gate bias, projection weight,
+        // projection bias - and once the parameters run out every read takes its default (0.01, 0, 0.01, 0).
+        int needed = 4 * n;
+        int available = Math.Min(_contextParams.Length, needed);
+        T small = NumOps.FromDouble(0.01);
+        var defaults = ParameterModulation.Cycle(
+            Engine, new Vector<T>(new[] { small, NumOps.Zero, small, NumOps.Zero }), needed);
+        var parameters = available == needed
+            ? _contextParams.GetSubVector(0, needed)
+            : Vector<T>.Concatenate(
+                available > 0 ? _contextParams.GetSubVector(0, available) : new Vector<T>(0),
+                defaults.GetSubVector(available, needed - available));
+        var table = Engine.Reshape(Tensor<T>.FromVector(parameters), new[] { n, 4 });
+        Vector<T> Column(int column)
+            => Engine.Reshape(Engine.TensorSlice(table, new[] { 0, column }, new[] { n, 1 }), new[] { n }).ToVector();
 
-            // Context gate: sigmoid(w * context + b)
-            double wCtx = paramIdx < _contextParams.Length
-                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0.01;
-            double bCtx = paramIdx < _contextParams.Length
-                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0;
-            double gate = 1.0 / (1.0 + Math.Exp(-(wCtx * contextMean + bCtx)));
+        // Context gate: sigmoid(w * context + b)
+        var gate = Engine.Sigmoid(Engine.Add(Engine.Multiply(Column(0), contextMean), Column(1)));
 
-            // Context-adapted feature: gate * projection(feature) + (1-gate) * feature
-            double wProj = paramIdx < _contextParams.Length
-                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0.01;
-            double bProj = paramIdx < _contextParams.Length
-                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0;
-            double projected = featureVal * wProj + bProj;
-
-            adapted[i] = NumOps.FromDouble(gate * projected + (1.0 - gate) * featureVal);
-        }
-
-        return adapted;
+        // Context-adapted feature: gate * projection(feature) + (1-gate) * feature = f + gate * (projection - f)
+        var projected = Engine.Add(Engine.Multiply(supportFeatures, Column(2)), Column(3));
+        return Engine.Add(supportFeatures, Engine.Multiply(gate, Engine.Subtract(projected, supportFeatures)));
     }
 
     /// <inheritdoc/>
