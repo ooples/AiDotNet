@@ -207,14 +207,16 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CalculateResiduals(Vector<T> y)
     {
-        Vector<T> residuals = new Vector<T>(y.Length);
-        for (int t = _arOrder; t < y.Length; t++)
+        // residual[t] = y[t] - Σ φ_i y[t-i-1] for t >= p; the first p entries stay zero.
+        int count = y.Length - _arOrder;
+        if (count <= 0)
         {
-            T yHat = PredictAtIndex(y, t);
-            residuals[t] = NumOps.Subtract(y[t], yHat);
+            return new Vector<T>(y.Length);
         }
 
-        return residuals;
+        var lags = TimeSeriesEngineOps<T>.LagMatrix(y, _arOrder, _arOrder, count);
+        var fitted = Engine.MatrixVectorMultiply(lags, _arCoefficients);
+        return Vector<T>.Concatenate(new Vector<T>(_arOrder), Engine.Subtract(y.GetSubVector(_arOrder, count), fitted));
     }
 
     /// <summary>
@@ -241,22 +243,15 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CalculateGradients(Vector<T> y, Vector<T> residuals)
     {
-        Vector<T> gradAR = new Vector<T>(_arOrder);
-
-        // VECTORIZED: Process lagged y values as vectors for each timestep
-        for (int t = _arOrder; t < y.Length; t++)
+        // gradAR = Σ_t residual[t] · [y[t-1], ..., y[t-p]] = Lagsᵀ · residuals[p..].
+        int count = y.Length - _arOrder;
+        if (count <= 0)
         {
-            var laggedY = new Vector<T>(_arOrder);
-            for (int i = 0; i < _arOrder; i++)
-            {
-                laggedY[i] = y[t - i - 1];
-            }
-
-            var contribution = (Vector<T>)Engine.Multiply(laggedY, residuals[t]);
-            gradAR = (Vector<T>)Engine.Add(gradAR, contribution);
+            return new Vector<T>(_arOrder);
         }
 
-        return gradAR;
+        var lags = TimeSeriesEngineOps<T>.LagMatrix(y, _arOrder, _arOrder, count);
+        return Engine.MatrixVectorMultiply(lags.Transpose(), residuals.GetSubVector(_arOrder, count));
     }
 
     /// <summary>
@@ -314,27 +309,17 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
 
         var series = _trainedSeries;
         int horizon = input.Rows;
-        Vector<T> predictions = new Vector<T>(horizon);
-        for (int t = 0; t < horizon; t++)
+
+        // In-sample: return training values directly
+        var inSample = series.GetSubVector(0, Math.Min(horizon, series.Length));
+        if (horizon <= series.Length)
         {
-            if (t < series.Length)
-            {
-                // In-sample: return training values directly
-                predictions[t] = series[t];
-            }
-            else
-            {
-                // Out-of-sample: predict using available history including prior predictions
-                var extended = new Vector<T>(t + 1);
-                for (int j = 0; j < series.Length; j++)
-                    extended[j] = series[j];
-                for (int j = series.Length; j < t; j++)
-                    extended[j] = predictions[j];
-                predictions[t] = PredictAtIndex(extended, t);
-            }
+            return inSample;
         }
 
-        return predictions;
+        // Out-of-sample: predict using available history including prior predictions
+        var outOfSample = TimeSeriesEngineOps<T>.ForecastAR(series, _arCoefficients, horizon - series.Length);
+        return Vector<T>.Concatenate(inSample, outOfSample);
     }
 
     /// <summary>
@@ -369,14 +354,8 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
             return NumOps.Zero;
         }
 
-        // Build vector of past values
-        T[] pastValues = new T[availableHistory];
-        for (int i = 0; i < availableHistory; i++)
-        {
-            pastValues[i] = y[t - i - 1];
-        }
-
-        Vector<T> pastVector = new Vector<T>(pastValues);
+        // Past values y[t-1], ..., y[t-availableHistory] (most recent first)
+        Vector<T> pastVector = TimeSeriesEngineOps<T>.Reverse(y.GetSubVector(t - availableHistory, availableHistory));
         Vector<T> coeffSlice = availableHistory < _arOrder
             ? _arCoefficients.Slice(0, availableHistory)
             : _arCoefficients;
@@ -576,27 +555,8 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model must be trained before making forecasts.");
         }
 
-        // Create an extended history that will include predictions
-        Vector<T> extendedHistory = new Vector<T>(history.Length + horizon);
-        for (int i = 0; i < history.Length; i++)
-        {
-            extendedHistory[i] = history[i];
-        }
-
-        // Generate predictions one by one
-        for (int t = history.Length; t < extendedHistory.Length; t++)
-        {
-            extendedHistory[t] = PredictAtIndex(extendedHistory, t);
-        }
-
-        // Extract just the forecasted values
-        Vector<T> forecast = new Vector<T>(horizon);
-        for (int i = 0; i < horizon; i++)
-        {
-            forecast[i] = extendedHistory[history.Length + i];
-        }
-
-        return forecast;
+        // Generate predictions one by one, each feeding the next
+        return TimeSeriesEngineOps<T>.ForecastAR(history, _arCoefficients, horizon);
     }
 
     /// <summary>
@@ -626,9 +586,9 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
         if (_arCoefficients.Length > 0)
         {
             sb.AppendLine("AR Coefficients:");
-            for (int i = 0; i < _arOrder; i++)
+            foreach (var line in TimeSeriesEngineOps<T>.FormatCoefficients(_arCoefficients, "AR"))
             {
-                sb.AppendLine($"  AR[{i + 1}] = {Convert.ToDouble(_arCoefficients[i]):F4}");
+                sb.AppendLine(line);
             }
         }
 
@@ -688,25 +648,17 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         // Store defensive copy of training series for in-sample predictions via Predict(Matrix<T>)
-        _trainedSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            _trainedSeries[i] = y[i];
-        }
+        _trainedSeries = y.Clone();
 
         // Industry-standard AR estimation via OLS (Yule-Walker / least squares).
         // Mean-center the data first since AR assumes zero-mean stationary data.
         _seriesMean = StatisticsHelper<T>.CalculateMean(y);
-        var centered = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            centered[i] = NumOps.Subtract(y[i], _seriesMean);
+        var centered = Engine.Subtract(y, Engine.Fill(y.Length, _seriesMean));
 
         _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(centered, _arOrder, MatrixDecompositionType.Qr);
 
         // Store learned coefficients as ModelParameters for GetParameters() / serialization
-        ModelParameters = new Vector<T>(_arOrder);
-        for (int i = 0; i < _arOrder; i++)
-            ModelParameters[i] = _arCoefficients[i];
+        ModelParameters = _arCoefficients.GetSubVector(0, _arOrder);
     }
 
     /// <summary>
