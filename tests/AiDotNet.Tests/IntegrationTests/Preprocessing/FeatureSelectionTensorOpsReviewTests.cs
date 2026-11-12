@@ -308,4 +308,118 @@ public class FeatureSelectionTensorOpsReviewTests
                 $"node {v}: {(double)half[v]} vs {reference[v]}");
         }
     }
+
+    private static (Matrix<Half> Half, Matrix<double> Double, Vector<Half> HalfTarget, Vector<double> DoubleTarget) RankData(
+        int n, int classes)
+    {
+        var dataHalf = new Matrix<Half>(n, 2);
+        var dataDouble = new Matrix<double>(n, 2);
+        var targetHalf = new Vector<Half>(n);
+        var targetDouble = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double label = i % classes;
+            double first = (i * 37 % 101) + 10 * label;
+            double second = i * 53 % 97;
+            dataHalf[i, 0] = (Half)first;
+            dataHalf[i, 1] = (Half)second;
+            dataDouble[i, 0] = first;
+            dataDouble[i, 1] = second;
+            targetHalf[i] = (Half)label;
+            targetDouble[i] = label;
+        }
+
+        return (dataHalf, dataDouble, targetHalf, targetDouble);
+    }
+
+    private static void AssertMatchesDouble(Tensor<Half> half, Tensor<double> reference, string what)
+    {
+        for (int j = 0; j < reference.Length; j++)
+        {
+            Assert.True(Half.IsFinite(half[j]), $"{what} {j} is {half[j]}");
+            Assert.True(Math.Abs((double)half[j] - reference[j]) <= 2e-3 * Math.Max(1, Math.Abs(reference[j])),
+                $"{what} {j}: {(double)half[j]} vs {reference[j]}");
+        }
+    }
+
+    // Mann-Whitney on 600 samples: n0 n1 = 90000 and the rank sums pass Half's largest value, so in Half the
+    // p-values were inf / NaN based. Run in double, the Half p-values match double.
+    [Fact(Timeout = 60000)]
+    public async Task MannWhitney_Half_MatchesDoubleFor600Samples()
+    {
+        await Task.CompletedTask;
+        var (dataHalf, dataDouble, targetHalf, targetDouble) = RankData(600, 2);
+        var maskHalf = new Tensor<Half>(new[] { 600 });
+        var maskDouble = new Tensor<double>(new[] { 600 });
+        for (int i = 0; i < 600; i++)
+        {
+            maskHalf[i] = (double)targetHalf[i] == 0 ? (Half)1 : (Half)0;
+            maskDouble[i] = targetDouble[i] == 0 ? 1 : 0;
+        }
+
+        var (_, pHalf) = FeatureSelectionTensorOps.MannWhitney(Tensor<Half>.FromMatrix(dataHalf), maskHalf, 300, 300);
+        var (_, pDouble) = FeatureSelectionTensorOps.MannWhitney(Tensor<double>.FromMatrix(dataDouble), maskDouble, 300, 300);
+        AssertMatchesDouble(pHalf, pDouble, "p-value");
+    }
+
+    // Kruskal-Wallis H on 600 samples in 3 classes: squared rank sums of about 10^10 overflowed Half.
+    [Fact(Timeout = 60000)]
+    public async Task KruskalWallis_Half_MatchesDoubleFor600Samples()
+    {
+        await Task.CompletedTask;
+        var (dataHalf, dataDouble, targetHalf, targetDouble) = RankData(600, 3);
+        var oneHotHalf = new Tensor<Half>(new[] { 600, 3 });
+        var oneHotDouble = new Tensor<double>(new[] { 600, 3 });
+        for (int i = 0; i < 600; i++)
+        {
+            oneHotHalf[i, (int)targetDouble[i]] = (Half)1;
+            oneHotDouble[i, (int)targetDouble[i]] = 1;
+        }
+
+        var (hHalf, pHalf) = FeatureSelectionTensorOps.KruskalWallis(Tensor<Half>.FromMatrix(dataHalf), oneHotHalf);
+        var (hDouble, pDouble) = FeatureSelectionTensorOps.KruskalWallis(Tensor<double>.FromMatrix(dataDouble), oneHotDouble);
+        AssertMatchesDouble(hHalf, hDouble, "H");
+        AssertMatchesDouble(pHalf, pDouble, "p-value");
+    }
+
+    // Spearman's rho of a strictly increasing function of the target is 1; with 200 samples the rank sum of squares
+    // (about 666 650) overflowed Half and the correlation came out 0.
+    [Fact(Timeout = 60000)]
+    public async Task SpearmanCorrelation_Half_IsOneForMonotoneFeature()
+    {
+        await Task.CompletedTask;
+        const int n = 200;
+        var data = new Matrix<Half>(n, 1);
+        var target = new Vector<Half>(n);
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = (Half)Math.Sqrt(i);
+            target[i] = (Half)i;
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.SpearmanCorrelation<Half>(nFeaturesToSelect: 1);
+        selector.Fit(data, target);
+        Assert.NotNull(selector.Correlations);
+        if (selector.Correlations is not null)
+            Assert.Equal(1.0, (double)selector.Correlations[0], 2);
+    }
+
+    // Kendall's tau-b on 100 samples with ties (4950 pairs, past 2048) matches the same selector in double.
+    [Fact(Timeout = 60000)]
+    public async Task KendallTau_Half_MatchesDoubleWithTiesFor100Samples()
+    {
+        await Task.CompletedTask;
+        var (dataHalf, dataDouble, targetHalf, targetDouble) = RankData(100, 3);
+        var half = new AiDotNet.Preprocessing.FeatureSelection.Filter.KendallTau<Half>(nFeaturesToSelect: 1);
+        var reference = new AiDotNet.Preprocessing.FeatureSelection.Filter.KendallTau<double>(nFeaturesToSelect: 1);
+        half.Fit(dataHalf, targetHalf);
+        reference.Fit(dataDouble, targetDouble);
+        Assert.NotNull(half.Correlations);
+        Assert.NotNull(reference.Correlations);
+        if (half.Correlations is not null && reference.Correlations is not null)
+        {
+            for (int j = 0; j < 2; j++)
+                Assert.Equal(reference.Correlations[j], (double)half.Correlations[j], 2);
+        }
+    }
 }
