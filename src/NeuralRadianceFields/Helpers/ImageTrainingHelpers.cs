@@ -143,4 +143,47 @@ internal static class ImageTrainingHelpers
         if (pixels is null) throw new ArgumentNullException(nameof(pixels));
         return engine.TensorConcatenate(new[] { pixels.RayOrigins, pixels.RayDirections }, axis: 1);
     }
+
+    /// <summary>
+    /// Generates one unit-length pinhole ray per pixel, row-major ([height * width, 3] origins and directions):
+    /// the camera-space direction ((x - cx) / f, (y - cy) / f, 1) with cx = (width - 1) / 2, cy = (height - 1) / 2,
+    /// rotated by the camera rotation and normalized (zero-length directions are left as they are).
+    /// </summary>
+    internal static (Tensor<T> origins, Tensor<T> directions) GeneratePinholeRays<T>(
+        IEngine engine,
+        Vector<T> cameraPosition,
+        Matrix<T> cameraRotation,
+        int width,
+        int height,
+        T focalLength)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numRays = width * height;
+        if (numRays == 0)
+        {
+            return (new Tensor<T>(new[] { 0, 3 }), new Tensor<T>(new[] { 0, 3 }));
+        }
+
+        var gridShape = new[] { height, width };
+        var xs = engine.TensorBroadcastTo(engine.TensorArange<T>(0, width, 1).Reshape(1, width), gridShape);
+        var ys = engine.TensorBroadcastTo(engine.TensorArange<T>(0, height, 1).Reshape(height, 1), gridShape);
+        var px = engine.TensorDivideScalar(
+            engine.TensorSubtractScalar(xs, numOps.FromDouble((width - 1) * 0.5)), focalLength).Reshape(numRays);
+        var py = engine.TensorDivideScalar(
+            engine.TensorSubtractScalar(ys, numOps.FromDouble((height - 1) * 0.5)), focalLength).Reshape(numRays);
+        var cameraDirs = engine.TensorStack(new[] { px, py, engine.TensorOnesLike(px) }, 1);
+
+        var rotation = engine.TensorSlice(Tensor<T>.FromMatrix(cameraRotation), new[] { 0, 0 }, new[] { 3, 3 });
+        var directions = engine.TensorMatMul(cameraDirs, engine.TensorTranspose(rotation));
+
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(directions), new[] { 1 }, true));
+        var normalized = engine.TensorMultiply(
+            directions, engine.TensorBroadcastTo(engine.TensorReciprocal(norm), directions.Shape));
+        var positive = engine.TensorBroadcastTo(engine.TensorGreaterThan(norm, numOps.Zero), directions.Shape);
+        directions = engine.TensorWhere(positive, normalized, directions);
+
+        var position = Tensor<T>.FromVector(cameraPosition.GetSubVector(0, 3)).Reshape(1, 3);
+        var origins = engine.TensorBroadcastTo(position, new[] { numRays, 3 }).Contiguous();
+        return (origins, directions);
+    }
 }
