@@ -443,15 +443,12 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 // Apply softmax to get probabilities
                 var probs = Softmax(logits);
 
-                // Compute cross-entropy loss
-                double loss = 0.0;
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    var prob = NumOps.ToDouble(probs[0, c]);
-                    var label = NumOps.ToDouble(task.TrainLabels[i, c]);
-                    loss -= label * Math.Log(Math.Max(prob, 1e-10));
-                }
-                epochLoss += loss;
+                // Compute cross-entropy loss: -sum(label * log(max(prob, 1e-10)))
+                var probRow = Engine.TensorNarrow(probs, 1, 0, NumClasses);
+                var floored = Engine.TensorWhere(
+                    Engine.TensorIsNan(probRow), probRow, Engine.TensorMax(probRow, NumOps.FromDouble(1e-10)));
+                var weightedLog = Engine.TensorMultiply(LabelRow(task.TrainLabels, i), Engine.TensorLog(floored));
+                epochLoss -= NumOps.ToDouble(Engine.TensorSum(weightedLog));
 
                 // Accuracy
                 int predictedClass = GetPredictedClass(logits);
@@ -528,39 +525,25 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
 
     private int GetPredictedClass(Tensor<T> logits)
     {
-        int maxClass = 0;
-        T maxValue = logits[0, 0];
-        for (int c = 1; c < NumClasses; c++)
-        {
-            if (NumOps.GreaterThan(logits[0, c], maxValue))
-            {
-                maxValue = logits[0, c];
-                maxClass = c;
-            }
-        }
-        return maxClass;
+        // First class with the strictly greatest logit, scanning from class 0
+        var row = Engine.TensorNarrow(Engine.TensorNarrow(logits, 0, 0, 1), 1, 0, NumClasses);
+        return TieBreakArgMax.FirstMaxIndex(row, ArgMaxScan.GreaterThanFromFirst);
     }
 
     private int GetTrueClass(Tensor<T> labels, int graphIdx)
     {
-        for (int c = 0; c < NumClasses; c++)
-        {
-            if (!NumOps.Equals(labels[graphIdx, c], NumOps.Zero))
-                return c;
-        }
-        return 0;
+        // First non-zero label entry (NaN counts as non-zero), or 0 when the row is all zero
+        var nonZero = Engine.TensorNotEquals(LabelRow(labels, graphIdx), NumOps.Zero);
+        return TieBreakArgMax.FirstMaxIndex(nonZero);
     }
+
+    private Tensor<T> LabelRow(Tensor<T> labels, int graphIdx)
+        => Engine.TensorNarrow(Engine.TensorNarrow(labels, 0, graphIdx, 1), 1, 0, NumClasses);
 
     private Tensor<T> ComputeGradient(Tensor<T> probs, Tensor<T> labels, int graphIdx)
     {
         // Vectorized: gradient of cross-entropy with softmax is (prob - label)
-        // Extract the label row for this graph using Engine.GetRow equivalent
-        var labelRow = new Tensor<T>([1, NumClasses]);
-        for (int c = 0; c < NumClasses; c++)
-        {
-            labelRow[0, c] = labels[graphIdx, c];
-        }
-        return Engine.TensorSubtract<T>(probs, labelRow);
+        return Engine.TensorSubtract<T>(probs, LabelRow(labels, graphIdx));
     }
 
     private Tensor<T> Softmax(Tensor<T> logits)
@@ -667,10 +650,7 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
             return;
         }
 
-        var identity = new Tensor<T>(new[] { numNodes, numNodes });
-        for (int i = 0; i < numNodes; i++)
-            identity[i, i] = NumOps.One;
-        SetAdjacencyMatrix(identity);
+        SetAdjacencyMatrix(Engine.TensorEye<T>(numNodes));
         _usesFallbackAdjacency = true;
     }
 
