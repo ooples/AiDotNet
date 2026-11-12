@@ -242,18 +242,13 @@ namespace AiDotNet.NeuralNetworks
 
         private Matrix<T> EncodeTokens(List<int> tokens)
         {
-            var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
+            var inputTensor = new Tensor<int>(tokens.ToArray(), new[] { 1, tokens.Count }).Cast<T>();
             var output = Predict(inputTensor); // [1, seqLen, outputDim]
 
             int seqLen = output.Shape[1];
-            var result = new Matrix<T>(seqLen, _outputDim);
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int d = 0; d < _outputDim; d++)
-                {
-                    result[s, d] = output[0, s, d];
-                }
-            }
+            var result = Engine.Reshape(
+                Engine.TensorSlice(output, new[] { 0, 0, 0 }, new[] { 1, seqLen, _outputDim }),
+                new[] { seqLen, _outputDim }).ToMatrix();
 
             // Normalization is critical for the MaxSim dot-product scoring
             for (int s = 0; s < seqLen; s++)
@@ -280,16 +275,8 @@ namespace AiDotNet.NeuralNetworks
             var matrix = EmbedLateInteraction(text);
             if (matrix.Rows == 0) return new Vector<T>(_outputDim);
 
-            var result = new Vector<T>(_outputDim);
-            for (int d = 0; d < _outputDim; d++)
-            {
-                T sum = NumOps.Zero;
-                for (int s = 0; s < matrix.Rows; s++)
-                {
-                    sum = NumOps.Add(sum, matrix[s, d]);
-                }
-                result[d] = NumOps.Divide(sum, NumOps.FromDouble(matrix.Rows));
-            }
+            var columnSums = Engine.ReduceSum(Tensor<T>.FromMatrix(matrix), new[] { 0 }, false);
+            var result = Engine.TensorDivideScalar(columnSums, NumOps.FromDouble(matrix.Rows)).ToVector();
 
             return result.SafeNormalize();
         }
@@ -307,27 +294,29 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         public T LateInteractionScore(Matrix<T> queryEmbeddings, Matrix<T> docEmbeddings)
         {
-            T totalScore = NumOps.Zero;
-
-            for (int q = 0; q < queryEmbeddings.Rows; q++)
+            int queryRows = queryEmbeddings.Rows;
+            if (queryRows == 0)
             {
-                var queryVec = queryEmbeddings.GetRow(q);
-                T maxSim = NumOps.MinValue;
-
-                for (int d = 0; d < docEmbeddings.Rows; d++)
-                {
-                    var docVec = docEmbeddings.GetRow(d);
-                    T sim = Engine.DotProduct(queryVec, docVec);
-                    if (NumOps.GreaterThan(sim, maxSim))
-                    {
-                        maxSim = sim;
-                    }
-                }
-
-                totalScore = NumOps.Add(totalScore, maxSim);
+                return NumOps.Zero;
             }
 
-            return totalScore;
+            // Each query token keeps its best document match, starting from MinValue and never taking a NaN.
+            var floor = new Tensor<T>(new[] { queryRows, 1 });
+            floor.Fill(NumOps.MinValue);
+            var candidates = floor;
+            if (docEmbeddings.Rows > 0)
+            {
+                var sims = Engine.TensorMatMul(
+                    Tensor<T>.FromMatrix(queryEmbeddings),
+                    Engine.TensorTranspose(Tensor<T>.FromMatrix(docEmbeddings)));
+                var minValues = new Tensor<T>(sims._shape);
+                minValues.Fill(NumOps.MinValue);
+                sims = Engine.TensorWhere(Engine.TensorIsNan(sims), minValues, sims);
+                candidates = Engine.TensorConcatenate(new[] { floor, sims }, 1);
+            }
+
+            var maxSims = Engine.ReduceMax(candidates, new[] { 1 }, false);
+            return Engine.TensorSum(maxSims);
         }
 
         /// <summary>
