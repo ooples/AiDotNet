@@ -95,19 +95,22 @@ public static class MatrixSolutionHelper
     private static Vector<T> SolveCramer<T>(Matrix<T> A, Vector<T> b)
     {
         var det = A.Determinant();
-        var x = new Vector<T>(b.Length);
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < b.Length; i++)
+        int n = b.Length;
+        if (n == 0)
         {
-            var Ai = A.Clone();
-            for (int j = 0; j < b.Length; j++)
-            {
-                Ai[j, i] = b[j];
-            }
-            x[i] = numOps.Divide(Ai.Determinant(), det);
+            return new Vector<T>(0);
         }
 
-        return x;
+        // Batch i is A with column i replaced by b: select b[j] where column k == i, else A[j, k].
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { n, n, n };
+        var aBatch = engine.TensorBroadcastTo(Tensor<T>.FromMatrix(A).Reshape(new[] { 1, n, n }), shape);
+        var bBatch = engine.TensorBroadcastTo(Tensor<T>.FromVector(b, new[] { 1, n, 1 }), shape);
+        var columnMask = engine.TensorBroadcastTo(engine.TensorEye<T>(n).Reshape(new[] { n, 1, n }), shape);
+        var replaced = engine.TensorWhere(columnMask, bBatch, aBatch);
+
+        var determinants = LinalgDispatch<T>.Det(replaced);
+        return engine.TensorDivideScalar(determinants, det).ToVector();
     }
 
     /// <summary>

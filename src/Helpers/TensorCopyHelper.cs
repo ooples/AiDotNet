@@ -112,32 +112,7 @@ public static class TensorCopyHelper
             return;
         }
 
-        // Calculate elements per sample (product of dimensions after the first)
-        int elementsPerSample = 1;
-        for (int d = 1; d < source.Shape.Length; d++)
-        {
-            elementsPerSample *= source.Shape[d];
-        }
-
-        // Create index arrays for multi-dimensional access
-        var sourceIndices = new int[source.Shape.Length];
-        var destIndices = new int[dest.Shape.Length];
-        sourceIndices[0] = sourceIndex;
-        destIndices[0] = destIndex;
-
-        // Copy all elements for this sample
-        for (int i = 0; i < elementsPerSample; i++)
-        {
-            // Convert flat index to multi-dimensional indices
-            int remaining = i;
-            for (int d = source.Shape.Length - 1; d >= 1; d--)
-            {
-                sourceIndices[d] = remaining % source.Shape[d];
-                destIndices[d] = remaining % dest.Shape[d];
-                remaining /= source.Shape[d];
-            }
-
-            dest[destIndices] = source[sourceIndices];
-        }
+        // Trailing shapes were validated above, so the sample is one bulk slice copy along dim 0.
+        dest.SetSlice(destIndex, source.GetSlice(sourceIndex));
     }
 }
