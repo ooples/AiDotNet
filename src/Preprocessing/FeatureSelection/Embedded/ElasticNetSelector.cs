@@ -31,13 +31,13 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -83,114 +83,35 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        // Standardize data
-        var means = new double[p];
-        var stds = new double[p];
-        var X = new double[n, p];
-        var y = new double[n];
+        var engine = Engine;
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        // Standardize data (population std; a near-zero std is replaced by 1) and center the target
+        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out var stds);
+        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
 
-        for (int j = 0; j < p; j++)
+        // Coordinate descent: beta_j = S(rho, l1) / (||x_j||^2 + l2) when that denominator is above 1e-10
+        T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio * n);
+        T l2Penalty = NumOps.FromDouble(_alpha * (1 - _l1Ratio) * n);
+        T floor = NumOps.FromDouble(1e-10);
+        var none = new Tensor<T>(new[] { 1 });
+        var denominators = engine.TensorAddScalar(engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false), l2Penalty);
+        var beta = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>
         {
-            for (int i = 0; i < n; i++)
-                means[j] += NumOps.ToDouble(data[i, j]);
-            means[j] /= n;
-
-            for (int i = 0; i < n; i++)
-                stds[j] += Math.Pow(NumOps.ToDouble(data[i, j]) - means[j], 2);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - means[j]) / stds[j];
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-        }
-
-        // Elastic Net penalties
-        double l1Penalty = _alpha * _l1Ratio * n;
-        double l2Penalty = _alpha * (1 - _l1Ratio) * n;
-
-        // Coordinate descent
-        var beta = new double[p];
-        var residuals = new double[n];
-        Array.Copy(y, residuals, n);
-
-        // Precompute X'X diagonals
-        var Xj2 = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                Xj2[j] += X[i, j] * X[i, j];
-        }
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            for (int j = 0; j < p; j++)
-            {
-                // Compute partial residual
-                double rhoJ = 0;
-                for (int i = 0; i < n; i++)
-                    rhoJ += X[i, j] * (residuals[i] + beta[j] * X[i, j]);
-
-                // Elastic Net update
-                double betaOld = beta[j];
-                double denom = Xj2[j] + l2Penalty;
-                if (denom > 1e-10)
-                {
-                    beta[j] = SoftThreshold(rhoJ, l1Penalty) / denom;
-                }
-
-                // Update residuals
-                if (Math.Abs(beta[j] - betaOld) > 1e-10)
-                {
-                    for (int i = 0; i < n; i++)
-                        residuals[i] -= (beta[j] - betaOld) * X[i, j];
-                }
-
-                maxChange = Math.Max(maxChange, Math.Abs(beta[j] - betaOld));
-            }
-
-            if (maxChange < _tolerance)
-                break;
-        }
+            var denom = engine.TensorSlice(denominators, new[] { j }, new[] { 1 });
+            return engine.TensorWhere(engine.TensorGreaterThan(denom, floor),
+                engine.TensorDivide(FeatureSelectionTensorOps.SoftThreshold(rho, l1Penalty), denom), none);
+        }, out _);
 
         // Un-standardize coefficients
-        _coefficients = new double[p];
-        for (int j = 0; j < p; j++)
-            _coefficients[j] = beta[j] / stds[j];
+        var coefficients = engine.TensorDivide(beta, stds);
+        _coefficients = coefficients.ToVector();
 
         // Select top features
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _coefficients
-            .Select((c, idx) => (Coef: Math.Abs(c), Index: idx))
-            .OrderByDescending(x => x.Coef)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(coefficients), nToSelect);
 
         IsFitted = true;
     }
-
-    private static double SoftThreshold(double x, double lambda)
-    {
-        if (x > lambda)
-            return x - lambda;
-        else if (x < -lambda)
-            return x + lambda;
-        else
-            return 0;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
