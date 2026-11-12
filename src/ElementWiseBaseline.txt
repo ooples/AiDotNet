@@ -16544,7 +16544,6 @@
 2	ADNELEM002|AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>)
 2	ADNELEM002|AiDotNet.Kernels.InducingPointKernel<T>.PrecomputeMatrices()
 5	ADNELEM002|AiDotNet.Kernels.InducingPointKernel<T>.SolveLowerTriangular(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
-1	ADNELEM002|AiDotNet.Kernels.KernelSerializationHelper<T>.ExtractKernelParams(AiDotNet.Interfaces.IKernelFunction<T>)
 1	ADNELEM002|AiDotNet.Kernels.LCMKernel<T>.Calculate(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 1	ADNELEM002|AiDotNet.Kernels.LCMKernel<T>.CalculateForOutputs(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>, int, int)
 2	ADNELEM002|AiDotNet.Kernels.MaternKernel<T>.Calculate(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
