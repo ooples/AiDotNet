@@ -734,4 +734,24 @@ public class FederatedElementwiseSweep29bReferenceTests
             Assert.Equal(before[i] * factor, after[i], Precision);
         }
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task ArithmeticSecretSharing_MultiplyUsesTripleMatchingPartyCountAndShape()
+    {
+        await Task.Yield();
+
+        // Triples pre-generated for 3 parties and shape [1] cannot mask a 2-party product of shape [3]. The old
+        // code appended fresh triples but still used the mismatched one at the current index, failing on the
+        // share-count check (or indexing past the triple for larger shapes).
+        var ss = new AiDotNet.FederatedLearning.MPC.ArithmeticSecretSharing<double>(numberOfParties: 3, preGenerateTriples: 0, seed: 7);
+        ss.PreGenerateBeaverTriples(new[] { 1 }, 1);
+
+        var x = new Tensor<double>(new[] { 2.0, -3.0, 0.5 }, new[] { 3 });
+        var y = new Tensor<double>(new[] { 4.0, 5.0, -6.0 }, new[] { 3 });
+        var product = ss.Reconstruct(ss.SecureMultiply(ss.Share(x, 2), ss.Share(y, 2)));
+
+        Assert.Equal(8.0, product[0], Precision);
+        Assert.Equal(-15.0, product[1], Precision);
+        Assert.Equal(-3.0, product[2], Precision);
+    }
 }
