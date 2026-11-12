@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -402,5 +403,172 @@ public class FeatureSelectionPopulationReferenceTests
         double levy = 0.01 * r1 * sigma / System.Math.Pow(System.Math.Abs(r2), 1 / 1.5);
         Assert.Equal(System.Math.Min(1, 0.1 + levy * 0.1), ToArray(positions)[0], 1e-10);
         Assert.Equal(0.0, ToArray(steps)[0], Tolerance);
+    }
+
+    // ---------------------------------------------------------------- Seeded streams of the kept algorithms
+
+    private static double[] AbsCorrelations(Matrix<double> x, Vector<double> y, double undefined)
+    {
+        int n = x.Rows, p = x.Columns;
+        var result = new double[p];
+        double yMean = 0;
+        for (int i = 0; i < n; i++) yMean += y[i];
+        yMean /= n;
+        for (int j = 0; j < p; j++)
+        {
+            double xMean = 0;
+            for (int i = 0; i < n; i++) xMean += x[i, j];
+            xMean /= n;
+            double sxy = 0, sxx = 0, syy = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double dx = x[i, j] - xMean, dy = y[i] - yMean;
+                sxy += dx * dy;
+                sxx += dx * dx;
+                syy += dy * dy;
+            }
+
+            result[j] = sxx > 1e-10 && syy > 1e-10 ? System.Math.Abs(sxy / System.Math.Sqrt(sxx * syy)) : undefined;
+        }
+
+        return result;
+    }
+
+    private static double ThresholdFitness(double[] position, double[] scores, int targetCount)
+    {
+        double total = 0;
+        int count = 0;
+        for (int j = 0; j < position.Length; j++)
+        {
+            if (position[j] > 0.5)
+            {
+                total += scores[j];
+                count++;
+            }
+        }
+
+        return count == 0 ? 0 : total / count - 0.1 * System.Math.Abs(count - targetCount);
+    }
+
+    [Fact]
+    public void AntColonyOptimization_MatchesAntSystemWithSameSeed()
+    {
+        var (x, y) = Problem(11, 50, 7);
+        int k = 3, ants = 5, iterations = 6, seed = 21;
+        double alpha = 1.0, beta = 2.0, rho = 0.1;
+        var selector = new AntColonyOptimization<double>(k, ants, iterations, alpha, beta, rho, seed);
+        selector.Fit(x, y);
+
+        // Ant System in double: roulette over the unselected features on tau^alpha eta^beta
+        var rng = new System.Random(seed);
+        int p = x.Columns;
+        var eta = AbsCorrelations(x, y, 0.01);
+        var tau = System.Linq.Enumerable.Repeat(1.0, p).ToArray();
+        int[]? best = null;
+        double bestFitness = double.MinValue;
+        for (int it = 0; it < iterations; it++)
+        {
+            var subsets = new System.Collections.Generic.List<int[]>();
+            var fitness = new double[ants];
+            for (int a = 0; a < ants; a++)
+            {
+                var available = System.Linq.Enumerable.Range(0, p).ToList();
+                var chosen = new System.Collections.Generic.List<int>();
+                while (chosen.Count < k)
+                {
+                    var w = available.Select(j => System.Math.Pow(tau[j], alpha) * System.Math.Pow(eta[j], beta)).ToArray();
+                    double r = rng.NextDouble() * w.Sum(), cum = 0;
+                    int pick = available.Count - 1;
+                    for (int i = 0; i < w.Length; i++)
+                    {
+                        cum += w[i];
+                        if (r <= cum)
+                        {
+                            pick = i;
+                            break;
+                        }
+                    }
+
+                    chosen.Add(available[pick]);
+                    available.RemoveAt(pick);
+                }
+
+                subsets.Add(chosen.ToArray());
+                fitness[a] = chosen.Average(j => eta[j]);
+                if (fitness[a] > bestFitness)
+                {
+                    bestFitness = fitness[a];
+                    best = chosen.ToArray();
+                }
+            }
+
+            for (int j = 0; j < p; j++) tau[j] *= 1 - rho;
+            for (int a = 0; a < ants; a++)
+                foreach (int j in subsets[a]) tau[j] += fitness[a];
+            for (int j = 0; j < p; j++) tau[j] = System.Math.Max(tau[j], 0.01);
+        }
+
+        Assert.NotNull(best);
+        Assert.Equal((best ?? System.Array.Empty<int>()).OrderBy(j => j).ToArray(), selector.SelectedIndices);
+        var pheromones = selector.Pheromones;
+        Assert.NotNull(pheromones);
+        for (int j = 0; j < p; j++)
+            Assert.Equal(tau[j], pheromones?[j] ?? double.NaN, 9);
+    }
+
+    [Fact]
+    public void HarmonySearch_MatchesGeemImprovisationWithSameSeed()
+    {
+        var (x, y) = Problem(12, 50, 6);
+        int k = 2, memory = 6, iterations = 25, seed = 5;
+        double hmcr = 0.9, par = 0.3, bw = 0.1;
+        var selector = new HarmonySearch<double>(k, memory, iterations, hmcr, par, bw, seed);
+        selector.Fit(x, y);
+
+        var rng = new System.Random(seed);
+        int p = x.Columns;
+        var scores = AbsCorrelations(x, y, 0);
+        var hm = new double[memory][];
+        var fit = new double[memory];
+        for (int i = 0; i < memory; i++)
+        {
+            hm[i] = new double[p];
+            for (int j = 0; j < p; j++) hm[i][j] = rng.NextDouble();
+        }
+
+        for (int i = 0; i < memory; i++) fit[i] = ThresholdFitness(hm[i], scores, k);
+        for (int it = 0; it < iterations; it++)
+        {
+            var h = new double[p];
+            for (int j = 0; j < p; j++)
+            {
+                if (rng.NextDouble() < hmcr)
+                {
+                    h[j] = hm[rng.Next(memory)][j];
+                    if (rng.NextDouble() < par)
+                        h[j] = System.Math.Max(0, System.Math.Min(1, h[j] + bw * (2 * rng.NextDouble() - 1)));
+                }
+                else
+                {
+                    h[j] = rng.NextDouble();
+                }
+            }
+
+            double f = ThresholdFitness(h, scores, k);
+            int worst = 0;
+            for (int i = 1; i < memory; i++) if (fit[i] < fit[worst]) worst = i;
+            if (f > fit[worst])
+            {
+                hm[worst] = h;
+                fit[worst] = f;
+            }
+        }
+
+        int bestIdx = 0;
+        for (int i = 1; i < memory; i++) if (fit[i] > fit[bestIdx]) bestIdx = i;
+        var featureScores = selector.FeatureScores;
+        Assert.NotNull(featureScores);
+        for (int j = 0; j < p; j++)
+            Assert.Equal(hm[bestIdx][j], featureScores?[j] ?? double.NaN, 12);
     }
 }
