@@ -371,21 +371,24 @@ public readonly struct LayerStateBag
     /// <summary>
     /// Formats a delegate-typed construction value for layer metadata through <see cref="DelegateState"/>: a
     /// <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c> written in engine ops is traced into a portable tensor program at the
-    /// layer's input shape, a named static method is saved by reference, and anything else keeps the legacy type
+    /// layer's input shape; anything else keeps the legacy type
     /// description, which a durable load rejects.
     /// </summary>
     public static string FormatDelegate(Delegate? value, int[]? inputShape)
     {
         if (value is null) return string.Empty;
         var saved = DelegateState.Save(value, inputShape);
-        // Nothing describes it (a closure doing work outside the engine): keep the legacy type description, which
-        // the in-memory clone channel ignores and a durable load rejects with the reason.
-        return saved.Length > 0 ? saved : FormatCloneObject(value);
+        // Only a tensor program is persisted (see IsDelegateStateForm: a model file never names a method to bind).
+        // Anything else keeps the legacy type description, which the in-memory clone channel ignores and a durable
+        // load rejects with the reason.
+        return saved.StartsWith(DelegateState.ProgramScheme, StringComparison.Ordinal) ? saved : FormatCloneObject(value);
     }
 
+    // Only the forms that are safe by construction are activated from a model file: a tensor program (replay binds
+    // only to AiDotNet.Tensors' generated engine-op catalog) or a legacy graph (translated to engine ops). A method
+    // reference would name an assembly and method to load from file data, which a model file must never be able to do.
     private static bool IsDelegateStateForm(string saved) =>
         saved.StartsWith(DelegateState.ProgramScheme, StringComparison.Ordinal)
-        || saved.StartsWith(DelegateState.MethodScheme, StringComparison.Ordinal)
         || saved.StartsWith(DelegateState.GraphScheme, StringComparison.Ordinal);
 
     /// <summary>

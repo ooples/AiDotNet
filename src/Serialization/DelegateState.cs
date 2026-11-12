@@ -196,10 +196,9 @@ public static class DelegateState
     {
         if (string.IsNullOrEmpty(saved))
             throw Unsaveable(layerName, key,
-                "nothing was recorded for it -- the layer was built with a lambda or a closure, "
-                + "which has no name to refer to and could not be traced into a tensor program (it does "
-                + "work outside the engine). Write it in engine ops, or pass a named static method or an "
-                + "expression tree, if this layer needs to survive a save.");
+                "nothing was recorded for it -- the function could not be traced into a tensor program (it does "
+                + "work outside the engine). Write it in engine ops, or build the layer from an expression "
+                + "tree, if this layer needs to survive a save.");
 
         if ((saved ?? throw new InvalidOperationException("saved is null where it is required.")).StartsWith(MethodScheme, StringComparison.Ordinal))
             return LoadMethodReference<TDelegate>(saved.Substring(MethodScheme.Length), layerName, key);

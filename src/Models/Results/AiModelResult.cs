@@ -2911,9 +2911,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             return AiDotNet.Tensors.Engines.Export.ProgramPackage.Load(new MemoryStream(bytes, writable: false));
         }
-        catch (AiDotNet.Tensors.Engines.Export.ProgramFormatException ex)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException or ThreadAbortException))
         {
-            System.Diagnostics.Trace.TraceWarning($"Ignoring the saved compiled program ({ex.Message}); it will be re-traced.");
+            // Any failure, not just a format error: the program is an optimisation, and the model itself is intact.
+            System.Diagnostics.Trace.TraceWarning($"Ignoring the saved compiled program ({ex.GetType().Name}: {ex.Message}); it will be re-traced.");
             return null;
         }
     }

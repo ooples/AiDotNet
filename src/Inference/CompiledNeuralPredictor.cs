@@ -113,6 +113,16 @@ internal sealed class CompiledNeuralPredictor<T>
                 // An input shape the program fixed (a non-batch axis): this shape takes the next tier.
                 return false;
             }
+            catch (Exception ex) when (!_config.ThrowOnFailure
+                                       && ex is InvalidOperationException or NotSupportedException or ProgramFormatException)
+            {
+                // A compiled or replayed program that fails is never allowed to fail the prediction: stop using the
+                // program tier for this model and answer from the next one.
+                _programDisabled = true;
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Program tier disabled for {_model.GetType().FullName}: {ex.GetType().Name}: {ex.Message}");
+                return false;
+            }
         }
     }
 

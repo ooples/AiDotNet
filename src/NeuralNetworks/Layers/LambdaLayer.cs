@@ -29,8 +29,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// <b>Saving and compilation:</b> a forward function written in engine ops (<c>AiDotNetEngine.Current</c>) is
 /// traced into a portable tensor program when the layer is saved, closures and captured weights included, and
-/// compiles with the rest of the model. A function that does work outside the engine can still run, but saves
-/// only as a named static method or through the expression-tree constructor.
+/// compiles with the rest of the model. A function that does work outside the engine can still run, but survives a save
+/// only through the expression-tree constructor.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

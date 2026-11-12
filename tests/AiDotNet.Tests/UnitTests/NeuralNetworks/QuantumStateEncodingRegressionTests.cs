@@ -241,32 +241,27 @@ public class QuantumStateEncodingRegressionTests
         => values.Skip(row * RowWidth).Take(RowWidth);
 
     /// <summary>
-    /// Measures whether this device keeps subnormals through the max reduction the prescale uses.
-    /// <c>Abs</c> alone does not answer it -- that is a sign-bit mask and survives flush-to-zero
-    /// hardware unchanged; the comparison inside the reduction is where a device drops them.
+    /// Measures, independently of the layer, whether this device's arithmetic keeps subnormals: a subnormal divided
+    /// by itself must be exactly 1.
     /// </summary>
+    /// <remarks>
+    /// Comparisons, max/min and selects are required to be exact for subnormals on every device (AiDotNet.Tensors
+    /// decides them on IEEE bit patterns, immune to fast-math flushing), so they are NOT probed here: a device that
+    /// flushes in a comparison is a bug this test must report, not an allowed flush. Only arithmetic may flush, which
+    /// OpenCL permits (-cl-fast-relaxed-math); division is the arithmetic the prescale relies on. The probe is
+    /// GPU-resident (uploaded like the layer's input) so nothing runs on the host.
+    /// </remarks>
     private static bool PreservesSubnormalsInArithmetic(DirectGpuTensorEngine gpu)
     {
-        // Measured with the operation the layer's prescale actually performs: it divides each row by the row's
-        // maximum magnitude (TensorDivide). A comparison or a multiply by 1 passes a subnormal through even where
-        // the arithmetic flushes it (OpenCL kernels are built with -cl-fast-relaxed-math, which permits flushing
-        // subnormal operands), so probing with those reported "preserves" on a device whose prescale returns 0, and
-        // the test then demanded the CPU's value for a row the device had legitimately flushed. A single op is not
-        // enough either: on the measured device the division keeps subnormals but the max REDUCTION flushes them.
-        // So the probe runs the prescale chain itself -- |x|, the row max, x / max -- exactly as QuantumLayer does.
         var previous = AiDotNetEngine.Current;
         try
         {
             AiDotNetEngine.Current = gpu;
-            // GPU-resident, uploaded the way the layer's input is, so the probe sees the same transfer path.
             using var host = new Tensor<float>([1, RowWidth]);
             host.Fill(float.Epsilon);
             using var subnormal = GpuTensorHelper.UploadToGpu(gpu.GetBackend()!, host, GpuTensorRole.Input);
-            using var magnitude = gpu.TensorAbs(subnormal);
-            var rowMax = gpu.ReduceMax(magnitude, [1], keepDims: true, out _);
-            var expanded = gpu.TensorRepeatElements(rowMax, RowWidth, axis: 1);
-            using var scaled = gpu.TensorDivide(subnormal, expanded);
-            return scaled.ToArray()[0] == 1f;
+            using var quotient = gpu.TensorDivide(subnormal, subnormal);
+            return quotient.ToArray()[0] == 1f;
         }
         finally
         {

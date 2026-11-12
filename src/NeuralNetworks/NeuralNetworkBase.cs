@@ -6989,10 +6989,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <para><b>For Beginners:</b> this answers "how does the output change if I nudge the input?", which a normal
     /// prediction does not keep track of.</para>
     /// </remarks>
-    public Tensor<T> PredictWithGradients(Tensor<T> input) => PredictFunnel(input, differentiable: true);
+    public Tensor<T> PredictWithGradients(Tensor<T> input)
+    {
+        // Through the virtual Predict, so a model that overrides it (detection heads, OCR, segmentation decoders) is
+        // differentiated through the same function it predicts with; the funnel those overrides reach skips its
+        // no-grad scope while this flag is set.
+        bool prior = t_differentiablePredict;
+        t_differentiablePredict = true;
+        try
+        {
+            return Predict(input);
+        }
+        finally
+        {
+            t_differentiablePredict = prior;
+        }
+    }
+
+    [ThreadStatic] private static bool t_differentiablePredict;
 
     private Tensor<T> PredictFunnel(Tensor<T> input, bool differentiable)
     {
+        differentiable |= t_differentiablePredict;
         RequireArchitectureAgreesWithInput();
         // A model that assembles its layers lazily does so here; the seed must be wired onto those layers.
         EnsureParametersReady();
