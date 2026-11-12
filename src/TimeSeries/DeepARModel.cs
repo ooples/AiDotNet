@@ -904,8 +904,8 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
         writer.Write(tensor.Shape.Length);
         foreach (var dim in tensor._shape)
             writer.Write(dim);
-        for (int i = 0; i < tensor.Length; i++)
-            writer.Write(Convert.ToDouble(tensor[i]));
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), v => Convert.ToDouble(v)))
+            writer.Write(value);
     }
 
     private void ReadTensorInto(BinaryReader reader, Tensor<T> tensor)

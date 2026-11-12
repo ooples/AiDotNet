@@ -595,8 +595,8 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         writer.Write(_options.NumLayers);
 
         writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(NumOps.ToDouble(_trainingSeries[i]));
+        foreach (double value in Array.ConvertAll(_trainingSeries.ToArray(), NumOps.ToDouble))
+            writer.Write(value);
 
         writer.Write(NumOps.ToDouble(_normMean));
         writer.Write(NumOps.ToDouble(_normStd));
@@ -635,7 +635,8 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         writer.Write(tensor._shape.Length);
         foreach (var dim in tensor._shape) writer.Write(dim);
         var span = tensor.Data.Span;
-        for (int i = 0; i < span.Length; i++) writer.Write(NumOps.ToDouble(span[i]));
+        foreach (double value in Array.ConvertAll(span.ToArray(), NumOps.ToDouble))
+            writer.Write(value);
     }
 
     private Tensor<T> DeserializeTensor(BinaryReader reader)

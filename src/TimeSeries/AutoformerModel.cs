@@ -250,12 +250,12 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), _numOps.FromDouble(2.0)),
+                _numOps.One),
+            _numOps.FromDouble(stddev));
     }
 
     private Tensor<T> CreateSinusoidalPositionalEncoding(int maxLen, int embeddingDim)
@@ -943,10 +943,8 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         {
             writer.Write(dim);
         }
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            writer.Write(_numOps.ToDouble(tensor[i]));
-        }
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), _numOps.ToDouble))
+            writer.Write(value);
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -958,10 +956,8 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
             shape[i] = reader.ReadInt32();
         }
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
+        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
+        Array.ConvertAll(storedValues, _numOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
         return tensor;
     }
 }
@@ -1107,12 +1103,12 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     // Getters for the model-level autodiff forward.
@@ -1136,10 +1132,8 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
         {
             writer.Write(dim);
         }
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(tensor[i]));
-        }
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), NumOps.ToDouble))
+            writer.Write(value);
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -1151,10 +1145,8 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
             shape[i] = reader.ReadInt32();
         }
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
+        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
+        Array.ConvertAll(storedValues, NumOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
         return tensor;
     }
 }
@@ -1314,12 +1306,12 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     // Getters for the model-level autodiff forward.
@@ -1349,10 +1341,8 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
         {
             writer.Write(dim);
         }
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(tensor[i]));
-        }
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), NumOps.ToDouble))
+            writer.Write(value);
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -1364,10 +1354,8 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
             shape[i] = reader.ReadInt32();
         }
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
+        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
+        Array.ConvertAll(storedValues, NumOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
         return tensor;
     }
 }
