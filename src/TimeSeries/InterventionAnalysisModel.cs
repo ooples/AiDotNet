@@ -292,14 +292,15 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         _arParameters = Engine.Multiply(Vector<T>.CreateRandom(rand, p), scale);
         _maParameters = Engine.Multiply(Vector<T>.CreateRandom(rand, q), scale);
 
-        // Initialize intervention effects
-        foreach (var intervention in _iaOptions.Interventions)
+        // Initialize intervention effects: u · 0.1 with u uniform in [0, 1), one draw per intervention
+        var initialEffects = Engine.Multiply(Vector<T>.CreateRandom(rand, _iaOptions.Interventions.Count), scale);
+        foreach (var (intervention, initialEffect) in _iaOptions.Interventions.Zip(initialEffects, (intervention, initialEffect) => (intervention, initialEffect)))
         {
             _interventionEffects.Add(new InterventionEffect<T>
             {
                 StartIndex = intervention.StartIndex,
                 Duration = intervention.Duration,
-                Effect = rand.NextDouble() * 0.1
+                Effect = initialEffect
             });
         }
     }
@@ -402,7 +403,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         var effects = optimizedParameters.GetSubVector(paramIndex, _interventionEffects.Count);
         foreach (var (effect, value) in _interventionEffects.Zip(effects, (effect, value) => (effect, value)))
         {
-            effect.Effect = Convert.ToDouble(value);
+            effect.Effect = value;
         }
     }
 
@@ -536,13 +537,14 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        // Add intervention effects
-        foreach (var effect in _interventionEffects)
+        // Add the effects of the interventions active at this index
+        T[] active = _interventionEffects
+            .Where(effect => index >= effect.StartIndex && (effect.Duration == 0 || index < effect.StartIndex + effect.Duration))
+            .Select(effect => effect.Effect)
+            .ToArray();
+        if (active.Length > 0)
         {
-            if (index >= effect.StartIndex && (effect.Duration == 0 || index < effect.StartIndex + effect.Duration))
-            {
-                prediction = NumOps.Add(prediction, NumOps.FromDouble(effect.Effect));
-            }
+            prediction = NumOps.Add(prediction, Engine.Sum(new Vector<T>(active)));
         }
 
         return prediction;
@@ -622,7 +624,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// while a website redesign increased sales by only 3%.
     /// </para>
     /// </remarks>
-    public Dictionary<string, double> GetInterventionEffects()
+    public Dictionary<string, T> GetInterventionEffects()
     {
         return _interventionEffects.ToDictionary(
             effect => $"Intervention_{effect.StartIndex}_{effect.Duration}",

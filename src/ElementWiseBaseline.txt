@@ -20006,7 +20006,6 @@
 1	ADNELEM002|AiDotNet.TimeSeries.InformerModel<T>.ReadTensor(System.IO.BinaryReader)
 7	ADNELEM002|AiDotNet.TimeSeries.InformerModel<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 1	ADNELEM002|AiDotNet.TimeSeries.InformerModel<T>.WriteTensor(System.IO.BinaryWriter, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
-2	ADNELEM002|AiDotNet.TimeSeries.InterventionAnalysisModel<T>.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector<T>, int)
 5	ADNELEM002|AiDotNet.TimeSeries.MAModel<T>.CalculateNegativeLogLikelihood(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 3	ADNELEM002|AiDotNet.TimeSeries.MAModel<T>.CalculateRecentErrors(AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 5	ADNELEM002|AiDotNet.TimeSeries.MAModel<T>.EstimateNoiseVariance(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
