@@ -133,7 +133,18 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
     /// This is the simplest additive structure - no interactions between features.
     /// </para>
     /// </remarks>
-    public AdditiveStructureKernel(int numFeatures, IKernelFunction<T> baseKernel, Vector<T>? weights = null)
+    public AdditiveStructureKernel(int numFeatures, IKernelFunction<T> baseKernel)
+        : this(numFeatures, baseKernel, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a fully additive kernel with one component per feature and the given component weights.
+    /// </summary>
+    /// <param name="numFeatures">The number of input features.</param>
+    /// <param name="baseKernel">The kernel applied to each feature.</param>
+    /// <param name="weights">The weight of each component, or null for equal weights.</param>
+    public AdditiveStructureKernel(int numFeatures, IKernelFunction<T> baseKernel, Vector<T>? weights)
     {
         if (numFeatures < 1)
             throw new ArgumentException("Must have at least one feature.", nameof(numFeatures));
