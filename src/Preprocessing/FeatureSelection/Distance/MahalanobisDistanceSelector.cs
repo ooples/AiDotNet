@@ -25,13 +25,13 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _distanceContributions;
+    private Vector<T>? _distanceContributions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DistanceContributions => _distanceContributions;
+    public Vector<T>? DistanceContributions => _distanceContributions;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,83 +65,33 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _distanceContributions = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
 
         // Compute class means for each feature
-        var classMeans = new Dictionary<int, double[]>();
-        foreach (var c in classes)
-        {
-            classMeans[c] = new double[p];
-            foreach (var idx in classIndices[c])
-                for (int j = 0; j < p; j++)
-                    classMeans[c][j] += X[idx, j];
-            for (int j = 0; j < p; j++)
-                classMeans[c][j] /= classIndices[c].Count;
-        }
+        var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+        var classMeans = FeatureSelectionTensorOps.GroupMeans(membership, X, out _);
 
-        // Compute pooled variance for each feature
-        var pooledVariance = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double sumSq = 0;
-            int totalCount = 0;
-            foreach (var c in classes)
-            {
-                double mean = classMeans[c][j];
-                foreach (var idx in classIndices[c])
-                {
-                    double diff = X[idx, j] - mean;
-                    sumSq += diff * diff;
-                }
-                totalCount += classIndices[c].Count;
-            }
-            pooledVariance[j] = totalCount > classes.Count ? sumSq / (totalCount - classes.Count) : 1;
-        }
+        // Compute pooled within-class variance for each feature
+        var withinClass = engine.TensorSubtract(X, engine.TensorMatMul(membership, classMeans));
+        var sumSq = engine.ReduceSum(engine.TensorSquare(withinClass), new[] { 0 }, false);
+        var pooledVariance = n > k
+            ? engine.TensorDivideScalar(sumSq, NumOps.FromDouble(n - k))
+            : PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
 
-        // Compute Mahalanobis-like contribution for each feature
-        for (int j = 0; j < p; j++)
-        {
-            double totalContribution = 0;
-            int pairCount = 0;
-
-            for (int ci = 0; ci < classes.Count; ci++)
-            {
-                for (int cj = ci + 1; cj < classes.Count; cj++)
-                {
-                    double meanDiff = classMeans[classes[ci]][j] - classMeans[classes[cj]][j];
-                    double variance = Math.Max(pooledVariance[j], 1e-10);
-                    totalContribution += (meanDiff * meanDiff) / variance;
-                    pairCount++;
-                }
-            }
-
-            _distanceContributions[j] = pairCount > 0 ? totalContribution / pairCount : 0;
-        }
+        // Compute Mahalanobis-like contribution for each feature: mean squared class-mean difference over variance
+        var variance = engine.TensorMax(pooledVariance, NumOps.FromDouble(1e-10));
+        var contributions = engine.TensorDivide(
+            FeatureSelectionTensorOps.MeanPairwiseDifference(classMeans, squared: true), variance);
+        _distanceContributions = contributions.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _distanceContributions[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(contributions, numToSelect);
 
         IsFitted = true;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
