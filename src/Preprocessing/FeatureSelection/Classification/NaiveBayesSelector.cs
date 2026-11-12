@@ -77,7 +77,8 @@ public class NaiveBayesSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             // Class-conditional means and (population) variances, floored at 1e-10.
             var Y = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
             var Yt = engine.TensorTranspose(Y);
-            var counts = engine.Reshape(engine.ReduceSum(Y, new[] { 0 }, false), new[] { k, 1 });
+            // Class sizes counted as int: a 0/1 sum in Half stops at 2048
+            var counts = engine.Reshape(engine.ReduceSum(Y.Cast<int>(), new[] { 0 }, false), new[] { k, 1 }).Cast<T>();
             var means = engine.TensorDivide(engine.TensorMatMul(Yt, X), counts);
             var centered = engine.TensorSubtract(X, engine.TensorMatMul(Y, means));
             var variances = engine.TensorMax(
@@ -93,9 +94,9 @@ public class NaiveBayesSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             var var2 = engine.TensorBroadcastTo(engine.Reshape(variances, new[] { 1, k, p }), pairShape);
             var symmetricKl = ComputeGaussianKL(mean1, var1, mean2, var2);
 
-            int pairCount = k * (k - 1) / 2;
-            power = engine.TensorDivideScalar(
-                engine.ReduceSum(symmetricKl, new[] { 0, 1 }, false), NumOps.FromDouble(2.0 * pairCount));
+            // Divided by k and then k - 1: the ordered pair count k (k - 1) overflows Half past k = 256
+            power = engine.TensorDivideScalar(engine.TensorDivideScalar(
+                engine.ReduceSum(symmetricKl, new[] { 0, 1 }, false), NumOps.FromDouble(k)), NumOps.FromDouble(k - 1));
         }
 
         _discriminativePower = power.ToVector();
