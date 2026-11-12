@@ -23,55 +23,23 @@ public class StyleMix<T> : ImageAugmenterBase<T>
         double maxVal = content.IsNormalized ? 1.0 : 255.0;
         int numPixels = content.Height * content.Width;
 
-        for (int c = 0; c < Math.Min(content.Channels, reference.Channels); c++)
-        {
-            // Compute content stats
-            double contentMean = 0, contentVar = 0;
-            for (int y = 0; y < content.Height; y++)
-                for (int x = 0; x < content.Width; x++)
-                    contentMean += NumOps.ToDouble(content.GetPixel(y, x, c));
-            contentMean /= numPixels;
+        // Content and reference statistics per channel (channels present in both images)
+        var engine = Engine;
+        int channels = Math.Min(content.Channels, reference.Channels);
+        var contentPlanar = content.ToPlanarTensor();
+        var contentRgb = ImageTensor<T>.LeadingChannels(contentPlanar, channels);
+        var (contentMean, contentStd) = ImageTensor<T>.ChannelMeanStd(contentRgb);
+        var (refMean, refStd) = ImageTensor<T>.ChannelMeanStd(ImageTensor<T>.LeadingChannels(reference.ToPlanarTensor(), channels));
 
-            for (int y = 0; y < content.Height; y++)
-                for (int x = 0; x < content.Width; x++)
-                {
-                    double diff = NumOps.ToDouble(content.GetPixel(y, x, c)) - contentMean;
-                    contentVar += diff * diff;
-                }
-            contentVar /= numPixels;
-            double contentStd = Math.Sqrt(contentVar + 1e-8);
+        // Transfer: normalize content, apply reference stats, blend
+        T alpha = NumOps.FromDouble(Alpha);
+        var targetMean = engine.TensorAdd(contentMean, engine.TensorMultiplyScalar(engine.TensorSubtract(refMean, contentMean), alpha));
+        var targetStd = engine.TensorAdd(contentStd, engine.TensorMultiplyScalar(engine.TensorSubtract(refStd, contentStd), alpha));
 
-            // Compute reference stats
-            int refPixels = reference.Height * reference.Width;
-            double refMean = 0, refVar = 0;
-            for (int y = 0; y < reference.Height; y++)
-                for (int x = 0; x < reference.Width; x++)
-                    refMean += NumOps.ToDouble(reference.GetPixel(y, x, c));
-            refMean /= refPixels;
-
-            for (int y = 0; y < reference.Height; y++)
-                for (int x = 0; x < reference.Width; x++)
-                {
-                    double diff = NumOps.ToDouble(reference.GetPixel(y, x, c)) - refMean;
-                    refVar += diff * diff;
-                }
-            refVar /= refPixels;
-            double refStd = Math.Sqrt(refVar + 1e-8);
-
-            // Transfer: normalize content, apply reference stats, blend
-            double targetMean = contentMean + Alpha * (refMean - contentMean);
-            double targetStd = contentStd + Alpha * (refStd - contentStd);
-
-            for (int y = 0; y < content.Height; y++)
-                for (int x = 0; x < content.Width; x++)
-                {
-                    double val = NumOps.ToDouble(content.GetPixel(y, x, c));
-                    double normalized = (val - contentMean) / contentStd;
-                    double transferred = normalized * targetStd + targetMean;
-                    result.SetPixel(y, x, c,
-                        NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, transferred))));
-                }
-        }
+        var normalized = engine.TensorDivide(engine.TensorSubtract(contentRgb, contentMean), contentStd);
+        var transferred = engine.TensorAdd(engine.TensorMultiply(normalized, targetStd), targetMean);
+        var clamped = engine.TensorClamp(transferred, NumOps.Zero, NumOps.FromDouble(maxVal));
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingBlock(contentPlanar, clamped));
 
         return result;
     }

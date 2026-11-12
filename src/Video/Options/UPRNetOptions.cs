@@ -34,7 +34,7 @@ public class UPRNetOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public UPRNetOptions(UPRNetOptions other)
+    public UPRNetOptions(UPRNetOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

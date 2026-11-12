@@ -59,6 +59,7 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
         GradientClippingMethod = other.GradientClippingMethod;
         MaxGradientNorm = other.MaxGradientNorm;
         MaxGradientValue = other.MaxGradientValue;
+        RegularizationOrder = other.RegularizationOrder;
         LearningRateScheduler = other.LearningRateScheduler;
         SchedulerStepMode = other.SchedulerStepMode;
         UseTrainingLossAsFitness = other.UseTrainingLossAsFitness;
@@ -145,6 +146,7 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
         GradientClippingMethod = other.GradientClippingMethod;
         MaxGradientNorm = other.MaxGradientNorm;
         MaxGradientValue = other.MaxGradientValue;
+        RegularizationOrder = other.RegularizationOrder;
         LearningRateScheduler = other.LearningRateScheduler;
         SchedulerStepMode = other.SchedulerStepMode;
         UseTrainingLossAsFitness = other.UseTrainingLossAsFitness;
@@ -408,6 +410,29 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     public double MaxGradientValue { get; set; } = GradientClippingHelper.DefaultMaxValue;
 
     /// <summary>
+    /// Gets or sets which side of gradient clipping the optimizer's regularization (L2 and the others) is added on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default, <see cref="RegularizationOrder.ClipThenRegularize"/>, is PyTorch's order:
+    /// <c>clip_grad_norm_</c> clips the loss gradient and <c>optimizer.step()</c> then adds
+    /// <c>weight_decay * theta</c>, so the clip never shrinks the decay. Choose
+    /// <see cref="RegularizationOrder.RegularizeThenClip"/> to reproduce a recipe that writes its L2 penalty into the
+    /// loss and clips the total, as TensorFlow/Keras does with a kernel regularizer and <c>clipnorm</c>.
+    /// </para>
+    /// <para>
+    /// Every training path follows it: the flat gradient path, the eager tape step (including the model's own
+    /// <c>MaxGradNorm</c> clip), gradient accumulation, streaming and the fused compiled step. It changes nothing
+    /// when there is no regularization or no clip.
+    /// </para>
+    /// <para><b>For Beginners:</b> Clipping caps how big a training step can get. This setting decides whether that
+    /// cap also limits the "keep the weights small" pull of regularization (RegularizeThenClip) or only the pull
+    /// of the data (ClipThenRegularize, the PyTorch default).
+    /// </para>
+    /// </remarks>
+    public RegularizationOrder RegularizationOrder { get; set; } = RegularizationOrder.ClipThenRegularize;
+
+    /// <summary>
     /// Gets or sets the learning rate scheduler to use during training.
     /// </summary>
     /// <remarks>
@@ -661,6 +686,24 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </para>
     /// </remarks>
     public double LineSearchMaxStep { get; set; } = 1e10;
+}
+
+/// <summary>
+/// Specifies which side of gradient clipping an optimizer adds its regularization on.
+/// </summary>
+public enum RegularizationOrder
+{
+    /// <summary>
+    /// Clips the loss gradient, then adds the regularization: PyTorch's <c>clip_grad_norm_</c> followed by
+    /// <c>optimizer.step()</c> with <c>weight_decay</c>. The clip never scales the regularization.
+    /// </summary>
+    ClipThenRegularize,
+
+    /// <summary>
+    /// Adds the regularization, then clips the sum: an L2 penalty in the loss under TensorFlow/Keras <c>clipnorm</c>.
+    /// The clip bounds the regularization too.
+    /// </summary>
+    RegularizeThenClip,
 }
 
 /// <summary>

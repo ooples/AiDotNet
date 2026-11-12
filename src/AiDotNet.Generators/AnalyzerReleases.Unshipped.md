@@ -37,6 +37,7 @@ ADN0057 | AiDotNet.Serialization | Info | LayerStateGenerator, Optional construc
 ADNTEST001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Float test scaffold rewrite was a no-op
 ADNTEST002 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape
 ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner
+ADNTEST004 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, A CollisionOwners entry no longer describes a collision
 ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two tensor layouts accept the same rank with different axis names
 ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
 ADNSHAPE003 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
@@ -84,7 +85,7 @@ AIDN098 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, 
 AIDN099 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, [TrainableParameter] on a non-partial class does nothing
 AIDN046 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Layer cannot be scaffolded and produces no generated tests
 AIDN111 | AiDotNet.ModelMetadata | Info | UnusedArchitectureParameterAnalyzer, Layer factory ignores the architecture it was handed
-AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, Optimizer builds its own random generator instead of drawing from the seeded OptimizerBase.Random
+AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternAnalyzer, Optimizer builds its own random generator instead of drawing from the seeded OptimizerBase.Random
 AIDN100 | AiDotNet.ParameterAutomation | Error | ParameterUpdateInPlaceAnalyzer, Trainable parameter reassigned to an Engine result in UpdateParameters
 ADNCLONE001 | AiDotNet.ClonePlan | Warning | ClonePlanGenerator, Clone plan records a member name shadowed with an unrelated type
 AIDN101 | AiDotNet.Correctness | Warning | TapeDetachmentAnalyzer, Predict inside a custom-loss lambda detaches the gradient (ratchet closed: removed from WarningsNotAsErrors now that SACAgent, ConditionalGAN and WGAN are fixed, so a regression fails the build)
@@ -101,6 +102,7 @@ ADNDEF001 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Two models
 ADNDEF002 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Transformer factory yields attention without a residual connection
 ADNDEF003 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model reuses another paper's layer factory without declaring it
 ADNDEF004 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model defect baseline entry is stale
+ADNDEF005 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Duplicate-model declaration contradicted by the code
 ADNGEN003 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Model has no hand-written paper test
 ADNGEN004 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Missing-paper-test baseline entry is stale
 ADNGEN005 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Options class with [PaperDefault] cannot be constructed by the generated test

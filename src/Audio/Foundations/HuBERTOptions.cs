@@ -22,7 +22,8 @@ public class HuBERTOptions : ModelOptions
 {
     #region Audio
 
-    /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>
+    /// <summary>Gets or sets the sample rate in Hz of the audio passed to the model. Audio at any other rate than the
+    /// encoder's native 16 kHz is band-limited resampled to 16 kHz before the convolutional feature encoder.</summary>
     public int SampleRate { get; set; } = 16000;
 
     #endregion
@@ -47,6 +48,22 @@ public class HuBERTOptions : ModelOptions
     /// <summary>Gets or sets the CNN feature encoder output dimension.</summary>
     public int FeatureEncoderDim { get; set; } = 512;
 
+    /// <summary>
+    /// Whether to build HuBERT-Large's layout: a layer-norm feature encoder with conv bias and a stable (pre-norm)
+    /// Transformer. False (the default) is HuBERT-Base's: group norm on the first feature-encoder layer and a
+    /// post-norm Transformer.
+    /// </summary>
+    public bool StableLayerNorm { get; set; }
+
+    /// <summary>Probability of skipping each Transformer layer during training (facebook/hubert-base-ls960: 0.1).</summary>
+    public double LayerDrop { get; set; } = 0.1;
+
+    /// <summary>SpecAugment time-mask probability during training (facebook/hubert-base-ls960: 0.05).</summary>
+    public double MaskTimeProbability { get; set; } = 0.05;
+
+    /// <summary>Dropout inside each feed-forward block (facebook/hubert-base-ls960: 0.1).</summary>
+    public double ActivationDropout { get; set; } = 0.1;
+
     #endregion
 
     #region Model Loading
@@ -61,11 +78,31 @@ public class HuBERTOptions : ModelOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 5e-5;
+    /// <summary>Gets or sets the peak learning rate of the pre-training schedule (5e-4, HuBERT Base's; Hsu et al. 2021,
+    /// section IV-C, which trains Large at 1.5e-3).</summary>
+    public double LearningRate { get; set; } = 5e-4;
 
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.1;
 
     #endregion
+
+    // The wav2vec 2.0 network HuBERT runs (Hsu et al. 2021, section 3), as transformers' HubertModel builds it.
+    internal Wav2Vec2Configuration ToConfiguration() => new()
+    {
+        ConvDims = Enumerable.Repeat(FeatureEncoderDim, 7).ToArray(),
+        HiddenSize = HiddenDim,
+        Layers = NumLayers,
+        Heads = NumAttentionHeads,
+        IntermediateSize = FeedForwardDim,
+        LayerNormFeatureEncoder = StableLayerNorm,
+        StableLayerNorm = StableLayerNorm,
+        ConvBias = StableLayerNorm,
+        FeatureProjectionDropout = DropoutRate,
+        HiddenDropout = DropoutRate,
+        AttentionDropout = DropoutRate,
+        ActivationDropout = ActivationDropout,
+        LayerDrop = LayerDrop,
+        MaskTimeProbability = MaskTimeProbability,
+    };
 }

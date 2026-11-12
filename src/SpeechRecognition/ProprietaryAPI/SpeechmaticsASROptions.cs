@@ -1,11 +1,14 @@
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 
-/// <summary>Options for Speechmatics: real-time multilingual ASR platform.</summary>
+/// <summary>Options for the Speechmatics stand-in after Ursa's disclosed design, a Conformer encoder with a CTC layer over phonemes.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the SpeechmaticsASR model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para>See <see cref="SpeechmaticsASR{T}"/> for which defaults the vendor or paper discloses and which the stand-in infers.</para>
+/// <para><b>For Beginners:</b> These options set the size of the encoder and decoder, the feature front end and the training
+/// augmentation.</para>
 /// </remarks>
 public class SpeechmaticsASROptions : ModelOptions
 {
@@ -22,40 +25,83 @@ public class SpeechmaticsASROptions : ModelOptions
 
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        NumMels = other.NumMels;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        ConvKernel = other.ConvKernel;
+        RopeTheta = other.RopeTheta;
+        FrequencyMasks = other.FrequencyMasks;
+        FrequencyMaskWidth = other.FrequencyMaskWidth;
+        TimeMasks = other.TimeMasks;
+        TimeMaskRatio = other.TimeMaskRatio;
         VocabSize = other.VocabSize;
-        MaxTextLength = other.MaxTextLength;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        Language = other.Language;
+        Seed = other.Seed;
     }
 
-    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
+    /// <summary>Audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 16000;
-    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
+
+    /// <summary>Longest audio a transcription covers, in seconds; longer input is truncated.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
-    /// <summary>Gets or sets the hidden width of the encoder.</summary>
-    public int EncoderDim { get; set; } = 256;
-    /// <summary>Gets or sets the number of encoder layers.</summary>
-    public int NumEncoderLayers { get; set; } = 4;
-    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
-    public int NumAttentionHeads { get; set; } = 4;
-    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
+
+    /// <summary>Log-mel bins (80 over 25 ms windows with a 10 ms stride).</summary>
     public int NumMels { get; set; } = 80;
-    /// <summary>Gets or sets the number of output tokens the model predicts over.</summary>
-    public int VocabSize { get; set; } = 5000;
-    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
-    public int MaxTextLength { get; set; } = 512;
-    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
-    public string? ModelPath { get; set; }
-    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
-    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
-    public double DropoutRate { get; set; } = 0.1;
-    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
+
+    /// <summary>Conformer width (512).</summary>
+    public int EncoderDim { get; set; } = 512;
+
+    /// <summary>Conformer blocks (18).</summary>
+    public int NumEncoderLayers { get; set; } = 18;
+
+    /// <summary>Attention heads per block (8).</summary>
+    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Expansion of each half-step feed-forward module (Gulati et al. 2020, section 2.3: 4).</summary>
+    public int FeedForwardMultiplier { get; set; } = 4;
+
+    /// <summary>Depthwise convolution kernel (31).</summary>
+    public int ConvKernel { get; set; } = 31;
+
+    /// <summary>Rotary base standing in for the relative sinusoidal encoding.</summary>
+    public double RopeTheta { get; set; } = 10000.0;
+
+    /// <summary>SpecAugment frequency masks (Park et al. 2019; Gulati et al. 2020, section 3.1: 2).</summary>
+    public int FrequencyMasks { get; set; } = 2;
+
+    /// <summary>Largest frequency mask, in mel bins (F = 27).</summary>
+    public int FrequencyMaskWidth { get; set; } = 27;
+
+    /// <summary>SpecAugment time masks (10).</summary>
+    public int TimeMasks { get; set; } = 10;
+
+    /// <summary>Largest time mask as a fraction of the utterance (pS = 0.05).</summary>
+    public double TimeMaskRatio { get; set; } = 0.05;
+
+    /// <summary>Output vocabulary size: the blank (token 0), the word boundary and the 39 ARPAbet phonemes.</summary>
+    public int VocabSize { get; set; } = 41;
+
+    /// <summary>The text of each token: the blank, the word boundary, then each ARPAbet phoneme followed by a space.</summary>
+    public string[] Vocabulary { get; set; } = { "<blank>", "| ", "AA ", "AE ", "AH ", "AO ", "AW ", "AY ", "B ", "CH ", "D ", "DH ", "EH ", "ER ", "EY ", "F ", "G ", "HH ", "IH ", "IY ", "JH ", "K ", "L ", "M ", "N ", "NG ", "OW ", "OY ", "P ", "R ", "S ", "SH ", "T ", "TH ", "UH ", "UW ", "V ", "W ", "Y ", "Z ", "ZH " };
+
+    /// <summary>Language reported for transcriptions.</summary>
     public string Language { get; set; } = "en";
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    internal ConformerAsrConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers, NumAttentionHeads = NumAttentionHeads,
+        FeedForwardMultiplier = FeedForwardMultiplier, ConvKernel = ConvKernel, RopeTheta = RopeTheta,
+        FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio, VocabSize = VocabSize,
+    };
 }

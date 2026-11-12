@@ -19,7 +19,7 @@ namespace AiDotNet.Enums;
 public enum MedicalAsrDecoderType
 {
     /// <summary>
-    /// Listen, Attend and Spell: a pyramidal encoder ("listen") feeding an attention decoder
+    /// Listen, Attend and Spell: a bidirectional LSTM encoder ("listen") feeding a multi-headed attention decoder
     /// ("attend and spell"). The paper's more robust option and the default here.
     /// </summary>
     ListenAttendSpell = 0,
