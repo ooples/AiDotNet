@@ -249,4 +249,27 @@ public class FeatureSelectionPopulationReferenceTests
         double expected = 0.4 - coefficientA * System.Math.Abs(coefficientC * 0.4 - 0.3);
         Assert.Equal(System.Math.Max(0, System.Math.Min(1, expected)), searched[0], Tolerance);
     }
+
+    // ---------------------------------------------------------------- Sine Cosine Algorithm (Mirjalili 2016)
+
+    [Fact]
+    public void SineCosine_Move_MatchesSineAndCosineBranches()
+    {
+        var positions = Tensor2D(new[,] { { 0.3, 0.7 } });
+        var destination = Tensor1D(0.6, 0.2);
+        double r1 = 1.2;
+        double[] u = { 0.1, 0.4, 0.2, 0.3, 0.8, 0.9 };
+        var draws = new Tensor<double>((double[])u.Clone(), new[] { 1, 2, 3 });
+        var moved = ToArray(SineCosine<double>.Move(positions, destination, draws, r1));
+
+        double[] x = { 0.3, 0.7 };
+        double[] best = { 0.6, 0.2 };
+        for (int j = 0; j < 2; j++)
+        {
+            double r2 = 2 * System.Math.PI * u[3 * j], r3 = 2 * u[3 * j + 1], r4 = u[3 * j + 2];
+            double wave = r4 < 0.5 ? System.Math.Sin(r2) : System.Math.Cos(r2);
+            double expected = x[j] + r1 * wave * System.Math.Abs(r3 * best[j] - x[j]);
+            Assert.Equal(System.Math.Max(0, System.Math.Min(1, expected)), moved[j], Tolerance);
+        }
+    }
 }
