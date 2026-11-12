@@ -27,9 +27,9 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly double _fairnessWeight;
     private readonly int _protectedAttributeIndex;
 
-    private double[]? _fairnessScores;
-    private double[]? _predictiveScores;
-    private double[]? _combinedScores;
+    private Vector<T>? _fairnessScores;
+    private Vector<T>? _predictiveScores;
+    private Vector<T>? _combinedScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -37,9 +37,9 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double FairnessWeight => _fairnessWeight;
     public int ProtectedAttributeIndex => _protectedAttributeIndex;
-    public double[]? FairnessScores => _fairnessScores;
-    public double[]? PredictiveScores => _predictiveScores;
-    public double[]? CombinedScores => _combinedScores;
+    public Vector<T>? FairnessScores => _fairnessScores;
+    public Vector<T>? PredictiveScores => _predictiveScores;
+    public Vector<T>? CombinedScores => _combinedScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -83,81 +83,34 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var protectedAttr = PreprocessingTensorOps.ColumnVector(X, _protectedAttributeIndex);
 
-        // Extract protected attribute
-        var protectedAttr = new double[n];
-        for (int i = 0; i < n; i++)
-            protectedAttr[i] = X[i, _protectedAttributeIndex];
+        // Protected attribute itself gets zero scores
+        var isProtected = PreprocessingTensorOps.RowVector(engine.TensorEye<T>(p), _protectedAttributeIndex);
+        var zeros = new Tensor<T>(new[] { p });
 
-        double protectedMean = protectedAttr.Average();
-        double protectedVar = 0;
-        for (int i = 0; i < n; i++)
-            protectedVar += (protectedAttr[i] - protectedMean) * (protectedAttr[i] - protectedMean);
+        // Correlation with target (predictive power), 0 when sqrt(sxx * syy) is not above 1e-10
+        var predictiveScores = engine.TensorWhere(isProtected, zeros, engine.TensorAbs(
+            PreprocessingTensorOps.CorrelationsWithDenominatorGuard(X, Tensor<T>.FromVector(target))));
 
-        double targetMean = y.Average();
-        double targetVar = 0;
-        for (int i = 0; i < n; i++)
-            targetVar += (y[i] - targetMean) * (y[i] - targetMean);
+        // Fairness score: higher when less correlated with protected attribute
+        var protectedCorr = engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(X, protectedAttr));
+        var fairnessScores = engine.TensorWhere(isProtected, zeros, PreprocessingTensorOps.OneMinus(protectedCorr));
 
-        _predictiveScores = new double[p];
-        _fairnessScores = new double[p];
-        _combinedScores = new double[p];
+        // Combined score: balance predictive power with fairness
+        var combinedScores = engine.TensorAdd(
+            engine.TensorMultiplyScalar(predictiveScores, NumOps.FromDouble(1 - _fairnessWeight)),
+            engine.TensorMultiplyScalar(fairnessScores, NumOps.FromDouble(_fairnessWeight)));
 
-        for (int j = 0; j < p; j++)
-        {
-            if (j == _protectedAttributeIndex)
-            {
-                // Protected attribute itself gets zero score
-                _predictiveScores[j] = 0;
-                _fairnessScores[j] = 0;
-                _combinedScores[j] = 0;
-                continue;
-            }
-
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double featureMean = col.Average();
-            double featureVar = 0;
-            for (int i = 0; i < n; i++)
-                featureVar += (col[i] - featureMean) * (col[i] - featureMean);
-
-            // Compute correlation with target (predictive power)
-            double covTarget = 0;
-            for (int i = 0; i < n; i++)
-                covTarget += (col[i] - featureMean) * (y[i] - targetMean);
-
-            double denomTarget = Math.Sqrt(featureVar * targetVar);
-            _predictiveScores[j] = denomTarget > 1e-10 ? Math.Abs(covTarget / denomTarget) : 0;
-
-            // Compute correlation with protected attribute (fairness concern)
-            double covProtected = 0;
-            for (int i = 0; i < n; i++)
-                covProtected += (col[i] - featureMean) * (protectedAttr[i] - protectedMean);
-
-            double denomProtected = Math.Sqrt(featureVar * protectedVar);
-            double protectedCorr = denomProtected > 1e-10 ? Math.Abs(covProtected / denomProtected) : 0;
-
-            // Fairness score: higher when less correlated with protected attribute
-            _fairnessScores[j] = 1.0 - protectedCorr;
-
-            // Combined score: balance predictive power with fairness
-            _combinedScores[j] = (1 - _fairnessWeight) * _predictiveScores[j] + _fairnessWeight * _fairnessScores[j];
-        }
+        _predictiveScores = predictiveScores.ToVector();
+        _fairnessScores = fairnessScores.ToVector();
+        _combinedScores = combinedScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p - 1); // Exclude protected attribute
-        _selectedIndices = Enumerable.Range(0, p)
+        _selectedIndices = PreprocessingTensorOps.StableOrder(combinedScores, descending: true)
             .Where(j => j != _protectedAttributeIndex)
-            .OrderByDescending(j => _combinedScores[j])
             .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
