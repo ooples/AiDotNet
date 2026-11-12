@@ -108,7 +108,10 @@ public class Normalizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Row norms over the selected columns; like scikit-learn's normalize, a norm below 10 * eps is treated
         // as 1 so an all-zero row stays zero.
         var x = Tensor<T>.FromMatrix(data);
-        var selected = Engine.TensorMultiply(x, ScalerTensorOps.BroadcastRow(mask, numRows));
+        // Unselected entries are replaced by 0, not multiplied by it: NaN * 0 and Inf * 0 are NaN, which would
+        // poison the norm of the selected columns.
+        var selected = Engine.TensorWhere(
+            ScalerTensorOps.BroadcastRow(mask, numRows), x, new Tensor<T>(new[] { numRows, numColumns }));
         var norm = ScalerTensorOps.HandleZerosInScale(CalculateRowNorms(selected));
         var normalized = Engine.TensorDivide(x, Engine.TensorBroadcastTo(norm, new[] { numRows, numColumns }));
         return ScalerTensorOps.MergeColumns(mask, normalized, data);
