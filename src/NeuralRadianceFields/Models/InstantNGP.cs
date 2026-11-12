@@ -1217,51 +1217,8 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         int height,
         T focalLength)
     {
-        int numRays = width * height;
-        var origins = new T[numRays * 3];
-        var directions = new T[numRays * 3];
-        double f = NumOps.ToDouble(focalLength);
-        double cx = (width - 1) * 0.5;
-        double cy = (height - 1) * 0.5;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                double px = (x - cx) / f;
-                double py = (y - cy) / f;
-                double pz = 1.0;
-
-                double dx = NumOps.ToDouble(cameraRotation[0, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[0, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[0, 2]) * pz;
-                double dy = NumOps.ToDouble(cameraRotation[1, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[1, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[1, 2]) * pz;
-                double dz = NumOps.ToDouble(cameraRotation[2, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[2, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[2, 2]) * pz;
-
-                double norm = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                if (norm > 0.0)
-                {
-                    double inv = 1.0 / norm;
-                    dx *= inv;
-                    dy *= inv;
-                    dz *= inv;
-                }
-
-                int idx = (y * width + x) * 3;
-                origins[idx] = cameraPosition[0];
-                origins[idx + 1] = cameraPosition[1];
-                origins[idx + 2] = cameraPosition[2];
-                directions[idx] = NumOps.FromDouble(dx);
-                directions[idx + 1] = NumOps.FromDouble(dy);
-                directions[idx + 2] = NumOps.FromDouble(dz);
-            }
-        }
-
-        return (new Tensor<T>(origins, [numRays, 3]), new Tensor<T>(directions, [numRays, 3]));
+        return NeuralRadianceFields.Helpers.ImageTrainingHelpers.GeneratePinholeRays(
+            Engine, cameraPosition, cameraRotation, width, height, focalLength);
     }
 
     private bool ComputeRayBounds(
