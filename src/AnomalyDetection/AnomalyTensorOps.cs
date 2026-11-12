@@ -216,6 +216,38 @@ internal static class AnomalyTensorOps
         return engine.TensorDivide(sums, engine.TensorMax(counts, numOps.One));
     }
 
+    /// <summary>The columns of a matrix as separate 1-D tensors.</summary>
+    internal static Tensor<T>[] Columns<T>(Matrix<T> x)
+    {
+        var data = ToTensor(x);
+        var columns = new Tensor<T>[x.Columns];
+        for (int j = 0; j < columns.Length; j++)
+        {
+            columns[j] = Engine.TensorSliceAxis(data, 1, j);
+        }
+
+        return columns;
+    }
+
+    /// <summary>0, 1, ..., n - 1 as an int tensor.</summary>
+    internal static Tensor<int> Range(int n) => Engine.TensorArange<int>(0, n, 1);
+
+    /// <summary>The entries of an int tensor where a 0/1 mask equals <paramref name="flag"/> (1 or 0), in order.</summary>
+    internal static Tensor<int> SelectWhere<T>(Tensor<int> items, Tensor<T> mask01, T flag)
+        => Engine.TensorMaskedSelect(items, Engine.TensorEqScalar(mask01, flag));
+
+    /// <summary>
+    /// Assembles per-row values delivered in pieces: the row ids of all pieces together are a permutation
+    /// of 0..n-1, and the result holds, at each row id, the value delivered for it.
+    /// </summary>
+    internal static Tensor<T> AssembleByRow<T>(List<Tensor<int>> rowPieces, List<Tensor<T>> valuePieces)
+    {
+        var engine = Engine;
+        var rows = rowPieces.Count == 1 ? rowPieces[0] : engine.TensorConcatenate(rowPieces.ToArray(), 0);
+        var values = valuePieces.Count == 1 ? valuePieces[0] : engine.TensorConcatenate(valuePieces.ToArray(), 0);
+        return engine.TensorGather(values, engine.TensorArgsort(rows, 0, false), 0);
+    }
+
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
     {
