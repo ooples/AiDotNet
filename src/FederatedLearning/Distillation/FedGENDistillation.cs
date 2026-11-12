@@ -110,7 +110,7 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
         (_numClasses + _noiseDim) * _hiddenDim + _hiddenDim + _hiddenDim * _featureDim + _featureDim;
 
     /// <inheritdoc/>
-    /// <remarks>Every class counts as one local sample; use the overload with label counts for the paper's α weights.</remarks>
+    /// <remarks>Every class counts as one local sample; use <see cref="ExtractHeadKnowledge"/> with label counts for the paper's α weights.</remarks>
     public Matrix<T> ExtractKnowledge(Vector<T> localModelParameters, Matrix<T>? publicData)
     {
         var uniform = new int[_numClasses];
@@ -119,7 +119,7 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
             uniform[c] = 1;
         }
 
-        return ExtractKnowledge(localModelParameters, uniform);
+        return ExtractHeadKnowledge(localModelParameters, uniform);
     }
 
     /// <summary>
@@ -128,7 +128,7 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
     /// <param name="localModelParameters">Client parameters; the first <see cref="HeadParameterCount"/> are the head.</param>
     /// <param name="labelCounts">Number of local training samples of each class (length C, non-negative).</param>
     /// <returns>A [C, L + 2] matrix: predictor weights, bias, sample count.</returns>
-    public Matrix<T> ExtractKnowledge(Vector<T> localModelParameters, int[] labelCounts)
+    public Matrix<T> ExtractHeadKnowledge(Vector<T> localModelParameters, int[] labelCounts)
     {
         Guard.NotNull(localModelParameters);
         Guard.NotNull(labelCounts);

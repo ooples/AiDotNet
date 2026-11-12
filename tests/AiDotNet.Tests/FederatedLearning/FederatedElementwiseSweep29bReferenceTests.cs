@@ -402,25 +402,121 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal((g0 * g0 + g1 * g1) / 2.0, fisher[0], 6);
     }
 
+    // FedCIL ACGAN with 2 classes, 1 feature, 1 noise input and 2 hidden units (24 parameters). The generator maps
+    // class 0 to +2 and class 1 to -2 (noise weight 0); the discriminator hidden layer is (relu(x), relu(-x)) with
+    // the given 2x2 class weights and a zero real/fake head.
+    private static Vector<double> FedCilParameters(double[] classifierWeights)
+    {
+        var values = new List<double>
+        {
+            1, 0, 0, 1, 0, 0, // generator W1 [onehot0; onehot1; noise] x 2 hidden
+            0, 0,             // generator b1
+            2, -2,            // generator W2
+            0,                // generator b2
+            1, -1,            // discriminator Wh
+            0, 0,             // discriminator bh
+            0, 0,             // adversarial W
+            0,                // adversarial b
+        };
+        values.AddRange(classifierWeights);
+        values.AddRange(new[] { 0.0, 0.0 }); // classifier bias
+        return new Vector<double>(values.ToArray());
+    }
+
+    private static AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<double> SmallFedCil(int consolidationSteps = 300)
+    {
+        return new AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<double>(
+            numClasses: 2, featureDim: 1, noiseDim: 1, hiddenDim: 2, batchSize: 32, learningRate: 0.1,
+            consistencyWeight: 1.0, consolidationSteps: consolidationSteps, seed: 11);
+    }
+
     [Fact(Timeout = 60000)]
-    public async Task FedCIL_PrototypeEmaCopiesInputAndRejectsLengthMismatch()
+    public async Task FedCIL_ConsistencyLossIsKlFromGlobalToLocalClassifier()
     {
         await Task.Yield();
 
-        // EMA: p = decay * p_old + (1 - decay) * p_new. The first prototype is stored as a copy, so a later
-        // edit of the caller's array must not leak into the global prototype.
-        var fedCil = new AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<double>(prototypeDecay: 0.75);
-        var first = new[] { 4.0, 8.0 };
-        fedCil.UpdatePrototype(3, first);
-        first[0] = 1000.0;
-        fedCil.UpdatePrototype(3, new[] { 0.0, 4.0 });
+        // Qi et al. 2023 consistency enforcement. x = 2: global logits (2, 0), local (swapped head) logits (0, 2).
+        // With a = sigmoid(2): KL = a ln(a / (1 - a)) + (1 - a) ln((1 - a) / a) = 2 (2a - 1) = 2 tanh(1).
+        var fedCil = SmallFedCil();
+        Assert.Equal(24, fedCil.ParameterCount);
+        var global = fedCil.CreateModel(FedCilParameters(new[] { 1.0, 0.0, 0.0, 1.0 }));
+        var local = fedCil.CreateModel(FedCilParameters(new[] { 0.0, 1.0, 1.0, 0.0 }));
+        Assert.Equal(FedCilParameters(new[] { 1.0, 0.0, 0.0, 1.0 }).ToArray(), fedCil.GetParameters(global).ToArray());
 
-        // Zero noise returns the prototype itself: 0.75 * [4, 8] + 0.25 * [0, 4] = [3, 7].
-        var samples = fedCil.GenerateSyntheticFeatures(3, 2, noiseScale: 0.0);
-        Assert.Equal(new[] { 3.0, 7.0 }, samples[0]);
-        Assert.Equal(new[] { 3.0, 7.0 }, samples[1]);
+        var loss = fedCil.ComputeConsistencyLoss(global, local, new Matrix<double>(new[,] { { 2.0 } }));
+        Assert.Equal(2.0 * Math.Tanh(1.0), loss, Precision);
+        Assert.Equal(0.0, fedCil.ComputeConsistencyLoss(global, global, new Matrix<double>(new[,] { { 2.0 } })), Precision);
 
-        Assert.Throws<ArgumentException>(() => fedCil.UpdatePrototype(3, new[] { 1.0 }));
+        // The generator draws class 0 at +2 and class 1 at -2.
+        Assert.Equal(2.0, fedCil.GenerateReplay(global, 0, 3)[1, 0], Precision);
+        Assert.Equal(-2.0, fedCil.GenerateReplay(global, 1, 3)[2, 0], Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedCIL_GenerativeReplayKeepsOldClassWhileLearningNewTask()
+    {
+        await Task.Yield();
+
+        // Task 2 brings only class 1 (real samples at -2), and the global classifier head is blank. Replaying
+        // class 0 from the global generator (+2) teaches the client classifier that +2 is class 0 even though no
+        // real class-0 sample is present; training on the new task alone labels +2 as class 1.
+        var task2 = new Matrix<double>(new[,] { { -2.0 }, { -2.1 }, { -1.9 } });
+        var labels = new[] { 1, 1, 1 };
+        var blank = new[] { 0.0, 0.0, 0.0, 0.0 };
+
+        var replaying = SmallFedCil();
+        var global = replaying.CreateModel(FedCilParameters(blank));
+        var withReplay = replaying.TrainClient(global, task2, labels, new[] { 0 }, steps: 300);
+        Assert.Equal(new[] { 0, 1 }, replaying.Classify(withReplay, new Matrix<double>(new[,] { { 2.0 }, { -2.0 } })));
+
+        // The global model is not modified by client training.
+        Assert.Equal(FedCilParameters(blank).ToArray(), replaying.GetParameters(global).ToArray());
+
+        var forgetting = SmallFedCil();
+        var withoutReplay = forgetting.TrainClient(
+            forgetting.CreateModel(FedCilParameters(blank)), task2, labels, Array.Empty<int>(), steps: 300);
+        Assert.Equal(1, forgetting.Classify(withoutReplay, new Matrix<double>(new[,] { { 2.0 } }))[0]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedCIL_ConsolidationAveragesClientsThenLearnsEveryClientsClasses()
+    {
+        await Task.Yield();
+
+        // Client A has learned class 0 only, client B class 1 only; both classifier heads are blank (zero).
+        var blank = new[] { 0.0, 0.0, 0.0, 0.0 };
+
+        // Without consolidation steps the server model is the weighted parameter average (weights 1 and 3).
+        var averaging = SmallFedCil(consolidationSteps: 0);
+        var a = FedCilParameters(blank);
+        var b = FedCilParameters(new[] { 4.0, 0.0, 0.0, 4.0 });
+        var averaged = averaging.Consolidate(
+            new Dictionary<int, AiDotNet.FederatedLearning.ContinualLearning.FedCILGenerativeModel<double>>
+            {
+                [0] = averaging.CreateModel(a),
+                [1] = averaging.CreateModel(b),
+            },
+            new Dictionary<int, IReadOnlyCollection<int>> { [0] = new[] { 0 }, [1] = new[] { 1 } },
+            new Dictionary<int, double> { [0] = 1.0, [1] = 3.0 });
+        var averagedParameters = averaging.GetParameters(averaged).ToArray();
+        for (int i = 0; i < a.Length; i++)
+        {
+            Assert.Equal(0.25 * a[i] + 0.75 * b[i], averagedParameters[i], Precision);
+        }
+
+        // Model consolidation: ACGAN steps on samples from each client generator for its own classes teach the
+        // global classifier both classes, which neither client classifier knew.
+        var consolidating = SmallFedCil();
+        var global = consolidating.Consolidate(
+            new Dictionary<int, AiDotNet.FederatedLearning.ContinualLearning.FedCILGenerativeModel<double>>
+            {
+                [0] = consolidating.CreateModel(FedCilParameters(blank)),
+                [1] = consolidating.CreateModel(FedCilParameters(blank)),
+            },
+            new Dictionary<int, IReadOnlyCollection<int>> { [0] = new[] { 0 }, [1] = new[] { 1 } },
+            null);
+        Assert.Equal(new[] { 0, 1 }, consolidating.Classify(global, new Matrix<double>(new[,] { { 2.0 }, { -2.0 } })));
+        Assert.Equal(new[] { 0, 1 }, consolidating.KnownClasses.OrderBy(c => c).ToArray());
     }
 
     [Fact(Timeout = 60000)]
@@ -551,12 +647,12 @@ public class FederatedElementwiseSweep29bReferenceTests
 
         var identityHead = new Vector<double>(new[] { 1.0, 0.0, 0.0, 1.0, 0.0, 0.0 });
         var swappedHead = new Vector<double>(new[] { 0.0, 1.0, 1.0, 0.0, 0.0, 0.0 });
-        var knowledgeA = fedGen.ExtractKnowledge(identityHead, new[] { 10, 0 });
+        var knowledgeA = fedGen.ExtractHeadKnowledge(identityHead, new[] { 10, 0 });
         Assert.Equal(10.0, knowledgeA[0, 3], Precision);
         var global = fedGen.AggregateKnowledge(new Dictionary<int, Matrix<double>>
         {
             [0] = knowledgeA,
-            [1] = fedGen.ExtractKnowledge(swappedHead, new[] { 0, 10 }),
+            [1] = fedGen.ExtractHeadKnowledge(swappedHead, new[] { 0, 10 }),
         }, null);
         Assert.Equal(1, global.Rows);
         Assert.Equal(fedGen.GeneratorParameterCount + 2, global.Columns);
@@ -585,8 +681,8 @@ public class FederatedElementwiseSweep29bReferenceTests
             noiseDim: 4, generatorHiddenDim: 16, batchSize: 32, distillationEpochs: 400, distillationLearningRate: 0.2);
         var identityGlobal = distiller.AggregateKnowledge(new Dictionary<int, Matrix<double>>
         {
-            [0] = distiller.ExtractKnowledge(identityHead, new[] { 10, 10 }),
-            [1] = distiller.ExtractKnowledge(identityHead, new[] { 10, 10 }),
+            [0] = distiller.ExtractHeadKnowledge(identityHead, new[] { 10, 10 }),
+            [1] = distiller.ExtractHeadKnowledge(identityHead, new[] { 10, 10 }),
         }, null);
         var client = new Vector<double>(new[] { 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 7.0, 8.0 });
         var updated = distiller.ApplyKnowledge(client, identityGlobal, null, 1.0);
