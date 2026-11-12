@@ -1,8 +1,8 @@
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
-/// Whole-series engine operations shared by the time-series models: lag matrices, autoregressive
-/// recursions, differencing and their inverses, expressed as <see cref="IEngine"/> ops in T.
+/// Whole-series engine operations shared by the time-series models: lag matrices, differencing and
+/// their inverses, expressed as <see cref="IEngine"/> ops in T.
 /// </summary>
 /// <typeparam name="T">The numeric type of the series.</typeparam>
 internal static class TimeSeriesEngineOps<T>
@@ -39,83 +39,6 @@ internal static class TimeSeriesEngineOps<T>
         var windows = Engine.TensorUnfold(segment, 0, p, 1);
         var reversed = new Tensor<int>(new[] { p }, new Vector<int>(Enumerable.Range(0, p).Reverse()));
         return Engine.TensorIndexSelect(windows, reversed, 1).ToMatrix();
-    }
-
-    /// <summary>
-    /// The most recent <paramref name="p"/> values of <paramref name="history"/>, newest first
-    /// (<c>[y[n-1], ..., y[n-p]]</c>), zero-filled where the history is shorter than <paramref name="p"/>.
-    /// </summary>
-    public static Vector<T> RecentState(Vector<T> history, int p)
-    {
-        int take = Math.Min(p, history.Length);
-        var recent = take > 0 ? Reverse(history.GetSubVector(history.Length - take, take)) : new Vector<T>(0);
-        return take < p ? Vector<T>.Concatenate(recent, new Vector<T>(p - take)) : recent;
-    }
-
-    /// <summary>
-    /// Companion (shift) matrix of an AR polynomial: row 0 is <paramref name="phi"/>, rows 1.. shift the
-    /// state down by one, so <c>C · [y[t-1], ..., y[t-p]] = [Σ φ_i y[t-i], y[t-1], ..., y[t-p+1]]</c>.
-    /// </summary>
-    public static Matrix<T> Companion(Vector<T> phi)
-    {
-        int p = phi.Length;
-        var top = Tensor<T>.FromVector(phi, new[] { 1, p });
-        if (p == 1)
-        {
-            return top.ToMatrix();
-        }
-
-        var shift = Engine.TensorConcatenate(new[]
-        {
-            Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(p - 1)),
-            new Tensor<T>(new[] { p - 1, 1 }),
-        }, 1);
-        return Engine.TensorConcatenate(new[] { top, shift }, 0).ToMatrix();
-    }
-
-    /// <summary>
-    /// Iterates <c>state ← M · state + c</c> <paramref name="steps"/> times and returns the first component
-    /// of every new state. This is the scan behind autoregressive forecasts.
-    /// </summary>
-    public static Vector<T> IterateFirstComponent(Matrix<T> m, Vector<T> state, Vector<T>? offset, int steps)
-    {
-        if (steps <= 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        var states = new List<Vector<T>>(steps);
-        for (int s = 0; s < steps; s++)
-        {
-            state = Engine.MatrixVectorMultiply(m, state);
-            if (offset is not null)
-            {
-                state = Engine.Add(state, offset);
-            }
-
-            states.Add(state);
-        }
-
-        return Matrix<T>.FromRowVectors(states).GetColumn(0);
-    }
-
-    /// <summary>
-    /// Autoregressive forecasts y[t] = Σ φ_i y[t-i-1] for <paramref name="horizon"/> steps after
-    /// <paramref name="history"/>, each forecast feeding the next.
-    /// </summary>
-    public static Vector<T> ForecastAR(Vector<T> history, Vector<T> phi, int horizon)
-    {
-        if (horizon <= 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        if (phi.Length == 0)
-        {
-            return new Vector<T>(horizon);
-        }
-
-        return IterateFirstComponent(Companion(phi), RecentState(history, phi.Length), null, horizon);
     }
 
     /// <summary>Lag-<paramref name="lag"/> difference <c>y[t] - y[t-lag]</c> for t = lag .. n-1.</summary>
