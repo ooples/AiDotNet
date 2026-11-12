@@ -22653,3 +22653,7 @@ AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic.PermutationImportance<T>.P
 AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<T>.FeatureBound.get -> double
 AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<T>.TargetBound.get -> double
 AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<T>.NoiseScale.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector<T>.ComplexityValues.get -> double[]?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector<T>.JBStatistics.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector<T>.ComplexityValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector<T>.JBStatistics.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?

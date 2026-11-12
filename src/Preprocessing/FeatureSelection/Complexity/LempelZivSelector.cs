@@ -26,14 +26,14 @@ public class LempelZivSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _complexityValues;
+    private Vector<T>? _complexityValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? ComplexityValues => _complexityValues;
+    public Vector<T>? ComplexityValues => _complexityValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -61,56 +61,43 @@ public class LempelZivSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _complexityValues = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
         // Normalized complexity bound: n / log_k(n) where k = alphabet size
         double normFactor = n / (Math.Log(n) / Math.Log(_nBins));
 
+        // Discretize every column to symbols: trunc((x - min) / range * (nBins - 1)), capped at nBins - 1;
+        // a (near-)constant column is all symbol 0
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(X), new[] { 1, p });
+        var range = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(X), new[] { 1, p }), min);
+        var scaled = engine.TensorMultiplyScalar(
+            engine.TensorDivide(engine.TensorSubtract(X, engine.TensorBroadcastTo(min, new[] { n, p })),
+                engine.TensorBroadcastTo(range, new[] { n, p })),
+            NumOps.FromDouble(_nBins - 1));
+        var bins = engine.TensorMin(engine.TensorTrunc(scaled), NumOps.FromDouble(_nBins - 1));
+        var constant = engine.TensorBroadcastTo(engine.TensorLessThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10)), new[] { n, p });
+        var symbols = engine.TensorWhere(constant, new Tensor<T>(new[] { n, p }), bins);
+
+        // Compute Lempel-Ziv complexity of each column's integer symbol sequence
+        var columnSymbols = engine.TensorTranspose(symbols).Cast<int>().AsSpan().ToArray();
+        var complexity = new int[p];
         for (int j = 0; j < p; j++)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Discretize to symbols
-            double min = col.Min();
-            double max = col.Max();
-            double range = max - min;
-
-            var symbols = new int[n];
-            if (range < 1e-10)
-            {
-                // Constant - all same symbol
-                for (int i = 0; i < n; i++)
-                    symbols[i] = 0;
-            }
-            else
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    int bin = (int)((col[i] - min) / range * (_nBins - 1));
-                    symbols[i] = Math.Min(bin, _nBins - 1);
-                }
-            }
-
-            // Compute Lempel-Ziv complexity
-            int complexity = ComputeLZComplexity(symbols);
-
-            // Normalize by theoretical bound
-            _complexityValues[j] = normFactor > 0 ? complexity / normFactor : 0;
+            var sequence = new int[n];
+            Array.Copy(columnSymbols, j * n, sequence, 0, n);
+            complexity[j] = ComputeLZComplexity(sequence);
         }
 
+        // Normalize by theoretical bound
+        var complexityValues = new Tensor<int>(complexity, new[] { p }).Cast<T>();
+        complexityValues = normFactor > 0
+            ? engine.TensorDivideScalar(complexityValues, NumOps.FromDouble(normFactor))
+            : new Tensor<T>(new[] { p });
+        _complexityValues = complexityValues.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _complexityValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(complexityValues, numToSelect);
 
         IsFitted = true;
     }
@@ -164,15 +151,7 @@ public class LempelZivSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         if (_selectedIndices is null)
             throw new InvalidOperationException("LempelZivSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
