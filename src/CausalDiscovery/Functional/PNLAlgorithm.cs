@@ -94,7 +94,7 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
                 // A symmetric pair is the convention CAMUVAlgorithm already uses for a pair it cannot
                 // orient, and RCDAlgorithm refuses to write an edge at all in the same situation.
                 // This aligns PNL with CAMUV: the adjacency is kept, the direction claim is not made.
-                T weightT = weightT;
+                T weightT = NumOps.FromDouble(weight);
 
                 // Both residual dependencies near zero: a deterministic relationship, where the PNL
                 // model has no residual asymmetry to read a direction from at all.

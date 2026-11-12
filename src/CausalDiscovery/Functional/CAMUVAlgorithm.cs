@@ -95,7 +95,7 @@ public class CAMUVAlgorithm<T> : FunctionalBase<T>
 
                 bool suspectConfounder = depIJ > _confoundingThreshold && depJI > _confoundingThreshold;
 
-                T weightT = weightT;
+                T weightT = NumOps.FromDouble(weight);
                 if (suspectConfounder)
                 {
                     W[i, j] = weightT;
