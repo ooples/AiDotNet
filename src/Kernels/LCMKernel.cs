@@ -48,7 +48,7 @@ public class LCMKernel<T> : IKernelFunction<T>
     /// <summary>
     /// The coregionalization matrices for each component.
     /// </summary>
-    private readonly double[][,] _coregMatrices;
+    private readonly Matrix<T>[] _coregMatrices;
 
     /// <summary>
     /// Number of components (latent functions).
@@ -80,14 +80,14 @@ public class LCMKernel<T> : IKernelFunction<T>
     /// var kernels = new[] { rbf, matern };
     ///
     /// // Coregionalization matrices define output correlations
-    /// var B1 = new double[,] { { 1.0, 0.8 }, { 0.8, 1.0 } };  // Strong correlation
-    /// var B2 = new double[,] { { 0.5, 0.1 }, { 0.1, 0.5 } };  // Weak correlation
+    /// var B1 = Matrix&lt;double&gt;.FromRows(new[] { 1.0, 0.8 }, new[] { 0.8, 1.0 });  // Strong correlation
+    /// var B2 = Matrix&lt;double&gt;.FromRows(new[] { 0.5, 0.1 }, new[] { 0.1, 0.5 });  // Weak correlation
     /// var coregMatrices = new[] { B1, B2 };
     ///
     /// var lcm = new LCMKernel&lt;double&gt;(kernels, coregMatrices);
     /// </para>
     /// </remarks>
-    public LCMKernel(IKernelFunction<T>[] inputKernels, double[][,] coregMatrices)
+    public LCMKernel(IKernelFunction<T>[] inputKernels, Matrix<T>[] coregMatrices)
     {
         if (inputKernels is null) throw new ArgumentNullException(nameof(inputKernels));
         if (coregMatrices is null) throw new ArgumentNullException(nameof(coregMatrices));
@@ -99,25 +99,25 @@ public class LCMKernel<T> : IKernelFunction<T>
         _numComponents = inputKernels.Length;
 
         // Verify all coregionalization matrices have the same dimensions
-        int numOutputs = coregMatrices[0].GetLength(0);
-        if (coregMatrices[0].GetLength(0) != coregMatrices[0].GetLength(1))
+        int numOutputs = coregMatrices[0].Rows;
+        if (coregMatrices[0].Rows != coregMatrices[0].Columns)
             throw new ArgumentException("Coregionalization matrices must be square.");
 
         foreach (var B in coregMatrices)
         {
-            if (B.GetLength(0) != numOutputs || B.GetLength(1) != numOutputs)
+            if (B.Rows != numOutputs || B.Columns != numOutputs)
                 throw new ArgumentException("All coregionalization matrices must have the same dimensions.");
         }
 
         _numOutputs = numOutputs;
         _inputKernels = new IKernelFunction<T>[_numComponents];
-        _coregMatrices = new double[_numComponents][,];
+        _coregMatrices = new Matrix<T>[_numComponents];
 
         for (int i = 0; i < _numComponents; i++)
         {
             Guard.NotNull(inputKernels[i], $"inputKernels[{i}]");
             _inputKernels[i] = inputKernels[i];
-            _coregMatrices[i] = (double[,])coregMatrices[i].Clone();
+            _coregMatrices[i] = coregMatrices[i].Clone();
         }
 
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -160,42 +160,24 @@ public class LCMKernel<T> : IKernelFunction<T>
             : RandomHelper.CreateSecureRandom();
 
         _inputKernels = new IKernelFunction<T>[_numComponents];
-        _coregMatrices = new double[_numComponents][,];
+        _numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        _coregMatrices = new Matrix<T>[_numComponents];
+        T bound = _numOps.FromDouble(1.0 / Math.Sqrt(effectiveRank));
+        var stabilizer = engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(numOutputs), _numOps.FromDouble(0.1));
 
         for (int i = 0; i < _numComponents; i++)
         {
             Guard.NotNull(inputKernels[i], $"inputKernels[{i}]");
             _inputKernels[i] = inputKernels[i];
 
-            // Generate random factor matrix L_i, then B_i = L_i × L_i^T
-            var L = new double[numOutputs, effectiveRank];
-            for (int d = 0; d < numOutputs; d++)
-            {
-                for (int r = 0; r < effectiveRank; r++)
-                {
-                    L[d, r] = (rand.NextDouble() - 0.5) * 2 / Math.Sqrt(effectiveRank);
-                }
-            }
-
-            _coregMatrices[i] = new double[numOutputs, numOutputs];
-            for (int d1 = 0; d1 < numOutputs; d1++)
-            {
-                for (int d2 = 0; d2 <= d1; d2++)
-                {
-                    double val = 0;
-                    for (int r = 0; r < effectiveRank; r++)
-                    {
-                        val += L[d1, r] * L[d2, r];
-                    }
-                    // Add small diagonal for stability
-                    if (d1 == d2) val += 0.1;
-                    _coregMatrices[i][d1, d2] = val;
-                    _coregMatrices[i][d2, d1] = val;
-                }
-            }
+            // Generate random factor matrix L_i with entries uniform in [-1/sqrt(rank), 1/sqrt(rank)),
+            // then B_i = L_i × L_i^T plus a small diagonal for stability
+            var factor = engine.TensorRandomUniformRange(new[] { numOutputs, effectiveRank },
+                _numOps.Negate(bound), bound, rand.Next());
+            var gram = engine.TensorMatMul(factor, engine.TensorTranspose(factor)).ToMatrix();
+            _coregMatrices[i] = engine.MatrixAdd(gram, stabilizer);
         }
-
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -232,11 +214,11 @@ public class LCMKernel<T> : IKernelFunction<T>
     /// when driven by this latent function.
     /// </para>
     /// </remarks>
-    public double[,] GetCoregMatrix(int componentIndex)
+    public Matrix<T> GetCoregMatrix(int componentIndex)
     {
         if (componentIndex < 0 || componentIndex >= _numComponents)
             throw new ArgumentOutOfRangeException(nameof(componentIndex));
-        return (double[,])_coregMatrices[componentIndex].Clone();
+        return _coregMatrices[componentIndex].Clone();
     }
 
     /// <summary>
@@ -278,15 +260,7 @@ public class LCMKernel<T> : IKernelFunction<T>
         var input2 = ExtractInput(x2);
 
         // Sum over components: k((x,d), (x',d')) = Σᵢ B_i[d,d'] × k_i(x, x')
-        double result = 0;
-        for (int i = 0; i < _numComponents; i++)
-        {
-            double kInput = _numOps.ToDouble(_inputKernels[i].Calculate(input1, input2));
-            double bEntry = _coregMatrices[i][output1, output2];
-            result += bEntry * kInput;
-        }
-
-        return _numOps.FromDouble(result);
+        return WeightedComponentSum(input1, input2, output1, output2);
     }
 
     /// <summary>
@@ -303,22 +277,30 @@ public class LCMKernel<T> : IKernelFunction<T>
     /// More efficient than creating extended vectors.
     /// </para>
     /// </remarks>
-    public double CalculateForOutputs(Vector<T> input1, Vector<T> input2, int output1, int output2)
+    public T CalculateForOutputs(Vector<T> input1, Vector<T> input2, int output1, int output2)
     {
         if (output1 < 0 || output1 >= _numOutputs)
             throw new ArgumentOutOfRangeException(nameof(output1));
         if (output2 < 0 || output2 >= _numOutputs)
             throw new ArgumentOutOfRangeException(nameof(output2));
 
-        double result = 0;
-        for (int i = 0; i < _numComponents; i++)
-        {
-            double kInput = _numOps.ToDouble(_inputKernels[i].Calculate(input1, input2));
-            double bEntry = _coregMatrices[i][output1, output2];
-            result += bEntry * kInput;
-        }
-        return result;
+        return WeightedComponentSum(input1, input2, output1, output2);
     }
+
+    /// <summary>
+    /// Computes Σᵢ B_i[output1, output2] × k_i(input1, input2).
+    /// </summary>
+    private T WeightedComponentSum(Vector<T> input1, Vector<T> input2, int output1, int output2)
+    {
+        var kernelValues = new Vector<T>(_inputKernels.Select(kernel => kernel.Calculate(input1, input2)));
+        var coregEntries = new Vector<T>(_coregMatrices.Select(matrix => CoregEntry(matrix, output1, output2)));
+        return AiDotNetEngine.Current.DotProduct(coregEntries, kernelValues);
+    }
+
+    /// <summary>
+    /// Reads B[output1, output2].
+    /// </summary>
+    private static T CoregEntry(Matrix<T> matrix, int output1, int output2) => matrix[output1, output2];
 
     /// <summary>
     /// Extracts the input part from an extended vector.
@@ -358,35 +340,23 @@ public class LCMKernel<T> : IKernelFunction<T>
     /// the aggregate output relationships.
     /// </para>
     /// </remarks>
-    public double[,] GetTotalCorrelation()
+    public Matrix<T> GetTotalCorrelation()
     {
-        var total = new double[_numOutputs, _numOutputs];
+        var engine = AiDotNetEngine.Current;
 
         // Sum coregionalization matrices
-        for (int i = 0; i < _numComponents; i++)
-        {
-            for (int d1 = 0; d1 < _numOutputs; d1++)
-            {
-                for (int d2 = 0; d2 < _numOutputs; d2++)
-                {
-                    total[d1, d2] += _coregMatrices[i][d1, d2];
-                }
-            }
-        }
+        var total = Tensor<T>.FromMatrix(_coregMatrices.Aggregate((sum, matrix) => engine.MatrixAdd(sum, matrix)));
 
-        // Convert to correlation
-        var correlation = new double[_numOutputs, _numOutputs];
-        for (int d1 = 0; d1 < _numOutputs; d1++)
-        {
-            for (int d2 = 0; d2 < _numOutputs; d2++)
-            {
-                double std1 = Math.Sqrt(Math.Max(total[d1, d1], 1e-10));
-                double std2 = Math.Sqrt(Math.Max(total[d2, d2], 1e-10));
-                correlation[d1, d2] = total[d1, d2] / (std1 * std2);
-            }
-        }
+        // Convert to correlation: total[d1, d2] / (sqrt(max(total[d1, d1], 1e-10)) * sqrt(max(total[d2, d2], 1e-10)))
+        var diagonal = engine.ReduceSum(
+            engine.TensorMultiply(total, Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(_numOutputs))), new[] { 1 });
+        var std = engine.TensorSqrt(engine.TensorClampMin(diagonal, _numOps.FromDouble(1e-10)));
+        var grid = new[] { _numOutputs, _numOutputs };
+        var stdProduct = engine.TensorMultiply(
+            engine.TensorBroadcastTo(std.Reshape(new[] { _numOutputs, 1 }), grid),
+            engine.TensorBroadcastTo(std.Reshape(new[] { 1, _numOutputs }), grid));
 
-        return correlation;
+        return engine.TensorDivide(total, stdProduct).ToMatrix();
     }
 
     /// <summary>
@@ -430,14 +400,13 @@ public class LCMKernel<T> : IKernelFunction<T>
                     nameof(outputCorrelation));
         }
 
-        var B = new double[numOutputs, numOutputs];
-        for (int i = 0; i < numOutputs; i++)
-        {
-            for (int j = 0; j < numOutputs; j++)
-            {
-                B[i, j] = (i == j) ? 1.0 : outputCorrelation;
-            }
-        }
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var B = engine.TensorWhere(
+            Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(numOutputs)),
+            Tensor<T>.CreateDefault(new[] { numOutputs, numOutputs }, numOps.One),
+            Tensor<T>.CreateDefault(new[] { numOutputs, numOutputs }, numOps.FromDouble(outputCorrelation)))
+            .ToMatrix();
 
         return new LCMKernel<T>(
             new[] { inputKernel },

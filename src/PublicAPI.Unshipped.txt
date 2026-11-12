@@ -22611,3 +22611,11 @@ AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFIDWithStats(AiDotNet.Tensor
 *REMOVED*AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> double
 AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVD(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realVideos, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> T
 AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> T
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.CalculateForOutputs(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! input2, int output1, int output2) -> double
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.GetCoregMatrix(int componentIndex) -> double[,]!
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.GetTotalCorrelation() -> double[,]!
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.LCMKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! inputKernels, double[,]![]! coregMatrices) -> void
+AiDotNet.Kernels.LCMKernel<T>.CalculateForOutputs(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! input2, int output1, int output2) -> T
+AiDotNet.Kernels.LCMKernel<T>.GetCoregMatrix(int componentIndex) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.LCMKernel<T>.GetTotalCorrelation() -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.LCMKernel<T>.LCMKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! inputKernels, AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! coregMatrices) -> void
