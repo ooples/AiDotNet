@@ -22565,3 +22565,5 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*virtual AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ComputeAccuracy(TOutput predictions, TOutput labels) -> double
+virtual AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ComputeAccuracy(TOutput predictions, TOutput labels) -> T
