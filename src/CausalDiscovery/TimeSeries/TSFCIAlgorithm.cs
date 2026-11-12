@@ -48,6 +48,12 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ResearchPaper("On Causal Discovery from Time Series Data using FCI", "https://doi.org/10.1007/978-3-642-15114-9_12", Year = 2010, Authors = "Doris Entner, Patrik O. Hoyer")]
 public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 {
+    /// <summary>
+    /// Maximum number of entries of one [d, k-block, d] partial-correlation workspace in the conditional
+    /// independence test; the conditioning variables are processed in blocks of this size.
+    /// </summary>
+    private const int MaxConditioningBlockElements = 1 << 22;
+
     /// <inheritdoc/>
     public override string Name => "tsFCI";
 
@@ -128,8 +134,11 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         T varianceFloor = NumOps.FromDouble(1e-10);
         var varianceOk = Engine.TensorMultiply(Engine.TensorGreaterThan(varianceRows, varianceFloor),
             Engine.TensorGreaterThan(varianceCols, varianceFloor));
-        var ratioI = Engine.TensorAbs(Engine.TensorDivide(covariance, varianceRows));
-        var ratioJ = Engine.TensorAbs(Engine.TensorDivide(covariance, varianceCols));
+        // Zero variances are replaced by 1 before dividing; those ratios are masked by varianceOk.
+        var safeVarianceRows = Engine.TensorWhere(Engine.TensorGreaterThan(varianceRows, varianceFloor), varianceRows, ones);
+        var safeVarianceCols = Engine.TensorWhere(Engine.TensorGreaterThan(varianceCols, varianceFloor), varianceCols, ones);
+        var ratioI = Engine.TensorAbs(Engine.TensorDivide(covariance, safeVarianceRows));
+        var ratioJ = Engine.TensorAbs(Engine.TensorDivide(covariance, safeVarianceCols));
         var ratioWins = Engine.TensorAdd(Engine.TensorGreaterThan(ratioI, ratioJ),
             Engine.TensorMultiply(Engine.TensorEquals(ratioI, ratioJ), Engine.TensorTriu(ones, 1)));
         var iToJ = Engine.TensorAdd(stronger, Engine.TensorMultiply(tie, Engine.TensorMultiply(varianceOk, ratioWins)));
@@ -166,13 +175,16 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         var targetSs = Engine.ReduceSum(Engine.TensorMultiply(target, target), new[] { 0 }, false);
 
         T floor = NumOps.FromDouble(1e-15);
-        var denom = Engine.TensorSqrt(Engine.TensorOuter(Engine.TensorMax(sourceSs, floor), Engine.TensorMax(targetSs, floor)));
+        // The square roots are taken before the outer product so finite sums of squares cannot overflow T.
+        var denom = Engine.TensorOuter(Engine.TensorSqrt(Engine.TensorMax(sourceSs, floor)),
+            Engine.TensorSqrt(Engine.TensorMax(targetSs, floor)));
         var corr = Engine.TensorDivide(cross, denom);
 
         var shape = new[] { d, d };
         var sourceSsRows = Engine.TensorBroadcastTo(sourceSs.Reshape(new[] { d, 1 }), shape);
         var noVariation = Engine.TensorLessThan(sourceSsRows, NumOps.FromDouble(1e-10));
-        var coef = Engine.TensorWhere(noVariation, Engine.TensorZerosLike(cross), Engine.TensorDivide(cross, sourceSsRows));
+        var safeSourceSs = Engine.TensorWhere(noVariation, Engine.TensorOnesLike(cross), sourceSsRows);
+        var coef = Engine.TensorWhere(noVariation, Engine.TensorZerosLike(cross), Engine.TensorDivide(cross, safeSourceSs));
         return (corr, coef);
     }
 
@@ -191,28 +203,51 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
     private Tensor<T> Survives(Tensor<T> corr0, Tensor<T> corrLag, T threshold)
     {
         int d = corrLag.Shape[0];
-        var cube = new[] { d, d, d }; // [i, k, j]
-        var rij = Engine.TensorBroadcastTo(corrLag.Reshape(new[] { d, 1, d }), cube);
-        var rik = Engine.TensorBroadcastTo(corr0.Reshape(new[] { d, d, 1 }), cube);
-        var rkj = Engine.TensorBroadcastTo(corrLag.Reshape(new[] { 1, d, d }), cube);
+        var pairOnes = Engine.TensorOnesLike(corrLag);
 
-        var numerator = Engine.TensorSubtract(rij, Engine.TensorMultiply(rik, rkj));
-        var ones = Engine.TensorOnesLike(rij);
-        var denomSq = Engine.TensorMultiply(
-            Engine.TensorSubtract(ones, Engine.TensorMultiply(rik, rik)),
-            Engine.TensorSubtract(ones, Engine.TensorMultiply(rkj, rkj)));
-        var conclusive = Engine.TensorSubtract(ones, Engine.TensorLessThan(denomSq, NumOps.FromDouble(1e-10)));
-        var absPartial = Engine.TensorAbs(Engine.TensorDivide(numerator, Engine.TensorSqrt(denomSq)));
+        // Only a pair whose lagged correlation exceeds the threshold can become an edge, so the
+        // survival flag of every other pair is never read; with no such pair there is nothing to test.
+        if (!CausalTensorHelpers.AnyAbove(Engine.TensorAbs(corrLag), threshold))
+            return pairOnes;
 
-        // |partial| <= threshold; both comparisons are false for NaN, so a NaN partial never removes an edge
-        var independent = Engine.TensorAdd(Engine.TensorLessThan(absPartial, threshold), Engine.TensorEquals(absPartial, threshold));
+        var offDiagonal = Engine.TensorSubtract(pairOnes, Engine.TensorEye<T>(d));
+        T conclusiveFloor = NumOps.FromDouble(1e-10);
 
-        var identity = Engine.TensorEye<T>(d);
-        var notI = Engine.TensorBroadcastTo(Engine.TensorSubtract(Engine.TensorOnesLike(identity), identity).Reshape(new[] { d, d, 1 }), cube);
-        var notJ = Engine.TensorBroadcastTo(Engine.TensorSubtract(Engine.TensorOnesLike(identity), identity).Reshape(new[] { 1, d, d }), cube);
-        var removes = Engine.TensorMultiply(Engine.TensorMultiply(independent, conclusive), Engine.TensorMultiply(notI, notJ));
+        // Conditioning variables k are processed in blocks so the [i, k, j] workspace stays bounded.
+        int blockK = Math.Max(1, Math.Min(d, MaxConditioningBlockElements / Math.Max(1, d * d)));
+        var removers = Engine.TensorZerosLike(corrLag);
+        for (int k0 = 0; k0 < d; k0 += blockK)
+        {
+            int kb = Math.Min(blockK, d - k0);
+            var cube = new[] { d, kb, d }; // [i, k, j]
+            var rij = Engine.TensorBroadcastTo(corrLag.Reshape(new[] { d, 1, d }), cube);
+            var rik = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(corr0, new[] { 0, k0 }, new[] { d, kb }).Reshape(new[] { d, kb, 1 }), cube);
+            var rkj = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(corrLag, new[] { k0, 0 }, new[] { kb, d }).Reshape(new[] { 1, kb, d }), cube);
 
-        var removers = Engine.ReduceSum(removes, new[] { 1 }, false);
-        return Engine.TensorSubtract(Engine.TensorOnesLike(removers), Engine.TensorGreaterThan(removers, NumOps.Zero));
+            var numerator = Engine.TensorSubtract(rij, Engine.TensorMultiply(rik, rkj));
+            var ones = Engine.TensorOnesLike(rij);
+            var denomSq = Engine.TensorMultiply(
+                Engine.TensorSubtract(ones, Engine.TensorMultiply(rik, rik)),
+                Engine.TensorSubtract(ones, Engine.TensorMultiply(rkj, rkj)));
+            var conclusive = Engine.TensorSubtract(ones, Engine.TensorLessThan(denomSq, conclusiveFloor));
+
+            // Inconclusive denominators are replaced by 1 before dividing (they are masked by conclusive).
+            var safeDenomSq = Engine.TensorWhere(conclusive, denomSq, ones);
+            var absPartial = Engine.TensorAbs(Engine.TensorDivide(numerator, Engine.TensorSqrt(safeDenomSq)));
+
+            // |partial| <= threshold; both comparisons are false for NaN, so a NaN partial never removes an edge
+            var independent = Engine.TensorAdd(Engine.TensorLessThan(absPartial, threshold), Engine.TensorEquals(absPartial, threshold));
+
+            var notI = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(offDiagonal, new[] { 0, k0 }, new[] { d, kb }).Reshape(new[] { d, kb, 1 }), cube);
+            var notJ = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(offDiagonal, new[] { k0, 0 }, new[] { kb, d }).Reshape(new[] { 1, kb, d }), cube);
+            var removes = Engine.TensorMultiply(Engine.TensorMultiply(independent, conclusive), Engine.TensorMultiply(notI, notJ));
+            removers = Engine.TensorAdd(removers, Engine.ReduceSum(removes, new[] { 1 }, false));
+        }
+
+        return Engine.TensorSubtract(pairOnes, Engine.TensorGreaterThan(removers, NumOps.Zero));
     }
 }
