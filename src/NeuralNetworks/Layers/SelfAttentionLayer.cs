@@ -1079,13 +1079,14 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
 
         // Per row H = -sum(p * log(p)) over weights >= 1e-10 (smaller ones are skipped to avoid log(0)).
         // We minimize -H summed over every (batch, head, query) row: sum(p * log(p)) over all kept weights.
-        var plogp = Engine.TensorMultiply(scores, Engine.TensorLog(scores));
-        var kept = Engine.TensorWhere(
-            Engine.TensorLessThan(scores, NumOps.FromDouble(1e-10)), new Tensor<T>(scores._shape), plogp);
-        T totalNegativeEntropy = Engine.TensorSum(kept);
+        var wide = scores.Cast<double>();
+        var small = Engine.TensorLessThan(wide, 1e-10);
+        var safe = Engine.TensorWhere(small, Tensor<double>.CreateDefault(wide.Shape.ToArray(), 1.0), wide);
+        var plogp = Engine.TensorMultiply(wide, Engine.TensorLog(safe));
+        var kept = Engine.TensorWhere(small, new Tensor<double>(wide.Shape.ToArray()), plogp);
+        T totalNegativeEntropy = NumOps.FromDouble(Engine.TensorSum(kept) / batchSize);
 
         // Average over batch size
-        totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
 
         // Store unweighted loss for diagnostics
         _lastEntropyLoss = totalNegativeEntropy;

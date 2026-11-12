@@ -197,7 +197,8 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
         }
 
         int sampleSize = branch.Length / batch;
-        var scaled = Engine.TensorMultiply(Engine.Reshape(branch, [batch, sampleSize]), sampleScale);
+        var scaled = Engine.TensorMultiply(Engine.Reshape(branch, [batch, sampleSize]),
+            Engine.TensorBroadcastTo(sampleScale, [batch, sampleSize]));
         return Engine.Reshape(scaled, branch.Shape.ToArray());
     }
 

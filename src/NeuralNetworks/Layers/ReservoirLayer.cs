@@ -582,9 +582,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         // "original=NaN, deserialized=NaN" -- NaN on BOTH sides, so the round trip was faithfully
         // preserving a value the layer had already broken.
         //
-        // The companion normalisation below already guards its own division; this one did not.
         T maxEigenvalue = ComputeMaxEigenvalue(_reservoirWeights);
-        double maxEigenvalueAsDouble = Convert.ToDouble(maxEigenvalue);
+        double maxEigenvalueAsDouble = NumOps.ToDouble(maxEigenvalue);
         if (maxEigenvalueAsDouble != 0.0 && !double.IsNaN(maxEigenvalueAsDouble)
             && !double.IsInfinity(maxEigenvalueAsDouble))
         {
@@ -611,10 +610,14 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         // which are complex in general (Jaeger 2001, "The echo state approach"; numpy.linalg.eigvals).
         // A Rayleigh-quotient power iteration only sees real dominant eigenvalues: for a dominant complex
         // pair it oscillates and returns a meaningless estimate (exactly 0 for a scaled rotation).
-        var eigenvalues = LinalgDispatch<T>.Eig(matrix).Values;   // [n, 2]: (real, imaginary)
+        var wide = matrix.Cast<double>();
+        double scale = Engine.TensorMaxValue(Engine.TensorAbs(wide));
+        if (scale == 0) return NumOps.Zero;
+        var normalized = Engine.TensorDivide(wide, Tensor<double>.CreateDefault(wide.Shape.ToArray(), scale));
+        var eigenvalues = LinalgDispatch<double>.Eig(normalized).Values;
         var modulus = Engine.TensorSqrt(
             Engine.ReduceSum(Engine.TensorMultiply(eigenvalues, eigenvalues), [1], keepDims: false));
-        return Engine.TensorMaxValue(modulus);
+        return NumOps.FromDouble(Engine.TensorMaxValue(modulus) * scale);
     }
 
 }

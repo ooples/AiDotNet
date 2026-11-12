@@ -305,12 +305,11 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         _ = Engine.TensorTopK(routerProbabilities, _topK, axis: 1, out Tensor<int> topKTensor);
         // 0/1 mask of each token's top-K experts: the K (distinct) one-hot rows summed.
         var activeMaskFlat = Engine.ReduceSum(
-            Engine.TensorOneHot<T>(topKTensor, _numExperts), new[] { 1 }, keepDims: false);
+            Engine.TensorOneHot<T>(topKTensor, _numExperts).Reshape(new[] { totalTokens, _topK, _numExperts }), new[] { 1 }, keepDims: false);
         var maskedWeights = Engine.TensorMultiply(routerProbabilities, activeMaskFlat);
         var weightSums = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true);
-        var routerWeightsResult = Engine.TensorDivide(
-            maskedWeights, Engine.TensorAddScalar(weightSums, NumOps.FromDouble(1e-10)));
-
+        var routerWeightsResult = Engine.TensorDivide(maskedWeights,
+            Engine.TensorBroadcastTo(Engine.TensorAddScalar(weightSums, NumOps.FromDouble(1e-10)), maskedWeights.Shape.ToArray()));
         // Step 2: one operation-specific recurrent node owns the routed expert scan. This exactly
         // preserves the legacy reset semantics: an expert not selected at t has zero state at t+1.
         var activeMask = Engine.Reshape(activeMaskFlat, new[] { batchSize, seqLen, _numExperts });

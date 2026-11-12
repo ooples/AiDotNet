@@ -1361,13 +1361,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             int keyOffset = seqKv - seqQ;
             int[] planeShape = [seqQ, seqKv];
             var lastAllowedKey = Engine.TensorBroadcastTo(
-                Engine.Reshape(Engine.TensorArange<T>(keyOffset, keyOffset + seqQ, 1), [seqQ, 1]), planeShape);
+                Engine.Reshape(Engine.TensorArange<int>(keyOffset, keyOffset + seqQ, 1), [seqQ, 1]), planeShape);
             var keyIndex = Engine.TensorBroadcastTo(
-                Engine.Reshape(Engine.TensorArange<T>(0, seqKv, 1), [1, seqKv]), planeShape);
+                Engine.Reshape(Engine.TensorArange<int>(0, seqKv, 1), [1, seqKv]), planeShape);
             var negInf = new Tensor<T>(planeShape);
             negInf.Fill(NumOps.FromDouble(double.NegativeInfinity));
             plane = Engine.Reshape(
-                Engine.TensorWhere(Engine.TensorGreaterThan(keyIndex, lastAllowedKey), negInf, new Tensor<T>(planeShape)),
+                Engine.TensorWhere(Engine.TensorGreaterThan(keyIndex, lastAllowedKey).Cast<T>(), negInf, new Tensor<T>(planeShape)),
                 [1, seqQ, seqKv]);
 
             planes = 1;

@@ -487,16 +487,28 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     {
         if (count == 0) return NumOps.One;
         int dims = centers.Length / count;
-        int[] pairShape = [count, count, dims];
-        var rows = Engine.Reshape(centers, [count, dims]);
-        var diff = Engine.TensorSubtract(
-            Engine.TensorBroadcastTo(Engine.Reshape(rows, [count, 1, dims]), pairShape),
-            Engine.TensorBroadcastTo(Engine.Reshape(rows, [1, count, dims]), pairShape));
-        T maxSquared = Engine.TensorMaxValue(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), [2], keepDims: false));
-
-        return NumOps.GreaterThan(maxSquared, NumOps.Zero)
-            ? NumOps.Divide(NumOps.Sqrt(maxSquared), NumOps.Sqrt(NumOps.FromDouble(2.0 * count)))
-            : NumOps.One;
+        if (dims == 0) return NumOps.One;
+        var rows = Engine.Reshape(centers.Cast<double>(), [count, dims]);
+        // Bound temporary difference grids to about one million elements instead of count^2 * dims.
+        int block = Math.Max(1, Math.Min(128, (int)Math.Sqrt((1 << 20) / (double)dims)));
+        double maxSquared = 0;
+        for (int first = 0; first < count; first += block)
+        {
+            int firstCount = Math.Min(block, count - first);
+            var firstRows = Engine.TensorSlice(rows, [first, 0], [firstCount, dims]);
+            for (int second = first; second < count; second += block)
+            {
+                int secondCount = Math.Min(block, count - second);
+                var secondRows = Engine.TensorSlice(rows, [second, 0], [secondCount, dims]);
+                int[] pairShape = [firstCount, secondCount, dims];
+                var diff = Engine.TensorSubtract(
+                    Engine.TensorBroadcastTo(firstRows.Reshape([firstCount, 1, dims]), pairShape),
+                    Engine.TensorBroadcastTo(secondRows.Reshape([1, secondCount, dims]), pairShape));
+                maxSquared = Math.Max(maxSquared, Engine.TensorMaxValue(
+                    Engine.ReduceSum(Engine.TensorMultiply(diff, diff), [2], keepDims: false)));
+            }
+        }
+        return maxSquared > 0 ? NumOps.FromDouble(Math.Sqrt(maxSquared / (2.0 * count))) : NumOps.One;
     }
 
     /// <summary>

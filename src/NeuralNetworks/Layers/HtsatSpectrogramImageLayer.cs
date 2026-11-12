@@ -143,7 +143,8 @@ public partial class HtsatSpectrogramImageLayer<T> : LayerBase<T>, IShapeContrac
         Tensor<T> Tap(T offset, Tensor<T> weight)
         {
             var source = engine.TensorClamp(engine.TensorAddScalar(index, offset), ops.Zero, lastInput).Cast<int>();
-            return engine.TensorMultiply(engine.TensorOneHot<T>(source, inputs), weight.Reshape(new[] { outputs, 1 }));
+            return engine.TensorMultiply(engine.TensorOneHot<T>(source, inputs),
+                engine.TensorBroadcastTo(weight.Reshape(new[] { outputs, 1 }), new[] { outputs, inputs }));
         }
 
         var matrix = Tap(ops.FromDouble(-1), Far(engine.TensorAddScalar(t, ops.One)));

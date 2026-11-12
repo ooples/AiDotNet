@@ -1123,7 +1123,9 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
                 var a = Engine.Reshape(Engine.TensorSlice(decay, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, hd, 1]);
                 var bk = Engine.Reshape(Engine.TensorSlice(injection, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, hd, 1]);
                 var v = Engine.Reshape(Engine.TensorSlice(vAll, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, 1, hd]);
-                s = Engine.TensorAdd(Engine.TensorMultiply(s, a), Engine.TensorMultiply(bk, v));
+                s = Engine.TensorAdd(
+                    Engine.TensorMultiply(s, Engine.TensorBroadcastTo(a, stateShape)),
+                    Engine.TensorMultiply(Engine.TensorBroadcastTo(bk, stateShape), Engine.TensorBroadcastTo(v, stateShape)));
             }
 
             return s;

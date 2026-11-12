@@ -188,7 +188,8 @@ public static class SSMQuantizationHelper<T>
         var quantized = QuantizeVector(original, bitWidth);
 
         var engine = AiDotNetEngine.Current;
-        return engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(original.AsTensor(), quantized.AsTensor())));
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(
+            original.AsTensor().Cast<double>(), quantized.AsTensor().Cast<double>()))));
     }
 
     private static Vector<T> QuantizeVector(Vector<T> parameters, int bitWidth)
@@ -197,6 +198,10 @@ public static class SSMQuantizationHelper<T>
             return parameters;
 
         // Find min and max for scaling
+        if (typeof(T) != typeof(double))
+            return SSMQuantizationHelper<double>.QuantizeVector(parameters.AsTensor().Cast<double>().ToVector(), bitWidth)
+                .AsTensor().Cast<T>().ToVector();
+
         var engine = AiDotNetEngine.Current;
         var values = parameters.AsTensor();
         T minVal = engine.TensorMinValue(values);

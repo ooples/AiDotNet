@@ -86,8 +86,8 @@ public partial class SpectrogramStripeDropLayer<T> : LayerBase<T>
 
         // mask[b, c, t, f] = keepTime[b, t] * keepFreq[b, f], broadcast over channels.
         var mask = Engine.TensorMultiply(
-            keepTime.Reshape(new[] { batch, 1, time, 1 }),
-            keepFreq.Reshape(new[] { batch, 1, 1, freq }));
+            Engine.TensorBroadcastTo(keepTime.Reshape(new[] { batch, 1, time, 1 }), input.Shape.ToArray()),
+            Engine.TensorBroadcastTo(keepFreq.Reshape(new[] { batch, 1, 1, freq }), input.Shape.ToArray()));
         return Engine.TensorMultiply(input, mask);
     }
 

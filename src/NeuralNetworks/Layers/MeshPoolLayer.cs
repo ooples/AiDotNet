@@ -334,10 +334,9 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private int[] SortEdgesByImportance(Tensor<T> importanceScores, int numEdges)
     {
-        // Ascending by score with ties kept in edge-index order (a composite (score, index) key),
-        // computed with engine comparisons; argsort alone is not documented as stable.
-        return AiDotNet.Augmentation.Tabular.TabularEngineOps<T>.StableOrder(
-            importanceScores.Reshape(new[] { numEdges }), descending: false);
+        // Stable O(N log N) ordering without allocating pairwise N-by-N rank grids.
+        var values = importanceScores.Reshape(new[] { numEdges }).ToArray();
+        return Enumerable.Range(0, numEdges).OrderBy(i => values[i], Comparer<T>.Create(NumOps.Compare)).ToArray();
     }
 
     /// <summary>

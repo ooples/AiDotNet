@@ -406,8 +406,8 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private Tensor<T> ClampCoordinate(Tensor<T> value)
     {
-        var finite = Engine.TensorNanToNum(value, 0.0, null, null);
-        return Engine.TensorClamp(Engine.TensorRound(finite), NumOps.Zero, NumOps.FromDouble(_maxPosition2D - 1));
+        var finite = Engine.TensorNanToNum(value.Cast<double>(), 0.0, null, null);
+        return Engine.TensorClamp(Engine.TensorRound(finite), 0.0, _maxPosition2D - 1.0).Cast<T>();
     }
 
     /// <inheritdoc/>

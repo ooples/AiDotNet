@@ -182,9 +182,9 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
         AppendTrainableParameter(_controlBias, PersistentTensorRole.Biases);
 
         var targetControlPoints = BuildControlPoints(controlPointCount, marginX, marginY);
-        _inverseKernel = Invert(BuildTpsKernel(targetControlPoints));
+        _inverseKernel = Invert(BuildTpsKernel(targetControlPoints)).Cast<T>();
         _targetCoordinateRepresentation =
-            BuildTargetCoordinateRepresentation(outputHeight, outputWidth, targetControlPoints);
+            BuildTargetCoordinateRepresentation(outputHeight, outputWidth, targetControlPoints).Cast<T>();
         RegisterBuffer(_inverseKernel, "inverse_kernel", PersistentTensorRole.Constant);
         RegisterBuffer(_targetCoordinateRepresentation, "target_coordinate_representation", PersistentTensorRole.Constant);
     }
@@ -303,7 +303,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
     {
         // Row-major (x0, y0, x1, y1, ...) is the [count, 2] point table flattened.
         var points = BuildControlPoints(count, marginX, marginY);
-        Engine.TensorCopy(Engine.Reshape(points, [count * 2]), bias);
+        Engine.TensorCopy(Engine.Reshape(points, [count * 2]).Cast<T>(), bias);
     }
 
     /// <summary>
@@ -311,27 +311,19 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
     /// <c>[marginX, 1 - marginX]</c>, first along the top edge (<c>y = marginY</c>) and then the bottom
     /// (<c>y = 1 - marginY</c>).
     /// </summary>
-    private Tensor<T> BuildControlPoints(int count, double marginX, double marginY)
+    private Tensor<double> BuildControlPoints(int count, double marginX, double marginY)
     {
         int side = count / 2;
-        var x = Engine.TensorAddScalar(
-            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, side, 1),
-                NumOps.FromDouble((1.0 - 2.0 * marginX) / (side - 1))),
-            NumOps.FromDouble(marginX));
-        var top = new Tensor<T>([side]);
-        top.Fill(NumOps.FromDouble(marginY));
-        var bottom = new Tensor<T>([side]);
-        bottom.Fill(NumOps.FromDouble(1.0 - marginY));
+        var x = Engine.TensorLinspace(marginX, 1.0 - marginX, side);
+        var top = Tensor<double>.CreateDefault([side], marginY);
+        var bottom = Tensor<double>.CreateDefault([side], 1.0 - marginY);
         var xs = Engine.TensorConcatenate([x, x], 0);
         var ys = Engine.TensorConcatenate([top, bottom], 0);
-        return Engine.TensorConcatenate([Engine.Reshape(xs, [count, 1]), Engine.Reshape(ys, [count, 1])], 1);
+        return Engine.TensorConcatenate([xs.Reshape([count, 1]), ys.Reshape([count, 1])], 1);
     }
 
-    /// <summary>
-    /// The <c>[count + 3, count + 3]</c> TPS system <c>[[K, 1, P], [1^T; P^T, 0]]</c> with
-    /// <c>K[i, j] = U(|p_i - p_j|)</c>.
-    /// </summary>
-    private Tensor<T> BuildTpsKernel(Tensor<T> control)
+    /// <summary>TPS geometry and its inverse retain double precision before casting constant buffers.</summary>
+    private Tensor<double> BuildTpsKernel(Tensor<double> control)
     {
         int count = control.Shape[0];
         var controlX = Engine.TensorSlice(control, [0, 0], [count, 1]);
@@ -339,59 +331,49 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
         int[] pairShape = [count, count];
         var dx = Engine.TensorSubtract(
             Engine.TensorBroadcastTo(controlX, pairShape),
-            Engine.TensorBroadcastTo(Engine.Reshape(controlX, [1, count]), pairShape));
+            Engine.TensorBroadcastTo(controlX.Reshape([1, count]), pairShape));
         var dy = Engine.TensorSubtract(
             Engine.TensorBroadcastTo(controlY, pairShape),
-            Engine.TensorBroadcastTo(Engine.Reshape(controlY, [1, count]), pairShape));
-        var ones = new Tensor<T>([count, 1]);
-        ones.Fill(NumOps.One);
-        var affine = Engine.TensorConcatenate([ones, control], 1);                      // [count, 3]
-        var top = Engine.TensorConcatenate([PartialRepresentation(dx, dy), affine], 1);   // [count, count + 3]
-        var bottom = Engine.TensorConcatenate([Engine.TensorTranspose(affine), new Tensor<T>([3, 3])], 1);
+            Engine.TensorBroadcastTo(controlY.Reshape([1, count]), pairShape));
+        var affine = Engine.TensorConcatenate([Tensor<double>.CreateDefault([count, 1], 1.0), control], 1);
+        var top = Engine.TensorConcatenate([PartialRepresentation(dx, dy), affine], 1);
+        var bottom = Engine.TensorConcatenate([Engine.TensorTranspose(affine), new Tensor<double>([3, 3])], 1);
         return Engine.TensorConcatenate([top, bottom], 0);
     }
 
-    /// <summary>
-    /// <c>[height * width, count + 3]</c>: for each output pixel (row-major, normalized to [0, 1]) the
-    /// radial terms <c>U(|q - p_i|)</c> followed by <c>1, x, y</c>.
-    /// </summary>
-    private Tensor<T> BuildTargetCoordinateRepresentation(int height, int width, Tensor<T> control)
+    private Tensor<double> BuildTargetCoordinateRepresentation(int height, int width, Tensor<double> control)
     {
         int count = control.Shape[0];
         int pixels = height * width;
         int[] gridShape = [height, width];
-        var columnX = Engine.TensorDivideScalar(Engine.TensorArange<T>(0, width, 1), NumOps.FromDouble(width - 1));
-        var rowY = Engine.TensorDivideScalar(Engine.TensorArange<T>(0, height, 1), NumOps.FromDouble(height - 1));
-        var nx = Engine.Reshape(Engine.TensorBroadcastTo(Engine.Reshape(columnX, [1, width]), gridShape), [pixels, 1]);
-        var ny = Engine.Reshape(Engine.TensorBroadcastTo(Engine.Reshape(rowY, [height, 1]), gridShape), [pixels, 1]);
-
+        var columnX = Engine.TensorLinspace(0.0, 1.0, width);
+        var rowY = Engine.TensorLinspace(0.0, 1.0, height);
+        var nx = Engine.TensorBroadcastTo(columnX.Reshape([1, width]), gridShape).Reshape([pixels, 1]);
+        var ny = Engine.TensorBroadcastTo(rowY.Reshape([height, 1]), gridShape).Reshape([pixels, 1]);
         int[] pairShape = [pixels, count];
-        var controlX = Engine.Reshape(Engine.TensorSlice(control, [0, 0], [count, 1]), [1, count]);
-        var controlY = Engine.Reshape(Engine.TensorSlice(control, [0, 1], [count, 1]), [1, count]);
+        var controlX = Engine.TensorSlice(control, [0, 0], [count, 1]).Reshape([1, count]);
+        var controlY = Engine.TensorSlice(control, [0, 1], [count, 1]).Reshape([1, count]);
         var dx = Engine.TensorSubtract(
             Engine.TensorBroadcastTo(nx, pairShape), Engine.TensorBroadcastTo(controlX, pairShape));
         var dy = Engine.TensorSubtract(
             Engine.TensorBroadcastTo(ny, pairShape), Engine.TensorBroadcastTo(controlY, pairShape));
-        var ones = new Tensor<T>([pixels, 1]);
-        ones.Fill(NumOps.One);
-        return Engine.TensorConcatenate([PartialRepresentation(dx, dy), ones, nx, ny], 1);
+        return Engine.TensorConcatenate([
+            PartialRepresentation(dx, dy), Tensor<double>.CreateDefault([pixels, 1], 1.0), nx, ny], 1);
     }
 
-    /// <summary>The TPS radial basis <c>U = 0.5 r^2 log(r^2)</c>, with <c>U(0) = 0</c>.</summary>
-    private Tensor<T> PartialRepresentation(Tensor<T> dx, Tensor<T> dy)
+    /// <summary>The radial basis 0.5 r^2 log(r^2), defined to be zero at the origin.</summary>
+    private Tensor<double> PartialRepresentation(Tensor<double> dx, Tensor<double> dy)
     {
-        var squaredDistance = Engine.TensorAdd(Engine.TensorMultiply(dx, dx), Engine.TensorMultiply(dy, dy));
-        var radial = Engine.TensorMultiplyScalar(
-            Engine.TensorMultiply(squaredDistance, Engine.TensorLog(squaredDistance)), NumOps.FromDouble(0.5));
-        return Engine.TensorWhere(
-            Engine.TensorGreaterThan(squaredDistance, NumOps.Zero), radial, new Tensor<T>(squaredDistance._shape));
+        var squared = Engine.TensorAdd(Engine.TensorMultiply(dx, dx), Engine.TensorMultiply(dy, dy));
+        var positive = Engine.TensorGreaterThan(squared, 0.0);
+        var safe = Engine.TensorWhere(positive, squared, Tensor<double>.CreateDefault(squared.Shape.ToArray(), 1.0));
+        return Engine.TensorMultiplyScalar(Engine.TensorMultiply(squared, Engine.TensorLog(safe)), 0.5);
     }
 
-    /// <summary>Inverse of the TPS system; throws when it is singular, as the Gauss-Jordan version did.</summary>
-    private Tensor<T> Invert(Tensor<T> source)
+    private Tensor<double> Invert(Tensor<double> source)
     {
         int size = source.Shape[0];
-        var (inverse, info) = LinalgDispatch<T>.SolveEx(source, Engine.TensorEye<T>(size));
+        var (inverse, info) = LinalgDispatch<double>.SolveEx(source, Engine.TensorEye<double>(size));
         if (Engine.TensorCountNonzero(info) > 0)
             throw new InvalidOperationException("TPS kernel is singular.");
         return inverse;
