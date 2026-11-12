@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.AutoML.NAS;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -149,12 +150,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return;
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var residuals = new Vector<T>(actual.Length);
-        for (int i = 0; i < actual.Length; i++)
-        {
-            residuals[i] = numOps.Abs(numOps.Subtract(actual[i], predicted[i]));
-        }
+        var engine = AiDotNetEngine.Current;
+        var residuals = engine.Abs(engine.Subtract(actual, predicted));
 
         var quantile = ComputeConformalRegressionQuantile(residuals, result.UncertaintyQuantificationOptions?.ConformalConfidenceLevel ?? 0.9);
 
@@ -265,48 +262,27 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             calibrated = ApplyIsotonicCalibrationToProbabilitiesBinary(probsTensor, x, y, batch);
         }
 
+        var engine = AiDotNetEngine.Current;
         var flatCalibrated = calibrated.ToVector();
-        var predictions = new Vector<int>(batch);
-        var confidence = new Vector<T>(batch);
-        for (int i = 0; i < batch; i++)
-        {
-            var bestLabel = 0;
-            var bestScore = flatCalibrated[i * numClasses];
-            for (int c = 1; c < numClasses; c++)
-            {
-                var score = flatCalibrated[i * numClasses + c];
-                if (numOps.GreaterThan(score, bestScore))
-                {
-                    bestScore = score;
-                    bestLabel = c;
-                }
-            }
+        var calibratedRows = Tensor<T>.FromVector(flatCalibrated, new[] { batch, numClasses });
 
-            predictions[i] = bestLabel;
-            confidence[i] = bestScore;
-        }
+        // Predicted class = first maximum of each row; confidence = that maximum.
+        var predictions = Vector<int>.FromArray(NasSamplingHelper.ArgMaxRows(calibratedRows, out T[] bestScores));
+        var confidence = Vector<T>.FromArray(bestScores);
 
         var ece = new AiDotNet.UncertaintyQuantification.Calibration.ExpectedCalibrationError<T>(numBins: 10);
         artifacts.HasExpectedCalibrationError = true;
         artifacts.ExpectedCalibrationError = ece.Compute(confidence, predictions, labels);
 
-        var scores = new Vector<T>(batch);
-        var scoreConfidence = new Vector<T>(batch);
-        var validCount = 0;
-        for (int i = 0; i < batch; i++)
+        int[] labelValues = labels.ToArray();
+        foreach (int invalidIndex in Enumerable.Range(0, batch).Where(i => labelValues[i] < 0 || labelValues[i] >= numClasses))
         {
-            var label = labels[i];
-            if (label < 0 || label >= numClasses)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"Warning: Conformal classification skipped an invalid label at index {i}: {label}. Valid range is [0, {numClasses - 1}].");
-                continue;
-            }
-
-            scores[validCount++] = flatCalibrated[i * numClasses + label];
-            scoreConfidence[validCount - 1] = confidence[i];
+            System.Diagnostics.Debug.WriteLine(
+                $"Warning: Conformal classification skipped an invalid label at index {invalidIndex}: {labelValues[invalidIndex]}. Valid range is [0, {numClasses - 1}].");
         }
 
+        int[] validRows = Enumerable.Range(0, batch).Where(i => labelValues[i] >= 0 && labelValues[i] < numClasses).ToArray();
+        var validCount = validRows.Length;
         if (validCount == 0)
         {
             System.Diagnostics.Debug.WriteLine(
@@ -314,9 +290,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return;
         }
 
-        var validScores = validCount == scores.Length
-            ? scores
-            : scores.Subvector(0, validCount);
+        // True-class probability of every sample with a valid label, in sample order.
+        var trueClassIndex = Tensor<int>.FromVector(Vector<int>.FromArray(validRows.Select(i => i * numClasses + labelValues[i]).ToArray()));
+        var validRowIndex = Tensor<int>.FromVector(Vector<int>.FromArray(validRows));
+        var validScores = engine.TensorGather(flatCalibrated.AsTensor(), trueClassIndex, 0).ToVector();
+        var scoreConfidence = engine.TensorGather(confidence.AsTensor(), validRowIndex, 0).ToVector();
 
         var confidenceLevel = result.UncertaintyQuantificationOptions?.ConformalConfidenceLevel ?? 0.9;
         var threshold = ComputeConformalClassificationThreshold(validScores.Clone(), confidenceLevel);
@@ -355,30 +333,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var tolerance = 1e-3;
-        var flat = values.ToVector();
+        var engine = AiDotNetEngine.Current;
+        var tolerance = numOps.FromDouble(1e-3);
+        var rows = Tensor<T>.FromVector(values.ToVector(), new[] { batch, classes });
 
-        var looksLikeProbabilities = true;
-        for (int b = 0; b < batch && looksLikeProbabilities; b++)
-        {
-            var sum = 0.0;
-            var baseIndex = b * classes;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = numOps.ToDouble(flat[baseIndex + c]);
-                if (p < 0.0 || p > 1.0)
-                {
-                    looksLikeProbabilities = false;
-                    break;
-                }
-                sum += p;
-            }
-
-            if (Math.Abs(sum - 1.0) > tolerance)
-            {
-                looksLikeProbabilities = false;
-            }
-        }
+        // Probabilities: every value in [0, 1] and every row summing to 1 within 1e-3. Comparisons are false for
+        // NaN, so NaN entries do not disqualify (as in the scalar check).
+        var outOfRange = engine.TensorAdd(engine.TensorLessThan(rows, numOps.Zero), engine.TensorGreaterThan(rows, numOps.One));
+        var rowSums = engine.ReduceSum(rows, new[] { 1 }, false);
+        var badSums = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtractScalar(rowSums, numOps.One)), tolerance);
+        var looksLikeProbabilities = !numOps.GreaterThan(engine.TensorSum(outOfRange), numOps.Zero)
+            && !numOps.GreaterThan(engine.TensorSum(badSums), numOps.Zero);
 
         if (looksLikeProbabilities)
         {
@@ -386,35 +351,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         // Treat as logits and apply stable softmax per sample.
-        var output = new Vector<T>(batch * classes);
-        for (int b = 0; b < batch; b++)
-        {
-            var baseIndex = b * classes;
-            var max = flat[baseIndex];
-            for (int c = 1; c < classes; c++)
-            {
-                var v = flat[baseIndex + c];
-                if (numOps.GreaterThan(v, max))
-                {
-                    max = v;
-                }
-            }
-
-            var sumExp = numOps.Zero;
-            for (int c = 0; c < classes; c++)
-            {
-                var ex = numOps.Exp(numOps.Subtract(flat[baseIndex + c], max));
-                output[baseIndex + c] = ex;
-                sumExp = numOps.Add(sumExp, ex);
-            }
-
-            for (int c = 0; c < classes; c++)
-            {
-                output[baseIndex + c] = numOps.Divide(output[baseIndex + c], sumExp);
-            }
-        }
-
-        return new Tensor<T>([batch, classes], output).Reshape(values._shape);
+        return engine.TensorSoftmax(rows, 1).Reshape(values._shape);
     }
 
     /// <summary>
@@ -431,46 +368,27 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var eps = numOps.FromDouble(1e-12);
         var sumTolerance = numOps.FromDouble(1e-3);
         var uniformProbability = numOps.Divide(numOps.One, numOps.FromDouble(classes));
-        var logits = new Matrix<T>(batch, classes);
-        var flat = probabilities.ToVector();
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { batch, classes };
+        var rows = Tensor<T>.FromVector(probabilities.ToVector(), shape);
+        var zeros = new Tensor<T>(shape);
 
-        for (int i = 0; i < batch; i++)
-        {
-            var sum = numOps.Zero;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[i * classes + c];
-                if (numOps.LessThan(p, numOps.Zero))
-                {
-                    p = numOps.Zero;
-                }
-                sum = numOps.Add(sum, p);
-            }
-
-            var fallbackToUniform = numOps.LessThan(sum, eps);
-            var shouldNormalize = !fallbackToUniform && numOps.GreaterThan(numOps.Abs(numOps.Subtract(sum, numOps.One)), sumTolerance);
-
-            for (int c = 0; c < classes; c++)
-            {
-                var p = fallbackToUniform ? uniformProbability : flat[i * classes + c];
-                if (!fallbackToUniform)
-                {
-                    if (numOps.LessThan(p, numOps.Zero))
-                    {
-                        p = numOps.Zero;
-                    }
-                    if (shouldNormalize)
-                    {
-                        p = numOps.Divide(p, sum);
-                    }
-                }
-                if (numOps.LessThan(p, eps))
-                {
-                    p = eps;
-                }
-                logits[i, c] = numOps.Log(p);
-            }
-        }
+        // Per row: negatives -> 0; a row summing below eps becomes uniform; a row off 1 by more than the tolerance
+        // is renormalised; every probability is floored at eps before the log.
+        var clipped = engine.TensorWhere(engine.TensorLessThan(rows, numOps.Zero), zeros, rows);
+        var rowSums = engine.ReduceSum(clipped, new[] { 1 }, true);
+        var fallbackToUniform = engine.TensorLessThan(rowSums, eps);
+        var shouldNormalize = engine.TensorMultiply(
+            engine.TensorAddScalar(engine.TensorNegate(fallbackToUniform), numOps.One),
+            engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtractScalar(rowSums, numOps.One)), sumTolerance));
+        var normalized = engine.TensorWhere(engine.TensorBroadcastTo(shouldNormalize, shape),
+            engine.TensorDivide(clipped, engine.TensorBroadcastTo(rowSums, shape)), clipped);
+        var uniform = new Tensor<T>(shape);
+        uniform.Fill(uniformProbability);
+        var chosen = engine.TensorWhere(engine.TensorBroadcastTo(fallbackToUniform, shape), uniform, normalized);
+        var floor = new Tensor<T>(shape);
+        floor.Fill(eps);
+        var logits = engine.TensorLog(engine.TensorWhere(engine.TensorLessThan(chosen, eps), floor, chosen)).ToMatrix();
 
         var scaler = new AiDotNet.UncertaintyQuantification.Calibration.TemperatureScaling<T>(initialTemperature: 1.0);
         scaler.Calibrate(logits, labels);
@@ -492,48 +410,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int classes)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         var eps = numOps.FromDouble(1e-12);
-        var scaled = new Vector<T>(batch * classes);
-        var flat = probabilities.ToVector();
+        var shape = new[] { batch, classes };
+        var rows = Tensor<T>.FromVector(probabilities.ToVector(), shape);
 
-        for (int i = 0; i < batch; i++)
-        {
-            var maxLogit = default(T);
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[i * classes + c];
-                if (numOps.LessThan(p, eps))
-                {
-                    p = eps;
-                }
-                var logit = numOps.Divide(numOps.Log(p), temperature);
-                if (c == 0 || numOps.GreaterThan(logit, (maxLogit ?? throw new InvalidOperationException("maxLogit is null where it is required."))))
-                {
-                    maxLogit = logit;
-                }
-            }
-
-            var sumExp = numOps.Zero;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[i * classes + c];
-                if (numOps.LessThan(p, eps))
-                {
-                    p = eps;
-                }
-                var logit = numOps.Divide(numOps.Log(p), temperature);
-                var exp = numOps.Exp(numOps.Subtract(logit, (maxLogit ?? throw new InvalidOperationException("maxLogit is null where it is required."))));
-                scaled[i * classes + c] = exp;
-                sumExp = numOps.Add(sumExp, exp);
-            }
-
-            for (int c = 0; c < classes; c++)
-            {
-                scaled[i * classes + c] = numOps.Divide(scaled[i * classes + c], sumExp);
-            }
-        }
-
-        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities._shape);
+        // softmax(log(max(p, eps)) / temperature) per row.
+        var floor = new Tensor<T>(shape);
+        floor.Fill(eps);
+        var logits = engine.TensorDivideScalar(
+            engine.TensorLog(engine.TensorWhere(engine.TensorLessThan(rows, eps), floor, rows)), temperature);
+        return engine.TensorSoftmax(logits, 1).Reshape(probabilities._shape);
     }
 
     private static ProbabilityCalibrationMethod ResolveCalibrationMethod(UncertaintyQuantificationOptions options, int numClasses)
@@ -564,97 +451,71 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private static (T a, T b) FitPlattScalingBinary(Tensor<T> probabilities, Vector<int> labels, int batch)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var eps = 1e-12;
+        var engine = AiDotNetEngine.Current;
 
-        double a = 1.0;
-        double b = 0.0;
+        // Platt (1999) by Newton's method on the logistic log-loss of sigmoid(a * logit(p1) + b), with a 1e-8 ridge
+        // on the Hessian diagonal; at most 50 steps, stopping when |step_a| + |step_b| < 1e-8 or the Hessian is
+        // singular.
+        var logit = PositiveClassLogit(probabilities, batch);
+        var target = engine.TensorEquals(labels.AsTensor().Cast<T>(), numOps.One);
+        var ones = new Tensor<T>(new[] { batch, 1 });
+        ones.Fill(numOps.One);
+        var design = Tensor<T>.Concatenate(new[] { logit.Reshape(new[] { batch, 1 }), ones }, 1);
+        var designT = engine.TensorTranspose(design);
+        var ridge = engine.TensorMultiplyScalar(engine.TensorEye<T>(2), numOps.FromDouble(1e-8));
+        var singular = numOps.FromDouble(1e-18);
+        var converged = numOps.FromDouble(1e-8);
 
-        var flat = probabilities.ToVector();
-
+        var theta = Tensor<T>.FromVector(new Vector<T>(new[] { numOps.One, numOps.Zero }), new[] { 2, 1 });
         for (int iter = 0; iter < 50; iter++)
         {
-            double gradA = 0.0;
-            double gradB = 0.0;
-            double hAA = 0.0;
-            double hAB = 0.0;
-            double hBB = 0.0;
+            var p = engine.TensorSigmoid(engine.TensorMatMul(design, theta).Reshape(new[] { batch }));
+            var gradient = engine.TensorMatMul(designT, engine.TensorSubtract(p, target).Reshape(new[] { batch, 1 }));
+            var w = engine.TensorMultiply(p, engine.TensorAddScalar(engine.TensorNegate(p), numOps.One));
+            var weightedDesign = engine.TensorMultiply(design, engine.TensorBroadcastTo(w.Reshape(new[] { batch, 1 }), new[] { batch, 2 }));
+            var hessian = engine.TensorAdd(engine.TensorMatMul(designT, weightedDesign), ridge);
 
-            for (int i = 0; i < batch; i++)
-            {
-                var p1 = numOps.ToDouble(flat[i * 2 + 1]);
-                if (p1 < eps) p1 = eps;
-                if (p1 > 1.0 - eps) p1 = 1.0 - eps;
-
-                var logit = Math.Log(p1 / (1.0 - p1));
-                var y = labels[i] == 1 ? 1.0 : 0.0;
-
-                var z = a * logit + b;
-                var p = 1.0 / (1.0 + Math.Exp(-z));
-
-                var diff = p - y;
-                gradA += diff * logit;
-                gradB += diff;
-
-                var w = p * (1.0 - p);
-                hAA += w * logit * logit;
-                hAB += w * logit;
-                hBB += w;
-            }
-
-            // Regularize to avoid singular Hessian
-            const double ridge = 1e-8;
-            hAA += ridge;
-            hBB += ridge;
-
-            var det = hAA * hBB - hAB * hAB;
-            if (Math.Abs(det) < 1e-18)
+            if (numOps.LessThan(numOps.Abs(LinalgDispatch<T>.Det(hessian).ToVector()[0]), singular))
             {
                 break;
             }
 
-            var invAA = hBB / det;
-            var invAB = -hAB / det;
-            var invBB = hAA / det;
+            var step = LinalgDispatch<T>.Solve(hessian, gradient);
+            theta = engine.TensorSubtract(theta, step);
 
-            var stepA = invAA * gradA + invAB * gradB;
-            var stepB = invAB * gradA + invBB * gradB;
-
-            a -= stepA;
-            b -= stepB;
-
-            if (Math.Abs(stepA) + Math.Abs(stepB) < 1e-8)
+            if (numOps.LessThan(engine.TensorSum(engine.TensorAbs(step)), converged))
             {
                 break;
             }
         }
 
-        return (numOps.FromDouble(a), numOps.FromDouble(b));
+        var fitted = theta.ToVector();
+        return (fitted[0], fitted[1]);
+    }
+
+    /// <summary>
+    /// logit(p1) of the positive-class column of a [batch, 2] probability tensor, with p1 clipped to
+    /// [1e-12, 1 - 1e-12].
+    /// </summary>
+    private static Tensor<T> PositiveClassLogit(Tensor<T> probabilities, int batch)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var p1 = engine.TensorClamp(
+            Tensor<T>.FromVector(probabilities.ToVector(), new[] { batch, 2 }).Slice(1, 1, 2).Reshape(new[] { batch }),
+            numOps.FromDouble(1e-12), numOps.FromDouble(1.0 - 1e-12));
+        return engine.TensorLog(engine.TensorDivide(p1, engine.TensorAddScalar(engine.TensorNegate(p1), numOps.One)));
     }
 
     private static Tensor<T> ApplyPlattScalingToProbabilitiesBinary(Tensor<T> probabilities, T a, T b, int batch)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var eps = 1e-12;
-        var flat = probabilities.ToVector();
-        var output = new Vector<T>(batch * 2);
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < batch; i++)
-        {
-            var p1 = numOps.ToDouble(flat[i * 2 + 1]);
-            if (p1 < eps) p1 = eps;
-            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
-
-            var logit = Math.Log(p1 / (1.0 - p1));
-            var z = numOps.Add(numOps.Multiply(a, numOps.FromDouble(logit)), b);
-            var zDouble = numOps.ToDouble(z);
-            var p1Cal = 1.0 / (1.0 + Math.Exp(-zDouble));
-
-            var p1T = numOps.FromDouble(p1Cal);
-            output[i * 2 + 1] = p1T;
-            output[i * 2] = numOps.Subtract(numOps.One, p1T);
-        }
-
-        return new Tensor<T>([batch, 2], output).Reshape(probabilities._shape);
+        // p1' = sigmoid(a * logit(p1) + b), p0' = 1 - p1'.
+        var p1 = engine.TensorSigmoid(engine.TensorAddScalar(engine.TensorMultiplyScalar(PositiveClassLogit(probabilities, batch), a), b));
+        var p0 = engine.TensorAddScalar(engine.TensorNegate(p1), numOps.One);
+        return Tensor<T>.Stack(new[] { p0, p1 }, 1).Reshape(probabilities._shape);
     }
 
     private static (Vector<T> x, Vector<T> y) FitIsotonicCalibrationBinary(Tensor<T> probabilities, Vector<int> labels, int batch)
@@ -720,43 +581,23 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private static Tensor<T> ApplyIsotonicCalibrationToProbabilitiesBinary(Tensor<T> probabilities, Vector<T> x, Vector<T> y, int batch)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var eps = 1e-12;
-        var flat = probabilities.ToVector();
-        var output = new Vector<T>(batch * 2);
+        var engine = AiDotNetEngine.Current;
+        var p1 = engine.TensorClamp(
+            Tensor<T>.FromVector(probabilities.ToVector(), new[] { batch, 2 }).Slice(1, 1, 2).Reshape(new[] { batch }),
+            numOps.FromDouble(1e-12), numOps.FromDouble(1.0 - 1e-12));
 
-        for (int i = 0; i < batch; i++)
+        // Step function of the isotonic fit: y at the first knot x >= p, the last y beyond the last knot, and the
+        // identity when there is no fit.
+        var p1Cal = p1;
+        if (x.Length > 0)
         {
-            var p1 = numOps.ToDouble(flat[i * 2 + 1]);
-            if (p1 < eps) p1 = eps;
-            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
-
-            var p1T = numOps.FromDouble(p1);
-            var p1Cal = EvaluateIsotonic(p1T, x, y, numOps);
-            output[i * 2 + 1] = p1Cal;
-            output[i * 2] = numOps.Subtract(numOps.One, p1Cal);
+            var knot = engine.TensorSearchSorted(x.AsTensor(), p1, false);
+            var levels = Tensor<T>.Concatenate(new[] { y.AsTensor(), y.GetSubVector(y.Length - 1, 1).AsTensor() }, 0);
+            p1Cal = engine.TensorGather(levels, knot, 0);
         }
 
-        return new Tensor<T>([batch, 2], output).Reshape(probabilities._shape);
-    }
-
-    private static T EvaluateIsotonic(T p, Vector<T> x, Vector<T> y, INumericOperations<T> numOps)
-    {
-        if (x.Length == 0)
-        {
-            return p;
-        }
-
-        var spanX = x.AsSpan();
-        var spanY = y.AsSpan();
-        for (int i = 0; i < spanX.Length; i++)
-        {
-            if (numOps.LessThanOrEquals(p, spanX[i]))
-            {
-                return spanY[i];
-            }
-        }
-
-        return spanY[spanY.Length - 1];
+        var p0 = engine.TensorAddScalar(engine.TensorNegate(p1Cal), numOps.One);
+        return Tensor<T>.Stack(new[] { p0, p1Cal }, 1).Reshape(probabilities._shape);
     }
 
     private static T ComputeCrossConformalClassificationThreshold(Vector<T> scores, double confidenceLevel, int folds, int? seed)
@@ -777,8 +618,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         var indices = Enumerable.Range(0, n).OrderBy(_ => rng.Next()).ToArray();
 
-        var thresholds = new Vector<T>(folds);
-        var thresholdCount = 0;
+        var engine = AiDotNetEngine.Current;
+        var thresholds = new List<T>(folds);
 
         for (int f = 0; f < folds; f++)
         {
@@ -790,21 +631,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 continue;
             }
 
-            var foldScores = new Vector<T>(len);
-            for (int i = 0; i < len; i++)
-            {
-                foldScores[i] = scores[indices[start + i]];
-            }
-
-            thresholds[thresholdCount++] = ComputeConformalClassificationThreshold(foldScores, confidenceLevel);
+            var foldIndex = Tensor<int>.FromVector(Vector<int>.FromArray(indices.Skip(start).Take(len).ToArray()));
+            var foldScores = engine.TensorGather(scores.AsTensor(), foldIndex, 0).ToVector();
+            thresholds.Add(ComputeConformalClassificationThreshold(foldScores, confidenceLevel));
         }
 
-        if (thresholdCount == 0)
+        if (thresholds.Count == 0)
         {
             return ComputeConformalClassificationThreshold(scores.Clone(), confidenceLevel);
         }
 
-        var usable = thresholdCount == thresholds.Length ? thresholds : thresholds.Subvector(0, thresholdCount);
+        var usable = Vector<T>.FromArray(thresholds.ToArray());
         var medianIndex = usable.Length / 2;
         return SelectKthInPlace(usable, medianIndex);
     }
@@ -827,43 +664,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         var globalThreshold = ComputeConformalClassificationThreshold(scores.Clone(), confidenceLevel);
 
-        var buckets = new List<T>[bins];
-        for (int i = 0; i < bins; i++)
-        {
-            buckets[i] = new List<T>();
-        }
+        // bin = floor(clamp(confidence, 0, 1) * bins), with confidence 1 in the last bin.
+        var engine = AiDotNetEngine.Current;
+        int[] binOf = n == 0
+            ? Array.Empty<int>()
+            : engine.TensorMin(
+                engine.TensorFloor(engine.TensorMultiplyScalar(
+                    engine.TensorClamp(confidence.GetSubVector(0, n).AsTensor(), numOps.Zero, numOps.One), numOps.FromDouble(bins))),
+                numOps.FromDouble(bins - 1)).Cast<int>().ToArray();
 
-        for (int i = 0; i < n; i++)
-        {
-            var conf = numOps.ToDouble(confidence[i]);
-            if (conf < 0.0) conf = 0.0;
-            if (conf > 1.0) conf = 1.0;
-
-            var bin = (int)Math.Floor(conf * bins);
-            if (bin == bins) bin = bins - 1;
-
-            buckets[bin].Add(scores[i]);
-        }
-
-        var thresholds = new Vector<T>(bins);
+        var thresholds = new List<T>(bins);
         for (int b = 0; b < bins; b++)
         {
-            if (buckets[b].Count == 0)
+            int bin = b;
+            int[] members = Enumerable.Range(0, n).Where(i => binOf[i] == bin).ToArray();
+            if (members.Length == 0)
             {
-                thresholds[b] = globalThreshold;
+                thresholds.Add(globalThreshold);
                 continue;
             }
 
-            var bucketScores = new Vector<T>(buckets[b].Count);
-            for (int i = 0; i < buckets[b].Count; i++)
-            {
-                bucketScores[i] = buckets[b][i];
-            }
-
-            thresholds[b] = ComputeConformalClassificationThreshold(bucketScores, confidenceLevel);
+            var bucketScores = engine.TensorGather(scores.AsTensor(), Tensor<int>.FromVector(Vector<int>.FromArray(members)), 0).ToVector();
+            thresholds.Add(ComputeConformalClassificationThreshold(bucketScores, confidenceLevel));
         }
 
-        return (edges, thresholds);
+        return (edges, Vector<T>.FromArray(thresholds.ToArray()));
     }
 
     private static void TryComputeLaplacePosteriorArtifacts(
@@ -898,23 +723,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return;
         }
 
-        var hDiag = new Vector<T>(gradients.Length);
-        for (int i = 0; i < hDiag.Length; i++)
-        {
-            hDiag[i] = priorPrecision;
-        }
-
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            var g2 = numOps.Multiply(gradients[i], gradients[i]);
-            hDiag[i] = numOps.Add(hDiag[i], g2);
-        }
-
-        var variance = new Vector<T>(hDiag.Length);
-        for (int i = 0; i < hDiag.Length; i++)
-        {
-            variance[i] = numOps.Divide(numOps.One, hDiag[i]);
-        }
+        // Diagonal posterior precision prior + g^2, variance = 1 / precision.
+        var engine = AiDotNetEngine.Current;
+        var gradientTensor = gradients.AsTensor();
+        var hDiag = engine.TensorAddScalar(engine.TensorMultiply(gradientTensor, gradientTensor), priorPrecision);
+        var variance = engine.Reciprocal(hDiag.ToVector());
 
         artifacts.HasLaplacePosterior = true;
         artifacts.LaplacePosteriorMean = InterfaceGuard.Parameterizable(model).GetParameters().Clone();
@@ -953,23 +766,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return;
         }
 
-        var hDiag = new Vector<T>(gradients.Length);
-        for (int i = 0; i < hDiag.Length; i++)
-        {
-            hDiag[i] = priorPrecision;
-        }
-
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            var g2 = numOps.Multiply(gradients[i], gradients[i]);
-            hDiag[i] = numOps.Add(hDiag[i], g2);
-        }
-
-        var variance = new Vector<T>(hDiag.Length);
-        for (int i = 0; i < hDiag.Length; i++)
-        {
-            variance[i] = numOps.Divide(numOps.One, hDiag[i]);
-        }
+        // Diagonal posterior precision prior + g^2, variance = 1 / precision.
+        var engine = AiDotNetEngine.Current;
+        var gradientTensor = gradients.AsTensor();
+        var hDiag = engine.TensorAddScalar(engine.TensorMultiply(gradientTensor, gradientTensor), priorPrecision);
+        var variance = engine.Reciprocal(hDiag.ToVector());
 
         artifacts.HasLaplacePosterior = true;
         artifacts.LaplacePosteriorMean = InterfaceGuard.Parameterizable(model).GetParameters().Clone();
@@ -1044,24 +845,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var parameters = InterfaceGuard.Parameterizable(swagModel).GetParameters();
             snapshotCount++;
 
+            var engine = AiDotNetEngine.Current;
+            var theta = parameters.AsTensor();
+            var thetaSquared = engine.TensorMultiply(theta, theta);
             if (mean == null)
             {
                 mean = parameters.Clone();
-                sqMean = new Vector<T>(parameters.Length);
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    sqMean[i] = numOps.Multiply(parameters[i], parameters[i]);
-                }
+                sqMean = thetaSquared.ToVector();
                 continue;
             }
 
+            // Running first and second moments (SWAG-Diagonal, Maddox et al. 2019): m += (x - m) / k.
             var k = numOps.FromDouble(snapshotCount);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
-                var p2 = numOps.Multiply(parameters[i], parameters[i]);
-                (sqMean ?? throw new InvalidOperationException("sqMean not initialized."))[i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
-            }
+            var currentSqMean = sqMean ?? throw new InvalidOperationException("sqMean not initialized.");
+            mean = engine.TensorAdd(mean.AsTensor(), engine.TensorDivideScalar(engine.TensorSubtract(theta, mean.AsTensor()), k)).ToVector();
+            sqMean = engine.TensorAdd(currentSqMean.AsTensor(),
+                engine.TensorDivideScalar(engine.TensorSubtract(thetaSquared, currentSqMean.AsTensor()), k)).ToVector();
         }
 
         if (mean == null || sqMean == null || snapshotCount == 0)
@@ -1069,17 +868,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return;
         }
 
-        var variance = new Vector<T>(mean.Length);
-        for (int i = 0; i < mean.Length; i++)
-        {
-            var m2 = numOps.Multiply(mean[i], mean[i]);
-            var v = numOps.Subtract(sqMean[i], m2);
-            if (numOps.LessThan(v, numOps.Zero))
-            {
-                v = numOps.Zero;
-            }
-            variance[i] = v;
-        }
+        // Diagonal variance max(E[x^2] - E[x]^2, 0); NaN stays NaN as in the scalar loop.
+        var varianceEngine = AiDotNetEngine.Current;
+        var meanTensor = mean.AsTensor();
+        var rawVariance = varianceEngine.TensorSubtract(sqMean.AsTensor(), varianceEngine.TensorMultiply(meanTensor, meanTensor));
+        var variance = varianceEngine.TensorWhere(varianceEngine.TensorLessThan(rawVariance, numOps.Zero),
+            new Tensor<T>(new[] { rawVariance.Length }), rawVariance).ToVector();
 
         artifacts.HasSwagPosterior = true;
         artifacts.SwagPosteriorMean = mean;
@@ -1154,24 +948,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var parameters = InterfaceGuard.Parameterizable(swagModel).GetParameters();
             snapshotCount++;
 
+            var engine = AiDotNetEngine.Current;
+            var theta = parameters.AsTensor();
+            var thetaSquared = engine.TensorMultiply(theta, theta);
             if (mean == null)
             {
                 mean = parameters.Clone();
-                sqMean = new Vector<T>(parameters.Length);
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    sqMean[i] = numOps.Multiply(parameters[i], parameters[i]);
-                }
+                sqMean = thetaSquared.ToVector();
                 continue;
             }
 
+            // Running first and second moments (SWAG-Diagonal, Maddox et al. 2019): m += (x - m) / k.
             var k = numOps.FromDouble(snapshotCount);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
-                var p2 = numOps.Multiply(parameters[i], parameters[i]);
-                (sqMean ?? throw new InvalidOperationException("sqMean not initialized."))[i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
-            }
+            var currentSqMean = sqMean ?? throw new InvalidOperationException("sqMean not initialized.");
+            mean = engine.TensorAdd(mean.AsTensor(), engine.TensorDivideScalar(engine.TensorSubtract(theta, mean.AsTensor()), k)).ToVector();
+            sqMean = engine.TensorAdd(currentSqMean.AsTensor(),
+                engine.TensorDivideScalar(engine.TensorSubtract(thetaSquared, currentSqMean.AsTensor()), k)).ToVector();
         }
 
         if (mean == null || sqMean == null || snapshotCount == 0)
@@ -1179,17 +971,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return;
         }
 
-        var variance = new Vector<T>(mean.Length);
-        for (int i = 0; i < mean.Length; i++)
-        {
-            var m2 = numOps.Multiply(mean[i], mean[i]);
-            var v = numOps.Subtract(sqMean[i], m2);
-            if (numOps.LessThan(v, numOps.Zero))
-            {
-                v = numOps.Zero;
-            }
-            variance[i] = v;
-        }
+        // Diagonal variance max(E[x^2] - E[x]^2, 0); NaN stays NaN as in the scalar loop.
+        var varianceEngine = AiDotNetEngine.Current;
+        var meanTensor = mean.AsTensor();
+        var rawVariance = varianceEngine.TensorSubtract(sqMean.AsTensor(), varianceEngine.TensorMultiply(meanTensor, meanTensor));
+        var variance = varianceEngine.TensorWhere(varianceEngine.TensorLessThan(rawVariance, numOps.Zero),
+            new Tensor<T>(new[] { rawVariance.Length }), rawVariance).ToVector();
 
         artifacts.HasSwagPosterior = true;
         artifacts.SwagPosteriorMean = mean;
@@ -1315,13 +1102,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 return true;
             }
 
-            var newVec = new Vector<T>(actual);
-            for (int i = 0; i < actual; i++)
-            {
-                newVec[i] = vector[i];
-            }
-
-            sliced = (TValue)(object)newVec;
+            sliced = (TValue)(object)vector.GetSubVector(0, actual);
             return true;
         }
 
@@ -1341,33 +1122,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         if (typeof(TOutput) == typeof(Tensor<T>))
         {
-            var flat = new Vector<T>(batch * classes);
-            for (int i = 0; i < batch; i++)
-            {
-                var label = labels[i];
-                if (label >= 0 && label < classes)
-                {
-                    flat[i * classes + label] = numOps.One;
-                }
-            }
-
-            target = (TOutput)(object)new Tensor<T>([batch, classes], flat);
+            target = (TOutput)(object)OneHotRows(labels, batch, classes);
             return true;
         }
 
         if (typeof(TOutput) == typeof(Matrix<T>))
         {
-            var mat = new Matrix<T>(batch, classes);
-            for (int i = 0; i < batch; i++)
-            {
-                var label = labels[i];
-                if (label >= 0 && label < classes)
-                {
-                    mat[i, label] = numOps.One;
-                }
-            }
-
-            target = (TOutput)(object)mat;
+            target = (TOutput)(object)OneHotRows(labels, batch, classes).ToMatrix();
             return true;
         }
 
@@ -1392,18 +1153,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return false;
     }
 
+    /// <summary>
+    /// A [batch, classes] one-hot tensor of the first <paramref name="batch"/> labels; rows whose label is outside
+    /// [0, classes) stay all zero.
+    /// </summary>
+    private static Tensor<T> OneHotRows(Vector<int> labels, int batch, int classes)
+    {
+        var engine = AiDotNetEngine.Current;
+        int[] values = labels.ToArray().Take(batch).ToArray();
+        var safeLabels = Tensor<int>.FromVector(Vector<int>.FromArray(values.Select(l => l >= 0 && l < classes ? l : 0).ToArray()));
+        var validRows = Tensor<int>.FromVector(Vector<int>.FromArray(values.Select(l => l >= 0 && l < classes ? 1 : 0).ToArray()))
+            .Cast<T>().Reshape(new[] { batch, 1 });
+        var oneHot = engine.TensorOneHot<T>(safeLabels, classes).Reshape(new[] { batch, classes });
+        return engine.TensorMultiply(oneHot, engine.TensorBroadcastTo(validRows, new[] { batch, classes }));
+    }
+
     private static Matrix<T> TakeFirstRows(Matrix<T> matrix, int rows)
     {
         var take = Math.Min(rows, matrix.Rows);
         var result = new Matrix<T>(take, matrix.Columns);
-        for (int r = 0; r < take; r++)
-        {
-            for (int c = 0; c < matrix.Columns; c++)
-            {
-                result[r, c] = matrix[r, c];
-            }
-        }
-
+        matrix.AsSpan().Slice(0, take * matrix.Columns).CopyTo(result.AsWritableSpan());
         return result;
     }
 
@@ -1412,25 +1181,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (tensor.Rank == 1)
         {
             var take = Math.Min(batch, tensor.Shape[0]);
-            var vec = tensor.ToVector();
-            var sliced = new Vector<T>(take);
-            for (int i = 0; i < take; i++)
-            {
-                sliced[i] = vec[i];
-            }
-            return new Tensor<T>([take], sliced);
+            return new Tensor<T>([take], tensor.ToVector().GetSubVector(0, take));
         }
 
         var totalBatch = tensor.Shape[0];
         var takeBatch = Math.Min(batch, totalBatch);
         var rowSize = tensor.Length / totalBatch;
 
-        var vecAll = tensor.ToVector();
-        var slicedVec = new Vector<T>(takeBatch * rowSize);
-        for (int i = 0; i < takeBatch * rowSize; i++)
-        {
-            slicedVec[i] = vecAll[i];
-        }
+        var slicedVec = tensor.ToVector().GetSubVector(0, takeBatch * rowSize);
 
         var newShape = new int[tensor.Shape.Length];
         newShape[0] = takeBatch;
@@ -1448,7 +1206,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="scores">Scores for the true labels (order does not matter).</param>
     /// <param name="confidenceLevel">Desired coverage probability (e.g., 0.9).</param>
     /// <returns>The score threshold.</returns>
-    private static T ComputeConformalClassificationThreshold(Vector<T> scores, double confidenceLevel)
+    /// <summary>
+    /// Split-conformal threshold on the true-class probability (LAC; Sadinle et al. 2019): with nonconformity
+    /// 1 - p, the conformal quantile is the ceil((n + 1)(1 - alpha))-th smallest nonconformity, i.e. the
+    /// floor((n + 1) alpha)-th smallest true-class probability. The set {c : p_c >= threshold} then covers the
+    /// true class with probability at least 1 - alpha. When floor((n + 1) alpha) is 0 every class is kept.
+    /// </summary>
+    internal static T ComputeConformalClassificationThreshold(Vector<T> scores, double confidenceLevel)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var n = scores.Length;
@@ -1457,96 +1221,25 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return numOps.Zero;
         }
 
-        var adjustedLevel = Math.Ceiling((n + 1) * (1.0 - confidenceLevel)) / n;
-        if (adjustedLevel < 0.0)
+        var alpha = Math.Min(1.0, Math.Max(0.0, 1.0 - confidenceLevel));
+
+        // The small slack keeps (n + 1) * alpha from landing just below an integer through rounding of 1 - level.
+        var rank = (int)Math.Floor((n + 1) * alpha + 1e-9);
+        if (rank < 1)
         {
-            adjustedLevel = 0.0;
-        }
-        if (adjustedLevel > 1.0)
-        {
-            adjustedLevel = 1.0;
+            return numOps.Zero;
         }
 
-        var index = (int)Math.Floor(n * adjustedLevel);
-        if (index < 0) index = 0;
-        if (index >= n) index = n - 1;
-
-        return SelectKthInPlace(scores, index);
+        return SelectKthInPlace(scores, Math.Min(rank, n) - 1);
     }
 
     /// <summary>
-    /// Selects the k-th smallest element in-place using a Quickselect partitioning strategy.
+    /// The k-th smallest value (0-based) of <paramref name="values"/>; the vector is left unchanged.
     /// </summary>
-    /// <param name="values">Values to select from (will be reordered).</param>
-    /// <param name="k">Zero-based rank of the element to select.</param>
-    /// <returns>The k-th smallest element.</returns>
     private static T SelectKthInPlace(Vector<T> values, int k)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = values.AsWritableSpan();
-        var left = 0;
-        var right = span.Length - 1;
-
-        int Partition(Span<T> innerSpan, int innerLeft, int innerRight, int pivotIndex)
-        {
-            var pivotValue = innerSpan[pivotIndex];
-            Swap(innerSpan, pivotIndex, innerRight);
-
-            var storeIndex = innerLeft;
-            for (int i = innerLeft; i < innerRight; i++)
-            {
-                if (numOps.LessThan(innerSpan[i], pivotValue))
-                {
-                    Swap(innerSpan, storeIndex, i);
-                    storeIndex++;
-                }
-            }
-
-            Swap(innerSpan, innerRight, storeIndex);
-            return storeIndex;
-        }
-
-        while (true)
-        {
-            if (left == right)
-            {
-                return span[left];
-            }
-
-            var pivotIndex = left + ((right - left) / 2);
-            pivotIndex = Partition(span, left, right, pivotIndex);
-
-            if (k == pivotIndex)
-            {
-                return span[k];
-            }
-
-            if (k < pivotIndex)
-            {
-                right = pivotIndex - 1;
-            }
-            else
-            {
-                left = pivotIndex + 1;
-            }
-        }
+        var (sorted, _) = AiDotNetEngine.Current.TensorSort(values.AsTensor(), 0, false);
+        return sorted.ToVector()[k];
     }
 
-    /// <summary>
-    /// Swaps two elements in a span.
-    /// </summary>
-    /// <param name="span">The span containing the elements to swap.</param>
-    /// <param name="a">The index of the first element.</param>
-    /// <param name="b">The index of the second element.</param>
-    private static void Swap(Span<T> span, int a, int b)
-    {
-        if (a == b)
-        {
-            return;
-        }
-
-        var temp = span[a];
-        span[a] = span[b];
-        span[b] = temp;
-    }
 }
