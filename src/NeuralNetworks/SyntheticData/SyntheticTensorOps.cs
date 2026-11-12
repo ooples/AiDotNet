@@ -273,4 +273,159 @@ internal static class SyntheticTensorOps<T>
 
         return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), axis: 1);
     }
+
+    /// <summary>
+    /// Offset and width of each categorical column's block in the generated row, in categorical-column order
+    /// (the order the conditional vector uses).
+    /// </summary>
+    public static List<(int Offset, int Width)> CategoricalOutputBlocks(TabularDataTransformer<T>? transformer, int columnCount)
+    {
+        var blocks = new List<(int Offset, int Width)>();
+        if (transformer is null) return blocks;
+        for (int col = 0; col < columnCount; col++)
+        {
+            var info = transformer.GetTransformInfo(col);
+            if (!info.IsContinuous) blocks.Add((info.StartOffset, info.Width));
+        }
+
+        return blocks;
+    }
+
+    /// <summary>
+    /// Conditional generator loss (Xu et al. 2019 §4.3, sdv-dev/CTGAN <c>_cond_loss</c>): the cross-entropy of each
+    /// conditioned column's category logits against the requested one-hot, masked to that column and averaged
+    /// over the batch.
+    /// </summary>
+    public static Tensor<T> ConditionalCrossEntropy(Tensor<T> generatorLogits, Tensor<T> condBatch, Tensor<T> maskBatch,
+        IReadOnlyList<(int Offset, int Width)> categoricalBlocks)
+    {
+        var engine = Engine;
+        int batch = generatorLogits.Shape[0];
+        var blocks = new Tensor<T>[categoricalBlocks.Count];
+        int index = 0;
+        foreach (var (offset, width) in categoricalBlocks)
+        {
+            blocks[index++] = engine.TensorLogSoftmax(
+                engine.TensorSlice(generatorLogits, new[] { 0, offset }, new[] { batch, width }), 1);
+        }
+
+        var logp = blocks.Length == 1 ? blocks[0] : engine.TensorConcatenate(blocks, axis: 1);
+        var masked = engine.TensorMultiply(engine.TensorMultiply(maskBatch, condBatch), logp);
+        var perRow = engine.ReduceSum(masked, new[] { 1 }, keepDims: false);
+        return engine.TensorNegate(engine.ReduceMean(perRow, new[] { 0 }, keepDims: false));
+    }
+
+    /// <summary>
+    /// A batch of training-by-sampling conditions with their column masks, each [batchSize, condWidth].
+    /// </summary>
+    public static (Tensor<T> Cond, Tensor<T> Mask) SampleCondMaskBatch(CTGANDataSampler<T>? sampler, int batchSize, int condWidth)
+    {
+        if (sampler is null || condWidth == 0)
+            return (new Tensor<T>(new[] { batchSize, condWidth }), new Tensor<T>(new[] { batchSize, condWidth }));
+
+        var conds = new List<Vector<T>>(batchSize);
+        var masks = new List<Vector<T>>(batchSize);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, mv, _, _, _) = sampler.SampleCondVecWithMask();
+            conds.Add(cv);
+            masks.Add(mv);
+        }
+
+        return (StackRows(conds, condWidth), StackRows(masks, condWidth));
+    }
+
+    /// <summary>
+    /// A batch of training-by-sampling conditions [batchSize, condWidth] with the real row drawn for each.
+    /// </summary>
+    public static (Tensor<T> CondBatch, int[] RowIndices) SampleConditionsWithRows(CTGANDataSampler<T>? sampler, int batchSize, int condWidth)
+    {
+        var rowIndices = new int[batchSize];
+        if (sampler is null) return (new Tensor<T>(new[] { batchSize, condWidth }), rowIndices);
+
+        var conds = new List<Vector<T>>(batchSize);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, rowIndex) = sampler.SampleConditionAndRow();
+            conds.Add(cv);
+            rowIndices[b] = rowIndex;
+        }
+
+        return (StackRows(conds, condWidth), rowIndices);
+    }
+
+    /// <summary>
+    /// Interleaves two Box-Muller halves z1[0], z2[0], z1[1], ... into a [batchSize, width] tensor, dropping the
+    /// spare value when batchSize * width is odd.
+    /// </summary>
+    public static Tensor<T> InterleaveNormalPairs(Tensor<T> z1, Tensor<T> z2, int batchSize, int width)
+    {
+        int total = batchSize * width;
+        int half = z1.Length;
+        var interleaved = Engine.TensorStack(new[] { z1, z2 }, 1).Reshape(new[] { 2 * half });
+        var noise = 2 * half == total ? interleaved : Engine.TensorSlice(interleaved, new[] { 0 }, new[] { total });
+        return noise.Reshape(new[] { batchSize, width });
+    }
+
+    /// <summary>
+    /// Gaussian-copula forward transform of one column: z = Phi^-1(u) with u = (midRank + 1) / (n + 1) clipped to
+    /// [1e-6, 1 - 1e-6], where midRank is the mean sorted position of each value's ties. Returns z and the sorted
+    /// column, which <see cref="GaussianCopulaInverse"/> interpolates.
+    /// </summary>
+    public static (Tensor<T> Z, Tensor<T> Sorted) GaussianCopulaForward(Tensor<T> values)
+    {
+        var engine = Engine;
+        int n = values.Length;
+        T one = NumOps.One;
+        var sorted = engine.TensorSort(values, 0, false).Values;
+
+        var first = engine.TensorSearchSorted(sorted, values, right: false).Cast<T>();
+        var last = engine.TensorSubtractScalar(engine.TensorSearchSorted(sorted, values, right: true).Cast<T>(), one);
+        var midRank = engine.TensorMultiplyScalar(engine.TensorAdd(first, last), NumOps.FromDouble(0.5));
+
+        var u = engine.TensorClamp(
+            engine.TensorMultiplyScalar(engine.TensorAddScalar(midRank, one), NumOps.FromDouble(1.0 / (n + 1.0))),
+            NumOps.FromDouble(1e-6), NumOps.FromDouble(1.0 - 1e-6));
+        return (StandardNormalQuantile(u), sorted);
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="GaussianCopulaForward"/>: u = Phi(z), rank = u (n + 1) - 1 clipped to [0, n - 1], and
+    /// the value linearly interpolated between the sorted entries around that rank.
+    /// </summary>
+    public static Tensor<T> GaussianCopulaInverse(Tensor<T> z, Tensor<T> sorted)
+    {
+        var engine = Engine;
+        int n = sorted.Length;
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+        T lastIndex = NumOps.FromDouble(n - 1);
+
+        var u = engine.TensorClamp(StandardNormalCdf(z), zero, one);
+        var rank = engine.TensorClamp(
+            engine.TensorSubtractScalar(engine.TensorMultiplyScalar(u, NumOps.FromDouble(n + 1.0)), one), zero, lastIndex);
+        var lo = engine.TensorFloor(rank);
+        var hi = engine.TensorMin(engine.TensorAddScalar(lo, one), lastIndex);
+        var frac = engine.TensorSubtract(rank, lo);
+
+        var below = engine.TensorGather(sorted, lo.Cast<int>(), 0);
+        var above = engine.TensorGather(sorted, hi.Cast<int>(), 0);
+        return engine.TensorAdd(below, engine.TensorMultiply(engine.TensorSubtract(above, below), frac));
+    }
+
+    /// <summary>Phi^-1(u) = sqrt(2) erfinv(2u - 1) (scipy.stats.norm.ppf).</summary>
+    public static Tensor<T> StandardNormalQuantile(Tensor<T> u)
+    {
+        var engine = Engine;
+        var centered = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(u, NumOps.FromDouble(2.0)), NumOps.One);
+        return engine.TensorMultiplyScalar(engine.TensorErfinv(centered), NumOps.FromDouble(Math.Sqrt(2.0)));
+    }
+
+    /// <summary>Phi(z) = (1 + erf(z / sqrt 2)) / 2 (scipy.stats.norm.cdf).</summary>
+    public static Tensor<T> StandardNormalCdf(Tensor<T> z)
+    {
+        var engine = Engine;
+        var erf = engine.TensorErf(engine.TensorMultiplyScalar(z, NumOps.FromDouble(1.0 / Math.Sqrt(2.0))));
+        return engine.TensorMultiplyScalar(engine.TensorAddScalar(erf, NumOps.One), NumOps.FromDouble(0.5));
+    }
 }
