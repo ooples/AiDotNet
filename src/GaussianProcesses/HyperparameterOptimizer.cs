@@ -366,8 +366,8 @@ public class HyperparameterOptimizer<T>
 
         // Fixed ordering so the dictionary can be mapped to and from a parameter vector.
         var names = new List<string>(initialParameters.Keys);
-        var engine = AiDotNetEngine.Current;
-        var start = new Vector<double>(names.Select(name => initialParameters[name]));
+        var start = new Vector<double>(names.Count);
+        for (int i = 0; i < names.Count; i++) start[i] = initialParameters[names[i]];
 
         double bestLml = double.NegativeInfinity;
         var bestParameters = new Dictionary<string, double>(initialParameters);
@@ -376,8 +376,7 @@ public class HyperparameterOptimizer<T>
         Dictionary<string, double> ToParameterDictionary(Vector<double> point)
         {
             var result = new Dictionary<string, double>(names.Count);
-            foreach (var (name, value) in names.Zip(point, (name, value) => (name, value)))
-                result[name] = value;
+            for (int i = 0; i < names.Count; i++) result[names[i]] = point[i];
             return result;
         }
 
@@ -387,6 +386,7 @@ public class HyperparameterOptimizer<T>
         {
             evaluations++;
             var current = ToParameterDictionary(point);
+            var gradientVector = new Vector<double>(names.Count);
 
             try
             {
@@ -397,10 +397,12 @@ public class HyperparameterOptimizer<T>
                     bestParameters = current;
                 }
 
-                var reported = new Vector<double>(
-                    names.Select(name => gradient.TryGetValue(name, out double g) ? g : 0.0));
+                for (int i = 0; i < names.Count; i++)
+                {
+                    gradientVector[i] = gradient.TryGetValue(names[i], out double g) ? -g : 0.0;
+                }
 
-                return (-lml, engine.Negate(reported));
+                return (-lml, gradientVector);
             }
             catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
             {
@@ -413,19 +415,28 @@ public class HyperparameterOptimizer<T>
                 // implementation instead halved the learning rate on every failure, which
                 // permanently degraded the step size for the rest of the run even after the search
                 // had returned to a well-conditioned region.
-                var best = new Vector<double>(names.Zip(
-                    point,
-                    (name, value) => bestParameters.TryGetValue(name, out double b) ? b : value));
+                for (int i = 0; i < names.Count; i++)
+                {
+                    double best = bestParameters.TryGetValue(names[i], out double b) ? b : point[i];
+                    gradientVector[i] = point[i] - best;
+                }
 
-                return (InfeasiblePointPenalty, engine.Subtract(point, best));
+                return (InfeasiblePointPenalty, gradientVector);
             }
         }
 
         Vector<double> Project(Vector<double> point)
         {
-            foreach (string name in names)
+            var projected = new Vector<double>(names.Count);
+            for (int i = 0; i < names.Count; i++)
             {
-                bool requiresPositive = RequiresPositive(name);
+                string name = names[i];
+                double value = point[i];
+                bool requiresPositive =
+                    name.Contains("variance", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("length", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("scale", StringComparison.OrdinalIgnoreCase);
+
                 if (parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds))
                 {
                     if (double.IsNaN(bounds.min) || double.IsInfinity(bounds.min) ||
@@ -445,31 +456,22 @@ public class HyperparameterOptimizer<T>
                             $"{MinimumPositiveHyperparameter}, but was {bounds.max}.",
                             nameof(parameterBounds));
                     }
+
+                    value = Math.Max(bounds.min, Math.Min(bounds.max, value));
                 }
+
+                // Kernel length scales, signal variances and noise variances are strictly positive
+                // quantities; a non-positive value makes the covariance matrix indefinite.
+                if (requiresPositive)
+                {
+                    value = Math.Max(MinimumPositiveHyperparameter, value);
+                }
+
+                projected[i] = value;
             }
 
-            var lower = new Vector<double>(names.Select(name =>
-                parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds)
-                    ? bounds.min
-                    : double.NegativeInfinity));
-            var upper = new Vector<double>(names.Select(name =>
-                parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds)
-                    ? bounds.max
-                    : double.PositiveInfinity));
-
-            // Kernel length scales, signal variances and noise variances are strictly positive
-            // quantities; a non-positive value makes the covariance matrix indefinite.
-            var positiveFloor = new Vector<double>(names.Select(name =>
-                RequiresPositive(name) ? MinimumPositiveHyperparameter : double.NegativeInfinity));
-
-            var clamped = engine.Max(lower, engine.Min(upper, point));
-            return engine.Max(positiveFloor, clamped);
+            return projected;
         }
-
-        static bool RequiresPositive(string name) =>
-            name.Contains("variance", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("length", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("scale", StringComparison.OrdinalIgnoreCase);
 
         // Uses the library's Adam optimizer rather than a private reimplementation of the update
         // rule. Bounds and positivity are enforced by projecting each iterate onto the feasible

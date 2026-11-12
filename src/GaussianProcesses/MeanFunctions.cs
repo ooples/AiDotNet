@@ -255,7 +255,11 @@ public class LinearMean<T> : IMeanFunction<T>
             throw new ArgumentException("Weights array cannot be empty.", nameof(weights));
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _weights = GaussianProcessEngineOps.FromDoubles<T>(weights);
+        _weights = new Vector<T>(weights.Length);
+        for (int i = 0; i < weights.Length; i++)
+        {
+            _weights[i] = _numOps.FromDouble(weights[i]);
+        }
 
         _bias = _numOps.FromDouble(bias);
     }
@@ -418,7 +422,6 @@ public class LinearMean<T> : IMeanFunction<T>
 public class PolynomialMean<T> : IMeanFunction<T>
 {
     private readonly double[] _coefficients;
-    private readonly Vector<T> _coefficientVector;
     private readonly int _degree;
     private readonly INumericOperations<T> _numOps;
 
@@ -447,7 +450,6 @@ public class PolynomialMean<T> : IMeanFunction<T>
             throw new ArgumentException("Must have at least one coefficient.", nameof(coefficients));
 
         _coefficients = (double[])coefficients.Clone();
-        _coefficientVector = GaussianProcessEngineOps.FromDoubles<T>(coefficients);
         _degree = coefficients.Length - 1;
         _numOps = MathHelper.GetNumericOperations<T>();
     }
@@ -505,20 +507,20 @@ public class PolynomialMean<T> : IMeanFunction<T>
         if (X.Columns == 0)
             throw new ArgumentException("Input matrix must have at least one column.", nameof(X));
 
-        // m(x) = Σ_j c_j x^j with x the first column: powers [1, x, x², ...] come from a cumulative
-        // product (exact repeated multiplication, valid for negative x), then one matrix-vector product.
-        var engine = AiDotNetEngine.Current;
-        int n = X.Rows;
-        var ones = Tensor<T>.CreateDefault(new[] { n, 1 }, _numOps.One);
-        var powers = ones;
-        if (_degree > 0)
+        var result = new Vector<T>(X.Rows);
+        for (int i = 0; i < X.Rows; i++)
         {
-            var x = Tensor<T>.FromVector(X.GetColumn(0)).Reshape(new[] { n, 1 });
-            var positivePowers = engine.TensorCumProd(engine.TensorTile(x, new[] { 1, _degree }), 1);
-            powers = engine.TensorConcatenate(new[] { ones, positivePowers }, 1);
+            double xVal = _numOps.ToDouble(X[i, 0]);
+
+            // Horner's method
+            double value = _coefficients[_degree];
+            for (int j = _degree - 1; j >= 0; j--)
+            {
+                value = value * xVal + _coefficients[j];
+            }
+            result[i] = _numOps.FromDouble(value);
         }
 
-        var coefficients = Tensor<T>.FromVector(_coefficientVector).Reshape(new[] { _degree + 1, 1 });
-        return engine.TensorMatMul(powers, coefficients).Reshape(new[] { n }).ToVector();
+        return result;
     }
 }

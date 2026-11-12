@@ -77,7 +77,7 @@ public class BootstrapValidation<T>
             : RandomHelper.CreateSecureRandom();
 
         var silhouetteScores = new List<double>();
-        var inertiaValues = new List<T>();
+        var inertiaValues = new List<double>();
         var daviesBouldinScores = new List<double>();
         var calinskiHarabaszScores = new List<double>();
 
@@ -121,9 +121,9 @@ public class BootstrapValidation<T>
                     double calinskiHarabasz = calinskiHarabaszMetric.Compute(bootstrapSample, kmeans.Labels);
                     calinskiHarabaszScores.Add(calinskiHarabasz);
 
-                    if (kmeans.Inertia is T inertia)
+                    if (kmeans.Inertia is not null)
                     {
-                        inertiaValues.Add(inertia);
+                        inertiaValues.Add(_numOps.ToDouble(kmeans.Inertia));
                     }
                 }
             }
@@ -139,7 +139,7 @@ public class BootstrapValidation<T>
             ConfidenceLevel = confidenceLevel,
             NumBootstraps = _numBootstraps,
             Silhouette = ComputeConfidenceInterval(silhouetteScores, confidenceLevel),
-            Inertia = ComputeConfidenceInterval(inertiaValues.ConvertAll(_numOps.ToDouble), confidenceLevel),
+            Inertia = ComputeConfidenceInterval(inertiaValues, confidenceLevel),
             DaviesBouldin = ComputeConfidenceInterval(daviesBouldinScores, confidenceLevel),
             CalinskiHarabasz = ComputeConfidenceInterval(calinskiHarabaszScores, confidenceLevel)
         };

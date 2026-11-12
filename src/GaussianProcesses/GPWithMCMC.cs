@@ -60,12 +60,12 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
     /// Standard GP practice: centering targets makes the zero-mean prior assumption
     /// valid regardless of target scale, ensuring scaling/translation equivariance.
     /// </summary>
-    private T _yMean;
+    private double _yMean;
 
     /// <summary>
     /// Standard deviation of the original training targets for output variance scaling.
     /// </summary>
-    private T _yStd;
+    private double _yStd = 1.0;
 
     /// <summary>
     /// MCMC samples of hyperparameters [lengthscale, outputVariance, noiseVariance].
@@ -117,9 +117,18 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
     /// change MUST rebuild (or null) these caches.
     /// </para>
     /// </summary>
-    private Tensor<T>? _baseKernel;
-    private Tensor<T>? _centeredTargets;
-    private Tensor<T>? _identity;
+    private double[,]? _baseKernelDouble;
+    private double[]? _centeredYDouble;
+
+    /// <summary>
+    /// Reusable per-instance work buffers for the <see cref="ComputeLogPosterior"/> Cholesky + solves,
+    /// sized once in <see cref="Fit"/>. Since that method is evaluated ~10^6 times by slice sampling,
+    /// reusing these avoids allocating a fresh Cholesky factor + two solve vectors on every call (they
+    /// are fully overwritten each evaluation; MCMC runs single-threaded per instance inside Fit).
+    /// </summary>
+    private double[,]? _choleskyWork;
+    private double[]? _alphaWork;
+    private double[]? _betaWork;
 
     /// <summary>
     /// Prior mean for log-lengthscale.
@@ -210,8 +219,6 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
             : RandomHelper.CreateSecureRandom();
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _yMean = _numOps.Zero;
-        _yStd = _numOps.One;
         _isTrained = false;
     }
 
@@ -257,8 +264,7 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
         // it scales with the input X, not the target y. Without this rescale, callers of
         // GetSamples() would see variances under-reported by a factor of _yStd^2 — exactly
         // the discrepancy flagged in PR review.
-        // The hyperparameter samples are reported as doubles; the target scale crosses that boundary once.
-        double scale = _numOps.ToDouble(_numOps.Multiply(_yStd, _yStd));
+        double scale = _yStd * _yStd;
         return _samples
             .Select(s => new[] { s[0], s[1] * scale, s[2] * scale })
             .ToList();
@@ -299,40 +305,51 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
 
         // Center targets: standard GP practice to make zero-mean prior valid.
         // This ensures scaling/translation equivariance regardless of MCMC convergence.
-        var engine = Engine;
-        T yMean = engine.Mean(y);
-        var deviations = Tensor<T>.FromVector(y);
-        deviations = engine.TensorSubtractScalar(deviations, yMean);
-        T yStd = MathHelper.Max(
-            _numOps.Sqrt(_numOps.Divide(engine.TensorSumOfSquares(deviations), _numOps.FromDouble(Math.Max(n - 1, 1)))),
-            _numOps.FromDouble(1e-10));
+        _yMean = 0;
+        for (int i = 0; i < n; i++)
+            _yMean += _numOps.ToDouble(y[i]);
+        _yMean /= n;
 
-        _yMean = yMean;
-        _yStd = yStd;
+        double sumSqDev = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double d = _numOps.ToDouble(y[i]) - _yMean;
+            sumSqDev += d * d;
+        }
+        _yStd = Math.Max(Math.Sqrt(sumSqDev / Math.Max(n - 1, 1)), 1e-10);
 
         // Store centered targets
-        _y = engine.TensorDivideScalar(deviations, yStd).ToVector();
+        var centeredY = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            centeredY[i] = _numOps.FromDouble((_numOps.ToDouble(y[i]) - _yMean) / _yStd);
+        _y = centeredY;
 
-        // Precompute the invariant base kernel structure + centered targets for the MCMC hot loop.
-        // k(xi, xj) does not depend on the sampled outputVar/noiseVar (ComputeLogPosterior scales by
-        // outputVar and adds noiseVar to the diagonal), so it is constant across every evaluation —
-        // computing it once here removes ~n^2/2 generic kernel calls from each slice-sampling evaluation.
-        _centeredTargets = Tensor<T>.FromVector(_y).Reshape(new[] { n, 1 });
-        // Base kernel matrix K_base[a, b] = k(x_a, x_b) over the training inputs (symmetric).
-        var kernelMatrix = new Matrix<T>(n, n);
-        for (int a = 0; a < n; a++)
+        // Precompute the invariant base kernel structure + centered targets in double for the MCMC
+        // hot loop. k(xi, xj) does not depend on the sampled outputVar/noiseVar (BuildKernelMatrix
+        // scales by outputVar and adds noiseVar to the diagonal), so it is constant across every
+        // ComputeLogPosterior evaluation — computing it once here removes ~n^2/2 generic kernel calls
+        // and all per-element boxing from each of the ~10^6 slice-sampling evaluations.
+        _centeredYDouble = new double[n];
+        for (int i = 0; i < n; i++)
+            _centeredYDouble[i] = _numOps.ToDouble(_y[i]);
+
+        _baseKernelDouble = new double[n, n];
+        for (int i = 0; i < n; i++)
         {
-            var xa = GetRow(X, a);
-            for (int b = a; b < n; b++)
+            var xi = GetRow(FittedX, i);
+            for (int j = i; j < n; j++)
             {
-                T kval = _kernel.Calculate(xa, GetRow(X, b));
-                kernelMatrix[a, b] = kval;
-                kernelMatrix[b, a] = kval;
+                double kval = _numOps.ToDouble(_kernel.Calculate(xi, GetRow(FittedX, j)));
+                _baseKernelDouble[i, j] = kval;
+                _baseKernelDouble[j, i] = kval;
             }
         }
 
-        _baseKernel = Tensor<T>.FromMatrix(kernelMatrix);
-        _identity = engine.TensorEye<T>(n);
+        // Size the ComputeLogPosterior work buffers once so the ~10^6 slice-sampling evaluations reuse
+        // them instead of allocating a Cholesky factor + two solve vectors on every call.
+        _choleskyWork = new double[n, n];
+        _alphaWork = new double[n];
+        _betaWork = new double[n];
 
         // Initialize hyperparameters in log-space
         double[] logParams = new double[3];
@@ -402,52 +419,57 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
             _choleskyFactors is null || _alphaVectors is null)
             throw new InvalidOperationException("Model must be trained first.");
 
-        // All posterior samples at once: sample s has k*_s = outputVar_s · k(x, X), mean k*_s · alpha_s and
-        // variance outputVar_s + noiseVar_s - ||L_s^{-1} k*_s||².
-        var engine = Engine;
         int numSamples = _samples.Count;
-        int n = _X.Rows;
-        var outputVars = Tensor<T>.FromVector(
-            GaussianProcessEngineOps.FromDoubles<T>(_samples.Select(sample => sample[1]).ToArray()));
-        var noiseVars = Tensor<T>.FromVector(
-            GaussianProcessEngineOps.FromDoubles<T>(_samples.Select(sample => sample[2]).ToArray()));
+        double[] means = new double[numSamples];
+        double[] variances = new double[numSamples];
 
-        // Base cross-covariance k(x, x_i) over the training inputs
-        var kernelCross = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
+        for (int s = 0; s < numSamples; s++)
         {
-            kernelCross[i] = _kernel.Calculate(x, GetRow(FittedX, i));
+            var sample = _samples[s];
+            double lengthscale = sample[0];
+            double outputVar = sample[1];
+            double noiseVar = sample[2];
+
+            // Compute k(x, X) with this sample's parameters
+            var kstar = ComputeCrossCovariance(x, lengthscale, outputVar);
+
+            // Mean: k* · alpha
+            double mean = 0;
+            for (int i = 0; i < _X.Rows; i++)
+            {
+                mean += _numOps.ToDouble(kstar[i]) * _numOps.ToDouble(_alphaVectors[s][i]);
+            }
+            means[s] = mean;
+
+            // Variance: k(x,x) - k*' · L^{-1} · L^{-T} · k*
+            double kxx = outputVar + noiseVar;
+
+            // Solve L · v = k*
+            var v = SolveLowerTriangular(_choleskyFactors[s], kstar);
+            double dotV = 0;
+            for (int i = 0; i < v.Length; i++)
+            {
+                double vi = _numOps.ToDouble(v[i]);
+                dotV += vi * vi;
+            }
+            variances[s] = Math.Max(kxx - dotV, 1e-10);
         }
 
-        var baseCross = Tensor<T>.FromVector(kernelCross);
-        var kstars = engine.TensorMultiply(
-            engine.TensorBroadcastTo(outputVars.Reshape(new[] { numSamples, 1 }), new[] { numSamples, n }),
-            engine.TensorBroadcastTo(baseCross.Reshape(new[] { 1, n }), new[] { numSamples, n }));
-
-        // Mean: k*_s · alpha_s
-        var alphas = engine.TensorStack(_alphaVectors.Select(alpha => Tensor<T>.FromVector(alpha)).ToArray(), 0);
-        var means = engine.ReduceSum(engine.TensorMultiply(kstars, alphas), new[] { 1 }, keepDims: false);
-
-        // Variance: k(x,x) - k*' · L^{-1} · L^{-T} · k*, with L_s · v_s = k*_s solved for every sample
-        var factors = engine.TensorStack(_choleskyFactors.Select(factor => Tensor<T>.FromMatrix(factor)).ToArray(), 0);
-        var v = LinalgDispatch<T>.SolveTriangular(factors, kstars.Reshape(new[] { numSamples, n, 1 }), upper: false);
-        var dotV = engine.ReduceSum(engine.TensorSquare(v), new[] { 1, 2 }, keepDims: false);
-        var variances = engine.TensorMax(
-            engine.TensorSubtract(engine.TensorAdd(outputVars, noiseVars), dotV),
-            _numOps.FromDouble(1e-10));
-
         // Law of total variance: E[Var] + Var[E]
-        T meanOfMeans = engine.TensorMean(means);
-        T meanOfVariances = engine.TensorMean(variances);
-        T varianceOfMeans = engine.TensorMean(engine.TensorSquare(engine.TensorSubtractScalar(means, meanOfMeans)));
-        T totalVariance = _numOps.Add(meanOfVariances, varianceOfMeans);
+        double meanOfMeans = means.Average();
+        double meanOfVariances = variances.Average();
+        double varianceOfMeans = means.Select(m => (m - meanOfMeans) * (m - meanOfMeans)).Average();
+
+        double totalVariance = meanOfVariances + varianceOfMeans;
 
         // De-center: transform from standardized space back to original scale
-        T yStd = _yStd;
-        T deCenteredMean = _numOps.Add(_numOps.Multiply(meanOfMeans, yStd), _yMean);
-        T deCenteredVariance = _numOps.Multiply(totalVariance, _numOps.Multiply(yStd, yStd));
+        double deCenteredMean = meanOfMeans * _yStd + _yMean;
+        double deCenteredVariance = totalVariance * _yStd * _yStd;
 
-        return (deCenteredMean, deCenteredVariance);
+        return (
+            _numOps.FromDouble(deCenteredMean),
+            _numOps.FromDouble(deCenteredVariance)
+        );
     }
 
     /// <summary>
@@ -514,8 +536,7 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
 
         // Rescale variance components back to the original target scale (see GetSamples()
         // for the full explanation — _samples are stored in standardized units).
-        // The hyperparameter samples are reported as doubles; the target scale crosses that boundary once.
-        double scale = _numOps.ToDouble(_numOps.Multiply(_yStd, _yStd));
+        double scale = _yStd * _yStd;
         var lengthscales = _samples.Select(s => s[0]).ToArray();
         var outputVars = _samples.Select(s => s[1] * scale).ToArray();
         var noiseVars = _samples.Select(s => s[2] * scale).ToArray();
@@ -535,29 +556,89 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private double ComputeLogPosterior(double[] logParams)
     {
-        if (_baseKernel is null || _centeredTargets is null || _identity is null)
+        if (_baseKernelDouble is null || _centeredYDouble is null
+            || _choleskyWork is null || _alphaWork is null || _betaWork is null)
             return double.NegativeInfinity;
 
-        // logParams[0] (lengthscale) is intentionally not applied to the kernel matrix here: the generic
-        // _kernel.Calculate(…) has its lengthscale fixed at kernel construction, so the sampled lengthscale
-        // has always been vestigial for a generic IKernelFunction — it feeds only the prior below (and is
-        // reported by GetPosteriorStatistics), never the training kernel or the predictive cross-covariance.
-        // Making it a live kernel hyperparameter needs a re-parameterizable kernel and is a separate change.
-        var engine = Engine;
-        T outputVar = _numOps.FromDouble(Math.Exp(logParams[1]));
-        T noiseVar = _numOps.FromDouble(Math.Exp(logParams[2]));
+        // logParams[0] (lengthscale) is intentionally not applied to the kernel matrix here, and this is
+        // NOT a regression from the cached-kernel optimization: on master BOTH BuildKernelMatrix(lengthscale,
+        // …) and ComputeCrossCovariance(x, lengthscale, …) accepted a lengthscale argument but never used it
+        // — each called the generic _kernel.Calculate(…), whose lengthscale is fixed at kernel construction.
+        // So the sampled lengthscale has always been vestigial for a generic IKernelFunction: it feeds only
+        // the prior below (and is reported by GetPosteriorStatistics), never the training kernel or the
+        // predictive cross-covariance. Caching _baseKernelDouble therefore reproduces the previous posterior
+        // bit-for-bit. Making lengthscale a LIVE kernel hyperparameter would require a re-parameterizable
+        // kernel (one that recomputes k(·,·) per sampled lengthscale) — which for a generic kernel means
+        // rebuilding the matrix every evaluation, defeating this timeout fix — so it is a separate modeling
+        // change, deliberately not bundled into this perf PR. It is still used by the prior below.
+        double outputVar = Math.Exp(logParams[1]);
+        double noiseVar = Math.Exp(logParams[2]);
+        int n = _centeredYDouble.Length;
 
-        // Cholesky of K = base·outputVar + noiseVar·I; a matrix that is not positive definite makes the
-        // parameters invalid.
-        var K = engine.TensorAdd(
-            engine.TensorMultiplyScalar(_baseKernel, outputVar), engine.TensorMultiplyScalar(_identity, noiseVar));
-        var lower = GaussianProcessEvidence.Cholesky(K);
-        if (lower is null)
-            return double.NegativeInfinity;
+        // Reuse the per-instance work buffers (sized in Fit). L's upper triangle is never read and
+        // alpha/beta are fully overwritten below, so reusing them is bit-identical to fresh allocations.
+        double[,] L = _choleskyWork;
+        double[] alpha = _alphaWork;
+        double[] beta = _betaWork;
 
-        // Log likelihood: -0.5 · (y' · K^-1 · y + log|K| + n·log(2π)). The slice sampler compares log
-        // densities of its scalar log-space hyperparameters, so the evidence is read as one scalar here.
-        double logLik = _numOps.ToDouble(GaussianProcessEvidence.LogMarginalLikelihood(lower, _centeredTargets));
+        // Cholesky of K = base·outputVar + noiseVar·I, computed directly in double. Same triple loop
+        // and accumulation order as CholeskyDecomposition, so the result is bit-identical to the
+        // generic path (which already did all arithmetic in double via ToDouble) — the MCMC sample
+        // sequence is unchanged, only the per-eval boxing/allocation is removed.
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j <= i; j++)
+            {
+                double aij = _baseKernelDouble[i, j] * outputVar;
+                if (i == j) aij += noiseVar;
+
+                double sum = 0;
+                for (int k = 0; k < j; k++)
+                    sum += L[i, k] * L[j, k];
+
+                if (i == j)
+                {
+                    double diag = aij - sum;
+                    if (diag <= 0)
+                        return double.NegativeInfinity; // not positive definite → invalid parameters
+                    L[i, j] = Math.Sqrt(diag);
+                }
+                else
+                {
+                    L[i, j] = (aij - sum) / L[j, j];
+                }
+            }
+        }
+
+        // Solve L·alpha = y (forward) then Lᵀ·beta = alpha (backward), matching SolveLowerTriangular /
+        // SolveUpperTriangular's accumulate-then-subtract order exactly.
+        for (int i = 0; i < n; i++)
+        {
+            double sum = 0;
+            for (int j = 0; j < i; j++)
+                sum += L[i, j] * alpha[j];
+            alpha[i] = (_centeredYDouble[i] - sum) / L[i, i];
+        }
+
+        for (int i = n - 1; i >= 0; i--)
+        {
+            double sum = 0;
+            for (int j = i + 1; j < n; j++)
+                sum += L[j, i] * beta[j];
+            beta[i] = (alpha[i] - sum) / L[i, i];
+        }
+
+        // Log likelihood: -0.5 · (y' · K^-1 · y + log|K| + n·log(2π))
+        double yKinvY = 0;
+        for (int i = 0; i < n; i++)
+            yKinvY += _centeredYDouble[i] * beta[i];
+
+        double logDetK = 0;
+        for (int i = 0; i < n; i++)
+            logDetK += Math.Log(L[i, i]);
+        logDetK *= 2; // log|K| = 2·sum(log(diag(L)))
+
+        double logLik = -0.5 * (yKinvY + logDetK + n * Math.Log(2 * Math.PI));
 
         // Log prior (normal priors on log-parameters)
         double logPrior = 0;
@@ -646,40 +727,152 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
         if (_X is null || _y is null || _samples is null)
             return;
 
-        // K_s = outputVar_s · K_base + noiseVar_s · I for every sample, factored and solved as one batch.
-        var engine = Engine;
-        int numSamples = _samples.Count;
+        _choleskyFactors = new List<Matrix<T>>();
+        _alphaVectors = new List<Vector<T>>();
+
+        foreach (var sample in _samples)
+        {
+            double lengthscale = sample[0];
+            double outputVar = sample[1];
+            double noiseVar = sample[2];
+
+            var K = BuildKernelMatrix(lengthscale, outputVar, noiseVar);
+            var L = CholeskyDecomposition(K);
+            var alpha = SolveLowerTriangular(L, _y);
+            var beta = SolveUpperTriangular(L, alpha);
+
+            _choleskyFactors.Add(L);
+            _alphaVectors.Add(beta);
+        }
+    }
+
+    /// <summary>
+    /// Builds kernel matrix with given hyperparameters.
+    /// </summary>
+    private Matrix<T> BuildKernelMatrix(double lengthscale, double outputVar, double noiseVar)
+    {
         int n = FittedX.Rows;
-        var outputVars = Tensor<T>.FromVector(
-            GaussianProcessEngineOps.FromDoubles<T>(_samples.Select(sample => sample[1]).ToArray()));
-        var noiseVars = Tensor<T>.FromVector(
-            GaussianProcessEngineOps.FromDoubles<T>(_samples.Select(sample => sample[2]).ToArray()));
-        var batchShape = new[] { numSamples, n, n };
-        var cachedKernel = _baseKernel ?? throw new InvalidOperationException("Base kernel has not been computed.");
-        var baseKernel = cachedKernel.Reshape(new[] { 1, n, n });
-        var identity = engine.TensorEye<T>(n).Reshape(new[] { 1, n, n });
-        var kernels = engine.TensorAdd(
-            engine.TensorMultiply(
-                engine.TensorBroadcastTo(baseKernel, batchShape),
-                engine.TensorBroadcastTo(outputVars.Reshape(new[] { numSamples, 1, 1 }), batchShape)),
-            engine.TensorMultiply(
-                engine.TensorBroadcastTo(identity, batchShape),
-                engine.TensorBroadcastTo(noiseVars.Reshape(new[] { numSamples, 1, 1 }), batchShape)));
+        var K = new Matrix<T>(n, n);
 
-        var (factors, info) = LinalgDispatch<T>.CholeskyEx(kernels, upper: false);
-        if (engine.TensorCountNonzero(info) > 0)
-            throw new InvalidOperationException("Matrix is not positive definite.");
+        for (int i = 0; i < n; i++)
+        {
+            var xi = GetRow(FittedX, i);
+            for (int j = i; j < n; j++)
+            {
+                var xj = GetRow(FittedX, j);
 
-        var targets = engine.TensorBroadcastTo(
-            Tensor<T>.FromVector(_y).Reshape(new[] { 1, n, 1 }), new[] { numSamples, n, 1 });
-        var alphas = LinalgDispatch<T>.CholeskySolve(targets, factors, upper: false);
+                // Scale kernel output by MCMC-sampled outputVar.
+                // The base kernel provides correlation structure; outputVar scales magnitude.
+                double kval = _numOps.ToDouble(_kernel.Calculate(xi, xj)) * outputVar;
 
-        _choleskyFactors = Enumerable.Range(0, numSamples)
-            .Select(s => engine.TensorSlice(factors, new[] { s, 0, 0 }, new[] { 1, n, n }).Reshape(new[] { n, n }).ToMatrix())
-            .ToList();
-        _alphaVectors = Enumerable.Range(0, numSamples)
-            .Select(s => engine.TensorSlice(alphas, new[] { s, 0, 0 }, new[] { 1, n, 1 }).Reshape(new[] { n }).ToVector())
-            .ToList();
+                // Add noise variance to diagonal
+                if (i == j)
+                    kval += noiseVar;
+
+                K[i, j] = _numOps.FromDouble(kval);
+                K[j, i] = _numOps.FromDouble(kval);
+            }
+        }
+
+        return K;
+    }
+
+    /// <summary>
+    /// Computes cross-covariance k(x, X).
+    /// </summary>
+    private Vector<T> ComputeCrossCovariance(Vector<T> x, double lengthscale, double outputVar)
+    {
+        int n = FittedX.Rows;
+        var kstar = new Vector<T>(n);
+
+        // Scale kernel output by MCMC-sampled output variance.
+        // The base kernel provides the correlation structure; outputVar scales the magnitude.
+        T scale = _numOps.FromDouble(outputVar);
+        for (int i = 0; i < n; i++)
+        {
+            var xi = GetRow(FittedX, i);
+            kstar[i] = _numOps.Multiply(_kernel.Calculate(x, xi), scale);
+        }
+
+        return kstar;
+    }
+
+    /// <summary>
+    /// Cholesky decomposition of a matrix.
+    /// </summary>
+    private Matrix<T> CholeskyDecomposition(Matrix<T> A)
+    {
+        int n = A.Rows;
+        var L = new Matrix<T>(n, n);
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j <= i; j++)
+            {
+                double sum = 0;
+                for (int k = 0; k < j; k++)
+                {
+                    sum += _numOps.ToDouble(L[i, k]) * _numOps.ToDouble(L[j, k]);
+                }
+
+                if (i == j)
+                {
+                    double diag = _numOps.ToDouble(A[i, i]) - sum;
+                    if (diag <= 0)
+                        throw new InvalidOperationException("Matrix is not positive definite.");
+                    L[i, j] = _numOps.FromDouble(Math.Sqrt(diag));
+                }
+                else
+                {
+                    double ljj = _numOps.ToDouble(L[j, j]);
+                    L[i, j] = _numOps.FromDouble((_numOps.ToDouble(A[i, j]) - sum) / ljj);
+                }
+            }
+        }
+
+        return L;
+    }
+
+    /// <summary>
+    /// Solves Lx = b for lower triangular L.
+    /// </summary>
+    private Vector<T> SolveLowerTriangular(Matrix<T> L, Vector<T> b)
+    {
+        int n = b.Length;
+        var x = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            double sum = 0;
+            for (int j = 0; j < i; j++)
+            {
+                sum += _numOps.ToDouble(L[i, j]) * _numOps.ToDouble(x[j]);
+            }
+            x[i] = _numOps.FromDouble((_numOps.ToDouble(b[i]) - sum) / _numOps.ToDouble(L[i, i]));
+        }
+
+        return x;
+    }
+
+    /// <summary>
+    /// Solves L'x = b for lower triangular L (i.e., solves upper triangular system).
+    /// </summary>
+    private Vector<T> SolveUpperTriangular(Matrix<T> L, Vector<T> b)
+    {
+        int n = b.Length;
+        var x = new Vector<T>(n);
+
+        for (int i = n - 1; i >= 0; i--)
+        {
+            double sum = 0;
+            for (int j = i + 1; j < n; j++)
+            {
+                sum += _numOps.ToDouble(L[j, i]) * _numOps.ToDouble(x[j]);
+            }
+            x[i] = _numOps.FromDouble((_numOps.ToDouble(b[i]) - sum) / _numOps.ToDouble(L[i, i]));
+        }
+
+        return x;
     }
 
     /// <summary>
@@ -687,7 +880,12 @@ public partial class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private Vector<T> GetRow(Matrix<T> matrix, int row)
     {
-        return matrix.GetRow(row);
+        var result = new Vector<T>(matrix.Columns);
+        for (int j = 0; j < matrix.Columns; j++)
+        {
+            result[j] = matrix[row, j];
+        }
+        return result;
     }
 
     /// <summary>

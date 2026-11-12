@@ -139,16 +139,6 @@ internal static class GaussianProcessEngineOps
     }
 
     /// <summary>
-    /// Converts a caller-supplied table of double configuration values (weights, coefficients) to a
-    /// <see cref="Vector{T}"/> once, at construction time.
-    /// </summary>
-    internal static Vector<T> FromDoubles<T>(double[] values)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return new Vector<T>(Array.ConvertAll(values, value => numOps.FromDouble(value)));
-    }
-
-    /// <summary>
     /// Rows of <paramref name="matrix"/> at <paramref name="rows"/>, in the given order.
     /// </summary>
     internal static Matrix<T> SelectRows<T>(Matrix<T> matrix, int[] rows)
