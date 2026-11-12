@@ -78,6 +78,25 @@ internal static class EvaluationTensorOps<T>
         return AiDotNetEngine.Current.TensorMultiply(a, b);
     }
 
+    /// <summary>
+    /// Clamps to [<paramref name="min"/>, <paramref name="max"/>] as <c>Math.Max(min, Math.Min(max, x))</c> does:
+    /// NaN stays NaN.
+    /// </summary>
+    internal static Tensor<T> ClampPreservingNaN(Tensor<T> values, T min, T max)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorWhere(engine.TensorIsNan(values), values, engine.TensorClamp(values, min, max));
+    }
+
+    /// <summary>log(p / (1 - p)).</summary>
+    internal static Tensor<T> Logit(Tensor<T> p)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorLog(engine.TensorDivide(p, engine.TensorSubtract(engine.TensorOnesLike(p), p)));
+    }
+
     /// <summary>Elementwise OR of two 1/0 masks.</summary>
     internal static Tensor<T> Or(Tensor<T> a, Tensor<T> b)
     {

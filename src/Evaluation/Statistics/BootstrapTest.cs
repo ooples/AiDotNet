@@ -98,6 +98,7 @@ public class BootstrapTest<T> : IStatisticalTest<T>
         // Paired permutation test: under null, signs of differences are random
         // We randomly flip signs to generate null distribution, a block of resamples at a time
         int moreExtreme = 0;
+        var count = NumOps.FromDouble(n);
         int blockSize = BlockSize(n);
         for (int start = 0; start < _numBootstraps; start += blockSize)
         {
@@ -112,7 +113,7 @@ public class BootstrapTest<T> : IStatisticalTest<T>
             var signed = engine.TensorMultiply(
                 new Tensor<int>(signs, new[] { rows, n }).Cast<T>(),
                 engine.TensorBroadcastTo(engine.Reshape(differences, new[] { 1, n }), new[] { rows, n }));
-            var permMeanDiffs = engine.TensorDivideScalar(engine.ReduceSum(signed, new[] { 1 }, false), NumOps.FromDouble(n));
+            var permMeanDiffs = engine.TensorDivideScalar(engine.ReduceSum(signed, new[] { 1 }, false), count);
             moreExtreme += EvaluationTensorOps<T>.Count(
                 EvaluationTensorOps<T>.GreaterOrEqualMask(engine.TensorAbs(permMeanDiffs), observedMagnitude));
         }
