@@ -131,41 +131,36 @@ public partial class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     }
 
     /// <summary>
-    /// Estimates uncertainty for a prediction using the configured method.
+    /// The uncertainty MLP's per-element parameters as an [n, 4] table: element i reads w1, b1, w2, b2 in order
+    /// from the learned parameters, and once they run out every read takes its default (0.01, 0, 0.01, 0).
     /// </summary>
-    /// <param name="features">Feature vector from the model.</param>
-    /// <returns>Uncertainty score (higher = more uncertain).</returns>
-    private double EstimateUncertainty(Vector<T> features)
+    private Tensor<T> UncertaintyParameterTable(int n)
     {
-        if (features.Length == 0)
-            return 0;
+        int needed = 4 * n;
+        int available = Math.Min(_uncertaintyParams.Length, needed);
+        T small = NumOps.FromDouble(0.01);
+        var defaults = ParameterModulation.Cycle(
+            Engine, new Vector<T>(new[] { small, NumOps.Zero, small, NumOps.Zero }), needed);
+        var parameters = available == needed
+            ? _uncertaintyParams.GetSubVector(0, needed)
+            : Vector<T>.Concatenate(
+                available > 0 ? _uncertaintyParams.GetSubVector(0, available) : new Vector<T>(0),
+                defaults.GetSubVector(available, needed - available));
+        return Engine.Reshape(Tensor<T>.FromVector(parameters), new[] { n, 4 });
+    }
 
-        // Process features through the learned uncertainty MLP (_uncertaintyParams).
-        // For each feature element: hidden = ReLU(w1 * val + b1), score = sigmoid(w2 * hidden + b2).
-        // Average all per-element scores for the overall uncertainty estimate.
-        int paramIdx = 0;
-        double totalScore = 0;
-
-        for (int i = 0; i < features.Length; i++)
-        {
-            double val = NumOps.ToDouble(features[i]);
-
-            // Layer 1: ReLU activation
-            double w1 = paramIdx < _uncertaintyParams.Length
-                ? NumOps.ToDouble(_uncertaintyParams[paramIdx++ % _uncertaintyParams.Length]) : 0.01;
-            double b1 = paramIdx < _uncertaintyParams.Length
-                ? NumOps.ToDouble(_uncertaintyParams[paramIdx++ % _uncertaintyParams.Length]) : 0;
-            double hidden = Math.Max(0, w1 * val + b1);
-
-            // Layer 2: sigmoid output -> [0, 1] uncertainty score
-            double w2 = paramIdx < _uncertaintyParams.Length
-                ? NumOps.ToDouble(_uncertaintyParams[paramIdx++ % _uncertaintyParams.Length]) : 0.01;
-            double b2 = paramIdx < _uncertaintyParams.Length
-                ? NumOps.ToDouble(_uncertaintyParams[paramIdx++ % _uncertaintyParams.Length]) : 0;
-            totalScore += 1.0 / (1.0 + Math.Exp(-(w2 * hidden + b2)));
-        }
-
-        return totalScore / Math.Max(features.Length, 1);
+    /// <summary>
+    /// Per-element uncertainty scores sigmoid(w2 * ReLU(w1 * x + b1) + b2), with element i using row i of the
+    /// [n, 4] parameter table.
+    /// </summary>
+    private Vector<T> UncertaintyScores(Vector<T> features, Tensor<T> table)
+    {
+        var hidden = Engine.TensorMax(Tensor<T>.FromVector(Engine.Add(
+            Engine.Multiply(ParameterModulation.Column(Engine, table, 0), features),
+            ParameterModulation.Column(Engine, table, 1))), NumOps.Zero).ToVector();
+        return Engine.Sigmoid(Engine.Add(
+            Engine.Multiply(ParameterModulation.Column(Engine, table, 2), hidden),
+            ParameterModulation.Column(Engine, table, 3)));
     }
 
     /// <inheritdoc/>
@@ -214,17 +209,9 @@ public partial class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 
             if (uncertaintyWeights != null && uncertaintyWeights.Length > 0)
             {
-                double sumAbs = 0;
-                for (int i = 0; i < uncertaintyWeights.Length; i++)
-                    sumAbs += Math.Abs(NumOps.ToDouble(uncertaintyWeights[i]));
-                double meanAbs = sumAbs / uncertaintyWeights.Length;
-                double modFactor = 0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0));
-
-                var currentParams = ParamModel.GetParameters();
-                var modulatedParams = new Vector<T>(currentParams.Length);
-                for (int i = 0; i < currentParams.Length; i++)
-                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
-                ParamModel.SetParameters(modulatedParams);
+                // 0.5 + 0.5 * sigmoid(mean|w| - 1) scales the backbone.
+                ParamModel.SetParameters(ParameterModulation.Apply(
+                    Engine, ParamModel.GetParameters(), ParameterModulation.MeanAbsGate(Engine, uncertaintyWeights)));
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
@@ -247,35 +234,19 @@ public partial class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             return supportFeatures;
 
         int numQuery = queryFeatures.Length;
-        var weights = new Vector<T>(numQuery);
 
-        for (int q = 0; q < numQuery; q++)
-        {
-            // Create a feature vector for this query element
-            var queryVec = new Vector<T>(1);
-            queryVec[0] = queryFeatures[q];
+        // Each query element is scored on its own, so every one uses the first parameter row.
+        var firstRow = UncertaintyParameterTable(1);
+        var uncertainty = UncertaintyScores(
+            queryFeatures, Engine.TensorBroadcastTo(firstRow, new[] { numQuery, 4 }));
 
-            // Estimate uncertainty for this token/feature
-            double uncertainty = EstimateUncertainty(queryVec);
+        // Similarity to the support centroid: q * mean(support)
+        T supportMean = supportFeatures.Length > 0 ? Engine.Mean(supportFeatures) : NumOps.Zero;
+        var sim = Engine.Multiply(queryFeatures, supportMean);
 
-            // Compute similarity to support centroid
-            double sim = 0;
-            for (int s = 0; s < supportFeatures.Length; s++)
-            {
-                sim += NumOps.ToDouble(NumOps.Multiply(queryFeatures[q],
-                    supportFeatures[s % supportFeatures.Length]));
-            }
-            sim /= Math.Max(supportFeatures.Length, 1);
-
-            // Weight = similarity / (uncertainty + eps)
-            // Higher similarity and lower uncertainty = higher weight
-            double reliabilityWeight = 1.0 / (uncertainty + 1e-6);
-            double weightedScore = sim * reliabilityWeight;
-
-            weights[q] = NumOps.FromDouble(weightedScore);
-        }
-
-        return weights;
+        // Weight = similarity / (uncertainty + eps)
+        // Higher similarity and lower uncertainty = higher weight
+        return Engine.Divide(sim, Engine.Add(uncertainty, Engine.Fill(numQuery, NumOps.FromDouble(1e-6))));
     }
 
     /// <inheritdoc/>
