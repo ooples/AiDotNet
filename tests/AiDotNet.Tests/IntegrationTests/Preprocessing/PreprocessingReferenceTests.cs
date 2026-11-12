@@ -206,7 +206,7 @@ public class PreprocessingReferenceTests
         Assert.Equal(new[] { 2 }, clipper.CountOutliersPerFeature(M(new double[,] { { -5 }, { 0 }, { 100 } })));
     }
 
-    // Iglewicz & Hoaglin: the clip bound is exactly where the modified Z-score 0.6745 * (x - median) / MAD
+    // Iglewicz & Hoaglin: the clip bound is exactly where the modified Z-score Phi^-1(3/4) * (x - median) / MAD
     // reaches the threshold, so GetModifiedZScores at the bound returns the threshold.
     [Fact(Timeout = 120000)]
     public async Task MADClipper_BoundsAgreeWithModifiedZScore()
@@ -217,7 +217,7 @@ public class PreprocessingReferenceTests
 
         double upper = clipper.UpperBounds?[0] ?? double.NaN;
         double lower = clipper.LowerBounds?[0] ?? double.NaN;
-        Assert.Equal(3.0 + 3.5 / 0.6745, upper, Tolerance);
+        Assert.Equal(3.0 + 3.5 / 0.6744897501960817, upper, Tolerance);
         var z = clipper.GetModifiedZScores(M(new double[,] { { upper }, { lower } }));
         Assert.Equal(3.5, z[0, 0], Tolerance);
         Assert.Equal(-3.5, z[1, 0], Tolerance);

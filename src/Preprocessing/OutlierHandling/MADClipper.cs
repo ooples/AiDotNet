@@ -50,15 +50,16 @@ namespace AiDotNet.Preprocessing.OutlierHandling;
 public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     /// <summary>
-    /// Constant for converting MAD to standard deviation equivalent (1 / 0.6745).
+    /// Constant for converting MAD to a consistent estimate of the standard deviation for normal data:
+    /// 1 / Phi^-1(3/4) = 1.4826022185..., the factor scipy.stats.median_abs_deviation(scale='normal') uses.
     /// </summary>
     private const double MADScaleFactor = 1.0 / ModifiedZScoreConstant;
 
     /// <summary>
-    /// The 0.6745 constant of Iglewicz and Hoaglin's modified Z-score (the 0.75 quantile of the standard
-    /// normal, so 0.6745 * (x - median) / MAD is comparable to a Z-score).
+    /// The constant of Iglewicz and Hoaglin's modified Z-score: the 0.75 quantile of the standard normal,
+    /// Phi^-1(3/4) (published rounded to 0.6745), so k * (x - median) / MAD is comparable to a Z-score.
     /// </summary>
-    private const double ModifiedZScoreConstant = 0.6745;
+    private const double ModifiedZScoreConstant = 0.6744897501960817;
 
     private readonly double _threshold;
 
@@ -143,8 +144,8 @@ public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _medians = ScalerTensorOps.MaskedParameters(mask, median, NumOps.Zero);
         _mads = ScalerTensorOps.MaskedParameters(mask, mad, NumOps.One);
 
-        // Modified Z-score = 0.6745 * (x - median) / MAD, so |M| <= threshold means
-        // x in median -/+ threshold * MAD / 0.6745. A zero MAD (all values equal) and the pass-through
+        // Modified Z-score = Phi^-1(3/4) * (x - median) / MAD, so |M| <= threshold means
+        // x in median -/+ threshold * MAD / Phi^-1(3/4). A zero MAD (all values equal) and the pass-through
         // columns get the widest bounds (no clipping).
         var spread = Engine.TensorMultiplyScalar(mad, NumOps.FromDouble(_threshold * MADScaleFactor));
         var clips = Engine.TensorMultiply(mask, Engine.TensorGreaterThan(mad, NumOps.Zero));
@@ -212,7 +213,7 @@ public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             return new Matrix<T>(numRows, numColumns);
         }
 
-        // Modified Z-score = 0.6745 * (x - median) / MAD on processed columns with MAD > 0, otherwise 0.
+        // Modified Z-score = Phi^-1(3/4) * (x - median) / MAD on processed columns with MAD > 0, otherwise 0.
         var mad = Tensor<T>.FromVector(_mads);
         var positive = Engine.TensorGreaterThan(mad, NumOps.Zero);
         var scored = Engine.TensorMultiply(
