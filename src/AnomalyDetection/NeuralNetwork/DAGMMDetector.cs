@@ -256,16 +256,10 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
 
     private void InitializeGMM()
     {
-        // Equal mixture weights, means uniform in [-0.05, 0.05) (drawn component by component, feature by
-        // feature), identity covariances
-        var draws = new double[_numMixtures * _zDim];
-        for (int i = 0; i < draws.Length; i++)
-        {
-            draws[i] = _random.NextDouble();
-        }
-
+        // Equal mixture weights, means uniform in [-0.05, 0.05) (one seeded engine draw, seed taken from the
+        // detector's Random), identity covariances
         var engine = Engine;
-        var uniform = Tensor<double>.FromVector(Vector<double>.Wrap(draws), new[] { _numMixtures, _zDim }).Cast<T>();
+        var uniform = engine.TensorUniform<T>(new[] { _numMixtures, _zDim }, 0.0, 1.0, _random.Next());
         _phi = engine.Fill(_numMixtures, NumOps.FromDouble(1.0 / _numMixtures)).AsTensor();
         _mu = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(uniform, NumOps.FromDouble(0.5)), NumOps.FromDouble(0.1));
         _sigma = engine.TensorTile(engine.Reshape(engine.TensorEye<T>(_zDim), new[] { 1, _zDim, _zDim }),
