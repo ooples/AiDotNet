@@ -99,6 +99,8 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         _subsequenceLength = subsequenceLength;
         // -1 = auto (m/4), 0 = no exclusion zone, positive = explicit value
         _exclusionZone = exclusionZone == -1 ? subsequenceLength / 4 : exclusionZone;
+        // No training series yet; Fit replaces this with the checksum of the training values
+        _trainingChecksum = NumOps.Zero;
     }
 
     /// <inheritdoc/>

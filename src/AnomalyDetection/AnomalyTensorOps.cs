@@ -839,6 +839,10 @@ internal static class AnomalyTensorOps
         int q = query.Shape[0];
         int d = trainingColumns.Length;
         T eps = numOps.FromDouble(1e-10);
+
+        // Every training column holds the same training rows, so the reference sample size N is shared
+        int referenceLength = (d > 0 ? trainingColumns[0].Length : 0) + (includeQuery ? q : 0);
+        T count = numOps.FromDouble(referenceLength);
         var lefts = new Tensor<T>[d];
         var rights = new Tensor<T>[d];
         var thirdMoments = new Tensor<T>[d];
@@ -849,7 +853,6 @@ internal static class AnomalyTensorOps
             var reference = includeQuery
                 ? engine.TensorSort(engine.TensorConcatenate(new[] { trainingColumns[j].AsTensor(), column }, 0), 0, false).Item1
                 : trainingColumns[j].AsTensor();
-            T count = numOps.FromDouble(reference.Length);
             var atMost = engine.TensorDivideScalar(engine.TensorSearchSorted(reference, column, true).Cast<T>(), count);
             var below = engine.TensorDivideScalar(engine.TensorSearchSorted(reference, column, false).Cast<T>(), count);
             var atLeast = engine.ScalarMinusTensor(numOps.One, below);
