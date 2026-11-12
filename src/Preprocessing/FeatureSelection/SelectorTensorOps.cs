@@ -320,7 +320,8 @@ internal static class SelectorTensorOps
         int n = x.Shape[0];
         int m = x.Shape[1];
         var yFull = engine.TensorBroadcastTo(y, new[] { n, m });
-        var count = engine.ReduceSum(mask, new[] { 0 }, true);
+        // Row counts in int: 0/1 sums in a narrow T (Half) stop growing at 2048
+        var count = engine.ReduceSum(mask.Cast<int>(), new[] { 0 }, true).Cast<T>();
         var xMean = engine.TensorDivide(engine.ReduceSum(engine.TensorMultiply(mask, x), new[] { 0 }, true), count);
         var yMean = engine.TensorDivide(engine.ReduceSum(engine.TensorMultiply(mask, yFull), new[] { 0 }, true), count);
         var xd = engine.TensorMultiply(mask, engine.TensorSubtract(x, xMean));
@@ -365,7 +366,8 @@ internal static class SelectorTensorOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int k = membership.Shape[1];
-        counts = engine.ReduceSum(membership, new[] { 0 }, false);
+        // Group sizes in int: 0/1 sums in a narrow T (Half) stop growing at 2048
+        counts = engine.ReduceSum(membership.Cast<int>(), new[] { 0 }, false).Cast<T>();
         var sums = engine.TensorMatMul(engine.TensorTranspose(membership), x);
         var divisor = engine.Reshape(engine.TensorMax(counts, ops.One), new[] { k, 1 });
         return engine.TensorDivide(sums, engine.TensorBroadcastTo(divisor, sums.Shape.ToArray()));
@@ -387,23 +389,30 @@ internal static class SelectorTensorOps
         if (p == 0)
             return zeros;
 
+        // Pair counts are summed in int (0/+-1 sums in a narrow T such as Half stop growing at 2048) and only the
+        // totals are converted to T.
         T tolerance = ops.FromDouble(1e-10);
         var ySigns = PairSigns(y, tolerance);
+        var ySignsInt = ySigns.Cast<int>();
         var signSums = new Tensor<T>[p];
         var untied = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
             var xSigns = PairSigns(PreprocessingTensorOps.ColumnVector(x, j), tolerance);
-            signSums[j] = engine.ReduceSum(engine.TensorMultiply(xSigns, ySigns), new[] { 0 }, true);
-            untied[j] = engine.ReduceSum(engine.TensorAbs(xSigns), new[] { 0 }, true);
+            signSums[j] = engine.ReduceSum(
+                engine.TensorMultiply(xSigns.Cast<int>(), ySignsInt), new[] { 0 }, true).Cast<T>();
+            untied[j] = PreprocessingTensorOps.Filled(
+                new[] { 1 }, PreprocessingTensorOps.CountAsScalar<T>(engine.TensorCountNonzero(xSigns)));
         }
 
         // Over ordered pairs: sum(sx * sy) = 2 (C - D) and sum|sx| = 2 (n0 - n1)
         var differences = engine.TensorConcatenate(signSums, 0);
         if (tauB)
         {
-            var denominators = engine.TensorSqrt(engine.TensorMultiplyScalar(
-                engine.TensorConcatenate(untied, 0), engine.TensorSum(engine.TensorAbs(ySigns))));
+            // sqrt(a) * sqrt(b) rather than sqrt(a * b): the product of two pair counts overflows Half
+            T yUntied = ops.Sqrt(PreprocessingTensorOps.CountAsScalar<T>(engine.TensorCountNonzero(ySigns)));
+            var denominators = engine.TensorMultiplyScalar(
+                engine.TensorSqrt(engine.TensorConcatenate(untied, 0)), yUntied);
             var usable = engine.TensorGreaterThan(denominators, ops.Zero);
             return engine.TensorWhere(usable, engine.TensorDivide(differences,
                 engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, ops.One))), zeros);
@@ -553,7 +562,10 @@ internal static class SelectorTensorOps
         int k = classes.Length;
         var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
         var observed = engine.TensorMatMul(engine.TensorTranspose(membership), x);
-        var classShare = engine.TensorDivideScalar(engine.ReduceSum(membership, new[] { 0 }, false), ops.FromDouble(n));
+        // Class sizes counted in int: 0/1 sums in a narrow T (Half) stop growing at 2048
+        var classSizes = PreprocessingTensorOps.CategoryCounts<T>(
+            new Tensor<int>((int[])classIndex.Clone(), new[] { classIndex.Length }), k);
+        var classShare = engine.TensorDivideScalar(classSizes, ops.FromDouble(n));
         var expected = engine.TensorOuter(classShare, engine.ReduceSum(x, new[] { 0 }, false));
         var difference = engine.TensorSubtract(observed, expected);
         var counted = engine.TensorGreaterThan(expected, ops.FromDouble(1e-10));
@@ -573,6 +585,12 @@ internal static class SelectorTensorOps
     /// (itself included). Samples whose class has a single member are ignored. The 1e-10 tie-breaking noise of
     /// scikit-learn is not added, so tie-free data reproduces it exactly.
     /// </summary>
+    /// <remarks>
+    /// One-dimensional neighbour search on sorted columns: the k_i nearest same-class samples lie within k_i places
+    /// of each sample in its class's sorted order, and the samples closer than d_i form a contiguous run of the
+    /// sorted column found by binary search, so memory is O(n p) and time O(n log n) per column. Class sizes and
+    /// neighbour counts are integers; only the final digamma terms are in <typeparamref name="T"/>.
+    /// </remarks>
     public static Tensor<T> MutualInfoClassif<T>(Tensor<T> x, Vector<T> target)
     {
         var engine = AiDotNetEngine.Current;
@@ -584,67 +602,143 @@ internal static class SelectorTensorOps
         if (p == 0 || classIndex.Length == 0)
             return zeros;
 
-        // Keep the samples whose class has more than one member
-        var classCounts = engine.ReduceSum(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k), new[] { 0 }, false);
-        var allClasses = new Tensor<int>(classIndex, new[] { classIndex.Length });
-        var rowClassCount = engine.TensorIndexSelect(classCounts, allClasses, 0);
-        var kept = PreprocessingTensorOps.MaskPositions(engine.TensorGreaterThan(rowClassCount, ops.One));
+        // Keep the samples whose class has more than one member (class sizes counted in int)
+        var allClasses = new Tensor<int>((int[])classIndex.Clone(), new[] { classIndex.Length });
+        var classSizes = engine.TensorBinCount(allClasses, k);
+        var rowClassCount = engine.TensorIndexSelect(classSizes, allClasses, 0);
+        var kept = PreprocessingTensorOps.MaskPositions(engine.TensorGreaterThan(rowClassCount, 1));
         int m = kept.Length;
         if (m == 0)
             return zeros;
 
         var keptIndex = new Tensor<int>(kept, new[] { m });
         var labelCounts = engine.TensorIndexSelect(rowClassCount, keptIndex, 0);
-        var neighbours = engine.TensorMin(engine.TensorSubtractScalar(labelCounts, ops.One), ops.FromDouble(3));
-
-        // Same-class pairs (self excluded) and the per-sample constant part of the estimate
-        var classColumn = engine.TensorIndexSelect(allClasses, keptIndex, 0).Cast<T>();
-        var shape = new[] { m, m };
-        var sameClass = engine.TensorEquals(
-            engine.TensorBroadcastTo(engine.Reshape(classColumn, new[] { m, 1 }), shape),
-            engine.TensorBroadcastTo(engine.Reshape(classColumn, new[] { 1, m }), shape));
-        sameClass = engine.TensorSubtract(sameClass, engine.TensorEye<T>(m));
-        var infinity = PreprocessingTensorOps.Filled(shape, ops.FromDouble(double.PositiveInfinity));
-        var origin = PreprocessingTensorOps.Filled(shape, ops.Zero);
+        var neighbours = engine.TensorMin(engine.TensorSubtractScalar(labelCounts, 1), 3);
         T constant = ops.Subtract(
             ops.Add(engine.TensorSum(engine.TensorDigamma(PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(m)))),
-                engine.TensorMean(engine.TensorDigamma(neighbours))),
-            engine.TensorMean(engine.TensorDigamma(labelCounts)));
+                engine.TensorMean(engine.TensorDigamma(neighbours.Cast<T>()))),
+            engine.TensorMean(engine.TensorDigamma(labelCounts.Cast<T>())));
         var constantTensor = PreprocessingTensorOps.Filled(new[] { 1 }, constant);
-        int columnsNeeded = Math.Min(3, m);
-        var isFirst = engine.TensorEquals(neighbours, ops.One);
-        var isSecond = engine.TensorEquals(neighbours, ops.FromDouble(2));
-        var positiveRadius = PreprocessingTensorOps.Filled(new[] { m }, ops.Zero);
 
+        // Group the kept rows by class; the order inside a class is irrelevant because each block is sorted next
         var keptRows = engine.TensorIndexSelect(x, keptIndex, 0);
+        var byClass = engine.TensorIndexSelect(
+            keptRows, engine.TensorArgsort(engine.TensorIndexSelect(allClasses, keptIndex, 0), 0, false), 0);
+        int[] sizes = classSizes.ToArray();
+        var classValues = new List<Tensor<T>>();
+        var classRadii = new List<Tensor<T>>();
+        int offset = 0;
+        for (int c = 0; c < k; c++)
+        {
+            if (sizes[c] < 2)
+                continue;
+            var sortedClass = engine.TensorSort(engine.TensorNarrow(byClass, 0, offset, sizes[c]), 0, false).Values;
+            offset += sizes[c];
+            classValues.Add(sortedClass);
+            classRadii.Add(KthNeighbourDistance(sortedClass, Math.Min(3, sizes[c] - 1)));
+        }
+
+        // Every sample's own value and radius, in class-sorted order (the estimate is a mean over samples)
+        var centres = engine.TensorConcatenate(classValues.ToArray(), 0);
+        var radii = engine.TensorConcatenate(classRadii.ToArray(), 0);
+        var positive = engine.TensorGreaterThan(radii, ops.Zero);
+        var sortedColumns = engine.TensorSort(keptRows, 0, false).Values;
         var results = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            var column = engine.TensorSliceAxis(keptRows, 1, j);
-            var distances = engine.TensorAbs(engine.TensorSubtract(
-                engine.TensorBroadcastTo(engine.Reshape(column, new[] { m, 1 }), shape),
-                engine.TensorBroadcastTo(engine.Reshape(column, new[] { 1, m }), shape)));
-
-            // Distance to the k_i-th nearest same-class neighbour
-            var nearest = engine.TensorSort(engine.TensorWhere(sameClass, distances, infinity), 1, false).Values;
-            var first = engine.TensorSliceAxis(nearest, 1, 0);
-            var second = columnsNeeded > 1 ? engine.TensorSliceAxis(nearest, 1, 1) : first;
-            var third = columnsNeeded > 2 ? engine.TensorSliceAxis(nearest, 1, 2) : second;
-            var radius = engine.TensorWhere(isFirst, first, engine.TensorWhere(isSecond, second, third));
-
-            // Samples strictly within the radius (at distance 0 when the radius is 0), itself included
-            var radiusColumn = engine.TensorBroadcastTo(engine.Reshape(radius, new[] { m, 1 }), shape);
-            var hasRadius = engine.TensorBroadcastTo(
-                engine.Reshape(engine.TensorGreaterThan(radius, positiveRadius), new[] { m, 1 }), shape);
-            var within = engine.TensorWhere(hasRadius,
-                engine.TensorLessThan(distances, radiusColumn), engine.TensorLessEqual(distances, origin));
-            var counts = engine.ReduceSum(within, new[] { 1 }, false);
-
+            var counts = CountWithinRadius(engine.TensorSliceAxis(sortedColumns, 1, j),
+                engine.TensorSliceAxis(centres, 1, j), engine.TensorSliceAxis(radii, 1, j),
+                engine.TensorSliceAxis(positive, 1, j));
             results[j] = engine.TensorSubtract(constantTensor,
-                engine.Reshape(engine.ReduceMean(engine.TensorDigamma(counts), new[] { 0 }, false), new[] { 1 }));
+                engine.Reshape(engine.ReduceMean(engine.TensorDigamma(counts.Cast<T>()), new[] { 0 }, false), new[] { 1 }));
         }
 
         return engine.TensorMax(engine.TensorConcatenate(results, 0), ops.Zero);
+    }
+
+    /// <summary>
+    /// For an [s, p] tensor sorted along axis 0, the distance from every entry to its <paramref name="k"/>-th
+    /// nearest other entry of the same column (1 &lt;= k &lt; s): the k-th smallest of the gaps to the entries up to
+    /// k places before and after it, which in one dimension hold its k nearest neighbours. Returns [s, p].
+    /// </summary>
+    private static Tensor<T> KthNeighbourDistance<T>(Tensor<T> sorted, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int s = sorted.Shape[0];
+        int p = sorted.Shape[1];
+        var candidates = new Tensor<T>[2 * k];
+        for (int step = 1; step <= k; step++)
+        {
+            // gap[r] = sorted[r + step] - sorted[r]: the forward gap of row r and the backward gap of row r + step
+            var gap = engine.TensorSubtract(
+                engine.TensorNarrow(sorted, 0, step, s - step), engine.TensorNarrow(sorted, 0, 0, s - step));
+            var missing = PreprocessingTensorOps.Filled(new[] { step, p }, ops.FromDouble(double.PositiveInfinity));
+            candidates[2 * step - 2] = engine.TensorConcatenate(new[] { gap, missing }, 0);
+            candidates[2 * step - 1] = engine.TensorConcatenate(new[] { missing, gap }, 0);
+        }
+
+        var nearest = engine.TensorSort(engine.TensorStack(candidates, 2), 2, false).Values;
+        return engine.TensorSliceAxis(nearest, 2, k - 1);
+    }
+
+    /// <summary>
+    /// For every centre (a value of the 1-D ascending <paramref name="sequence"/>), the number of entries of the
+    /// sequence at distance below its radius, or at distance 0 where <paramref name="positive"/> is 0. That set is a
+    /// contiguous run of the sequence containing the centre: it is located by binary search on
+    /// <c>centre -/+ radius</c>, then each end is moved a whole value at a time until the entry just inside it passes
+    /// the distance test and the entry just beyond it fails, so the count matches the distance test exactly even
+    /// where <c>centre + radius</c> rounds.
+    /// </summary>
+    private static Tensor<int> CountWithinRadius<T>(Tensor<T> sequence, Tensor<T> centre, Tensor<T> radius, Tensor<T> positive)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = sequence.Length;
+        var origin = PreprocessingTensorOps.Filled(new[] { centre.Length }, ops.Zero);
+
+        // 1 where the sequence entry at each position passes the distance test of its centre
+        Tensor<int> Inside(Tensor<int> position)
+        {
+            var value = engine.TensorIndexSelect(sequence, engine.TensorClamp(position, 0, n - 1), 0);
+            var distance = engine.TensorAbs(engine.TensorSubtract(value, centre));
+            return engine.TensorWhere(positive, engine.TensorLessThan(distance, radius),
+                engine.TensorLessEqual(distance, origin)).Cast<int>();
+        }
+
+        // The first position (right: one past the last) holding the value found at each position
+        Tensor<int> ValueEdge(Tensor<int> position, bool right) => engine.TensorSearchSorted(sequence,
+            engine.TensorIndexSelect(sequence, engine.TensorClamp(position, 0, n - 1), 0), right);
+
+        // Initial ends, widened to cover every copy of the centre itself
+        var upper = engine.TensorMax(engine.TensorSearchSorted(sequence, engine.TensorAdd(centre, radius), false),
+            engine.TensorSearchSorted(sequence, centre, true));
+        var lower = engine.TensorMin(engine.TensorSearchSorted(sequence, engine.TensorSubtract(centre, radius), true),
+            engine.TensorSearchSorted(sequence, centre, false));
+
+        // Every move lands on a value boundary between the current end and the true one, so this terminates
+        bool moved = true;
+        while (moved)
+        {
+            var grow = engine.TensorMultiply(engine.TensorLessThan(upper, n), Inside(upper));
+            var nextUpper = engine.TensorWhere(grow, ValueEdge(upper, true), upper);
+            var last = engine.TensorSubtractScalar(nextUpper, 1);
+            var shrink = engine.TensorMultiply(engine.TensorGreaterThan(nextUpper, 0), engine.TensorEquals(Inside(last), 0));
+            nextUpper = engine.TensorWhere(shrink, ValueEdge(last, false), nextUpper);
+
+            var below = engine.TensorSubtractScalar(lower, 1);
+            grow = engine.TensorMultiply(engine.TensorGreaterThan(lower, 0), Inside(below));
+            var nextLower = engine.TensorWhere(grow, ValueEdge(below, false), lower);
+            shrink = engine.TensorMultiply(engine.TensorLessThan(nextLower, n), engine.TensorEquals(Inside(nextLower), 0));
+            nextLower = engine.TensorWhere(shrink, ValueEdge(nextLower, true), nextLower);
+
+            moved = engine.TensorCountNonzero(engine.TensorSubtract(nextUpper, upper)) > 0
+                || engine.TensorCountNonzero(engine.TensorSubtract(nextLower, lower)) > 0;
+            upper = nextUpper;
+            lower = nextLower;
+        }
+
+        return engine.TensorSubtract(upper, lower);
     }
 
     /// <summary>
