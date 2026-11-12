@@ -401,6 +401,7 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var transformedRows = new Matrix<T>(numSamples, _dataWidth);
         int numSteps = _options.NumSteps;
         double dt = 1.0 / numSteps;
+        T dtT = NumOps.FromDouble(dt);
 
         for (int i = 0; i < numSamples; i++)
         {
@@ -424,21 +425,15 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                     double t = (double)step / numSteps;
                     var velocity = PredictVelocity(x, t);
 
-                    for (int j = 0; j < _dataWidth; j++)
-                    {
-                        x[j] = NumOps.FromDouble(NumOps.ToDouble(x[j]) + dt * NumOps.ToDouble(velocity[j]));
-                    }
+                    // x <- x + dt * v
+                    x = Engine.Add(x, Engine.Multiply(velocity, dtT));
                 }
             }
 
             // Apply output activations to get valid data
             var xTensor = VectorToTensor(x);
             var activated = ApplyOutputActivations(xTensor);
-
-            for (int j = 0; j < _dataWidth && j < activated.Length; j++)
-            {
-                transformedRows[i, j] = activated[j];
-            }
+            transformedRows.SetRow(i, TensorToVector(activated, _dataWidth));
         }
 
         return _transformer.InverseTransform(transformedRows);
@@ -453,13 +448,8 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var timeEmbed = CreateTimeEmbedding(t);
 
         // Concatenate data and time embedding
-        int totalLen = x.Length + timeEmbed.Length;
-        var input = new Vector<T>(totalLen);
-        for (int i = 0; i < x.Length; i++) input[i] = x[i];
-        for (int i = 0; i < timeEmbed.Length; i++) input[x.Length + i] = timeEmbed[i];
-
         // Forward through velocity field layers (GANDALF pattern: layers handle Forward)
-        var current = VectorToTensor(input);
+        var current = Engine.TensorConcatenate(new[] { VectorToTensor(x), VectorToTensor(timeEmbed) }, 0);
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
@@ -471,19 +461,27 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private Vector<T> CreateTimeEmbedding(double t)
     {
         int dim = _options.TimeEmbeddingDimension;
-        var embedding = new Vector<T>(dim);
         int halfDim = dim / 2;
 
-        for (int i = 0; i < halfDim; i++)
+        // [sin(angle_i), cos(angle_i)] with angle_i = 1000 t * exp(-ln(10000) i / halfDim); t is scaled by
+        // 1000 for better frequency coverage. An odd dim leaves the last entry 0.
+        Tensor<T> current;
+        if (halfDim == 0)
         {
-            double freq = Math.Exp(-Math.Log(10000.0) * i / halfDim);
-            double angle = t * 1000.0 * freq; // Scale t by 1000 for better frequency coverage
-            embedding[i] = NumOps.FromDouble(Math.Sin(angle));
-            if (i + halfDim < dim) embedding[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
+            current = new Tensor<T>([dim]);
+        }
+        else
+        {
+            var frequencies = Engine.TensorExp(Engine.TensorMultiplyScalar(
+                Engine.TensorArange<T>(0, halfDim, 1), NumOps.FromDouble(-Math.Log(10000.0) / halfDim)));
+            var angles = Engine.TensorMultiplyScalar(frequencies, NumOps.FromDouble(t * 1000.0));
+            var parts = dim % 2 == 0
+                ? new[] { Engine.TensorSin(angles), Engine.TensorCos(angles) }
+                : new[] { Engine.TensorSin(angles), Engine.TensorCos(angles), new Tensor<T>([1]) };
+            current = Engine.TensorConcatenate(parts, 0);
         }
 
         // Forward through time projection layers
-        var current = VectorToTensor(embedding);
         foreach (var layer in _timeProjectionLayers)
         {
             current = layer.Forward(current);
@@ -500,48 +498,38 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         for (int row = startRow; row < endRow; row++)
         {
-            // Sample random time t ~ U(0, 1)
-            double t = _random.NextDouble();
-
-            // Get data point x1
-            var x1 = GetRow(transformedData, row);
-
-            // Sample noise x0 ~ N(0, 1)
-            var x0 = CreateStandardNormalVector(_dataWidth);
-
-            // Compute the point on the conditional probability path:
-            //   xt = (1-t)*x0 + t*x1 + sigma*eps      (Lipman et al. 2023, Eq. 22)
-            // Sigma is the width of that path. At sigma = 0 the path is the bare
-            // straight line and the option is inert, which is what it was before.
-            var pathNoise = CreateStandardNormalVector(_dataWidth);
-            double sigma = _options.Sigma;
-            var xt = new Vector<T>(_dataWidth);
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                double v0 = NumOps.ToDouble(x0[j]);
-                double v1 = NumOps.ToDouble(x1[j]);
-                xt[j] = NumOps.FromDouble(
-                    (1.0 - t) * v0 + t * v1 + sigma * NumOps.ToDouble(pathNoise[j]));
-            }
-
-            // Target velocity: v* = x1 - x0 (optimal transport direction)
-            var targetVelocity = new Tensor<T>([_dataWidth]);
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                targetVelocity[j] = NumOps.FromDouble(
-                    NumOps.ToDouble(x1[j]) - NumOps.ToDouble(x0[j]));
-            }
-
-            // Create time embedding and build input tensor
-            var timeEmbed = CreateTimeEmbedding(t);
-            int totalLen = xt.Length + timeEmbed.Length;
-            var input = new Tensor<T>([totalLen]);
-            for (int j = 0; j < xt.Length; j++) input[j] = xt[j];
-            for (int j = 0; j < timeEmbed.Length; j++) input[xt.Length + j] = timeEmbed[j];
-
-            // Use Train() method (GANDALF pattern: forward → loss → backward → update)
-            Train(input, targetVelocity);
+            TrainOnRow(transformedData.GetRow(row));
         }
+    }
+
+    /// <summary>One flow-matching step on data point <paramref name="x1"/>.</summary>
+    private void TrainOnRow(Vector<T> x1)
+    {
+        // Sample random time t ~ U(0, 1)
+        double t = _random.NextDouble();
+        T tT = NumOps.FromDouble(t);
+
+        // Sample noise x0 ~ N(0, 1)
+        var x0 = CreateStandardNormalVector(_dataWidth);
+
+        // Compute the point on the conditional probability path:
+        //   xt = (1-t)*x0 + t*x1 + sigma*eps      (Lipman et al. 2023, Eq. 22)
+        // Sigma is the width of that path. At sigma = 0 the path is the bare
+        // straight line and the option is inert, which is what it was before.
+        var pathNoise = CreateStandardNormalVector(_dataWidth);
+        var xt = Engine.Add(
+            Engine.Add(Engine.Multiply(x0, NumOps.Subtract(NumOps.One, tT)), Engine.Multiply(x1, tT)),
+            Engine.Multiply(pathNoise, NumOps.FromDouble(_options.Sigma)));
+
+        // Target velocity: v* = x1 - x0 (optimal transport direction)
+        var targetVelocity = Tensor<T>.FromVector(Engine.Subtract(x1, x0));
+
+        // Create time embedding and build input tensor
+        var timeEmbed = CreateTimeEmbedding(t);
+        var input = Engine.TensorConcatenate(new[] { VectorToTensor(xt), VectorToTensor(timeEmbed) }, 0);
+
+        // Use Train() method (GANDALF pattern: forward → loss → backward → update)
+        Train(input, targetVelocity);
     }
 
     #endregion
@@ -553,39 +541,24 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // k1 = v(x, t)
         var k1 = PredictVelocity(x, t);
 
+        T halfDt = NumOps.FromDouble(0.5 * dt);
+        T fullDt = NumOps.FromDouble(dt);
+
         // k2 = v(x + dt/2 * k1, t + dt/2)
-        var xMid1 = new Vector<T>(_dataWidth);
-        for (int j = 0; j < _dataWidth; j++)
-        {
-            xMid1[j] = NumOps.FromDouble(NumOps.ToDouble(x[j]) + 0.5 * dt * NumOps.ToDouble(k1[j]));
-        }
-        var k2 = PredictVelocity(xMid1, t + 0.5 * dt);
+        var k2 = PredictVelocity(Engine.Add(x, Engine.Multiply(k1, halfDt)), t + 0.5 * dt);
 
         // k3 = v(x + dt/2 * k2, t + dt/2)
-        var xMid2 = new Vector<T>(_dataWidth);
-        for (int j = 0; j < _dataWidth; j++)
-        {
-            xMid2[j] = NumOps.FromDouble(NumOps.ToDouble(x[j]) + 0.5 * dt * NumOps.ToDouble(k2[j]));
-        }
-        var k3 = PredictVelocity(xMid2, t + 0.5 * dt);
+        var k3 = PredictVelocity(Engine.Add(x, Engine.Multiply(k2, halfDt)), t + 0.5 * dt);
 
         // k4 = v(x + dt * k3, t + dt)
-        var xEnd = new Vector<T>(_dataWidth);
-        for (int j = 0; j < _dataWidth; j++)
-        {
-            xEnd[j] = NumOps.FromDouble(NumOps.ToDouble(x[j]) + dt * NumOps.ToDouble(k3[j]));
-        }
-        var k4 = PredictVelocity(xEnd, t + dt);
+        var k4 = PredictVelocity(Engine.Add(x, Engine.Multiply(k3, fullDt)), t + dt);
 
         // x_new = x + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
-        var result = new Vector<T>(_dataWidth);
-        for (int j = 0; j < _dataWidth; j++)
-        {
-            double step = (NumOps.ToDouble(k1[j]) + 2.0 * NumOps.ToDouble(k2[j])
-                + 2.0 * NumOps.ToDouble(k3[j]) + NumOps.ToDouble(k4[j])) / 6.0;
-            result[j] = NumOps.FromDouble(NumOps.ToDouble(x[j]) + dt * step);
-        }
-        return result;
+        T two = NumOps.FromDouble(2.0);
+        var weighted = Engine.Add(
+            Engine.Add(k1, Engine.Multiply(k2, two)),
+            Engine.Add(Engine.Multiply(k3, two), k4));
+        return Engine.Add(x, Engine.Multiply(weighted, NumOps.FromDouble(dt / 6.0)));
     }
 
     #endregion
@@ -597,6 +570,7 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         if (_transformer is null) return output;
 
         var result = new Tensor<T>(output._shape);
+        var squashed = Engine.TensorTanh(output);
         int idx = 0;
 
         for (int col = 0; col < _columns.Count && idx < output.Length; col++)
@@ -606,7 +580,8 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             {
                 if (idx < output.Length)
                 {
-                    result[idx] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(output[idx])));
+                    // The scalar value goes through tanh.
+                    squashed.Data.Span.Slice(idx, 1).CopyTo(result.Data.Span.Slice(idx, 1));
                     idx++;
                 }
                 int numModes = transform.Width - 1;
@@ -738,32 +713,27 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
     {
         int n = data.Rows;
-        double sum = 0;
-        double min = double.MaxValue;
-        double max = double.MinValue;
-
-        for (int row = 0; row < n; row++)
+        if (n == 0)
         {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            sum += val;
-            if (val < min) min = val;
-            if (val > max) max = val;
+            // An empty column keeps the empty-scan values: no min/max, mean 0/0, unit std.
+            meta.Min = double.MaxValue;
+            meta.Max = double.MinValue;
+            meta.Mean = 0.0 / n;
+            meta.Std = 1.0;
+            return;
         }
 
-        double mean = sum / n;
-        double sumSqDiff = 0;
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            double diff = val - mean;
-            sumSqDiff += diff * diff;
-        }
+        var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
+        T meanT = Engine.TensorMean(column);
+        double mean = NumOps.ToDouble(meanT);
 
-        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
+        // Sample standard deviation (n - 1), floored at 1e-10.
+        T sumSqDiff = Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, meanT));
+        double std = n > 1 ? Math.Sqrt(NumOps.ToDouble(sumSqDiff) / (n - 1)) : 1.0;
         if (std < 1e-10) std = 1e-10;
 
-        meta.Min = min;
-        meta.Max = max;
+        meta.Min = NumOps.ToDouble(Engine.TensorMinValue(column));
+        meta.Max = NumOps.ToDouble(Engine.TensorMaxValue(column));
         meta.Mean = mean;
         meta.Std = std;
     }
@@ -794,26 +764,20 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #region Helpers
 
-    private static Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var v = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++) v[j] = matrix[row, j];
-        return v;
-    }
+    private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
-
+    /// <summary>The first min(length, t.Length) values of <paramref name="t"/>, zero-padded to <paramref name="length"/>.</summary>
     private static Vector<T> TensorToVector(Tensor<T> t, int length)
     {
-        var v = new Vector<T>(length);
         int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
+        if (copyLen == 0)
+            return new Vector<T>(length);
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.Reshape(t, new[] { t.Length });
+        var head = copyLen == t.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { copyLen });
+        if (copyLen < length)
+            head = engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { length - copyLen }) }, 0);
+        return head.ToVector();
     }
 
     #endregion

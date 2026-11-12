@@ -337,10 +337,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
 
             // Initialize membrane potentials to zero
             var potentials = new Vector<T>(neuronCount);
-            for (int i = 0; i < neuronCount; i++)
-            {
-                potentials[i] = NumOps.Zero;
-            }
+            potentials.Fill(NumOps.Zero);
             _membranePotentials.Add(potentials);
 
             // Initialize refractory counters to zero
@@ -357,10 +354,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
             // spikes fire, enabling the network to differentiate inputs.
             var threshold = NumOps.FromDouble(0.3);
             var thresholds = new Vector<T>(neuronCount);
-            for (int i = 0; i < neuronCount; i++)
-            {
-                thresholds[i] = threshold;
-            }
+            thresholds.Fill(threshold);
             _firingThresholds.Add(thresholds);
         }
     }
@@ -373,19 +367,13 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     private Vector<T> AggregateSpikeTrainToOutput(List<Vector<T>> spikeTrain)
     {
         int outputSize = spikeTrain[0].Length;
-        var output = new Vector<T>(outputSize);
+        if (outputSize == 0)
+            return new Vector<T>(0);
 
-        for (int i = 0; i < outputSize; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int t = 0; t < spikeTrain.Count; t++)
-            {
-                sum = NumOps.Add(sum, spikeTrain[t][i]);
-            }
-            output[i] = NumOps.Divide(sum, NumOps.FromDouble(spikeTrain.Count));
-        }
-
-        return output;
+        // Mean firing over time: sum the [time, neurons] stack over time, divided by the step count.
+        var stacked = Engine.TensorStack(spikeTrain.Select(v => Tensor<T>.FromVector(v)).ToArray(), 0);
+        var summed = Engine.ReduceSum(stacked, new[] { 0 }, false);
+        return Engine.TensorDivideScalar(summed, NumOps.FromDouble(spikeTrain.Count)).ToVector();
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -489,7 +477,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 ResetState();
             }
         }
-        var accumSpikes = new T[spikingOutputSize];
+        var accumSpikes = new Tensor<T>(new[] { spikingOutputSize });
 
         for (int step = 0; step < _simulationSteps; step++)
         {
@@ -498,17 +486,18 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
             for (int i = 0; i < lastSpikingIdx; i++)
                 current = Layers[i].Forward(current);
 
-            var vec = current.ToVector();
-            for (int i = 0; i < Math.Min(spikingOutputSize, vec.Length); i++)
-                accumSpikes[i] = NumOps.Add(accumSpikes[i], vec[i]);
+            // The first min(spikingOutputSize, length) outputs, zero-padded, join the running sum.
+            int kept = Math.Min(spikingOutputSize, current.Length);
+            if (kept == 0)
+                continue;
+            var flat = Engine.Reshape(current, new[] { current.Length });
+            var leading = kept == current.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { kept });
+            if (kept < spikingOutputSize)
+                leading = Engine.TensorConcatenate(new[] { leading, new Tensor<T>(new[] { spikingOutputSize - kept }) }, 0);
+            accumSpikes = Engine.TensorAdd(accumSpikes, leading);
         }
 
-        // Average spike rate
-        for (int i = 0; i < spikingOutputSize; i++)
-            accumSpikes[i] = NumOps.Divide(accumSpikes[i], NumOps.FromDouble(_simulationSteps));
-
-        // Pass spike rates through non-spiking readout
-        var spikeRateTensor = Tensor<T>.FromVector(new Vector<T>(accumSpikes));
+        var spikeRateTensor = Engine.TensorDivideScalar(accumSpikes, NumOps.FromDouble(_simulationSteps));
         if (readoutIdx >= 0)
         {
             for (int i = readoutIdx; i < Layers.Count; i++)
@@ -669,38 +658,36 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 }
                 else
                 {
+                    // Only the first min(output, neurons) potentials receive input; the rest just decay.
+                    int ml = Math.Min(lOutTensor.Length, mDecayed.Length);
                     mTensor = mDecayed;
-                    int ml = Math.Min(lOutTensor.Length, mTensor.Length);
-                    for (int m = 0; m < ml; m++)
-                        mTensor[m] = NumOps.Add(mTensor[m], lOutTensor[m]);
-                }
-                for (int m = 0; m < membranePotentials.Length; m++)
-                    membranePotentials[m] = mTensor[m];
-
-                // Snapshot membrane voltages at the moment of the
-                // threshold check — this is the u_t the surrogate
-                // gradient operates on. Snapshot via Clone so the
-                // post-spike reset below doesn't mutate stored values.
-                Vector<T> membraneSnapshot = new Vector<T>(membranePotentials.Length);
-                for (int m = 0; m < membranePotentials.Length; m++)
-                    membraneSnapshot[m] = membranePotentials[m];
-
-                // Generate spikes (branching per-neuron)
-                Vector<T> spikes = new Vector<T>(membranePotentials.Length);
-                for (int n = 0; n < membranePotentials.Length; n++)
-                {
-                    if (refractoryCounters[n] <= 0 && NumOps.GreaterThanOrEquals(membranePotentials[n], firingThresholds[n]))
+                    if (ml > 0)
                     {
-                        spikes[n] = NumOps.One;
-                        membranePotentials[n] = NumOps.Zero;
-                        refractoryCounters[n] = _refractoryPeriod;
-                    }
-                    else
-                    {
-                        spikes[n] = NumOps.Zero;
-                        if (refractoryCounters[n] > 0) refractoryCounters[n]--;
+                        var drive = Engine.TensorSlice(lOutTensor, new[] { 0 }, new[] { ml });
+                        if (ml < mDecayed.Length)
+                            drive = Engine.TensorConcatenate(new[] { drive, new Tensor<T>(new[] { mDecayed.Length - ml }) }, 0);
+                        mTensor = Engine.TensorAdd(mDecayed, drive);
                     }
                 }
+
+                // Snapshot of the integrated potential before the threshold check (u_t for the surrogate).
+                Vector<T> membraneSnapshot = mTensor.ToVector();
+
+                // A neuron fires when it is out of its refractory period and its potential reaches the threshold;
+                // firing resets the potential to 0 and starts the refractory count, otherwise the count ticks down.
+                var counters = new Tensor<int>((int[])refractoryCounters.Clone(), new[] { refractoryCounters.Length });
+                var ready = Engine.TensorLessThan(counters, 1).Cast<T>();
+                var reached = Engine.TensorGreaterEqual(mTensor, Tensor<T>.FromVector(firingThresholds));
+                var fires = Engine.TensorMultiply(ready, reached);
+                var firesMask = fires.Cast<int>();
+                var tickedDown = Engine.TensorWhere(
+                    Engine.TensorGreaterThan(counters, 0), Engine.TensorSubtractScalar(counters, 1), counters);
+                var nextCounters = Engine.TensorWhere(
+                    firesMask, Engine.TensorFullLike(counters, _refractoryPeriod), tickedDown);
+                nextCounters.AsSpan().CopyTo(refractoryCounters);
+                Engine.TensorWhere(fires, Engine.TensorZerosLike(mTensor), mTensor)
+                    .AsSpan().CopyTo(membranePotentials.AsWritableSpan());
+                Vector<T> spikes = fires.ToVector();
 
                 // Store spike + membrane snapshots in history
                 layerSpikeHistory[layerIndex].Add(spikes);
@@ -725,11 +712,6 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // exactly to OutputShape (lazy layers, generic test bases). Compare only
         // the overlapping prefix so we don't index past either vector.
         int errorLength = Math.Min(expectedOutputVector.Length, outputLayerActivity.Length);
-        Vector<T> outputError = new Vector<T>(errorLength);
-        for (int i = 0; i < errorLength; i++)
-        {
-            outputError[i] = NumOps.Subtract(expectedOutputVector[i], outputLayerActivity[i]);
-        }
 
         // Calculate and store the loss. ValidateVectorLengths in the base class
         // requires identical lengths; truncate to the overlapping prefix to
@@ -741,6 +723,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
             ? expectedOutputVector
             : expectedOutputVector.GetSubVector(0, errorLength);
         LastLoss = LossFunction.CalculateLoss(lossPredicted, lossExpected);
+        Vector<T> outputError = Engine.Subtract(lossExpected, lossPredicted);
 
         // Backpropagate error and apply STDP learning (output layer uses
         // surrogate-gradient Adam with the recorded membrane history;
@@ -906,204 +889,116 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 // total drift after the loss has settled.
                 double lrD = _options.ReadoutLearningRate
                               / Math.Sqrt(1.0 + _adamStep);
-                int T = layerMembraneHistory[layerIndex].Count;
-                bool isSpikingReadout = layerIndex < readoutBoundary;
-
-                // Per-neuron gradient-flow coefficient — how much a unit
-                // change in the membrane drive (W·s_pre) translates to a
-                // unit change in the post-rate. For SPIKING readouts this
-                // is the time-summed Zenke 2018 surrogate σ'(u_t − θ);
-                // for NON-spiking readouts (the default Eliasmith 2004
-                // NEF / Neftci 2019 architecture where the last
-                // DenseLayer outputs continuous values directly) the
-                // mapping is just the identity, i.e. coefficient = T
-                // (sum of a constant 1 over T timesteps) — which makes
-                // the gradient reduce to the plain rate-based delta
-                // rule (target − actual)·pre_rate that's optimal for a
-                // linear readout.
-                double[] surrogateSums = new double[postSize];
-                if (isSpikingReadout)
-                {
-                    var firingThresholds = _firingThresholds[layerIndex];
-                    const double SurrogateAlpha = 10.0;
-                    for (int post = 0; post < postSize; post++)
-                    {
-                        double threshold = Convert.ToDouble(firingThresholds[post]);
-                        double sum = 0;
-                        for (int t = 0; t < T; t++)
-                        {
-                            double u = Convert.ToDouble(layerMembraneHistory[layerIndex][t][post]);
-                            double a = 1.0 + SurrogateAlpha * Math.Abs(u - threshold);
-                            sum += 1.0 / (a * a);
-                        }
-                        surrogateSums[post] = sum;
-                    }
-                }
-                else
-                {
-                    // Linear non-spiking readout — gradient flows
-                    // through the identity at every timestep.
-                    for (int post = 0; post < postSize; post++) surrogateSums[post] = T;
-                }
-
-                for (int post = 0; post < postSize; post++)
-                {
-                    if (post >= outputError.Length) continue;
-                    double errD = Convert.ToDouble(outputError[post]);
-                    // dL/d(actual_rate) = -outputError (factor of 2 absorbed in lr).
-                    // ∂(actual_rate)/∂(weight_post,pre) via surrogate-
-                    // gradient BPTT through the membrane = (1/T) · Σₜ
-                    // σ'(u_t − θ_post) · s_pre,t. The Σₜ σ' part is
-                    // shared across pre — multiply by per-pre
-                    // pre-spike-count to get the full per-(post,pre)
-                    // contribution (approximation: assumes uniform
-                    // distribution of σ'(u) across pre-spike times,
-                    // which is exact when σ' is constant — for non-
-                    // constant σ' this is a first-order moment
-                    // approximation that converges in practice).
-                    for (int pre = 0; pre < preSize; pre++)
-                    {
-                        double preCount = 0;
-                        for (int t = 0; t < T; t++)
-                        {
-                            preCount += Convert.ToDouble(preSynapticSpikes[t][pre]);
-                        }
-                        // grad = dL/dW = (-outputError) · (1/T) · σ_sum_post · (preCount/T)
-                        // Rearranged: grad = -outputError · σ_sum_post · preCount / (T·T)
-                        double grad = -errD * surrogateSums[post] * preCount / (T * (double)T);
-
-                        int paramIndex = post * preSize + pre;
-                        if (paramIndex >= parameterUpdates.Length) continue;
-
-                        double m = Convert.ToDouble(mVec[paramIndex]);
-                        double v = Convert.ToDouble(vVec[paramIndex]);
-                        m = AdamBeta1 * m + (1 - AdamBeta1) * grad;
-                        v = AdamBeta2 * v + (1 - AdamBeta2) * grad * grad;
-                        mVec[paramIndex] = NumOps.FromDouble(m);
-                        vVec[paramIndex] = NumOps.FromDouble(v);
-
-                        double mHat = m / biasCorrection1;
-                        double vHat = v / biasCorrection2;
-                        // Adam descent step: W -= lr · m̂ / (√v̂ + ε)
-                        double step = -lrD * mHat / (Math.Sqrt(vHat) + AdamEpsilon);
-                        parameterUpdates[paramIndex] = NumOps.FromDouble(step);
-                    }
-                }
+                ApplyReadoutAdamStep(
+                    layerIndex, readoutBoundary, postSize, preSize, preSynapticSpikes, layerMembraneHistory,
+                    outputError, parameterUpdates, mVec, vVec, lrD, biasCorrection1, biasCorrection2);
             }
             else
             {
-                // ─── Hidden layers: no per-call STDP weight update in
-                // the supervised-training Train() path. Pure pair-based
-                // STDP is an UNSUPERVISED Hebbian rule (Gerstner &
-                // Kistler 2002) — it drifts the hidden representation
-                // in directions decoupled from the supervised MSE loss
-                // and was preventing the output-layer surrogate-
-                // gradient updates from settling the loss to a stable
-                // minimum (Train_ShouldReduceLoss / MoreData
-                // failures). Per Zenke 2018 §3.2 / Neftci 2019 review,
-                // proper supervised SNN training propagates the
-                // surrogate gradient THROUGH the hidden layers via
-                // BPTT — but that requires full per-timestep adjoint
-                // recurrence which is a larger refactor. Until that
-                // lands, leaving hidden weights frozen during
-                // supervised training matches the "fixed random
-                // projection + trained readout" pattern of Eliasmith &
-                // Anderson 2004 / NEF reservoir computing — a
-                // paper-canonical SNN configuration where only the
-                // readout adapts.
                 continue;
             }
 
-            Vector<T> updatedParameters = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                if (i < parameterUpdates.Length)
-                {
-                    updatedParameters[i] = NumOps.Add(parameters[i], parameterUpdates[i]);
-                }
-                else
-                {
-                    updatedParameters[i] = parameters[i];
-                }
-            }
+            // parameterUpdates has the parameters' length, so every parameter gets its (possibly zero) update.
+            Vector<T> updatedParameters = Engine.Add(parameters, parameterUpdates);
             layer.SetParameters(updatedParameters);
         }
     }
 
     /// <summary>
-    /// Calculates weight change based on STDP rule for a specific connection.
+    /// One surrogate-gradient Adam step for the readout layer: fills the leading entries of
+    /// <paramref name="parameterUpdates"/> and advances the Adam moments in place.
     /// </summary>
-    /// <param name="preSynapticSpikes">Spike history of pre-synaptic neuron.</param>
-    /// <param name="postSynapticSpikes">Spike history of post-synaptic neuron.</param>
-    /// <param name="preIndex">Index of pre-synaptic neuron.</param>
-    /// <param name="postIndex">Index of post-synaptic neuron.</param>
-    /// <param name="stdpWindow">Time window for STDP effect.</param>
-    /// <returns>The calculated weight change based on STDP.</returns>
-    private T CalculateSTDPWeightChange(
+    private void ApplyReadoutAdamStep(
+        int layerIndex,
+        int readoutBoundary,
+        int postSize,
+        int preSize,
         List<Vector<T>> preSynapticSpikes,
-        List<Vector<T>> postSynapticSpikes,
-        int preIndex,
-        int postIndex,
-        int stdpWindow)
+        List<List<Vector<T>>> layerMembraneHistory,
+        Vector<T> outputError,
+        Vector<T> parameterUpdates,
+        Vector<T> mVec,
+        Vector<T> vVec,
+        double lrD,
+        double biasCorrection1,
+        double biasCorrection2)
     {
-        // STDP Parameters
-        T stdpAmplitude = NumOps.FromDouble(0.1); // Maximum weight change
-        T stdpTimeFactor = NumOps.FromDouble(0.2); // How quickly effect decays with time
+        int steps = layerMembraneHistory[layerIndex].Count;
+        bool isSpikingReadout = layerIndex < readoutBoundary;
 
-        T totalChange = NumOps.Zero;
-
-        // Loop through all time steps
-        for (int t = 0; t < preSynapticSpikes.Count; t++)
+        // Per-neuron gradient-flow coefficient — how much a unit
+        // change in the membrane drive (W·s_pre) translates to a
+        // unit change in the post-rate. For SPIKING readouts this
+        // is the time-summed Zenke 2018 surrogate σ'(u_t − θ);
+        // for NON-spiking readouts (the default Eliasmith 2004
+        // NEF / Neftci 2019 architecture where the last
+        // DenseLayer outputs continuous values directly) the
+        // mapping is just the identity, i.e. coefficient = T
+        // (sum of a constant 1 over T timesteps) — which makes
+        // the gradient reduce to the plain rate-based delta
+        // rule (target − actual)·pre_rate that's optimal for a
+        // linear readout.
+        // Surrogate-gradient sum per output neuron over the T steps: for a spiking readout,
+        // sum_t 1 / (1 + alpha |u_t - threshold|)^2 on the recorded potentials; otherwise T.
+        T stepCount = NumOps.FromDouble(steps);
+        Tensor<T> surrogateSums;
+        if (isSpikingReadout)
         {
-            // Skip if no spike in either neuron at this time
-            if (NumOps.Equals(preSynapticSpikes[t][preIndex], NumOps.Zero) &&
-                NumOps.Equals(postSynapticSpikes[t][postIndex], NumOps.Zero))
-            {
-                continue;
-            }
-
-            // If post-synaptic neuron spikes at this time
-            if (NumOps.Equals(postSynapticSpikes[t][postIndex], NumOps.One))
-            {
-                // Look for pre-synaptic spikes in the window before this spike
-                for (int dt = 1; dt <= stdpWindow && t - dt >= 0; dt++)
-                {
-                    if (NumOps.Equals(preSynapticSpikes[t - dt][preIndex], NumOps.One))
-                    {
-                        // Pre-synaptic neuron fired before post-synaptic neuron
-                        // This should strengthen the connection (positive change)
-                        T timeFactor = NumOps.Exp(NumOps.Multiply(
-                            NumOps.Negate(NumOps.FromDouble(dt)),
-                            stdpTimeFactor));
-
-                        T change = NumOps.Multiply(stdpAmplitude, timeFactor);
-                        totalChange = NumOps.Add(totalChange, change);
-                    }
-                }
-            }
-
-            // If pre-synaptic neuron spikes at this time
-            if (NumOps.Equals(preSynapticSpikes[t][preIndex], NumOps.One))
-            {
-                // Look for post-synaptic spikes in the window before this spike
-                for (int dt = 1; dt <= stdpWindow && t - dt >= 0; dt++)
-                {
-                    if (NumOps.Equals(postSynapticSpikes[t - dt][postIndex], NumOps.One))
-                    {
-                        // Post-synaptic neuron fired before pre-synaptic neuron
-                        // This should weaken the connection (negative change)
-                        T timeFactor = NumOps.Exp(NumOps.Multiply(
-                            NumOps.Negate(NumOps.FromDouble(dt)),
-                            stdpTimeFactor));
-
-                        T change = NumOps.Multiply(NumOps.Negate(stdpAmplitude), timeFactor);
-                        totalChange = NumOps.Add(totalChange, change);
-                    }
-                }
-            }
+            T surrogateAlpha = NumOps.FromDouble(10.0);
+            var potentials = Engine.TensorStack(
+                layerMembraneHistory[layerIndex].Select(v => Tensor<T>.FromVector(v.GetSubVector(0, postSize))).ToArray(), 0);
+            var threshold = Engine.Reshape(
+                Tensor<T>.FromVector(_firingThresholds[layerIndex].GetSubVector(0, postSize)), new[] { 1, postSize });
+            var distance = Engine.TensorAbs(Engine.TensorSubtract(potentials, Engine.TensorBroadcastTo(threshold, potentials.Shape.ToArray())));
+            var a = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(distance, surrogateAlpha), NumOps.One);
+            surrogateSums = Engine.ReduceSum(Engine.TensorReciprocal(Engine.TensorMultiply(a, a)), new[] { 0 }, false);
+        }
+        else
+        {
+            surrogateSums = Engine.TensorFullLike(new Tensor<T>(new[] { postSize }), stepCount);
         }
 
-        return totalChange;
+        // grad[post, pre] = -err[post] * surrogate[post] * preCount[pre] / T^2 for the posts that have an
+        // error entry, flattened post-major into the leading parameters (the rest stay untouched).
+        int errorPosts = Math.Min(postSize, outputError.Length);
+        int updated = Math.Min(errorPosts * preSize, parameterUpdates.Length);
+        if (updated > 0)
+        {
+            var preCount = Engine.ReduceSum(
+                Engine.TensorStack(preSynapticSpikes.Select(v => Tensor<T>.FromVector(v.GetSubVector(0, preSize))).ToArray(), 0),
+                new[] { 0 }, false);
+            var postFactor = Engine.TensorMultiply(
+                Tensor<T>.FromVector(outputError.GetSubVector(0, errorPosts)),
+                Engine.TensorSlice(surrogateSums, new[] { 0 }, new[] { errorPosts }));
+            var gradMatrix = Engine.TensorMatMul(
+                Engine.Reshape(postFactor, new[] { errorPosts, 1 }), Engine.Reshape(preCount, new[] { 1, preSize }));
+            var grad = Engine.TensorSlice(
+                Engine.TensorDivideScalar(
+                    Engine.TensorNegate(Engine.Reshape(gradMatrix, new[] { errorPosts * preSize })),
+                    NumOps.Multiply(stepCount, stepCount)),
+                new[] { 0 }, new[] { updated });
+
+            // Adam on the updated entries.
+            T beta1 = NumOps.FromDouble(AdamBeta1);
+            T beta2 = NumOps.FromDouble(AdamBeta2);
+            var mHead = Tensor<T>.FromVector(mVec.GetSubVector(0, updated));
+            var vHead = Tensor<T>.FromVector(vVec.GetSubVector(0, updated));
+            var mNext = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(mHead, beta1),
+                Engine.TensorMultiplyScalar(grad, NumOps.FromDouble(1 - AdamBeta1)));
+            var vNext = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(vHead, beta2),
+                Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), NumOps.FromDouble(1 - AdamBeta2)));
+            mNext.AsSpan().CopyTo(mVec.AsWritableSpan());
+            vNext.AsSpan().CopyTo(vVec.AsWritableSpan());
+
+            var mHat = Engine.TensorDivideScalar(mNext, NumOps.FromDouble(biasCorrection1));
+            var vHat = Engine.TensorDivideScalar(vNext, NumOps.FromDouble(biasCorrection2));
+            var step = Engine.TensorMultiplyScalar(
+                Engine.TensorDivide(mHat, Engine.TensorAddScalar(Engine.TensorSqrt(vHat), NumOps.FromDouble(AdamEpsilon))),
+                NumOps.FromDouble(-lrD));
+            step.AsSpan().CopyTo(parameterUpdates.AsWritableSpan());
+        }
     }
 
     /// <summary>
@@ -1133,19 +1028,13 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     public override void ResetState()
     {
         // Reset SNN-level state
-        for (int layer = 0; layer < _membranePotentials.Count; layer++)
+        foreach (var potentials in _membranePotentials)
         {
-            for (int i = 0; i < _membranePotentials[layer].Length; i++)
-            {
-                _membranePotentials[layer][i] = NumOps.Zero;
-            }
+            potentials.Fill(NumOps.Zero);
         }
-        for (int layer = 0; layer < _refractoryCounters.Count; layer++)
+        foreach (var counters in _refractoryCounters)
         {
-            for (int i = 0; i < _refractoryCounters[layer].Length; i++)
-            {
-                _refractoryCounters[layer][i] = 0;
-            }
+            Array.Clear(counters, 0, counters.Length);
         }
 
         // Reset SpikingLayer internal states (membrane, spikes, refractory)
@@ -1415,10 +1304,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
         }
 
         // Set thresholds
-        for (int i = 0; i < thresholds.Length; i++)
-        {
-            _firingThresholds[layerIndex][i] = thresholds[i];
-        }
+        thresholds.AsSpan().CopyTo(_firingThresholds[layerIndex].AsWritableSpan());
     }
 
     /// <summary>

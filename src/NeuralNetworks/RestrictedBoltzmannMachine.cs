@@ -74,14 +74,9 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         int length = Math.Min(input.Length, reconstruction.Length);
         if (length == 0) return NumOps.Zero;
 
-        T squaredError = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            T residual = NumOps.Subtract(reconstruction[i], input[i]);
-            squaredError = NumOps.Add(squaredError, NumOps.Multiply(residual, residual));
-        }
-
-        return NumOps.Divide(squaredError, NumOps.FromDouble(length));
+        // Mean squared residual over the first `length` elements (row-major) of both tensors.
+        var residual = Engine.TensorSubtract(Leading(reconstruction, length), Leading(input, length));
+        return Engine.TensorMean(Engine.TensorMultiply(residual, residual));
     }
 
     /// <summary>
@@ -503,9 +498,10 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         // Standard U(-0.05, 0.05) is too narrow for 128+ units — sigmoid
         // output becomes indistinguishable for different input magnitudes.
         double scale = Math.Sqrt(2.0 / (VisibleSize + HiddenSize));
+        _visibleBiases.Fill(NumOps.Zero);
+        _hiddenBiases.Fill(NumOps.Zero);
         for (int i = 0; i < VisibleSize; i++)
         {
-            _visibleBiases[i] = NumOps.Zero;
             for (int j = 0; j < HiddenSize; j++)
             {
                 // Box-Muller for Gaussian
@@ -514,11 +510,6 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
                 double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
                 _weights[i, j] = NumOps.FromDouble(gaussian * scale);
             }
-        }
-
-        for (int j = 0; j < HiddenSize; j++)
-        {
-            _hiddenBiases[j] = NumOps.Zero;
         }
     }
 
@@ -557,11 +548,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         if (visibleLayer.Rank == 1)
         {
             // 1D tensor: reshape to column matrix [visibleSize, 1]
-            visibleMatrix = new Matrix<T>(visibleLayer.Shape[0], 1);
-            for (int i = 0; i < visibleLayer.Shape[0]; i++)
-            {
-                visibleMatrix[i, 0] = visibleLayer[i];
-            }
+            visibleMatrix = visibleLayer.Reshape([visibleLayer.Shape[0], 1]).ToMatrix();
         }
         else if (visibleLayer.Rank == 2)
         {
@@ -642,15 +629,8 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         if (input.Shape.Length != 2 || input.Shape[1] != VisibleSize)
         {
             // Reshape input if needed
-            var reshapedInput = new Tensor<T>(new[] { 1, VisibleSize });
-            Vector<T> inputVector = input.ToVector();
-
-            for (int i = 0; i < Math.Min(inputVector.Length, VisibleSize); i++)
-            {
-                reshapedInput[0, i] = inputVector[i];
-            }
-
-            input = reshapedInput;
+            // The first min(length, VisibleSize) values, zero-padded to one [1, VisibleSize] row.
+            input = Engine.Reshape(LeadingPadded(input, VisibleSize), new[] { 1, VisibleSize });
         }
 
 
@@ -735,11 +715,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         if (hiddenLayer.Rank == 1)
         {
             // 1D tensor: reshape to column matrix [hiddenSize, 1]
-            hiddenMatrix = new Matrix<T>(hiddenLayer.Shape[0], 1);
-            for (int i = 0; i < hiddenLayer.Shape[0]; i++)
-            {
-                hiddenMatrix[i, 0] = hiddenLayer[i];
-            }
+            hiddenMatrix = hiddenLayer.Reshape([hiddenLayer.Shape[0], 1]).ToMatrix();
         }
         else if (hiddenLayer.Rank == 2)
         {
@@ -823,11 +799,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         if (input.Shape.Length == 1)
         {
             // Single sample, reshape to [1, visibleSize]
-            batchInput = new Tensor<T>([1, VisibleSize]);
-            for (int i = 0; i < Math.Min(input.Shape[0], VisibleSize); i++)
-            {
-                batchInput[0, i] = input[i];
-            }
+            batchInput = Engine.Reshape(LeadingPadded(input, VisibleSize), [1, VisibleSize]);
         }
         else
         {
@@ -846,11 +818,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         for (int b = 0; b < batchSize; b++)
         {
             // Extract single sample
-            var visibleSample = new Tensor<T>([1, VisibleSize]);
-            for (int i = 0; i < VisibleSize; i++)
-            {
-                visibleSample[0, i] = batchInput[b, i];
-            }
+            var visibleSample = Engine.TensorSlice(batchInput, [b, 0], [1, VisibleSize]);
 
             // Positive phase
             var hiddenActivations = GetHiddenLayerActivation(visibleSample);
@@ -888,31 +856,14 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
             // Accumulate updates
             weightUpdates = weightUpdates.Add(sampleWeightUpdates);
 
-            // Helper to access tensor value regardless of orientation
-            T GetVal(Tensor<T> t, int idx)
-            {
-                if (t.Rank == 1) return t[idx];
-                if (t.Shape[0] == 1) return t[0, idx];
-                return t[idx, 0];
-            }
-
+            // [1, n], [n, 1] and [n] layouts all hold element i at flat index i.
             // Update visible bias (visible data - visible reconstruction)
-            for (int i = 0; i < VisibleSize; i++)
-            {
-                visibleBiasUpdates[i] = NumOps.Add(
-                    visibleBiasUpdates[i],
-                    NumOps.Subtract(GetVal(visibleSample, i), GetVal(visibleReconstruction, i))
-                );
-            }
+            visibleBiasUpdates = Engine.Add(visibleBiasUpdates, Engine.TensorSubtract(
+                Leading(visibleSample, VisibleSize), Leading(visibleReconstruction, VisibleSize)).ToVector());
 
             // Update hidden bias (hidden activations - hidden reactivations)
-            for (int j = 0; j < HiddenSize; j++)
-            {
-                hiddenBiasUpdates[j] = NumOps.Add(
-                    hiddenBiasUpdates[j],
-                    NumOps.Subtract(GetVal(hiddenActivations, j), GetVal(hiddenReactivations, j))
-                );
-            }
+            hiddenBiasUpdates = Engine.Add(hiddenBiasUpdates, Engine.TensorSubtract(
+                Leading(hiddenActivations, HiddenSize), Leading(hiddenReactivations, HiddenSize)).ToVector());
         }
 
         // Apply updates, normalized by batch size
@@ -922,51 +873,29 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         // Contrastive divergence computes an ascent direction (positive phase minus negative
         // phase). Publish the equivalent loss gradient in the exact parameter order so the update
         // below is W -= learningRate * gradient and callers observe the signal actually applied.
-        var publishedGradients = new Vector<T>(
-            HiddenSize * VisibleSize + VisibleSize + HiddenSize);
-        int gradientOffset = 0;
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
+        // Layout: weights row-major [HiddenSize, VisibleSize], then visible biases, then hidden biases.
+        var weightUpdateTensor = Tensor<T>.FromMatrix(weightUpdates);
+        var visibleUpdateTensor = Tensor<T>.FromVector(visibleBiasUpdates);
+        var hiddenUpdateTensor = Tensor<T>.FromVector(hiddenBiasUpdates);
+        var flatUpdates = Engine.TensorConcatenate(
+            new[]
             {
-                publishedGradients[gradientOffset++] = NumOps.Negate(
-                    NumOps.Multiply(weightUpdates[i, j], batchNormalization));
-            }
-        }
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            publishedGradients[gradientOffset++] = NumOps.Negate(
-                NumOps.Multiply(visibleBiasUpdates[i], batchNormalization));
-        }
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            publishedGradients[gradientOffset++] = NumOps.Negate(
-                NumOps.Multiply(hiddenBiasUpdates[i], batchNormalization));
-        }
+                Engine.Reshape(weightUpdateTensor, new[] { HiddenSize * VisibleSize }),
+                visibleUpdateTensor,
+                hiddenUpdateTensor
+            },
+            0);
+        var publishedGradients = Engine.TensorNegate(Engine.TensorMultiplyScalar(flatUpdates, batchNormalization)).ToVector();
         PublishFlatParameterGradients(publishedGradients);
 
-        // Update weights
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                T update = NumOps.Multiply(weightUpdates[i, j], learningFactor);
-                _weights[i, j] = NumOps.Add(_weights[i, j], update);
-            }
-        }
+        // Update weights, written back into the same tensor
+        Engine.TensorAdd(_weights, Engine.Reshape(
+                Engine.TensorMultiplyScalar(weightUpdateTensor, learningFactor), _weights.Shape.ToArray()))
+            .AsSpan().CopyTo(_weights.AsWritableSpan());
 
         // Update biases
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            T update = NumOps.Multiply(visibleBiasUpdates[i], learningFactor);
-            _visibleBiases[i] = NumOps.Add(_visibleBiases[i], update);
-        }
-
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            T update = NumOps.Multiply(hiddenBiasUpdates[i], learningFactor);
-            _hiddenBiases[i] = NumOps.Add(_hiddenBiases[i], update);
-        }
+        _visibleBiases = Engine.Add(_visibleBiases, Engine.Multiply(visibleBiasUpdates, learningFactor));
+        _hiddenBiases = Engine.Add(_hiddenBiases, Engine.Multiply(hiddenBiasUpdates, learningFactor));
 
         // Calculate and set the reconstruction error as the loss
         LastLoss = ComputeReconstructionError(batchInput);
@@ -982,26 +911,10 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
     /// <returns>Matrix of associations between visible and hidden units.</returns>
     private Matrix<T> ComputeAssociations(Tensor<T> visible, Tensor<T> hidden)
     {
-        var associations = new Matrix<T>(HiddenSize, VisibleSize);
-
-        // Handle both [1, size] and [size, 1] tensor orientations
-        T GetValue(Tensor<T> t, int idx)
-        {
-            if (t.Rank == 1) return t[idx];
-            if (t.Shape[0] == 1) return t[0, idx]; // [1, size]
-            return t[idx, 0]; // [size, 1]
-        }
-
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            T h = GetValue(hidden, i);
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                associations[i, j] = NumOps.Multiply(h, GetValue(visible, j));
-            }
-        }
-
-        return associations;
+        // associations[i, j] = h_i * v_j; [1, size], [size, 1] and [size] all hold element i at flat index i.
+        var hiddenColumn = Engine.Reshape(Leading(hidden, HiddenSize), new[] { HiddenSize, 1 });
+        var visibleRow = Engine.Reshape(Leading(visible, VisibleSize), new[] { 1, VisibleSize });
+        return Engine.TensorMatMul(hiddenColumn, visibleRow).ToMatrix();
     }
 
     /// <summary>
@@ -1059,10 +972,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
             }
 
             // Store the final sample
-            for (int i = 0; i < VisibleSize; i++)
-            {
-                samples[s, i] = visibleState[0, i];
-            }
+            samples.SetSlice(s * VisibleSize, Leading(visibleState, VisibleSize).ToVector());
         }
 
         return samples;
@@ -1074,11 +984,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         Tensor<T> reshapedInput;
         if (input.Shape.Length == 1)
         {
-            reshapedInput = new Tensor<T>(new[] { 1, input.Shape[0] });
-            for (int i = 0; i < input.Shape[0]; i++)
-            {
-                reshapedInput[0, i] = input[i];
-            }
+            reshapedInput = Engine.Reshape(input, new[] { 1, input.Shape[0] });
         }
         else
         {
@@ -1086,16 +992,12 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         }
 
         int batchSize = reshapedInput.Shape[0];
-        T totalError = NumOps.Zero;
+        var sampleErrors = new T[batchSize];
 
         for (int b = 0; b < batchSize; b++)
         {
             // Extract single sample
-            var visibleSample = new Tensor<T>(new[] { 1, VisibleSize });
-            for (int i = 0; i < VisibleSize; i++)
-            {
-                visibleSample[0, i] = reshapedInput[b, i];
-            }
+            var visibleSample = Engine.TensorSlice(reshapedInput, new[] { b, 0 }, new[] { 1, VisibleSize });
 
             // Forward pass to hidden layer
             var hiddenActivations = GetHiddenLayerActivation(visibleSample);
@@ -1103,31 +1005,38 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
             // Reconstruct visible layer
             var visibleReconstruction = GetVisibleLayerActivation(hiddenActivations);
 
-            // Helper for tensor access regardless of orientation
-            T GetReconVal(int idx)
-            {
-                if (visibleReconstruction.Rank == 1) return visibleReconstruction[idx];
-                if (visibleReconstruction.Shape[0] == 1) return visibleReconstruction[0, idx];
-                return visibleReconstruction[idx, 0];
-            }
-
-            // Compute mean squared error
-            T sampleError = NumOps.Zero;
-            for (int i = 0; i < VisibleSize; i++)
-            {
-                T diff = NumOps.Subtract(visibleSample[0, i], GetReconVal(i));
-                sampleError = NumOps.Add(sampleError, NumOps.Multiply(diff, diff));
-            }
-
-            // Average error over features
-            sampleError = NumOps.Divide(sampleError, NumOps.FromDouble(VisibleSize));
-
-            // Add to total error
-            totalError = NumOps.Add(totalError, sampleError);
+            // Mean squared error over features ([1, n], [n, 1] and [n] hold element i at flat index i)
+            var diff = Engine.TensorSubtract(
+                Leading(visibleSample, VisibleSize), Leading(visibleReconstruction, VisibleSize));
+            sampleErrors[b] = Engine.TensorMean(Engine.TensorMultiply(diff, diff));
         }
 
-        // Average error over batch
-        return NumOps.Divide(totalError, NumOps.FromDouble(batchSize));
+        // Average error over batch (0/0 for an empty batch, as before)
+        if (batchSize == 0)
+            return NumOps.Divide(NumOps.Zero, NumOps.FromDouble(batchSize));
+        return Engine.TensorMean(new Tensor<T>(sampleErrors, new[] { batchSize }));
+    }
+
+    /// <summary>The first <paramref name="count"/> elements of <paramref name="tensor"/> in row-major order, as [count].</summary>
+    private Tensor<T> Leading(Tensor<T> tensor, int count)
+    {
+        var flat = Engine.Reshape(tensor, new[] { tensor.Length });
+        return count == tensor.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { count });
+    }
+
+    /// <summary>
+    /// The first min(length, <paramref name="count"/>) elements of <paramref name="tensor"/> in row-major order,
+    /// zero-padded to [count].
+    /// </summary>
+    private Tensor<T> LeadingPadded(Tensor<T> tensor, int count)
+    {
+        int kept = Math.Min(tensor.Length, count);
+        if (kept == 0)
+            return new Tensor<T>(new[] { count });
+        var leading = Leading(tensor, kept);
+        return kept == count
+            ? leading
+            : Engine.TensorConcatenate(new[] { leading, new Tensor<T>(new[] { count - kept }) }, 0);
     }
 
     /// <summary>

@@ -1164,32 +1164,27 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
     {
         int n = data.Rows;
-        double sum = 0;
-        double min = double.MaxValue;
-        double max = double.MinValue;
-
-        for (int row = 0; row < n; row++)
+        if (n == 0)
         {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            sum += val;
-            if (val < min) min = val;
-            if (val > max) max = val;
+            // An empty column keeps the empty-scan values: no min/max, mean 0/0, unit std.
+            meta.Min = double.MaxValue;
+            meta.Max = double.MinValue;
+            meta.Mean = 0.0 / n;
+            meta.Std = 1.0;
+            return;
         }
 
-        double mean = sum / n;
-        double sumSqDiff = 0;
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            double diff = val - mean;
-            sumSqDiff += diff * diff;
-        }
+        var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
+        T meanT = Engine.TensorMean(column);
+        double mean = NumOps.ToDouble(meanT);
 
-        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
+        // Sample standard deviation (n - 1), floored at 1e-10.
+        T sumSqDiff = Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, meanT));
+        double std = n > 1 ? Math.Sqrt(NumOps.ToDouble(sumSqDiff) / (n - 1)) : 1.0;
         if (std < 1e-10) std = 1e-10;
 
-        meta.Min = min;
-        meta.Max = max;
+        meta.Min = NumOps.ToDouble(Engine.TensorMinValue(column));
+        meta.Max = NumOps.ToDouble(Engine.TensorMaxValue(column));
         meta.Mean = mean;
         meta.Std = std;
     }
@@ -1227,19 +1222,20 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         return v;
     }
 
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
+    private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
+    /// <summary>The first min(length, t.Length) values of <paramref name="t"/>, zero-padded to <paramref name="length"/>.</summary>
     private static Vector<T> TensorToVector(Tensor<T> t, int length)
     {
-        var v = new Vector<T>(length);
         int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
+        if (copyLen == 0)
+            return new Vector<T>(length);
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.Reshape(t, new[] { t.Length });
+        var head = copyLen == t.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { copyLen });
+        if (copyLen < length)
+            head = engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { length - copyLen }) }, 0);
+        return head.ToVector();
     }
 
     #endregion

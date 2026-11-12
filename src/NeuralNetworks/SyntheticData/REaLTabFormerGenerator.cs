@@ -449,35 +449,36 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     private Vector<T> ComputeEmbeddings(int[] tokens, int length)
     {
         int d = _embDim;
-        var embeddings = new Vector<T>(length * d);
+        if (length == 0 || d == 0)
+            return new Vector<T>(length * d);
 
-        for (int pos = 0; pos < length; pos++)
-        {
-            int token = pos < tokens.Length ? tokens[pos] : 0;
-            int vocabSize = _vocabSizes[pos];
+        // Token embedding: the token index scaled to [-1, 1] (0 for a single-token vocabulary), times 0.1.
+        var tokenIds = new int[length];
+        Array.Copy(tokens, tokenIds, Math.Min(tokens.Length, length));
+        var vocab = new Tensor<int>(_vocabSizes.GetRange(0, length).ToArray(), new[] { length, 1 }).Cast<T>();
+        var token = new Tensor<int>(tokenIds, new[] { length, 1 }).Cast<T>();
+        var spread = Engine.TensorSubtractScalar(vocab, NumOps.One);
+        var scaled = Engine.TensorSubtractScalar(
+            Engine.TensorDivide(Engine.TensorMultiplyScalar(token, NumOps.FromDouble(2.0)), spread), NumOps.One);
+        var tokenScale = Engine.TensorWhere(
+            Engine.TensorGreaterThan(vocab, NumOps.One), scaled, Engine.TensorZerosLike(scaled));
 
-            // Token embedding: scale token index to [-1, 1] and project
-            double tokenScale = vocabSize > 1 ? (2.0 * token / (vocabSize - 1) - 1.0) : 0;
+        // Position encoding: sin(pos / 10000^(j/d)) on even j, cos(pos / 10000^((j-1)/d)) on odd j.
+        var pairIndex = new Tensor<int>(
+            Enumerable.Range(0, d).Select(j => j - (j % 2)).ToArray(), new[] { 1, d }).Cast<T>();
+        var inverseScale = Engine.TensorExp(
+            Engine.TensorMultiplyScalar(pairIndex, NumOps.FromDouble(-Math.Log(10000.0) / d)));
+        var angles = Engine.TensorMatMul(
+            Engine.Reshape(Engine.TensorArange<T>(0, length, 1), new[] { length, 1 }), inverseScale);       // [length, d]
+        var isEven = Engine.TensorBroadcastTo(new Tensor<int>(
+            Enumerable.Range(0, d).Select(j => j % 2 == 0 ? 1 : 0).ToArray(), new[] { 1, d }).Cast<T>(), new[] { length, d });
+        var positionEncoding = Engine.TensorWhere(isEven, Engine.TensorSin(angles), Engine.TensorCos(angles));
 
-            for (int j = 0; j < d; j++)
-            {
-                double posEnc;
-                if (j % 2 == 0)
-                {
-                    posEnc = Math.Sin(pos / Math.Pow(10000.0, (double)j / d));
-                }
-                else
-                {
-                    posEnc = Math.Cos(pos / Math.Pow(10000.0, (double)(j - 1) / d));
-                }
-
-                // Combine token and position
-                double val = tokenScale * 0.1 + posEnc;
-                embeddings[pos * d + j] = NumOps.FromDouble(val);
-            }
-        }
-
-        return embeddings;
+        // Combine token and position
+        var combined = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(Engine.TensorMultiplyScalar(tokenScale, NumOps.FromDouble(0.1)), new[] { length, d }),
+            positionEncoding);
+        return Engine.Reshape(combined, new[] { length * d }).ToVector();
     }
 
     private Vector<T> TransformerForward(Vector<T> embeddings, int seqLen)
@@ -500,122 +501,64 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     private Vector<T> CausalSelfAttention(Vector<T> input, int seqLen, int layerIdx)
     {
         int d = _embDim;
-        var output = new Vector<T>(seqLen * d);
+        if (seqLen == 0 || d == 0)
+            return new Vector<T>(seqLen * d);
 
-        for (int pos = 0; pos < seqLen; pos++)
-        {
-            var queryInput = ExtractPosition(input, pos, d);
-            var queryTensor = _attentionQueryLayers[layerIdx].Forward(VectorToTensor(queryInput));
-            var query = TensorToVector(queryTensor, d);
+        // Every position's query/key/value row in one batch: [seqLen, d] (positions past the input read as 0).
+        var x = Engine.Reshape(Tensor<T>.FromVector(TensorToVector(Tensor<T>.FromVector(input), seqLen * d)), new[] { seqLen, d });
+        var query = Engine.Reshape(_attentionQueryLayers[layerIdx].Forward(x), new[] { seqLen, d });
+        var key = Engine.Reshape(_attentionKeyLayers[layerIdx].Forward(x), new[] { seqLen, d });
+        var value = Engine.Reshape(_attentionValueLayers[layerIdx].Forward(x), new[] { seqLen, d });
 
-            // Compute attention weights over positions [0, pos]
-            var attnWeights = new double[pos + 1];
-            double maxWeight = double.MinValue;
+        // Causal attention: position pos attends over keys [0, pos] with softmax(q . k / sqrt(d)).
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(query, Engine.TensorTranspose(key)), NumOps.FromDouble(1.0 / Math.Sqrt(d)));
+        var future = Engine.TensorGreaterThan(
+            Engine.TensorSubtract(
+                Engine.Reshape(Engine.TensorArange<int>(0, seqLen, 1), new[] { 1, seqLen }),
+                Engine.Reshape(Engine.TensorArange<int>(0, seqLen, 1), new[] { seqLen, 1 })),
+            0).Cast<T>();
+        scores = Engine.TensorWhere(
+            future, Engine.TensorFullLike(scores, NumOps.FromDouble(double.NegativeInfinity)), scores);
+        var weights = Engine.TensorSoftmax(scores, 1);
 
-            for (int k = 0; k <= pos; k++)
-            {
-                var keyInput = ExtractPosition(input, k, d);
-                var keyTensor = _attentionKeyLayers[layerIdx].Forward(VectorToTensor(keyInput));
-                var key = TensorToVector(keyTensor, d);
-
-                double dot = 0;
-                for (int j = 0; j < d; j++)
-                {
-                    dot += NumOps.ToDouble(query[j]) * NumOps.ToDouble(key[j]);
-                }
-                attnWeights[k] = dot / Math.Sqrt(d);
-                if (attnWeights[k] > maxWeight) maxWeight = attnWeights[k];
-            }
-
-            // Softmax
-            double sumExp = 0;
-            for (int k = 0; k <= pos; k++)
-            {
-                attnWeights[k] = Math.Exp(attnWeights[k] - maxWeight);
-                sumExp += attnWeights[k];
-            }
-            for (int k = 0; k <= pos; k++)
-            {
-                attnWeights[k] /= Math.Max(sumExp, 1e-10);
-            }
-
-            // Weighted sum of values
-            var attnOutput = new double[d];
-            for (int k = 0; k <= pos; k++)
-            {
-                var valInput = ExtractPosition(input, k, d);
-                var valTensor = _attentionValueLayers[layerIdx].Forward(VectorToTensor(valInput));
-                var val = TensorToVector(valTensor, d);
-
-                for (int j = 0; j < d; j++)
-                {
-                    attnOutput[j] += attnWeights[k] * NumOps.ToDouble(val[j]);
-                }
-            }
-
-            // Output projection + residual
-            var attnVec = new Vector<T>(d);
-            for (int j = 0; j < d; j++) attnVec[j] = NumOps.FromDouble(attnOutput[j]);
-            var projTensor = _attentionOutputLayers[layerIdx].Forward(VectorToTensor(attnVec));
-            var proj = TensorToVector(projTensor, d);
-
-            for (int j = 0; j < d; j++)
-            {
-                double residual = NumOps.ToDouble(input[pos * d + j]);
-                output[pos * d + j] = NumOps.FromDouble(NumOps.ToDouble(proj[j]) + residual);
-            }
-        }
-
-        return output;
+        // Weighted sum of values, output projection + residual
+        var attended = Engine.TensorMatMul(weights, value);
+        var projected = Engine.Reshape(_attentionOutputLayers[layerIdx].Forward(attended), new[] { seqLen, d });
+        return Engine.Reshape(Engine.TensorAdd(projected, x), new[] { seqLen * d }).ToVector();
     }
 
     private Vector<T> FeedForwardPerPosition(Vector<T> input, int seqLen, int layerIdx)
     {
         int d = _embDim;
-        var output = new Vector<T>(seqLen * d);
+        if (seqLen == 0 || d == 0)
+            return new Vector<T>(seqLen * d);
 
-        for (int pos = 0; pos < seqLen; pos++)
+        // Every position through the feed-forward block in one batch: [seqLen, d].
+        var x = Engine.Reshape(Tensor<T>.FromVector(TensorToVector(Tensor<T>.FromVector(input), seqLen * d)), new[] { seqLen, d });
+        var hidden = _ffnLayer1s[layerIdx].Forward(x);
+        var ffnOut = _ffnLayer2s[layerIdx].Forward(hidden);
+        if (layerIdx < _ffnDropouts.Count)
         {
-            var posInput = ExtractPosition(input, pos, d);
-            var hidden = _ffnLayer1s[layerIdx].Forward(VectorToTensor(posInput));
-            var ffnOut = _ffnLayer2s[layerIdx].Forward(hidden);
-            if (layerIdx < _ffnDropouts.Count)
-            {
-                _ffnDropouts[layerIdx].SetTrainingMode(IsTrainingMode);
-                ffnOut = _ffnDropouts[layerIdx].Forward(ffnOut);
-            }
-            var ffnVec = TensorToVector(ffnOut, d);
-
-            // Residual connection
-            for (int j = 0; j < d; j++)
-            {
-                output[pos * d + j] = NumOps.FromDouble(
-                    NumOps.ToDouble(ffnVec[j]) + NumOps.ToDouble(input[pos * d + j]));
-            }
+            _ffnDropouts[layerIdx].SetTrainingMode(IsTrainingMode);
+            ffnOut = _ffnDropouts[layerIdx].Forward(ffnOut);
         }
 
-        return output;
+        // Residual connection
+        var output = Engine.TensorAdd(Engine.Reshape(ffnOut, new[] { seqLen, d }), x);
+        return Engine.Reshape(output, new[] { seqLen * d }).ToVector();
     }
 
-    private Vector<T> ExtractColumnHidden(Vector<T> hiddenStates, int col)
-    {
-        int d = _embDim;
-        var result = new Vector<T>(d);
-        for (int j = 0; j < d && (col * d + j) < hiddenStates.Length; j++)
-        {
-            result[j] = hiddenStates[col * d + j];
-        }
-        return result;
-    }
+    private Vector<T> ExtractColumnHidden(Vector<T> hiddenStates, int col) => ExtractPosition(hiddenStates, col, _embDim);
 
     private static Vector<T> ExtractPosition(Vector<T> sequence, int pos, int dim)
     {
-        var result = new Vector<T>(dim);
-        for (int j = 0; j < dim && (pos * dim + j) < sequence.Length; j++)
-        {
-            result[j] = sequence[pos * dim + j];
-        }
-        return result;
+        // Elements [pos * dim, pos * dim + dim) of the sequence; positions past its end read as 0.
+        int start = Math.Min(pos * dim, sequence.Length);
+        int available = Math.Min(dim, sequence.Length - start);
+        if (available <= 0)
+            return new Vector<T>(dim);
+        return TensorToVector(Tensor<T>.FromVector(sequence.GetSubVector(start, available)), dim);
     }
 
     #endregion
@@ -624,28 +567,17 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
 
     private Tensor<T> ComputeCrossEntropyGrad(Tensor<T> logits, int targetToken)
     {
-        var grad = new Tensor<T>(logits._shape);
-        double maxVal = double.MinValue;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal) maxVal = v;
-        }
-
-        double sumExp = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            sumExp += Math.Exp(NumOps.ToDouble(logits[i]) - maxVal);
-        }
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double softmax = Math.Exp(NumOps.ToDouble(logits[i]) - maxVal) / Math.Max(sumExp, 1e-10);
-            double target = i == targetToken ? 1.0 : 0.0;
-            grad[i] = NumOps.FromDouble(softmax - target);
-        }
-
-        return grad;
+        // softmax(logits) - onehot(target) over the flattened logits.
+        int length = logits.Length;
+        if (length == 0)
+            return new Tensor<T>(logits._shape);
+        var probabilities = Engine.TensorSoftmax(Engine.Reshape(logits, new[] { length }), 0);
+        var grad = targetToken >= 0 && targetToken < length
+            ? Engine.TensorSubtract(
+                probabilities,
+                Engine.Reshape(Engine.TensorOneHot<T>(new Tensor<int>(new[] { targetToken }, new[] { 1 }), length), new[] { length }))
+            : probabilities;
+        return Engine.Reshape(grad, logits._shape);
     }
 
     private void UpdateTransformerParameters(T lr)
@@ -667,33 +599,16 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
         int vocabSize = logits.Length;
         if (vocabSize == 0) return 0;
 
-        // Apply temperature
-        double maxVal = double.MinValue;
-        for (int i = 0; i < vocabSize; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]) / Math.Max(temperature, 1e-10);
-            if (v > maxVal) maxVal = v;
-        }
-
-        // Compute probabilities
-        var probs = new double[vocabSize];
-        double sumExp = 0;
-        for (int i = 0; i < vocabSize; i++)
-        {
-            probs[i] = Math.Exp(NumOps.ToDouble(logits[i]) / Math.Max(temperature, 1e-10) - maxVal);
-            sumExp += probs[i];
-        }
-
-        // Normalize and sample
-        double u = _random.NextDouble() * sumExp;
-        double cumulative = 0;
-        for (int i = 0; i < vocabSize; i++)
-        {
-            cumulative += probs[i];
-            if (cumulative >= u) return i;
-        }
-
-        return vocabSize - 1;
+        // Temperature-scaled, max-shifted exponentials; the token is the first whose running sum reaches
+        // u * total for one uniform draw u.
+        var scaled = Engine.TensorDivideScalar(
+            Engine.Reshape(logits, new[] { vocabSize }), NumOps.FromDouble(Math.Max(temperature, 1e-10)));
+        var weights = Engine.TensorExp(Engine.TensorSubtractScalar(scaled, Engine.TensorMaxValue(scaled)));
+        var cumulative = Engine.TensorCumSum(weights, 0);
+        T total = cumulative.GetFlatIndexValue(vocabSize - 1);
+        T u = NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), total);
+        int index = Engine.TensorSearchSorted(cumulative, new Tensor<T>(new[] { u }, new[] { 1 }))[0];
+        return Math.Min(index, vocabSize - 1);
     }
 
     #endregion
@@ -762,43 +677,32 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     /// </summary>
     private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
     {
-        var result = new Tensor<T>(grad._shape);
-        double normSq = 0;
-
-        for (int i = 0; i < grad.Length; i++)
+        // Non-finite entries become 0; the result is rescaled to maxNorm when its norm exceeds it.
+        var result = Engine.TensorWhere(Engine.TensorIsFinite(grad), grad, Engine.TensorZerosLike(grad));
+        T norm = NumOps.Sqrt(NumOps.Add(Engine.TensorSumOfSquares(result), NumOps.FromDouble(1e-12)));
+        T limit = NumOps.FromDouble(maxNorm);
+        if (NumOps.GreaterThan(norm, limit))
         {
-            double val = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val)) val = 0;
-            result[i] = NumOps.FromDouble(val);
-            normSq += val * val;
-        }
-
-        double norm = Math.Sqrt(normSq + 1e-12);
-        if (norm > maxNorm)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.FromDouble(NumOps.ToDouble(result[i]) * scale);
-            }
+            result = Engine.TensorMultiplyScalar(result, NumOps.Divide(limit, norm));
         }
 
         return result;
     }
 
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
+    private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
+    /// <summary>The first min(length, t.Length) values of <paramref name="t"/>, zero-padded to <paramref name="length"/>.</summary>
     private static Vector<T> TensorToVector(Tensor<T> t, int length)
     {
-        var v = new Vector<T>(length);
         int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
+        if (copyLen == 0)
+            return new Vector<T>(length);
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.Reshape(t, new[] { t.Length });
+        var head = copyLen == t.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { copyLen });
+        if (copyLen < length)
+            head = engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { length - copyLen }) }, 0);
+        return head.ToVector();
     }
 
     #endregion

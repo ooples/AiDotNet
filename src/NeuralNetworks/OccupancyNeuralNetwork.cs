@@ -323,14 +323,7 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
                 else if (input.Rank == 2 && input.Shape[0] == _historyWindowSize)
                 {
                     // Input is a sequence of feature vectors, reshape to [1, timeSteps, features]
-                    var reshapedInput = new Tensor<T>([1, _historyWindowSize, input.Shape[1]]);
-                    for (int t = 0; t < _historyWindowSize; t++)
-                    {
-                        for (int f = 0; f < input.Shape[1]; f++)
-                        {
-                            reshapedInput[0, t, f] = input[t, f];
-                        }
-                    }
+                    var reshapedInput = Engine.Reshape(input, [1, _historyWindowSize, input.Shape[1]]);
                     return ForwardTemporal(reshapedInput);
                 }
                 else
@@ -351,7 +344,6 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
                     // If input is multi-dimensional but network is not temporal,
                     // assume batch processing and process each vector separately
                     int batchSize = input.Shape[0];
-                    int features = input.Rank > 1 ? input.Shape[1] : input.Shape[0];
 
                     // Create output tensor for batch results
                     var output = TensorAllocator.Rent<T>([batchSize, Architecture.OutputSize]);
@@ -360,20 +352,13 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
                     for (int b = 0; b < batchSize; b++)
                     {
                         // Extract single vector from batch
-                        var singleInput = new Vector<T>(features);
-                        for (int f = 0; f < features; f++)
-                        {
-                            singleInput[f] = input[b, f];
-                        }
+                        var singleInput = input.GetRow(b);
 
                         // Process through layers
                         var result = ProcessSingleInput(singleInput);
 
-                        // Store in output tensor
-                        for (int o = 0; o < result.Length; o++)
-                        {
-                            output[b, o] = result[o];
-                        }
+                        // Store in output tensor (row b starts at flat index b * OutputSize)
+                        output.SetSlice(b * Architecture.OutputSize, result);
                     }
 
                     return output;
@@ -468,16 +453,7 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
         }
 
         // Calculate error (expected - predicted)
-        var error = new Tensor<T>(predicted._shape);
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            var predictedValue = predicted.GetFlatIndexValue(i);
-            var expectedValue = expected.GetFlatIndexValue(i);
-            error.SetFlatIndex(i, NumOps.Subtract(expectedValue, predictedValue));
-        }
-
-        return error;
+        return Engine.TensorSubtract(expected, predicted);
     }
 
 
