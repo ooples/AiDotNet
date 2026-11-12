@@ -242,74 +242,10 @@ public class ImageFolderDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         // ImageHelper returns [1, C, H, W] in CHW format
         Tensor<T> imageTensor = ImageHelper<T>.LoadImage(filePath, _options.NormalizePixels);
 
-        int srcChannels = imageTensor.Shape[1];
-        int srcHeight = imageTensor.Shape[2];
-        int srcWidth = imageTensor.Shape[3];
-        var srcSpan = imageTensor.AsSpan();
-
-        int totalPixels = targetHeight * targetWidth * targetChannels;
-        var pixels = new T[totalPixels];
-
-        // Bilinear resize from source to target dimensions, converting CHW -> HWC
-        for (int y = 0; y < targetHeight; y++)
-        {
-            for (int x = 0; x < targetWidth; x++)
-            {
-                // Map target coordinates to source coordinates
-                double srcY = (double)y * (srcHeight - 1) / Math.Max(1, targetHeight - 1);
-                double srcX = (double)x * (srcWidth - 1) / Math.Max(1, targetWidth - 1);
-
-                int y0 = (int)Math.Floor(srcY);
-                int y1 = Math.Min(y0 + 1, srcHeight - 1);
-                int x0 = (int)Math.Floor(srcX);
-                int x1 = Math.Min(x0 + 1, srcWidth - 1);
-
-                double dy = srcY - y0;
-                double dx = srcX - x0;
-
-                for (int c = 0; c < targetChannels; c++)
-                {
-                    double value;
-                    if (c < srcChannels)
-                    {
-                        // Bilinear interpolation from CHW source
-                        int chOffset = c * srcHeight * srcWidth;
-                        double v00 = NumOps.ToDouble(srcSpan[chOffset + y0 * srcWidth + x0]);
-                        double v01 = NumOps.ToDouble(srcSpan[chOffset + y0 * srcWidth + x1]);
-                        double v10 = NumOps.ToDouble(srcSpan[chOffset + y1 * srcWidth + x0]);
-                        double v11 = NumOps.ToDouble(srcSpan[chOffset + y1 * srcWidth + x1]);
-
-                        value = v00 * (1 - dx) * (1 - dy) +
-                                v01 * dx * (1 - dy) +
-                                v10 * (1 - dx) * dy +
-                                v11 * dx * dy;
-                    }
-                    else if (srcChannels == 1)
-                    {
-                        // Grayscale to RGB: replicate the single channel
-                        int chOffset = 0;
-                        double v00 = NumOps.ToDouble(srcSpan[chOffset + y0 * srcWidth + x0]);
-                        double v01 = NumOps.ToDouble(srcSpan[chOffset + y0 * srcWidth + x1]);
-                        double v10 = NumOps.ToDouble(srcSpan[chOffset + y1 * srcWidth + x0]);
-                        double v11 = NumOps.ToDouble(srcSpan[chOffset + y1 * srcWidth + x1]);
-
-                        value = v00 * (1 - dx) * (1 - dy) +
-                                v01 * dx * (1 - dy) +
-                                v10 * (1 - dx) * dy +
-                                v11 * dx * dy;
-                    }
-                    else
-                    {
-                        value = 0;
-                    }
-
-                    // Store in HWC format: [y, x, c]
-                    pixels[(y * targetWidth + x) * targetChannels + c] = NumOps.FromDouble(value);
-                }
-            }
-        }
-
-        return pixels;
+        // Bilinear resize (align_corners) from source to target dimensions, converting CHW -> HWC.
+        // A grayscale source is replicated across colour channels; other missing channels are zero.
+        return Benchmarks.VisionLoaderHelper.ResizeChwToHwc(imageTensor, targetHeight, targetWidth, targetChannels,
+            Benchmarks.VisionLoaderHelper.ExtraChannelFill.Zero).ToArray();
     }
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
