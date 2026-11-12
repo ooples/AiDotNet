@@ -256,17 +256,17 @@ public class MMHCAlgorithm<T> : HybridBase<T>
         }
 
         // Build adjacency using Matrix<T>
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, double>();
         for (int j = 0; j < d; j++)
         {
             foreach (int i in parents[j])
             {
                 double corr = Math.Abs(ComputeCorrelation(data, i, j));
-                W[i, j] = NumOps.FromDouble(Math.Max(corr, 1e-10));
+                weights[i * d + j] = Math.Max(corr, 1e-10);
             }
         }
 
-        return W;
+        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
 
     /// <summary>
