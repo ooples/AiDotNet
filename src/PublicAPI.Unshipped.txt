@@ -22565,6 +22565,8 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Constraint.ConstraintBasedSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Constraint.ConstraintBasedSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.EmbeddedWrapperHybridSelector<T>.FeatureScores.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.Hybrid.EmbeddedWrapperHybridSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.FilterWrapperHybridSelector<T>.FeatureScores.get -> double[]?
