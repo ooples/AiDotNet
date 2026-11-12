@@ -410,6 +410,43 @@ internal static class TimeSeriesEngineOps<T>
         return result.ToVector();
     }
 
+    /// <summary>
+    /// Per-step empirical quantiles of sampled forecast paths: for each q, step h is the
+    /// <c>clamp(floor(q · count), 0, count - 1)</c>-th smallest of the samples' values at h.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">No samples while a quantile and a step are requested.</exception>
+    public static Dictionary<double, Vector<T>> SampleQuantiles(IReadOnlyList<Vector<T>> samples, double[] quantiles, int horizon)
+    {
+        var result = new Dictionary<double, Vector<T>>();
+        if (horizon <= 0)
+        {
+            foreach (var q in quantiles)
+                result[q] = new Vector<T>(horizon);
+            return result;
+        }
+
+        int count = samples.Count;
+        if (count == 0)
+        {
+            if (quantiles.Length > 0)
+                throw new ArgumentOutOfRangeException(nameof(samples), "At least one sample is required to compute quantiles.");
+            return result;
+        }
+
+        // [count, horizon] sample matrix sorted ascending down each step's column
+        var stacked = Engine.TensorSlice(
+            Engine.TensorStack(samples.Select(sample => Tensor<T>.FromVector(sample)).ToArray(), 0),
+            new[] { 0, 0 }, new[] { count, horizon });
+        var (sorted, _) = Engine.TensorSort(stacked, 0);
+        foreach (var q in quantiles)
+        {
+            int idx = Math.Max(0, Math.Min((int)(q * count), count - 1));
+            result[q] = Engine.TensorSlice(sorted, new[] { idx, 0 }, new[] { 1, horizon }).ToVector();
+        }
+
+        return result;
+    }
+
     private static string FormatValue(T value)
         => value is IFormattable formattable
             ? formattable.ToString("F4", System.Globalization.CultureInfo.CurrentCulture)

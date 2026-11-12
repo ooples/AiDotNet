@@ -698,24 +698,8 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             samples.Add(forecast);
         }
 
-        var result = new Dictionary<double, Vector<T>>();
-        double[][] sampleValues = samples.Select(sample => Array.ConvertAll(sample.ToArray(), v => Convert.ToDouble(v))).ToArray();
-        int horizonSteps = Math.Max(_options.ForecastHorizon, 0);
-        foreach (var q in quantiles)
-        {
-            double[] quantileValues = Enumerable.Range(0, horizonSteps).Select(h =>
-            {
-                var values = sampleValues.Select(sample => sample[h]).OrderBy(v => v).ToList();
-                int idx = (int)(q * values.Count);
-                idx = Math.Max(0, Math.Min(idx, values.Count - 1));
-                return values[idx];
-            }).ToArray();
-            var quantileForecast = new Vector<T>(_options.ForecastHorizon);
-            Array.ConvertAll(quantileValues, _numOps.FromDouble).AsSpan().CopyTo(quantileForecast.AsWritableSpan());
-            result[q] = quantileForecast;
-        }
-
-        return result;
+        // Empirical per-step quantiles of the sampled paths, ranked in T
+        return TimeSeriesEngineOps<T>.SampleQuantiles(samples, quantiles, _options.ForecastHorizon);
     }
 
     private T PredictWithTemperature(Vector<T> input, double scaleFactor, double temperature)
@@ -781,8 +765,8 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         writer.Write(tensor.Shape.Length);
         foreach (var dim in tensor._shape)
             writer.Write(dim);
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), v => Convert.ToDouble(v)))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+            writer.Write(Convert.ToDouble(tensor[i]));
     }
 
 
@@ -801,8 +785,8 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             shape[i] = reader.ReadInt32();
 
         var tensor = new Tensor<T>(shape);
-        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
-        Array.ConvertAll(storedValues, _numOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
         return tensor;
     }
 
@@ -1253,8 +1237,8 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
         writer.Write(tensor.Shape.Length);
         foreach (var dim in tensor._shape)
             writer.Write(dim);
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), v => Convert.ToDouble(v)))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+            writer.Write(Convert.ToDouble(tensor[i]));
     }
 
     private Tensor<T> DeserializeTensor(BinaryReader reader)
@@ -1265,8 +1249,8 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
             shape[i] = reader.ReadInt32();
 
         var tensor = new Tensor<T>(shape);
-        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
-        Array.ConvertAll(storedValues, NumOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
         return tensor;
     }
 }

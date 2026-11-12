@@ -636,27 +636,8 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
 
     private Dictionary<double, Vector<T>> BuildQuantiles(List<Vector<T>> samples, double[] quantiles)
     {
-        var result = new Dictionary<double, Vector<T>>();
-        double[][] sampleValues = samples.Select(sample => Array.ConvertAll(sample.ToArray(), v => Convert.ToDouble(v))).ToArray();
-        int horizonSteps = Math.Max(_options.ForecastHorizon, 0);
-        foreach (var q in quantiles)
-        {
-            double[] quantileValues = Enumerable.Range(0, horizonSteps).Select(hStep =>
-            {
-                var values = sampleValues.Select(sample => sample[hStep]).ToList();
-                values.Sort();
-
-                int idx = (int)(q * values.Count);
-                idx = Math.Max(0, Math.Min(idx, values.Count - 1));
-                return values[idx];
-            }).ToArray();
-
-            var quantileForecast = new Vector<T>(_options.ForecastHorizon);
-            Array.ConvertAll(quantileValues, NumOps.FromDouble).AsSpan().CopyTo(quantileForecast.AsWritableSpan());
-            result[q] = quantileForecast;
-        }
-
-        return result;
+        // Empirical per-step quantiles of the sampled paths, ranked in T
+        return TimeSeriesEngineOps<T>.SampleQuantiles(samples, quantiles, _options.ForecastHorizon);
     }
 
     /// <summary>
@@ -888,8 +869,8 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
         writer.Write(tensor.Shape.Length);
         foreach (var dim in tensor._shape)
             writer.Write(dim);
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), v => Convert.ToDouble(v)))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+            writer.Write(Convert.ToDouble(tensor[i]));
     }
 
     private void ReadTensorInto(BinaryReader reader, Tensor<T> tensor)
@@ -899,10 +880,11 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
         for (int d = 0; d < rank; d++)
             shape[d] = reader.ReadInt32();
         int total = shape.Aggregate(1, (a, bb) => a * bb);
-
-        // Every stored value is read; the first tensor.Length of them overwrite the tensor
-        double[] stored = Enumerable.Range(0, Math.Max(total, 0)).Select(_ => reader.ReadDouble()).ToArray();
-        int used = Math.Min(stored.Length, tensor.Length);
-        Array.ConvertAll(stored, NumOps.FromDouble).AsSpan(0, used).CopyTo(tensor.Data.Span);
+        for (int i = 0; i < total; i++)
+        {
+            double v = reader.ReadDouble();
+            if (i < tensor.Length)
+                tensor[i] = NumOps.FromDouble(v);
+        }
     }
 }
