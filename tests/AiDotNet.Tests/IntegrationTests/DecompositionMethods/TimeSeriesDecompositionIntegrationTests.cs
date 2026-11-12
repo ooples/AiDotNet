@@ -1,5 +1,6 @@
 using AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 using AiDotNet.Enums;
+using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using Xunit;
@@ -92,6 +93,81 @@ public class TimeSeriesDecompositionIntegrationTests
     }
 
     #endregion
+
+    private static object? InvokeAdditivePrivate(AdditiveDecomposition<double> decomposition, string name, params object[] args)
+    {
+        var method = typeof(AdditiveDecomposition<double>).GetMethod(
+            name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        return method.Invoke(decomposition, args);
+    }
+
+    [Fact]
+    public void Additive_STL_SeriesShorterThanOnePeriod_HasNoNaN()
+    {
+        // n <= period gives one-row subseries (window 0); they must pass through unsmoothed
+        // instead of scaling the distance by infinity (0 * Infinity = NaN).
+        var data = new double[10];
+        for (int i = 0; i < data.Length; i++)
+        {
+            data[i] = 3.0 + 0.5 * i + ((i * 5) % 3);
+        }
+
+        var decomp = new AdditiveDecomposition<double>(new Vector<double>(data), AdditiveDecompositionAlgorithmType.STL);
+
+        foreach (var type in new[] { DecompositionComponentType.Trend, DecompositionComponentType.Seasonal, DecompositionComponentType.Residual })
+        {
+            var component = decomp.GetComponentAsVector(type);
+            Assert.Equal(data.Length, component.Length);
+            for (int i = 0; i < component.Length; i++)
+            {
+                Assert.False(double.IsNaN(component[i]), $"{type}[{i}] is NaN");
+            }
+        }
+    }
+
+    [Fact]
+    public void Additive_SubseriesSmoothing_WindowIsMeasuredInSubseriesRows()
+    {
+        // Five rows with period 12: window = 3 rows, half window 1.5, so a neighbouring row (distance
+        // 1 row) has tri-cube weight (1 - 1/1.5)^3 = 1/27. Measuring the distance in time steps (12)
+        // gave every neighbour weight 0 and returned the input unchanged.
+        var decomp = new AdditiveDecomposition<double>(CreateSeasonalTimeSeries());
+        var column = new Matrix<double>(5, 1);
+        column[0, 0] = 0; column[1, 0] = 0; column[2, 0] = 27; column[3, 0] = 0; column[4, 0] = 0;
+        var grid = AiDotNet.Tensors.LinearAlgebra.Tensor<double>.FromMatrix(column);
+
+        var smoothed = Assert.IsType<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(
+            InvokeAdditivePrivate(decomp, "SmoothSubseriesColumns", grid, 1));
+
+        double w = 1.0 / 27.0;
+        Assert.Equal(27.0 / (1 + 2 * w), smoothed[2, 0], 1e-10);
+        Assert.Equal(27.0 * w / (1 + 2 * w), smoothed[1, 0], 1e-10);
+        Assert.Equal(27.0 * w / (1 + 2 * w), smoothed[3, 0], 1e-10);
+        Assert.Equal(0.0, smoothed[0, 0], 1e-10);
+        Assert.Equal(0.0, smoothed[4, 0], 1e-10);
+    }
+
+    [Fact]
+    public void Additive_LoessSmoothing_IsLocalLinear_ReproducesARampAtTheBoundaries()
+    {
+        // Local-linear LOESS reproduces a straight line exactly, including the truncated windows at
+        // both ends; a weighted mean is pulled inwards there (biased up at index 0).
+        var decomp = new AdditiveDecomposition<double>(CreateSeasonalTimeSeries());
+        var ramp = new double[30];
+        for (int i = 0; i < ramp.Length; i++)
+        {
+            ramp[i] = 2.0 + 0.5 * i;
+        }
+
+        var smoothed = Assert.IsType<Vector<double>>(
+            InvokeAdditivePrivate(decomp, "LoessSmoothing", new Vector<double>(ramp), 23));
+
+        for (int i = 0; i < ramp.Length; i++)
+        {
+            Assert.Equal(ramp[i], smoothed[i], 1e-9);
+        }
+    }
 
     #region MultiplicativeDecomposition Tests
 

@@ -35,6 +35,12 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private readonly AdditiveDecompositionAlgorithmType _algorithm;
 
     /// <summary>
+    /// Upper bound on the elements of one block of pairwise subseries weights, so smoothing a long
+    /// series never materialises a full count x count matrix.
+    /// </summary>
+    private const int MaxPairwiseWeightElements = 1 << 20;
+
+    /// <summary>
     /// Creates a new instance of the AdditiveDecomposition class
     /// </summary>
     /// <param name="timeSeries">The time series data to decompose</param>
@@ -225,24 +231,45 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
 
     /// <summary>
     /// LOESS (span 0.75, tri-cube weights) of every column of <paramref name="grid"/>, where all
-    /// columns are subseries of the same length whose members are <paramref name="period"/> apart.
+    /// columns are subseries of the same length.
     /// </summary>
+    /// <remarks>
+    /// Distances are measured in subseries rows, the unit the window (0.75 of the subseries length)
+    /// is measured in. The pairwise weights are built in row blocks of at most
+    /// <see cref="MaxPairwiseWeightElements"/> elements, so memory stays bounded for long series.
+    /// </remarks>
     private Tensor<T> SmoothSubseriesColumns(Tensor<T> grid, int period)
     {
         int count = grid.Shape[0];
         int windowSize = (int)(0.75 * count);
+        if (windowSize == 0)
+        {
+            // A one-row subseries has no neighbours to smooth with (and a zero window would
+            // scale every distance by infinity).
+            return grid;
+        }
 
-        // Pairwise distances |x_a - x_b| = period * |a - b| scaled by the half window.
-        var index = Engine.TensorArange<T>(0, count, 1);
-        var rowsIndex = Engine.TensorBroadcastTo(index.Reshape(new[] { count, 1 }), new[] { count, count });
-        var colsIndex = Engine.TensorBroadcastTo(index.Reshape(new[] { 1, count }), new[] { count, count });
-        var distance = Engine.TensorMultiplyScalar(
-            Engine.TensorAbs(Engine.TensorSubtract(colsIndex, rowsIndex)), NumOps.FromDouble(period));
-        var weights = TriCube(Engine.TensorMultiplyScalar(distance, NumOps.FromDouble(1.0 / (windowSize / 2.0))));
+        T inverseHalfWindow = NumOps.FromDouble(1.0 / (windowSize / 2.0));
+        int blockRows = Math.Max(1, Math.Min(count, MaxPairwiseWeightElements / count));
+        var columnIndex = Engine.TensorArange<T>(0, count, 1).Reshape(new[] { 1, count });
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < count; start += blockRows)
+        {
+            int rowsInBlock = Math.Min(blockRows, count - start);
+            var blockShape = new[] { rowsInBlock, count };
+            var rowIndex = Engine.TensorArange<T>(start, start + rowsInBlock, 1).Reshape(new[] { rowsInBlock, 1 });
+            var distance = Engine.TensorAbs(Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(columnIndex, blockShape),
+                Engine.TensorBroadcastTo(rowIndex, blockShape)));
+            var weights = TriCube(Engine.TensorMultiplyScalar(distance, inverseHalfWindow));
 
-        var weightedSums = Engine.TensorMatMul(weights, grid);
-        var totals = Engine.TensorMatMul(weights, Engine.TensorOnesLike(grid));
-        return DivideElementwise(weightedSums, totals);
+            var weightedSums = Engine.TensorMatMul(weights, grid);
+            var totals = Engine.TensorBroadcastTo(
+                Engine.ReduceSum(weights, new[] { 1 }, true), new[] { rowsInBlock, period });
+            blocks.Add(DivideElementwise(weightedSums, totals));
+        }
+
+        return blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), 0);
     }
 
     /// <summary>
@@ -276,7 +303,41 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> LoessSmoothing(Vector<T> data, int windowSize)
     {
-        return CenteredWindowAverage(data, TriCubeKernel(windowSize / 2));
+        // Local-linear LOESS (degree 1, as in Cleveland et al. 1990 STL): at each centre i, fit
+        // y = a + b d by weighted least squares over the offsets d in the tri-cube window that
+        // fall inside the series, and return a. With S_k = sum w d^k and T_k = sum w d^k y,
+        // a = (S_2 T_0 - S_1 T_1) / (S_0 S_2 - S_1^2). Every sum is one zero-padded correlation.
+        int n = data.Length;
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        int half = windowSize / 2;
+        var weights = TriCubeKernel(half);
+        var offsets = Engine.TensorArange<T>(-half, half + 1, 1);
+        var weightedOffsets = Engine.TensorMultiply(weights, offsets);
+        var weightedSquares = Engine.TensorMultiply(weightedOffsets, offsets);
+
+        var x = Tensor<T>.FromVector(data, new[] { 1, 1, n });
+        var ones = Engine.TensorOnesLike(x);
+        var kernelShape = new[] { 1, 1, 2 * half + 1 };
+        var s0 = Engine.Conv1D(ones, weights.Reshape(kernelShape), 1, half);
+        var s1 = Engine.Conv1D(ones, weightedOffsets.Reshape(kernelShape), 1, half);
+        var s2 = Engine.Conv1D(ones, weightedSquares.Reshape(kernelShape), 1, half);
+        var t0 = Engine.Conv1D(x, weights.Reshape(kernelShape), 1, half);
+        var t1 = Engine.Conv1D(x, weightedOffsets.Reshape(kernelShape), 1, half);
+
+        var determinant = Engine.TensorSubtract(Engine.TensorMultiply(s0, s2), Engine.TensorMultiply(s1, s1));
+        var numerator = Engine.TensorSubtract(Engine.TensorMultiply(s2, t0), Engine.TensorMultiply(s1, t1));
+
+        // Only one weighted point (S_0 S_2 = S_1^2): the slope is undetermined, so the fit is the
+        // weighted mean T_0 / S_0.
+        var singular = Engine.TensorEquals(determinant, NumOps.Zero);
+        var safeDeterminant = Engine.TensorWhere(singular, Engine.TensorOnesLike(determinant), determinant);
+        var linear = Engine.TensorDivide(numerator, safeDeterminant);
+        var constant = DivideElementwise(t0, s0);
+        return Engine.TensorWhere(singular, constant, linear).Reshape(new[] { n }).ToVector();
     }
 
     /// <summary>
