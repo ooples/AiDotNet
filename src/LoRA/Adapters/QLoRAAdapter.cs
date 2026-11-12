@@ -473,15 +473,9 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Find min/max scale
-        T minScale = _quantizationScales[0];
-        T maxScale = _quantizationScales[0];
-        for (int i = 1; i < _quantizationScales.Length; i++)
-        {
-            if (NumOps.LessThan(_quantizationScales[i], minScale))
-                minScale = _quantizationScales[i];
-            if (NumOps.GreaterThan(_quantizationScales[i], maxScale))
-                maxScale = _quantizationScales[i];
-        }
+        Tensor<T> scales = new Tensor<T>(_quantizationScales, [_quantizationScales.Length]);
+        T minScale = Engine.TensorMinValue(scales);
+        T maxScale = Engine.TensorMaxValue(scales);
 
         // Compute meta-scale and meta-zero-point
         T scaleRange = NumOps.Subtract(maxScale, minScale);
@@ -655,42 +649,17 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
+        // View input as [batchSize, inputSize] and compute: input * weights^T
+        Tensor<T> inputMatrix = Engine.Reshape(input, [batchSize, inputSize]);
+        Tensor<T> baseOutputMatrix = Engine.TensorMatMul(
+            inputMatrix, Tensor<T>.FromMatrix(Engine.MatrixTranspose(_dequantizedWeights)));
 
-        // Compute: input * weights^T
-        Matrix<T> baseOutputMatrix = inputMatrix.Multiply(_dequantizedWeights.Transpose());
-
-        // Add biases (get from base layer parameters)
+        // Add biases (get from base layer parameters), broadcast over the batch
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                T bias = baseParams[weightCount + j];
-                baseOutputMatrix[i, j] = NumOps.Add(baseOutputMatrix[i, j], bias);
-            }
-        }
-
-        // Convert to tensor
-        Vector<T> baseOutputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                baseOutputData[idx++] = baseOutputMatrix[i, j];
-            }
-        }
-        Tensor<T> baseOutput = new Tensor<T>(new[] { batchSize, outputSize }, baseOutputData);
+        Tensor<T> bias = Engine.Reshape(Tensor<T>.FromVector(baseParams.GetSubVector(weightCount, outputSize)), [1, outputSize]);
+        Tensor<T> baseOutput = Engine.TensorAdd(
+            baseOutputMatrix, Engine.TensorBroadcastTo(bias, [batchSize, outputSize]));
 
         // Forward through LoRA layer
         Tensor<T> loraOutput = _loraLayer.Forward(input);
@@ -748,28 +717,15 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        Vector<T> mergedParams = new Vector<T>((inputSize * outputSize) + outputSize);
-
         // Merge weights
         // dequantizedBaseWeights is [outputSize, inputSize]
-        // loraWeights from MergeWeights() is [inputSize, outputSize]
-        // So we access loraWeights[j, i] = loraWeights[inputIdx, outputIdx]
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                int idx = i * inputSize + j;
-                mergedParams[idx] = NumOps.Add(dequantizedBaseWeights[i, j], loraWeights[j, i]);
-            }
-        }
-
-        // Copy biases unchanged (LoRA doesn't modify biases)
+        // loraWeights from MergeWeights() is [inputSize, outputSize], so its transpose lines up.
+        // Biases are copied unchanged (LoRA doesn't modify biases).
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
-        for (int i = 0; i < outputSize; i++)
-        {
-            mergedParams[weightCount + i] = baseParams[weightCount + i];
-        }
+        Vector<T> mergedWeights = Engine.Add(
+            dequantizedBaseWeights.ToRowVector(), Engine.MatrixTranspose(loraWeights).ToRowVector());
+        Vector<T> mergedParams = Vector<T>.Concatenate(mergedWeights, baseParams.GetSubVector(weightCount, outputSize));
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

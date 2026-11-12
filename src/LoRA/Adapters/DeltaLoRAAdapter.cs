@@ -176,16 +176,9 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int inputSize = GetInputShape()[0];
         _deltaWeights = new Tensor<T>([inputSize, outputSize]);
+        // Both start at zero (fresh tensors and matrices are zero-filled).
         _velocity = new Matrix<T>(inputSize, outputSize);
-
-        // Initialize to zero
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                _deltaWeights[i, j] = NumOps.Zero;
-                _velocity[i, j] = NumOps.Zero;
-            }
+    }
         }
     }
 
@@ -265,23 +258,14 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
             T momentumT = NumOps.FromDouble(_momentumFactor);
             T oneMinusMomentumT = NumOps.FromDouble(1.0 - _momentumFactor);
 
-            for (int i = 0; i < _deltaWeights.Shape[0]; i++)
-            {
-                for (int j = 0; j < _deltaWeights.Shape[1]; j++)
-                {
-                    // Update velocity: v = momentum * v + (1 - momentum) * gradient
-                    _velocity[i, j] = NumOps.Add(
-                        NumOps.Multiply(momentumT, _velocity[i, j]),
-                        NumOps.Multiply(oneMinusMomentumT, _deltaGradients[i, j])
-                    );
+            // Update velocity: v = momentum * v + (1 - momentum) * gradient
+            _velocity = Engine.MatrixAdd(
+                Engine.MatrixMultiplyScalar(_velocity, momentumT),
+                Engine.MatrixMultiplyScalar(_deltaGradients, oneMinusMomentumT));
 
-                    // Update delta weights: delta -= learning_rate * velocity
-                    _deltaWeights[i, j] = NumOps.Subtract(
-                        _deltaWeights[i, j],
-                        NumOps.Multiply(learningRate, _velocity[i, j])
-                    );
-                }
-            }
+            // Update delta weights: delta -= learning_rate * velocity
+            Engine.TensorSubtractInPlace(
+                _deltaWeights, Tensor<T>.FromMatrix(Engine.MatrixMultiplyScalar(_velocity, learningRate)));
         }
     }
 
@@ -299,14 +283,7 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public Matrix<T> GetCurrentDelta()
     {
-        Matrix<T> copy = new Matrix<T>(_deltaWeights.Shape[0], _deltaWeights.Shape[1]);
-        for (int i = 0; i < _deltaWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _deltaWeights.Shape[1]; j++)
-            {
-                copy[i, j] = _deltaWeights[i, j];
-            }
-        }
+        Matrix<T> copy = _deltaWeights.ToMatrix();
         return copy;
     }
 
@@ -358,35 +335,17 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
         T deltaScalingT = NumOps.FromDouble(_deltaScaling);
 
-        // Merge weights: base + LoRA + delta * scaling
-        // DenseLayer uses [inputSize, outputSize] convention
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / outputSize;
-            int col = i % outputSize;
-
-            // Start with base weight
-            T merged = baseParams[i];
-
-            // Add LoRA contribution
-            merged = NumOps.Add(merged, loraWeights[row, col]);
-
-            // Add scaled delta contribution
-            merged = NumOps.Add(merged, NumOps.Multiply(_deltaWeights[row, col], deltaScalingT));
-
-            mergedParams[i] = merged;
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights: base + LoRA + delta * scaling. Both deltas are [inputSize, outputSize];
+        // DenseLayer stores its weights input-major and FullyConnectedLayer output-major, so the
+        // latter uses the transposes. Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Matrix<T> scaledDelta = Engine.MatrixMultiplyScalar(_deltaWeights.ToMatrix(), deltaScalingT);
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
+        mergedParams = AddFlatWeightsToParameters(
+            mergedParams, isOutputMajor ? scaledDelta.Transpose() : scaledDelta, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
