@@ -152,6 +152,64 @@ internal static class EvaluationTensorOps<T>
     }
 
     /// <summary>
+    /// The area under the ROC curve of <paramref name="scores"/> for the 1/0 <paramref name="positiveMask"/>, as
+    /// the Mann-Whitney statistic: the fraction of (positive, negative) pairs the scores order correctly, ties
+    /// counting one half (scikit-learn's <c>roc_auc_score</c>). The caller guarantees both classes are present.
+    /// </summary>
+    internal static T RocAuc(Tensor<T> scores, Tensor<T> positiveMask)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        int positives = Count(positiveMask);
+        int negatives = scores.Length - positives;
+        var (negativesBelow, negativesAtOrBelow) = WeightBelow(scores, Not(positiveMask));
+        var pairCredit = engine.TensorSum(engine.TensorMultiply(positiveMask, engine.TensorAdd(negativesBelow, negativesAtOrBelow)));
+        return NumOps.Divide(pairCredit, NumOps.FromDouble(2.0 * positives * negatives));
+    }
+
+    /// <summary>
+    /// Average precision of <paramref name="scores"/> for the 1/0 <paramref name="positiveMask"/>: the sum over
+    /// distinct thresholds of precision times the recall gained there (scikit-learn's
+    /// <c>average_precision_score</c>). Returns zero when there is no positive.
+    /// </summary>
+    internal static T AveragePrecision(Tensor<T> scores, Tensor<T> positiveMask)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        int positives = Count(positiveMask);
+        if (positives == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        // At the threshold of each sample's own score: predicted positives are the samples scoring at least as high.
+        var (positivesBelow, _) = WeightBelow(scores, positiveMask);
+        var (samplesBelow, _) = WeightBelow(scores, engine.TensorOnesLike(scores));
+        var truePositives = engine.TensorSubtract(engine.TensorFullLike(scores, NumOps.FromDouble(positives)), positivesBelow);
+        var predictedPositives = engine.TensorSubtract(engine.TensorFullLike(scores, NumOps.FromDouble(scores.Length)), samplesBelow);
+        var precision = engine.TensorDivide(truePositives, predictedPositives);
+
+        // Each positive adds 1 / positives of recall at its threshold.
+        var gained = engine.TensorSum(engine.TensorMultiply(positiveMask, precision));
+        return NumOps.Divide(gained, NumOps.FromDouble(positives));
+    }
+
+    /// <summary>
+    /// For every sample, the total <paramref name="weights"/> of the samples scoring strictly below it and of
+    /// those scoring at or below it.
+    /// </summary>
+    private static (Tensor<T> Below, Tensor<T> AtOrBelow) WeightBelow(Tensor<T> scores, Tensor<T> weights)
+    {
+        var engine = AiDotNetEngine.Current;
+        var (sorted, order) = engine.TensorSort(scores);
+        var cumulative = engine.TensorCumSum(engine.TensorGather(weights, order, 0), 0);
+        var padded = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), cumulative }, 0);
+        var below = engine.TensorSearchSorted(sorted, scores, false);
+        var atOrBelow = engine.TensorSearchSorted(sorted, scores, true);
+        return (engine.TensorGather(padded, below, 0), engine.TensorGather(padded, atOrBelow, 0));
+    }
+
+    /// <summary>
     /// Returns two order statistics of bootstrap values, ordered as <c>Array.Sort</c> orders doubles (NaN first,
     /// then ascending).
     /// </summary>

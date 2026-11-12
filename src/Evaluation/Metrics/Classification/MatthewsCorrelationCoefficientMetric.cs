@@ -100,39 +100,23 @@ public class MatthewsCorrelationCoefficientMetric<T> : IClassificationMetric<T>
         }
 
         // Get unique classes from both predictions and actuals
-        var classes = new HashSet<double>();
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            classes.Add(NumOps.ToDouble(actuals[i]));
-            classes.Add(NumOps.ToDouble(predictions[i]));
-        }
+        var predictionTensor = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actualTensor = EvaluationTensorOps<T>.ToTensor(actuals);
+        var classes = EvaluationTensorOps<T>.UniqueLabels(actualTensor, predictionTensor);
 
-        if (classes.Count == 2)
+        if (classes.Length == 2)
         {
             return ComputeBinaryMCC(predictions, actuals);
         }
         else
         {
-            return ComputeMultiClassMCC(predictions, actuals, classes);
+            return ComputeMultiClassMCC(predictionTensor, actualTensor, classes);
         }
     }
 
     private T ComputeBinaryMCC(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
-        double positiveLabelValue = NumOps.ToDouble(_positiveLabel);
-
-        int tp = 0, tn = 0, fp = 0, fn = 0;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool predicted = NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-            bool actual = NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-
-            if (predicted && actual) tp++;
-            else if (!predicted && !actual) tn++;
-            else if (predicted && !actual) fp++;
-            else fn++;
-        }
+        var (tp, tn, fp, fn) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, _positiveLabel);
 
         // MCC = (TP*TN - FP*FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
         double numerator = (double)tp * tn - (double)fp * fn;
@@ -152,58 +136,28 @@ public class MatthewsCorrelationCoefficientMetric<T> : IClassificationMetric<T>
         return NumOps.FromDouble(numerator / denominator);
     }
 
-    private T ComputeMultiClassMCC(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, HashSet<double> classes)
+    private static T ComputeMultiClassMCC(Tensor<T> predictions, Tensor<T> actuals, Tensor<T> classes)
     {
-        // Build confusion matrix with class index lookup for efficiency
-        var classList = classes.ToList();
-        int k = classList.Count;
-        var classIndex = new Dictionary<double, int>(k);
-        for (int i = 0; i < k; i++)
-        {
-            classIndex[classList[i]] = i;
-        }
-
-        var confusionMatrix = new int[k, k];
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            int predIdx = classIndex[NumOps.ToDouble(predictions[i])];
-            int actualIdx = classIndex[NumOps.ToDouble(actuals[i])];
-            confusionMatrix[actualIdx, predIdx]++;
-        }
-
         // Compute multi-class MCC using Gorodkin's formula
         // MCC = (c*s - sum(p_k * t_k)) / sqrt((s^2 - sum(p_k^2)) * (s^2 - sum(t_k^2)))
         // where c = sum of correct (diagonal), s = total samples
         // p_k = sum of column k (predicted as k), t_k = sum of row k (actual k)
 
         int n = predictions.Length;
-        double c = 0; // correct predictions (trace)
-        var p = new double[k]; // predicted totals per class
-        var t = new double[k]; // actual totals per class
-
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                if (i == j)
-                {
-                    c += confusionMatrix[i, j];
-                }
-                p[j] += confusionMatrix[i, j];
-                t[i] += confusionMatrix[i, j];
-            }
-        }
+        double c = EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.PairEqualMask(predictions, actuals));
 
         double sumPkTk = 0;
         double sumPk2 = 0;
         double sumTk2 = 0;
 
-        for (int i = 0; i < k; i++)
+        foreach (T cls in classes)
         {
-            sumPkTk += p[i] * t[i];
-            sumPk2 += p[i] * p[i];
-            sumTk2 += t[i] * t[i];
+            var counts = EvaluationTensorOps<T>.LabelCounts(predictions, actuals, cls);
+            double p = counts.PredictedPositives;
+            double t = counts.ActualPositives;
+            sumPkTk += p * t;
+            sumPk2 += p * p;
+            sumTk2 += t * t;
         }
 
         double s = n;

@@ -52,38 +52,11 @@ public class AUCPRMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int n = predictions.Length;
-        var sorted = new (double prob, int label)[n];
-        for (int i = 0; i < n; i++)
-        {
-            sorted[i] = (NumOps.ToDouble(predictions[i]), NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0);
-        }
-        Array.Sort(sorted, (a, b) => b.prob.CompareTo(a.prob));
-
-        int totalPositives = sorted.Count(s => s.label == 1);
-        if (totalPositives == 0) return NumOps.Zero;
-
-        double auc = 0;
-        double prevRecall = 0;
-        int tp = 0;
-        int fp = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            if (sorted[i].label == 1) tp++;
-            else fp++;
-
-            double precision = tp + fp > 0 ? (double)tp / (tp + fp) : 0;
-            double recall = (double)tp / totalPositives;
-
-            if (recall > prevRecall)
-            {
-                auc += precision * (recall - prevRecall);
-                prevRecall = recall;
-            }
-        }
-
-        return NumOps.FromDouble(auc);
+        // Average precision: precision at each distinct threshold weighted by the recall gained there, so tied
+        // scores share one threshold (scikit-learn's average_precision_score).
+        var scores = EvaluationTensorOps<T>.ToTensor(predictions);
+        var positiveMask = EvaluationTensorOps<T>.EqualMask(EvaluationTensorOps<T>.ToTensor(actuals), NumOps.One);
+        return EvaluationTensorOps<T>.AveragePrecision(scores, positiveMask);
     }
 
     /// <inheritdoc />
