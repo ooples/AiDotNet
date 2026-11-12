@@ -422,6 +422,27 @@ internal static class AnomalyTensorOps
     internal static Tensor<T> ColumnMads<T>(Tensor<T> data, Tensor<T> centers)
         => ColumnMedians(Engine.TensorAbs(SubtractRow(data, centers)));
 
+    /// <summary>The scatter matrix centered^T centered of already centered rows, divided by divisor.</summary>
+    internal static Tensor<T> Covariance<T>(Tensor<T> centered, T divisor)
+    {
+        var engine = Engine;
+        return engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(centered), centered), divisor);
+    }
+
+    /// <summary>
+    /// Squared Mahalanobis distance of every already centered row: d_i' * inverse * d_i.
+    /// </summary>
+    internal static Tensor<T> MahalanobisSquared<T>(Tensor<T> centered, Tensor<T> inverse)
+    {
+        var engine = Engine;
+        var projected = engine.TensorMatMul(centered, engine.TensorTranspose(inverse));
+        return engine.ReduceSum(engine.TensorMultiply(centered, projected), new[] { 1 }, false);
+    }
+
+    /// <summary>The p x p identity matrix times a scalar.</summary>
+    internal static Tensor<T> ScaledIdentity<T>(int p, T scale)
+        => Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), scale);
+
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
     {
