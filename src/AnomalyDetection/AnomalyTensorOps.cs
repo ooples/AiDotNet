@@ -170,11 +170,25 @@ internal static class AnomalyTensorOps
     /// there is none. A NaN ratio never wins the comparison.
     /// </summary>
     internal static Vector<T> MaxStandardizedDeviation<T>(Matrix<T> x, Vector<T> means, Vector<T> stds)
+        => MaxScaledDeviation(x, means, stds, false, MathHelper.GetNumericOperations<T>().One);
+
+    /// <summary>
+    /// As <see cref="MaxStandardizedDeviation{T}(Matrix{T}, Vector{T}, Vector{T})"/> with the deviation
+    /// multiplied by <paramref name="factor"/> first (when <paramref name="scaled"/>):
+    /// |factor * (x_ij - center_j)| / scale_j.
+    /// </summary>
+    internal static Vector<T> MaxScaledDeviation<T>(Matrix<T> x, Vector<T> means, Vector<T> stds, bool scaled, T factor)
     {
         var engine = Engine;
         var numOps = MathHelper.GetNumericOperations<T>();
         var stdTensor = stds.AsTensor();
-        var ratio = DivideRow(engine.TensorAbs(SubtractRow(ToTensor(x), means.AsTensor())), stdTensor);
+        var deviation = SubtractRow(ToTensor(x), means.AsTensor());
+        if (scaled)
+        {
+            deviation = engine.TensorMultiplyScalar(deviation, factor);
+        }
+
+        var ratio = DivideRow(engine.TensorAbs(deviation), stdTensor);
 
         // Zero-std columns are skipped: x/0 is +inf or NaN, times 0 is NaN, and NaN entries become 0.
         ratio = MultiplyRow(ratio, engine.TensorNotEquals(stdTensor, numOps.Zero));
@@ -315,6 +329,26 @@ internal static class AnomalyTensorOps
         var median = engine.TensorMultiplyScalar(engine.TensorAdd(low, high), numOps.FromDouble(0.5));
         return engine.Reshape(median, new[] { n });
     }
+
+    /// <summary>
+    /// Per-column medians of a [n, d] tensor (n &gt; 0); an even n averages the two middle values.
+    /// </summary>
+    internal static Tensor<T> ColumnMedians<T>(Tensor<T> data)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = data.Shape[0];
+        var (sorted, _) = engine.TensorSort(data, 0, false);
+        var low = engine.TensorSliceAxis(sorted, 0, (n - 1) / 2);
+        var high = engine.TensorSliceAxis(sorted, 0, n / 2);
+
+        // For an odd n both picks are the middle value and (v + v) * 0.5 == v exactly.
+        return engine.TensorMultiplyScalar(engine.TensorAdd(low, high), numOps.FromDouble(0.5));
+    }
+
+    /// <summary>Per-column median absolute deviation from the given per-column centers.</summary>
+    internal static Tensor<T> ColumnMads<T>(Tensor<T> data, Tensor<T> centers)
+        => ColumnMedians(Engine.TensorAbs(SubtractRow(data, centers)));
 
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
