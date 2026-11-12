@@ -209,7 +209,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private int[] BelowOrBest(Tensor<T> pValues, double threshold)
     {
         var selected = FilterStatisticTensorOps.MaskPositions(Engine.TensorLessThan(pValues, NumOps.FromDouble(threshold)));
-        return selected.Length > 0 ? selected : [FilterStatisticTensorOps.FirstArgMin(pValues)];
+        return selected.Length > 0 ? selected : new[] { FilterStatisticTensorOps.FirstArgMin(pValues) };
     }
 
     private (Vector<T> Scores, Vector<T> PValues) ComputeFClassif(Matrix<T> data, Vector<T> target, int n)
