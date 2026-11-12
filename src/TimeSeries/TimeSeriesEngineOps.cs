@@ -213,6 +213,53 @@ internal static class TimeSeriesEngineOps<T>
         return computed < maxLag + 1 ? Vector<T>.Concatenate(head, new Vector<T>(maxLag + 1 - computed)) : head;
     }
 
+    /// <summary>
+    /// Autocorrelations ρ(lag) = Σ_t (y[t] - mean)(y[t + lag] - mean) / ((n - lag) · variance) for lags
+    /// 0..maxLag, with the sample mean and variance of <see cref="StatisticsHelper{T}"/>.
+    /// </summary>
+    public static Vector<T> Autocorrelations(Vector<T> y, int maxLag)
+    {
+        T mean = StatisticsHelper<T>.CalculateMean(y);
+        T variance = StatisticsHelper<T>.CalculateVariance(y);
+
+        var centered = Engine.Subtract(y, Engine.Fill(y.Length, mean));
+        var sums = LagProductSums(centered, maxLag);
+        var lags = Engine.TensorArange<T>(0, maxLag + 1, 1);
+        var counts = Engine.ScalarMinusTensor(NumOps.FromDouble(y.Length), lags);
+        var denominators = Engine.TensorMultiplyScalar(counts, variance).ToVector();
+        return Engine.Divide(sums, denominators);
+    }
+
+    /// <summary>Symmetric Toeplitz matrix <c>R[i, j] = values[|i - j|]</c> of size p × p.</summary>
+    public static Matrix<T> Toeplitz(Vector<T> values, int p)
+    {
+        if (p <= 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        var index = Enumerable.Range(0, p * p).Select(cell => Math.Abs(cell / p - cell % p));
+        return Tensor<T>.FromVector(Gather(values, index), new[] { p, p }).ToMatrix();
+    }
+
+    /// <summary>
+    /// Scales <paramref name="coefficients"/> in place by <c>target / Σ|c|</c> when <c>Σ|c|</c> exceeds
+    /// <paramref name="limit"/>.
+    /// </summary>
+    public static void ShrinkAbsSum(Vector<T> coefficients, T limit, T target)
+    {
+        if (coefficients.Length == 0)
+        {
+            return;
+        }
+
+        T absSum = Engine.Sum(Engine.Abs(coefficients));
+        if (NumOps.GreaterThan(absSum, limit))
+        {
+            Engine.Multiply(coefficients, NumOps.Divide(target, absSum)).CopyTo(coefficients.AsWritableSpan());
+        }
+    }
+
     /// <summary>Formats the elements as "  {label}[{i + 1}] = {value:F4}" lines.</summary>
     public static IEnumerable<string> FormatCoefficients(Vector<T> coefficients, string label)
         => coefficients.Select((c, i) => $"  {label}[{i + 1}] = {FormatValue(c)}");

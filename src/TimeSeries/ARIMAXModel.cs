@@ -356,10 +356,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
 
         // Yule-Walker: R φ = r with the Toeplitz matrix R[i, j] = ρ(|i - j|) and r[i] = ρ(i + 1)
         Vector<T> autocorrelations = CalculateAutocorrelations(residuals, Math.Max(p, q));
-        var toeplitzIndex = Enumerable.Range(0, p * p).Select(cell => Math.Abs(cell / Math.Max(p, 1) - cell % Math.Max(p, 1)));
-        Matrix<T> R = p > 0
-            ? Tensor<T>.FromVector(TimeSeriesEngineOps<T>.Gather(autocorrelations, toeplitzIndex), new[] { p, p }).ToMatrix()
-            : new Matrix<T>(0, 0);
+        Matrix<T> R = TimeSeriesEngineOps<T>.Toeplitz(autocorrelations, p);
         Vector<T> r = autocorrelations.GetSubVector(1, p);
 
         _arCoefficients = MatrixSolutionHelper.SolveLinearSystem(R, r, _arimaxOptions.DecompositionType);
@@ -397,17 +394,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     private Vector<T> CalculateAutocorrelations(Vector<T> y, int maxLag)
     {
-        T mean = StatisticsHelper<T>.CalculateMean(y);
-        T variance = StatisticsHelper<T>.CalculateVariance(y);
-
-        // ρ(lag) = Σ_t (y[t] - mean)(y[t + lag] - mean) / ((n - lag) · variance)
-        var centered = Engine.Subtract(y, Engine.Fill(y.Length, mean));
-        var sums = TimeSeriesEngineOps<T>.LagProductSums(centered, maxLag);
-        var lags = Engine.TensorArange<T>(0, maxLag + 1, 1);
-        var counts = Engine.ScalarMinusTensor(NumOps.FromDouble(y.Length), lags);
-        var denominators = Engine.TensorMultiplyScalar(counts, variance).ToVector();
-
-        return Engine.Divide(sums, denominators);
+        return TimeSeriesEngineOps<T>.Autocorrelations(y, maxLag);
     }
 
     /// <summary>
