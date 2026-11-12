@@ -345,28 +345,41 @@ public partial class Transfusion<T>
         int patchCount = _patchGridSide * _patchGridSide;
         var x = GaussianLike(new Tensor<T>([1, patchCount, _patchDim]), rng);
 
-        for (int step = steps; step >= 1; step--)
+        // The DDIM coefficients of every step, computed up front. Step k runs step = steps - k with
+        // t = step * timesteps / steps - 1 and previous = (step - 1) * timesteps / steps - 1.
+        var stepNumber = Engine.ScalarMinusTensor(steps, Engine.TensorArange<int>(0, steps, 1));
+        var timestepDivisor = Tensor<int>.CreateDefault([steps], steps);
+        var current = Engine.TensorSubtractScalar(
+            Engine.TensorFloorDivide(Engine.TensorMultiplyScalar(stepNumber, timesteps), timestepDivisor), 1);
+        var previousStep = Engine.TensorSubtractScalar(
+            Engine.TensorFloorDivide(Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(stepNumber, 1), timesteps), timestepDivisor), 1);
+        var alphaBar = CosineAlphaBars(current.Cast<T>(), timesteps);
+        // alphaBarPrev = 1 before the first timestep.
+        var alphaBarPrevious = Engine.TensorWhere(
+            Engine.TensorLessThan(previousStep.Cast<T>(), NumOps.Zero),
+            Tensor<T>.CreateDefault([steps], NumOps.One),
+            CosineAlphaBars(previousStep.Cast<T>(), timesteps));
+        var noiseScale = Engine.TensorSqrt(Engine.TensorMax(Engine.ScalarMinusTensor(NumOps.One, alphaBar), NumOps.Zero));
+        var inverseSignal = Engine.TensorDivide(
+            Tensor<T>.CreateDefault([steps], NumOps.One),
+            Engine.TensorSqrt(Engine.TensorMax(alphaBar, NumOps.FromDouble(1e-12))));
+        var previousSignal = Engine.TensorSqrt(alphaBarPrevious);
+        var previousNoise = Engine.TensorSqrt(Engine.TensorMax(Engine.ScalarMinusTensor(NumOps.One, alphaBarPrevious), NumOps.Zero));
+
+        for (int k = 0; k < steps; k++)
         {
+            int step = steps - k;
             int t = (step * timesteps / steps) - 1;
-            int previous = ((step - 1) * timesteps / steps) - 1;
-            double alphaBar = CosineAlphaBar(t, timesteps);
-            double alphaBarPrevious = previous < 0 ? 1.0 : CosineAlphaBar(previous, timesteps);
 
             var predicted = PredictPatchNoise(heads, textRows, x, Math.Max(0, t));
             // x_0 = (x_t - sqrt(1 - alphaBar) * eps) / sqrt(alphaBar), then
             // x_{t-1} = sqrt(alphaBarPrev) * x_0 + sqrt(1 - alphaBarPrev) * eps.
-            var denoised = Engine.TensorMultiplyScalar(
-                Engine.TensorSubtract(
-                    x,
-                    Engine.TensorMultiplyScalar(
-                        predicted, NumOps.FromDouble(Math.Sqrt(Math.Max(0.0, 1.0 - alphaBar))))),
-                NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(alphaBar, 1e-12))));
+            var denoised = Engine.TensorMultiply(
+                Engine.TensorSubtract(x, Engine.TensorMultiply(predicted, Pick(noiseScale, k))),
+                Pick(inverseSignal, k));
             x = Engine.TensorAdd(
-                Engine.TensorMultiplyScalar(
-                    denoised, NumOps.FromDouble(Math.Sqrt(alphaBarPrevious))),
-                Engine.TensorMultiplyScalar(
-                    predicted,
-                    NumOps.FromDouble(Math.Sqrt(Math.Max(0.0, 1.0 - alphaBarPrevious)))));
+                Engine.TensorMultiply(denoised, Pick(previousSignal, k)),
+                Engine.TensorMultiply(predicted, Pick(previousNoise, k)));
         }
 
         return x;
@@ -585,6 +598,24 @@ public partial class Transfusion<T>
         }
 
         return Math.Min(1.0, Math.Max(1e-8, F(timestep) / F(0.0)));
+    }
+
+    /// <summary>
+    /// <see cref="CosineAlphaBar"/> for a tensor of (integer-valued) timesteps.
+    /// </summary>
+    private Tensor<T> CosineAlphaBars(Tensor<T> timestepValues, int timesteps)
+    {
+        // f(t) = cos(((t / T) + s) / (1 + s) * pi / 2)^2; alphaBar = clamp(f(t) / f(0), 1e-8, 1).
+        double scale = Math.PI / 2.0 / (1.0 + CosineScheduleOffset);
+        double f0 = Math.Cos(CosineScheduleOffset * scale);
+        f0 *= f0;
+        var angle = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(
+                Engine.TensorDivideScalar(timestepValues, NumOps.FromDouble(timesteps)), NumOps.FromDouble(CosineScheduleOffset)),
+            NumOps.FromDouble(scale));
+        var cosine = Engine.TensorCos(angle);
+        var ratio = Engine.TensorDivideScalar(Engine.TensorMultiply(cosine, cosine), NumOps.FromDouble(f0));
+        return Engine.TensorClamp(ratio, NumOps.FromDouble(1e-8), NumOps.One);
     }
 
     /// <summary>Token ids as the <c>[1, S]</c> tensor the embedding layer indexes with.</summary>

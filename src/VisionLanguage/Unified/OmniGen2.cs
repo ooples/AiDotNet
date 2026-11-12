@@ -237,14 +237,21 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
             ? engine.TensorMultiplyScalar(CyclicTake(conditioning, dim), NumOps.FromDouble(0.1))
             : new Tensor<T>([0]);
 
+        // Per-step time-embedding scale t * 0.03 with t = 1 - step / numOdeSteps.
+        var timeScale = engine.TensorMultiplyScalar(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorDivideScalar(
+                engine.TensorArange<T>(0, numOdeSteps, 1), NumOps.FromDouble(numOdeSteps))),
+            NumOps.FromDouble(0.03));
+        T timeAmplitude = NumOps.FromDouble(0.1);
+        T cfg = NumOps.FromDouble(cfgScale);
+        T dtStep = NumOps.FromDouble(1.0 / numOdeSteps);
+
         for (int step = 0; step < numOdeSteps; step++)
         {
-            double t = 1.0 - (double)step / numOdeSteps;
-            double dt = 1.0 / numOdeSteps;
 
             // Predict velocity field v(x_t, t, cond): input[d] = x_t[d % outPixels] + 0.1 * cond[d % condDim] + timeEmb[d]
             var timeEmb = engine.TensorMultiplyScalar(
-                engine.TensorSin(engine.TensorMultiplyScalar(dimIndex, NumOps.FromDouble(t * 0.03))), NumOps.FromDouble(0.1));
+                engine.TensorSin(engine.TensorMultiply(dimIndex, Pick(timeScale, step))), timeAmplitude);
             var latentView = CyclicTake(latent, dim);
             var stepInput = engine.TensorAdd(engine.TensorAdd(latentView, scaledConditioning), timeEmb);
 
@@ -264,10 +271,10 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
             var vCond = condVelocity.Reshape([velDim]);
             var vUncond = engine.TensorSlice(uncondVelocity.Reshape([uncondVelocity.Length]), [0], [velDim]);
             var vGuided = engine.TensorAdd(
-                vUncond, engine.TensorMultiplyScalar(engine.TensorSubtract(vCond, vUncond), NumOps.FromDouble(cfgScale)));
+                vUncond, engine.TensorMultiplyScalar(engine.TensorSubtract(vCond, vUncond), cfg));
 
             // Euler step: x_{t-dt} = x_t - dt * v(x_t, t)
-            latent = engine.TensorSubtract(latent, engine.TensorMultiplyScalar(CyclicTake(vGuided, outPixels), NumOps.FromDouble(dt)));
+            latent = engine.TensorSubtract(latent, engine.TensorMultiplyScalar(CyclicTake(vGuided, outPixels), dtStep));
         }
 
         // Step 4: Output

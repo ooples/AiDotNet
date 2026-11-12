@@ -237,9 +237,11 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
         int[] neighborOffsets = [-1, 1, -gridSize, gridSize, -gridSize - 1, -gridSize + 1, gridSize - 1, gridSize + 1];
 
         int numSteps = 20;
+        T half = NumOps.FromDouble(0.5);
+        T neighborConfidence = NumOps.FromDouble(0.15);
         for (int step = 0; step < numSteps; step++)
         {
-            int maskedCount = NumOps.ToInt(engine.TensorSum(isMasked));
+            int maskedCount = engine.TensorSum(isMasked.Cast<int>());
             if (maskedCount == 0)
                 break;
 
@@ -263,11 +265,11 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
             var contextVal = engine.TensorDivide(contextSum, engine.TensorMax(neighborCount, NumOps.One));
 
             var logit = engine.TensorAdd(
-                engine.TensorMultiplyScalar(contextVal, NumOps.FromDouble(0.5)),
-                engine.TensorMultiplyScalar(textCond, NumOps.FromDouble(0.5)));
+                engine.TensorMultiplyScalar(contextVal, half),
+                engine.TensorMultiplyScalar(textCond, half));
             var predictedIds = QuantizeTanhTokens(logit, numVisTokens);
             var confidences = engine.TensorAdd(
-                engine.TensorAbs(logit), engine.TensorMultiplyScalar(neighborCount, NumOps.FromDouble(0.15)));
+                engine.TensorAbs(logit), engine.TensorMultiplyScalar(neighborCount, neighborConfidence));
 
             var unmaskNow = SelectTopKFirstIndex(confidences, isMasked, toUnmask);
             visualTokenIds = engine.TensorWhere(unmaskNow, predictedIds, visualTokenIds);
@@ -275,7 +277,7 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
         }
 
         // Fill any remaining masked tokens with t % numVisTokens
-        if (NumOps.GreaterThan(engine.TensorSum(isMasked), NumOps.Zero))
+        if (engine.TensorSum(isMasked.Cast<int>()) > 0)
         {
             if (numVisTokens == 0)
                 throw new DivideByZeroException();
