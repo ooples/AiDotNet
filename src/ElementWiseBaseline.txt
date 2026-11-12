@@ -20868,7 +20868,6 @@
 4	ADNELEM002|AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.CTCGreedyDecodeWithConfidence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.DetectLanguageProbabilities(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.ExtractSegments(string, double, System.Collections.Generic.List<int>, double)
-1	ADNELEM002|AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASR<T>.AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASR<T>.Labels(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASR<T>.Samples(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int, int)

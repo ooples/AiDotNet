@@ -41,6 +41,8 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ResearchPaper("Moonshine: Speech Recognition for Live Transcription and Voice Commands", "https://arxiv.org/abs/2410.15608", Year = 2024, Authors = "Useful Sensors")]
 [PaperOptimizer(OptimizerKind.ScheduleFreeAdamW, LearningRate = 1.4e-3, WarmupSteps = 8192,
                 Source = "Jeffries et al. 2024: the AdamW variation of the schedule-free optimizer of Defazio et al. 2024, with gradient norm clipping and the learning rate warmed up to 1.4e-3 over 8192 steps. The clipping threshold is not stated, so none is declared.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork feeds the raw waveform to Moonshine's convolution stem as a single-channel [B, 1, samples] signal, so Layers[0] never sees the caller's [batch, samples] layout.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Time)]
 public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

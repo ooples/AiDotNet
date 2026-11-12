@@ -22629,3 +22629,4 @@ static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.BlockwiseAnchorLocal
 AiDotNet.Interfaces.ISharedParameterConsumerLayer<T>
 AiDotNet.Interfaces.ISharedParameterConsumerLayer<T>.GetSharedTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.NeuralNetworks.Layers.TiedEmbeddingHeadLayer<T>.GetSharedTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<T>.Train(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> void

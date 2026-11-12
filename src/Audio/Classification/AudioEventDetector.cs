@@ -68,6 +68,8 @@ namespace AiDotNet.Audio.Classification;
 // detector implements. The previous entry paired that id with the title and author list of the
 // companion Audio Set dataset paper (Gemmeke et al., ICASSP 2017) — two different papers.
 [ResearchPaper("CNN Architectures for Large-Scale Audio Classification", "https://arxiv.org/abs/1609.09430", Year = 2017, Authors = "Shawn Hershey, Sourish Chaudhuri, Daniel P. W. Ellis, Jort F. Gemmeke, Aren Jansen, R. Channing Moore, Manoj Plakal, Devin Platt, Rif A. Saurous, Bryan Seybold, Malcolm Slaney, Ron J. Weiss, Kevin Wilson")]
+[AiDotNet.Attributes.PreprocessesInput("The forward reshapes the caller's [frames, bins] (or [batch, frames, bins]) log-mel patch to a single-channel [B, 1, frames, bins] image before the first convolution.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields

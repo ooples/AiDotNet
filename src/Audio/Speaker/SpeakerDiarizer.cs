@@ -63,6 +63,8 @@ namespace AiDotNet.Audio.Speaker;
     "The JHU DIHARD system embeds 1.5-second windows every 0.75 seconds with x-vectors (Snyder et al. 2018) and clusters them "
     + "agglomeratively, so the diarizer runs the x-vector network of its embedding extractor.")]
     [ResearchPaper("Speaker Diarization: A Review of Recent Research", "https://doi.org/10.1109/TASLP.2012.2209910")]
+[AiDotNet.Attributes.PreprocessesInput("The diarizer runs its extractor's XVectorNetwork, which transposes [batch, frames, features] to channel-first [B, features, frames] before the first TDNN convolution.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Time)]
 public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
 {
     #region Fields

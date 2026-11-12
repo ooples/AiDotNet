@@ -84,6 +84,7 @@ public class RealBasicVSRSharpOptions : NeuralNetworkOptions
     /// Gets or sets the mean absolute cleaning residue, in pixel levels 0-255, below which inference stops cleaning
     /// (5, the release's test setting for this stage; training uses 255, i.e. one pass).
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Acts only when a cleaning pass's mean residue crosses it; the untrained test-scale model's residue never falls between the probed thresholds. The shared RealBasicVsrCore stopping rule is covered by RealBasicVSRPaperTests (RunNormalizedForTest at thresholds 10 and 0).")]
     public double InferenceCleaningThreshold { get; set; } = 5;
 
     #endregion
