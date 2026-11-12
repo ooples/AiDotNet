@@ -184,7 +184,7 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         var shape = new[] { numFrames, numSections };
         var logits = Engine.Reshape(Engine.TensorSlice(AudioEngineOps.Flatten(Engine, output), [0], [used]), shape);
         var ranked = Engine.TensorWhere(
-            Engine.TensorIsNan(logits), Tensor<T>.CreateDefault(shape, NumOps.FromDouble(double.NegativeInfinity)), logits);
+            Engine.TensorIsNan(logits), Tensor<T>.CreateDefault(shape, AudioEngineOps.NegativeInfinityOrMin<T>()), logits);
         var maxVal = Engine.TensorBroadcastTo(Engine.ReduceMax(ranked, [1], keepDims: true), shape);
         var exp = Engine.TensorExp(Engine.TensorSubtract(logits, maxVal));
         var sumExp = Engine.TensorBroadcastTo(Engine.ReduceSum(exp, [1], keepDims: true), shape);
@@ -320,7 +320,7 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         if (numSections <= 0) return new int[numFrames];
         int total = numFrames * numSections;
         int available = Math.Min(output.Length, total);
-        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
+        T negativeInfinity = AudioEngineOps.NegativeInfinityOrMin<T>();
         var scores = available == 0
             ? Tensor<T>.CreateDefault([total], negativeInfinity)
             : Engine.TensorSlice(AudioEngineOps.Flatten(Engine, output), [0], [available]);

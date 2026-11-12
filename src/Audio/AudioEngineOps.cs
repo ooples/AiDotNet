@@ -9,6 +9,27 @@ namespace AiDotNet.Audio;
 /// </summary>
 internal static class AudioEngineOps
 {
+    /// <summary>True for the element types that can hold NaN and infinities.</summary>
+    internal static bool IsFloating<T>()
+        => typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half);
+
+    /// <summary>
+    /// -infinity for floating element types, otherwise the type's minimum value (decimal and the
+    /// integer types have no infinity, and converting double -infinity to them throws).
+    /// </summary>
+    internal static T NegativeInfinityOrMin<T>()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return IsFloating<T>() ? NegativeInfinityOrMin<T>() : numOps.MinValue;
+    }
+
+    /// <summary>NaN for floating element types, otherwise zero (only reachable where no NaN exists).</summary>
+    internal static T NaNOrZero<T>()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return IsFloating<T>() ? numOps.FromDouble(double.NaN) : numOps.Zero;
+    }
+
     /// <summary>Row-major flatten to a rank-1 tensor.</summary>
     internal static Tensor<T> Flatten<T>(IEngine engine, Tensor<T> x)
         => x.Shape.Length == 1 ? x : engine.Reshape(x, new[] { x.Length });
@@ -35,7 +56,7 @@ internal static class AudioEngineOps
         // NaN compares false with everything, so for ranking it behaves like a value no number exceeds
         // from below: substitute -inf, which every number is >= (only floating types can hold NaN).
         var comparable = anyNan
-            ? engine.TensorWhere(isNan, Tensor<T>.CreateDefault(new[] { n }, numOps.FromDouble(double.NegativeInfinity)), v)
+            ? engine.TensorWhere(isNan, Tensor<T>.CreateDefault(new[] { n }, NegativeInfinityOrMin<T>()), v)
             : v;
         var sorted = engine.TensorSort(comparable, 0, descending: false).Values;
         // Elements strictly greater than v[i] = n - (elements <= v[i]).
@@ -64,7 +85,7 @@ internal static class AudioEngineOps
         if (numOps.IsNaN(first)) return 0;
         var isNan = engine.TensorIsNan(v);
         var comparable = engine.TensorCountNonzero(isNan) > 0
-            ? engine.TensorWhere(isNan, Tensor<T>.CreateDefault(new[] { n }, numOps.FromDouble(double.NegativeInfinity)), v)
+            ? engine.TensorWhere(isNan, Tensor<T>.CreateDefault(new[] { n }, NegativeInfinityOrMin<T>()), v)
             : v;
         // v[0] is a number, so the maximum is a number and its first occurrence is the scan's answer.
         T best = engine.TensorMaxValue(comparable);
@@ -556,10 +577,10 @@ internal static class AudioEngineOps
         int n = Math.Max(0, Math.Min(count, logits.Length));
         if (n == 0) return (0, numOps.Divide(numOps.One, numOps.Zero));
         var head = FitLength(engine, logits, n);
-        var candidates = engine.Concat(new[] { Tensor<T>.CreateDefault(new[] { 1 }, numOps.FromDouble(double.NegativeInfinity)), head }, 0);
+        var candidates = engine.Concat(new[] { Tensor<T>.CreateDefault(new[] { 1 }, NegativeInfinityOrMin<T>()), head }, 0);
         int best = FirstArgMaxSequential(engine, candidates);
         int bin = best > 0 ? best - 1 : 0;
-        T bestValue = best > 0 ? Head(engine, engine.TensorSlice(head, new[] { bin }, new[] { 1 }), 1)[0] : numOps.FromDouble(double.NegativeInfinity);
+        T bestValue = best > 0 ? Head(engine, engine.TensorSlice(head, new[] { bin }, new[] { 1 }), 1)[0] : NegativeInfinityOrMin<T>();
         T sumExp = engine.TensorSum(engine.TensorExp(engine.TensorSubtractScalar(head, bestValue)));
         return (bin, numOps.Divide(numOps.One, sumExp));
     }
@@ -577,7 +598,7 @@ internal static class AudioEngineOps
         var numOps = MathHelper.GetNumericOperations<T>();
         var shape = new[] { rows, cols };
         var ranked = engine.TensorWhere(
-            engine.TensorIsNan(matrix), Tensor<T>.CreateDefault(shape, numOps.FromDouble(double.NegativeInfinity)), matrix);
+            engine.TensorIsNan(matrix), Tensor<T>.CreateDefault(shape, NegativeInfinityOrMin<T>()), matrix);
         var best = engine.TensorBroadcastTo(engine.ReduceMax(ranked, new[] { 1 }, keepDims: true), shape);
         var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, cols, 1), new[] { 1, cols }), shape);
         var firstBest = engine.TensorWhere(

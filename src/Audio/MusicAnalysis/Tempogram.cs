@@ -172,7 +172,7 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         {
             var candidates = Engine.Concat(new[]
             {
-                Tensor<T>.CreateDefault([1], NumOps.FromDouble(double.NegativeInfinity)),
+                Tensor<T>.CreateDefault([1], AudioEngineOps.NegativeInfinityOrMin<T>()),
                 AudioEngineOps.FitLength(Engine, output, numBins)
             }, 0);
             bestBin = Math.Max(0, AudioEngineOps.FirstArgMaxSequential(Engine, candidates) - 1);
