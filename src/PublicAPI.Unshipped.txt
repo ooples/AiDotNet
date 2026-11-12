@@ -1219,3 +1219,6 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecWeightsPath.get -> string?
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecWeightsPath.set -> void
+override AiDotNet.Audio.AudioGen.AudioGenModel<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
