@@ -129,7 +129,7 @@ public class CAMAlgorithm<T> : FunctionalBase<T>
 
     private Matrix<T> FitAndPrune(Matrix<T> data, int n, int d, List<int> causalOrder)
     {
-        var weights = new Dictionary<int, double>();
+        var W = new Matrix<T>(d, d);
 
         for (int idx = 1; idx < d; idx++)
         {
@@ -159,12 +159,12 @@ public class CAMAlgorithm<T> : FunctionalBase<T>
 
                 if (significantByLR || significantByVariance)
                 {
-                    weights[parent * d + target] = Math.Sqrt(Math.Max(0, varianceReduction));
+                    W[parent, target] = NumOps.FromDouble(Math.Sqrt(Math.Max(0, varianceReduction)));
                 }
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return W;
     }
 
     private double ComputeAdditiveResidualVariance(Matrix<T> data, int n, int target, List<int> parents)

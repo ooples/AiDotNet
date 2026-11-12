@@ -207,7 +207,7 @@ public class GFCIAlgorithm<T> : HybridBase<T>
         }
 
         // Build weighted adjacency matrix
-        var weights = new Dictionary<int, double>();
+        var W = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++)
@@ -216,20 +216,20 @@ public class GFCIAlgorithm<T> : HybridBase<T>
 
                 if (bidirected[i, j])
                 {
-                    weights[i * d + j] = Math.Abs(ComputeCorrelation(data, i, j));
+                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputeCorrelation(data, i, j)));
                 }
                 else if (oriented[i, j])
                 {
-                    weights[i * d + j] = ComputeOLSWeight(data, i, j);
+                    W[i, j] = NumOps.FromDouble(ComputeOLSWeight(data, i, j));
                 }
                 else if (!oriented[j, i] && !bidirected[j, i])
                 {
-                    weights[i * d + j] = Math.Abs(ComputeCorrelation(data, i, j));
+                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputeCorrelation(data, i, j)));
                 }
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return W;
     }
 
     private bool IsCI(Matrix<T> data, int i, int j, List<int> condSet, int n)

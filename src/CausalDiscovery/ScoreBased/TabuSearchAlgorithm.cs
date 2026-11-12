@@ -157,12 +157,7 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
         }
 
         // Build adjacency from best parent sets using Matrix<T>
-        var weights = new Dictionary<int, double>();
-        for (int to = 0; to < d; to++)
-            foreach (int from in bestParentSets[to])
-                weights[from * d + to] = Math.Max(MinimumEdgeWeight, ComputeAbsCorrelation(data, from, to));
-
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return CorrelationWeightedAdjacency(data, parentSets, MinimumEdgeWeight);
     }
 
     private static HashSet<int>[] CloneParentSets(HashSet<int>[] parentSets, int d)

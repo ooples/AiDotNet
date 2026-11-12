@@ -87,7 +87,7 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         int effectiveN = n - MaxLag;
         if (effectiveN < 2 * MaxLag + 3 || d < 2) return new Matrix<T>(d, d);
 
-        var result = new Dictionary<int, double>();
+        var result = new Matrix<T>(d, d);
 
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
@@ -104,11 +104,11 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
                 {
                     // Use the fitted lag coefficient as the edge weight
                     if (Math.Abs(betaIJ) > EdgeCoefficientThreshold)
-                        result[i * d + j] = betaIJ;
+                        result[i, j] = NumOps.FromDouble(betaIJ);
                 }
             }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, result);
+        return result;
     }
 
     private (double hsic, double beta) FitAndComputeHSIC(Matrix<T> data, int cause, int target, int n)

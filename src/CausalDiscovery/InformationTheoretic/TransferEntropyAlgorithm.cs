@@ -80,7 +80,7 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         if (effectiveN < 2 * _maxLag + 3)
             throw new ArgumentException($"Insufficient samples for TransferEntropy: need at least {3 * _maxLag + 3} rows for maxLag={_maxLag}, got {n}.");
 
-        var weights = new Dictionary<int, double>();
+        var result = new Matrix<T>(d, d);
 
         for (int source = 0; source < d; source++)
         {
@@ -94,11 +94,11 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
                 double te = ComputeTransferEntropy(data, source, target, n);
 
                 if (te > _threshold)
-                    weights[source * d + target] = te;
+                    result[source, target] = NumOps.FromDouble(te);
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return result;
     }
 
     private double ComputeTransferEntropy(Matrix<T> data, int source, int target, int n)

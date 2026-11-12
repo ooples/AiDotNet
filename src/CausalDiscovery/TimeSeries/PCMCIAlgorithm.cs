@@ -121,7 +121,7 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         }
 
         // Step 2: MCI tests — test with conditioning on parents of BOTH source and target
-        var weights = new Dictionary<int, double>();
+        var W = new Matrix<T>(d, d);
         for (int j = 0; j < d; j++)
         {
             foreach (var (pVar, pLag) in candidateParents[j])
@@ -143,9 +143,9 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 {
                     // Aggregate across lags: take maximum absolute partial correlation
                     double absPartCorr = Math.Abs(partCorr);
-                    double current = weights.TryGetValue(pVar * d + j, out double existing) ? existing : 0;
+                    double current = NumOps.ToDouble(W[pVar, j]);
                     if (absPartCorr > current)
-                        weights[pVar * d + j] = absPartCorr;
+                        W[pVar, j] = NumOps.FromDouble(absPartCorr);
                 }
             }
         }
@@ -153,7 +153,8 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // Fallback: With deterministic or near-deterministic data, conditioning on
         // correlated parents makes all partial correlations zero, removing all edges.
         // In this case, use unconditional lagged cross-correlation to detect relationships.
-        bool hasEdges = weights.Any(edge => edge.Key / d != edge.Key % d && Math.Abs(edge.Value) > 0);
+        bool hasEdges = CausalTensorHelpers.AnyAbove(
+            Engine.TensorMultiply(Engine.TensorAbs(Tensor<T>.FromMatrix(W)), OffDiagonalMask(d)), NumOps.Zero);
 
         if (!hasEdges)
         {
@@ -179,12 +180,12 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     }
 
                     if (maxCorr >= 0.1)
-                        weights[bestSource * d + bestTarget] = maxCorr;
+                        W[bestSource, bestTarget] = NumOps.FromDouble(maxCorr);
                 }
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return W;
     }
 
     /// <summary>

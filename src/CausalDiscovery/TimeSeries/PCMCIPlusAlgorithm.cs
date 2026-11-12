@@ -76,8 +76,8 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
         foreach (int position in Engine.TensorNonzero(Engine.TensorTranspose(hasLaggedEdge).Reshape(new[] { d * d })).ToArray())
             parentsOf[position / d].Add(position % d);
 
-        // Contemporaneous strengths, applied where they exceed the lagged weight already there
-        var contemporaneous = new Dictionary<int, double>();
+        // Lagged edges start the result; contemporaneous strengths replace them where larger.
+        var W = lagged.ToMatrix();
 
         // Step 2: Contemporaneous discovery via conditional independence testing
         // Condition on the lagged parents of both variables (discovered from PCMCI)
@@ -110,20 +110,24 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
                     // Significant contemporaneous link — orient using causal ordering heuristic
                     int parentsOfI = parentsOf[i].Count, parentsOfJ = parentsOf[j].Count;
 
-                    // Each pair is visited once, so the weight already at [i, j] / [j, i] is the lagged one.
+                    T strength = NumOps.FromDouble(Math.Abs(partCorr));
                     if (parentsOfI <= parentsOfJ)
-                        contemporaneous[i * d + j] = Math.Abs(partCorr);
+                    {
+                        double current = NumOps.ToDouble(W[i, j]);
+                        if (Math.Abs(partCorr) > current)
+                            W[i, j] = strength;
+                    }
                     else
-                        contemporaneous[j * d + i] = Math.Abs(partCorr);
+                    {
+                        double current = NumOps.ToDouble(W[j, i]);
+                        if (Math.Abs(partCorr) > current)
+                            W[j, i] = strength;
+                    }
                 }
             }
         }
 
-        var strength = Tensor<T>.FromMatrix(CausalTensorHelpers.FromStatistics<T>(d, d, contemporaneous));
-        var tested = Tensor<T>.FromMatrix(CausalTensorHelpers.FromStatistics<T>(d, d,
-            contemporaneous.ToDictionary(link => link.Key, _ => 1.0)));
-        var replace = Engine.TensorMultiply(tested, Engine.TensorGreaterThan(strength, lagged));
-        return Engine.TensorWhere(replace, strength, lagged).ToMatrix();
+        return W;
     }
 
     /// <summary>

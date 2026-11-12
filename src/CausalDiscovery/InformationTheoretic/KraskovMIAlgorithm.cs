@@ -86,7 +86,7 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
         if (n < k + 2)
             throw new ArgumentException($"KraskovMI requires at least {k + 2} samples for k={k}, got {n}.");
 
-        var weights = new Dictionary<int, double>();
+        var result = new Matrix<T>(d, d);
 
         // Compute KSG mutual information for each pair
         // KSG is an undirected MI estimator — emit undirected adjacency (both directions)
@@ -99,14 +99,15 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
 
                 if (mi > _threshold)
                 {
+                    T miVal = NumOps.FromDouble(mi);
                     // Undirected: MI is symmetric, place in both directions
-                    weights[i * d + j] = mi;
-                    weights[j * d + i] = mi;
+                    result[i, j] = miVal;
+                    result[j, i] = miVal;
                 }
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return result;
     }
 
     private double ComputeKSGMutualInformation(Matrix<T> data, int col1, int col2, int n, int k)
