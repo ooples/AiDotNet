@@ -926,23 +926,22 @@ public class SignalToNoiseRatio<T> where T : struct
 }
 
 /// <summary>
-/// Perceptual Evaluation of Speech Quality (PESQ) approximation metric.
+/// A PESQ-like speech quality approximation. This is NOT ITU-T P.862 (PESQ) and does not reproduce its scores.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is a simplified approximation of the ITU-T P.862 PESQ algorithm.
-/// For production use, consider using an official PESQ implementation.
+/// This metric blends STOI and segmental SNR into a number on the MOS-LQO range (-0.5 to 4.5) using an
+/// empirical mapping. It does not implement the ITU-T P.862 / P.862.2 perceptual model (level and IRS
+/// filtering, time alignment, auditory transform, disturbance aggregation), and its values do not match
+/// the official reference implementation or the python <c>pesq</c> package. Do not report its output as
+/// PESQ or compare it with published PESQ results.
 /// </para>
 /// <para>
-/// PESQ scores range from -0.5 to 4.5, where higher values indicate better quality.
-/// - &gt;4.0: Excellent quality
-/// - 3.5-4.0: Good quality
-/// - 3.0-3.5: Fair quality
-/// - &lt;3.0: Poor quality
+/// Use it only as a rough relative quality indicator; higher values indicate better quality.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class PerceptualSpeechQuality<T> where T : struct
+public class ApproximatePerceptualSpeechQuality<T> where T : struct
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _sampleRate;
@@ -950,10 +949,10 @@ public class PerceptualSpeechQuality<T> where T : struct
     private readonly SignalToNoiseRatio<T> _snr;
 
     /// <summary>
-    /// Initializes a new instance of PESQ approximation calculator.
+    /// Initializes a new instance of the PESQ-like approximation (not ITU-T P.862).
     /// </summary>
     /// <param name="sampleRate">Audio sample rate (8000 or 16000 Hz supported).</param>
-    public PerceptualSpeechQuality(int sampleRate = 16000)
+    public ApproximatePerceptualSpeechQuality(int sampleRate = 16000)
     {
         if (sampleRate != 8000 && sampleRate != 16000)
         {
@@ -967,15 +966,15 @@ public class PerceptualSpeechQuality<T> where T : struct
     }
 
     /// <summary>
-    /// Computes an approximation of PESQ score between degraded and reference speech.
+    /// Computes the PESQ-like approximation between degraded and reference speech (not an ITU-T P.862 score).
     /// </summary>
     /// <param name="degraded">The degraded speech signal.</param>
     /// <param name="reference">The clean reference speech signal.</param>
-    /// <returns>Approximated PESQ score (MOS-LQO scale, -0.5 to 4.5).</returns>
+    /// <returns>A PESQ-like score on the MOS-LQO range (-0.5 to 4.5); not comparable with P.862 scores.</returns>
     public T Compute(Tensor<T> degraded, Tensor<T> reference)
     {
         // This is a simplified approximation combining STOI and segmental SNR
-        // For accurate PESQ, use the official ITU-T P.862 implementation
+        // It is not ITU-T P.862 and does not match P.862 scores
 
         // Get STOI score (0-1)
         T stoiScore = _stoi.Compute(degraded, reference);
@@ -987,15 +986,15 @@ public class PerceptualSpeechQuality<T> where T : struct
 
         // Approximate PESQ using empirical mapping from STOI and SNR
         // This is based on observed correlations between PESQ and these metrics
-        double pesqApprox = MapToPesqScale(stoi, snr);
+        double pesqApprox = MapToPesqLikeScale(stoi, snr);
 
         return _numOps.FromDouble(pesqApprox);
     }
 
     /// <summary>
-    /// Maps STOI and SNR to an approximate PESQ score.
+    /// Maps STOI and SNR to a PESQ-like score.
     /// </summary>
-    private double MapToPesqScale(double stoi, double snr)
+    private double MapToPesqLikeScale(double stoi, double snr)
     {
         // Normalize SNR to [0, 1] range (assuming -5 to 30 dB range)
         double snrNorm = Math.Max(0, Math.Min(1, (snr + 5) / 35));

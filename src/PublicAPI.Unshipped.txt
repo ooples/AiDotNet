@@ -22577,3 +22577,9 @@ static AiDotNet.Kernels.GridInterpolationKernel<T>.WithUniformGrid(AiDotNet.Inte
 AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.RandomSurvivalForest(int numTrees = 100, int maxDepth = 10, int minSamplesLeaf = 6, int maxFeatures = 0, int? seed = null, bool bootstrap = true) -> void
 AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.Bootstrap.get -> bool
 override AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.PredictCumulativeHazard(AiDotNet.Tensors.LinearAlgebra.Vector<T>! times, AiDotNet.Tensors.LinearAlgebra.Matrix<T>? features = null) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! degraded, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reference) -> T
+*REMOVED*AiDotNet.Metrics.PerceptualSpeechQuality<T>.PerceptualSpeechQuality(int sampleRate = 16000) -> void
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>.ApproximatePerceptualSpeechQuality(int sampleRate = 16000) -> void
+AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! degraded, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reference) -> T
