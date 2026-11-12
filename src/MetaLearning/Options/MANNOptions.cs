@@ -185,6 +185,29 @@ public class MANNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public int NumReadHeads { get; set; } = 1;
 
     /// <summary>
+    /// Gets or sets the decay <c>gamma</c> of the least-recently-used access (LRUA) usage weights.
+    /// </summary>
+    /// <value>Default is 0.95.</value>
+    /// <remarks>
+    /// <para>Santoro et al. 2016: <c>w^u_t = gamma * w^u_{t-1} + w^r_t + w^w_t</c>. The paper leaves gamma open; 0.95 is
+    /// the value public LRUA implementations use. Must be in [0, 1].</para>
+    /// <para><b>For Beginners:</b> How quickly the memory forgets that a slot was used. A slot whose usage has
+    /// decayed below the others is the one the next write overwrites.</para>
+    /// </remarks>
+    public double UsageDecay { get; set; } = 0.95;
+
+    /// <summary>
+    /// Gets or sets <c>alpha</c>, the logit of the LRUA write gate <c>sigmoid(alpha)</c>.
+    /// </summary>
+    /// <value>Default is 0.0, a gate of 0.5.</value>
+    /// <remarks>
+    /// <para>Santoro et al. 2016: <c>w^w_t = sigmoid(alpha) * w^r_{t-1} + (1 - sigmoid(alpha)) * w^lu_{t-1}</c>, which
+    /// interpolates between rewriting the slot read last and writing to the least-used slot. The paper learns
+    /// alpha; here the controller is trained on the query loss alone, so alpha is a fixed hyperparameter.</para>
+    /// </remarks>
+    public double WriteGateLogit { get; set; } = 0.0;
+
+    /// <summary>
     /// Gets or sets the number of write heads.
     /// </summary>
     /// <value>Default is 1.</value>
@@ -326,6 +349,8 @@ public class MANNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
                MemoryKeySize > 0 &&
                MemoryValueSize > 0 &&
                NumReadHeads > 0 &&
+               UsageDecay >= 0 && UsageDecay <= 1 &&
+               !double.IsNaN(WriteGateLogit) && !double.IsInfinity(WriteGateLogit) &&
                NumWriteHeads > 0 &&
                NumClasses > 0 &&
                MetaBatchSize > 0 &&
@@ -359,6 +384,8 @@ public class MANNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
             MemoryKeySize = MemoryKeySize,
             MemoryValueSize = MemoryValueSize,
             NumReadHeads = NumReadHeads,
+            UsageDecay = UsageDecay,
+            WriteGateLogit = WriteGateLogit,
             NumWriteHeads = NumWriteHeads,
             NumClasses = NumClasses,
             ClearMemoryBetweenTasks = ClearMemoryBetweenTasks,
