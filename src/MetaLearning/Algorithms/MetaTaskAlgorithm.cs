@@ -119,7 +119,7 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     }
 
     /// <summary>
-    /// Algorithm 1, line 14: Z random example pairs. The first index is into the query set (or the support
+    /// Algorithm 1, line 9: Z random example pairs. The first index is into the query set (or the support
     /// set under <see cref="MetaMixSource.SupportAndQuery"/>), the second into the query set.
     /// </summary>
     private (int[] First, int[] Second) DrawPairs(IMetaLearningTask<T, TInput, TOutput> task)
