@@ -7,8 +7,37 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Helpers;
 /// Whole-array engine helpers shared by the feature selectors: column gathers, filled tensors, per-column
 /// moments and ranked index selection with LINQ-compatible tie order.
 /// </summary>
+/// <remarks>
+/// Counts and ranks are kept in int, never accumulated in T (a Half running count stops at 2048, where
+/// 2048 + 1 rounds back to 2048), and sums of squares are formed on pre-scaled values so that they do not
+/// overflow Half (65504) once the values pass 256.
+/// </remarks>
 internal static class FeatureSelectionTensorOps
 {
+    /// <summary>The smallest positive normal Half, 2^-14.</summary>
+    private const double HalfSmallestNormal = 6.103515625e-05;
+
+    /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to the smallest positive normal value of T where it is below
+    /// that. Half cannot hold 1e-10 (it rounds to 0), which turns "not above epsilon" guards off; float, double
+    /// and decimal keep <paramref name="epsilon"/> unchanged.
+    /// </summary>
+    private static T Tolerance<T>(double epsilon) =>
+        MathHelper.GetNumericOperations<T>().FromDouble(typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+
+    /// <summary>
+    /// A path length longer than any real one: +infinity for the IEEE types, and half of the largest value for
+    /// the others (decimal has no infinity, and half the maximum leaves room for one addition of two of them).
+    /// </summary>
+    private static T Unreachable<T>()
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half))
+            return ops.FromDouble(double.PositiveInfinity);
+
+        return ops.Divide(ops.MaxValue, ops.FromDouble(2));
+    }
+
     /// <summary>Gathers the given columns of <paramref name="data"/> into a new matrix, in the given order.</summary>
     public static Matrix<T> SelectColumns<T>(Matrix<T> data, int[] columns)
     {
@@ -43,26 +72,6 @@ internal static class FeatureSelectionTensorOps
 
     /// <summary>Column-wise maximum of a 2-D tensor ([n, p] to [p]).</summary>
     public static Tensor<T> ColumnMax<T>(Tensor<T> x) => AiDotNetEngine.Current.ReduceMax(x, new[] { 0 }, false);
-
-    /// <summary>
-    /// Per-column population moments of a 2-D tensor ([n, p]): the column means ([1, p]), the population
-    /// standard deviations ([p]) and the centred data ([n, p]).
-    /// </summary>
-    public static Tensor<T> CenterColumns<T>(Tensor<T> x, out Tensor<T> mean, out Tensor<T> std)
-    {
-        var engine = AiDotNetEngine.Current;
-        mean = engine.ReduceMean(x, new[] { 0 }, true);
-        var centered = engine.TensorSubtract(x, mean);
-        std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false));
-        return centered;
-    }
-
-    /// <summary>
-    /// The <paramref name="quantile"/>-th quantile of every column of a 2-D tensor ([n, p] to [p]), interpolating
-    /// linearly between order statistics at position <c>quantile * (n - 1)</c> (numpy's default method).
-    /// </summary>
-    public static Tensor<T> ColumnQuantile<T>(Tensor<T> x, double quantile) =>
-        AiDotNetEngine.Current.TensorQuantile(x, quantile, 0, false, QuantileInterpolation.Linear);
 
     /// <summary>
     /// Sliding-window maximum along the last axis of a 2-D tensor ([rows, n]): entry i becomes the maximum over
@@ -106,57 +115,71 @@ internal static class FeatureSelectionTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         var squared = engine.TensorMax(engine.PairwiseDistanceSquared(x, x), ops.Zero);
-        return engine.TensorMultiply(squared, OneMinus(engine.TensorEye<T>(n)));
+        // the diagonal is set, not masked by a multiply: 0 * infinity (|a|^2 overflows Half past 256) is NaN
+        return engine.TensorWhere(engine.TensorEye<T>(n), Filled(new[] { n, n }, ops.Zero), squared);
     }
 
     /// <summary>
     /// The k-nearest-neighbour mask of a pairwise distance matrix ([n, n]): entry (i, j) is 1 when j is one of
-    /// the <paramref name="k"/> rows closest to row i, excluding i itself. Ties at the k-th distance go to the
-    /// lower indices, like a stable <c>OrderBy(distance).Take(k)</c> over <c>j != i</c>.
+    /// the <paramref name="k"/> rows closest to row i, excluding i itself (k is capped at n - 1). Ties at the k-th
+    /// distance go to the lower indices, like a stable <c>OrderBy(distance).Take(k)</c> over <c>j != i</c>.
     /// </summary>
+    /// <remarks>
+    /// One stable sort of all n * n distances orders them by (distance, row, column), and every row then takes its
+    /// first k columns other than itself. The places are counted in int: a running tie count in Half stops at 2048
+    /// (2048 + 1 rounds back to 2048), so rows with more than 2048 tied candidates would take every one of them.
+    /// </remarks>
     public static Tensor<T> KNearestMask<T>(Tensor<T> distances, int k)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = distances.Shape[0];
-        if (k <= 0 || n == 0)
+        int take = Math.Min(k, n - 1);
+        if (take <= 0)
             return new Tensor<T>(new[] { n, n });
 
-        // Push the diagonal past every real distance so a row never picks itself
-        var eye = engine.TensorEye<T>(n);
-        T beyond = ops.Add(engine.TensorMaxValue(distances), ops.One);
-        var d = engine.TensorAdd(engine.TensorMultiply(distances, OneMinus(eye)), engine.TensorMultiplyScalar(eye, beyond));
+        var order = StableOrder(distances, descending: false);
+        var positions = new int[n * take];
+        var taken = new int[n];
+        foreach (int position in order)
+        {
+            int row = position / n;
+            if (position - row * n == row || taken[row] == take)
+                continue;
 
-        var sorted = engine.TensorSort(d, 1, false).Item1;
-        var kth = engine.TensorBroadcastTo(engine.TensorSlice(sorted, new[] { 0, k - 1 }, new[] { n, 1 }), new[] { n, n });
-        var less = engine.TensorLessThan(d, kth);
-        var lessCount = engine.TensorBroadcastTo(engine.ReduceSum(less, new[] { 1 }, true), new[] { n, n });
-        var tie = engine.TensorEquals(d, kth);
-        var tieRank = engine.TensorCumSum(tie, 1);
+            positions[row * take + taken[row]] = position;
+            taken[row]++;
+        }
 
-        // Ties at the k-th distance fill the remaining k - lessCount places in index order
-        var remaining = engine.TensorSubtract(Filled(new[] { n, n }, ops.FromDouble(k)), lessCount);
-        var takeTie = engine.TensorMultiply(tie, OneMinus(engine.TensorGreaterThan(tieRank, remaining)));
-        return engine.TensorAdd(less, takeTie);
+        var mask = engine.TensorScatter(
+            new Tensor<T>(new[] { n * n }),
+            new Tensor<int>(positions, new[] { n * take }),
+            Filled(new[] { n * take }, ops.One),
+            0);
+        return engine.Reshape(mask, new[] { n, n });
     }
 
     /// <summary>
     /// All-pairs shortest path lengths (Floyd-Warshall) over a weighted graph ([n, n] edge lengths where
-    /// <paramref name="edges"/> is 1, no edge elsewhere). Returns the path lengths and, in
-    /// <paramref name="reachable"/>, the 0/1 mask of the connected pairs (the diagonal included).
+    /// <paramref name="edges"/> is 1, no edge elsewhere). Returns the path lengths, 0 for the pairs that are not
+    /// connected, and, in <paramref name="reachable"/>, the 0/1 mask of the connected pairs (the diagonal included).
     /// </summary>
+    /// <remarks>
+    /// Pairs without an edge start at +infinity (half the largest value for types without an infinity) and are
+    /// built with a where, not a mask multiply: a finite sentinel such as the sum of all edge lengths overflows
+    /// Half past 65504, and 0 * infinity in a mask multiply is NaN on every edge.
+    /// </remarks>
     public static Tensor<T> ShortestPaths<T>(Tensor<T> lengths, Tensor<T> edges, out Tensor<T> reachable)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = lengths.Shape[0];
         var eye = engine.TensorEye<T>(n);
+        T unreachable = Unreachable<T>();
 
-        // Unreachable pairs hold a sentinel longer than any simple path (the sum of all edge lengths, plus 1)
-        var edgeLengths = engine.TensorMultiply(lengths, engine.TensorMultiply(edges, OneMinus(eye)));
-        T unreachable = ops.Add(engine.TensorSum(edgeLengths), ops.One);
-        var noEdge = OneMinus(engine.TensorMax(edges, eye));
-        var graph = engine.TensorAdd(edgeLengths, engine.TensorMultiplyScalar(noEdge, unreachable));
+        var offDiagonalEdges = engine.TensorMultiply(edges, OneMinus(eye));
+        var start = engine.TensorWhere(eye, Filled(new[] { n, n }, ops.Zero), Filled(new[] { n, n }, unreachable));
+        var graph = engine.TensorWhere(offDiagonalEdges, lengths, start);
 
         for (int via = 0; via < n; via++)
         {
@@ -167,7 +190,7 @@ internal static class FeatureSelectionTensorOps
         }
 
         reachable = engine.TensorLessThan(graph, unreachable);
-        return graph;
+        return engine.TensorWhere(reachable, graph, Filled(new[] { n, n }, ops.Zero));
     }
 
     /// <summary>
@@ -217,8 +240,16 @@ internal static class FeatureSelectionTensorOps
     /// Locally linear reconstruction (barycenter) weights, as in scikit-learn's <c>barycenter_kneighbors_graph</c>:
     /// for each row i with neighbours N(i), solve <c>(G + R I) w = 1</c> with the local Gram matrix
     /// <c>G = (x_i - x_N)(x_i - x_N)'</c> and <c>R = reg * trace(G)</c> (<c>reg</c> when the trace is 0), then
-    /// normalize w to sum 1 (when the sum is not within 1e-10 of 0). Returns the [n, n] weight matrix.
+    /// normalize w to sum 1 (when the sum is not within the tolerance of 0). Returns the [n, n] weight matrix.
     /// </summary>
+    /// <remarks>
+    /// Every row's differences are divided by their largest magnitude s before the Gram matrix is formed:
+    /// (x_i - x_N) squared overflows Half once a difference passes 256, which left an infinite system and zero
+    /// weights. The ridge scales with the trace, so the scaled system is the original one divided by s^2 and its
+    /// solution is s^2 w, which normalizes to the same weights. The "sum is 0" guard is taken on that
+    /// dimensionless sum with a T-aware tolerance (1e-10, raised to Half's smallest normal 2^-14 since 1e-10 is 0
+    /// in Half); rows that do not normalize are divided back by s^2.
+    /// </remarks>
     public static Tensor<T> BarycenterWeights<T>(Tensor<T> x, int[] neighborIndices, int k, double reg)
     {
         var engine = AiDotNetEngine.Current;
@@ -231,6 +262,14 @@ internal static class FeatureSelectionTensorOps
         var index = new Tensor<int>((int[])neighborIndices.Clone(), new[] { n * k });
         var neighbors = engine.Reshape(engine.TensorIndexSelect(x, index, 0), new[] { n, k, p });
         var differences = engine.TensorSubtract(engine.Reshape(x, new[] { n, 1, p }), neighbors);
+        var scale = Filled(new[] { n, 1, 1 }, ops.One);
+        if (p > 0)
+        {
+            var largest = engine.ReduceMax(engine.TensorAbs(differences), new[] { 1, 2 }, true); // [n, 1, 1]
+            scale = engine.TensorWhere(engine.TensorGreaterThan(largest, ops.Zero), largest, scale);
+            differences = engine.TensorDivide(differences, scale);
+        }
+
         var gram = engine.TensorBatchMatMul(differences, engine.TensorPermute(differences, new[] { 0, 2, 1 }));
 
         var eye = engine.Reshape(engine.TensorEye<T>(k), new[] { 1, k, k });
@@ -244,8 +283,8 @@ internal static class FeatureSelectionTensorOps
 
         var weights = LinalgDispatch<T>.Solve(system, Filled(new[] { n, k, 1 }, ops.One)); // [n, k, 1]
         var sum = engine.ReduceSum(weights, new[] { 1 }, true); // [n, 1, 1]
-        var normalizable = engine.TensorGreaterThan(engine.TensorAbs(sum), ops.FromDouble(1e-10));
-        var divisor = engine.TensorWhere(normalizable, sum, Filled(new[] { n, 1, 1 }, ops.One));
+        var normalizable = engine.TensorGreaterThan(engine.TensorAbs(sum), Tolerance<T>(1e-10));
+        var divisor = engine.TensorWhere(normalizable, sum, engine.TensorSquare(scale));
         weights = engine.TensorDivide(weights, divisor);
 
         var oneHot = engine.TensorOneHot<T>(new Tensor<int>((int[])neighborIndices.Clone(), new[] { n, k }), n); // [n, k, n]
@@ -381,8 +420,14 @@ internal static class FeatureSelectionTensorOps
 
     /// <summary>
     /// Pearson correlations between the columns of <paramref name="a"/> ([n, pa]) and of <paramref name="b"/>
-    /// ([n, pb]) as a [pa, pb] tensor; 0 where <c>sqrt(sxx * syy)</c> is not above 1e-10.
+    /// ([n, pb]) as a [pa, pb] tensor; 0 where <c>sqrt(sxx) sqrt(syy)</c> is not above a T-aware tolerance
+    /// (1e-10, raised to Half's smallest normal 2^-14 since 1e-10 is 0 in Half).
     /// </summary>
+    /// <remarks>
+    /// The correlation is scale-free, so every centred column is first divided by its largest magnitude: sums of
+    /// squares of the raw values overflow Half (65504) once the values pass 256, which made r inf / inf = NaN.
+    /// The guard is taken on the unscaled <c>sqrt(sxx) sqrt(syy)</c>, rebuilt from the scaled sums.
+    /// </remarks>
     public static Tensor<T> ColumnCorrelations<T>(Tensor<T> a, Tensor<T> b)
     {
         var engine = AiDotNetEngine.Current;
@@ -391,11 +436,18 @@ internal static class FeatureSelectionTensorOps
         int pb = b.Shape[1];
         var ac = engine.TensorSubtract(a, engine.ReduceMean(a, new[] { 0 }, true));
         var bc = engine.TensorSubtract(b, engine.ReduceMean(b, new[] { 0 }, true));
-        var cross = engine.TensorMatMul(engine.TensorTranspose(ac), bc);
-        var aSq = engine.ReduceSum(engine.TensorSquare(ac), new[] { 0 }, false);
-        var bSq = engine.ReduceSum(engine.TensorSquare(bc), new[] { 0 }, false);
-        var denominator = engine.TensorSqrt(engine.TensorOuter(aSq, bSq));
-        var defined = engine.TensorGreaterThan(denominator, ops.FromDouble(1e-10));
+        var aScale = ColumnScale(ac);
+        var bScale = ColumnScale(bc);
+        var au = engine.TensorDivide(ac, engine.Reshape(aScale, new[] { 1, pa }));
+        var bu = engine.TensorDivide(bc, engine.Reshape(bScale, new[] { 1, pb }));
+        var cross = engine.TensorMatMul(engine.TensorTranspose(au), bu);
+        var aNorm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(au), new[] { 0 }, false));
+        var bNorm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(bu), new[] { 0 }, false));
+        var denominator = engine.TensorOuter(aNorm, bNorm);
+
+        // sqrt(sxx) sqrt(syy) = (scale_a |a'|)(scale_b |b'|); an overflow to +infinity only passes the guard
+        var magnitude = engine.TensorOuter(engine.TensorMultiply(aScale, aNorm), engine.TensorMultiply(bScale, bNorm));
+        var defined = engine.TensorGreaterThan(magnitude, Tolerance<T>(1e-10));
         var safe = engine.TensorWhere(defined, denominator, Filled(new[] { pa, pb }, ops.One));
         return engine.TensorWhere(defined, engine.TensorDivide(cross, safe), new Tensor<T>(new[] { pa, pb }));
     }
@@ -424,18 +476,59 @@ internal static class FeatureSelectionTensorOps
         return engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(difference), negativeGamma));
     }
 
-    /// <summary>Column-wise standardization (population std); columns whose std is not above 1e-10 are left as they are.</summary>
+    /// <summary>
+    /// Population standard deviation of every column of an already centred [n, p] tensor ([p]): the square root
+    /// of the column mean of the squares (numpy.std, ddof = 0, of the uncentred data).
+    /// </summary>
+    /// <remarks>
+    /// The squares are taken of the column divided by its largest magnitude s, and the result multiplied back by
+    /// s: squaring the raw values overflows Half (65504) once they pass 256, which made the std +infinity.
+    /// </remarks>
+    public static Tensor<T> CenteredColumnStd<T>(Tensor<T> centered)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = centered.Shape[1];
+        var scale = ColumnScale(centered);
+        var unit = engine.TensorDivide(centered, engine.Reshape(scale, new[] { 1, p }));
+        return engine.TensorMultiply(scale, engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(unit), new[] { 0 }, false)));
+    }
+
+    /// <summary>
+    /// Column-wise standardization (population std); columns whose std is not above a T-aware tolerance (1e-10,
+    /// raised to Half's smallest normal 2^-14 since 1e-10 is 0 in Half) are left as they are.
+    /// </summary>
     public static Tensor<T> StandardizeColumnsOrKeep<T>(Tensor<T> x)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int p = x.Shape[1];
-        var centered = CenterColumns(x, out _, out var std);
-        var varying = engine.TensorGreaterThan(std, ops.FromDouble(1e-10));
+        var centered = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        var std = CenteredColumnStd(centered);
+        var varying = engine.TensorGreaterThan(std, Tolerance<T>(1e-10));
         var safeStd = engine.Reshape(engine.TensorWhere(varying, std, Filled(new[] { p }, ops.One)), new[] { 1, p });
         var mask = engine.TensorBroadcastTo(engine.Reshape(varying, new[] { 1, p }), new[] { n, p });
         return engine.TensorWhere(mask, engine.TensorDivide(centered, safeStd), x);
+    }
+
+    /// <summary>
+    /// Among the entries where the 0/1 <paramref name="mask"/> is set, the positions of the (at most
+    /// <paramref name="k"/>) largest scores, returned in ascending index order; ties keep the lower index first.
+    /// </summary>
+    public static int[] TopKWhere<T>(Tensor<T> scores, Tensor<T> mask, int k)
+    {
+        var positions = MaskPositions(mask);
+        if (positions.Length == 0 || k <= 0)
+            return Array.Empty<int>();
+
+        // ranked among the masked entries only: a fill of (min - 1) for the others equals min itself once the
+        // scores are past 2^24 in float (2048 in Half) or -infinity, and then ties pulled unmasked entries in
+        var candidateScores = AiDotNetEngine.Current.TensorIndexSelect(
+            scores, new Tensor<int>((int[])positions.Clone(), new[] { positions.Length }), 0);
+        var order = StableOrder(candidateScores, descending: true);
+        var selected = order.Take(Math.Min(k, positions.Length)).Select(rank => positions[rank]).ToArray();
+        Array.Sort(selected);
+        return selected;
     }
 
     /// <summary>
@@ -454,42 +547,14 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>
-    /// The positions of the <paramref name="k"/> smallest entries of a 1-D score tensor, returned in ascending
-    /// index order; ties keep the lower index first (LINQ <c>OrderBy(...).Take(k).OrderBy(i)</c>).
-    /// </summary>
-    public static int[] BottomKIndicesSorted<T>(Tensor<T> scores, int k)
-    {
-        int count = Math.Min(Math.Max(k, 0), scores.Length);
-        if (count == 0)
-            return Array.Empty<int>();
-
-        var selected = StableOrder(scores, descending: false).AsSpan().Slice(0, count).ToArray();
-        Array.Sort(selected);
-        return selected;
-    }
-
-    /// <summary>
-    /// Among the entries where the 0/1 <paramref name="mask"/> is set, the positions of the (at most
-    /// <paramref name="k"/>) largest scores, returned in ascending index order; ties keep the lower index first.
-    /// </summary>
-    public static int[] TopKWhere<T>(Tensor<T> scores, Tensor<T> mask, int k)
-    {
-        int candidates = CountNonZero(mask);
-        if (candidates == 0)
-            return Array.Empty<int>();
-
-        var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        T below = ops.Subtract(engine.TensorMinValue(scores), ops.One);
-        var ranked = engine.TensorWhere(mask, scores, Filled(scores.Shape.ToArray(), below));
-        return TopKIndicesSorted(ranked, Math.Min(k, candidates));
-    }
-
-    /// <summary>
     /// The indices that sort a 1-D tensor ascending (or descending), with tied values kept in their original
     /// index order like LINQ <c>OrderBy</c>/<c>OrderByDescending</c>. The engine argsort is not documented as
-    /// stable, so it sorts a distinct composite key (rank of the value, then the index).
+    /// stable, so it sorts a distinct composite key (rank of the value, then the index), with the ranks in int.
     /// </summary>
+    /// <remarks>
+    /// NaN orders as the worst value in both directions: after every number (infinities included) when
+    /// ascending, and after every number when descending, so a NaN score is never the best.
+    /// </remarks>
     public static int[] StableOrder<T>(Tensor<T> values, bool descending)
     {
         int count = values.Length;
@@ -497,16 +562,28 @@ internal static class FeatureSelectionTensorOps
             return Array.Empty<int>();
 
         var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         var flat = values.Rank == 1 ? values : engine.Reshape(values, new[] { count });
-        var sorted = engine.TensorSort(flat, 0, false).Item1;
+
+        // NaN takes a placeholder 0 for the rank search (ranks stay monotone in the real values) and is then
+        // given rank `count`, past every real value's rank, whichever way the order runs.
+        var isNaN = engine.TensorIsNan(flat);
+        var zeros = Filled(new[] { count }, ops.Zero);
+        var nanPositions = MaskPositions(engine.TensorWhere(isNaN, Filled(new[] { count }, ops.One), zeros));
+        var ranked = nanPositions.Length == 0 ? flat : engine.TensorWhere(isNaN, zeros, flat);
+        var sorted = engine.TensorSort(ranked, 0, false).Item1;
 
         // ascending rank: #{m : v[m] < v[j]}; descending rank: #{m : v[m] > v[j]} = count - #{m : v[m] <= v[j]}
-        var less = engine.TensorSearchSorted(sorted, flat, false).AsSpan().ToArray();
-        var atMost = engine.TensorSearchSorted(sorted, flat, true).AsSpan().ToArray();
+        var less = engine.TensorSearchSorted(sorted, ranked, false).AsSpan().ToArray();
+        var atMost = engine.TensorSearchSorted(sorted, ranked, true).AsSpan().ToArray();
+        var notANumber = new bool[count];
+        foreach (int position in nanPositions)
+            notANumber[position] = true;
+
         var keys = new long[count];
         for (int j = 0; j < count; j++)
         {
-            long rank = descending ? count - atMost[j] : less[j];
+            long rank = notANumber[j] ? count : descending ? count - atMost[j] : less[j];
             keys[j] = rank * count + j;
         }
 
@@ -522,4 +599,21 @@ internal static class FeatureSelectionTensorOps
 
     /// <summary>The number of non-zero entries of a 0/1 mask tensor.</summary>
     public static int CountNonZero<T>(Tensor<T> mask) => AiDotNetEngine.Current.TensorCountNonzero(mask);
+
+    /// <summary>
+    /// The largest magnitude of every column of an [n, p] tensor ([p]), with 1 for the all-zero (and empty)
+    /// columns, used to pre-scale columns before their squares are summed.
+    /// </summary>
+    private static Tensor<T> ColumnScale<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        var ones = Filled(new[] { p }, ops.One);
+        if (x.Shape[0] == 0 || p == 0)
+            return ones;
+
+        var largest = engine.ReduceMax(engine.TensorAbs(x), new[] { 0 }, false);
+        return engine.TensorWhere(engine.TensorGreaterThan(largest, ops.Zero), largest, ones);
+    }
 }
