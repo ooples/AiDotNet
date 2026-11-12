@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Hybrid;
 
@@ -28,13 +29,13 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
     private readonly double _lassoAlpha;
     private readonly int _wrapperIterations;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,76 +72,36 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        // Normalize features (sample standard deviation)
+        var raw = Tensor<T>.FromMatrix(data);
+        var means = engine.TensorBroadcastTo(engine.ReduceMean(raw, new[] { 0 }, true), new[] { n, p });
+        var centered = engine.TensorSubtract(raw, means);
+        var stds = engine.TensorAddScalar(
+            engine.TensorSqrt(engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, true), NumOps.FromDouble(n - 1))),
+            NumOps.FromDouble(1e-10));
+        var x = engine.TensorDivide(centered, engine.TensorBroadcastTo(stds, new[] { n, p }));
 
-        // Normalize features
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-            for (int i = 0; i < n; i++) X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
-
-        double yMean = y.Average();
-        var yNorm = y.Select(yi => yi - yMean).ToArray();
+        var y = Tensor<T>.FromVector(target);
+        var yNorm = engine.TensorSubtract(y, engine.TensorBroadcastTo(engine.ReduceMean(y, new[] { 0 }, true), new[] { n }));
 
         // Phase 1: Embedded - Lasso with coordinate descent
-        var beta = new double[p];
-        int maxIterLasso = 100;
+        var beta = LassoCoordinateDescent(x, yNorm, _lassoAlpha, 100);
+        var absBeta = engine.TensorAbs(beta);
 
-        for (int iter = 0; iter < maxIterLasso; iter++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                // Compute residual without feature j
-                double rho = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double residual = yNorm[i];
-                    for (int k = 0; k < p; k++)
-                        if (k != j)
-                            residual -= beta[k] * X[i, k];
-                    rho += X[i, j] * residual;
-                }
-                rho /= n;
-
-                // Soft thresholding
-                beta[j] = SoftThreshold(rho, _lassoAlpha);
-            }
-        }
-
-        // Get candidate set from Lasso
-        var candidates = Enumerable.Range(0, p)
-            .Where(j => Math.Abs(beta[j]) > 1e-10)
-            .OrderByDescending(j => Math.Abs(beta[j]))
-            .ToList();
-
-        // Ensure we have at least some candidates
+        // Get candidate set from Lasso: nonzero coefficients by decreasing magnitude, then the rest if too few
+        var order = FeatureSelectionTensorOps.StableOrder(absBeta, descending: true);
+        var nonzero = new HashSet<int>(FeatureSelectionTensorOps.MaskPositions(
+            engine.TensorGreaterThan(absBeta, NumOps.FromDouble(1e-10))));
+        var candidates = order.Where(j => nonzero.Contains(j)).ToList();
         if (candidates.Count < _nFeaturesToSelect)
-        {
-            var additional = Enumerable.Range(0, p)
-                .Where(j => !candidates.Contains(j))
-                .OrderByDescending(j => Math.Abs(beta[j]))
-                .Take(_nFeaturesToSelect - candidates.Count);
-            candidates.AddRange(additional);
-        }
+            candidates.AddRange(order.Where(j => !nonzero.Contains(j)).Take(_nFeaturesToSelect - candidates.Count));
 
         // Phase 2: Wrapper - refine using forward/backward selection
         var selected = candidates.Take(_nFeaturesToSelect).ToList();
-        double bestScore = EvaluateSubset(X, yNorm, selected, n);
+        var bestScore = EvaluateSubset(x, yNorm, selected);
 
         for (int iter = 0; iter < _wrapperIterations; iter++)
         {
@@ -151,8 +112,8 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
             {
                 int feature = selected[i];
                 selected.RemoveAt(i);
-                double score = EvaluateSubset(X, yNorm, selected, n);
-                if (score > bestScore)
+                var score = EvaluateSubset(x, yNorm, selected);
+                if (PopulationSearchOps.Greater(score, bestScore))
                 {
                     bestScore = score;
                     improved = true;
@@ -164,13 +125,13 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
             }
 
             // Try to add features
-            foreach (int j in candidates.Where(j => !selected.Contains(j)))
+            foreach (int j in candidates.Where(j => !selected.Contains(j)).ToList())
             {
                 if (selected.Count >= _nFeaturesToSelect) break;
 
                 selected.Add(j);
-                double score = EvaluateSubset(X, yNorm, selected, n);
-                if (score > bestScore)
+                var score = EvaluateSubset(x, yNorm, selected);
+                if (PopulationSearchOps.Greater(score, bestScore))
                 {
                     bestScore = score;
                     improved = true;
@@ -184,102 +145,69 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
             if (!improved) break;
         }
 
-        // Compute final scores
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = Math.Abs(beta[j]);
-        for (int i = 0; i < selected.Count; i++)
-            _featureScores[selected[i]] += 1.0; // Boost selected features
+        // Compute final scores: |beta| plus 1 for the selected features
+        var featureScores = engine.TensorAdd(absBeta, PopulationSearchOps.IndexMask<T>(selected.ToArray(), p));
+        _featureScores = featureScores.ToVector();
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _selectedIndices = selected.OrderBy(i => i).ToArray();
         IsFitted = true;
     }
 
-    private double SoftThreshold(double x, double lambda)
+    /// <summary>
+    /// Lasso by cyclic coordinate descent (Friedman, Hastie and Tibshirani 2010) for min (1/2n) |y - X b|^2 +
+    /// alpha |b|_1: each sweep updates b_j = S(rho_j, alpha) / ((1/n) sum_i x_ij^2) with
+    /// rho_j = (1/n) sum_i x_ij (y_i - sum_{k != j} x_ik b_k) and soft threshold S.
+    /// </summary>
+    internal static Tensor<T> LassoCoordinateDescent(Tensor<T> x, Tensor<T> y, double alpha, int sweeps)
     {
-        if (x > lambda) return x - lambda;
-        if (x < -lambda) return x + lambda;
-        return 0;
-    }
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        T invN = ops.FromDouble(1.0 / n);
+        T zero = ops.Zero;
+        T negativeLambda = ops.FromDouble(-alpha);
 
-    private double EvaluateSubset(double[,] X, double[] y, List<int> features, int n)
-    {
-        if (features.Count == 0) return double.MinValue;
+        var columnScale = engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorSquare(x), new[] { 0 }, false), invN);
+        var safeScale = engine.TensorWhere(
+            engine.TensorGreaterThan(columnScale, zero), columnScale, FeatureSelectionTensorOps.Filled(new[] { p }, ops.One));
+        var beta = new Tensor<T>(new[] { p });
+        var residual = y;
 
-        // Compute R-squared with simple linear regression
-        var XtX = new double[features.Count, features.Count];
-        var Xty = new double[features.Count];
-
-        for (int i = 0; i < n; i++)
+        for (int sweep = 0; sweep < sweeps; sweep++)
         {
-            for (int j1 = 0; j1 < features.Count; j1++)
+            for (int j = 0; j < p; j++)
             {
-                for (int j2 = 0; j2 < features.Count; j2++)
-                    XtX[j1, j2] += X[i, features[j1]] * X[i, features[j2]];
-                Xty[j1] += X[i, features[j1]] * y[i];
+                var column = engine.Reshape(engine.TensorSlice(x, new[] { 0, j }, new[] { n, 1 }), new[] { n });
+                var old = PopulationSearchOps.At(beta, j);
+
+                // Partial residual with feature j's contribution added back
+                var partial = engine.TensorAdd(residual, PopulationSearchOps.Scale(column, old));
+                var rho = engine.TensorMultiplyScalar(
+                    engine.ReduceSum(engine.TensorMultiply(column, partial), new[] { 0 }, true), invN);
+                var shrunk = engine.TensorSubtract(
+                    engine.TensorMax(engine.TensorAddScalar(rho, negativeLambda), zero),
+                    engine.TensorMax(engine.TensorAddScalar(engine.TensorNegate(rho), negativeLambda), zero));
+                var updated = engine.TensorDivide(shrunk, PopulationSearchOps.At(safeScale, j));
+
+                beta = PopulationSearchOps.ReplaceAt(beta, j, updated);
+                residual = engine.TensorSubtract(partial, PopulationSearchOps.Scale(column, updated));
             }
         }
 
-        // Add regularization
-        for (int j = 0; j < features.Count; j++)
-            XtX[j, j] += 1e-6;
-
-        var beta = SolveSystem(XtX, Xty, features.Count);
-
-        // Compute R-squared
-        double ssTot = 0, ssRes = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double pred = 0;
-            for (int j = 0; j < features.Count; j++)
-                pred += beta[j] * X[i, features[j]];
-            ssRes += (y[i] - pred) * (y[i] - pred);
-            ssTot += y[i] * y[i];
-        }
-
-        return ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
+        return beta;
     }
 
-    private double[] SolveSystem(double[,] A, double[] b, int n)
+    /// <summary>R^2 = 1 - SS_res / sum y^2 of a ridge (1e-6) least-squares fit of centered y on the features.</summary>
+    private static Tensor<T> EvaluateSubset(Tensor<T> x, Tensor<T> y, List<int> features)
     {
-        var aug = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                aug[i, j] = A[i, j];
-            aug[i, n] = b[i];
-        }
+        if (features.Count == 0)
+            return FeatureSelectionTensorOps.Filled(new[] { 1 }, MathHelper.GetNumericOperations<T>().MinValue);
 
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-
-            for (int row = col + 1; row < n; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= n; j++)
-                    aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, n];
-            for (int j = i + 1; j < n; j++)
-                x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
+        var design = SubsetRegressionOps.Columns(x, features);
+        var coefficients = SubsetRegressionOps.RidgeCoefficients(design, y, 1e-6);
+        return SubsetRegressionOps.RSquared(
+            y, SubsetRegressionOps.Predict(design, coefficients), new Tensor<T>(new[] { 1 }), out _);
     }
 
     /// <inheritdoc />
@@ -295,15 +223,7 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
         if (_selectedIndices is null)
             throw new InvalidOperationException("EmbeddedWrapperHybridSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

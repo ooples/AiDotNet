@@ -1107,4 +1107,113 @@ public class FeatureSelectionPopulationReferenceTests
         double share = (double)positive / subsamples;
         Assert.Equal(new[] { share, share, 1 - share, 0 }, selector.SelectionProbabilities?.ToArray());
     }
+
+    // ---------------------------------------------------------------- Hybrid selectors
+
+    [Fact]
+    public void EmbeddedWrapper_LassoCoordinateDescentDividesByTheColumnScale()
+    {
+        var (x, y) = Problem(17, 30, 3);
+        int n = x.Rows, p = x.Columns;
+        double alpha = 0.05;
+        var cols = new double[p][];
+        for (int j = 0; j < p; j++) cols[j] = Enumerable.Range(0, n).Select(i => x[i, j] * (j + 1)).ToArray();
+        var target = Enumerable.Range(0, n).Select(i => y[i]).ToArray();
+
+        // Friedman et al. (2010): b_j = S(rho_j, alpha) / ((1/n) sum x_ij^2), here with unscaled columns
+        var beta = new double[p];
+        for (int sweep = 0; sweep < 50; sweep++)
+        {
+            for (int j = 0; j < p; j++)
+            {
+                double rho = 0, scale = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double r = target[i];
+                    for (int k = 0; k < p; k++) if (k != j) r -= beta[k] * cols[k][i];
+                    rho += cols[j][i] * r;
+                    scale += cols[j][i] * cols[j][i];
+                }
+
+                rho /= n;
+                scale /= n;
+                double s = rho > alpha ? rho - alpha : rho < -alpha ? rho + alpha : 0;
+                beta[j] = s / scale;
+            }
+        }
+
+        var design = new double[n, p];
+        for (int i = 0; i < n; i++) for (int j = 0; j < p; j++) design[i, j] = cols[j][i];
+        var result = ToArray(AiDotNet.Preprocessing.FeatureSelection.Hybrid.EmbeddedWrapperHybridSelector<double>
+            .LassoCoordinateDescent(Tensor2D(design), Tensor1D(target), alpha, 50));
+        for (int j = 0; j < p; j++)
+            Assert.Equal(beta[j], result[j], 9);
+    }
+
+    [Fact]
+    public void FilterWrapper_CrossValidatedRSquaredMatchesFoldwiseLeastSquares()
+    {
+        var (x, y) = Problem(18, 23, 4);
+        int n = x.Rows;
+        var order = Enumerable.Range(0, n).Reverse().ToArray();
+        var features = new List<int> { 2, 0 };
+        var score = ToArray(AiDotNet.Preprocessing.FeatureSelection.Hybrid.FilterWrapperHybridSelector<double>
+            .CrossValidatedRSquared(Tensor2D(ToGrid(x)), Tensor1D(Enumerable.Range(0, n).Select(i => y[i]).ToArray()), features, order))[0];
+
+        double total = 0;
+        for (int fold = 0; fold < 5; fold++)
+        {
+            int start = fold * n / 5, end = (fold + 1) * n / 5;
+            var train = order.Where((_, i) => i < start || i >= end).ToArray();
+            var test = order.Skip(start).Take(end - start).ToArray();
+
+            // Normal equations with intercept and ridge 1e-6, solved by Cramer-free Gaussian elimination
+            int k = 3;
+            var a = new double[k, k + 1];
+            foreach (int i in train)
+            {
+                var row = new[] { 1, x[i, 2], x[i, 0] };
+                for (int r = 0; r < k; r++)
+                {
+                    for (int c = 0; c < k; c++) a[r, c] += row[r] * row[c];
+                    a[r, k] += row[r] * y[i];
+                }
+            }
+
+            for (int r = 0; r < k; r++) a[r, r] += 1e-6;
+            for (int c = 0; c < k; c++)
+                for (int r = c + 1; r < k; r++)
+                {
+                    double f = a[r, c] / a[c, c];
+                    for (int q = c; q <= k; q++) a[r, q] -= f * a[c, q];
+                }
+
+            var b = new double[k];
+            for (int r = k - 1; r >= 0; r--)
+            {
+                b[r] = a[r, k];
+                for (int q = r + 1; q < k; q++) b[r] -= a[r, q] * b[q];
+                b[r] /= a[r, r];
+            }
+
+            double mean = test.Average(i => y[i]), res = 0, tot = 0;
+            foreach (int i in test)
+            {
+                double pred = b[0] + b[1] * x[i, 2] + b[2] * x[i, 0];
+                res += (y[i] - pred) * (y[i] - pred);
+                tot += (y[i] - mean) * (y[i] - mean);
+            }
+
+            total += 1 - res / tot;
+        }
+
+        Assert.Equal(total / 5, score, 8);
+    }
+
+    private static double[,] ToGrid(Matrix<double> m)
+    {
+        var grid = new double[m.Rows, m.Columns];
+        for (int i = 0; i < m.Rows; i++) for (int j = 0; j < m.Columns; j++) grid[i, j] = m[i, j];
+        return grid;
+    }
 }
