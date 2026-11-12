@@ -16477,8 +16477,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     private static void WriteParameterValue(BinaryWriter writer, T value, SerializedParameterEncoding encoding)
     {
-        if (encoding == SerializedParameterEncoding.Float32) writer.Write(Convert.ToSingle(value));
-        else writer.Write(Convert.ToDouble(value));
+        double numeric = MathHelper.GetNumericOperations<T>().ToDouble(value);
+        if (encoding == SerializedParameterEncoding.Float32) writer.Write((float)numeric);
+        else writer.Write(numeric);
     }
 
     private T ReadParameterValue(BinaryReader reader, SerializedParameterEncoding encoding)

@@ -1,3 +1,12 @@
+using AiDotNet.SpeechRecognition;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.SyntheticData;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Helpers;
 using Xunit;
 using System.Threading.Tasks;
@@ -632,4 +641,450 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(3.0, (lower + upper) / 2.0, 1e-12);
         Assert.Equal(Math.Sqrt(0.5) * t, (upper - lower) / 2.0, 1e-12);
     }
+}
+
+public class ElementwiseSweepRegressionTests
+{
+    [Fact]
+    public void HalfSnnReadout_ZeroGradientProducesAZeroFiniteUpdate()
+    {
+        using var model = CreateHalfSnn();
+        var update = RunHalfReadoutStep(model, (Half)0, new double[1], new double[1], step: 1);
+        Assert.Equal((Half)0, update[0]);
+    }
+
+    [Fact]
+    public void HalfSnnReadout_TinyGradientAndLongHistoryKeepTheAdamVariance()
+    {
+        using var model = CreateHalfSnn();
+        var firstMoment = new double[1];
+        var secondMoment = new double[1];
+        Half error = (Half)0.0001;
+        var update = RunHalfReadoutStep(model, error, firstMoment, secondMoment, step: 1);
+        double gradient = -(double)error;
+        double expectedVariance = 0.001 * gradient * gradient;
+        Assert.InRange(Math.Abs(firstMoment[0] - 0.1 * gradient), 0, 1e-15);
+        Assert.InRange(Math.Abs(secondMoment[0] - expectedVariance), 0, 1e-20);
+        double expectedUpdate = -0.001 * gradient / (Math.Abs(gradient) + 1e-8);
+        Assert.InRange((double)update[0], expectedUpdate - 1e-6, expectedUpdate + 1e-6);
+    }
+
+    [Fact]
+    public void HalfSnnCheckpoint_PreservesWideMomentsAndTheNextAdamUpdate()
+    {
+        using var source = CreateHalfSnn();
+        using var restored = CreateHalfSnn();
+        var sourceM = SnnMoments(source, "_adamMWide");
+        var sourceV = SnnMoments(source, "_adamVWide");
+        sourceM[0] = new double[1];
+        sourceV[0] = new double[1];
+        RunHalfReadoutStep(source, (Half)0.0001, sourceM[0], sourceV[0], step: 1);
+        var counter = typeof(SpikingNeuralNetwork<Half>).GetField("_adamStep",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        counter.SetValue(source, 1);
+        restored.Deserialize(source.Serialize());
+        var restoredM = SnnMoments(restored, "_adamMWide");
+        var restoredV = SnnMoments(restored, "_adamVWide");
+        Assert.Equal(sourceM[0], restoredM[0]);
+        Assert.Equal(sourceV[0], restoredV[0]);
+        Assert.Equal(1, (int)counter.GetValue(restored)!);
+        var expected = RunHalfReadoutStep(source, (Half)0.0002, sourceM[0], sourceV[0], step: 2);
+        var actual = RunHalfReadoutStep(restored, (Half)0.0002, restoredM[0], restoredV[0], step: 2);
+        Assert.Equal(expected.ToArray(), actual.ToArray());
+        Assert.Equal(sourceM[0], restoredM[0]);
+        Assert.Equal(sourceV[0], restoredV[0]);
+    }
+
+    [Fact]
+    public void HalfSnnTraining_UsesWideMomentsAndKeepsFiniteParameters()
+    {
+        using var model = CreateHalfSnn();
+        model.Train(new Tensor<Half>(new Half[] { (Half)1, (Half)0.5, (Half)0.25, (Half)0.75 }, new[] { 4 }),
+            new Tensor<Half>(new Half[] { (Half)0.2 }, new[] { 1 }));
+        Assert.NotEmpty(SnnMoments(model, "_adamMWide"));
+        Assert.All(model.GetParameters().ToArray(), value => Assert.True(!Half.IsNaN(value) && !Half.IsInfinity(value)));
+    }
+
+    private static SpikingNeuralNetwork<Half> CreateHalfSnn() => new(
+        new NeuralNetworkArchitecture<Half>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 1,
+            layers: new List<AiDotNet.Interfaces.ILayer<Half>>
+            {
+                new AiDotNet.NeuralNetworks.Layers.SpikingLayer<Half>(4, 2),
+                new AiDotNet.NeuralNetworks.Layers.DenseLayer<Half>(1)
+            }),
+        vectorActivation: null,
+        options: new AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions { SimulationSteps = 2 });
+
+    [Fact]
+    public void HalfSnnTraining_ImportsLegacyMomentsBeforeTheNextUpdate()
+    {
+        using var legacy = CreateHalfSnn();
+        using var wide = CreateHalfSnn();
+        var input = new Tensor<Half>(new Half[] { (Half)1, (Half)0.5, (Half)0.25, (Half)0.75 }, new[] { 4 });
+        var target = new Tensor<Half>(new Half[] { (Half)0.2 }, new[] { 1 });
+        legacy.Train(input, target);
+        wide.Deserialize(legacy.Serialize());
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var legacyM = (Dictionary<int, Vector<Half>>)typeof(SpikingNeuralNetwork<Half>)
+            .GetField("_adamM", flags)!.GetValue(legacy)!;
+        var legacyV = (Dictionary<int, Vector<Half>>)typeof(SpikingNeuralNetwork<Half>)
+            .GetField("_adamV", flags)!.GetValue(legacy)!;
+        foreach (var pair in SnnMoments(legacy, "_adamMWide"))
+        {
+            legacyM[pair.Key] = new Vector<Half>(Enumerable.Repeat((Half)0.002, pair.Value.Length).ToArray());
+            legacyV[pair.Key] = new Vector<Half>(Enumerable.Repeat((Half)0.0002, pair.Value.Length).ToArray());
+            SnnMoments(wide, "_adamMWide")[pair.Key] = legacyM[pair.Key].ToArray().Select(value => (double)value).ToArray();
+            SnnMoments(wide, "_adamVWide")[pair.Key] = legacyV[pair.Key].ToArray().Select(value => (double)value).ToArray();
+        }
+        SnnMoments(legacy, "_adamMWide").Clear();
+        SnnMoments(legacy, "_adamVWide").Clear();
+        legacy.Train(input, target);
+        wide.Train(input, target);
+        Assert.Empty(legacyM);
+        Assert.Empty(legacyV);
+        Assert.Equal(wide.GetParameters().ToArray(), legacy.GetParameters().ToArray());
+        foreach (var pair in SnnMoments(wide, "_adamVWide"))
+            Assert.Equal(pair.Value, SnnMoments(legacy, "_adamVWide")[pair.Key]);
+    }
+
+    private static Dictionary<int, double[]> SnnMoments(SpikingNeuralNetwork<Half> model, string name) =>
+        (Dictionary<int, double[]>)typeof(SpikingNeuralNetwork<Half>).GetField(name,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(model)!;
+
+    private static Vector<Half> RunHalfReadoutStep(SpikingNeuralNetwork<Half> model, Half error,
+        double[] firstMoment, double[] secondMoment, int step)
+    {
+        const int steps = 300; // Half overflows when the normalization denominator forms 300^2.
+        var spikes = Enumerable.Range(0, steps).Select(_ => new Vector<Half>(new Half[] { (Half)1 })).ToList();
+        var history = new List<List<Vector<Half>>> { spikes };
+        var updates = new Vector<Half>(1);
+        var method = typeof(SpikingNeuralNetwork<Half>).GetMethod("ApplyReadoutAdamStep",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        method.Invoke(model, new object[] { 0, 0, 1, 1, spikes, history,
+            new Vector<Half>(new[] { error }), updates, firstMoment, secondMoment, 0.001,
+            1 - Math.Pow(0.9, step), 1 - Math.Pow(0.999, step) });
+        return updates;
+    }
+
+    [Fact]
+    public void BandMultiply_SkippedPaddingDoesNotPropagateNonfiniteCoefficients()
+    {
+        var band = new Matrix<double>(new[,] { { double.NaN, 2.0, 3.0 }, { 4.0, 5.0, 6.0 }, { 7.0, 8.0, double.NaN } });
+        var result = new Vector<double>(new[] { double.NaN, double.NaN, double.NaN });
+        MatrixHelper<double>.BandDiagonalMultiply(1, 1, band, result, new Vector<double>(new[] { 1.0, 2.0, 3.0 }));
+        Assert.Equal(new[] { 8.0, 32.0, 38.0 }, result.ToArray());
+        Assert.True(double.IsNaN(band[0, 0]));
+        Assert.True(double.IsNaN(band[2, 2]));
+    }
+
+    [Fact]
+    public void HalfTabDDPM_ConstantNumericalColumnNormalizesToZero()
+    {
+        using var model = new TabDDPMGenerator<Half>(
+            new NeuralNetworkArchitecture<Half>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+            new TabDDPMOptions<Half> { NumTimesteps = 2, NumCategoricalDiffusionSteps = 2,
+                MLPDimensions = new[] { 4 }, TimestepEmbeddingDimension = 4, Seed = 7 });
+        var columns = new[] { new ColumnMetadata("constant", ColumnDataType.Continuous) };
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        typeof(TabDDPMGenerator<Half>).GetMethod("AnalyzeColumns", flags)!.Invoke(model, new object[] { columns });
+        var data = new Matrix<Half>(new[,] { { (Half)5 }, { (Half)5 }, { (Half)5 }, { (Half)5 } });
+        var prepared = (ValueTuple<Matrix<Half>, Matrix<Half>>)typeof(TabDDPMGenerator<Half>)
+            .GetMethod("PreprocessData", flags)!.Invoke(model, new object[] { data, columns })!;
+        Assert.All(prepared.Item1.AsSpan().ToArray(), value => Assert.Equal((Half)0, value));
+    }
+
+    [Fact]
+    public void HalfNormClipping_LargeFiniteVector_UsesWideAccumulation()
+    {
+        const int count = 70000;
+        var input = new Vector<Half>(Enumerable.Repeat((Half)1, count).ToArray());
+        var clipped = GradientClippingHelper.ClipByNorm(input, 10)!;
+        double expected = 10 / Math.Sqrt(count);
+        Assert.All(clipped.ToArray(), value => Assert.InRange((double)value, expected - 3e-5, expected + 3e-5));
+        Assert.Equal(1.0, (double)input[0]);
+    }
+
+    [Fact]
+    public void DoubleNormClipping_DoesNotSquareExtremeFiniteMagnitudes()
+    {
+        var input = new Vector<double>(new[] { 1e300, -1e300 });
+        double expected = 1 / Math.Sqrt(2);
+        var clipped = GradientClippingHelper.ClipByNorm(input, 1)!;
+        Assert.Equal(expected, clipped[0], 12);
+        Assert.Equal(-expected, clipped[1], 12);
+        var global = GradientClippingHelper.ClipByGlobalNorm(
+            new List<Vector<double>> { new(new[] { 1e300 }), new(new[] { -1e300 }) }, 1)!;
+        Assert.Equal(expected, global[0][0], 12);
+        Assert.Equal(-expected, global[1][0], 12);
+    }
+
+    [Fact]
+    public void NormClipping_PreservesARepresentableSubnormalDirection()
+    {
+        var clipped = GradientClippingHelper.ClipByNorm(new Vector<float>(new[] { 1e-40f, -1e-40f }), 1e-42)!;
+        Assert.InRange(clipped[0], 6.9e-43f, 7.2e-43f);
+        Assert.InRange(clipped[1], -7.2e-43f, -6.9e-43f);
+    }
+
+    [Fact]
+    public void HalfCausalMask_IsFiniteAndDoesNotReadFutureTokens()
+    {
+        using var decoder = new T5RelativeBiasAttentionLayer<Half>(4, 1, bidirectional: false, seed: 5);
+        var input = new Tensor<Half>(
+            Enumerable.Range(0, 12).Select(i => (Half)(0.01 * (i + 1))).ToArray(), new[] { 3, 4 });
+        var full = decoder.Forward(input).ToArray();
+        Assert.All(full, value => Assert.True(!Half.IsNaN(value) && !Half.IsInfinity(value)));
+        var prefix = new Tensor<Half>(input.ToArray().Take(4).ToArray(), new[] { 1, 4 });
+        Assert.Equal(decoder.Forward(prefix).ToArray(), full.Take(4).ToArray());
+    }
+
+    [Fact]
+    public void MemoryUsagePenalty_UniformReadAndWriteWeightsHavePositiveShannonEntropy()
+    {
+        using var model = new NeuralTuringMachine<double> { UseAuxiliaryLoss = true };
+        Assert.Equal(2 * Math.Log(64), model.ComputeAuxiliaryLoss(), 10);
+    }
+
+    [Fact]
+    public void MemoryRead_SkippedLocationsDoNotPropagateNonfiniteValues()
+    {
+        using var model = new NeuralTuringMachine<double>();
+        var memory = new Matrix<double>(64, 32);
+        memory.AsWritableSpan().Fill(double.NaN);
+        for (int column = 0; column < 32; column++) memory[0, column] = column + 1;
+        var weights = new Vector<double>(64);
+        weights[0] = 1;
+        var read = typeof(NeuralTuringMachine<double>).GetMethod("ReadFromMemory",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var result = (Vector<double>)read.Invoke(model, new object[] { memory, weights })!;
+        Assert.Equal(Enumerable.Range(1, 32).Select(value => (double)value).ToArray(), result.ToArray());
+    }
+
+    [Fact]
+    public void TabDDPMCheckpoint_RestoresFittedNormalizationAndReconstructionRange()
+    {
+        TabDDPMGenerator<double> Create(int seed) => new(
+            new NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+            new TabDDPMOptions<double> { NumTimesteps = 2, NumCategoricalDiffusionSteps = 2,
+                MLPDimensions = new[] { 4 }, TimestepEmbeddingDimension = 4, BatchSize = 4, Epochs = 1, Seed = seed });
+        using var source = Create(7);
+        using var restored = Create(19);
+        var columns = new[] { new ColumnMetadata("value", ColumnDataType.Continuous) };
+        source.Fit(new Matrix<double>(new[,] { { 10.0 }, { 20.0 }, { 30.0 }, { 40.0 } }), columns, epochs: 1);
+        restored.Fit(new Matrix<double>(new[,] { { -40.0 }, { -30.0 }, { -20.0 }, { -10.0 } }), columns, epochs: 1);
+        restored.Deserialize(source.Serialize());
+        var generated = restored.Generate(3);
+        Assert.Equal(3, generated.Rows);
+        Assert.Equal(1, generated.Columns);
+        Assert.All(generated.AsSpan().ToArray(), value => Assert.InRange(value, 10, 40));
+    }
+
+    [Fact]
+    public void JackknifeMeanInterval_UsesOnlyThePairedPredictionPrefix()
+    {
+        var actual = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
+        var expected = StatisticsHelper<double>.CalculateJackknifeInterval(actual, new Vector<double>(new[] { 1.0, 2.0, 3.0 }));
+        var extra = StatisticsHelper<double>.CalculateJackknifeInterval(actual, new Vector<double>(new[] { 1.0, 2.0, 3.0, 1e6 }));
+        Assert.Equal(expected, extra);
+    }
+
+    [Fact]
+    public void JackknifeMeanInterval_DoesNotLoseSpreadAtALargeCommonOffset()
+    {
+        const double offset = 1e16;
+        var values = new Vector<double>(new[] { offset + 2, offset + 4, offset + 6, offset + 8, offset + 10 });
+        var interval = StatisticsHelper<double>.CalculateJackknifeInterval(values, values);
+        // Mean = offset + 6; s/sqrt(5) = sqrt(2), t(4,.975) ~= 2.776: endpoints round to +2 and +10.
+        Assert.Equal(offset + 2, interval.Lower);
+        Assert.Equal(offset + 10, interval.Upper);
+    }
+}
+
+public class CtcGreedyDecodingTests
+{
+    private static (List<int> tokens, double confidence) Reference(
+        Tensor<double> logits, int maxTokens, int framesAfterEmission = 1)
+    {
+        var tokens = new List<int>();
+        double totalConf = 0;
+        int confCount = 0;
+        int prevToken = -1;
+        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
+        int vocabSize = logits.Rank >= 2 ? logits.Shape[logits.Rank - 1] : logits.Shape[0];
+        int t = 0;
+        while (t < numFrames && tokens.Count < maxTokens)
+        {
+            int maxIdx = 0;
+            double maxVal = double.NegativeInfinity;
+            for (int v = 0; v < vocabSize; v++)
+            {
+                double val = logits.Rank >= 2 ? logits[t, v] : logits[v];
+                if (val > maxVal) { maxVal = val; maxIdx = v; }
+            }
+
+            double sumExp = 0;
+            for (int v = 0; v < vocabSize; v++)
+            {
+                double val = logits.Rank >= 2 ? logits[t, v] : logits[v];
+                sumExp += Math.Exp(val - maxVal);
+            }
+
+            double frameConf = 1.0 / sumExp;
+            if (maxIdx != prevToken && maxIdx > 0)
+            {
+                tokens.Add(maxIdx);
+                totalConf += frameConf;
+                confCount++;
+                t += framesAfterEmission;
+            }
+            else
+            {
+                t++;
+            }
+
+            prevToken = maxIdx;
+        }
+
+        return (tokens, confCount > 0 ? totalConf / confCount : 0.0);
+    }
+
+    /// <summary>Small integer logits, so equal maxima within a frame are common.</summary>
+    private static Tensor<double> TiedLogits(int frames, int vocab, int seed)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        var data = new double[frames * vocab];
+        for (int i = 0; i < data.Length; i++) data[i] = rng.Next(0, 4);
+        return new Tensor<double>(data, new[] { frames, vocab });
+    }
+
+    private static void AssertSame((List<int> tokens, double confidence) expected, (List<int> tokens, double confidence) actual)
+    {
+        Assert.Equal(expected.tokens, actual.tokens);
+        if (double.IsNaN(expected.confidence))
+            Assert.True(double.IsNaN(actual.confidence), $"Expected NaN confidence, got {actual.confidence}.");
+        else
+            Assert.Equal(expected.confidence, actual.confidence, 12);
+    }
+
+    [Theory]
+    [InlineData(1, 5, int.MaxValue)]
+    [InlineData(40, 6, int.MaxValue)]
+    [InlineData(40, 6, 3)]
+    [InlineData(25, 1, int.MaxValue)]
+    [InlineData(25, 4, 0)]
+    public void MatchesTheScalarScan_IncludingTies(int frames, int vocab, int maxTokens)
+    {
+        for (int seed = 0; seed < 5; seed++)
+        {
+            var logits = TiedLogits(frames, vocab, seed);
+            AssertSame(Reference(logits, maxTokens), CtcGreedyDecoding.Decode(logits, maxTokens));
+        }
+    }
+
+    [Fact]
+    public void LowestIndexWinsATie()
+    {
+        var logits = new Tensor<double>(new double[] { 0, 2, 2, 1 }, new[] { 1, 4 });
+        var (tokens, _) = CtcGreedyDecoding.Decode(logits, int.MaxValue);
+        Assert.Equal(new List<int> { 1 }, tokens);
+    }
+
+    [Fact]
+    public void NaNAndNegativeInfinityNeverWin()
+    {
+        double nan = double.NaN;
+        double negInf = double.NegativeInfinity;
+        var logits = new Tensor<double>(
+            new[]
+            {
+                nan, 1.0, 3.0, nan,       // NaN skipped for the argmax, but poisons that frame's confidence
+                negInf, negInf, negInf, 2.0,
+                nan, nan, nan, nan,       // nothing can win: the blank
+                negInf, negInf, negInf, negInf,
+                0.5, 0.5, double.PositiveInfinity, 0.5,
+            },
+            new[] { 5, 4 });
+
+        AssertSame(Reference(logits, int.MaxValue), CtcGreedyDecoding.Decode(logits, int.MaxValue));
+    }
+
+    [Fact]
+    public void ASingleFrameVectorDecodesAsOneFrame()
+    {
+        var logits = new Tensor<double>(new[] { 0.1, 0.2, 0.9, 0.3 }, new[] { 4 });
+        AssertSame(Reference(logits, int.MaxValue), CtcGreedyDecoding.Decode(logits, int.MaxValue));
+    }
+
+    [Fact]
+    public void RankThreeLogitsAreRejectedLikeTheTwoIndexRead()
+    {
+        var logits = new Tensor<double>(new[] { 2, 3, 4 });
+        Assert.Throws<ArgumentException>(() => CtcGreedyDecoding.Decode(logits, int.MaxValue));
+    }
+
+    [Fact]
+    public void FlatDecodingReadsTheLeadingFramesTimesVocabElements()
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var data = new double[2 * 3 * 4];
+        for (int i = 0; i < data.Length; i++) data[i] = rng.Next(0, 3);
+        var rankThree = new Tensor<double>(data, new[] { 2, 3, 4 });
+
+        // frames = 2, vocab = 4: the first 8 flat elements, as two rows.
+        var leadingData = new double[8];
+        Array.Copy(data, leadingData, 8);
+        var leading = new Tensor<double>(leadingData, new[] { 2, 4 });
+        AssertSame(Reference(leading, int.MaxValue), CtcGreedyDecoding.DecodeFlat(rankThree, int.MaxValue));
+    }
+
+    [Theory]
+    [InlineData(2, int.MaxValue)]
+    [InlineData(1, 5)]
+    [InlineData(0, int.MaxValue)]
+    public void FrameSkippingMatchesTheScalarWalk(int framesAfterEmission, int maxTokens)
+    {
+        for (int seed = 0; seed < 5; seed++)
+        {
+            var logits = TiedLogits(30, 5, seed + 20);
+            AssertSame(
+                Reference(logits, maxTokens, framesAfterEmission),
+                CtcGreedyDecoding.DecodeSkippingAfterEmission(logits, maxTokens, framesAfterEmission));
+        }
+    }
+    [Fact]
+    public void HalfWideVocabulary_ConfidenceDoesNotOverflowTheDenominator()
+    {
+        const int vocab = 70000;
+        var values = new Half[vocab];
+        values[1] = (Half)0.01;
+        var logits = new Tensor<Half>(values, new[] { 1, vocab });
+        var result = CtcGreedyDecoding.Decode(logits, 1);
+        Assert.Equal(new[] { 1 }, result.tokens);
+        double expected = 1.0 / (1.0 + (vocab - 1) * Math.Exp(-(double)values[1]));
+        Assert.InRange(result.confidence, expected - 1e-10, expected + 1e-10);
+        var flat = CtcGreedyDecoding.DecodeFlat(logits, 1);
+        var skipped = CtcGreedyDecoding.DecodeSkippingAfterEmission(logits, 1, 1);
+        Assert.Equal(result.tokens, flat.tokens);
+        Assert.Equal(result.tokens, skipped.tokens);
+        Assert.Equal(result.confidence, flat.confidence);
+        Assert.Equal(result.confidence, skipped.confidence);
+        var singlePrecision = CtcGreedyDecoding.Decode(logits.Cast<float>(), 1);
+        Assert.InRange(singlePrecision.confidence, expected - 1e-10, expected + 1e-10);
+    }
+
+    [Fact]
+    public void HalfLongUtterance_EmittedConfidenceSumDoesNotOverflow()
+    {
+        const int frames = 70000;
+        var values = new Half[frames * 3];
+        for (int frame = 0; frame < frames; frame++)
+            values[frame * 3 + 1 + frame % 2] = (Half)100;
+        var result = CtcGreedyDecoding.Decode(new Tensor<Half>(values, new[] { frames, 3 }), frames);
+        Assert.Equal(frames, result.tokens.Count);
+        Assert.Equal(1.0, result.confidence, 6);
+    }
+
 }

@@ -5607,8 +5607,6 @@
 1	ADNELEM001|AiDotNet.Models.ModelStateRegistry<T>.ReadTensor(System.IO.BinaryReader)
 1	ADNELEM001|AiDotNet.Models.ModelStateRegistry<T>.ReadVector(System.IO.BinaryReader)
 1	ADNELEM001|AiDotNet.Models.ModelStateRegistry<T>.WriteMatrix(System.IO.BinaryWriter, AiDotNet.Tensors.LinearAlgebra.Matrix<T>?)
-1	ADNELEM001|AiDotNet.Models.ModelStateRegistry<T>.WriteTensor(System.IO.BinaryWriter, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?)
-1	ADNELEM001|AiDotNet.Models.ModelStateRegistry<T>.WriteVector(System.IO.BinaryWriter, AiDotNet.Tensors.LinearAlgebra.Vector<T>?)
 1	ADNELEM001|AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.LearningRateMask.set
 1	ADNELEM001|AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.WeightDecayMask.set
 2	ADNELEM001|AiDotNet.Models.Parameters.ComponentCollectionParameterSource<T>.GetParameters()
@@ -6071,9 +6069,7 @@
 1	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LayerBase<T>.NormalTensor(int[], double, System.Random)
 1	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ParameterStateWriteTarget.CopyFrom(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 2	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ReadRegisteredBuffers(System.IO.BinaryReader)
-1	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LayerBase<T>.Serialize(System.IO.BinaryWriter)
 1	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LayerBase<T>.TrainableParameterValueSlot.CopyFrom(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
-1	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LayerBase<T>.WriteRegisteredBuffers(System.IO.BinaryWriter, bool)
 4	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LayerNormalizationLayer<T>.UpdateParameters(T)
 3	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LearnedTokenTypeEmbeddingLayer<T>.UpdateParameters(T)
 1	ADNELEM001|AiDotNet.NeuralNetworks.Layers.LocationSensitiveAttentionLayer<T>.LocationSensitiveAttentionLayer(int, int, int, int, int)
