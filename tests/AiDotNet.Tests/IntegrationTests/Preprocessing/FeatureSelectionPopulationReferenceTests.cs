@@ -171,4 +171,42 @@ public class FeatureSelectionPopulationReferenceTests
         Assert.Equal(0.7, positions[2], Tolerance);
         Assert.Equal(0.15, positions[3], Tolerance);
     }
+
+    // ---------------------------------------------------------------- Grey Wolf Optimizer (Mirjalili 2014)
+
+    [Fact]
+    public void GreyWolfOptimizer_Hunt_MatchesEncirclingEquations()
+    {
+        var positions = Tensor2D(new[,] { { 0.5 } });
+        var leaders = Tensor2D(new[,] { { 0.8 }, { 0.6 }, { 0.4 } });
+        double[] r = { 0.25, 0.5, 0.75, 0.1, 0.5, 0.9 };
+        var draws = new Tensor<double>((double[])r.Clone(), new[] { 1, 1, 6 });
+        double a = 1.5;
+
+        double expected = 0;
+        double[] leader = { 0.8, 0.6, 0.4 };
+        for (int l = 0; l < 3; l++)
+        {
+            double coefficientA = 2 * a * r[2 * l] - a;
+            double coefficientC = 2 * r[2 * l + 1];
+            double distance = System.Math.Abs(coefficientC * leader[l] - 0.5);
+            expected += leader[l] - coefficientA * distance;
+        }
+
+        expected = System.Math.Max(0, System.Math.Min(1, expected / 3));
+        Assert.Equal(expected, ToArray(GreyWolfOptimizer<double>.Hunt(positions, leaders, draws, a))[0], Tolerance);
+    }
+
+    [Fact]
+    public void GreyWolfOptimizer_Leaders_AreTheBestFoundSoFar()
+    {
+        var leaders = Tensor2D(new[,] { { 0.9 }, { 0.8 }, { 0.7 } });
+        var population = Tensor2D(new[,] { { 0.85 }, { 0.1 } });
+
+        // A wolf that moved to a worse place does not replace a leader; a better one ranks among them
+        var (best, fitness) = GreyWolfOptimizer<double>.UpdateLeaders(
+            leaders, Tensor1D(0.9, 0.8, 0.7), population, Tensor1D(0.85, 0.1));
+        Assert.Equal(new[] { 0.9, 0.85, 0.8 }, ToArray(best));
+        Assert.Equal(new[] { 0.9, 0.85, 0.8 }, ToArray(fitness));
+    }
 }

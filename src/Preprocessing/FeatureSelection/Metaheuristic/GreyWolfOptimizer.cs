@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -30,7 +31,7 @@ public class GreyWolfOptimizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     private readonly int _maxIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -38,7 +39,7 @@ public class GreyWolfOptimizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int MaxIterations => _maxIterations;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -79,153 +80,86 @@ public class GreyWolfOptimizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        int targetCount = Math.Min(_nFeaturesToSelect, p);
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
+
         // Initialize population (continuous positions)
-        var positions = new double[_populationSize, p];
-        for (int i = 0; i < _populationSize; i++)
-            for (int j = 0; j < p; j++)
-                positions[i, j] = random.NextDouble();
+        var positions = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
+        var fitness = PopulationSearchOps.ThresholdFitness(positions, correlations, targetCount, 0.1);
 
-        var fitness = new double[_populationSize];
-        for (int i = 0; i < _populationSize; i++)
-            fitness[i] = EvaluateSolution(data, target, positions, i, p, n);
-
-        // Track best wolves
-        var sortedIndices = Enumerable.Range(0, _populationSize)
-            .OrderByDescending(i => fitness[i])
-            .ToArray();
-
-        int alphaIdx = sortedIndices[0];
-        int betaIdx = sortedIndices[1];
-        int deltaIdx = sortedIndices[2];
-
-        var alphaPos = new double[p];
-        var betaPos = new double[p];
-        var deltaPos = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            alphaPos[j] = positions[alphaIdx, j];
-            betaPos[j] = positions[betaIdx, j];
-            deltaPos[j] = positions[deltaIdx, j];
-        }
+        // Alpha, beta and delta: the three best solutions found so far
+        var (leaders, leaderFitness) = UpdateLeaders(null, null, positions, fitness);
 
         // Main loop
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             double a = 2 - iter * 2.0 / _maxIterations;
 
-            for (int i = 0; i < _populationSize; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    // Encircling prey
-                    double r1 = random.NextDouble();
-                    double r2 = random.NextDouble();
-                    double A1 = 2 * a * r1 - a;
-                    double C1 = 2 * r2;
-                    double D_alpha = Math.Abs(C1 * alphaPos[j] - positions[i, j]);
-                    double X1 = alphaPos[j] - A1 * D_alpha;
-
-                    r1 = random.NextDouble();
-                    r2 = random.NextDouble();
-                    double A2 = 2 * a * r1 - a;
-                    double C2 = 2 * r2;
-                    double D_beta = Math.Abs(C2 * betaPos[j] - positions[i, j]);
-                    double X2 = betaPos[j] - A2 * D_beta;
-
-                    r1 = random.NextDouble();
-                    r2 = random.NextDouble();
-                    double A3 = 2 * a * r1 - a;
-                    double C3 = 2 * r2;
-                    double D_delta = Math.Abs(C3 * deltaPos[j] - positions[i, j]);
-                    double X3 = deltaPos[j] - A3 * D_delta;
-
-                    positions[i, j] = Math.Max(0, Math.Min(1, (X1 + X2 + X3) / 3));
-                }
-
-                fitness[i] = EvaluateSolution(data, target, positions, i, p, n);
-            }
-
-            // Update alpha, beta, delta
-            sortedIndices = Enumerable.Range(0, _populationSize)
-                .OrderByDescending(i => fitness[i])
-                .ToArray();
-
-            alphaIdx = sortedIndices[0];
-            betaIdx = sortedIndices[1];
-            deltaIdx = sortedIndices[2];
-
-            for (int j = 0; j < p; j++)
-            {
-                alphaPos[j] = positions[alphaIdx, j];
-                betaPos[j] = positions[betaIdx, j];
-                deltaPos[j] = positions[deltaIdx, j];
-            }
+            // Per wolf and dimension: r1, r2 for alpha, then beta, then delta, in the order of the scalar draws
+            var draws = PopulationSearchOps.Uniform<T>(random, _populationSize, p, 6);
+            positions = Hunt(positions, leaders, draws, a);
+            fitness = PopulationSearchOps.ThresholdFitness(positions, correlations, targetCount, 0.1);
+            (leaders, leaderFitness) = UpdateLeaders(leaders, leaderFitness, positions, fitness);
         }
 
         // Extract best solution
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = alphaPos[j];
+        var alpha = PopulationSearchOps.Row(leaders, 0);
+        _featureScores = alpha.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(alpha, numToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluateSolution(Matrix<T> data, Vector<T> target, double[,] positions, int idx, int p, int n)
+    /// <summary>
+    /// Mirjalili's position update: for each leader L in (alpha, beta, delta), A = 2 a r1 - a, C = 2 r2,
+    /// D = |C L - X| and X_L = L - A D; the new position is (X_alpha + X_beta + X_delta) / 3, clamped to [0, 1].
+    /// <paramref name="draws"/> is [m, p, 6] with (r1, r2) for alpha, beta and delta in that order.
+    /// </summary>
+    internal static Tensor<T> Hunt(Tensor<T> positions, Tensor<T> leaders, Tensor<T> draws, double a)
     {
-        var selectedFeatures = Enumerable.Range(0, p)
-            .Where(j => positions[idx, j] > 0.5)
-            .ToArray();
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = positions.Shape[0];
+        int p = positions.Shape[1];
+        var shape = new[] { m, p };
+        Tensor<T>? sum = null;
+        for (int leader = 0; leader < 3; leader++)
+        {
+            var r1 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 2 * leader }, new[] { m, p, 1 }), shape);
+            var r2 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 2 * leader + 1 }, new[] { m, p, 1 }), shape);
+            var coefficientA = PopulationSearchOps.Affine(r1, 2 * a, -a);
+            var coefficientC = engine.TensorMultiplyScalar(r2, ops.FromDouble(2));
+            var position = engine.TensorBroadcastTo(
+                engine.Reshape(PopulationSearchOps.Row(leaders, leader), new[] { 1, p }), shape);
+            var distance = engine.TensorAbs(engine.TensorSubtract(engine.TensorMultiply(coefficientC, position), positions));
+            var estimate = engine.TensorSubtract(position, engine.TensorMultiply(coefficientA, distance));
+            sum = sum is null ? estimate : engine.TensorAdd(sum, estimate);
+        }
 
-        if (selectedFeatures.Length == 0)
-            return 0;
-
-        double totalScore = 0;
-        foreach (int f in selectedFeatures)
-            totalScore += ComputeCorrelation(data, target, f, n);
-
-        int targetCount = Math.Min(_nFeaturesToSelect, p);
-        double countPenalty = Math.Abs(selectedFeatures.Length - targetCount);
-
-        return totalScore / selectedFeatures.Length - 0.1 * countPenalty;
+        return PopulationSearchOps.Clamp01(engine.TensorDivideScalar(sum ?? positions, ops.FromDouble(3)));
     }
 
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int j, int n)
+    /// <summary>
+    /// The three best solutions found so far: the previous leaders (kept first on ties) together with the current
+    /// population, ranked by fitness. Returns the leaders [3, p] and their fitness [3].
+    /// </summary>
+    internal static (Tensor<T> Leaders, Tensor<T> Fitness) UpdateLeaders(
+        Tensor<T>? leaders, Tensor<T>? leaderFitness, Tensor<T> positions, Tensor<T> fitness)
     {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+        var engine = AiDotNetEngine.Current;
+        var pool = leaders is null ? positions : engine.TensorConcatenate(new[] { leaders, positions }, 0);
+        var poolFitness = leaderFitness is null ? fitness : engine.TensorConcatenate(new[] { leaderFitness, fitness }, 0);
+        var top = FeatureSelectionTensorOps.StableOrder(poolFitness, descending: true).Take(3).ToArray();
+        var topFitness = PopulationSearchOps.Rows(engine.Reshape(poolFitness, new[] { poolFitness.Length, 1 }), top);
+        return (PopulationSearchOps.Rows(pool, top), engine.Reshape(topFitness, new[] { top.Length }));
     }
 
     /// <inheritdoc />
@@ -241,15 +175,7 @@ public class GreyWolfOptimizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("GreyWolfOptimizer has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
