@@ -144,9 +144,9 @@ internal static class ParetoOps
     public static Tensor<T> OnePointCrossover<T>(Tensor<T> first, Tensor<T> second, int point)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int p = first.Length;
-        var head = engine.TensorLessThan(engine.TensorArange<T>(0, p, 1), ops.FromDouble(point));
+        // positions compared as int: in Half the positions past 2048 are not exact and land on the wrong side
+        var head = engine.TensorLessThan(engine.TensorArange<int>(0, p, 1), point).Cast<T>();
         return engine.TensorWhere(head, first, second);
     }
 

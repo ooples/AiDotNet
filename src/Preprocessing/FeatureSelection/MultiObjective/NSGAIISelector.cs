@@ -145,7 +145,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     /// </summary>
     private (Tensor<T> Accuracy, Tensor<T> FeatureCount) EvaluateObjectives(Tensor<T> masks, Tensor<T> scores) =>
         (PopulationSearchOps.SubsetFitness(masks, scores, 0, NumOps.Zero, NumOps.Zero),
-         Engine.ReduceSum(masks, new[] { 1 }, false));
+         Engine.ReduceSum(masks.Cast<int>(), new[] { 1 }, false).Cast<T>());
 
     /// <summary>
     /// Crowded binary tournament: of two uniformly drawn solutions the one in the better front wins, and within a

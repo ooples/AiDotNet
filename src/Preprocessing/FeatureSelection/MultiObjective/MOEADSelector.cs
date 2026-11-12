@@ -202,7 +202,8 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     {
         var engine = Engine;
         int m = masks.Shape[0];
-        var count = engine.ReduceSum(masks, new[] { 1 }, false);
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        var count = engine.ReduceSum(masks.Cast<int>(), new[] { 1 }, false).Cast<T>();
         var emptyCount = PreprocessingTensorOps.Filled(new[] { m }, NumOps.FromDouble(masks.Shape[1]));
         return (PopulationSearchOps.SubsetFitness(masks, scores, 0, NumOps.Zero, NumOps.Zero),
                 engine.TensorWhere(engine.TensorGreaterThan(count, NumOps.Zero), count, emptyCount));

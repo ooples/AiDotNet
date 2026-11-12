@@ -30,7 +30,7 @@ internal static class PopulationSearchOps
         T tiny = ops.FromDouble(1e-10);
         var defined = engine.TensorMultiply(engine.TensorGreaterThan(sxx, tiny), engine.TensorGreaterThan(syy, tiny));
         var safe = engine.TensorWhere(
-            defined, engine.TensorSqrt(engine.TensorMultiply(sxx, syy)), PreprocessingTensorOps.Filled(new[] { p }, ops.One));
+            defined, engine.TensorMultiply(engine.TensorSqrt(sxx), engine.TensorSqrt(syy)), PreprocessingTensorOps.Filled(new[] { p }, ops.One));
         return engine.TensorWhere(
             defined, engine.TensorAbs(engine.TensorDivide(sxy, safe)), PreprocessingTensorOps.Filled(new[] { p }, undefined));
     }
@@ -47,7 +47,8 @@ internal static class PopulationSearchOps
         int m = mask.Shape[0];
         int p = mask.Shape[1];
         var total = engine.Reshape(engine.TensorMatMul(mask, engine.Reshape(scores, new[] { p, 1 })), new[] { m });
-        var count = engine.ReduceSum(mask, new[] { 1 }, false);
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        var count = engine.ReduceSum(mask.Cast<int>(), new[] { 1 }, false).Cast<T>();
         var any = engine.TensorGreaterThan(count, ops.Zero);
         var safeCount = engine.TensorWhere(any, count, PreprocessingTensorOps.Filled(new[] { m }, ops.One));
         var deviation = engine.TensorAbs(engine.TensorAddScalar(count, ops.FromDouble(-targetCount)));

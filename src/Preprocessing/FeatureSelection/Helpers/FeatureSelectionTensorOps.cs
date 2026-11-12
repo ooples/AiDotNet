@@ -340,7 +340,8 @@ internal static class FeatureSelectionTensorOps
         var cross = engine.TensorMatMul(engine.TensorTranspose(ac), bc);
         var aSq = engine.ReduceSum(engine.TensorSquare(ac), new[] { 0 }, false);
         var bSq = engine.ReduceSum(engine.TensorSquare(bc), new[] { 0 }, false);
-        var denominator = engine.TensorSqrt(engine.TensorOuter(aSq, bSq));
+        // sqrt(sxx) sqrt(syy), not sqrt(sxx syy): the product overflows Half once both sums pass 256
+        var denominator = engine.TensorOuter(engine.TensorSqrt(aSq), engine.TensorSqrt(bSq));
         var defined = engine.TensorGreaterThan(denominator, ops.FromDouble(1e-10));
         var safe = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { pa, pb }, ops.One));
         return engine.TensorWhere(defined, engine.TensorDivide(cross, safe), new Tensor<T>(new[] { pa, pb }));
@@ -401,14 +402,17 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static int[] TopKWhere<T>(Tensor<T> scores, Tensor<T> mask, int k)
     {
-        int candidates = PreprocessingTensorOps.CountNonZero(mask);
-        if (candidates == 0)
+        var positions = PreprocessingTensorOps.MaskPositions(mask);
+        if (positions.Length == 0 || k <= 0)
             return Array.Empty<int>();
 
-        var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        T below = ops.Subtract(engine.TensorMinValue(scores), ops.One);
-        var ranked = engine.TensorWhere(mask, scores, PreprocessingTensorOps.Filled(scores.Shape.ToArray(), below));
-        return PreprocessingTensorOps.TopKIndicesSorted(ranked, Math.Min(k, candidates));
+        // ranked among the masked entries only: a fill of (min - 1) for the others equals min itself once the
+        // scores are past 2^24 in float (2048 in Half) or -infinity, and then ties pulled unmasked entries in
+        var candidateScores = AiDotNetEngine.Current.TensorIndexSelect(
+            scores, new Tensor<int>((int[])positions.Clone(), new[] { positions.Length }), 0);
+        var order = PreprocessingTensorOps.StableOrder(candidateScores, descending: true);
+        var selected = order.Take(Math.Min(k, positions.Length)).Select(rank => positions[rank]).ToArray();
+        Array.Sort(selected);
+        return selected;
     }
 }
