@@ -1134,7 +1134,7 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
         if (originalSeries.Length > 0)
         {
             var errors = Engine.Abs(Engine.Subtract(originalSeries, reconstructed.GetSubVector(0, originalSeries.Length)));
-            T largest = Engine.Max(errors);
+            T largest = Engine.TensorMaxValue(errors.AsTensor());
             if (NumOps.GreaterThan(largest, maxError))
             {
                 maxError = largest;

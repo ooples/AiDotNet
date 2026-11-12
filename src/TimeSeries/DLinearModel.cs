@@ -64,7 +64,7 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
     private (Tensor<T> Trend, Tensor<T> Seasonal) Decompose(Tensor<T> windows)
     {
         int half = _kernel / 2;
-        var padded = Engine.PadNd(windows, new[] { half, half }, AiDotNet.Tensors.Engines.PadMode.Replicate);
+        var padded = Engine.PadNd<T>(windows, new[] { half, half }, AiDotNet.Tensors.Engines.PadMode.Replicate);
 
         // [batch, L, kernel] sliding windows summed over the kernel axis, in master's offset order.
         var sums = Engine.ReduceSum(Engine.TensorUnfold(padded, 1, _kernel, 1), new[] { 2 }, keepDims: false);

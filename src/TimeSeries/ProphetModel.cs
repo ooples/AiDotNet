@@ -427,8 +427,10 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 
         // Evenly spaced over the first 80% of the time range: tMin + span · j / count for j = 1..count
         double span = 0.8 * (tMax - tMin);
-        double[] positions = Enumerable.Range(1, count).Select(j => tMin + span * ((double)j / count)).ToArray();
-        return new Vector<T>(Array.ConvertAll(positions, NumOps.FromDouble));
+        var steps = new Tensor<int>(new[] { count }, new Vector<int>(Enumerable.Range(1, count).ToArray())).Cast<T>();
+        var fractions = Engine.TensorDivideScalar(steps, NumOps.FromDouble(count));
+        return Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(fractions, NumOps.FromDouble(span)), NumOps.FromDouble(tMin)).ToVector();
     }
 
     /// <summary>

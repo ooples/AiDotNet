@@ -538,13 +538,16 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         }
 
         // Linear interpolation: out[i] = v[⌊s⌋]·(1 - w) + v[min(⌊s⌋ + 1, n - 1)]·w with s = i·scale, w = s - ⌊s⌋
-        double scale = (double)(inputLength - 1) / (targetLength - 1);
-        double[] sources = Enumerable.Range(0, targetLength).Select(i => i * scale).ToArray();
-        int[] lower = Array.ConvertAll(sources, s => (int)Math.Floor(s));
+        // s = i·(n - 1)/(m - 1) split exactly in integers: ⌊s⌋ is the quotient, w = remainder / (m - 1) in T
+        long numeratorStep = inputLength - 1;
+        long denominator = targetLength - 1;
+        int[] lower = Enumerable.Range(0, targetLength).Select(i => (int)(i * numeratorStep / denominator)).ToArray();
         int[] upper = Array.ConvertAll(lower, idx => Math.Min(idx + 1, inputLength - 1));
-        double[] weights = sources.Select((s, i) => s - lower[i]).ToArray();
-        var upperWeights = new Vector<T>(Array.ConvertAll(weights, NumOps.FromDouble));
-        var lowerWeights = new Vector<T>(Array.ConvertAll(Array.ConvertAll(weights, w => 1.0 - w), NumOps.FromDouble));
+        int[] remainders = Enumerable.Range(0, targetLength).Select(i => (int)(i * numeratorStep % denominator)).ToArray();
+        var weights = Engine.TensorDivideScalar(
+            new Tensor<int>(new[] { targetLength }, new Vector<int>(remainders)).Cast<T>(), NumOps.FromDouble(denominator));
+        var upperWeights = weights.ToVector();
+        var lowerWeights = Engine.TensorSubtract(Engine.TensorFullLike(weights, NumOps.One), weights).ToVector();
         return Tensor<T>.FromVector(Engine.Add(
             Engine.Multiply(TimeSeriesEngineOps<T>.Gather(values, lower), lowerWeights),
             Engine.Multiply(TimeSeriesEngineOps<T>.Gather(values, upper), upperWeights)));

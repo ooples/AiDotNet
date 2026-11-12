@@ -536,14 +536,13 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        // Add intervention effects of the interventions active at this index
-        double[] active = _interventionEffects
-            .Where(effect => index >= effect.StartIndex && (effect.Duration == 0 || index < effect.StartIndex + effect.Duration))
-            .Select(effect => effect.Effect)
-            .ToArray();
-        if (active.Length > 0)
+        // Add intervention effects
+        foreach (var effect in _interventionEffects)
         {
-            prediction = NumOps.Add(prediction, Engine.Sum(new Vector<T>(Array.ConvertAll(active, NumOps.FromDouble))));
+            if (index >= effect.StartIndex && (effect.Duration == 0 || index < effect.StartIndex + effect.Duration))
+            {
+                prediction = NumOps.Add(prediction, NumOps.FromDouble(effect.Effect));
+            }
         }
 
         return prediction;
