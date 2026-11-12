@@ -26,14 +26,14 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
     private readonly int _nFeaturesToSelect;
     private readonly int _kNeighbors;
 
-    private double[]? _entropyValues;
+    private Vector<T>? _entropyValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int KNeighbors => _kNeighbors;
-    public double[]? EntropyValues => _entropyValues;
+    public Vector<T>? EntropyValues => _entropyValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,56 +64,40 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (n <= _kNeighbors)
             throw new ArgumentException($"Number of samples ({n}) must be greater than k ({_kNeighbors}).");
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _entropyValues = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
         // Kozachenko-Leonenko estimator for 1D differential entropy
         // H = log(n-1) - digamma(k) + log(2) + (1/n) * sum(log(2 * epsilon_i))
-        double digammaK = Digamma(_kNeighbors);
-        double logN = Math.Log(n - 1);
+        T offset = NumOps.FromDouble(Math.Log(n - 1) - Digamma(_kNeighbors));
+        T floor = NumOps.FromDouble(1e-10);
+        T two = NumOps.FromDouble(2);
+        var shape = new[] { n, n };
+        var excludeSelf = engine.TensorMultiplyScalar(engine.TensorEye<T>(n), NumOps.MaxValue);
 
+        var entropies = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+            // k-th nearest neighbour distance of every point (itself excluded), at least 1e-10
+            var col = PreprocessingTensorOps.ColumnVector(X, j);
+            var distances = engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.Reshape(col, new[] { n, 1 }), shape),
+                engine.TensorBroadcastTo(engine.Reshape(col, new[] { 1, n }), shape)));
+            var sorted = engine.TensorSort(engine.TensorAdd(distances, excludeSelf), 1, false).Item1;
+            var epsilon = engine.TensorMax(engine.TensorSlice(sorted, new[] { 0, _kNeighbors - 1 }, new[] { n, 1 }), floor);
 
-            // Find k-th nearest neighbor distance for each point
-            double sumLogEpsilon = 0;
-            for (int i = 0; i < n; i++)
-            {
-                var distances = new List<double>();
-                for (int ii = 0; ii < n; ii++)
-                {
-                    if (ii != i)
-                        distances.Add(Math.Abs(col[i] - col[ii]));
-                }
-                distances.Sort();
-
-                double epsilon = distances[_kNeighbors - 1];
-                if (epsilon < 1e-10)
-                    epsilon = 1e-10;
-
-                sumLogEpsilon += Math.Log(2 * epsilon);
-            }
-
-            _entropyValues[j] = logN - digammaK + sumLogEpsilon / n;
+            entropies[j] = engine.TensorAddScalar(
+                engine.ReduceMean(engine.TensorLog(engine.TensorMultiplyScalar(epsilon, two)), new[] { 0 }, false), offset);
         }
 
+        var entropyValues = engine.Reshape(p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(entropies, 0), new[] { p });
+        _entropyValues = entropyValues.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _entropyValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(entropyValues, numToSelect);
 
         IsFitted = true;
     }
-
     private double Digamma(int k)
     {
         // Approximation of digamma function for positive integers
