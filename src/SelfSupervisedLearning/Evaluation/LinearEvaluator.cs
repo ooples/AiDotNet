@@ -234,6 +234,7 @@ public class LinearEvaluator<T>
 
     private Tensor<T> ExtractBatch(Tensor<T> data, int startIdx, int batchSize)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var dim = data.Shape[1];
         return Engine.TensorSlice(data, new[] { startIdx, 0 }, new[] { batchSize, dim });
     }
@@ -246,6 +247,7 @@ public class LinearEvaluator<T>
 
     private Tensor<T> Forward(Tensor<T> representations)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // logits = x[:, :inputDim] W + b
         var inputs = InputColumns(representations);
         return Engine.TensorAdd(Engine.TensorMatMul(inputs, _weights), _bias.Reshape(1, _numClasses));
@@ -256,6 +258,7 @@ public class LinearEvaluator<T>
     /// </summary>
     private Tensor<T> InputColumns(Tensor<T> representations)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = representations.Shape[0];
         return representations.Rank == 2 && representations.Shape[1] == _inputDim
             ? representations
@@ -265,6 +268,7 @@ public class LinearEvaluator<T>
     private (T loss, Tensor<T> gradWeights, Tensor<T> gradBias) ComputeCrossEntropyLossAndGrad(
         Tensor<T> logits, int[] labels, Tensor<T> representations)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = logits.Shape[0];
 
         // Softmax per row (max-shifted)
@@ -290,6 +294,7 @@ public class LinearEvaluator<T>
 
     private void UpdateParameters(Tensor<T> gradWeights, Tensor<T> gradBias, double lr)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var lrT = NumOps.FromDouble(lr);
 
         _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(gradWeights, lrT));
@@ -298,9 +303,11 @@ public class LinearEvaluator<T>
 
     private int ComputeCorrect(Tensor<T> logits, int[] labels)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Predicted class per row is the first index of the row maximum
         var predicted = Engine.TensorArgMax(logits, 1).ToArray();
-        return predicted.Zip(labels, (p, label) => p == label ? 1 : 0).Sum();
+        // labels[b] is indexed per row, so a short label array throws exactly as master did
+        return predicted.Select((p, b) => p == labels[b] ? 1 : 0).Sum();
     }
 
     private int ComputeTopKCorrect(Tensor<T> logits, int[] labels, int k)

@@ -125,6 +125,7 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private Tensor<T> ComputeLogits(Tensor<T> features)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // logits = features[:, :encoderOutputDim] W + b
         return Engine.TensorAdd(
             Engine.TensorMatMul(FeatureColumns(features), ClassifierWeightsView),
@@ -141,6 +142,7 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
     /// <summary>The first <c>encoderOutputDim</c> columns of a [batch, features] tensor.</summary>
     private Tensor<T> FeatureColumns(Tensor<T> features)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = features.Shape[0];
         return features.Rank == 2 && features.Shape[1] == _encoderOutputDim
             ? features
@@ -152,6 +154,7 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
     /// </summary>
     private (Tensor<T> Max, Tensor<T> Exps, Tensor<T> SumExp) ShiftedExponentials(Tensor<T> logits)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = logits.Shape[0];
         var classLogits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, _numClasses });
         var maxLogit = Engine.ReduceMax(classLogits, new[] { 1 }, keepDims: true);
@@ -162,11 +165,13 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
     /// <summary>One-hot [batch, numClasses] targets for the labels.</summary>
     private Tensor<T> LabelTargets(int[] labels, int batchSize)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         return Engine.TensorOneHot<T>(new Tensor<int>(labels.Take(batchSize).ToArray(), new[] { batchSize }), _numClasses);
     }
 
     private T ComputeCrossEntropyLoss(Tensor<T> logits, int[] labels)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = logits.Shape[0];
 
         // log p_true = (trueLogit - max) - log(sum exp(logit - max))
@@ -183,6 +188,7 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private Tensor<T> ComputeGradients(Tensor<T> logits, int[] labels)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = logits.Shape[0];
 
         // Softmax probabilities minus the one-hot target
@@ -193,6 +199,7 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private void UpdateClassifier(Tensor<T> features, Tensor<T> gradLogits, double lr)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = features.Shape[0];
         var lrT = NumOps.FromDouble(lr / batchSize);
 
@@ -208,6 +215,7 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private Tensor<T> ComputeFeatureGradients(Tensor<T> gradLogits)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // dFeatures = gradLogits W^T
         return Engine.TensorMatMul(gradLogits, Engine.TensorTranspose(ClassifierWeightsView));
     }
@@ -222,12 +230,14 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private int ComputeCorrect(Tensor<T> logits, int[] labels)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = logits.Shape[0];
 
         // Predicted class per row is the first index of the row maximum
         var classLogits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, _numClasses });
         var predicted = Engine.TensorArgMax(classLogits, 1).ToArray();
-        return predicted.Zip(labels, (p, label) => p == label ? 1 : 0).Sum();
+        // labels[b] is indexed per row, so a short label array throws exactly as master did
+        return predicted.Select((p, b) => p == labels[b] ? 1 : 0).Sum();
     }
 
     private double GetLearningRate(int epoch, int totalEpochs)
@@ -248,6 +258,7 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private Tensor<T> ExtractBatch(Tensor<T> data, int startIdx, int batchSize)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var dim = data.Shape[1];
         return Engine.TensorSlice(data, new[] { startIdx, 0 }, new[] { batchSize, dim });
     }
