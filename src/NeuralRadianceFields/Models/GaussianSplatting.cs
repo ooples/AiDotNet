@@ -195,285 +195,187 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
 {
     private readonly GaussianSplattingOptions _options;
 
+    // Gaussian state, one row per Gaussian, generic in T. Declaration order is the flat parameter layout:
+    // positions [N, 3] | rotation quaternions (w, x, y, z) [N, 4] | log-scales [N, 3] | opacity logits [N] |
+    // spherical-harmonics coefficients [N, K, 3] (coefficient-major, channel last). Without spherical harmonics
+    // K is 1 and the single coefficient row holds the RGB colour directly. Scales are log-parameterised (the
+    // exp activation of Kerbl et al. 2023), so every scale stays positive under gradient steps.
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _positions = new Tensor<T>(new[] { 0, 3 });
+
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _rotations = new Tensor<T>(new[] { 0, 4 });
+
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _logScales = new Tensor<T>(new[] { 0, 3 });
+
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _opacityLogits = new Tensor<T>(new[] { 0 });
+
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _shCoefficients = new Tensor<T>(new[] { 0, 1, 3 });
+
     /// <summary>
-    /// Represents a single 3D Gaussian in the scene.
+    /// Per-Gaussian learning-rate multipliers [N, 5] (position, scale, opacity, rotation, colour). Split
+    /// children compound <see cref="AiDotNet.Models.Options.SplitChildLearningRateScales"/> into their row; every
+    /// other Gaussian keeps 1. Optimizer state, not a model parameter.
     /// </summary>
-    private sealed partial class Gaussian
+    [Scratch]
+    private Tensor<T> _learningRateScales = new Tensor<T>(new[] { 0, LearningRateScaleColumns });
+
+    private const int LearningRateScaleColumns = 5;
+    private const int LrPosition = 0;
+    private const int LrScale = 1;
+    private const int LrOpacity = 2;
+    private const int LrRotation = 3;
+    private const int LrColor = 4;
+
+    // Kerbl et al. 2023, section 5.2: every 3000 iterations alpha <- min(alpha, 0.01) inside the densification window.
+    private const int OpacityResetInterval = 3000;
+    private const double OpacityResetCeiling = 0.01;
+
+    // Element budgets for the dense pairwise passes (point x Gaussian, pixel x splat), processed in chunks.
+    private const int PairBudget = 1 << 22;
+    private const int RasterBudget = 1 << 16;
+
+    // Columns of ProjectedSplats.Raster.
+    private const int ColMeanX = 0;
+    private const int ColMeanY = 1;
+    private const int ColInvA = 2;
+    private const int ColInvB = 3;
+    private const int ColInvC = 4;
+    private const int ColOpacity = 5;
+    private const int ColRed = 6;
+    private const int ColGreen = 7;
+    private const int ColBlue = 8;
+    private const int ColMinX = 9;
+    private const int ColMaxX = 10;
+    private const int ColMinY = 11;
+    private const int ColMaxY = 12;
+    private const int RasterColumns = 13;
+
+    // Columns of ProjectedSplats.Extra: camera-space mean, camera-space covariance (row-major upper triangle) and the
+    // unclamped colour.
+    private const int ExCamX = 0;
+    private const int ExCamY = 1;
+    private const int ExCamZ = 2;
+    private const int ExCov00 = 3;
+    private const int ExCov01 = 4;
+    private const int ExCov02 = 5;
+    private const int ExCov11 = 6;
+    private const int ExCov12 = 7;
+    private const int ExCov22 = 8;
+    private const int ExRawRed = 9;
+    private const int ExRawGreen = 10;
+    private const int ExRawBlue = 11;
+    private const int ExtraColumns = 12;
+
+    // Columns of the per-splat image-gradient sums.
+    private const int GradSumRed = 0;
+    private const int GradSumGreen = 1;
+    private const int GradSumBlue = 2;
+    private const int GradInvA = 3;
+    private const int GradInvB = 4;
+    private const int GradInvC = 5;
+    private const int GradOpacity = 6;
+    private const int GradMeanX = 7;
+    private const int GradMeanY = 8;
+    private const int GradColumns = 9;
+
+    /// <summary>A symmetric 3x3 matrix per Gaussian, one [N] tensor per upper-triangle entry.</summary>
+    private sealed class Symmetric3
     {
-        public Gaussian(int colorDim, INumericOperations<T> numOps)
+        public Symmetric3(Tensor<T> xx, Tensor<T> xy, Tensor<T> xz, Tensor<T> yy, Tensor<T> yz, Tensor<T> zz)
         {
-            if (colorDim <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(colorDim), "Color dimension must be positive.");
-            }
-            if (numOps == null)
-            {
-                throw new ArgumentNullException(nameof(numOps));
-            }
-
-            Position = new Vector<T>(3);
-            Rotation = new Vector<T>(4);
-            Scale = new Vector<T>(3);
-            Color = new Vector<T>(colorDim);
-            Opacity = numOps.FromDouble(0.0);
-            PositionLrScale = 1.0;
-            ScaleLrScale = 1.0;
-            OpacityLrScale = 1.0;
-            RotationLrScale = 1.0;
-            ColorLrScale = 1.0;
+            XX = xx;
+            XY = xy;
+            XZ = xz;
+            YY = yy;
+            YZ = yz;
+            ZZ = zz;
         }
 
-        public Vector<T> Position { get; }
-        public Vector<T> Rotation { get; }
-        public Vector<T> Scale { get; }
-        public Vector<T> Color { get; }
-
-        /// <summary>
-        /// Backing store for <see cref="Opacity"/>, a one-element vector rather than a bare
-        /// <typeparamref name="T"/> so the parameter walk can reach it.
-        /// </summary>
-        /// <remarks>
-        /// Every other attribute of a Gaussian is already a <see cref="Vector{T}"/>, which a tensor
-        /// can be built over WITHOUT copying -- writes through that view land in the field itself.
-        /// A bare scalar field has no address the walk can hold, so opacity alone would have forced
-        /// the hand-written parameter surfaces to stay. One element of indirection removes them all,
-        /// and the property below keeps every existing read and write in the renderer working
-        /// unchanged.
-        /// </remarks>
-        [AiDotNet.Attributes.TrainableParameter]
-        private readonly Vector<T> _opacity = new(1);
-
-        /// <summary>Opacity in logit space, stored in <see cref="OpacityStorage"/>.</summary>
-        public T Opacity
-        {
-            get => _opacity[0];
-            set => _opacity[0] = value;
-        }
-
-        /// <summary>The one-element store behind <see cref="Opacity"/>, for the parameter walk.</summary>
-        public Vector<T> OpacityStorage => _opacity;
-
-        // Derived: Covariance matrix Σ = R * S * S^T * R^T
-        public Matrix<T>? Covariance { get; set; }
-        public Matrix<T>? CovarianceInverse { get; set; }
-
-        // Per-Gaussian LR multipliers (excellence goal #4 — persistent split-child LR state).
-        // Default 1.0 (no effect). Set to the SplitChildLearningRateScales values when this
-        // Gaussian is born from a split; consumed by every per-attribute optimizer update.
-        public double PositionLrScale { get; set; }
-        public double ScaleLrScale { get; set; }
-        public double OpacityLrScale { get; set; }
-        public double RotationLrScale { get; set; }
-        public double ColorLrScale { get; set; }
+        public Tensor<T> XX { get; }
+        public Tensor<T> XY { get; }
+        public Tensor<T> XZ { get; }
+        public Tensor<T> YY { get; }
+        public Tensor<T> YZ { get; }
+        public Tensor<T> ZZ { get; }
     }
 
-    private sealed class CameraGaussian
+    /// <summary>The Gaussians in camera coordinates.</summary>
+    private sealed class CameraSpace
     {
-        public CameraGaussian(
-            Gaussian source,
-            Vector<T> position,
-            Matrix<T> covariance,
-            Vector<T> color,
-            T opacity)
+        public CameraSpace(Tensor<T> position, Tensor<T> covariance, Tensor<T> worldOffset)
         {
-            Guard.NotNull(source);
-            Source = source;
-            Guard.NotNull(position);
             Position = position;
-            Guard.NotNull(covariance);
             Covariance = covariance;
-            Guard.NotNull(color);
-            Color = color;
-            Opacity = opacity;
+            WorldOffset = worldOffset;
         }
 
-        public Gaussian Source { get; }
-        public Vector<T> Position { get; }
-        public Matrix<T> Covariance { get; }
-        public Vector<T> Color { get; }
-        public T Opacity { get; }
+        /// <summary>Camera-space means [N, 3].</summary>
+        public Tensor<T> Position { get; }
+
+        /// <summary>Camera-space covariances, row-major [N, 9].</summary>
+        public Tensor<T> Covariance { get; }
+
+        /// <summary>World-space camera-to-Gaussian offsets [N, 3] (the viewing direction before normalisation).</summary>
+        public Tensor<T> WorldOffset { get; }
     }
 
-    private sealed class ProjectedGaussian
+    /// <summary>The visible splats in front-to-back order.</summary>
+    private sealed class ProjectedSplats
     {
-        public ProjectedGaussian(
-            Gaussian source,
-            double meanX,
-            double meanY,
-            double depth,
-            double invA,
-            double invB,
-            double invC,
-            double opacity,
-            double colorR,
-            double colorG,
-            double colorB,
-            int minX,
-            int maxX,
-            int minY,
-            int maxY,
-            double camX,
-            double camY,
-            double camZ,
-            double focalLength)
+        public ProjectedSplats(Tensor<int> indices, Tensor<T> visibleMask, Tensor<T> raster, Tensor<T> extra, Tensor<T> basis)
         {
-            Guard.NotNull(source);
-            Source = source;
-            MeanX = meanX;
-            MeanY = meanY;
-            Depth = depth;
-            InvA = invA;
-            InvB = invB;
-            InvC = invC;
-            Opacity = opacity;
-            ColorR = colorR;
-            ColorG = colorG;
-            ColorB = colorB;
-            MinX = minX;
-            MaxX = maxX;
-            MinY = minY;
-            MaxY = maxY;
-            CamX = camX;
-            CamY = camY;
-            CamZ = camZ;
-            FocalLength = focalLength;
+            Indices = indices;
+            VisibleMask = visibleMask;
+            Raster = raster;
+            Extra = extra;
+            Basis = basis;
         }
 
-        public Gaussian Source { get; }
-        public double MeanX { get; }
-        public double MeanY { get; }
-        public double Depth { get; }
-        public double InvA { get; }
-        public double InvB { get; }
-        public double InvC { get; }
-        public double Opacity { get; }
-        public double ColorR { get; }
-        public double ColorG { get; }
-        public double ColorB { get; }
-        public int MinX { get; }
-        public int MaxX { get; }
-        public int MinY { get; }
-        public int MaxY { get; }
-        public double CamX { get; }
-        public double CamY { get; }
-        public double CamZ { get; }
-        public double FocalLength { get; }
+        /// <summary>Gaussian row of each splat [M], sorted by camera depth (stable).</summary>
+        public Tensor<int> Indices { get; }
+
+        /// <summary>1 for every visible Gaussian, 0 otherwise [N].</summary>
+        public Tensor<T> VisibleMask { get; }
+
+        /// <summary>Rasterisation attributes [M, RasterColumns].</summary>
+        public Tensor<T> Raster { get; }
+
+        /// <summary>Camera-space geometry and unclamped colour [M, ExtraColumns].</summary>
+        public Tensor<T> Extra { get; }
+
+        /// <summary>Spherical-harmonics basis of each splat's viewing direction [M, K].</summary>
+        public Tensor<T> Basis { get; }
+
+        public int Count => Indices.Length;
     }
 
-    private sealed class SpatialHashGrid
+    /// <summary>Camera-space-projected mean gradients of the visible Gaussians of one image step.</summary>
+    private sealed class GaussianGradient
     {
-        private readonly Dictionary<(int X, int Y, int Z), List<int>> _cells;
-        private readonly double _cellSize;
-        private readonly double _invCellSize;
-        private readonly double _minX;
-        private readonly double _minY;
-        private readonly double _minZ;
-        private readonly int _radius;
-
-        public SpatialHashGrid(
-            List<Gaussian> gaussians,
-            double cellSize,
-            int radius,
-            AiDotNet.Tensors.Interfaces.INumericOperations<T> numOps)
+        public GaussianGradient(Tensor<int> indices, Tensor<T> gradients)
         {
-            _cells = new Dictionary<(int, int, int), List<int>>(gaussians.Count);
-            _cellSize = cellSize;
-            _invCellSize = cellSize > 0.0 ? 1.0 / cellSize : 0.0;
-            _radius = Math.Max(1, radius);
-
-            double minX = double.PositiveInfinity;
-            double minY = double.PositiveInfinity;
-            double minZ = double.PositiveInfinity;
-
-            for (int i = 0; i < gaussians.Count; i++)
-            {
-                var pos = gaussians[i].Position;
-                minX = Math.Min(minX, numOps.ToDouble(pos[0]));
-                minY = Math.Min(minY, numOps.ToDouble(pos[1]));
-                minZ = Math.Min(minZ, numOps.ToDouble(pos[2]));
-            }
-
-            if (double.IsInfinity(minX) || double.IsInfinity(minY) || double.IsInfinity(minZ))
-            {
-                minX = 0.0;
-                minY = 0.0;
-                minZ = 0.0;
-            }
-
-            _minX = minX;
-            _minY = minY;
-            _minZ = minZ;
-
-            for (int i = 0; i < gaussians.Count; i++)
-            {
-                var pos = gaussians[i].Position;
-                int ix = (int)Math.Floor((numOps.ToDouble(pos[0]) - _minX) * _invCellSize);
-                int iy = (int)Math.Floor((numOps.ToDouble(pos[1]) - _minY) * _invCellSize);
-                int iz = (int)Math.Floor((numOps.ToDouble(pos[2]) - _minZ) * _invCellSize);
-                var key = (ix, iy, iz);
-                if (!_cells.TryGetValue(key, out var list))
-                {
-                    list = [];
-                    _cells[key] = list;
-                }
-                list.Add(i);
-            }
+            Guard.NotNull(indices);
+            Indices = indices;
+            Guard.NotNull(gradients);
+            Gradients = gradients;
         }
 
-        public IEnumerable<int> Query(double x, double y, double z)
-        {
-            if (_cellSize <= 0.0)
-            {
-                yield break;
-            }
+        /// <summary>Gaussian rows [M], in depth order.</summary>
+        public Tensor<int> Indices { get; }
 
-            int ix = (int)Math.Floor((x - _minX) * _invCellSize);
-            int iy = (int)Math.Floor((y - _minY) * _invCellSize);
-            int iz = (int)Math.Floor((z - _minZ) * _invCellSize);
+        /// <summary>World-space position gradients [M, 3].</summary>
+        public Tensor<T> Gradients { get; }
 
-            for (int dx = -_radius; dx <= _radius; dx++)
-            {
-                for (int dy = -_radius; dy <= _radius; dy++)
-                {
-                    for (int dz = -_radius; dz <= _radius; dz++)
-                    {
-                        if (_cells.TryGetValue((ix + dx, iy + dy, iz + dz), out var list))
-                        {
-                            for (int i = 0; i < list.Count; i++)
-                            {
-                                yield return list[i];
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        public int Count => Indices.Length;
     }
 
-    private readonly struct GaussianGradient
-    {
-        public GaussianGradient(Gaussian gaussian, double gradX, double gradY, double gradZ)
-        {
-            Gaussian = gaussian;
-            GradX = gradX;
-            GradY = gradY;
-            GradZ = gradZ;
-        }
-
-        public Gaussian Gaussian { get; }
-        public double GradX { get; }
-        public double GradY { get; }
-        public double GradZ { get; }
-
-        public double Magnitude => Math.Sqrt(GradX * GradX + GradY * GradY + GradZ * GradZ);
-    }
-
-    private readonly List<Gaussian> _gaussians;
     private readonly bool _useSphericalHarmonics;
     private readonly int _shDegree; // Degree of spherical harmonics (0-3)
     private int _trainingStep;
-    private SpatialHashGrid? _spatialIndex;
-    private bool _spatialIndexDirty = true;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -549,9 +451,9 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             throw new ArgumentOutOfRangeException(nameof(options.DefaultPointSpacing), "DefaultPointSpacing must be positive.");
         }
 
-        _gaussians = [];
         _useSphericalHarmonics = options.UseSphericalHarmonics;
         _shDegree = options.ShDegree;
+        _shCoefficients = new Tensor<T>(new[] { 0, GetShBasisCount(), 3 });
 
         EnableDensification = options.EnableDensification;
         DensificationInterval = options.DensificationInterval;
@@ -784,351 +686,248 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         {
             return;
         }
+
+        var engine = Engine;
         int basisCount = GetShBasisCount();
-        int colorDim = _useSphericalHarmonics ? 3 * basisCount : 3;
-        var numOps = NumOps;
-        const double shBase = 0.282095;
-        var positionsX = new double[numPoints];
-        var positionsY = new double[numPoints];
-        var positionsZ = new double[numPoints];
-        double minX = double.PositiveInfinity;
-        double minY = double.PositiveInfinity;
-        double minZ = double.PositiveInfinity;
-        double maxX = double.NegativeInfinity;
-        double maxY = double.NegativeInfinity;
-        double maxZ = double.NegativeInfinity;
+        var points = Tensor<T>.FromMatrix(pointCloud);
 
-        for (int i = 0; i < numPoints; i++)
+        Tensor<T> rgb;
+        if (colors != null)
         {
-            var gaussian = new Gaussian(colorDim, numOps);
-            double x = numOps.ToDouble(pointCloud[i, 0]);
-            double y = numOps.ToDouble(pointCloud[i, 1]);
-            double z = numOps.ToDouble(pointCloud[i, 2]);
-            positionsX[i] = x;
-            positionsY[i] = y;
-            positionsZ[i] = z;
-            minX = Math.Min(minX, x);
-            minY = Math.Min(minY, y);
-            minZ = Math.Min(minZ, z);
-            maxX = Math.Max(maxX, x);
-            maxY = Math.Max(maxY, y);
-            maxZ = Math.Max(maxZ, z);
-
-            gaussian.Position[0] = numOps.FromDouble(x);
-            gaussian.Position[1] = numOps.FromDouble(y);
-            gaussian.Position[2] = numOps.FromDouble(z);
-            gaussian.Rotation[0] = numOps.FromDouble(1.0);
-            gaussian.Rotation[1] = numOps.FromDouble(0.0);
-            gaussian.Rotation[2] = numOps.FromDouble(0.0);
-            gaussian.Rotation[3] = numOps.FromDouble(0.0);
-            gaussian.Scale[0] = numOps.FromDouble(MinScale);
-            gaussian.Scale[1] = numOps.FromDouble(MinScale);
-            gaussian.Scale[2] = numOps.FromDouble(MinScale);
-
-            double r = colors != null ? numOps.ToDouble(colors[i, 0]) : ModelRandom.NextDouble();
-            double g = colors != null ? numOps.ToDouble(colors[i, 1]) : ModelRandom.NextDouble();
-            double b = colors != null ? numOps.ToDouble(colors[i, 2]) : ModelRandom.NextDouble();
-
-            if (_useSphericalHarmonics)
-            {
-                gaussian.Color[0] = numOps.FromDouble(r / shBase);
-                gaussian.Color[basisCount] = numOps.FromDouble(g / shBase);
-                gaussian.Color[2 * basisCount] = numOps.FromDouble(b / shBase);
-            }
-            else
-            {
-                gaussian.Color[0] = numOps.FromDouble(r);
-                gaussian.Color[1] = numOps.FromDouble(g);
-                gaussian.Color[2] = numOps.FromDouble(b);
-            }
-
-            _gaussians.Add(gaussian);
-        }
-
-        double extentX = maxX - minX;
-        double extentY = maxY - minY;
-        double extentZ = maxZ - minZ;
-        double volume = extentX * extentY * extentZ;
-        double baseSpacing;
-        if (volume > 0.0)
-        {
-            baseSpacing = Math.Pow(volume / numPoints, 1.0 / 3.0);
+            rgb = engine.TensorSlice(Tensor<T>.FromMatrix(colors), new[] { 0, 0 }, new[] { numPoints, 3 });
         }
         else
         {
-            double maxExtent = Math.Max(extentX, Math.Max(extentY, extentZ));
-            baseSpacing = maxExtent > 0.0 ? maxExtent / Math.Sqrt(numPoints) : 0.0;
-        }
-
-        if (baseSpacing <= 0.0)
-        {
-            baseSpacing = DefaultPointSpacing;
-        }
-
-        double cellSize = Math.Max(baseSpacing, MinScale * InitialNeighborSearchScale);
-        double invCellSize = cellSize > 0.0 ? 1.0 / cellSize : 0.0;
-        var grid = new Dictionary<(int X, int Y, int Z), List<int>>(numPoints);
-        for (int i = 0; i < numPoints; i++)
-        {
-            int ix = (int)Math.Floor((positionsX[i] - minX) * invCellSize);
-            int iy = (int)Math.Floor((positionsY[i] - minY) * invCellSize);
-            int iz = (int)Math.Floor((positionsZ[i] - minZ) * invCellSize);
-            var key = (ix, iy, iz);
-            if (!grid.TryGetValue(key, out var list))
+            // Seeded colour draws stay in master's order (r, g, b per point); there is no engine op that draws a
+            // tensor from a caller-owned Random.
+            rgb = new Tensor<T>(new[] { numPoints, 3 });
+            for (int i = 0; i < numPoints; i++)
             {
-                list = [];
-                grid[key] = list;
+                rgb[i, 0] = NumOps.FromDouble(ModelRandom.NextDouble());
+                rgb[i, 1] = NumOps.FromDouble(ModelRandom.NextDouble());
+                rgb[i, 2] = NumOps.FromDouble(ModelRandom.NextDouble());
             }
-            list.Add(i);
         }
 
-        for (int i = 0; i < numPoints; i++)
+        // The DC coefficient carries the colour (divided by the degree-0 basis constant with spherical harmonics);
+        // the higher-order coefficients start at zero.
+        var dc = _useSphericalHarmonics
+            ? engine.TensorDivideScalar(rgb, NumOps.FromDouble(0.282095))
+            : rgb;
+        var sh = dc.Reshape(numPoints, 1, 3);
+        if (basisCount > 1)
         {
-            double nearestSq = double.PositiveInfinity;
-            int ix = (int)Math.Floor((positionsX[i] - minX) * invCellSize);
-            int iy = (int)Math.Floor((positionsY[i] - minY) * invCellSize);
-            int iz = (int)Math.Floor((positionsZ[i] - minZ) * invCellSize);
-
-            for (int dx = -1; dx <= 1; dx++)
-            {
-                for (int dy = -1; dy <= 1; dy++)
-                {
-                    for (int dz = -1; dz <= 1; dz++)
-                    {
-                        if (!grid.TryGetValue((ix + dx, iy + dy, iz + dz), out var list))
-                        {
-                            continue;
-                        }
-
-                        for (int idx = 0; idx < list.Count; idx++)
-                        {
-                            int neighbor = list[idx];
-                            if (neighbor == i)
-                            {
-                                continue;
-                            }
-
-                            double ox = positionsX[i] - positionsX[neighbor];
-                            double oy = positionsY[i] - positionsY[neighbor];
-                            double oz = positionsZ[i] - positionsZ[neighbor];
-                            double distSq = ox * ox + oy * oy + oz * oz;
-                            if (distSq < nearestSq)
-                            {
-                                nearestSq = distSq;
-                            }
-                        }
-                    }
-                }
-            }
-
-            double neighborDistance = nearestSq < double.PositiveInfinity
-                ? Math.Sqrt(nearestSq)
-                : baseSpacing;
-            if (neighborDistance <= 0.0)
-            {
-                neighborDistance = baseSpacing;
-            }
-
-            double scale = Math.Max(MinScale, neighborDistance * InitialScaleMultiplier);
-            var gaussian = _gaussians[i];
-            gaussian.Scale[0] = numOps.FromDouble(scale);
-            gaussian.Scale[1] = numOps.FromDouble(scale);
-            gaussian.Scale[2] = numOps.FromDouble(scale);
-            ComputeCovariance(gaussian);
+            sh = engine.TensorConcatenate(new[] { sh, new Tensor<T>(new[] { numPoints, basisCount - 1, 3 }) }, 1);
         }
 
-        MarkSpatialIndexDirty();
+        var rotations = engine.TensorConcatenate(
+            new[] { Full(new[] { numPoints, 1 }, NumOps.One), new Tensor<T>(new[] { numPoints, 3 }) }, 1);
+        var scales = InitialScales(points);
+        var logScales = engine.TensorTile(engine.TensorLog(scales).Reshape(numPoints, 1), new[] { 1, 3 });
+
+        _positions = AppendRows(_positions, points);
+        _rotations = AppendRows(_rotations, rotations);
+        _logScales = AppendRows(_logScales, logScales);
+        _opacityLogits = AppendRows(_opacityLogits, new Tensor<T>(new[] { numPoints }));
+        _shCoefficients = AppendRows(_shCoefficients, sh);
+        _learningRateScales = AppendRows(_learningRateScales, Full(new[] { numPoints, LearningRateScaleColumns }, NumOps.One));
+        InvalidateParameterCountCache();
     }
 
-    private void ComputeCovariance(Gaussian gaussian)
+    /// <summary>
+    /// Initial isotropic scale of each point: its nearest-neighbour distance within the 3x3x3 block of grid cells
+    /// around it (cell size from the cloud's mean spacing) times <see cref="InitialScaleMultiplier"/>, at least
+    /// <see cref="MinScale"/>; points without a neighbour use the mean spacing.
+    /// </summary>
+    private Tensor<T> InitialScales(Tensor<T> points)
     {
-        double qw = NumOps.ToDouble(gaussian.Rotation[0]);
-        double qx = NumOps.ToDouble(gaussian.Rotation[1]);
-        double qy = NumOps.ToDouble(gaussian.Rotation[2]);
-        double qz = NumOps.ToDouble(gaussian.Rotation[3]);
-
-        double qNorm = Math.Sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
-        if (qNorm > 0.0)
+        var engine = Engine;
+        int n = points._shape[0];
+        var ops = NumOps;
+        var lower = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(points), new[] { 0 }, false));
+        var upper = engine.ReduceMax(points, new[] { 0 }, false);
+        var extent = engine.TensorSubtract(upper, lower);
+        T extentX = extent[0];
+        T extentY = extent[1];
+        T extentZ = extent[2];
+        T volume = ops.Multiply(ops.Multiply(extentX, extentY), extentZ);
+        T count = ops.FromDouble(n);
+        T baseSpacing;
+        if (ops.GreaterThan(volume, ops.Zero))
         {
-            double inv = 1.0 / qNorm;
-            qw *= inv;
-            qx *= inv;
-            qy *= inv;
-            qz *= inv;
+            baseSpacing = ops.Power(ops.Divide(volume, count), ops.FromDouble(1.0 / 3.0));
+        }
+        else
+        {
+            T maxExtent = MaxOf(extentX, MaxOf(extentY, extentZ));
+            baseSpacing = ops.GreaterThan(maxExtent, ops.Zero) ? ops.Divide(maxExtent, ops.Sqrt(count)) : ops.Zero;
         }
 
-        double xx = qx * qx;
-        double yy = qy * qy;
-        double zz = qz * qz;
-        double xy = qx * qy;
-        double xz = qx * qz;
-        double yz = qy * qz;
-        double wx = qw * qx;
-        double wy = qw * qy;
-        double wz = qw * qz;
-
-        double r00 = 1.0 - 2.0 * (yy + zz);
-        double r01 = 2.0 * (xy - wz);
-        double r02 = 2.0 * (xz + wy);
-        double r10 = 2.0 * (xy + wz);
-        double r11 = 1.0 - 2.0 * (xx + zz);
-        double r12 = 2.0 * (yz - wx);
-        double r20 = 2.0 * (xz - wy);
-        double r21 = 2.0 * (yz + wx);
-        double r22 = 1.0 - 2.0 * (xx + yy);
-
-        double sx = Math.Max(1e-6, Math.Abs(NumOps.ToDouble(gaussian.Scale[0])));
-        double sy = Math.Max(1e-6, Math.Abs(NumOps.ToDouble(gaussian.Scale[1])));
-        double sz = Math.Max(1e-6, Math.Abs(NumOps.ToDouble(gaussian.Scale[2])));
-        double sx2 = sx * sx;
-        double sy2 = sy * sy;
-        double sz2 = sz * sz;
-
-        double m00 = r00 * sx2;
-        double m01 = r01 * sy2;
-        double m02 = r02 * sz2;
-        double m10 = r10 * sx2;
-        double m11 = r11 * sy2;
-        double m12 = r12 * sz2;
-        double m20 = r20 * sx2;
-        double m21 = r21 * sy2;
-        double m22 = r22 * sz2;
-
-        double cov00 = m00 * r00 + m01 * r01 + m02 * r02;
-        double cov01 = m00 * r10 + m01 * r11 + m02 * r12;
-        double cov02 = m00 * r20 + m01 * r21 + m02 * r22;
-        double cov11 = m10 * r10 + m11 * r11 + m12 * r12;
-        double cov12 = m10 * r20 + m11 * r21 + m12 * r22;
-        double cov22 = m20 * r20 + m21 * r21 + m22 * r22;
-
-        const double eps = 1e-6;
-        cov00 += eps;
-        cov11 += eps;
-        cov22 += eps;
-
-        var covariance = new Matrix<T>(3, 3);
-        covariance[0, 0] = NumOps.FromDouble(cov00);
-        covariance[0, 1] = NumOps.FromDouble(cov01);
-        covariance[0, 2] = NumOps.FromDouble(cov02);
-        covariance[1, 0] = NumOps.FromDouble(cov01);
-        covariance[1, 1] = NumOps.FromDouble(cov11);
-        covariance[1, 2] = NumOps.FromDouble(cov12);
-        covariance[2, 0] = NumOps.FromDouble(cov02);
-        covariance[2, 1] = NumOps.FromDouble(cov12);
-        covariance[2, 2] = NumOps.FromDouble(cov22);
-        gaussian.Covariance = covariance;
-
-        double det = cov00 * (cov11 * cov22 - cov12 * cov12)
-                     - cov01 * (cov01 * cov22 - cov12 * cov02)
-                     + cov02 * (cov01 * cov12 - cov11 * cov02);
-        if (Math.Abs(det) < 1e-12)
+        if (!ops.GreaterThan(baseSpacing, ops.Zero))
         {
-            det = det >= 0.0 ? 1e-12 : -1e-12;
+            baseSpacing = ops.FromDouble(DefaultPointSpacing);
         }
 
-        double inv00 = (cov11 * cov22 - cov12 * cov12) / det;
-        double inv01 = (cov02 * cov12 - cov01 * cov22) / det;
-        double inv02 = (cov01 * cov12 - cov02 * cov11) / det;
-        double inv11 = (cov00 * cov22 - cov02 * cov02) / det;
-        double inv12 = (cov02 * cov01 - cov00 * cov12) / det;
-        double inv22 = (cov00 * cov11 - cov01 * cov01) / det;
+        T cellSize = MaxOf(baseSpacing, ops.FromDouble(MinScale * InitialNeighborSearchScale));
+        T invCellSize = ops.GreaterThan(cellSize, ops.Zero) ? ops.Divide(ops.One, cellSize) : ops.Zero;
+        var cells = engine.TensorFloor(engine.TensorMultiplyScalar(Sub(points, lower.Reshape(1, 3)), invCellSize));
 
-        var inverse = new Matrix<T>(3, 3);
-        inverse[0, 0] = NumOps.FromDouble(inv00);
-        inverse[0, 1] = NumOps.FromDouble(inv01);
-        inverse[0, 2] = NumOps.FromDouble(inv02);
-        inverse[1, 0] = NumOps.FromDouble(inv01);
-        inverse[1, 1] = NumOps.FromDouble(inv11);
-        inverse[1, 2] = NumOps.FromDouble(inv12);
-        inverse[2, 0] = NumOps.FromDouble(inv02);
-        inverse[2, 1] = NumOps.FromDouble(inv12);
-        inverse[2, 2] = NumOps.FromDouble(inv22);
-        gaussian.CovarianceInverse = inverse;
+        T sentinel = ops.MaxValue;
+        T one = ops.One;
+        T zero = ops.Zero;
+        T minScale = ops.FromDouble(MinScale);
+        T multiplier = ops.FromDouble(InitialScaleMultiplier);
+        var columnIndex = engine.TensorArange<T>(0, n, 1).Reshape(1, n);
+        int chunk = Math.Max(1, PairBudget / Math.Max(1, n * 3));
+        var parts = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += chunk)
+        {
+            int rows = Math.Min(chunk, n - start);
+            var shape3 = new[] { rows, n, 3 };
+            var shape2 = new[] { rows, n };
+            var rowPoints = engine.TensorSlice(points, new[] { start, 0 }, new[] { rows, 3 });
+            var rowCells = engine.TensorSlice(cells, new[] { start, 0 }, new[] { rows, 3 });
+            var offset = Sub(Bc(rowPoints.Reshape(rows, 1, 3), shape3), Bc(points.Reshape(1, n, 3), shape3));
+            var distSq = engine.ReduceSum(engine.TensorMultiply(offset, offset), new[] { 2 }, false);
+            var cellGap = engine.ReduceMax(
+                engine.TensorAbs(Sub(Bc(rowCells.Reshape(rows, 1, 3), shape3), Bc(cells.Reshape(1, n, 3), shape3))),
+                new[] { 2 }, false);
+            var rowIndex = engine.TensorArange<T>(start, start + rows, 1).Reshape(rows, 1);
+            var neighbour = Mul(Le(cellGap, one), Not(engine.TensorEquals(Bc(rowIndex, shape2), Bc(columnIndex, shape2))));
+            var candidate = engine.TensorWhere(engine.TensorIsNan(distSq), Full(shape2, sentinel), distSq);
+            candidate = Select(neighbour, candidate, Full(shape2, sentinel));
+            var nearestSq = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidate), new[] { 1 }, false));
+            var found = engine.TensorLessThan(nearestSq, sentinel);
+            var spacing = Full(new[] { rows }, baseSpacing);
+            var distance = Select(found, engine.TensorSqrt(nearestSq), spacing);
+            distance = Select(Le(distance, zero), spacing, distance);
+            parts.Add(MaxScalar(engine.TensorMultiplyScalar(distance, multiplier), minScale));
+        }
+
+        return engine.TensorConcatenate(parts.ToArray(), 0);
     }
 
-    private void EnsureSpatialIndex()
+    /// <summary>
+    /// Unit quaternions of the given rows as (w, x, y, z) [N] tensors. Degenerate quaternions become the identity
+    /// when <paramref name="identityWhenDegenerate"/> is set (norm below 1e-12, the optimizer's rule) and are left
+    /// unnormalised otherwise (norm 0, the covariance rule).
+    /// </summary>
+    private (Tensor<T> W, Tensor<T> X, Tensor<T> Y, Tensor<T> Z) UnitQuaternions(Tensor<T> rotations, bool identityWhenDegenerate)
     {
-        if (!EnableSpatialIndex || _gaussians.Count == 0)
+        var engine = Engine;
+        var w = Col(rotations, 0);
+        var x = Col(rotations, 1);
+        var y = Col(rotations, 2);
+        var z = Col(rotations, 3);
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(rotations, rotations), new[] { 1 }, false));
+        var ones = engine.TensorOnesLike(norm);
+        if (identityWhenDegenerate)
         {
-            _spatialIndex = null;
-            _spatialIndexDirty = false;
-            return;
+            var degenerate = Lt(norm, NumOps.FromDouble(1e-12));
+            var inv = Select(degenerate, ones, engine.TensorReciprocal(norm));
+            var zeros = engine.TensorZerosLike(norm);
+            return (
+                Select(degenerate, ones, engine.TensorMultiply(w, inv)),
+                Select(degenerate, zeros, engine.TensorMultiply(x, inv)),
+                Select(degenerate, zeros, engine.TensorMultiply(y, inv)),
+                Select(degenerate, zeros, engine.TensorMultiply(z, inv)));
         }
 
-        if (!_spatialIndexDirty && _spatialIndex != null)
-        {
-            return;
-        }
-
-        _spatialIndex = BuildSpatialIndex();
-        _spatialIndexDirty = false;
+        var scale = Select(Gt(norm, NumOps.Zero), engine.TensorReciprocal(norm), ones);
+        return (engine.TensorMultiply(w, scale), engine.TensorMultiply(x, scale),
+            engine.TensorMultiply(y, scale), engine.TensorMultiply(z, scale));
     }
 
-    private SpatialHashGrid BuildSpatialIndex()
+    /// <summary>Rotation matrices [N, 3, 3] of unit quaternions.</summary>
+    private Tensor<T> RotationMatrices(Tensor<T> w, Tensor<T> x, Tensor<T> y, Tensor<T> z)
     {
-        double avgScale = 0.0;
-        double maxScale = 0.0;
-        if (_gaussians.Count > 0)
+        var engine = Engine;
+        int n = w.Length;
+        T one = NumOps.One;
+        T two = NumOps.FromDouble(2.0);
+        var xx = engine.TensorMultiply(x, x);
+        var yy = engine.TensorMultiply(y, y);
+        var zz = engine.TensorMultiply(z, z);
+        var xy = engine.TensorMultiply(x, y);
+        var xz = engine.TensorMultiply(x, z);
+        var yz = engine.TensorMultiply(y, z);
+        var wx = engine.TensorMultiply(w, x);
+        var wy = engine.TensorMultiply(w, y);
+        var wz = engine.TensorMultiply(w, z);
+        var entries = new[]
         {
-            var engine = AiDotNetEngine.Current;
-            var rows = new Tensor<T>[_gaussians.Count];
-            for (int i = 0; i < rows.Length; i++)
-            {
-                rows[i] = Tensor<T>.FromVector(_gaussians[i].Scale.GetSubVector(0, 3));
-            }
-
-            var scales = engine.TensorAbs(engine.TensorStack(rows, 0));
-            if (AiDotNet.Geometry.GeometryEngineOps<T>.AnyNan(scales))
-            {
-                // Math.Max and the running sum propagate NaN.
-                avgScale = double.NaN;
-                maxScale = double.NaN;
-            }
-            else
-            {
-                // The mean and maximum are computed in T; only the two grid parameters are converted
-                // for the double-based SpatialHashGrid. Absolute values are never negative, so the
-                // maximum equals master's Math.Max fold seeded with 0.
-                var largest = engine.ReduceMax(scales, new[] { 1 }, false);
-                avgScale = NumOps.ToDouble(engine.TensorMean(largest));
-                maxScale = NumOps.ToDouble(engine.TensorMaxValue(largest));
-            }
-        }
-
-        if (avgScale <= 0.0)
-        {
-            avgScale = 0.01;
-        }
-
-        double cellSize = Math.Max(avgScale * 2.5, Math.Max(maxScale, MinScale));
-        int radius = Math.Max(SpatialIndexRadius, (int)Math.Ceiling(maxScale * 3.0 / cellSize));
-        return new SpatialHashGrid(_gaussians, cellSize, radius, NumOps);
+            engine.ScalarMinusTensor(one, engine.TensorMultiplyScalar(engine.TensorAdd(yy, zz), two)),
+            engine.TensorMultiplyScalar(engine.TensorSubtract(xy, wz), two),
+            engine.TensorMultiplyScalar(engine.TensorAdd(xz, wy), two),
+            engine.TensorMultiplyScalar(engine.TensorAdd(xy, wz), two),
+            engine.ScalarMinusTensor(one, engine.TensorMultiplyScalar(engine.TensorAdd(xx, zz), two)),
+            engine.TensorMultiplyScalar(engine.TensorSubtract(yz, wx), two),
+            engine.TensorMultiplyScalar(engine.TensorSubtract(xz, wy), two),
+            engine.TensorMultiplyScalar(engine.TensorAdd(yz, wx), two),
+            engine.ScalarMinusTensor(one, engine.TensorMultiplyScalar(engine.TensorAdd(xx, yy), two)),
+        };
+        return engine.TensorStack(entries, 1).Reshape(n, 3, 3);
     }
 
-    private IEnumerable<Gaussian> GetCandidateGaussians(double x, double y, double z)
-    {
-        EnsureSpatialIndex();
-        if (_spatialIndex == null)
-        {
-            for (int i = 0; i < _gaussians.Count; i++)
-            {
-                yield return _gaussians[i];
-            }
-            yield break;
-        }
+    /// <summary>Clamped per-axis scales max(1e-6, exp(log s)) [N, 3], as the covariance uses them.</summary>
+    private Tensor<T> CovarianceScales(Tensor<T> logScales)
+        => MaxScalar(Engine.TensorExp(logScales), NumOps.FromDouble(1e-6));
 
-        foreach (int idx in _spatialIndex.Query(x, y, z))
-        {
-            if ((uint)idx < (uint)_gaussians.Count)
-            {
-                yield return _gaussians[idx];
-            }
-        }
+    /// <summary>
+    /// World-space covariances R S^2 R^T + 1e-6 I [N, 3, 3] of the given rows (quaternions normalised when their norm
+    /// is positive).
+    /// </summary>
+    private Tensor<T> WorldCovariances(Tensor<T> rotations, Tensor<T> logScales)
+    {
+        var engine = Engine;
+        int n = rotations._shape[0];
+        var (w, x, y, z) = UnitQuaternions(rotations, identityWhenDegenerate: false);
+        var r = RotationMatrices(w, x, y, z);
+        var s = CovarianceScales(logScales);
+        var scaled = Mul(r, engine.TensorMultiply(s, s).Reshape(n, 1, 3));
+        var covariance = engine.TensorMatMul(scaled, engine.TensorPermute(r, new[] { 0, 2, 1 }).Contiguous());
+        var eye = engine.TensorMultiplyScalar(Identity3().Reshape(1, 3, 3), NumOps.FromDouble(1e-6));
+        return Add(covariance, eye);
     }
 
-    private void MarkSpatialIndexDirty()
+    /// <summary>Inverse covariances of all Gaussians, with master's determinant floor of +-1e-12.</summary>
+    private Symmetric3 InverseCovariances()
     {
-        _spatialIndexDirty = true;
+        var engine = Engine;
+        int n = GaussianCount;
+        var flat = WorldCovariances(_rotations, _logScales).Reshape(n, 9);
+        var c00 = Col(flat, 0);
+        var c01 = Col(flat, 1);
+        var c02 = Col(flat, 2);
+        var c11 = Col(flat, 4);
+        var c12 = Col(flat, 5);
+        var c22 = Col(flat, 8);
+        var m00 = engine.TensorSubtract(engine.TensorMultiply(c11, c22), engine.TensorMultiply(c12, c12));
+        var m01 = engine.TensorSubtract(engine.TensorMultiply(c01, c22), engine.TensorMultiply(c12, c02));
+        var m02 = engine.TensorSubtract(engine.TensorMultiply(c01, c12), engine.TensorMultiply(c11, c02));
+        var det = engine.TensorAdd(
+            engine.TensorSubtract(engine.TensorMultiply(c00, m00), engine.TensorMultiply(c01, m01)),
+            engine.TensorMultiply(c02, m02));
+        T floor = NumOps.FromDouble(1e-12);
+        var tiny = Lt(engine.TensorAbs(det), floor);
+        var signedFloor = Select(Ge(det, NumOps.Zero), Full(det._shape, floor), Full(det._shape, NumOps.Negate(floor)));
+        det = Select(tiny, signedFloor, det);
+        return new Symmetric3(
+            engine.TensorDivide(m00, det),
+            engine.TensorDivide(engine.TensorSubtract(engine.TensorMultiply(c02, c12), engine.TensorMultiply(c01, c22)), det),
+            engine.TensorDivide(m02, det),
+            engine.TensorDivide(engine.TensorSubtract(engine.TensorMultiply(c00, c22), engine.TensorMultiply(c02, c02)), det),
+            engine.TensorDivide(engine.TensorSubtract(engine.TensorMultiply(c02, c01), engine.TensorMultiply(c00, c12)), det),
+            engine.TensorDivide(engine.TensorSubtract(engine.TensorMultiply(c00, c11), engine.TensorMultiply(c01, c01)), det));
+    }
+
+    private Tensor<T> Identity3()
+    {
+        var eye = new Tensor<T>(new[] { 3, 3 });
+        eye[0, 0] = NumOps.One;
+        eye[1, 1] = NumOps.One;
+        eye[2, 2] = NumOps.One;
+        return eye;
     }
 
     /// <inheritdoc />
@@ -1143,149 +942,141 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             throw new ArgumentException("Viewing directions must have shape [N, 3].", nameof(viewingDirections));
         }
 
+        var engine = Engine;
         int numPoints = positions.Shape[0];
-        var rgb = new T[numPoints * 3];
-        var density = new T[numPoints];
-        var posData = positions.Data.Span;
-        var dirData = viewingDirections.Data.Span;
-        EnsureSpatialIndex();
-        var spatialIndex = _spatialIndex;
-
-        for (int i = 0; i < numPoints; i++)
+        int n = GaussianCount;
+        if (numPoints == 0 || n == 0)
         {
-            double px = NumOps.ToDouble(posData[i * 3]);
-            double py = NumOps.ToDouble(posData[i * 3 + 1]);
-            double pz = NumOps.ToDouble(posData[i * 3 + 2]);
+            return (new Tensor<T>(new[] { numPoints, 3 }), new Tensor<T>(new[] { numPoints, 1 }));
+        }
 
-            double dx = NumOps.ToDouble(dirData[i * 3]);
-            double dy = NumOps.ToDouble(dirData[i * 3 + 1]);
-            double dz = NumOps.ToDouble(dirData[i * 3 + 2]);
-            NormalizeDirection(ref dx, ref dy, ref dz);
+        var inverse = InverseCovariances();
+        var opacity = engine.TensorSigmoid(_opacityLogits).Reshape(1, n);
+        var i00 = inverse.XX.Reshape(1, n);
+        var i01 = inverse.XY.Reshape(1, n);
+        var i02 = inverse.XZ.Reshape(1, n);
+        var i11 = inverse.YY.Reshape(1, n);
+        var i12 = inverse.YZ.Reshape(1, n);
+        var i22 = inverse.ZZ.Reshape(1, n);
+        var unitDirections = NormalizeRows(viewingDirections);
 
-            double accumR = 0.0;
-            double accumG = 0.0;
-            double accumB = 0.0;
-            double accumDensity = 0.0;
+        // Colour sources: per-Gaussian constant colours, or the SH coefficients of each channel as [K, N] for a
+        // basis [points, K] x coefficients [K, N] product.
+        int basisCount = GetShBasisCount();
+        var channelCoefficients = engine.TensorPermute(_shCoefficients, new[] { 2, 1, 0 }).Contiguous();
+        var constantColours = Clamp01(engine.TensorSlice(_shCoefficients, new[] { 0, 0, 0 }, new[] { n, 1, 3 }).Reshape(n, 3));
+        var coeffRed = engine.TensorSlice(channelCoefficients, new[] { 0, 0, 0 }, new[] { 1, basisCount, n }).Reshape(basisCount, n);
+        var coeffGreen = engine.TensorSlice(channelCoefficients, new[] { 1, 0, 0 }, new[] { 1, basisCount, n }).Reshape(basisCount, n);
+        var coeffBlue = engine.TensorSlice(channelCoefficients, new[] { 2, 0, 0 }, new[] { 1, basisCount, n }).Reshape(basisCount, n);
 
-            if (spatialIndex == null)
+        // Spatial index as a candidate mask: a Gaussian is a candidate for a point when their grid cells are within
+        // the query radius on every axis (the cells the hash grid would visit).
+        bool useGrid = EnableSpatialIndex;
+        bool noCandidates = false;
+        Tensor<T> gaussianCells = new Tensor<T>(new[] { n, 3 });
+        Tensor<T> gridOrigin = new Tensor<T>(new[] { 1, 3 });
+        T invCellSize = NumOps.Zero;
+        T gridRadius = NumOps.One;
+        if (useGrid)
+        {
+            var scales = engine.TensorAbs(engine.TensorExp(_logScales));
+            if (AiDotNet.Geometry.GeometryEngineOps<T>.AnyNan(scales))
             {
-                for (int gIdx = 0; gIdx < _gaussians.Count; gIdx++)
-                {
-                    var gaussian = _gaussians[gIdx];
-                    if (gaussian.CovarianceInverse == null)
-                    {
-                        ComputeCovariance(gaussian);
-                    }
-
-                    double gx = NumOps.ToDouble(gaussian.Position[0]);
-                    double gy = NumOps.ToDouble(gaussian.Position[1]);
-                    double gz = NumOps.ToDouble(gaussian.Position[2]);
-
-                    double ox = px - gx;
-                    double oy = py - gy;
-                    double oz = pz - gz;
-
-                    var inv = gaussian.CovarianceInverse;
-                    if (inv == null)
-                    {
-                        throw new InvalidOperationException("Gaussian covariance inverse is not initialized.");
-                    }
-                    double inv00 = NumOps.ToDouble(inv[0, 0]);
-                    double inv01 = NumOps.ToDouble(inv[0, 1]);
-                    double inv02 = NumOps.ToDouble(inv[0, 2]);
-                    double inv11 = NumOps.ToDouble(inv[1, 1]);
-                    double inv12 = NumOps.ToDouble(inv[1, 2]);
-                    double inv22 = NumOps.ToDouble(inv[2, 2]);
-
-                    double q =
-                        ox * (inv00 * ox + inv01 * oy + inv02 * oz) +
-                        oy * (inv01 * ox + inv11 * oy + inv12 * oz) +
-                        oz * (inv02 * ox + inv12 * oy + inv22 * oz);
-
-                    double weight = Math.Exp(-0.5 * q);
-                    double alpha = Sigmoid(NumOps.ToDouble(gaussian.Opacity)) * weight;
-                    if (alpha <= 1e-8)
-                    {
-                        continue;
-                    }
-
-                    var (r, g, b) = EvaluateGaussianColor(gaussian, dx, dy, dz);
-                    accumDensity += alpha;
-                    accumR += alpha * r;
-                    accumG += alpha * g;
-                    accumB += alpha * b;
-                }
+                // NaN scales give a NaN cell size, which collapses every Gaussian and point into one cell.
+                useGrid = false;
             }
             else
             {
-                foreach (int gIdx in spatialIndex.Query(px, py, pz))
+                var largest = engine.ReduceMax(scales, new[] { 1 }, false);
+                T avgScale = engine.TensorMean(largest);
+                T maxScale = engine.TensorMaxValue(largest);
+                if (!NumOps.GreaterThan(avgScale, NumOps.Zero))
                 {
-                    if ((uint)gIdx >= (uint)_gaussians.Count)
-                    {
-                        continue;
-                    }
+                    avgScale = NumOps.FromDouble(0.01);
+                }
 
-                    var gaussian = _gaussians[gIdx];
-                    if (gaussian.CovarianceInverse == null)
-                    {
-                        ComputeCovariance(gaussian);
-                    }
-
-                    double gx = NumOps.ToDouble(gaussian.Position[0]);
-                    double gy = NumOps.ToDouble(gaussian.Position[1]);
-                    double gz = NumOps.ToDouble(gaussian.Position[2]);
-
-                    double ox = px - gx;
-                    double oy = py - gy;
-                    double oz = pz - gz;
-
-                    var inv = gaussian.CovarianceInverse;
-                    if (inv == null)
-                    {
-                        throw new InvalidOperationException("Gaussian covariance inverse is not initialized.");
-                    }
-                    double inv00 = NumOps.ToDouble(inv[0, 0]);
-                    double inv01 = NumOps.ToDouble(inv[0, 1]);
-                    double inv02 = NumOps.ToDouble(inv[0, 2]);
-                    double inv11 = NumOps.ToDouble(inv[1, 1]);
-                    double inv12 = NumOps.ToDouble(inv[1, 2]);
-                    double inv22 = NumOps.ToDouble(inv[2, 2]);
-
-                    double q =
-                        ox * (inv00 * ox + inv01 * oy + inv02 * oz) +
-                        oy * (inv01 * ox + inv11 * oy + inv12 * oz) +
-                        oz * (inv02 * ox + inv12 * oy + inv22 * oz);
-
-                    double weight = Math.Exp(-0.5 * q);
-                    double alpha = Sigmoid(NumOps.ToDouble(gaussian.Opacity)) * weight;
-                    if (alpha <= 1e-8)
-                    {
-                        continue;
-                    }
-
-                    var (r, g, b) = EvaluateGaussianColor(gaussian, dx, dy, dz);
-                    accumDensity += alpha;
-                    accumR += alpha * r;
-                    accumG += alpha * g;
-                    accumB += alpha * b;
+                T cellSize = MaxOf(NumOps.Multiply(avgScale, NumOps.FromDouble(2.5)), MaxOf(maxScale, NumOps.FromDouble(MinScale)));
+                T reach = NumOps.Ceiling(NumOps.Divide(NumOps.Multiply(maxScale, NumOps.FromDouble(3.0)), cellSize));
+                gridRadius = MaxOf(NumOps.One, MaxOf(NumOps.FromDouble(SpatialIndexRadius), reach));
+                if (!NumOps.GreaterThan(cellSize, NumOps.Zero))
+                {
+                    noCandidates = true;
+                }
+                else
+                {
+                    invCellSize = NumOps.Divide(NumOps.One, cellSize);
+                    gridOrigin = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(_positions), new[] { 0 }, false)).Reshape(1, 3);
+                    gaussianCells = engine.TensorFloor(engine.TensorMultiplyScalar(Sub(_positions, gridOrigin), invCellSize));
                 }
             }
-
-            if (accumDensity > 1e-8)
-            {
-                accumR /= accumDensity;
-                accumG /= accumDensity;
-                accumB /= accumDensity;
-            }
-
-            int baseIdx = i * 3;
-            rgb[baseIdx] = NumOps.FromDouble(Clamp01(accumR));
-            rgb[baseIdx + 1] = NumOps.FromDouble(Clamp01(accumG));
-            rgb[baseIdx + 2] = NumOps.FromDouble(Clamp01(accumB));
-            density[i] = NumOps.FromDouble(accumDensity);
         }
 
-        return (new Tensor<T>(rgb, [numPoints, 3]), new Tensor<T>(density, [numPoints, 1]));
+        T half = NumOps.FromDouble(-0.5);
+        T alphaFloor = NumOps.FromDouble(1e-8);
+        int chunk = Math.Max(1, PairBudget / Math.Max(1, n * 3));
+        var rgbParts = new List<Tensor<T>>();
+        var densityParts = new List<Tensor<T>>();
+        for (int start = 0; start < numPoints; start += chunk)
+        {
+            int rows = Math.Min(chunk, numPoints - start);
+            var shape = new[] { rows, n };
+            var shape3 = new[] { rows, n, 3 };
+            var points = engine.TensorSlice(positions, new[] { start, 0 }, new[] { rows, 3 });
+            var offset = Sub(Bc(points.Reshape(rows, 1, 3), shape3), Bc(_positions.Reshape(1, n, 3), shape3));
+            var ox = engine.TensorSlice(offset, new[] { 0, 0, 0 }, new[] { rows, n, 1 }).Reshape(rows, n);
+            var oy = engine.TensorSlice(offset, new[] { 0, 0, 1 }, new[] { rows, n, 1 }).Reshape(rows, n);
+            var oz = engine.TensorSlice(offset, new[] { 0, 0, 2 }, new[] { rows, n, 1 }).Reshape(rows, n);
+            var qx = Add(Add(Mul(i00, ox), Mul(i01, oy)), Mul(i02, oz));
+            var qy = Add(Add(Mul(i01, ox), Mul(i11, oy)), Mul(i12, oz));
+            var qz = Add(Add(Mul(i02, ox), Mul(i12, oy)), Mul(i22, oz));
+            var q = engine.TensorAdd(engine.TensorAdd(engine.TensorMultiply(ox, qx), engine.TensorMultiply(oy, qy)), engine.TensorMultiply(oz, qz));
+            var alpha = Mul(opacity, engine.TensorExp(engine.TensorMultiplyScalar(q, half)));
+
+            // Gaussians with alpha <= 1e-8 are skipped (NaN alphas are not).
+            var keep = Not(Le(alpha, alphaFloor));
+            if (noCandidates)
+            {
+                keep = engine.TensorZerosLike(alpha);
+            }
+            else if (useGrid)
+            {
+                var pointCells = engine.TensorFloor(engine.TensorMultiplyScalar(Sub(points, gridOrigin), invCellSize));
+                var gap = engine.ReduceMax(
+                    engine.TensorAbs(Sub(Bc(pointCells.Reshape(rows, 1, 3), shape3), Bc(gaussianCells.Reshape(1, n, 3), shape3))),
+                    new[] { 2 }, false);
+                keep = engine.TensorMultiply(keep, Le(gap, gridRadius));
+            }
+
+            Tensor<T> red, green, blue;
+            if (_useSphericalHarmonics)
+            {
+                var basis = ShBasis(engine.TensorSlice(unitDirections, new[] { start, 0 }, new[] { rows, 3 }));
+                red = Clamp01(engine.TensorMatMul(basis, coeffRed));
+                green = Clamp01(engine.TensorMatMul(basis, coeffGreen));
+                blue = Clamp01(engine.TensorMatMul(basis, coeffBlue));
+            }
+            else
+            {
+                red = Bc(Col(constantColours, 0).Reshape(1, n), shape);
+                green = Bc(Col(constantColours, 1).Reshape(1, n), shape);
+                blue = Bc(Col(constantColours, 2).Reshape(1, n), shape);
+            }
+
+            var zeros = engine.TensorZerosLike(alpha);
+            var density = engine.ReduceSum(engine.TensorWhere(keep, alpha, zeros), new[] { 1 }, false);
+            var accumRed = engine.ReduceSum(engine.TensorWhere(keep, Mul(alpha, red), zeros), new[] { 1 }, false);
+            var accumGreen = engine.ReduceSum(engine.TensorWhere(keep, Mul(alpha, green), zeros), new[] { 1 }, false);
+            var accumBlue = engine.ReduceSum(engine.TensorWhere(keep, Mul(alpha, blue), zeros), new[] { 1 }, false);
+
+            var normalise = Gt(density, alphaFloor);
+            accumRed = Select(normalise, engine.TensorDivide(accumRed, density), accumRed);
+            accumGreen = Select(normalise, engine.TensorDivide(accumGreen, density), accumGreen);
+            accumBlue = Select(normalise, engine.TensorDivide(accumBlue, density), accumBlue);
+            rgbParts.Add(Clamp01(engine.TensorStack(new[] { accumRed, accumGreen, accumBlue }, 1)));
+            densityParts.Add(density.Reshape(rows, 1));
+        }
+
+        return (engine.TensorConcatenate(rgbParts.ToArray(), 0), engine.TensorConcatenate(densityParts.ToArray(), 0));
     }
 
     /// <inheritdoc />
@@ -1307,396 +1098,396 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         T focalLength,
         bool clampOutput)
     {
-        var image = new T[imageHeight * imageWidth * 3];
-        var transformedGaussians = TransformGaussiansToCamera(cameraPosition, cameraRotation);
-        var projected2DGaussians = ProjectGaussiansTo2D(transformedGaussians, imageWidth, imageHeight, focalLength);
-        RasterizeGaussians(projected2DGaussians, image, imageWidth, imageHeight, clampOutput);
-
-        return new Tensor<T>(image, [imageHeight, imageWidth, 3]);
+        var camera = TransformGaussiansToCamera(cameraPosition, cameraRotation);
+        var splats = ProjectGaussiansTo2D(camera, imageWidth, imageHeight, focalLength);
+        return RasterizeGaussians(splats, imageWidth, imageHeight, clampOutput);
     }
 
-    private List<CameraGaussian> TransformGaussiansToCamera(
+    /// <summary>
+    /// Maps every Gaussian into camera coordinates. Convention (matches NeRF.RenderImage + NerfLab.LookAt):
+    /// <paramref name="cameraRotation"/> is CAMERA-to-WORLD -- its columns are the world-space directions of the camera
+    /// right/up/forward axes -- so a world point maps to camera space through its transpose: x_c = R^T (x - c), and a
+    /// covariance through R^T Sigma R.
+    /// </summary>
+    private CameraSpace TransformGaussiansToCamera(
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation)
     {
-        var transformed = new List<CameraGaussian>(_gaussians.Count);
-
-        // Convention (matches NeRF.RenderImage + NerfLab.LookAt): cameraRotation is a
-        // CAMERA-to-WORLD matrix — its columns are the world-space directions of the camera
-        // right/up/forward axes. To map a world point into camera coordinates we need the
-        // TRANSPOSE (world-to-camera). Previously this method used R (not R^T), which is why
-        // GS.RenderImage produced all-zero output for LookAt-derived rotations — every
-        // Gaussian was being mapped to the wrong side of the camera and projected outside
-        // the image plane. Same fix applies to the covariance transform below.
-        double r00 = NumOps.ToDouble(cameraRotation[0, 0]);
-        double r10 = NumOps.ToDouble(cameraRotation[0, 1]);
-        double r20 = NumOps.ToDouble(cameraRotation[0, 2]);
-        double r01 = NumOps.ToDouble(cameraRotation[1, 0]);
-        double r11 = NumOps.ToDouble(cameraRotation[1, 1]);
-        double r21 = NumOps.ToDouble(cameraRotation[1, 2]);
-        double r02 = NumOps.ToDouble(cameraRotation[2, 0]);
-        double r12 = NumOps.ToDouble(cameraRotation[2, 1]);
-        double r22 = NumOps.ToDouble(cameraRotation[2, 2]);
-
-        double camX = NumOps.ToDouble(cameraPosition[0]);
-        double camY = NumOps.ToDouble(cameraPosition[1]);
-        double camZ = NumOps.ToDouble(cameraPosition[2]);
-
-        foreach (var gaussian in _gaussians)
+        var engine = Engine;
+        int n = GaussianCount;
+        var rotation = Tensor<T>.FromMatrix(cameraRotation);
+        var origin = engine.TensorSlice(Tensor<T>.FromVector(cameraPosition), new[] { 0 }, new[] { 3 }).Reshape(1, 3);
+        if (n == 0)
         {
-            if (gaussian.Covariance == null)
-            {
-                ComputeCovariance(gaussian);
-            }
-
-            double px = NumOps.ToDouble(gaussian.Position[0]) - camX;
-            double py = NumOps.ToDouble(gaussian.Position[1]) - camY;
-            double pz = NumOps.ToDouble(gaussian.Position[2]) - camZ;
-
-            double tx = r00 * px + r01 * py + r02 * pz;
-            double ty = r10 * px + r11 * py + r12 * pz;
-            double tz = r20 * px + r21 * py + r22 * pz;
-
-            var cov = gaussian.Covariance;
-            if (cov == null)
-            {
-                throw new InvalidOperationException("Gaussian covariance is not initialized.");
-            }
-            double c00 = NumOps.ToDouble(cov[0, 0]);
-            double c01 = NumOps.ToDouble(cov[0, 1]);
-            double c02 = NumOps.ToDouble(cov[0, 2]);
-            double c11 = NumOps.ToDouble(cov[1, 1]);
-            double c12 = NumOps.ToDouble(cov[1, 2]);
-            double c22 = NumOps.ToDouble(cov[2, 2]);
-
-            double t00 = r00 * c00 + r01 * c01 + r02 * c02;
-            double t01 = r00 * c01 + r01 * c11 + r02 * c12;
-            double t02 = r00 * c02 + r01 * c12 + r02 * c22;
-            double t10 = r10 * c00 + r11 * c01 + r12 * c02;
-            double t11 = r10 * c01 + r11 * c11 + r12 * c12;
-            double t12 = r10 * c02 + r11 * c12 + r12 * c22;
-            double t20 = r20 * c00 + r21 * c01 + r22 * c02;
-            double t21 = r20 * c01 + r21 * c11 + r22 * c12;
-            double t22 = r20 * c02 + r21 * c12 + r22 * c22;
-
-            double cam00 = t00 * r00 + t01 * r01 + t02 * r02;
-            double cam01 = t00 * r10 + t01 * r11 + t02 * r12;
-            double cam02 = t00 * r20 + t01 * r21 + t02 * r22;
-            double cam11 = t10 * r10 + t11 * r11 + t12 * r12;
-            double cam12 = t10 * r20 + t11 * r21 + t12 * r22;
-            double cam22 = t20 * r20 + t21 * r21 + t22 * r22;
-
-            var covCam = new Matrix<T>(3, 3);
-            covCam[0, 0] = NumOps.FromDouble(cam00);
-            covCam[0, 1] = NumOps.FromDouble(cam01);
-            covCam[0, 2] = NumOps.FromDouble(cam02);
-            covCam[1, 0] = NumOps.FromDouble(cam01);
-            covCam[1, 1] = NumOps.FromDouble(cam11);
-            covCam[1, 2] = NumOps.FromDouble(cam12);
-            covCam[2, 0] = NumOps.FromDouble(cam02);
-            covCam[2, 1] = NumOps.FromDouble(cam12);
-            covCam[2, 2] = NumOps.FromDouble(cam22);
-
-            var camPosition = new Vector<T>(3)
-            {
-                [0] = NumOps.FromDouble(tx),
-                [1] = NumOps.FromDouble(ty),
-                [2] = NumOps.FromDouble(tz)
-            };
-
-            transformed.Add(new CameraGaussian(
-                source: gaussian,
-                position: camPosition,
-                covariance: covCam,
-                color: gaussian.Color,
-                opacity: gaussian.Opacity));
+            return new CameraSpace(new Tensor<T>(new[] { 0, 3 }), new Tensor<T>(new[] { 0, 9 }), new Tensor<T>(new[] { 0, 3 }));
         }
 
-        return transformed;
+        var offset = Sub(_positions, origin);
+
+        // Row vectors: (R^T d)^T = d^T R.
+        var position = engine.TensorMatMul(offset, rotation);
+        var world = WorldCovariances(_rotations, _logScales);
+        var tiled = engine.TensorTile(rotation.Reshape(1, 3, 3), new[] { n, 1, 1 });
+        var tiledT = engine.TensorPermute(tiled, new[] { 0, 2, 1 }).Contiguous();
+        var covariance = engine.TensorMatMul(engine.TensorMatMul(tiledT, world), tiled).Reshape(n, 9);
+        return new CameraSpace(position, covariance, offset);
     }
 
-    private List<ProjectedGaussian> ProjectGaussiansTo2D(
-        List<CameraGaussian> gaussians3D,
+    /// <summary>
+    /// EWA projection (Zwicker et al. 2002, as used by Kerbl et al. 2023) of the camera-space Gaussians onto the
+    /// image plane: 2-D mean, conic (inverse 2-D covariance, regularised by 1e-6 on the diagonal), 3-sigma bounding
+    /// box and colour. Gaussians behind the camera (z &lt;= 1e-6), with a degenerate footprint (det &lt;= 1e-12) or whose
+    /// box misses the image are dropped; the rest are sorted front to back.
+    /// </summary>
+    private ProjectedSplats ProjectGaussiansTo2D(
+        CameraSpace camera,
         int width,
         int height,
         T focalLength)
     {
-        var projected = new List<ProjectedGaussian>(gaussians3D.Count);
-        double f = NumOps.ToDouble(focalLength);
-        double cx = (width - 1) * 0.5;
-        double cy = (height - 1) * 0.5;
-
-        foreach (var gaussian in gaussians3D)
+        var engine = Engine;
+        int n = camera.Position._shape[0];
+        int basisCount = GetShBasisCount();
+        if (n == 0)
         {
-            double x = NumOps.ToDouble(gaussian.Position[0]);
-            double y = NumOps.ToDouble(gaussian.Position[1]);
-            double z = NumOps.ToDouble(gaussian.Position[2]);
-
-            if (z <= 1e-6)
-            {
-                continue;
-            }
-
-            double invZ = 1.0 / z;
-            double meanX = f * x * invZ + cx;
-            double meanY = f * y * invZ + cy;
-
-            var cov = gaussian.Covariance;
-            double s00 = NumOps.ToDouble(cov[0, 0]);
-            double s01 = NumOps.ToDouble(cov[0, 1]);
-            double s02 = NumOps.ToDouble(cov[0, 2]);
-            double s11 = NumOps.ToDouble(cov[1, 1]);
-            double s12 = NumOps.ToDouble(cov[1, 2]);
-            double s22 = NumOps.ToDouble(cov[2, 2]);
-
-            double j00 = f * invZ;
-            double j02 = -f * x * invZ * invZ;
-            double j11 = f * invZ;
-            double j12 = -f * y * invZ * invZ;
-
-            double v0x = j00;
-            double v0y = 0.0;
-            double v0z = j02;
-            double v1x = 0.0;
-            double v1y = j11;
-            double v1z = j12;
-
-            double t0x = s00 * v0x + s01 * v0y + s02 * v0z;
-            double t0y = s01 * v0x + s11 * v0y + s12 * v0z;
-            double t0z = s02 * v0x + s12 * v0y + s22 * v0z;
-            double t1x = s00 * v1x + s01 * v1y + s02 * v1z;
-            double t1y = s01 * v1x + s11 * v1y + s12 * v1z;
-            double t1z = s02 * v1x + s12 * v1y + s22 * v1z;
-
-            double a = v0x * t0x + v0y * t0y + v0z * t0z;
-            double b = v0x * t1x + v0y * t1y + v0z * t1z;
-            double c = v1x * t1x + v1y * t1y + v1z * t1z;
-
-            const double eps = 1e-6;
-            a += eps;
-            c += eps;
-
-            double det = a * c - b * b;
-            if (det <= 1e-12)
-            {
-                continue;
-            }
-
-            double invDet = 1.0 / det;
-            double invA = c * invDet;
-            double invB = -b * invDet;
-            double invC = a * invDet;
-
-            double trace = a + c;
-            double disc = trace * trace - 4.0 * det;
-            if (disc < 0.0)
-            {
-                disc = 0.0;
-            }
-            double maxEigen = 0.5 * (trace + Math.Sqrt(disc));
-            double radius = 3.0 * Math.Sqrt(Math.Max(maxEigen, 0.0));
-            if (radius < 1.0)
-            {
-                radius = 1.0;
-            }
-
-            int minX = (int)Math.Floor(meanX - radius);
-            int maxX = (int)Math.Ceiling(meanX + radius);
-            int minY = (int)Math.Floor(meanY - radius);
-            int maxY = (int)Math.Ceiling(meanY + radius);
-
-            if (maxX < 0 || maxY < 0 || minX >= width || minY >= height)
-            {
-                continue;
-            }
-
-            minX = Math.Max(0, minX);
-            maxX = Math.Min(width - 1, maxX);
-            minY = Math.Max(0, minY);
-            maxY = Math.Min(height - 1, maxY);
-
-            double dirX = -x;
-            double dirY = -y;
-            double dirZ = -z;
-            NormalizeDirection(ref dirX, ref dirY, ref dirZ);
-
-            var (r, g, bColor) = EvaluateGaussianColor(gaussian.Source, dirX, dirY, dirZ);
-            double opacity = Sigmoid(NumOps.ToDouble(gaussian.Opacity));
-
-            projected.Add(new ProjectedGaussian(
-                source: gaussian.Source,
-                meanX: meanX,
-                meanY: meanY,
-                depth: z,
-                invA: invA,
-                invB: invB,
-                invC: invC,
-                opacity: opacity,
-                colorR: r,
-                colorG: g,
-                colorB: bColor,
-                minX: minX,
-                maxX: maxX,
-                minY: minY,
-                maxY: maxY,
-                camX: x,
-                camY: y,
-                camZ: z,
-                focalLength: f));
+            return EmptySplats(0, basisCount);
         }
 
-        return projected;
+        var ops = NumOps;
+        T f = focalLength;
+        var x = Col(camera.Position, 0);
+        var y = Col(camera.Position, 1);
+        var z = Col(camera.Position, 2);
+        var cov = camera.Covariance;
+        var s00 = Col(cov, 0);
+        var s01 = Col(cov, 1);
+        var s02 = Col(cov, 2);
+        var s11 = Col(cov, 4);
+        var s12 = Col(cov, 5);
+        var s22 = Col(cov, 8);
+
+        var invZ = engine.TensorReciprocal(z);
+        var meanX = engine.TensorAddScalar(engine.TensorMultiply(engine.TensorMultiplyScalar(x, f), invZ), ops.FromDouble((width - 1) * 0.5));
+        var meanY = engine.TensorAddScalar(engine.TensorMultiply(engine.TensorMultiplyScalar(y, f), invZ), ops.FromDouble((height - 1) * 0.5));
+
+        // Rows of the projection Jacobian: v0 = (j00, 0, j02), v1 = (0, j11, j12).
+        var j00 = engine.TensorMultiplyScalar(invZ, f);
+        var j02 = engine.TensorNegate(engine.TensorMultiply(engine.TensorMultiply(engine.TensorMultiplyScalar(x, f), invZ), invZ));
+        var j11 = j00;
+        var j12 = engine.TensorNegate(engine.TensorMultiply(engine.TensorMultiply(engine.TensorMultiplyScalar(y, f), invZ), invZ));
+        var t0x = engine.TensorAdd(engine.TensorMultiply(s00, j00), engine.TensorMultiply(s02, j02));
+        var t0z = engine.TensorAdd(engine.TensorMultiply(s02, j00), engine.TensorMultiply(s22, j02));
+        var t1x = engine.TensorAdd(engine.TensorMultiply(s01, j11), engine.TensorMultiply(s02, j12));
+        var t1y = engine.TensorAdd(engine.TensorMultiply(s11, j11), engine.TensorMultiply(s12, j12));
+        var t1z = engine.TensorAdd(engine.TensorMultiply(s12, j11), engine.TensorMultiply(s22, j12));
+        T eps = ops.FromDouble(1e-6);
+        var a = engine.TensorAddScalar(engine.TensorAdd(engine.TensorMultiply(j00, t0x), engine.TensorMultiply(j02, t0z)), eps);
+        var b = engine.TensorAdd(engine.TensorMultiply(j00, t1x), engine.TensorMultiply(j02, t1z));
+        var c = engine.TensorAddScalar(engine.TensorAdd(engine.TensorMultiply(j11, t1y), engine.TensorMultiply(j12, t1z)), eps);
+        var det = engine.TensorSubtract(engine.TensorMultiply(a, c), engine.TensorMultiply(b, b));
+        var invDet = engine.TensorReciprocal(det);
+        var invA = engine.TensorMultiply(c, invDet);
+        var invB = engine.TensorNegate(engine.TensorMultiply(b, invDet));
+        var invC = engine.TensorMultiply(a, invDet);
+
+        var trace = engine.TensorAdd(a, c);
+        var disc = engine.TensorSubtract(engine.TensorMultiply(trace, trace), engine.TensorMultiplyScalar(det, ops.FromDouble(4.0)));
+        disc = Select(Lt(disc, ops.Zero), engine.TensorZerosLike(disc), disc);
+        var maxEigen = engine.TensorMultiplyScalar(engine.TensorAdd(trace, engine.TensorSqrt(disc)), ops.FromDouble(0.5));
+        var radius = engine.TensorMultiplyScalar(engine.TensorSqrt(MaxScalar(maxEigen, ops.Zero)), ops.FromDouble(3.0));
+        radius = Select(Lt(radius, ops.One), engine.TensorOnesLike(radius), radius);
+        var minX = engine.TensorFloor(engine.TensorSubtract(meanX, radius));
+        var maxX = engine.TensorCeiling(engine.TensorAdd(meanX, radius));
+        var minY = engine.TensorFloor(engine.TensorSubtract(meanY, radius));
+        var maxY = engine.TensorCeiling(engine.TensorAdd(meanY, radius));
+
+        // Visibility. The box test is written so that a NaN box (a NaN mean or footprint) drops the Gaussian.
+        var visible = engine.TensorMultiply(Not(Le(z, eps)), Not(Le(det, ops.FromDouble(1e-12))));
+        visible = engine.TensorMultiply(visible, engine.TensorMultiply(
+            Ge(maxX, ops.Zero), Ge(maxY, ops.Zero)));
+        visible = engine.TensorMultiply(visible, engine.TensorMultiply(
+            Lt(minX, ops.FromDouble(width)), Lt(minY, ops.FromDouble(height))));
+        var visibleRows = engine.TensorNonzero(visible);
+        int m = visibleRows._shape[0];
+        if (m == 0)
+        {
+            return EmptySplats(n, basisCount);
+        }
+
+        var rows = visibleRows.Reshape(m);
+        var order = engine.TensorArgsort(engine.TensorIndexSelect(z, rows, 0), 0, false);
+        var sorted = engine.TensorIndexSelect(rows, order, 0);
+
+        minX = MaxScalar(minX, ops.Zero);
+        maxX = MinScalar(maxX, ops.FromDouble(width - 1));
+        minY = MaxScalar(minY, ops.Zero);
+        maxY = MinScalar(maxY, ops.FromDouble(height - 1));
+
+        // Colour seen along the world-space ray from the camera to the Gaussian -- the viewing direction QueryField
+        // receives -- through the spherical-harmonics basis, or the stored colour without spherical harmonics.
+        var basis = ShBasis(NormalizeRows(camera.WorldOffset));
+        Tensor<T> raw;
+        if (_useSphericalHarmonics)
+        {
+            raw = engine.ReduceSum(Mul(basis.Reshape(n, basisCount, 1), _shCoefficients), new[] { 1 }, false);
+        }
+        else
+        {
+            raw = engine.TensorSlice(_shCoefficients, new[] { 0, 0, 0 }, new[] { n, 1, 3 }).Reshape(n, 3);
+        }
+
+        var colour = Clamp01(raw);
+        var raster = engine.TensorStack(new[]
+        {
+            meanX, meanY, invA, invB, invC, engine.TensorSigmoid(_opacityLogits),
+            Col(colour, 0), Col(colour, 1), Col(colour, 2), minX, maxX, minY, maxY,
+        }, 1);
+        var extra = engine.TensorStack(new[]
+        {
+            x, y, z, s00, s01, s02, s11, s12, s22, Col(raw, 0), Col(raw, 1), Col(raw, 2),
+        }, 1);
+        return new ProjectedSplats(
+            sorted,
+            visible,
+            engine.TensorIndexSelect(raster, sorted, 0),
+            engine.TensorIndexSelect(extra, sorted, 0),
+            engine.TensorIndexSelect(basis, sorted, 0));
     }
 
-    private static List<int>[] BuildTileBuckets(
-        List<ProjectedGaussian> gaussians2D,
-        int tilesX,
-        int tilesY,
-        int tileSize)
+    private ProjectedSplats EmptySplats(int gaussianCount, int basisCount)
+        => new ProjectedSplats(
+            new Tensor<int>(new[] { 0 }),
+            new Tensor<T>(new[] { gaussianCount }),
+            new Tensor<T>(new[] { 0, RasterColumns }),
+            new Tensor<T>(new[] { 0, ExtraColumns }),
+            new Tensor<T>(new[] { 0, basisCount }));
+
+    private Tensor<T> RasterizeGaussians(ProjectedSplats splats, int width, int height, bool clampOutput)
     {
-        var buckets = new List<int>[tilesX * tilesY];
-        for (int i = 0; i < gaussians2D.Count; i++)
-        {
-            var gaussian = gaussians2D[i];
-            int tileMinX = gaussian.MinX / tileSize;
-            int tileMaxX = gaussian.MaxX / tileSize;
-            int tileMinY = gaussian.MinY / tileSize;
-            int tileMaxY = gaussian.MaxY / tileSize;
-
-            tileMinX = Math.Max(0, Math.Min(tilesX - 1, tileMinX));
-            tileMaxX = Math.Max(0, Math.Min(tilesX - 1, tileMaxX));
-            tileMinY = Math.Max(0, Math.Min(tilesY - 1, tileMinY));
-            tileMaxY = Math.Max(0, Math.Min(tilesY - 1, tileMaxY));
-
-            for (int ty = tileMinY; ty <= tileMaxY; ty++)
-            {
-                int row = ty * tilesX;
-                for (int tx = tileMinX; tx <= tileMaxX; tx++)
-                {
-                    int idx = row + tx;
-                    if (buckets[idx] == null)
-                    {
-                        buckets[idx] = [];
-                    }
-                    buckets[idx].Add(i);
-                }
-            }
-        }
-
-        return buckets;
+        var image = SplatTiles(splats, width, height, null, null, out _);
+        return clampOutput ? Clamp01(image) : image;
     }
 
-    private void RasterizeGaussians(List<ProjectedGaussian> gaussians2D, T[] image, int width, int height, bool clampOutput)
+    /// <summary>
+    /// Front-to-back alpha compositing of the depth-sorted splats over screen tiles, C = sum_i T_i alpha_i c_i with
+    /// T_i = prod_{j &lt; i} (1 - alpha_j). A pixel ignores a splat outside its box, below the -20 exponent cutoff or
+    /// the 1e-6 alpha cutoff, and stops once its transmittance falls below 1e-4. With a loss gradient the same pass
+    /// accumulates, per splat, the sums the image-space gradient needs (columns GradSumRed..GradMeanY).
+    /// </summary>
+    private Tensor<T> SplatTiles(
+        ProjectedSplats splats,
+        int width,
+        int height,
+        Tensor<T>? prediction,
+        Tensor<T>? lossGradient,
+        out Tensor<T> splatGradients)
     {
-        if (gaussians2D.Count == 0 || width <= 0 || height <= 0)
+        var engine = Engine;
+        int m = splats.Count;
+        splatGradients = new Tensor<T>(new[] { m, GradColumns });
+        if (width <= 0 || height <= 0)
         {
-            return;
+            return new Tensor<T>(new[] { Math.Max(0, height), Math.Max(0, width), 3 });
         }
+        if (m == 0)
+        {
+            return new Tensor<T>(new[] { height, width, 3 });
+        }
+
+        bool training = prediction is not null && lossGradient is not null;
+        var ops = NumOps;
+        T one = ops.One;
+        T two = ops.FromDouble(2.0);
+        T minusHalf = ops.FromDouble(-0.5);
+        T exponentCutoff = ops.FromDouble(-20.0);
+        T alphaCutoff = ops.FromDouble(1e-6);
+        T transmittanceCutoff = ops.FromDouble(1e-4);
+        T oneMinusAlphaFloor = ops.FromDouble(1e-6);
 
         int tileSize = Math.Max(4, TileSize);
         int tilesX = (width + tileSize - 1) / tileSize;
         int tilesY = (height + tileSize - 1) / tileSize;
-        var buckets = BuildTileBuckets(gaussians2D, tilesX, tilesY, tileSize);
 
-        System.Threading.Tasks.Parallel.For(0, tilesX * tilesY, tileIdx =>
+        // Tile membership of every splat: [M, tilesX] and [M, tilesY] masks of the tile ranges its box covers.
+        T tileT = ops.FromDouble(tileSize);
+        var raster = splats.Raster;
+        var memberX = TileMembership(Col(raster, ColMinX), Col(raster, ColMaxX), tileT, tilesX);
+        var memberY = TileMembership(Col(raster, ColMinY), Col(raster, ColMaxY), tileT, tilesY);
+
+        var imageRows = new List<Tensor<T>>();
+        var gradientIndices = new List<Tensor<int>>();
+        var gradientValues = new List<Tensor<T>>();
+        for (int ty = 0; ty < tilesY; ty++)
         {
-            var bucket = buckets[tileIdx];
-            if (bucket == null || bucket.Count == 0)
+            int yStart = ty * tileSize;
+            int tileHeight = Math.Min(height, yStart + tileSize) - yStart;
+            var rowMember = engine.TensorSlice(memberY, new[] { 0, ty }, new[] { m, 1 }).Reshape(m);
+            var rowTiles = new List<Tensor<T>>();
+            for (int tx = 0; tx < tilesX; tx++)
             {
-                return;
-            }
-
-            bucket.Sort((a, b) => gaussians2D[a].Depth.CompareTo(gaussians2D[b].Depth));
-
-            int tileX = tileIdx % tilesX;
-            int tileY = tileIdx / tilesX;
-            int xStart = tileX * tileSize;
-            int yStart = tileY * tileSize;
-            int xEnd = Math.Min(width, xStart + tileSize) - 1;
-            int yEnd = Math.Min(height, yStart + tileSize) - 1;
-            int tileWidth = xEnd - xStart + 1;
-            int tileHeight = yEnd - yStart + 1;
-            int tilePixelCount = tileWidth * tileHeight;
-
-            var accumR = new double[tilePixelCount];
-            var accumG = new double[tilePixelCount];
-            var accumB = new double[tilePixelCount];
-            var transmittance = new double[tilePixelCount];
-
-            for (int i = 0; i < tilePixelCount; i++)
-            {
-                transmittance[i] = 1.0;
-            }
-
-            for (int i = 0; i < bucket.Count; i++)
-            {
-                var gaussian = gaussians2D[bucket[i]];
-                int minX = Math.Max(gaussian.MinX, xStart);
-                int maxX = Math.Min(gaussian.MaxX, xEnd);
-                int minY = Math.Max(gaussian.MinY, yStart);
-                int maxY = Math.Min(gaussian.MaxY, yEnd);
-
-                for (int y = minY; y <= maxY; y++)
+                int xStart = tx * tileSize;
+                int tileWidth = Math.Min(width, xStart + tileSize) - xStart;
+                int pixels = tileWidth * tileHeight;
+                var inTile = engine.TensorMultiply(rowMember, engine.TensorSlice(memberX, new[] { 0, tx }, new[] { m, 1 }).Reshape(m));
+                var bucketRows = engine.TensorNonzero(inTile);
+                int bucketSize = bucketRows._shape[0];
+                if (bucketSize == 0)
                 {
-                    int localRow = (y - yStart) * tileWidth;
-                    for (int x = minX; x <= maxX; x++)
-                    {
-                        int localIdx = localRow + (x - xStart);
-                        double t = transmittance[localIdx];
-                        if (t < 1e-4)
-                        {
-                            continue;
-                        }
-
-                        double dx = x - gaussian.MeanX;
-                        double dy = y - gaussian.MeanY;
-                        double exponent =
-                            -0.5 * (gaussian.InvA * dx * dx + 2.0 * gaussian.InvB * dx * dy + gaussian.InvC * dy * dy);
-                        if (exponent < -20.0)
-                        {
-                            continue;
-                        }
-
-                        double weight = Math.Exp(exponent);
-                        double alpha = gaussian.Opacity * weight;
-                        if (alpha < 1e-6)
-                        {
-                            continue;
-                        }
-
-                        accumR[localIdx] += t * alpha * gaussian.ColorR;
-                        accumG[localIdx] += t * alpha * gaussian.ColorG;
-                        accumB[localIdx] += t * alpha * gaussian.ColorB;
-                        transmittance[localIdx] = t * (1.0 - alpha);
-                    }
+                    rowTiles.Add(new Tensor<T>(new[] { tileHeight, tileWidth, 3 }));
+                    continue;
                 }
-            }
 
-            for (int y = 0; y < tileHeight; y++)
-            {
-                int globalRow = (yStart + y) * width;
-                int localRow = y * tileWidth;
-                for (int x = 0; x < tileWidth; x++)
+                // Bucket rows ascend through the depth-sorted splats, so the bucket is front to back.
+                var bucket = bucketRows.Reshape(bucketSize);
+                var attributes = engine.TensorIndexSelect(raster, bucket, 0);
+                var pixelX = engine.TensorTile(engine.TensorArange<T>(xStart, xStart + tileWidth, 1), new[] { tileHeight }).Reshape(pixels, 1);
+                var pixelY = engine.TensorRepeatInterleave(engine.TensorArange<T>(yStart, yStart + tileHeight, 1), tileWidth, 0).Reshape(pixels, 1);
+
+                Tensor<T>? total = null;
+                Tensor<T>? upstream = null;
+                if (training && prediction is not null && lossGradient is not null)
                 {
-                    int globalIdx = globalRow + (xStart + x);
-                    int baseIdx = globalIdx * 3;
-                    int localIdx = localRow + x;
-                    double r = accumR[localIdx];
-                    double g = accumG[localIdx];
-                    double b = accumB[localIdx];
-                    if (clampOutput)
+                    total = engine.TensorSlice(prediction, new[] { yStart, xStart, 0 }, new[] { tileHeight, tileWidth, 3 }).Reshape(pixels, 3);
+                    upstream = engine.TensorSlice(lossGradient, new[] { yStart, xStart, 0 }, new[] { tileHeight, tileWidth, 3 }).Reshape(pixels, 3);
+                }
+
+                var transmittance = Full(new[] { pixels, 1 }, one);
+                var accumRed = new Tensor<T>(new[] { pixels, 1 });
+                var accumGreen = new Tensor<T>(new[] { pixels, 1 });
+                var accumBlue = new Tensor<T>(new[] { pixels, 1 });
+                int chunk = Math.Max(1, RasterBudget / pixels);
+                for (int start = 0; start < bucketSize; start += chunk)
+                {
+                    int count = Math.Min(chunk, bucketSize - start);
+                    var shape = new[] { pixels, count };
+                    var part = engine.TensorSlice(attributes, new[] { start, 0 }, new[] { count, RasterColumns });
+                    var meanX = Row(part, ColMeanX, count);
+                    var meanY = Row(part, ColMeanY, count);
+                    var invA = Row(part, ColInvA, count);
+                    var invB = Row(part, ColInvB, count);
+                    var invC = Row(part, ColInvC, count);
+                    var opacity = Row(part, ColOpacity, count);
+                    var red = Row(part, ColRed, count);
+                    var green = Row(part, ColGreen, count);
+                    var blue = Row(part, ColBlue, count);
+
+                    var px = Bc(pixelX, shape);
+                    var py = Bc(pixelY, shape);
+                    var inBox = engine.TensorMultiply(
+                        engine.TensorMultiply(engine.TensorGreaterEqual(px, Bc(Row(part, ColMinX, count), shape)), engine.TensorLessEqual(px, Bc(Row(part, ColMaxX, count), shape))),
+                        engine.TensorMultiply(engine.TensorGreaterEqual(py, Bc(Row(part, ColMinY, count), shape)), engine.TensorLessEqual(py, Bc(Row(part, ColMaxY, count), shape))));
+                    var dx = Sub(px, meanX);
+                    var dy = Sub(py, meanY);
+                    var quad = engine.TensorAdd(
+                        engine.TensorAdd(engine.TensorMultiply(Mul(invA, dx), dx), engine.TensorMultiply(Mul(engine.TensorMultiplyScalar(invB, two), dx), dy)),
+                        engine.TensorMultiply(Mul(invC, dy), dy));
+                    var exponent = engine.TensorMultiplyScalar(quad, minusHalf);
+                    var weight = engine.TensorExp(exponent);
+                    var alpha = Mul(opacity, weight);
+                    var valid = engine.TensorMultiply(inBox, engine.TensorMultiply(Not(Lt(exponent, exponentCutoff)), Not(Lt(alpha, alphaCutoff))));
+                    var zeros = engine.TensorZerosLike(alpha);
+                    var factor = engine.ScalarMinusTensor(one, engine.TensorWhere(valid, alpha, zeros));
+
+                    // Exclusive transmittance by a running product; the carry continues it into the next chunk.
+                    var scan = engine.TensorCumProd(engine.TensorConcatenate(new[] { transmittance, factor }, 1), 1);
+                    var before = engine.TensorSlice(scan, new[] { 0, 0 }, new[] { pixels, count });
+                    transmittance = engine.TensorSlice(scan, new[] { 0, count }, new[] { pixels, 1 });
+                    var live = engine.TensorMultiply(valid, Not(Lt(before, transmittanceCutoff)));
+                    var weightedAlpha = engine.TensorWhere(live, engine.TensorMultiply(before, alpha), zeros);
+                    var contribRed = engine.TensorWhere(live, Mul(weightedAlpha, red), zeros);
+                    var contribGreen = engine.TensorWhere(live, Mul(weightedAlpha, green), zeros);
+                    var contribBlue = engine.TensorWhere(live, Mul(weightedAlpha, blue), zeros);
+
+                    var scanRed = engine.TensorCumSum(engine.TensorConcatenate(new[] { accumRed, contribRed }, 1), 1);
+                    var scanGreen = engine.TensorCumSum(engine.TensorConcatenate(new[] { accumGreen, contribGreen }, 1), 1);
+                    var scanBlue = engine.TensorCumSum(engine.TensorConcatenate(new[] { accumBlue, contribBlue }, 1), 1);
+                    accumRed = engine.TensorSlice(scanRed, new[] { 0, count }, new[] { pixels, 1 });
+                    accumGreen = engine.TensorSlice(scanGreen, new[] { 0, count }, new[] { pixels, 1 });
+                    accumBlue = engine.TensorSlice(scanBlue, new[] { 0, count }, new[] { pixels, 1 });
+
+                    if (total is null || upstream is null)
                     {
-                        r = Clamp01(r);
-                        g = Clamp01(g);
-                        b = Clamp01(b);
+                        continue;
                     }
 
-                    image[baseIdx] = NumOps.FromDouble(r);
-                    image[baseIdx + 1] = NumOps.FromDouble(g);
-                    image[baseIdx + 2] = NumOps.FromDouble(b);
+                    // d C / d alpha_i = T_i c_i - (sum_{j > i} T_j alpha_j c_j) / (1 - alpha_i), with the colour after
+                    // splat i read off the rendered image (as the per-Gaussian implementation did).
+                    var gradRed = Bc(Col2(upstream, 0, pixels), shape);
+                    var gradGreen = Bc(Col2(upstream, 1, pixels), shape);
+                    var gradBlue = Bc(Col2(upstream, 2, pixels), shape);
+                    var invOneMinusAlpha = engine.TensorReciprocal(MaxScalar(engine.ScalarMinusTensor(one, alpha), oneMinusAlphaFloor));
+                    var dRed = ColourTerm(before, red, Bc(Col2(total, 0, pixels), shape), engine.TensorSlice(scanRed, new[] { 0, 0 }, new[] { pixels, count }), contribRed, invOneMinusAlpha);
+                    var dGreen = ColourTerm(before, green, Bc(Col2(total, 1, pixels), shape), engine.TensorSlice(scanGreen, new[] { 0, 0 }, new[] { pixels, count }), contribGreen, invOneMinusAlpha);
+                    var dBlue = ColourTerm(before, blue, Bc(Col2(total, 2, pixels), shape), engine.TensorSlice(scanBlue, new[] { 0, 0 }, new[] { pixels, count }), contribBlue, invOneMinusAlpha);
+                    var dAlpha = engine.TensorAdd(engine.TensorAdd(engine.TensorMultiply(gradRed, dRed), engine.TensorMultiply(gradGreen, dGreen)), engine.TensorMultiply(gradBlue, dBlue));
+                    var dExponent = engine.TensorMultiply(Mul(dAlpha, opacity), weight);
+                    var halfExponent = engine.TensorMultiplyScalar(dExponent, minusHalf);
+                    var dOpacity = engine.TensorMultiply(Mul(engine.TensorMultiply(dAlpha, weight), opacity), Bc(engine.ScalarMinusTensor(one, opacity), shape));
+                    var dMeanX = engine.TensorMultiply(dExponent, engine.TensorAdd(Mul(invA, dx), Mul(invB, dy)));
+                    var dMeanY = engine.TensorMultiply(dExponent, engine.TensorAdd(Mul(invB, dx), Mul(invC, dy)));
+                    var columns = new[]
+                    {
+                        engine.TensorMultiply(weightedAlpha, gradRed),
+                        engine.TensorMultiply(weightedAlpha, gradGreen),
+                        engine.TensorMultiply(weightedAlpha, gradBlue),
+                        engine.TensorMultiply(engine.TensorMultiply(halfExponent, dx), dx),
+                        engine.TensorMultiply(engine.TensorMultiply(engine.TensorNegate(dExponent), dx), dy),
+                        engine.TensorMultiply(engine.TensorMultiply(halfExponent, dy), dy),
+                        dOpacity,
+                        dMeanX,
+                        dMeanY,
+                    };
+                    var sums = new List<Tensor<T>>();
+                    foreach (var column in columns)
+                    {
+                        sums.Add(engine.ReduceSum(engine.TensorWhere(live, column, zeros), new[] { 0 }, false));
+                    }
+
+                    gradientValues.Add(engine.TensorStack(sums.ToArray(), 1));
+                    gradientIndices.Add(engine.TensorSlice(bucket, new[] { start }, new[] { count }));
                 }
+
+                rowTiles.Add(engine.TensorConcatenate(new[] { accumRed, accumGreen, accumBlue }, 1).Reshape(tileHeight, tileWidth, 3));
             }
-        });
+
+            imageRows.Add(engine.TensorConcatenate(rowTiles.ToArray(), 1));
+        }
+
+        if (gradientValues.Count > 0)
+        {
+            splatGradients = engine.TensorIndexAdd(
+                splatGradients,
+                0,
+                engine.TensorConcatenate(gradientIndices.ToArray(), 0),
+                engine.TensorConcatenate(gradientValues.ToArray(), 0));
+        }
+
+        return engine.TensorConcatenate(imageRows.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// [M, tiles] mask of the tiles (of size <paramref name="tileSize"/>) that the pixel range [lower, upper] of each
+    /// splat touches.
+    /// </summary>
+    private Tensor<T> TileMembership(Tensor<T> lower, Tensor<T> upper, T tileSize, int tiles)
+    {
+        var engine = Engine;
+        int m = lower.Length;
+        var shape = new[] { m, tiles };
+        var first = engine.TensorFloor(engine.TensorDivideScalar(lower, tileSize)).Reshape(m, 1);
+        var last = engine.TensorFloor(engine.TensorDivideScalar(upper, tileSize)).Reshape(m, 1);
+        var tileIndex = Bc(engine.TensorArange<T>(0, tiles, 1).Reshape(1, tiles), shape);
+        return engine.TensorMultiply(
+            engine.TensorLessEqual(Bc(first, shape), tileIndex),
+            engine.TensorGreaterEqual(Bc(last, shape), tileIndex));
+    }
+
+    /// <summary>T_i c_i - (C - C_before_i - contribution_i) / max(1e-6, 1 - alpha_i).</summary>
+    private Tensor<T> ColourTerm(Tensor<T> before, Tensor<T> colour, Tensor<T> total, Tensor<T> accumulated, Tensor<T> contribution, Tensor<T> invOneMinusAlpha)
+    {
+        var engine = Engine;
+        var after = engine.TensorSubtract(engine.TensorSubtract(total, accumulated), contribution);
+        return engine.TensorSubtract(Mul(before, colour), engine.TensorMultiply(after, invOneMinusAlpha));
     }
 
     /// <inheritdoc />
@@ -1799,42 +1590,12 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             throw new ArgumentException("Input must have shape [N, 6] (position + direction).", nameof(input));
         }
 
+        var engine = Engine;
         int numPoints = input.Shape[0];
-        var positions = new T[numPoints * 3];
-        var directions = new T[numPoints * 3];
-
-        for (int i = 0; i < numPoints; i++)
-        {
-            int baseIdx = i * 6;
-            int posIdx = i * 3;
-            positions[posIdx] = input.Data.Span[baseIdx];
-            positions[posIdx + 1] = input.Data.Span[baseIdx + 1];
-            positions[posIdx + 2] = input.Data.Span[baseIdx + 2];
-            directions[posIdx] = input.Data.Span[baseIdx + 3];
-            directions[posIdx + 1] = input.Data.Span[baseIdx + 4];
-            directions[posIdx + 2] = input.Data.Span[baseIdx + 5];
-        }
-
-        var posTensor = new Tensor<T>(positions, [numPoints, 3]);
-        var dirTensor = new Tensor<T>(directions, [numPoints, 3]);
+        var posTensor = engine.TensorSlice(input, new[] { 0, 0 }, new[] { numPoints, 3 });
+        var dirTensor = engine.TensorSlice(input, new[] { 0, 3 }, new[] { numPoints, 3 });
         var (rgb, density) = QueryField(posTensor, dirTensor);
-
-        if (IsTrainingMode)
-        {
-        }
-
-        var output = new T[numPoints * 4];
-        for (int i = 0; i < numPoints; i++)
-        {
-            int outIdx = i * 4;
-            int rgbIdx = i * 3;
-            output[outIdx] = rgb.Data.Span[rgbIdx];
-            output[outIdx + 1] = rgb.Data.Span[rgbIdx + 1];
-            output[outIdx + 2] = rgb.Data.Span[rgbIdx + 2];
-            output[outIdx + 3] = density.Data.Span[i];
-        }
-
-        return new Tensor<T>(output, [numPoints, 4]);
+        return engine.TensorConcatenate(new[] { rgb, density }, 1);
     }
 
     /// <summary>
@@ -2107,17 +1868,14 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         {
             Interval = Math.Max(1, DensificationInterval)
         };
-        double meanGradNorm = 0;
-        if (gradients.Count > 0)
-        {
-            for (int i = 0; i < gradients.Count; i++) meanGradNorm += gradients[i].Magnitude;
-            meanGradNorm /= gradients.Count;
-        }
+        double meanGradNorm = MeanGradientNorm(gradients);
         double lossValue = NumOps.ToDouble(LastLoss);
         if (EnableDensification && schedule.ShouldFire(_trainingStep, lossValue, meanGradNorm))
         {
             DensifyAndPrune(gradients);
         }
+
+        ResetOpacityIfScheduled();
 
         return true;
     }
@@ -2132,110 +1890,118 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     public void RunCompressionPass()
     {
         var opts = _options.CompressionOptions ?? new AiDotNet.Models.Options.GaussianCompressionOptions();
+        var engine = Engine;
+        var ops = NumOps;
+        int before = GaussianCount;
+        EnsureLearningRateScales();
 
-        if (opts.PruneLowOpacity)
+        if (opts.PruneLowOpacity && GaussianCount > 0)
         {
-            double threshold = Math.Max(0.0, EffectiveOpacityPruneThreshold);
-            for (int i = _gaussians.Count - 1; i >= 0; i--)
+            T threshold = ops.FromDouble(Math.Max(0.0, EffectiveOpacityPruneThreshold));
+            KeepRows(Not(Lt(engine.TensorSigmoid(_opacityLogits), threshold)));
+        }
+
+        if (opts.MergeOverlapping && opts.MergeOverlapThreshold < 1.0 && GaussianCount > 1)
+        {
+            // Merge Gaussians whose center-to-center distance is smaller than half the sum of their max scales
+            // (approximation of ellipse overlap). From the last Gaussian down, each merges into the highest-index
+            // earlier Gaussian it overlaps (which may itself have absorbed later ones), then drops out.
+            int n = GaussianCount;
+            T threshold = ops.FromDouble(opts.MergeOverlapThreshold);
+            T halfT = ops.FromDouble(0.5);
+            T probabilityCap = ops.FromDouble(0.9999);
+            T zero = ops.Zero;
+            var removed = new List<int>();
+            for (int i = n - 1; i >= 1; i--)
             {
-                if (Sigmoid(NumOps.ToDouble(_gaussians[i].Opacity)) < threshold)
+                var source = engine.TensorSlice(_positions, new[] { i, 0 }, new[] { 1, 3 });
+                var earlier = engine.TensorSlice(_positions, new[] { 0, 0 }, new[] { i, 3 });
+                var sourceLog = engine.TensorSlice(_logScales, new[] { i, 0 }, new[] { 1, 3 });
+                var sourceMax = engine.ReduceMax(engine.TensorExp(sourceLog), new[] { 1 }, false);
+                var earlierMax = engine.ReduceMax(engine.TensorExp(engine.TensorSlice(_logScales, new[] { 0, 0 }, new[] { i, 3 })), new[] { 1 }, false);
+                var delta = Sub(source, earlier);
+                var distance = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(delta, delta), new[] { 1 }, false));
+                var reach = Add(sourceMax, earlierMax);
+                var overlap = MaxScalar(engine.TensorDivide(engine.TensorSubtract(reach, distance), reach), zero);
+                var hits = engine.TensorNonzero(Ge(overlap, threshold));
+                if (hits._shape[0] == 0)
                 {
-                    _gaussians.RemoveAt(i);
+                    continue;
                 }
+
+                int j = engine.TensorMaxValue(hits);
+                var target = engine.TensorSlice(_positions, new[] { j, 0 }, new[] { 1, 3 });
+                var targetLog = engine.TensorSlice(_logScales, new[] { j, 0 }, new[] { 1, 3 });
+                var mergedPosition = engine.TensorMultiplyScalar(engine.TensorAdd(target, source), halfT);
+
+                // The larger scale per axis wins; ties (and NaN comparisons) keep the source's value.
+                var mergedLog = engine.TensorWhere(engine.TensorGreaterThan(targetLog, sourceLog), targetLog, sourceLog);
+
+                // Opacities add in probability space (clamped below 1), so the merged Gaussian keeps the combined
+                // contribution of the near-duplicates.
+                var opacities = engine.TensorSigmoid(engine.TensorConcatenate(new[]
+                {
+                    engine.TensorSlice(_opacityLogits, new[] { i }, new[] { 1 }),
+                    engine.TensorSlice(_opacityLogits, new[] { j }, new[] { 1 }),
+                }, 0));
+                var summed = MinScalar(engine.ReduceSum(opacities, new[] { 0 }, true), probabilityCap);
+                mergedPosition.CopyTo(_positions.Data.Span.Slice(j * 3, 3));
+                mergedLog.CopyTo(_logScales.Data.Span.Slice(j * 3, 3));
+                Logit(summed).CopyTo(_opacityLogits.Data.Span.Slice(j, 1));
+                removed.Add(i);
+            }
+
+            if (removed.Count > 0)
+            {
+                var removedRows = new Tensor<int>(removed.ToArray(), new[] { removed.Count });
+                var drop = engine.TensorIndexAdd(new Tensor<T>(new[] { n }), 0, removedRows, Full(new[] { removed.Count }, ops.One));
+                KeepRows(Not(drop));
             }
         }
 
-        if (opts.MergeOverlapping && opts.MergeOverlapThreshold < 1.0)
+        if (opts.QuantizeSphericalHarmonics && _options.UseSphericalHarmonics && _options.ShDegree > 0 && GaussianCount > 0)
         {
-            // Merge Gaussians whose center-to-center distance is smaller than half the sum
-            // of their max scales (approximation of ellipse overlap). Two-pass O(N^2) — fine
-            // for a one-shot post-training pass on scenes with 100k-1M Gaussians.
-            for (int i = _gaussians.Count - 1; i >= 0; i--)
-            {
-                var gi = _gaussians[i];
-                double siMax = MaxScaleOf(gi);
-                for (int j = i - 1; j >= 0; j--)
-                {
-                    var gj = _gaussians[j];
-                    double sjMax = MaxScaleOf(gj);
-                    double dx = NumOps.ToDouble(gi.Position[0]) - NumOps.ToDouble(gj.Position[0]);
-                    double dy = NumOps.ToDouble(gi.Position[1]) - NumOps.ToDouble(gj.Position[1]);
-                    double dz = NumOps.ToDouble(gi.Position[2]) - NumOps.ToDouble(gj.Position[2]);
-                    double dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                    double overlap = Math.Max(0, (siMax + sjMax - dist) / (siMax + sjMax));
-                    if (overlap >= opts.MergeOverlapThreshold)
-                    {
-                        // Merge i into j: average positions, take max scale, sum opacities
-                        // (clamped via sigmoid on read), then drop i.
-                        MergeInto(gj, gi);
-                        _gaussians.RemoveAt(i);
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (opts.QuantizeSphericalHarmonics && _options.UseSphericalHarmonics && _options.ShDegree > 0)
-        {
-            // Per-Gaussian symmetric quantization on Color (which packs SH coefficients when
-            // UseSphericalHarmonics is on: Color length = 3 * (ShDegree+1)^2). Records a
-            // per-Gaussian scale factor and quantizes each coefficient to the nearest bin.
+            // Per-Gaussian symmetric quantization of the SH coefficients: a per-Gaussian scale factor (NaN
+            // coefficients ignored) and each coefficient rounded to the nearest bin; all-zero Gaussians are left alone.
+            int n = GaussianCount;
             int levels = (1 << Math.Max(1, Math.Min(16, opts.QuantizationBits))) - 1;
-            double halfLevels = levels / 2.0;
-            for (int i = 0; i < _gaussians.Count; i++)
-            {
-                var g = _gaussians[i];
-                double absMax = 0;
-                for (int k = 0; k < g.Color.Length; k++)
-                {
-                    double v = Math.Abs(NumOps.ToDouble(g.Color[k]));
-                    if (v > absMax) absMax = v;
-                }
-                double qScale = absMax > 0 ? absMax / halfLevels : 0;
-                if (qScale == 0) continue;
-                for (int k = 0; k < g.Color.Length; k++)
-                {
-                    double v = NumOps.ToDouble(g.Color[k]);
-                    double quantized = Math.Round(v / qScale) * qScale;
-                    g.Color[k] = NumOps.FromDouble(quantized);
-                }
-            }
+            T halfLevels = ops.FromDouble(levels / 2.0);
+            var flat = _shCoefficients.Reshape(n, _shCoefficients.Length / Math.Max(1, n));
+            var magnitude = engine.TensorAbs(flat);
+            magnitude = engine.TensorWhere(engine.TensorIsNan(magnitude), engine.TensorZerosLike(magnitude), magnitude);
+            var absMax = engine.ReduceMax(magnitude, new[] { 1 }, true);
+            var qScale = Select(Gt(absMax, ops.Zero), engine.TensorDivideScalar(absMax, halfLevels), engine.TensorZerosLike(absMax));
+            var active = Not(engine.TensorEquals(qScale, ops.Zero));
+            var safeScale = Select(active, qScale, engine.TensorOnesLike(qScale));
+            var quantized = Mul(engine.TensorRound(Div(flat, safeScale)), safeScale);
+            WriteInPlace(_shCoefficients, Select(active, quantized, flat));
         }
 
-        MarkSpatialIndexDirty();
+        if (GaussianCount != before)
+        {
+            // Pruning and merging resize the parameter surface.
+            InvalidateParameterCountCache();
+        }
     }
 
-    private static double MaxScaleOf(Gaussian g)
+    /// <summary>Keeps the Gaussians whose mask entry is non-zero, in order.</summary>
+    private void KeepRows(Tensor<T> keep)
     {
-        double a = Math.Abs(System.Convert.ToDouble(g.Scale[0]));
-        double b = Math.Abs(System.Convert.ToDouble(g.Scale[1]));
-        double c = Math.Abs(System.Convert.ToDouble(g.Scale[2]));
-        return Math.Max(a, Math.Max(b, c));
-    }
+        var engine = Engine;
+        var kept = engine.TensorNonzero(keep);
+        int count = kept._shape[0];
+        if (count == GaussianCount)
+        {
+            return;
+        }
 
-    private static void MergeInto(Gaussian target, Gaussian source)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var engine = AiDotNetEngine.Current;
-        var targetPosition = Tensor<T>.FromVector(target.Position.GetSubVector(0, 3));
-        var sourcePosition = Tensor<T>.FromVector(source.Position.GetSubVector(0, 3));
-        var mergedPosition = engine.TensorDivideScalar(engine.TensorAdd(targetPosition, sourcePosition), numOps.FromDouble(2.0));
-        mergedPosition.CopyTo(target.Position.AsWritableSpan().Slice(0, 3));
-
-        // The larger scale per axis wins; ties (and NaN comparisons) keep the source's value.
-        var targetScale = Tensor<T>.FromVector(target.Scale.GetSubVector(0, 3));
-        var sourceScale = Tensor<T>.FromVector(source.Scale.GetSubVector(0, 3));
-        var mergedScale = engine.TensorWhere(engine.TensorGreaterThan(targetScale, sourceScale), targetScale, sourceScale);
-        mergedScale.CopyTo(target.Scale.AsWritableSpan().Slice(0, 3));
-        // Opacity: convert both from logit → probability, SUM (matches the doc's
-        // "sum opacities" semantics), clamp back into a valid probability range, and
-        // convert back to logit. Taking max would leave the merged Gaussian no more
-        // opaque than either input — the point of merging near-duplicates is that their
-        // COMBINED contribution should be preserved.
-        double srcOpProb = Sigmoid(numOps.ToDouble(source.Opacity));
-        double tgtOpProb = Sigmoid(numOps.ToDouble(target.Opacity));
-        double summedProb = Math.Min(0.9999, srcOpProb + tgtOpProb);
-        target.Opacity = numOps.FromDouble(Logit(summedProb));
+        var rows = kept.Reshape(count);
+        _positions = engine.TensorIndexSelect(_positions, rows, 0).Clone();
+        _rotations = engine.TensorIndexSelect(_rotations, rows, 0).Clone();
+        _logScales = engine.TensorIndexSelect(_logScales, rows, 0).Clone();
+        _opacityLogits = engine.TensorIndexSelect(_opacityLogits, rows, 0).Clone();
+        _shCoefficients = engine.TensorIndexSelect(_shCoefficients, rows, 0).Clone();
+        _learningRateScales = engine.TensorIndexSelect(EnsureLearningRateScales(), rows, 0).Clone();
     }
 
     /// <summary>
@@ -2321,32 +2087,21 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         int targC = target._shape[1];
         if (predC == targC) return target;
 
-        var aligned = new T[predN * predC];
+        // For prediction channels the target doesn't supply (typical case: target is RGB [N, 3] but prediction is
+        // RGBA [N, 4] with a density channel), the aligned target takes the prediction's value, so the per-channel
+        // loss term (pred - pred)^2 = 0 -- zero gradient on the unmatched channel. Padding with zeros instead would
+        // silently regularise the density channel toward zero, a target the caller never requested, and would
+        // actively suppress opacity during ray-mode training.
+        var engine = Engine;
         int copyC = Math.Min(predC, targC);
-        var predSpan = prediction.Data.Span;
-        var targSpan = target.Data.Span;
-        for (int n = 0; n < predN; n++)
+        var copied = engine.TensorSlice(target, new[] { 0, 0 }, new[] { predN, copyC });
+        if (copyC == predC)
         {
-            int alignedBase = n * predC;
-            for (int c = 0; c < copyC; c++)
-            {
-                aligned[alignedBase + c] = targSpan[n * targC + c];
-            }
-            // For prediction channels the target doesn't supply (typical
-            // case: target is RGB [N, 3] but prediction is RGBA [N, 4]
-            // with a density channel), set aligned = pred so the per-
-            // channel loss term (pred − pred)² = 0 — i.e. zero gradient
-            // on the unmatched channel. Padding with default(T) instead
-            // would silently regularise the density channel toward zero
-            // ((pred − 0)² = pred²), which is NOT a target the caller
-            // requested and would actively suppress opacity during ray-
-            // mode training.
-            for (int c = copyC; c < predC; c++)
-            {
-                aligned[alignedBase + c] = predSpan[alignedBase + c];
-            }
+            return copied;
         }
-        return new Tensor<T>(aligned, [predN, predC]);
+
+        var padding = engine.TensorSlice(prediction, new[] { 0, copyC }, new[] { predN, predC - copyC });
+        return engine.TensorConcatenate(new[] { copied, padding }, 1);
     }
 
     /// <summary>
@@ -2361,105 +2116,79 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     /// </summary>
     private void ApplyRayGradients(Tensor<T> rayInput, Tensor<T> lossGradient)
     {
-        if (_gaussians.Count == 0) return;
+        int n = GaussianCount;
+        if (n == 0) return;
         int numRays = rayInput.Shape[0];
         if (numRays == 0) return;
 
         // Stride into lossGradient must match the prediction's per-ray
         // channel count, not a hard-coded 3. ForwardWithMemory emits
-        // [N, 4] (RGB + density) when density is enabled, and the loss
-        // gradient inherits that shape — reading r * 3 + c would step
-        // across the wrong memory offsets and silently corrupt the
-        // colour-channel update.
+        // [N, 4] (RGB + density), and the loss gradient inherits that
+        // shape -- reading r * 3 + c would step across the wrong memory
+        // offsets and silently corrupt the colour-channel update.
         int gradC = lossGradient._shape.Length >= 2 ? lossGradient._shape[1] : 1;
+        var engine = Engine;
+        var ops = NumOps;
 
-        // Average gradient per Gaussian — keeps this proportional to the
-        // ray-batch size so a 10-ray batch and a 1000-ray batch produce
-        // updates of comparable scale.
-        T invRays = NumOps.FromDouble(1.0 / numRays);
+        // Average gradient per channel over the ray batch -- keeps the update proportional to the
+        // ray-batch size so a 10-ray batch and a 1000-ray batch produce updates of comparable scale.
+        T invRays = ops.FromDouble(1.0 / numRays);
+        var perRay = engine.TensorSlice(lossGradient.Reshape(lossGradient.Length), new[] { 0 }, new[] { numRays * gradC })
+            .Reshape(numRays, gradC);
+        var meanGrad = engine.TensorMultiplyScalar(engine.ReduceSum(perRay, new[] { 0 }, false), invRays);
 
-        // Mean RGB loss gradient over the ray batch. Only the first three channels are
-        // colour (a 4-channel target carries density in channel 3, handled by opacity below).
+        // Only the first three channels are colour (a 4-channel target carries density in channel 3, handled by
+        // opacity below). The colour residual of each channel lands on that channel's DC coefficient -- entry
+        // [n, 0, c] of the coefficient tensor, which is the RGB colour itself without spherical harmonics. The
+        // constant rgb = shBase * dc Jacobian factor is folded into the (tunable) colour learning rate: this
+        // ray-mode update is already a coarse mean-field approximation (uniform per-Gaussian attribution, no
+        // alpha weighting), so an exact SH-basis scale buys no accuracy and only shrinks the step.
         int rgbChannels = Math.Min(3, gradC);
-        var meanRgbGrad = new T[rgbChannels];
-        for (int c = 0; c < rgbChannels; c++)
+        var colourGrad = engine.TensorSlice(meanGrad, new[] { 0 }, new[] { rgbChannels });
+        if (rgbChannels < 3)
         {
-            T sum = NumOps.Zero;
-            for (int r = 0; r < numRays; r++)
-            {
-                sum = NumOps.Add(sum, lossGradient.Data.Span[r * gradC + c]);
-            }
-            meanRgbGrad[c] = NumOps.Multiply(sum, invRays);
+            colourGrad = engine.TensorConcatenate(new[] { colourGrad, new Tensor<T>(new[] { 3 - rgbChannels }) }, 0);
         }
 
-        // Colour parameter layout depends on the appearance model. With spherical harmonics
-        // (the default), gaussian.Color holds SH COEFFICIENTS: the per-channel DC term (which
-        // sets base RGB) lives at index channel*basisCount, NOT at channel. Writing the G/B
-        // residual into Color[1]/Color[2] would corrupt the RED channel's higher-order SH
-        // coefficients and never move green/blue — the appearance never descends toward the
-        // target. Map each RGB residual onto the correct DC coefficient index. The constant
-        // rgb = shBase * dc Jacobian factor is folded into the (tunable) colour learning rate:
-        // this ray-mode update is already a coarse mean-field approximation (uniform per-Gaussian
-        // attribution, no alpha weighting), so an exact SH-basis scale buys no accuracy and only
-        // shrinks the step.
-        bool sh = _useSphericalHarmonics;
-        int basisCount = sh ? GetShBasisCount() : 1;
+        int basisCount = GetShBasisCount();
+        int width = basisCount * 3;
+        var lrScales = EnsureLearningRateScales();
 
-        // Whether the target carries a density/opacity channel we can descend on.
-        bool hasDensityChannel = gradC >= 4;
-        T meanDensityGrad = NumOps.Zero;
-        if (hasDensityChannel)
+        // #1835 excellence goal #4 (persistent per-Gaussian LR state): the colour step is scaled by each
+        // Gaussian's colour multiplier (split children carry SplitChildLearningRateScales.Color). The configured
+        // colour learning rate is used, as 3DGS uses different LRs per parameter family (Kerbl et al. 2023).
+        var colourStep = engine.TensorMultiplyScalar(Col(lrScales, LrColor), ops.FromDouble(ColorLearningRate)).Reshape(n, 1);
+        var flat = _shCoefficients.Reshape(n, width);
+        var dc = engine.TensorSlice(flat, new[] { 0, 0 }, new[] { n, 3 });
+        var newDc = engine.TensorSubtract(dc, Mul(colourGrad.Reshape(1, 3), colourStep));
+        var updated = width > 3
+            ? engine.TensorConcatenate(new[] { newDc, engine.TensorSlice(flat, new[] { 0, 3 }, new[] { n, width - 3 }) }, 1)
+            : newDc;
+        WriteInPlace(_shCoefficients, updated);
+
+        var shGrad = Bc(colourGrad.Reshape(1, 3), new[] { n, 3 });
+        if (width > 3)
         {
-            T sum = NumOps.Zero;
-            for (int r = 0; r < numRays; r++)
-            {
-                sum = NumOps.Add(sum, lossGradient.Data.Span[r * gradC + 3]);
-            }
-            meanDensityGrad = NumOps.Multiply(sum, invRays);
+            shGrad = engine.TensorConcatenate(new[] { shGrad, new Tensor<T>(new[] { n, width - 3 }) }, 1);
         }
 
-        int publishedLength = 0;
-        for (int g = 0; g < _gaussians.Count; g++)
-            publishedLength += 11 + _gaussians[g].Color.Length;
-        var publishedGradients = new Vector<T>(publishedLength);
-        var publishedSpan = publishedGradients.AsWritableSpan();
-        int publishedOffset = 0;
-
-        for (int g = 0; g < _gaussians.Count; g++)
+        // Descend the density residual through opacity (the rendered density channel is a monotonic function of
+        // opacity), so a 4-channel ray target trains geometry too.
+        var opacityGrad = new Tensor<T>(new[] { n, 1 });
+        if (gradC >= 4)
         {
-            var gauss = _gaussians[g];
-
-            // #1835 excellence goal #4 (persistent per-Gaussian LR state): scale the color
-            // step by this Gaussian's ColorLrScale. Split children set this to
-            // SplitChildLearningRateScales.Color at split time (default 1.0 = no effect).
-            // Use the configured colour learning rate rather than a magic constant — 3DGS uses
-            // different LRs per parameter family (Kerbl et al. 2023 §B), and the ray-mode path
-            // honours the same configuration as the image-supervised path.
-            var colorStep = NumOps.FromDouble(ColorLearningRate * gauss.ColorLrScale);
-
-            for (int c = 0; c < rgbChannels; c++)
-            {
-                int colorIdx = sh ? c * basisCount : c;
-                if (colorIdx >= gauss.Color.Length) continue;
-                publishedSpan[publishedOffset + 11 + colorIdx] = meanRgbGrad[c];
-                var delta = NumOps.Multiply(meanRgbGrad[c], colorStep);
-                gauss.Color[colorIdx] = NumOps.Subtract(gauss.Color[colorIdx], delta);
-            }
-
-            // Descend the density residual through opacity (the rendered density channel is a
-            // monotonic function of opacity), so a 4-channel ray target trains geometry too.
-            if (hasDensityChannel)
-            {
-                publishedSpan[publishedOffset + 10] = meanDensityGrad;
-                var opacityStep = NumOps.FromDouble(OpacityLearningRate * gauss.OpacityLrScale);
-                var delta = NumOps.Multiply(meanDensityGrad, opacityStep);
-                gauss.Opacity = NumOps.Subtract(gauss.Opacity, delta);
-            }
-
-            publishedOffset += 11 + gauss.Color.Length;
+            var densityGrad = engine.TensorSlice(meanGrad, new[] { 3 }, new[] { 1 });
+            var opacityStep = engine.TensorMultiplyScalar(Col(lrScales, LrOpacity), ops.FromDouble(OpacityLearningRate));
+            WriteInPlace(_opacityLogits, engine.TensorSubtract(_opacityLogits, Mul(densityGrad, opacityStep)));
+            opacityGrad = Bc(densityGrad.Reshape(1, 1), new[] { n, 1 });
         }
 
-        PublishFlatParameterGradients(publishedGradients);
+        PublishImageGradients(
+            new Tensor<T>(new[] { n, 3 }),
+            new Tensor<T>(new[] { n, 4 }),
+            new Tensor<T>(new[] { n, 3 }),
+            opacityGrad,
+            shGrad);
     }
 
     // ParameterCount was a formula here -- perGaussian * _gaussians.Count -- restating the layout
@@ -2496,21 +2225,16 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
 
     /// <inheritdoc />
     /// <remarks>
-    /// A Gaussian's covariance is DERIVED from its rotation and scale, and the spatial index is
-    /// built from positions, so restoring the parameters without rebuilding both leaves the
-    /// renderer drawing the old geometry while reporting the new weights. This ran at the end of
-    /// the deleted UpdateParameters; SetParameters -- the path serialization and the optimizer's
-    /// post-training writeback both call -- only reached it because SetParameters was overridden to
-    /// forward here. Now it is a hook on the one restore path, so it cannot be skipped.
+    /// Every derived quantity -- covariances, projections, the spatial-index cells -- is computed from the
+    /// parameter tensors on use, so restoring the parameters cannot leave the renderer drawing stale geometry.
+    /// SetParameters (serialization and the optimizer's post-training writeback) reaches this hook on the one
+    /// restore path.
     /// </remarks>
     protected override void OnParametersRestored()
     {
-        foreach (var gaussian in _gaussians)
-        {
-            ComputeCovariance(gaussian);
-        }
-
-        MarkSpatialIndexDirty();
+        // Covariances, projections and the spatial-index cells are derived from the parameter tensors on every
+        // use, so a restore only has to bring the per-Gaussian optimizer state in line with the restored count.
+        EnsureLearningRateScales();
     }
 
     /// <inheritdoc />
@@ -2518,13 +2242,13 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     {
         int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
         int perGaussian = 3 + 4 + 3 + 1 + colorDim;
-        int totalParameters = _gaussians.Count * perGaussian;
+        int totalParameters = GaussianCount * perGaussian;
 
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "GaussianCount", _gaussians.Count },
+                { "GaussianCount", GaussianCount },
                 { "UseSphericalHarmonics", _useSphericalHarmonics },
                 { "ShDegree", _shDegree },
                 { "ColorDimensions", colorDim },
@@ -2571,27 +2295,18 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         imageHeight = expectedOutput.Shape[0];
         imageWidth = expectedOutput.Shape[1];
 
-        var data = input.Data.Span;
-        cameraPosition = new Vector<T>(3)
-        {
-            [0] = data[0],
-            [1] = data[1],
-            [2] = data[2]
-        };
-
-        cameraRotation = new Matrix<T>(3, 3);
-        int offset = 3;
-        for (int r = 0; r < 3; r++)
-        {
-            for (int c = 0; c < 3; c++)
-            {
-                cameraRotation[r, c] = data[offset++];
-            }
-        }
-
-        focalLength = data[12];
+        var engine = Engine;
+        cameraPosition = engine.TensorSlice(input, new[] { 0, 0 }, new[] { 1, 3 }).Reshape(3).ToVector();
+        cameraRotation = engine.TensorSlice(input, new[] { 0, 3 }, new[] { 1, 9 }).Reshape(3, 3).ToMatrix();
+        focalLength = input[0, 12];
     }
 
+    /// <summary>
+    /// One image-space gradient step (Kerbl et al. 2023, section 5 and appendix): backpropagates the loss gradient of the
+    /// rendered image through the front-to-back compositing, the EWA projection and the covariance
+    /// parameterisation Sigma = R S S^T R^T, publishes the flat parameter gradient and applies the per-attribute
+    /// learning rates. Returns the world-space position gradients of the visible Gaussians for densification.
+    /// </summary>
     private List<GaussianGradient> ApplyImageGradients(
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
@@ -2601,11 +2316,9 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         Tensor<T> prediction,
         Tensor<T> lossGradient)
     {
-        var transformed = TransformGaussiansToCamera(cameraPosition, cameraRotation);
-        var projected = ProjectGaussiansTo2D(transformed, imageWidth, imageHeight, focalLength);
-        var sorted = projected.OrderBy(g => g.Depth).ToList();
+        var camera = TransformGaussiansToCamera(cameraPosition, cameraRotation);
+        var splats = ProjectGaussiansTo2D(camera, imageWidth, imageHeight, focalLength);
 
-        int pixelCount = imageWidth * imageHeight;
         if (prediction.Shape.Length != 3 ||
             prediction.Shape[0] != imageHeight ||
             prediction.Shape[1] != imageWidth ||
@@ -2621,595 +2334,260 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             throw new ArgumentException("Loss gradient must have shape [H, W, 3].", nameof(lossGradient));
         }
 
-        var totalR = new double[pixelCount];
-        var totalG = new double[pixelCount];
-        var totalB = new double[pixelCount];
-        var gradR = new double[pixelCount];
-        var gradG = new double[pixelCount];
-        var gradB = new double[pixelCount];
-        var predData = prediction.Data.Span;
-        var gradData = lossGradient.Data.Span;
-
-        for (int i = 0; i < pixelCount; i++)
-        {
-            int baseIdx = i * 3;
-            totalR[i] = NumOps.ToDouble(predData[baseIdx]);
-            totalG[i] = NumOps.ToDouble(predData[baseIdx + 1]);
-            totalB[i] = NumOps.ToDouble(predData[baseIdx + 2]);
-            gradR[i] = NumOps.ToDouble(gradData[baseIdx]);
-            gradG[i] = NumOps.ToDouble(gradData[baseIdx + 1]);
-            gradB[i] = NumOps.ToDouble(gradData[baseIdx + 2]);
-        }
-
-        var accumR = new double[pixelCount];
-        var accumG = new double[pixelCount];
-        var accumB = new double[pixelCount];
-        var transmittance = new double[pixelCount];
-        for (int i = 0; i < pixelCount; i++)
-        {
-            transmittance[i] = 1.0;
-        }
-
-        double r00 = NumOps.ToDouble(cameraRotation[0, 0]);
-        double r01 = NumOps.ToDouble(cameraRotation[0, 1]);
-        double r02 = NumOps.ToDouble(cameraRotation[0, 2]);
-        double r10 = NumOps.ToDouble(cameraRotation[1, 0]);
-        double r11 = NumOps.ToDouble(cameraRotation[1, 1]);
-        double r12 = NumOps.ToDouble(cameraRotation[1, 2]);
-        double r20 = NumOps.ToDouble(cameraRotation[2, 0]);
-        double r21 = NumOps.ToDouble(cameraRotation[2, 1]);
-        double r22 = NumOps.ToDouble(cameraRotation[2, 2]);
-
-        var gradients = new List<GaussianGradient>(sorted.Count);
+        var engine = Engine;
+        var ops = NumOps;
+        int n = GaussianCount;
         int basisCount = GetShBasisCount();
+        int m = splats.Count;
+        var gradients = new List<GaussianGradient>();
 
-        var publishedOffsets = new Dictionary<Gaussian, int>();
-        int publishedLength = 0;
-        for (int i = 0; i < _gaussians.Count; i++)
+        var positionGrad = new Tensor<T>(new[] { n, 3 });
+        var rotationGrad = new Tensor<T>(new[] { n, 4 });
+        var scaleGrad = new Tensor<T>(new[] { n, 3 });
+        var opacityGrad = new Tensor<T>(new[] { n, 1 });
+        var shGrad = new Tensor<T>(new[] { n, basisCount * 3 });
+        if (m == 0)
         {
-            publishedOffsets[_gaussians[i]] = publishedLength;
-            publishedLength += 11 + _gaussians[i].Color.Length;
-        }
-        var publishedGradients = new Vector<T>(publishedLength);
-        var publishedSpan = publishedGradients.AsWritableSpan();
-
-        foreach (var gaussian in sorted)
-        {
-            var source = gaussian.Source;
-            int publishedOffset = publishedOffsets[source];
-            double gradPosX = 0.0;
-            double gradPosY = 0.0;
-            double gradPosZ = 0.0;
-            double gradOpacity = 0.0;
-
-            double gradColorR = 0.0;
-            double gradColorG = 0.0;
-            double gradColorB = 0.0;
-            double gradInvA = 0.0;
-            double gradInvB = 0.0;
-            double gradInvC = 0.0;
-            double[]? gradCoeffR = null;
-            double[]? gradCoeffG = null;
-            double[]? gradCoeffB = null;
-            double[]? shBasis = null;
-
-            if (_useSphericalHarmonics)
-            {
-                double dirX = -gaussian.CamX;
-                double dirY = -gaussian.CamY;
-                double dirZ = -gaussian.CamZ;
-                NormalizeDirection(ref dirX, ref dirY, ref dirZ);
-                shBasis = EvaluateSphericalHarmonicsBasis(dirX, dirY, dirZ);
-                gradCoeffR = new double[basisCount];
-                gradCoeffG = new double[basisCount];
-                gradCoeffB = new double[basisCount];
-            }
-
-            double opacityParam = NumOps.ToDouble(source.Opacity);
-            double alphaBase = Sigmoid(opacityParam);
-
-            for (int y = gaussian.MinY; y <= gaussian.MaxY; y++)
-            {
-                int rowOffset = y * imageWidth;
-                for (int x = gaussian.MinX; x <= gaussian.MaxX; x++)
-                {
-                    int idx = rowOffset + x;
-                    double t = transmittance[idx];
-                    if (t < 1e-4)
-                    {
-                        continue;
-                    }
-
-                    double dx = x - gaussian.MeanX;
-                    double dy = y - gaussian.MeanY;
-                    double exponent =
-                        -0.5 * (gaussian.InvA * dx * dx + 2.0 * gaussian.InvB * dx * dy + gaussian.InvC * dy * dy);
-                    if (exponent < -20.0)
-                    {
-                        continue;
-                    }
-
-                    double weight = Math.Exp(exponent);
-                    double alpha = alphaBase * weight;
-                    if (alpha < 1e-6)
-                    {
-                        continue;
-                    }
-
-                    double gR = gradR[idx];
-                    double gG = gradG[idx];
-                    double gB = gradB[idx];
-                    double weightedAlpha = t * alpha;
-
-                    if (_useSphericalHarmonics && shBasis != null && gradCoeffR != null && gradCoeffG != null && gradCoeffB != null)
-                    {
-                        for (int b = 0; b < basisCount; b++)
-                        {
-                            double basis = shBasis[b];
-                            gradCoeffR[b] += weightedAlpha * gR * basis;
-                            gradCoeffG[b] += weightedAlpha * gG * basis;
-                            gradCoeffB[b] += weightedAlpha * gB * basis;
-                        }
-                    }
-                    else
-                    {
-                        gradColorR += weightedAlpha * gR;
-                        gradColorG += weightedAlpha * gG;
-                        gradColorB += weightedAlpha * gB;
-                    }
-
-                    double contribR = weightedAlpha * gaussian.ColorR;
-                    double contribG = weightedAlpha * gaussian.ColorG;
-                    double contribB = weightedAlpha * gaussian.ColorB;
-
-                    double afterR = totalR[idx] - accumR[idx] - contribR;
-                    double afterG = totalG[idx] - accumG[idx] - contribG;
-                    double afterB = totalB[idx] - accumB[idx] - contribB;
-
-                    double invOneMinusAlpha = 1.0 / Math.Max(1e-6, 1.0 - alpha);
-                    double dColorTermR = t * gaussian.ColorR - afterR * invOneMinusAlpha;
-                    double dColorTermG = t * gaussian.ColorG - afterG * invOneMinusAlpha;
-                    double dColorTermB = t * gaussian.ColorB - afterB * invOneMinusAlpha;
-                    double dL_dalpha = gR * dColorTermR + gG * dColorTermG + gB * dColorTermB;
-                    double dL_dweight = dL_dalpha * alphaBase;
-                    double dL_dexponent = dL_dweight * weight;
-                    gradInvA += -0.5 * dL_dexponent * dx * dx;
-                    gradInvB += -dL_dexponent * dx * dy;
-                    gradInvC += -0.5 * dL_dexponent * dy * dy;
-                    gradOpacity += dL_dalpha * weight * alphaBase * (1.0 - alphaBase);
-
-                    double invMuX = gaussian.InvA * dx + gaussian.InvB * dy;
-                    double invMuY = gaussian.InvB * dx + gaussian.InvC * dy;
-                    double gradMuX = dL_dalpha * alphaBase * weight * invMuX;
-                    double gradMuY = dL_dalpha * alphaBase * weight * invMuY;
-
-                    double invZ = 1.0 / gaussian.CamZ;
-                    double f = gaussian.FocalLength;
-                    double gradCamX = gradMuX * f * invZ;
-                    double gradCamY = gradMuY * f * invZ;
-                    double gradCamZ = gradMuX * (-f * gaussian.CamX * invZ * invZ)
-                                      + gradMuY * (-f * gaussian.CamY * invZ * invZ);
-
-                    gradPosX += r00 * gradCamX + r10 * gradCamY + r20 * gradCamZ;
-                    gradPosY += r01 * gradCamX + r11 * gradCamY + r21 * gradCamZ;
-                    gradPosZ += r02 * gradCamX + r12 * gradCamY + r22 * gradCamZ;
-
-                    accumR[idx] += contribR;
-                    accumG[idx] += contribG;
-                    accumB[idx] += contribB;
-                    transmittance[idx] = t * (1.0 - alpha);
-                }
-            }
-
-            // Per-Gaussian persistent LR multipliers (#1835 excellence goal #4).
-            double lrColor    = ColorLearningRate    * source.ColorLrScale;
-            double lrOpacity  = OpacityLearningRate  * source.OpacityLrScale;
-            double lrPosition = PositionLearningRate * source.PositionLrScale;
-
-            publishedSpan[publishedOffset] = NumOps.FromDouble(gradPosX);
-            publishedSpan[publishedOffset + 1] = NumOps.FromDouble(gradPosY);
-            publishedSpan[publishedOffset + 2] = NumOps.FromDouble(gradPosZ);
-            publishedSpan[publishedOffset + 10] = NumOps.FromDouble(gradOpacity);
-
-            if (_useSphericalHarmonics && gradCoeffR != null && gradCoeffG != null && gradCoeffB != null)
-            {
-                for (int b = 0; b < basisCount; b++)
-                {
-                    int rIdx = b;
-                    int gIdx = b + basisCount;
-                    int bIdx = b + 2 * basisCount;
-
-                    publishedSpan[publishedOffset + 11 + rIdx] = NumOps.FromDouble(gradCoeffR[b]);
-                    publishedSpan[publishedOffset + 11 + gIdx] = NumOps.FromDouble(gradCoeffG[b]);
-                    publishedSpan[publishedOffset + 11 + bIdx] = NumOps.FromDouble(gradCoeffB[b]);
-
-                    source.Color[rIdx] = NumOps.FromDouble(
-                        NumOps.ToDouble(source.Color[rIdx]) - lrColor * gradCoeffR[b]);
-                    source.Color[gIdx] = NumOps.FromDouble(
-                        NumOps.ToDouble(source.Color[gIdx]) - lrColor * gradCoeffG[b]);
-                    source.Color[bIdx] = NumOps.FromDouble(
-                        NumOps.ToDouble(source.Color[bIdx]) - lrColor * gradCoeffB[b]);
-                }
-            }
-            else
-            {
-                publishedSpan[publishedOffset + 11] = NumOps.FromDouble(gradColorR);
-                publishedSpan[publishedOffset + 12] = NumOps.FromDouble(gradColorG);
-                publishedSpan[publishedOffset + 13] = NumOps.FromDouble(gradColorB);
-                source.Color[0] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[0]) - lrColor * gradColorR));
-                source.Color[1] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[1]) - lrColor * gradColorG));
-                source.Color[2] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[2]) - lrColor * gradColorB));
-            }
-
-            source.Opacity = NumOps.FromDouble(NumOps.ToDouble(source.Opacity) - lrOpacity * gradOpacity);
-            source.Position[0] = NumOps.FromDouble(NumOps.ToDouble(source.Position[0]) - lrPosition * gradPosX);
-            source.Position[1] = NumOps.FromDouble(NumOps.ToDouble(source.Position[1]) - lrPosition * gradPosY);
-            source.Position[2] = NumOps.FromDouble(NumOps.ToDouble(source.Position[2]) - lrPosition * gradPosZ);
-
-            if (Math.Abs(gradInvA) > 0.0 || Math.Abs(gradInvB) > 0.0 || Math.Abs(gradInvC) > 0.0)
-            {
-                double invA = gaussian.InvA;
-                double invB = gaussian.InvB;
-                double invC = gaussian.InvC;
-
-                double temp00 = gradInvA * invA + gradInvB * invB;
-                double temp01 = gradInvA * invB + gradInvB * invC;
-                double temp10 = gradInvB * invA + gradInvC * invB;
-                double temp11 = gradInvB * invB + gradInvC * invC;
-
-                double covGradA = -(invA * temp00 + invB * temp10);
-                double covGradB = -(invA * temp01 + invB * temp11);
-                double covGradC = -(invB * temp01 + invC * temp11);
-
-                double invZ = 1.0 / gaussian.CamZ;
-                double f = gaussian.FocalLength;
-                double j00 = f * invZ;
-                double j02 = -f * gaussian.CamX * invZ * invZ;
-                double j11 = f * invZ;
-                double j12 = -f * gaussian.CamY * invZ * invZ;
-
-                double g00 = covGradA;
-                double g01 = covGradB;
-                double g11 = covGradC;
-
-                double s00 = g00 * j00 * j00;
-                double s01 = g01 * j00 * j11;
-                double s02 = j00 * (g00 * j02 + g01 * j12);
-                double s11 = g11 * j11 * j11;
-                double s12 = j11 * (g01 * j02 + g11 * j12);
-                double s22 = g00 * j02 * j02 + 2.0 * g01 * j02 * j12 + g11 * j12 * j12;
-
-                double qw = NumOps.ToDouble(source.Rotation[0]);
-                double qx = NumOps.ToDouble(source.Rotation[1]);
-                double qy = NumOps.ToDouble(source.Rotation[2]);
-                double qz = NumOps.ToDouble(source.Rotation[3]);
-
-                double qNorm = Math.Sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
-                if (qNorm < 1e-12)
-                {
-                    qw = 1.0;
-                    qx = 0.0;
-                    qy = 0.0;
-                    qz = 0.0;
-                }
-                else
-                {
-                    double inv = 1.0 / qNorm;
-                    qw *= inv;
-                    qx *= inv;
-                    qy *= inv;
-                    qz *= inv;
-                }
-
-                double rot00 = 1.0 - 2.0 * (qy * qy + qz * qz);
-                double rot01 = 2.0 * (qx * qy - qw * qz);
-                double rot02 = 2.0 * (qx * qz + qw * qy);
-                double rot10 = 2.0 * (qx * qy + qw * qz);
-                double rot11 = 1.0 - 2.0 * (qx * qx + qz * qz);
-                double rot12 = 2.0 * (qy * qz - qw * qx);
-                double rot20 = 2.0 * (qx * qz - qw * qy);
-                double rot21 = 2.0 * (qy * qz + qw * qx);
-                double rot22 = 1.0 - 2.0 * (qx * qx + qy * qy);
-
-                double gr00 = s00 * rot00 + s01 * rot10 + s02 * rot20;
-                double gr01 = s00 * rot01 + s01 * rot11 + s02 * rot21;
-                double gr02 = s00 * rot02 + s01 * rot12 + s02 * rot22;
-                double gr10 = s01 * rot00 + s11 * rot10 + s12 * rot20;
-                double gr11 = s01 * rot01 + s11 * rot11 + s12 * rot21;
-                double gr12 = s01 * rot02 + s11 * rot12 + s12 * rot22;
-                double gr20 = s02 * rot00 + s12 * rot10 + s22 * rot20;
-                double gr21 = s02 * rot01 + s12 * rot11 + s22 * rot21;
-                double gr22 = s02 * rot02 + s12 * rot12 + s22 * rot22;
-
-                double rt00 = rot00 * gr00 + rot10 * gr10 + rot20 * gr20;
-                double rt11 = rot01 * gr01 + rot11 * gr11 + rot21 * gr21;
-                double rt22 = rot02 * gr02 + rot12 * gr12 + rot22 * gr22;
-
-                double sx = Math.Max(MinScale, NumOps.ToDouble(source.Scale[0]));
-                double sy = Math.Max(MinScale, NumOps.ToDouble(source.Scale[1]));
-                double sz = Math.Max(MinScale, NumOps.ToDouble(source.Scale[2]));
-
-                double gradScaleX = 2.0 * sx * rt00;
-                double gradScaleY = 2.0 * sy * rt11;
-                double gradScaleZ = 2.0 * sz * rt22;
-
-                publishedSpan[publishedOffset + 7] = NumOps.FromDouble(gradScaleX);
-                publishedSpan[publishedOffset + 8] = NumOps.FromDouble(gradScaleY);
-                publishedSpan[publishedOffset + 9] = NumOps.FromDouble(gradScaleZ);
-
-                double lrScale = ScaleLearningRate * source.ScaleLrScale;
-                sx = Math.Max(MinScale, sx - lrScale * gradScaleX);
-                sy = Math.Max(MinScale, sy - lrScale * gradScaleY);
-                sz = Math.Max(MinScale, sz - lrScale * gradScaleZ);
-
-                source.Scale[0] = NumOps.FromDouble(sx);
-                source.Scale[1] = NumOps.FromDouble(sy);
-                source.Scale[2] = NumOps.FromDouble(sz);
-
-                double sx2 = sx * sx;
-                double sy2 = sy * sy;
-                double sz2 = sz * sz;
-
-                double rs00 = rot00 * sx2;
-                double rs01 = rot01 * sy2;
-                double rs02 = rot02 * sz2;
-                double rs10 = rot10 * sx2;
-                double rs11 = rot11 * sy2;
-                double rs12 = rot12 * sz2;
-                double rs20 = rot20 * sx2;
-                double rs21 = rot21 * sy2;
-                double rs22 = rot22 * sz2;
-
-                double gR00 = 2.0 * (s00 * rs00 + s01 * rs10 + s02 * rs20);
-                double gR01 = 2.0 * (s00 * rs01 + s01 * rs11 + s02 * rs21);
-                double gR02 = 2.0 * (s00 * rs02 + s01 * rs12 + s02 * rs22);
-                double gR10 = 2.0 * (s01 * rs00 + s11 * rs10 + s12 * rs20);
-                double gR11 = 2.0 * (s01 * rs01 + s11 * rs11 + s12 * rs21);
-                double gR12 = 2.0 * (s01 * rs02 + s11 * rs12 + s12 * rs22);
-                double gR20 = 2.0 * (s02 * rs00 + s12 * rs10 + s22 * rs20);
-                double gR21 = 2.0 * (s02 * rs01 + s12 * rs11 + s22 * rs21);
-                double gR22 = 2.0 * (s02 * rs02 + s12 * rs12 + s22 * rs22);
-
-                double gradW = gR01 * (-2.0 * qz) + gR02 * (2.0 * qy) + gR10 * (2.0 * qz)
-                               + gR12 * (-2.0 * qx) + gR20 * (-2.0 * qy) + gR21 * (2.0 * qx);
-                double gradX = gR01 * (2.0 * qy) + gR02 * (2.0 * qz) + gR10 * (2.0 * qy)
-                               + gR11 * (-4.0 * qx) + gR12 * (-2.0 * qw) + gR20 * (2.0 * qz)
-                               + gR21 * (2.0 * qw) + gR22 * (-4.0 * qx);
-                double gradY = gR00 * (-4.0 * qy) + gR01 * (2.0 * qx) + gR02 * (2.0 * qw)
-                               + gR10 * (2.0 * qx) + gR12 * (2.0 * qz) + gR20 * (-2.0 * qw)
-                               + gR21 * (2.0 * qz) + gR22 * (-4.0 * qy);
-                double gradZ = gR00 * (-4.0 * qz) + gR01 * (-2.0 * qw) + gR02 * (2.0 * qx)
-                               + gR10 * (2.0 * qw) + gR11 * (-4.0 * qz) + gR12 * (2.0 * qy)
-                               + gR20 * (2.0 * qx) + gR21 * (2.0 * qy);
-
-                publishedSpan[publishedOffset + 3] = NumOps.FromDouble(gradW);
-                publishedSpan[publishedOffset + 4] = NumOps.FromDouble(gradX);
-                publishedSpan[publishedOffset + 5] = NumOps.FromDouble(gradY);
-                publishedSpan[publishedOffset + 6] = NumOps.FromDouble(gradZ);
-
-                double lrRotation = RotationLearningRate * source.RotationLrScale;
-                qw -= lrRotation * gradW;
-                qx -= lrRotation * gradX;
-                qy -= lrRotation * gradY;
-                qz -= lrRotation * gradZ;
-
-                double newNorm = Math.Sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
-                if (newNorm < 1e-12)
-                {
-                    qw = 1.0;
-                    qx = 0.0;
-                    qy = 0.0;
-                    qz = 0.0;
-                }
-                else
-                {
-                    double invNew = 1.0 / newNorm;
-                    qw *= invNew;
-                    qx *= invNew;
-                    qy *= invNew;
-                    qz *= invNew;
-                }
-
-                source.Rotation[0] = NumOps.FromDouble(qw);
-                source.Rotation[1] = NumOps.FromDouble(qx);
-                source.Rotation[2] = NumOps.FromDouble(qy);
-                source.Rotation[3] = NumOps.FromDouble(qz);
-                ComputeCovariance(source);
-            }
-
-            gradients.Add(new GaussianGradient(source, gradPosX, gradPosY, gradPosZ));
+            PublishImageGradients(positionGrad, rotationGrad, scaleGrad, opacityGrad, shGrad);
+            return gradients;
         }
 
-        MarkSpatialIndexDirty();
-        PublishFlatParameterGradients(publishedGradients);
+        SplatTiles(splats, imageWidth, imageHeight, prediction, lossGradient, out var sums);
+
+        T zero = ops.Zero;
+        T one = ops.One;
+        T two = ops.FromDouble(2.0);
+        T half = ops.FromDouble(0.5);
+        T f = focalLength;
+        var rows = splats.Indices;
+        var mask = splats.VisibleMask;
+        var extra = splats.Extra;
+        var raster = splats.Raster;
+        var camX = Col(extra, ExCamX);
+        var camY = Col(extra, ExCamY);
+        var camZ = Col(extra, ExCamZ);
+        var invZ = engine.TensorReciprocal(camZ);
+        var fInvZ = engine.TensorMultiplyScalar(invZ, f);
+        var fInvZ2 = engine.TensorMultiply(fInvZ, invZ);
+        var gradMeanX = Col(sums, GradMeanX);
+        var gradMeanY = Col(sums, GradMeanY);
+        var gradInvA = Col(sums, GradInvA);
+        var gradInvB = Col(sums, GradInvB);
+        var gradInvC = Col(sums, GradInvC);
+
+        // Mean projection: mu = f (x, y) / z + c.
+        var gradCamX = engine.TensorMultiply(gradMeanX, fInvZ);
+        var gradCamY = engine.TensorMultiply(gradMeanY, fInvZ);
+        var gradCamZ = engine.TensorNegate(engine.TensorAdd(
+            engine.TensorMultiply(gradMeanX, engine.TensorMultiply(fInvZ2, camX)),
+            engine.TensorMultiply(gradMeanY, engine.TensorMultiply(fInvZ2, camY))));
+
+        // A Gaussian whose conic received no gradient keeps its shape (its rotation and scale are not touched).
+        var covChanged = Not(engine.TensorMultiply(
+            engine.TensorMultiply(Not(Gt(engine.TensorAbs(gradInvA), zero)), Not(Gt(engine.TensorAbs(gradInvB), zero))),
+            Not(Gt(engine.TensorAbs(gradInvC), zero))));
+
+        // Conic Q = Sigma2D^-1: dL/dQ as a symmetric matrix has off-diagonal 0.5 dL/dInvB, because the exponent
+        // counts invB twice. dL/dSigma2D = -Q (dL/dQ) Q.
+        var invA = Col(raster, ColInvA);
+        var invB = Col(raster, ColInvB);
+        var invC = Col(raster, ColInvC);
+        var halfB = engine.TensorMultiplyScalar(gradInvB, half);
+        var temp00 = engine.TensorAdd(engine.TensorMultiply(gradInvA, invA), engine.TensorMultiply(halfB, invB));
+        var temp01 = engine.TensorAdd(engine.TensorMultiply(gradInvA, invB), engine.TensorMultiply(halfB, invC));
+        var temp10 = engine.TensorAdd(engine.TensorMultiply(halfB, invA), engine.TensorMultiply(gradInvC, invB));
+        var temp11 = engine.TensorAdd(engine.TensorMultiply(halfB, invB), engine.TensorMultiply(gradInvC, invC));
+        var g00 = engine.TensorNegate(engine.TensorAdd(engine.TensorMultiply(invA, temp00), engine.TensorMultiply(invB, temp10)));
+        var g01 = engine.TensorNegate(engine.TensorAdd(engine.TensorMultiply(invA, temp01), engine.TensorMultiply(invB, temp11)));
+        var g11 = engine.TensorNegate(engine.TensorAdd(engine.TensorMultiply(invB, temp01), engine.TensorMultiply(invC, temp11)));
+        var screenGrad = engine.TensorStack(new[] { g00, g01, g01, g11 }, 1).Reshape(m, 2, 2);
+
+        // Sigma2D = J Sigma_cam J^T with J = [[f/z, 0, -f x / z^2], [0, f/z, -f y / z^2]].
+        var zeros = engine.TensorZerosLike(camZ);
+        var j02 = engine.TensorNegate(engine.TensorMultiply(fInvZ2, camX));
+        var j12 = engine.TensorNegate(engine.TensorMultiply(fInvZ2, camY));
+        var jacobian = engine.TensorStack(new[] { fInvZ, zeros, j02, zeros, fInvZ, j12 }, 1).Reshape(m, 2, 3);
+        var jacobianT = engine.TensorPermute(jacobian, new[] { 0, 2, 1 }).Contiguous();
+        var camCov = engine.TensorStack(new[]
+        {
+            Col(extra, ExCov00), Col(extra, ExCov01), Col(extra, ExCov02),
+            Col(extra, ExCov01), Col(extra, ExCov11), Col(extra, ExCov12),
+            Col(extra, ExCov02), Col(extra, ExCov12), Col(extra, ExCov22),
+        }, 1).Reshape(m, 3, 3);
+        var camCovGrad = engine.TensorMatMul(engine.TensorMatMul(jacobianT, screenGrad), jacobian);
+
+        // The Jacobian depends on the camera-space mean: dL/dJ = 2 (dL/dSigma2D) J Sigma_cam.
+        var jacobianGrad = engine.TensorMultiplyScalar(
+            engine.TensorMatMul(screenGrad, engine.TensorMatMul(jacobian, camCov)), two).Reshape(m, 6);
+        var dJ00 = Col(jacobianGrad, 0);
+        var dJ02 = Col(jacobianGrad, 2);
+        var dJ11 = Col(jacobianGrad, 4);
+        var dJ12 = Col(jacobianGrad, 5);
+        var twoFInvZ3 = engine.TensorMultiplyScalar(engine.TensorMultiply(fInvZ2, invZ), two);
+        var ewaX = engine.TensorNegate(engine.TensorMultiply(dJ02, fInvZ2));
+        var ewaY = engine.TensorNegate(engine.TensorMultiply(dJ12, fInvZ2));
+        var ewaZ = engine.TensorAdd(
+            engine.TensorNegate(engine.TensorMultiply(engine.TensorAdd(dJ00, dJ11), fInvZ2)),
+            engine.TensorAdd(
+                engine.TensorMultiply(dJ02, engine.TensorMultiply(twoFInvZ3, camX)),
+                engine.TensorMultiply(dJ12, engine.TensorMultiply(twoFInvZ3, camY))));
+        gradCamX = engine.TensorAdd(gradCamX, Select(covChanged, ewaX, zeros));
+        gradCamY = engine.TensorAdd(gradCamY, Select(covChanged, ewaY, zeros));
+        gradCamZ = engine.TensorAdd(gradCamZ, Select(covChanged, ewaZ, zeros));
+
+        // Back to world space: x_cam = R^T (x - c), so dL/dx = R dL/dx_cam, and Sigma_cam = R^T Sigma R, so
+        // dL/dSigma = R (dL/dSigma_cam) R^T.
+        var cameraRot = Tensor<T>.FromMatrix(cameraRotation);
+        var cameraRotT = engine.TensorTranspose(cameraRot);
+        var gradPos = engine.TensorMatMul(engine.TensorStack(new[] { gradCamX, gradCamY, gradCamZ }, 1), cameraRotT);
+        var tiled = engine.TensorTile(cameraRot.Reshape(1, 3, 3), new[] { m, 1, 1 });
+        var tiledT = engine.TensorPermute(tiled, new[] { 0, 2, 1 }).Contiguous();
+        var worldCovGrad = engine.TensorMatMul(engine.TensorMatMul(tiled, camCovGrad), tiledT);
+
+        // Sigma = Rq diag(s^2) Rq^T with s = max(1e-6, exp(log s)): dL/dlog s_j = 2 s_j^2 (Rq^T G Rq)_jj and
+        // dL/dRq = 2 G Rq diag(s^2), at the current (pre-update) parameters.
+        var rotRows = engine.TensorIndexSelect(_rotations, rows, 0);
+        var logRows = engine.TensorIndexSelect(_logScales, rows, 0);
+        var (qw, qx, qy, qz) = UnitQuaternions(rotRows, identityWhenDegenerate: true);
+        var rq = RotationMatrices(qw, qx, qy, qz);
+        var s = CovarianceScales(logRows);
+        var s2 = engine.TensorMultiply(s, s);
+        var gRq = engine.TensorMatMul(worldCovGrad, rq);
+        var diagonal = engine.ReduceSum(engine.TensorMultiply(rq, gRq), new[] { 1 }, false);
+        var unclamped = Not(Lt(engine.TensorExp(logRows), ops.FromDouble(1e-6)));
+        var covChanged3 = Bc(covChanged.Reshape(m, 1), new[] { m, 3 });
+        var gradLogScale = Select(covChanged3,
+            engine.TensorMultiply(engine.TensorMultiplyScalar(engine.TensorMultiply(s2, diagonal), two), unclamped),
+            engine.TensorZerosLike(logRows));
+        var gR = engine.TensorMultiplyScalar(Mul(gRq, s2.Reshape(m, 1, 3)), two).Reshape(m, 9);
+        var quatGrad = QuaternionGradient(gR, qw, qx, qy, qz);
+        var gradRotation = Select(Bc(covChanged.Reshape(m, 1), new[] { m, 4 }), quatGrad, engine.TensorZerosLike(quatGrad));
+
+        // Colour: with spherical harmonics dL/dcoeff_k = basis_k dL/dcolour, zero where the colour clamp is active.
+        var colourGrad = engine.TensorStack(new[] { Col(sums, GradSumRed), Col(sums, GradSumGreen), Col(sums, GradSumBlue) }, 1);
+        var shRows = engine.TensorIndexSelect(_shCoefficients.Reshape(n, basisCount * 3), rows, 0).Reshape(m, basisCount, 3);
+        var lrScales = engine.TensorIndexSelect(EnsureLearningRateScales(), rows, 0);
+        var lrColour = engine.TensorMultiplyScalar(Col(lrScales, LrColor), ops.FromDouble(ColorLearningRate)).Reshape(m, 1, 1);
+        Tensor<T> gradSh;
+        Tensor<T> newSh;
+        if (_useSphericalHarmonics)
+        {
+            var raw = engine.TensorStack(new[] { Col(extra, ExRawRed), Col(extra, ExRawGreen), Col(extra, ExRawBlue) }, 1);
+            var passes = engine.TensorMultiply(Not(Le(raw, zero)), Not(Ge(raw, one)));
+            gradSh = Mul(splats.Basis.Reshape(m, basisCount, 1), engine.TensorMultiply(colourGrad, passes).Reshape(m, 1, 3));
+            newSh = engine.TensorSubtract(shRows, Mul(lrColour, gradSh));
+        }
+        else
+        {
+            gradSh = colourGrad.Reshape(m, 1, 3);
+            newSh = Clamp01(engine.TensorSubtract(shRows, Mul(lrColour, gradSh)));
+        }
+
+        var gradOpacity = Col(sums, GradOpacity);
+        var opacityRows = engine.TensorIndexSelect(_opacityLogits, rows, 0);
+        var newOpacity = engine.TensorSubtract(opacityRows, engine.TensorMultiply(
+            engine.TensorMultiplyScalar(Col(lrScales, LrOpacity), ops.FromDouble(OpacityLearningRate)), gradOpacity));
+        var positionRows = engine.TensorIndexSelect(_positions, rows, 0);
+        var newPositions = engine.TensorSubtract(positionRows, Mul(
+            engine.TensorMultiplyScalar(Col(lrScales, LrPosition), ops.FromDouble(PositionLearningRate)).Reshape(m, 1), gradPos));
+
+        // Log-scale step, floored at log(MinScale).
+        T logMin = ops.Log(ops.FromDouble(MinScale));
+        var lrScale = engine.TensorMultiplyScalar(Col(lrScales, LrScale), ops.FromDouble(ScaleLearningRate)).Reshape(m, 1);
+        var steppedLog = MaxScalar(engine.TensorSubtract(MaxScalar(logRows, logMin), Mul(lrScale, gradLogScale)), logMin);
+        var newLogScales = Select(covChanged3, steppedLog, logRows);
+
+        // Quaternion step from the normalised quaternion, renormalised (identity when it collapses).
+        var lrRotation = engine.TensorMultiplyScalar(Col(lrScales, LrRotation), ops.FromDouble(RotationLearningRate)).Reshape(m, 1);
+        var unit = engine.TensorStack(new[] { qw, qx, qy, qz }, 1);
+        var (sw, sx, sy, sz) = UnitQuaternions(engine.TensorSubtract(unit, Mul(lrRotation, quatGrad)), identityWhenDegenerate: true);
+        var newRotations = Select(Bc(covChanged.Reshape(m, 1), new[] { m, 4 }),
+            engine.TensorStack(new[] { sw, sx, sy, sz }, 1), rotRows);
+
+        WriteRows(_positions, rows, mask, newPositions);
+        WriteRows(_rotations, rows, mask, newRotations);
+        WriteRows(_logScales, rows, mask, newLogScales);
+        WriteInPlace(_opacityLogits, Select(mask, engine.TensorIndexAdd(engine.TensorZerosLike(_opacityLogits), 0, rows, newOpacity), _opacityLogits));
+        var shFlat = _shCoefficients.Reshape(n, basisCount * 3);
+        var shUpdated = Select(mask.Reshape(n, 1),
+            engine.TensorIndexAdd(engine.TensorZerosLike(shFlat), 0, rows, newSh.Reshape(m, basisCount * 3)), shFlat);
+        WriteInPlace(_shCoefficients, shUpdated);
+
+        positionGrad = engine.TensorIndexAdd(positionGrad, 0, rows, gradPos);
+        rotationGrad = engine.TensorIndexAdd(rotationGrad, 0, rows, gradRotation);
+        scaleGrad = engine.TensorIndexAdd(scaleGrad, 0, rows, gradLogScale);
+        opacityGrad = engine.TensorIndexAdd(opacityGrad, 0, rows, gradOpacity.Reshape(m, 1));
+        shGrad = engine.TensorIndexAdd(shGrad, 0, rows, gradSh.Reshape(m, basisCount * 3));
+        PublishImageGradients(positionGrad, rotationGrad, scaleGrad, opacityGrad, shGrad);
+
+        gradients.Add(new GaussianGradient(rows, gradPos));
         return gradients;
     }
 
-    private void ApplyQueryGradients(
-        Tensor<T> positions,
-        Tensor<T> directions,
-        Tensor<T> outputGradient)
+    /// <summary>
+    /// dL/dq of a unit quaternion (w, x, y, z) from dL/dR [M, 9] (row-major), through the rotation-matrix formulas of
+    /// <see cref="RotationMatrices"/>.
+    /// </summary>
+    private Tensor<T> QuaternionGradient(Tensor<T> gradR, Tensor<T> w, Tensor<T> x, Tensor<T> y, Tensor<T> z)
     {
-        if (outputGradient.Shape.Length != 2 || outputGradient.Shape[1] != 4)
+        var engine = Engine;
+        T two = NumOps.FromDouble(2.0);
+        T four = NumOps.FromDouble(4.0);
+        var g00 = Col(gradR, 0);
+        var g01 = Col(gradR, 1);
+        var g02 = Col(gradR, 2);
+        var g10 = Col(gradR, 3);
+        var g11 = Col(gradR, 4);
+        var g12 = Col(gradR, 5);
+        var g20 = Col(gradR, 6);
+        var g21 = Col(gradR, 7);
+        var g22 = Col(gradR, 8);
+        var w2 = engine.TensorMultiplyScalar(w, two);
+        var x2 = engine.TensorMultiplyScalar(x, two);
+        var y2 = engine.TensorMultiplyScalar(y, two);
+        var z2 = engine.TensorMultiplyScalar(z, two);
+        var x4 = engine.TensorMultiplyScalar(x, four);
+        var y4 = engine.TensorMultiplyScalar(y, four);
+        var z4 = engine.TensorMultiplyScalar(z, four);
+
+        var gradW = SumOfProducts(
+            (g01, engine.TensorNegate(z2)), (g02, y2), (g10, z2), (g12, engine.TensorNegate(x2)), (g20, engine.TensorNegate(y2)), (g21, x2));
+        var gradX = SumOfProducts(
+            (g01, y2), (g02, z2), (g10, y2), (g11, engine.TensorNegate(x4)), (g12, engine.TensorNegate(w2)), (g20, z2), (g21, w2), (g22, engine.TensorNegate(x4)));
+        var gradY = SumOfProducts(
+            (g00, engine.TensorNegate(y4)), (g01, x2), (g02, w2), (g10, x2), (g12, z2), (g20, engine.TensorNegate(w2)), (g21, z2), (g22, engine.TensorNegate(y4)));
+        var gradZ = SumOfProducts(
+            (g00, engine.TensorNegate(z4)), (g01, engine.TensorNegate(w2)), (g02, x2), (g10, w2), (g11, engine.TensorNegate(z4)), (g12, y2), (g20, x2), (g21, y2));
+        return engine.TensorStack(new[] { gradW, gradX, gradY, gradZ }, 1);
+    }
+
+    private Tensor<T> SumOfProducts(params (Tensor<T> A, Tensor<T> B)[] terms)
+    {
+        var engine = Engine;
+        var sum = engine.TensorMultiply(terms[0].A, terms[0].B);
+        for (int i = 1; i < terms.Length; i++)
         {
-            throw new ArgumentException("Output gradient must have shape [N, 4].", nameof(outputGradient));
+            sum = engine.TensorAdd(sum, engine.TensorMultiply(terms[i].A, terms[i].B));
         }
 
-        int numPoints = positions.Shape[0];
-        var posData = positions.Data.Span;
-        var dirData = directions.Data.Span;
-        var gradData = outputGradient.Data.Span;
+        return sum;
+    }
 
-        for (int i = 0; i < numPoints; i++)
-        {
-            double px = NumOps.ToDouble(posData[i * 3]);
-            double py = NumOps.ToDouble(posData[i * 3 + 1]);
-            double pz = NumOps.ToDouble(posData[i * 3 + 2]);
-
-            double dx = NumOps.ToDouble(dirData[i * 3]);
-            double dy = NumOps.ToDouble(dirData[i * 3 + 1]);
-            double dz = NumOps.ToDouble(dirData[i * 3 + 2]);
-            NormalizeDirection(ref dx, ref dy, ref dz);
-
-            double sumAlpha = 0.0;
-            double sumR = 0.0;
-            double sumG = 0.0;
-            double sumB = 0.0;
-
-            foreach (var gaussian in GetCandidateGaussians(px, py, pz))
+    /// <summary>Publishes the image-step gradient in the flat parameter layout.</summary>
+    private void PublishImageGradients(Tensor<T> position, Tensor<T> rotation, Tensor<T> logScale, Tensor<T> opacity, Tensor<T> sh)
+    {
+        int total = position.Length + rotation.Length + logScale.Length + opacity.Length + sh.Length;
+        var published = total == 0
+            ? new Vector<T>(0)
+            : Engine.TensorConcatenate(new[]
             {
-                if (gaussian.CovarianceInverse == null)
-                {
-                    ComputeCovariance(gaussian);
-                }
-
-                double gx = NumOps.ToDouble(gaussian.Position[0]);
-                double gy = NumOps.ToDouble(gaussian.Position[1]);
-                double gz = NumOps.ToDouble(gaussian.Position[2]);
-
-                double ox = px - gx;
-                double oy = py - gy;
-                double oz = pz - gz;
-
-                var inv = gaussian.CovarianceInverse;
-                if (inv == null)
-                {
-                    throw new InvalidOperationException("Gaussian covariance inverse is not initialized.");
-                }
-                double inv00 = NumOps.ToDouble(inv[0, 0]);
-                double inv01 = NumOps.ToDouble(inv[0, 1]);
-                double inv02 = NumOps.ToDouble(inv[0, 2]);
-                double inv11 = NumOps.ToDouble(inv[1, 1]);
-                double inv12 = NumOps.ToDouble(inv[1, 2]);
-                double inv22 = NumOps.ToDouble(inv[2, 2]);
-
-                double q =
-                    ox * (inv00 * ox + inv01 * oy + inv02 * oz) +
-                    oy * (inv01 * ox + inv11 * oy + inv12 * oz) +
-                    oz * (inv02 * ox + inv12 * oy + inv22 * oz);
-
-                double weight = Math.Exp(-0.5 * q);
-                double alphaBase = Sigmoid(NumOps.ToDouble(gaussian.Opacity));
-                double alpha = alphaBase * weight;
-                if (alpha <= 1e-8)
-                {
-                    continue;
-                }
-
-                var (r, g, b) = EvaluateGaussianColor(gaussian, dx, dy, dz);
-                sumAlpha += alpha;
-                sumR += alpha * r;
-                sumG += alpha * g;
-                sumB += alpha * b;
-            }
-
-            if (sumAlpha <= 1e-10)
-            {
-                continue;
-            }
-
-            int gradIdx = i * 4;
-            double gradR = NumOps.ToDouble(gradData[gradIdx]);
-            double gradG = NumOps.ToDouble(gradData[gradIdx + 1]);
-            double gradB = NumOps.ToDouble(gradData[gradIdx + 2]);
-            double gradDensity = NumOps.ToDouble(gradData[gradIdx + 3]);
-
-            double invSumAlpha = 1.0 / sumAlpha;
-            double dSumColorR = gradR * invSumAlpha;
-            double dSumColorG = gradG * invSumAlpha;
-            double dSumColorB = gradB * invSumAlpha;
-
-            double colorDot = gradR * sumR + gradG * sumG + gradB * sumB;
-            double dSumAlpha = gradDensity - colorDot * invSumAlpha * invSumAlpha;
-
-            foreach (var gaussian in GetCandidateGaussians(px, py, pz))
-            {
-                if (gaussian.CovarianceInverse == null)
-                {
-                    ComputeCovariance(gaussian);
-                }
-
-                double gx = NumOps.ToDouble(gaussian.Position[0]);
-                double gy = NumOps.ToDouble(gaussian.Position[1]);
-                double gz = NumOps.ToDouble(gaussian.Position[2]);
-
-                double ox = px - gx;
-                double oy = py - gy;
-                double oz = pz - gz;
-
-                var inv = gaussian.CovarianceInverse;
-                if (inv == null)
-                {
-                    throw new InvalidOperationException("Gaussian covariance inverse is not initialized.");
-                }
-                double inv00 = NumOps.ToDouble(inv[0, 0]);
-                double inv01 = NumOps.ToDouble(inv[0, 1]);
-                double inv02 = NumOps.ToDouble(inv[0, 2]);
-                double inv11 = NumOps.ToDouble(inv[1, 1]);
-                double inv12 = NumOps.ToDouble(inv[1, 2]);
-                double inv22 = NumOps.ToDouble(inv[2, 2]);
-
-                double q =
-                    ox * (inv00 * ox + inv01 * oy + inv02 * oz) +
-                    oy * (inv01 * ox + inv11 * oy + inv12 * oz) +
-                    oz * (inv02 * ox + inv12 * oy + inv22 * oz);
-
-                double weight = Math.Exp(-0.5 * q);
-                double opacityParam = NumOps.ToDouble(gaussian.Opacity);
-                double alphaBase = Sigmoid(opacityParam);
-                double alpha = alphaBase * weight;
-                if (alpha <= 1e-8)
-                {
-                    continue;
-                }
-
-                var (r, g, b) = EvaluateGaussianColor(gaussian, dx, dy, dz);
-                double dAlpha = dSumAlpha + dSumColorR * r + dSumColorG * g + dSumColorB * b;
-
-                // #1835 excellence goal #4 — per-Gaussian persistent LR multipliers.
-                double lrColor2    = ColorLearningRate    * gaussian.ColorLrScale;
-                double lrOpacity2  = OpacityLearningRate  * gaussian.OpacityLrScale;
-                double lrPosition2 = PositionLearningRate * gaussian.PositionLrScale;
-
-                if (_useSphericalHarmonics)
-                {
-                    var basis = EvaluateSphericalHarmonicsBasis(dx, dy, dz);
-                    int basisCount = basis.Length;
-                    for (int bIdx = 0; bIdx < basisCount; bIdx++)
-                    {
-                        int rIdx = bIdx;
-                        int gIdx = bIdx + basisCount;
-                        int bIdx2 = bIdx + 2 * basisCount;
-                        double coeff = basis[bIdx];
-                        gaussian.Color[rIdx] = NumOps.FromDouble(
-                            NumOps.ToDouble(gaussian.Color[rIdx]) - lrColor2 * alpha * dSumColorR * coeff);
-                        gaussian.Color[gIdx] = NumOps.FromDouble(
-                            NumOps.ToDouble(gaussian.Color[gIdx]) - lrColor2 * alpha * dSumColorG * coeff);
-                        gaussian.Color[bIdx2] = NumOps.FromDouble(
-                            NumOps.ToDouble(gaussian.Color[bIdx2]) - lrColor2 * alpha * dSumColorB * coeff);
-                    }
-                }
-                else
-                {
-                    gaussian.Color[0] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[0]) - lrColor2 * alpha * dSumColorR));
-                    gaussian.Color[1] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[1]) - lrColor2 * alpha * dSumColorG));
-                    gaussian.Color[2] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[2]) - lrColor2 * alpha * dSumColorB));
-                }
-
-                double gradOpacity = dAlpha * weight * alphaBase * (1.0 - alphaBase);
-                gaussian.Opacity = NumOps.FromDouble(opacityParam - lrOpacity2 * gradOpacity);
-
-                double gradPosX = dAlpha * alpha * (inv00 * ox + inv01 * oy + inv02 * oz);
-                double gradPosY = dAlpha * alpha * (inv01 * ox + inv11 * oy + inv12 * oz);
-                double gradPosZ = dAlpha * alpha * (inv02 * ox + inv12 * oy + inv22 * oz);
-
-                gaussian.Position[0] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[0]) - lrPosition2 * gradPosX);
-                gaussian.Position[1] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[1]) - lrPosition2 * gradPosY);
-                gaussian.Position[2] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[2]) - lrPosition2 * gradPosZ);
-            }
-        }
-
-        MarkSpatialIndexDirty();
+                position.Reshape(position.Length),
+                rotation.Reshape(rotation.Length),
+                logScale.Reshape(logScale.Length),
+                opacity.Reshape(opacity.Length),
+                sh.Reshape(sh.Length),
+            }, 0).ToVector();
+        PublishFlatParameterGradients(published);
     }
 
     /// <summary>
@@ -3220,14 +2598,83 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     internal void RunDensifyAndPruneForTest(int iteration, double gradientsMagnitude)
     {
         _trainingStep = iteration;
+        int n = GaussianCount;
         var synthetic = new List<GaussianGradient>();
-        for (int i = 0; i < _gaussians.Count; i++)
+        if (n > 0)
         {
-            synthetic.Add(new GaussianGradient(
-                _gaussians[i],
-                gradX: gradientsMagnitude, gradY: 0.0, gradZ: 0.0));
+            var engine = Engine;
+            var indices = engine.TensorArange<T>(0, n, 1).Cast<int>();
+            var gradient = engine.TensorConcatenate(new[]
+            {
+                Full(new[] { n, 1 }, NumOps.FromDouble(gradientsMagnitude)),
+                new Tensor<T>(new[] { n, 2 }),
+            }, 1);
+            synthetic.Add(new GaussianGradient(indices, gradient));
         }
+
         DensifyAndPrune(synthetic);
+    }
+
+    /// <summary>
+    /// Test-only hook: replaces the whole cloud with the given per-attribute tensors (positions [N, 3], unit
+    /// quaternions [N, 4], log-scales [N, 3], opacity logits [N], spherical-harmonics coefficients [N, K, 3]).
+    /// </summary>
+    internal void SetGaussianStateForTest(
+        Tensor<T> positions,
+        Tensor<T> rotations,
+        Tensor<T> logScales,
+        Tensor<T> opacityLogits,
+        Tensor<T> shCoefficients)
+    {
+        Guard.NotNull(positions);
+        Guard.NotNull(rotations);
+        Guard.NotNull(logScales);
+        Guard.NotNull(opacityLogits);
+        Guard.NotNull(shCoefficients);
+        int n = positions.Shape[0];
+        int basisCount = GetShBasisCount();
+        if (positions.Rank != 2 || positions.Shape[1] != 3
+            || rotations.Rank != 2 || rotations.Shape[0] != n || rotations.Shape[1] != 4
+            || logScales.Rank != 2 || logScales.Shape[0] != n || logScales.Shape[1] != 3
+            || opacityLogits.Rank != 1 || opacityLogits.Shape[0] != n
+            || shCoefficients.Rank != 3 || shCoefficients.Shape[0] != n || shCoefficients.Shape[1] != basisCount || shCoefficients.Shape[2] != 3)
+        {
+            throw new ArgumentException("Gaussian state tensors must be [N, 3], [N, 4], [N, 3], [N] and [N, K, 3].");
+        }
+
+        _positions = positions.Clone();
+        _rotations = rotations.Clone();
+        _logScales = logScales.Clone();
+        _opacityLogits = opacityLogits.Clone();
+        _shCoefficients = shCoefficients.Clone();
+        _learningRateScales = Full(new[] { n, LearningRateScaleColumns }, NumOps.One);
+        InvalidateParameterCountCache();
+    }
+
+    /// <summary>Test-only hook: runs the opacity-reset schedule as if <paramref name="iteration"/> steps had run.</summary>
+    internal void RunOpacityResetForTest(int iteration)
+    {
+        _trainingStep = iteration;
+        ResetOpacityIfScheduled();
+    }
+
+    /// <summary>
+    /// Kerbl et al. 2023, section 5.2: every 3000 iterations, while densification is still running, every opacity is
+    /// reset to at most 0.01 so floaters near the cameras can be pruned and the remaining Gaussians re-learn theirs.
+    /// </summary>
+    private void ResetOpacityIfScheduled()
+    {
+        if (!EnableDensification
+            || _trainingStep <= 0
+            || _trainingStep % OpacityResetInterval != 0
+            || _trainingStep > EffectiveDensificationEndIteration
+            || GaussianCount == 0)
+        {
+            return;
+        }
+
+        T ceilingLogit = NumOps.Log(NumOps.FromDouble(OpacityResetCeiling / (1.0 - OpacityResetCeiling)));
+        WriteInPlace(_opacityLogits, MinScalar(_opacityLogits, ceilingLogit));
     }
 
     private void DensifyAndPrune(List<GaussianGradient> gradients)
@@ -3241,123 +2688,164 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             return;
         }
 
-        double pruneThreshold = Math.Max(0.0, EffectiveOpacityPruneThreshold);
-        for (int i = _gaussians.Count - 1; i >= 0; i--)
+        var engine = Engine;
+        var ops = NumOps;
+        int n = GaussianCount;
+        int basisCount = GetShBasisCount();
+        var lrScales = EnsureLearningRateScales();
+
+        // Prune first: Gaussians whose opacity is below the threshold (NaN opacities stay).
+        T pruneThreshold = ops.FromDouble(Math.Max(0.0, EffectiveOpacityPruneThreshold));
+        var kept = n == 0 ? new Tensor<T>(new[] { 0 }) : Not(Lt(engine.TensorSigmoid(_opacityLogits), pruneThreshold));
+        var keptRows = engine.TensorNonzero(kept);
+        int count = keptRows._shape[0];
+        if (count < n)
         {
-            double alpha = Sigmoid(NumOps.ToDouble(_gaussians[i].Opacity));
-            if (alpha < pruneThreshold)
-            {
-                _gaussians.RemoveAt(i);
-            }
+            var rows = keptRows.Reshape(count);
+            _positions = engine.TensorIndexSelect(_positions, rows, 0).Clone();
+            _rotations = engine.TensorIndexSelect(_rotations, rows, 0).Clone();
+            _logScales = engine.TensorIndexSelect(_logScales, rows, 0).Clone();
+            _opacityLogits = engine.TensorIndexSelect(_opacityLogits, rows, 0).Clone();
+            _shCoefficients = engine.TensorIndexSelect(_shCoefficients, rows, 0).Clone();
+            _learningRateScales = engine.TensorIndexSelect(lrScales, rows, 0).Clone();
         }
 
         int cap = EffectiveMaxGaussianCount;
-        if (_gaussians.Count >= cap)
+        var indexParts = new List<Tensor<int>>();
+        var gradientParts = new List<Tensor<T>>();
+        foreach (var batch in gradients)
         {
-            // Pruning above may have changed both the renderer's integer indices and the model's
-            // parameter surface even though no split can be added at the cap.
-            MarkSpatialIndexDirty();
+            if (batch.Count > 0)
+            {
+                indexParts.Add(batch.Indices);
+                gradientParts.Add(batch.Gradients);
+            }
+        }
+
+        if (count >= cap || indexParts.Count == 0 || count == 0)
+        {
+            // Pruning may have changed the parameter surface even though no split can be added.
             InvalidateParameterCountCache();
             return;
         }
 
-        double splitThresh = EffectiveGradientNormThreshold;
-        foreach (var gradient in gradients.OrderByDescending(g => g.Magnitude))
+        // Candidates in descending gradient magnitude (stable; NaN magnitudes last, as LINQ orders them). The run
+        // stops at the first magnitude below the threshold, pruned sources are skipped, and at most cap - count
+        // splits are made.
+        var sourceRows = engine.TensorConcatenate(indexParts.ToArray(), 0);
+        var sourceGrads = engine.TensorConcatenate(gradientParts.ToArray(), 0);
+        var magnitude = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(sourceGrads, sourceGrads), new[] { 1 }, false));
+        var order = engine.TensorArgsort(engine.TensorNegate(magnitude), 0, false);
+        var sortedRows = engine.TensorIndexSelect(sourceRows, order, 0);
+        var sortedGrads = engine.TensorIndexSelect(sourceGrads, order, 0);
+        var aboveThreshold = engine.TensorCumProd(
+            Not(Lt(engine.TensorIndexSelect(magnitude, order, 0), ops.FromDouble(EffectiveGradientNormThreshold))), 0);
+        var alive = engine.TensorIndexSelect(kept, sortedRows, 0);
+        var candidate = engine.TensorMultiply(aboveThreshold, alive);
+        var taken = engine.TensorMultiply(candidate, Le(engine.TensorCumSum(candidate, 0), ops.FromDouble(cap - count)));
+        var takenRows = engine.TensorNonzero(taken);
+        int splits = takenRows._shape[0];
+        if (splits == 0)
         {
-            if (_gaussians.Count >= cap)
-            {
-                break;
-            }
-
-            if (gradient.Magnitude < splitThresh)
-            {
-                break;
-            }
-
-            var source = gradient.Gaussian;
-            if (!_gaussians.Contains(source))
-            {
-                continue;
-            }
-            var clone = CloneGaussian(source);
-
-            double gx = gradient.GradX;
-            double gy = gradient.GradY;
-            double gz = gradient.GradZ;
-            NormalizeDirection(ref gx, ref gy, ref gz);
-
-            // #1835 excellence goal #4 — SplitChildLearningRateScales. Bakes the paper's
-            // per-attribute LR multipliers into the ONE-SHOT split perturbation: position
-            // jitter shrinks (scale < 1 → children stay closer to parent, since their per-
-            // step position LR would be smaller anyway), scale factor grows (scale > 1 →
-            // children start proportionally smaller which mimics needing more updates per
-            // step to converge). Reference impls apply the multipliers as persistent per-
-            // Gaussian LR state; folding into the initial perturbation is a stateless
-            // approximation that reaches the same steady state after a few iterations.
-            var childScales = _options.SplitChildLearningRateScales ?? new AiDotNet.Models.Options.SplitChildLearningRateScales();
-
-            double jitter = SplitPositionJitter * childScales.Position;
-            if (gx == 0.0 && gy == 0.0 && gz == 0.0)
-            {
-                gx = ModelRandom.NextDouble() - 0.5;
-                gy = ModelRandom.NextDouble() - 0.5;
-                gz = ModelRandom.NextDouble() - 0.5;
-                NormalizeDirection(ref gx, ref gy, ref gz);
-            }
-
-            double effectiveScaleFactor = SplitScaleFactor / childScales.Scale;
-            for (int d = 0; d < 3; d++)
-            {
-                double scale = NumOps.ToDouble(source.Scale[d]);
-                double newScale = Math.Max(MinScale, scale * effectiveScaleFactor);
-                source.Scale[d] = NumOps.FromDouble(newScale);
-                clone.Scale[d] = NumOps.FromDouble(newScale);
-            }
-
-            source.Position[0] = NumOps.FromDouble(NumOps.ToDouble(source.Position[0]) + jitter * gx);
-            source.Position[1] = NumOps.FromDouble(NumOps.ToDouble(source.Position[1]) + jitter * gy);
-            source.Position[2] = NumOps.FromDouble(NumOps.ToDouble(source.Position[2]) + jitter * gz);
-
-            clone.Position[0] = NumOps.FromDouble(NumOps.ToDouble(clone.Position[0]) - jitter * gx);
-            clone.Position[1] = NumOps.FromDouble(NumOps.ToDouble(clone.Position[1]) - jitter * gy);
-            clone.Position[2] = NumOps.FromDouble(NumOps.ToDouble(clone.Position[2]) - jitter * gz);
-
-            double alpha = Sigmoid(NumOps.ToDouble(source.Opacity));
-            double newAlpha = Math.Min(SplitOpacityMax, alpha * SplitOpacityFactor);
-            source.Opacity = NumOps.FromDouble(Logit(newAlpha));
-            clone.Opacity = NumOps.FromDouble(Logit(newAlpha));
-
-            // #1835 excellence goal #4 (persistent per-Gaussian LR state): both children
-            // inherit the paper-standard multipliers. Compounds if a child later splits
-            // again — reference impls do the same (each generation of children gets a
-            // fresh LR multiplier layered on top of its parent's).
-            source.PositionLrScale *= childScales.Position;
-            source.ScaleLrScale    *= childScales.Scale;
-            source.OpacityLrScale  *= childScales.Opacity;
-            source.RotationLrScale *= childScales.Rotation;
-            source.ColorLrScale    *= childScales.Color;
-            clone.PositionLrScale   = source.PositionLrScale;
-            clone.ScaleLrScale      = source.ScaleLrScale;
-            clone.OpacityLrScale    = source.OpacityLrScale;
-            clone.RotationLrScale   = source.RotationLrScale;
-            clone.ColorLrScale      = source.ColorLrScale;
-
-            ComputeCovariance(source);
-            ComputeCovariance(clone);
-            _gaussians.Add(clone);
+            InvalidateParameterCountCache();
+            return;
         }
 
-        MarkSpatialIndexDirty();
+        var picked = takenRows.Reshape(splits);
 
-        // Densification is a STRUCTURAL parameter change: this model's parameters are the
-        // Gaussians themselves (GetExtraTrainableTensors enumerates _gaussians), so pruning or
-        // splitting resizes the parameter surface exactly the way adding or removing a layer
-        // does. Without this the cached ParameterLayoutSnapshot keeps describing the previous
-        // cloud, so ParameterCount reports the pre-densification size while ApplyImageGradients
-        // publishes a gradient sized from the live list — and PublishFlatParameterGradients
-        // throws "Flat gradient length (224) must match ParameterCount (112)" on the very next
-        // training step. MarkSpatialIndexDirty above only invalidates the renderer's index.
+        // Rows of the split sources after pruning: the number of kept rows before each.
+        var newIndex = engine.TensorSubtractScalar(engine.TensorCumSum(kept, 0), ops.One);
+        var sources = engine.TensorIndexSelect(newIndex, engine.TensorIndexSelect(sortedRows, picked, 0), 0).Cast<int>();
+
+        // Split direction: the normalised position gradient, or a seeded random direction when it is zero.
+        var direction = NormalizeRows(engine.TensorIndexSelect(sortedGrads, picked, 0));
+        var isZero = engine.TensorEquals(engine.ReduceSum(engine.TensorAbs(direction), new[] { 1 }, false), ops.Zero);
+        var zeroRows = engine.TensorNonzero(isZero);
+        int zeroCount = zeroRows._shape[0];
+        if (zeroCount > 0)
+        {
+            // The draws keep master's order (three per zero-gradient split, in split order); no engine op draws a
+            // tensor from a caller-owned Random.
+            var random = new Tensor<T>(new[] { zeroCount, 3 });
+            for (int i = 0; i < zeroCount; i++)
+            {
+                random[i, 0] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
+                random[i, 1] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
+                random[i, 2] = ops.FromDouble(ModelRandom.NextDouble() - 0.5);
+            }
+
+            var scattered = engine.TensorIndexAdd(engine.TensorZerosLike(direction), 0, zeroRows.Reshape(zeroCount), NormalizeRows(random));
+            direction = Select(isZero.Reshape(splits, 1), scattered, direction);
+        }
+
+        // #1835 excellence goal #4 -- SplitChildLearningRateScales. Position jitter shrinks by the position
+        // multiplier and the scale factor grows by the scale multiplier; both children inherit the compounded
+        // per-attribute multipliers (each generation layers its multiplier on its parent's).
+        var childScales = _options.SplitChildLearningRateScales ?? new AiDotNet.Models.Options.SplitChildLearningRateScales();
+        T jitter = ops.FromDouble(SplitPositionJitter * childScales.Position);
+        T scaleFactor = ops.FromDouble(SplitScaleFactor / childScales.Scale);
+        var offset = engine.TensorMultiplyScalar(direction, jitter);
+
+        var sourcePositions = engine.TensorIndexSelect(_positions, sources, 0);
+        var splitScales = engine.TensorLog(MaxScalar(
+            engine.TensorMultiplyScalar(engine.TensorExp(engine.TensorIndexSelect(_logScales, sources, 0)), scaleFactor),
+            ops.FromDouble(MinScale)));
+        var splitAlpha = MinScalar(
+            engine.TensorMultiplyScalar(engine.TensorSigmoid(engine.TensorIndexSelect(_opacityLogits, sources, 0)), ops.FromDouble(SplitOpacityFactor)),
+            ops.FromDouble(SplitOpacityMax));
+        var splitOpacity = Logit(splitAlpha);
+        var multipliers = Tensor<T>.FromVector(new Vector<T>(new[]
+        {
+            ops.FromDouble(childScales.Position),
+            ops.FromDouble(childScales.Scale),
+            ops.FromDouble(childScales.Opacity),
+            ops.FromDouble(childScales.Rotation),
+            ops.FromDouble(childScales.Color),
+        })).Reshape(1, LearningRateScaleColumns);
+        var splitLr = Mul(engine.TensorIndexSelect(_learningRateScales, sources, 0), multipliers);
+
+        // Sources move along +direction, clones along -direction; both get the reduced scale and opacity.
+        var sourceMask = engine.TensorIndexAdd(new Tensor<T>(new[] { count }), 0, sources, Full(new[] { splits }, ops.One));
+        WriteRows(_positions, sources, sourceMask, engine.TensorAdd(sourcePositions, offset));
+        WriteRows(_logScales, sources, sourceMask, splitScales);
+        WriteRows(_learningRateScales, sources, sourceMask, splitLr);
+        WriteInPlace(_opacityLogits, Select(sourceMask,
+            engine.TensorIndexAdd(engine.TensorZerosLike(_opacityLogits), 0, sources, splitOpacity), _opacityLogits));
+
+        var clonePositions = engine.TensorSubtract(sourcePositions, offset);
+        var cloneRotations = engine.TensorIndexSelect(_rotations, sources, 0);
+        var cloneSh = engine.TensorIndexSelect(_shCoefficients, sources, 0);
+        _positions = AppendRows(_positions, clonePositions);
+        _rotations = AppendRows(_rotations, cloneRotations);
+        _logScales = AppendRows(_logScales, splitScales);
+        _opacityLogits = AppendRows(_opacityLogits, splitOpacity);
+        _shCoefficients = AppendRows(_shCoefficients, cloneSh.Reshape(splits, basisCount, 3));
+        _learningRateScales = AppendRows(_learningRateScales, splitLr);
+
+        // Densification is a STRUCTURAL parameter change: the per-Gaussian tensors are the model's parameters, so
+        // pruning or splitting resizes the parameter surface exactly the way adding or removing a layer does.
+        // Without this the cached ParameterLayoutSnapshot keeps describing the previous cloud and the next
+        // PublishFlatParameterGradients call fails its length check.
         InvalidateParameterCountCache();
+    }
+
+    /// <summary>Mean world-space position-gradient magnitude over the visible Gaussians of a step (0 when none).</summary>
+    private double MeanGradientNorm(List<GaussianGradient> gradients)
+    {
+        var engine = Engine;
+        var magnitudes = new List<Tensor<T>>();
+        foreach (var batch in gradients)
+        {
+            if (batch.Count > 0)
+            {
+                magnitudes.Add(engine.TensorSqrt(engine.ReduceSum(
+                    engine.TensorMultiply(batch.Gradients, batch.Gradients), new[] { 1 }, false)));
+            }
+        }
+
+        return magnitudes.Count == 0
+            ? 0.0
+            : NumOps.ToDouble(engine.TensorMean(engine.TensorConcatenate(magnitudes.ToArray(), 0)));
     }
 
     /// <inheritdoc />
@@ -3366,90 +2854,54 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         return ForwardWithMemory(input);
     }
 
-    private Gaussian CloneGaussian(Gaussian source)
+    /// <summary>
+    /// Real spherical-harmonics basis [R, K] of the (renormalised) directions [R, 3], degrees 0-3 with the constants of
+    /// Sloan's "Stupid Spherical Harmonics Tricks" (as in the reference 3DGS rasteriser, without its sign convention).
+    /// </summary>
+    private Tensor<T> ShBasis(Tensor<T> directions)
     {
-        var clone = new Gaussian(source.Color.Length, NumOps);
-        source.Position.AsSpan().CopyTo(clone.Position.AsWritableSpan());
-        source.Rotation.AsSpan().CopyTo(clone.Rotation.AsWritableSpan());
-        source.Scale.AsSpan().CopyTo(clone.Scale.AsWritableSpan());
-        source.Color.AsSpan().CopyTo(clone.Color.AsWritableSpan());
-        clone.Opacity = source.Opacity;
-        clone.PositionLrScale = source.PositionLrScale;
-        clone.ScaleLrScale    = source.ScaleLrScale;
-        clone.OpacityLrScale  = source.OpacityLrScale;
-        clone.RotationLrScale = source.RotationLrScale;
-        clone.ColorLrScale    = source.ColorLrScale;
-        clone.Covariance = source.Covariance?.Clone();
-        clone.CovarianceInverse = source.CovarianceInverse?.Clone();
-
-        return clone;
-    }
-
-    private (double r, double g, double b) EvaluateGaussianColor(
-        Gaussian gaussian,
-        double dirX,
-        double dirY,
-        double dirZ)
-    {
-        if (!_useSphericalHarmonics)
-        {
-            return (
-                Clamp01(NumOps.ToDouble(gaussian.Color[0])),
-                Clamp01(NumOps.ToDouble(gaussian.Color[1])),
-                Clamp01(NumOps.ToDouble(gaussian.Color[2])));
-        }
-
-        var basis = EvaluateSphericalHarmonicsBasis(dirX, dirY, dirZ);
-        int basisCount = basis.Length;
-        double r = 0.0;
-        double g = 0.0;
-        double b = 0.0;
-
-        for (int i = 0; i < basisCount; i++)
-        {
-            double coeff = basis[i];
-            r += coeff * NumOps.ToDouble(gaussian.Color[i]);
-            g += coeff * NumOps.ToDouble(gaussian.Color[i + basisCount]);
-            b += coeff * NumOps.ToDouble(gaussian.Color[i + 2 * basisCount]);
-        }
-
-        return (Clamp01(r), Clamp01(g), Clamp01(b));
-    }
-
-    private double[] EvaluateSphericalHarmonicsBasis(double x, double y, double z)
-    {
-        NormalizeDirection(ref x, ref y, ref z);
+        var engine = Engine;
+        int rows = directions._shape[0];
         int degree = _useSphericalHarmonics ? _shDegree : 0;
-        int count = (degree + 1) * (degree + 1);
-        var basis = new double[count];
-
-        basis[0] = 0.282095;
+        var unit = NormalizeRows(directions);
+        var x = Col(unit, 0);
+        var y = Col(unit, 1);
+        var z = Col(unit, 2);
+        var basis = new List<Tensor<T>> { Full(new[] { rows }, NumOps.FromDouble(0.282095)) };
         if (degree >= 1)
         {
-            basis[1] = 0.488603 * y;
-            basis[2] = 0.488603 * z;
-            basis[3] = 0.488603 * x;
+            T c1 = NumOps.FromDouble(0.488603);
+            basis.Add(engine.TensorMultiplyScalar(y, c1));
+            basis.Add(engine.TensorMultiplyScalar(z, c1));
+            basis.Add(engine.TensorMultiplyScalar(x, c1));
         }
         if (degree >= 2)
         {
-            basis[4] = 1.092548 * x * y;
-            basis[5] = 1.092548 * y * z;
-            basis[6] = 0.315392 * (3.0 * z * z - 1.0);
-            basis[7] = 1.092548 * x * z;
-            basis[8] = 0.546274 * (x * x - y * y);
-        }
-        if (degree >= 3)
-        {
-            basis[9] = 0.590044 * y * (3.0 * x * x - y * y);
-            basis[10] = 2.890611 * x * y * z;
-            basis[11] = 0.457046 * y * (5.0 * z * z - 1.0);
-            basis[12] = 0.373176 * z * (5.0 * z * z - 3.0);
-            basis[13] = 0.457046 * x * (5.0 * z * z - 1.0);
-            basis[14] = 1.445306 * z * (x * x - y * y);
-            basis[15] = 0.590044 * x * (x * x - 3.0 * y * y);
+            var xx = engine.TensorMultiply(x, x);
+            var yy = engine.TensorMultiply(y, y);
+            var zz = engine.TensorMultiply(z, z);
+            T c2 = NumOps.FromDouble(1.092548);
+            basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(x, y), c2));
+            basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(y, z), c2));
+            basis.Add(engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorMultiplyScalar(zz, NumOps.FromDouble(3.0)), NumOps.One), NumOps.FromDouble(0.315392)));
+            basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(x, z), c2));
+            basis.Add(engine.TensorMultiplyScalar(engine.TensorSubtract(xx, yy), NumOps.FromDouble(0.546274)));
+            if (degree >= 3)
+            {
+                T three = NumOps.FromDouble(3.0);
+                T five = NumOps.FromDouble(5.0);
+                var fiveZzMinusOne = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(zz, five), NumOps.One);
+                basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(y, engine.TensorSubtract(engine.TensorMultiplyScalar(xx, three), yy)), NumOps.FromDouble(0.590044)));
+                basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorMultiply(x, y), z), NumOps.FromDouble(2.890611)));
+                basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(y, fiveZzMinusOne), NumOps.FromDouble(0.457046)));
+                basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(z, engine.TensorSubtractScalar(engine.TensorMultiplyScalar(zz, five), three)), NumOps.FromDouble(0.373176)));
+                basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(x, fiveZzMinusOne), NumOps.FromDouble(0.457046)));
+                basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(z, engine.TensorSubtract(xx, yy)), NumOps.FromDouble(1.445306)));
+                basis.Add(engine.TensorMultiplyScalar(engine.TensorMultiply(x, engine.TensorSubtract(xx, engine.TensorMultiplyScalar(yy, three))), NumOps.FromDouble(0.590044)));
+            }
         }
 
-        return basis;
+        return engine.TensorStack(basis.ToArray(), 1);
     }
 
     private int GetShBasisCount()
@@ -3458,72 +2910,210 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         return (degree + 1) * (degree + 1);
     }
 
-    private static void NormalizeDirection(ref double x, ref double y, ref double z)
+    // ---- Element-wise helpers. Comparisons return 0/1 masks; NaN follows the scalar code each one replaces. ----
+
+    /// <summary>Rows [R, 3] scaled to unit length; zero-length (and NaN) rows are left as they are.</summary>
+    private Tensor<T> NormalizeRows(Tensor<T> rows)
     {
-        double norm = Math.Sqrt(x * x + y * y + z * z);
-        if (norm > 0.0)
-        {
-            double inv = 1.0 / norm;
-            x *= inv;
-            y *= inv;
-            z *= inv;
-        }
+        var engine = Engine;
+        int count = rows._shape[0];
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(rows, rows), new[] { 1 }, false));
+        var inv = Select(Gt(norm, NumOps.Zero), engine.TensorReciprocal(norm), engine.TensorOnesLike(norm));
+        return Mul(rows, inv.Reshape(count, 1));
     }
 
-    private static double Sigmoid(double x)
+    /// <summary>Column <paramref name="column"/> of a rank-2 tensor, as a rank-1 tensor.</summary>
+    private Tensor<T> Col(Tensor<T> matrix, int column)
     {
-        return 1.0 / (1.0 + Math.Exp(-x));
+        int rows = matrix._shape[0];
+        return Engine.TensorSlice(matrix, new[] { 0, column }, new[] { rows, 1 }).Reshape(rows);
     }
 
-    private static double Logit(double value)
+    /// <summary>Column <paramref name="column"/> of a rank-2 tensor with <paramref name="rows"/> rows, kept as [rows, 1].</summary>
+    private Tensor<T> Col2(Tensor<T> matrix, int column, int rows)
+        => Engine.TensorSlice(matrix, new[] { 0, column }, new[] { rows, 1 });
+
+    /// <summary>Column <paramref name="column"/> of a rank-2 tensor with <paramref name="rows"/> rows, as [1, rows].</summary>
+    private Tensor<T> Row(Tensor<T> matrix, int column, int rows)
+        => Engine.TensorSlice(matrix, new[] { 0, column }, new[] { rows, 1 }).Reshape(1, rows);
+
+    private Tensor<T> Full(int[] shape, T value)
     {
-        double clamped = Math.Min(1.0 - 1e-6, Math.Max(1e-6, value));
-        return Math.Log(clamped / (1.0 - clamped));
+        var tensor = new Tensor<T>(shape);
+        tensor.Fill(value);
+        return tensor;
     }
 
-    private static double Clamp01(double value)
+    private Tensor<T> Bc(Tensor<T> tensor, int[] shape) => Engine.TensorBroadcastTo(tensor, shape);
+
+    private static int[] BroadcastShape(int[] a, int[] b)
     {
-        if (value <= 0.0)
+        int rank = Math.Max(a.Length, b.Length);
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
         {
-            return 0.0;
-        }
-        if (value >= 1.0)
-        {
-            return 1.0;
+            int ia = i - (rank - a.Length);
+            int ib = i - (rank - b.Length);
+            int da = ia >= 0 ? a[ia] : 1;
+            int db = ib >= 0 ? b[ib] : 1;
+            shape[i] = da == 1 ? db : da;
         }
 
-        return value;
+        return shape;
+    }
+
+    private Tensor<T> Add(Tensor<T> a, Tensor<T> b)
+    {
+        var shape = BroadcastShape(a._shape, b._shape);
+        return Engine.TensorAdd(Bc(a, shape), Bc(b, shape));
+    }
+
+    private Tensor<T> Sub(Tensor<T> a, Tensor<T> b)
+    {
+        var shape = BroadcastShape(a._shape, b._shape);
+        return Engine.TensorSubtract(Bc(a, shape), Bc(b, shape));
+    }
+
+    private Tensor<T> Mul(Tensor<T> a, Tensor<T> b)
+    {
+        var shape = BroadcastShape(a._shape, b._shape);
+        return Engine.TensorMultiply(Bc(a, shape), Bc(b, shape));
+    }
+
+    private Tensor<T> Div(Tensor<T> a, Tensor<T> b)
+    {
+        var shape = BroadcastShape(a._shape, b._shape);
+        return Engine.TensorDivide(Bc(a, shape), Bc(b, shape));
+    }
+
+    /// <summary>Element-wise select (mask != 0 picks <paramref name="x"/>) with broadcasting.</summary>
+    private Tensor<T> Select(Tensor<T> mask, Tensor<T> x, Tensor<T> y)
+    {
+        var shape = BroadcastShape(BroadcastShape(mask._shape, x._shape), y._shape);
+        return Engine.TensorWhere(Bc(mask, shape), Bc(x, shape), Bc(y, shape));
+    }
+
+    private Tensor<T> Lt(Tensor<T> x, T value) => Engine.TensorLessThan(x, value);
+
+    private Tensor<T> Gt(Tensor<T> x, T value) => Engine.TensorGreaterThan(x, value);
+
+    /// <summary>x &lt;= value (0 for NaN).</summary>
+    private Tensor<T> Le(Tensor<T> x, T value) => Engine.TensorAdd(Engine.TensorLessThan(x, value), Engine.TensorEquals(x, value));
+
+    /// <summary>x &gt;= value (0 for NaN).</summary>
+    private Tensor<T> Ge(Tensor<T> x, T value) => Engine.TensorAdd(Engine.TensorGreaterThan(x, value), Engine.TensorEquals(x, value));
+
+    private Tensor<T> Not(Tensor<T> mask) => Engine.ScalarMinusTensor(NumOps.One, mask);
+
+    /// <summary>Math.Max(x, value): a NaN x stays NaN.</summary>
+    private Tensor<T> MaxScalar(Tensor<T> x, T value) => Engine.TensorWhere(Lt(x, value), Full(x._shape, value), x);
+
+    /// <summary>Math.Min(x, value): a NaN x stays NaN.</summary>
+    private Tensor<T> MinScalar(Tensor<T> x, T value) => Engine.TensorWhere(Gt(x, value), Full(x._shape, value), x);
+
+    /// <summary>0 for x &lt;= 0, 1 for x &gt;= 1, x otherwise (NaN stays NaN).</summary>
+    private Tensor<T> Clamp01(Tensor<T> x)
+        => Engine.TensorWhere(Le(x, NumOps.Zero), Engine.TensorZerosLike(x), Engine.TensorWhere(Ge(x, NumOps.One), Engine.TensorOnesLike(x), x));
+
+    /// <summary>log(p / (1 - p)) of p clamped to [1e-6, 1 - 1e-6].</summary>
+    private Tensor<T> Logit(Tensor<T> probability)
+    {
+        var engine = Engine;
+        var clamped = MinScalar(MaxScalar(probability, NumOps.FromDouble(1e-6)), NumOps.FromDouble(1.0 - 1e-6));
+        return engine.TensorLog(engine.TensorDivide(clamped, engine.ScalarMinusTensor(NumOps.One, clamped)));
+    }
+
+    /// <summary>Math.Max for one pair of scalars (NaN propagates).</summary>
+    private T MaxOf(T a, T b)
+    {
+        if (NumOps.IsNaN(a))
+        {
+            return a;
+        }
+        if (NumOps.IsNaN(b))
+        {
+            return b;
+        }
+
+        return NumOps.GreaterThan(b, a) ? b : a;
+    }
+
+    /// <summary>Appends rows to a per-Gaussian tensor, returning a tensor the model owns.</summary>
+    private Tensor<T> AppendRows(Tensor<T> existing, Tensor<T> rows)
+        => existing._shape[0] == 0 ? rows.Clone() : Engine.TensorConcatenate(new[] { existing, rows }, 0).Clone();
+
+    /// <summary>Writes <paramref name="value"/> into a parameter tensor of the same shape, in place.</summary>
+    private static void WriteInPlace(Tensor<T> field, Tensor<T> value) => value.CopyTo(field.Data.Span);
+
+    /// <summary>
+    /// Replaces the rows <paramref name="rows"/> (unique) of a rank-2 parameter tensor with <paramref name="values"/>,
+    /// in place; <paramref name="rowMask"/> is the matching [N] 0/1 mask.
+    /// </summary>
+    private void WriteRows(Tensor<T> field, Tensor<int> rows, Tensor<T> rowMask, Tensor<T> values)
+    {
+        var engine = Engine;
+        var scattered = engine.TensorIndexAdd(engine.TensorZerosLike(field), 0, rows, values);
+        WriteInPlace(field, Select(rowMask.Reshape(rowMask.Length, 1), scattered, field));
+    }
+
+    /// <summary>[N, 5] multipliers of the current cloud (ones for rows the optimizer state does not cover).</summary>
+    private Tensor<T> EnsureLearningRateScales()
+    {
+        int n = GaussianCount;
+        if (_learningRateScales._shape[0] != n)
+        {
+            _learningRateScales = Full(new[] { n, LearningRateScaleColumns }, NumOps.One);
+        }
+
+        return _learningRateScales;
     }
 
     /// <summary>
     /// Gets the number of Gaussians currently in the scene.
     /// </summary>
-    public int GaussianCount => _gaussians.Count;
+    public int GaussianCount => _positions._shape[0];
 
     /// <summary>
     /// Diagnostic snapshot of the Gaussian cloud state — returns per-index summary
     /// (position, opacity-after-sigmoid, max-scale, mean-color). Intended for tests /
     /// validation probes that need to inspect the cloud without exposing the internal
-    /// <c>Gaussian</c> type.
+    /// per-attribute tensors.
     /// </summary>
     public IReadOnlyList<(double PosX, double PosY, double PosZ, double Opacity, double MaxScale, double MeanColor)> GetGaussianDiagnostics()
     {
-        var results = new List<(double, double, double, double, double, double)>(_gaussians.Count);
-        for (int i = 0; i < _gaussians.Count; i++)
+        int n = GaussianCount;
+        var results = new List<(double, double, double, double, double, double)>(n);
+        if (n == 0)
         {
-            var g = _gaussians[i];
-            double px = NumOps.ToDouble(g.Position[0]);
-            double py = NumOps.ToDouble(g.Position[1]);
-            double pz = NumOps.ToDouble(g.Position[2]);
-            double op = Sigmoid(NumOps.ToDouble(g.Opacity));
-            double s0 = Math.Abs(NumOps.ToDouble(g.Scale[0]));
-            double s1 = Math.Abs(NumOps.ToDouble(g.Scale[1]));
-            double s2 = Math.Abs(NumOps.ToDouble(g.Scale[2]));
-            double maxS = Math.Max(s0, Math.Max(s1, s2));
-            double sumC = 0;
-            for (int c = 0; c < Math.Min(3, g.Color.Length); c++) sumC += NumOps.ToDouble(g.Color[c]);
-            results.Add((px, py, pz, op, maxS, sumC / 3.0));
+            return results;
         }
+
+        // The colour summary is the mean of the first three stored colour values per Gaussian, in the channel-major
+        // order the colour was always reported in (the RGB colour, or the leading red SH coefficients).
+        var engine = Engine;
+        int basisCount = GetShBasisCount();
+        var channelMajor = engine.TensorPermute(_shCoefficients, new[] { 0, 2, 1 }).Contiguous().Reshape(n, 3 * basisCount);
+        var leading = engine.TensorSlice(channelMajor, new[] { 0, 0 }, new[] { n, 3 });
+        var table = engine.TensorConcatenate(new[]
+        {
+            _positions,
+            engine.TensorSigmoid(_opacityLogits).Reshape(n, 1),
+            engine.ReduceMax(engine.TensorAbs(engine.TensorExp(_logScales)), new[] { 1 }, true),
+            engine.TensorDivideScalar(engine.ReduceSum(leading, new[] { 1 }, true), NumOps.FromDouble(3.0)),
+        }, 1);
+
+        // The public contract reports doubles; this boundary is the only conversion.
+        for (int i = 0; i < n; i++)
+        {
+            results.Add((
+                NumOps.ToDouble(table[i, 0]),
+                NumOps.ToDouble(table[i, 1]),
+                NumOps.ToDouble(table[i, 2]),
+                NumOps.ToDouble(table[i, 3]),
+                NumOps.ToDouble(table[i, 4]),
+                NumOps.ToDouble(table[i, 5])));
+        }
+
         return results;
     }
 }
