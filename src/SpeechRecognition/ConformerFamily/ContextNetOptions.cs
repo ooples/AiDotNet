@@ -51,6 +51,7 @@ public class ContextNetOptions : ModelOptions
     /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Reference-configuration metadata, retained in serialized options; it does not crop or reject recordings. ContextNetTranscriptionTests verifies both the reported value and transcription beyond that duration.")]
     public int MaxAudioLengthSeconds { get; set; } = 30;
 
     /// <summary>Nominal encoder width. Retained for callers and serialization round-trip.</summary>

@@ -58,6 +58,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, MinLearningRate = 1e-5,
                 DecayRate = 0.1, Milestones = [6],
                 Schedule = LearningRateSchedulerType.MultiStep,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
                 Source = "Fang et al. 2021, Sec. 4: Adam with an initial learning rate of 1e-4, decayed "
                         + "to 1e-5 after 6 epochs. That single drop by a factor of ten is declared as a "
                         + "one-milestone step schedule. The factory call is already present at the "

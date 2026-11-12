@@ -34,7 +34,7 @@ public class StableVideoSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public StableVideoSROptions(StableVideoSROptions other)
+    public StableVideoSROptions(StableVideoSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -78,6 +78,7 @@ public class StableVideoSROptions : NeuralNetworkOptions
     public int NumTemporalModules { get; set; } = 9;
 
     /// <summary>Compatibility alias for the pre-fidelity option name.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("This aliases NumTemporalModules, whose sensitivity is tracked under its own name; reading and writing either sets the same value.")]
     [Obsolete("Use NumTemporalModules. Upscale-A-Video has nine stage modules, not two attention layers per block.")]
     public int NumTemporalLayers
     {

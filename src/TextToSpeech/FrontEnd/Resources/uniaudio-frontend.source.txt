@@ -1,0 +1,21 @@
+UniAudio released frontend resources
+
+uniaudio-phones.txt.gz contains the original phone_dict Git blob from
+https://github.com/yangdongchao/UniAudio/blob/c1146a8cecf84f1c2e877170d84998393b7e1e78/UniAudio/tools/tokenizer/phone/phone_dict
+Uncompressed SHA-256: b1caeef5c5393db636f8078a1c0f3539bccbf4bbdad392b393ca4d529b4291da
+
+uniaudio-align-lexicon.txt.gz contains the original released Kaldi alignment lexicon:
+https://huggingface.co/Dongchao/UniAudio/blob/835f07dcf1bdf586b0f427be59e4d48d0320f00e/lang_nosp/phones/align_lexicon.txt
+Uncompressed SHA-256: d2301e3ff78073f3880dadf57f4fd6fe9b301d5a7d66e7110f7f54209f57819f
+The release's optional_silence.txt specifies SIL and oov.txt specifies <UNK>.
+
+uniaudio-uppercase.tsv.gz records Python Unicode 14.0.0 full uppercase mappings,
+including expansions such as sharp-s and ligatures, as used by str.upper().
+Uncompressed SHA-256: e3822c10113225ca4ff8515505375060502fce55c10153b56106a1aa60408a10
+
+The UniAudio repository identifies its code as MIT-licensed in readme.md.
+Its Kaldi English pronunciation lexicon derives from CMUdict, whose attribution
+and redistribution terms are reproduced in uniaudio-cmudict-license.txt.
+
+Resources preserve the original bytes; gzip timestamps are zero for reproducibility.
+Rebuild with tools/reference-data/uniaudio_frontend_resources.py.

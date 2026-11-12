@@ -1,0 +1,41 @@
+{
+  "source": "cutlet-0.5.0/unidic-lite-1.0.8",
+  "cases": [
+    {
+      "text": "あ",
+      "expected": "a"
+    },
+    {
+      "text": "アイウエオ",
+      "expected": "aiueo"
+    },
+    {
+      "text": "こんにちは。",
+      "expected": "konnichiha."
+    },
+    {
+      "text": "私は日本語を勉強しています。",
+      "expected": "watakushi wa nippon go wo benkyou shite imasu."
+    },
+    {
+      "text": "カツカレーを食べた。",
+      "expected": "cutlet curry wo tabeta."
+    },
+    {
+      "text": "東京へ行った。",
+      "expected": "tokyo e itta."
+    },
+    {
+      "text": "きゃっと しんよう",
+      "expected": "kyat to shinyou"
+    },
+    {
+      "text": "John's本",
+      "expected": "john's hon"
+    },
+    {
+      "text": "すもももももももものうち",
+      "expected": "sumomo mo momo mo momo no uchi"
+    }
+  ]
+}

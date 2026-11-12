@@ -1,29 +1,23 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for UDVD unsupervised deep video denoising.
+/// Configuration options for UDVD, unsupervised deep video denoising with a blind-spot network (Sheth et al.,
+/// ICCV 2021).
 /// </summary>
 /// <remarks>
 /// <para>
-/// UDVD (Sheth et al., ICCV 2021) performs blind video denoising without paired training data:
-/// - Blind denoising: requires only noisy video for training (no clean ground truth),
-///   predicting each noisy pixel from a neighborhood that excludes that pixel
-/// - Multi-frame fusion: maps five contiguous frames to an estimate of the middle frame
-/// - Directional blind spots: combines four rotated, vertically-causal branches
-/// - Spatio-temporal adaptation: combines features from nearby frames with learned weights
-///   that adapt to content and noise characteristics
-/// - Noise-adaptive: handles varying and unknown noise levels including real camera noise
-///   (not just synthetic Gaussian), making it practical for real-world footage
+/// Defaults follow the paper and the authors' release (github.com/sreyas-mohan/udvd, models/udvd.py,
+/// "blind-video-net-4"): five frames, two blind-spot U-Nets with 48-channel encoders and 96-channel decoders, the
+/// first stage emitting 32 channels per frame triplet, Gaussian noise of σ = 30/255, and Adam at 1e-4 halved at
+/// epochs 20, 25 and 30.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> UDVD removes noise from video without needing clean reference
-/// footage for training. It learns to denoise by recognizing that noise is random (different
-/// each frame) while real content is consistent. This makes it especially useful for
-/// real-world noisy video where you don't have a clean version to compare against.
+/// <b>For Beginners:</b> UDVD learns to denoise from noisy video alone. Its network is built so that it can never
+/// see the pixel it is predicting, so the only way to predict that noisy pixel well is to predict the clean signal
+/// from the surrounding pixels and frames; the noisy pixel is then folded back in with Bayes' rule.
 /// </para>
 /// </remarks>
 public class UDVDOptions : NeuralNetworkOptions
@@ -40,40 +34,37 @@ public class UDVDOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public UDVDOptions(UDVDOptions other)
+    public UDVDOptions(UDVDOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
         Seed = other.Seed;
-        EncoderLayerCount = other.EncoderLayerCount;
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumLevels = other.NumLevels;
-        NumResBlocks = other.NumResBlocks;
-        TemporalBufferSize = other.TemporalBufferSize;
+        EncoderFeatures = other.EncoderFeatures;
+        DecoderFeatures = other.DecoderFeatures;
+        FirstStageFeatures = other.FirstStageFeatures;
+        NoiseLevel = other.NoiseLevel;
         ModelPath = other.ModelPath;
-        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the channels of each blind-spot U-Net's encoder (48).</summary>
+    public int EncoderFeatures { get; set; } = 48;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the channels of each blind-spot U-Net's decoder and second stage's output (96).</summary>
+    public int DecoderFeatures { get; set; } = 96;
 
-    /// <summary>Gets or sets the number of U-Net levels.</summary>
-    public int NumLevels { get; set; } = 4;
+    /// <summary>Gets or sets the channels the first-stage U-Net emits for each frame triplet (32).</summary>
+    public int FirstStageFeatures { get; set; } = 32;
 
-    /// <summary>Gets or sets the number of residual blocks per level.</summary>
-    public int NumResBlocks { get; set; } = 2;
-
-    /// <summary>Gets or sets the number of contiguous frames used for temporal context.</summary>
-    public int TemporalBufferSize { get; set; } = 5;
+    /// <summary>
+    /// Gets or sets the standard deviation (in normalized [0, 1] units) of the Gaussian noise the likelihood and the
+    /// posterior assume; null estimates it from the frames. Default: 30/255, the level UDVD is trained at.
+    /// </summary>
+    public double? NoiseLevel { get; set; } = 30.0 / 255.0;
 
     #endregion
 
@@ -89,11 +80,8 @@ public class UDVDOptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets Adam's initial learning rate (paper/released-code default: 1e-4).</summary>
+    /// <summary>Gets or sets Adam's starting learning rate (1e-4).</summary>
     public double LearningRate { get; set; } = 1e-4;
-
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
 
     #endregion
 }

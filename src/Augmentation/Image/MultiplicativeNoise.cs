@@ -22,31 +22,22 @@ public class MultiplicativeNoise<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         var result = data.Clone();
 
+        int h = data.Height, w = data.Width, channels = data.Channels;
+        Tensor<T> multipliers;
         if (!PerChannel)
         {
             // Same multiplier for all channels at each pixel
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double mult = context.GetRandomDouble(MinMultiplier, MaxMultiplier);
-                    for (int c = 0; c < data.Channels; c++)
-                    {
-                        double val = NumOps.ToDouble(data.GetPixel(y, x, c)) * mult;
-                        result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                    }
-                }
+            multipliers = AugmentationRandom<T>.Uniform(context, [1, h, w], MinMultiplier, MaxMultiplier);
         }
         else
         {
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                    for (int c = 0; c < data.Channels; c++)
-                    {
-                        double mult = context.GetRandomDouble(MinMultiplier, MaxMultiplier);
-                        double val = NumOps.ToDouble(data.GetPixel(y, x, c)) * mult;
-                        result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                    }
+            var mult = AugmentationRandom<T>.Uniform(context, [h, w, channels], MinMultiplier, MaxMultiplier);
+            multipliers = ImageTensor<T>.PlanarFromInterleaved(mult, h, w, channels);
         }
+
+        var engine = Engine;
+        var scaled = engine.TensorMultiply(data.ToPlanarTensor(), multipliers);
+        result.SetFromPlanarTensor(engine.TensorClamp(scaled, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }

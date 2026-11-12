@@ -42,7 +42,7 @@ public class IQVFIOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public IQVFIOptions(IQVFIOptions other)
+    public IQVFIOptions(IQVFIOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
