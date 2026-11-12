@@ -79,22 +79,18 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // far down a causal chain have tiny variance, so their parent-mask gradients
         // never separate from the 0.5 init. ----
         var X = new Tensor<T>(new[] { n, d }, data);
-        var onesN1 = new Tensor<T>(new[] { n, 1 });
-        for (int s = 0; s < n; s++) onesN1[s, 0] = NumOps.One;
+        var onesN1 = Engine.TensorOnesLike(new Tensor<T>(new[] { n, 1 }));
         var meanRow = Engine.ReduceMean(X, new[] { 0 }, true);                  // [1,d]
         var centered = Engine.TensorSubtract(X, Engine.TensorMatMul(onesN1, meanRow));
         var varRow = Engine.ReduceMean(Engine.TensorMultiply(centered, centered), new[] { 0 }, true); // [1,d]
-        var invStdRow = new Tensor<T>(new[] { 1, d });
-        for (int j = 0; j < d; j++)
-        {
-            T v = varRow[0, j];
-            invStdRow[0, j] = NumOps.GreaterThan(v, NumOps.FromDouble(1e-12))
-                ? NumOps.Divide(NumOps.One, NumOps.Sqrt(v)) : NumOps.Zero;
-        }
+        var positiveVariance = Engine.TensorGreaterThan(varRow, NumOps.FromDouble(1e-12));
+        var invStdRow = Engine.TensorWhere(positiveVariance,
+            Engine.TensorReciprocal(Engine.TensorSqrt(Engine.TensorWhere(positiveVariance, varRow, Engine.TensorOnesLike(varRow)))),
+            Engine.TensorZerosLike(varRow));
         var Xs = Engine.TensorMultiply(centered, Engine.TensorMatMul(onesN1, invStdRow)); // [n,d]
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
-        T initScale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
+        int D = d * h;
 
         // ---- Per-variable sub-networks (CASTLE, Kyono et al. 2020 / NOTEARS-MLP,
         // Zheng et al. 2020). Each target variable j has its OWN MLP f_j that
@@ -109,28 +105,15 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // removes the gate, so training simply grows the weights for genuine parents.
         // x_j is excluded from its own predictor by holding Wh_j[j,:] = 0 (no self-
         // edge / trivial identity map). ----
-        var Wh = new Tensor<T>[d];
-        var Wo = new Tensor<T>[d];
-        // Adam first/second-moment state, one pair per network.
-        var mWh = new Tensor<T>[d];
-        var vWh = new Tensor<T>[d];
-        var mWo = new Tensor<T>[d];
-        var vWo = new Tensor<T>[d];
-        for (int j = 0; j < d; j++)
-        {
-            Wh[j] = new Tensor<T>(new[] { d, h });
-            Wo[j] = new Tensor<T>(new[] { h, 1 });
-            mWh[j] = new Tensor<T>(new[] { d, h });
-            vWh[j] = new Tensor<T>(new[] { d, h });
-            mWo[j] = new Tensor<T>(new[] { h, 1 });
-            vWo[j] = new Tensor<T>(new[] { h, 1 });
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < h; k++)
-                    Wh[j][i, k] = i == j ? NumOps.Zero
-                        : NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-            for (int k = 0; k < h; k++)
-                Wo[j][k, 0] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-        }
+        //
+        // All d networks are stored side by side: Wh [i, j*h + k] = Wh_j[i, k] and
+        // Wo [j*h + k] = Wo_j[k], so one matmul runs every network at once.
+        var (Wh, Wo, inputMask) = InitializeCastleNetworks(rng, d, h);
+        // Adam first/second-moment state.
+        var mWh = new Tensor<T>(new[] { d, D });
+        var vWh = new Tensor<T>(new[] { d, D });
+        var mWo = new Tensor<T>(new[] { D });
+        var vWo = new Tensor<T>(new[] { D });
 
         // Optimization budget. The augmented-Lagrangian solve needs enough full-batch
         // steps for each f_j to fit and for the constraint to bind; the tiny default
@@ -147,19 +130,8 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
 
         // Adam hyperparameters (CASTLE optimizes with Adam).
         double lrA = Math.Max(LearningRate, 0.01);
-        T beta1 = NumOps.FromDouble(0.9);
-        T beta2 = NumOps.FromDouble(0.999);
-        T oneMinusB1 = NumOps.FromDouble(0.1);
-        T oneMinusB2 = NumOps.FromDouble(0.001);
-        T adamEps = NumOps.FromDouble(1e-8);
-        T lambda1 = NumOps.FromDouble(0.02);   // group-lasso sparsity weight
-        T groupEps = NumOps.FromDouble(1e-8);
         T gradScale = NumOps.FromDouble(2.0 / n);   // d/dpred of mean-squared error
 
-        // Augmented-Lagrangian state for the acyclicity constraint h(A)=0 (NOTEARS):
-        // the gradient of α·h + (ρ/2)·h² is (α + ρ·h)·∇h. Dual ascent on α plus
-        // penalty escalation on ρ drives h→0 (a true DAG) and, with the group-L1 term,
-        // prunes indirect / cyclic edges (e.g. X0→X2 in the chain X0→X1→X2).
         // CASTLE HOLDS rho AND alpha FIXED AT 1.0. The reference implementation
         // (github.com/trentkyono/CASTLE, CASTLE.py) sets rho_i = np.array([[1.0]]) and
         // alpha_i = np.array([[1.0]]) and never updates them: the penalty is simply
@@ -173,172 +145,37 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // edges. The diagnostic tell was that the failure got WORSE with a larger step budget --
         // 10000 steps recovered an edge, 12000 recovered none -- which is the opposite of an
         // under-training curve and the signature of a penalty that never stops growing.
-        // AUGMENTED-LAGRANGIAN POLICY, FIXED RATHER THAN ESCALATED.
-        // alpha is the Lagrange multiplier on the acyclicity residual and rho the quadratic penalty
-        // weight. Both are held at 1 for the whole solve. The classic schedule multiplies rho and
-        // accumulates alpha every outer iteration, which is what produced the failure recorded
-        // above: the penalty grew without bound, collapsed every edge to zero -- an empty graph is
-        // trivially acyclic -- and got WORSE with more steps.
+        // The gradient of α·h + (ρ/2)·h² is (α + ρ·h)·∇h.
         const double AcyclicityMultiplier = 1.0;
         const double AcyclicityPenaltyWeight = 1.0;
         T alpha = NumOps.FromDouble(AcyclicityMultiplier);
         T rho = NumOps.FromDouble(AcyclicityPenaltyWeight);
 
-        // ---- Pre-allocate every per-step tensor ONCE (allocation-flat inner loop).
-        // The solve runs `steps` (>= 2000) full-batch iterations over d sub-networks. Allocating
-        // the forward/backward temporaries per iteration churned ~8 tensors of [n,h] per network
-        // per step — at n=400, h=64, d=4 that is ~7.4 MB/step, so ~14.7 GB across the solve. The
-        // generated tests run inside a TensorArena scope, which does not release rented buffers
-        // until the scope exits, so that churn accumulated and blew the 16 GB heap limit (the
-        // test host died with a fatal OOM inside AutoTensorCache.RentOrAllocate, aborting the
-        // whole shard). Hoisting the invariants (Xs^T and the target columns never change) and
-        // writing every op into a reused destination keeps the footprint flat at ~1.6 MB for the
-        // entire solve. Operand order is unchanged, so the math is identical. ----
+        // ---- Pre-allocate every [n, ·] per-step tensor ONCE (allocation-flat inner loop).
+        // The generated tests run inside a TensorArena scope, which does not release rented buffers
+        // until the scope exits, so per-step [n, d*h] temporaries accumulate across the >= 2000 steps
+        // and can exhaust the heap. Every sample-sized op therefore writes into a reused destination;
+        // only parameter-sized ([d, d*h]) temporaries are allocated per step. ----
         var XsT = Engine.TensorTranspose(Xs);                     // [d,n] — loop-invariant
-        var targetCols = new Tensor<T>[d];                        // x_j columns — loop-invariant
-        for (int j = 0; j < d; j++)
-        {
-            targetCols[j] = new Tensor<T>(new[] { n, 1 });
-            for (int s = 0; s < n; s++) targetCols[j][s, 0] = Xs[s, j];
-        }
-
-        // Gradient accumulators: written by phase 1, adjusted by phase 2, consumed by phase 3,
-        // so they are per-network and live for the whole step (but allocated only once).
-        var gWh = new Tensor<T>[d];
-        var gWo = new Tensor<T>[d];
-        for (int j = 0; j < d; j++)
-        {
-            gWh[j] = new Tensor<T>(new[] { d, h });
-            gWo[j] = new Tensor<T>(new[] { h, 1 });
-        }
-
-        // Scratch reused across BOTH the network loop and the step loop: each value is consumed
-        // within the iteration that writes it.
-        var hPre = new Tensor<T>(new[] { n, h });
-        var H = new Tensor<T>(new[] { n, h });
-        var HT = new Tensor<T>(new[] { h, n });
-        var negH = new Tensor<T>(new[] { n, h });
-        var oneMinusH = new Tensor<T>(new[] { n, h });
-        var dPred = new Tensor<T>(new[] { n, h });
-        var dPredH = new Tensor<T>(new[] { n, h });
-        var dH = new Tensor<T>(new[] { n, h });
-        var pred = new Tensor<T>(new[] { n, 1 });
-        var residRaw = new Tensor<T>(new[] { n, 1 });
-        var resid = new Tensor<T>(new[] { n, 1 });
-        var WoT = new Tensor<T>(new[] { 1, h });
-        T negOne = NumOps.FromDouble(-1.0);
-        var axes2 = new[] { 1, 0 };
+        var networkOf = BlockDiagonalSelector(d, h);              // [d*h, d], 1 where unit j*h+k belongs to network j
+        var buffers = new CastleBuffers(n, d, D);
 
         for (int step = 0; step < steps; step++)
         {
             bool constrain = step >= warmupSteps;
 
-            // 1) Reconstruction forward/backward for every f_j (all O(n) work is
-            //    vectorized via Engine matmuls). Gradients are accumulated and applied
-            //    only after the cross-network acyclicity term is added below.
-            for (int j = 0; j < d; j++)
-            {
-                Engine.MatMulInto(hPre, Xs, Wh[j]);               // [n,h]
-                Engine.SigmoidInto(H, hPre);                      // [n,h]
-                Engine.MatMulInto(pred, H, Wo[j]);                // [n,1]
-
-                // resid = (2/n)·(pred − x_j)
-                Engine.TensorSubtractInto(residRaw, pred, targetCols[j]);
-                Engine.TensorMultiplyScalarInto(resid, residRaw, gradScale);                // [n,1]
-
-                Engine.TransposeInto(HT, H, axes2);
-                Engine.MatMulInto(gWo[j], HT, resid);                                       // [h,1]
-                Engine.TransposeInto(WoT, Wo[j], axes2);
-                Engine.MatMulInto(dPred, resid, WoT);                                       // [n,h]
-                Engine.TensorMultiplyScalarInto(negH, H, negOne);
-                Engine.TensorAddScalarInto(oneMinusH, negH, NumOps.One);
-                Engine.TensorMultiplyInto(dPredH, dPred, H);
-                Engine.TensorMultiplyInto(dH, dPredH, oneMinusH);                           // [n,h]
-                Engine.MatMulInto(gWh[j], XsT, dH);                                         // [d,h]
-            }
+            // 1) Reconstruction forward/backward for every f_j.
+            var (gWh, gWo) = ReconstructionGradients(Xs, XsT, Wh, Wo, networkOf, gradScale, buffers);
 
             // 2) Once past warmup, add the group-L1 sparsity and augmented-Lagrangian
-            //    acyclicity gradients to the first-layer weights. The adjacency used by
-            //    the constraint is A_sq[i,j] = ‖Wh_j[i,:]‖² (the squared influence of
-            //    variable i on network j); h(A_sq) = tr(exp(A_sq)) − d, and
-            //    ∂h/∂A_sq[i,j] = exp(A_sq)^T[i,j] = exp(A_sq)[j,i]. Chaining
-            //    ∂A_sq[i,j]/∂Wh_j[i,k] = 2·Wh_j[i,k] gives the per-weight acyclicity
-            //    gradient (α+ρh)·exp(A_sq)[j,i]·2·Wh_j[i,k].
+            //    acyclicity gradients to the first-layer weights.
             if (constrain)
-            {
-                var Asq = new Matrix<T>(d, d);
-                for (int j = 0; j < d; j++)
-                    for (int i = 0; i < d; i++)
-                    {
-                        if (i == j) continue;
-                        T s2 = NumOps.Zero;
-                        for (int k = 0; k < h; k++)
-                            s2 = NumOps.Add(s2, NumOps.Multiply(Wh[j][i, k], Wh[j][i, k]));
-                        Asq[i, j] = s2;
-                    }
-                var expAsq = MatrixExponentialTaylor(Asq, d);
-                T hVal = NumOps.Zero;
-                for (int i = 0; i < d; i++) hVal = NumOps.Add(hVal, expAsq[i, i]);
-                hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
-                T alRhoH = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));   // α + ρ·h
-                T twoAlRhoH = NumOps.Multiply(NumOps.FromDouble(2.0), alRhoH);
+                gWh = AddSparsityAndAcyclicityGradient(gWh, Wh, alpha, rho, d, h);
 
-                for (int j = 0; j < d; j++)
-                    for (int i = 0; i < d; i++)
-                    {
-                        if (i == j) continue;
-                        // Row norm ‖Wh_j[i,:]‖ for the group-lasso subgradient.
-                        T rowNorm = NumOps.Sqrt(NumOps.Add(Asq[i, j], groupEps));
-                        T l1Coef = NumOps.Divide(lambda1, rowNorm);                       // λ1 / ‖·‖
-                        T acycCoef = NumOps.Multiply(twoAlRhoH, expAsq[j, i]);            // 2(α+ρh)·exp[j,i]
-                        T coef = NumOps.Add(l1Coef, acycCoef);
-                        for (int k = 0; k < h; k++)
-                            gWh[j][i, k] = NumOps.Add(gWh[j][i, k], NumOps.Multiply(coef, Wh[j][i, k]));
-                    }
-
-                // No dual ascent and no rho escalation: see the rho/alpha initialization above.
-                // The reference keeps both fixed at 1.0 for the whole run.
-            }
-
-            // 3) Adam update for every network's weights. Bias-correction factors for
-            //    this step (t = step+1). The self-row Wh_j[j,:] is held at zero.
+            // 3) Adam update for every network's weights (t = step+1). The self-row Wh_j[j,:] is held at zero.
             int t = step + 1;
-            T bc1 = NumOps.FromDouble(1.0 - Math.Pow(0.9, t));
-            T bc2 = NumOps.FromDouble(1.0 - Math.Pow(0.999, t));
-            T lrAt = NumOps.FromDouble(lrA);
-            for (int j = 0; j < d; j++)
-            {
-                for (int i = 0; i < d; i++)
-                {
-                    if (i == j) continue;   // self-row stays zero
-                    for (int k = 0; k < h; k++)
-                    {
-                        T g = gWh[j][i, k];
-                        T m = NumOps.Add(NumOps.Multiply(beta1, mWh[j][i, k]), NumOps.Multiply(oneMinusB1, g));
-                        T v = NumOps.Add(NumOps.Multiply(beta2, vWh[j][i, k]), NumOps.Multiply(oneMinusB2, NumOps.Multiply(g, g)));
-                        mWh[j][i, k] = m;
-                        vWh[j][i, k] = v;
-                        T mhat = NumOps.Divide(m, bc1);
-                        T vhat = NumOps.Divide(v, bc2);
-                        T stepVal = NumOps.Divide(NumOps.Multiply(lrAt, mhat),
-                            NumOps.Add(NumOps.Sqrt(vhat), adamEps));
-                        Wh[j][i, k] = NumOps.Subtract(Wh[j][i, k], stepVal);
-                    }
-                }
-                for (int k = 0; k < h; k++)
-                {
-                    T g = gWo[j][k, 0];
-                    T m = NumOps.Add(NumOps.Multiply(beta1, mWo[j][k, 0]), NumOps.Multiply(oneMinusB1, g));
-                    T v = NumOps.Add(NumOps.Multiply(beta2, vWo[j][k, 0]), NumOps.Multiply(oneMinusB2, NumOps.Multiply(g, g)));
-                    mWo[j][k, 0] = m;
-                    vWo[j][k, 0] = v;
-                    T mhat = NumOps.Divide(m, bc1);
-                    T vhat = NumOps.Divide(v, bc2);
-                    T stepVal = NumOps.Divide(NumOps.Multiply(lrAt, mhat),
-                        NumOps.Add(NumOps.Sqrt(vhat), adamEps));
-                    Wo[j][k, 0] = NumOps.Subtract(Wo[j][k, 0], stepVal);
-                }
-            }
+            (Wh, mWh, vWh) = CastleAdamStep(Wh, gWh, mWh, vWh, t, lrA, inputMask);
+            (Wo, mWo, vWo) = CastleAdamStep(Wo, gWo, mWo, vWo, t, lrA, null);
         }
 
         // Adjacency = first-layer weight-row norms A[i,j] = ‖Wh_j[i,:]‖. CASTLE's
@@ -348,22 +185,176 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // Direction is resolved by A[i,j] vs A[j,i]; edge magnitude comes from the
         // covariance ratio.
         var cov = ComputeCovarianceMatrix(Xs.ToMatrix());
-        var learnedP = new double[d, d];
-        for (int j = 0; j < d; j++)
-            for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
-                double s2 = 0.0;
+        var learnedP = Engine.TensorSqrt(SquaredGroupNorms(Wh, d, h));
+        return BuildFinalAdjacency(ToDoubleGrid(learnedP, d), cov, d, learnedThreshold: 0.3);
+    }
+
+    /// <summary>Reused [n, ·] scratch tensors for the reconstruction pass.</summary>
+    private sealed class CastleBuffers
+    {
+        public CastleBuffers(int n, int d, int units)
+        {
+            HPre = new Tensor<T>(new[] { n, units });
+            H = new Tensor<T>(new[] { n, units });
+            HT = new Tensor<T>(new[] { units, n });
+            NegH = new Tensor<T>(new[] { n, units });
+            OneMinusH = new Tensor<T>(new[] { n, units });
+            DPred = new Tensor<T>(new[] { n, units });
+            DPredH = new Tensor<T>(new[] { n, units });
+            DH = new Tensor<T>(new[] { n, units });
+            Pred = new Tensor<T>(new[] { n, d });
+            ResidRaw = new Tensor<T>(new[] { n, d });
+            Resid = new Tensor<T>(new[] { n, d });
+            OutputGrad = new Tensor<T>(new[] { units, d });
+        }
+
+        public Tensor<T> HPre { get; }
+        public Tensor<T> H { get; }
+        public Tensor<T> HT { get; }
+        public Tensor<T> NegH { get; }
+        public Tensor<T> OneMinusH { get; }
+        public Tensor<T> DPred { get; }
+        public Tensor<T> DPredH { get; }
+        public Tensor<T> DH { get; }
+        public Tensor<T> Pred { get; }
+        public Tensor<T> ResidRaw { get; }
+        public Tensor<T> Resid { get; }
+        public Tensor<T> OutputGrad { get; }
+    }
+
+    /// <summary>
+    /// Seeded initialization in the reference draw order: for each network j, Wh_j[i, k] for i != j
+    /// (k inner), then Wo_j[k]; every value is sqrt(2/d) * (u - 0.5). Returns Wh [d, d*h], Wo [d*h]
+    /// and the mask [d, d*h] that is zero on each network's self-row.
+    /// </summary>
+    private (Tensor<T> Wh, Tensor<T> Wo, Tensor<T> InputMask) InitializeCastleNetworks(Random rng, int d, int h)
+    {
+        int D = d * h;
+        var draws = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Tensor<T>.CreateRandom(rng, d, D), NumOps.FromDouble(-0.5)),
+            NumOps.FromDouble(Math.Sqrt(2.0 / d)));
+
+        // Wh [i, j*h + k] = draw[j, slot(i)*h + k], slot skipping i == j.
+        var source = new int[d * D];
+        var selfRow = new bool[d * D];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
                 for (int k = 0; k < h; k++)
                 {
-                    double w = NumOps.ToDouble(Wh[j][i, k]);
-                    s2 += w * w;
+                    int position = i * D + j * h + k;
+                    source[position] = j * D + (i == j ? 0 : ((i < j ? i : i - 1) * h + k));
+                    selfRow[position] = i == j;
                 }
-                double a = Math.Sqrt(s2);
-                learnedP[i, j] = a;
-            }
 
-        return BuildFinalAdjacency(learnedP, cov, d, learnedThreshold: 0.3);
+        var gathered = Engine.TensorIndexSelect(draws.Reshape(new[] { d * D }),
+            new Tensor<int>(source, new[] { d * D }), 0);
+        var zeros = Engine.TensorZerosLike(gathered);
+        var inputMask = Engine.TensorWhere(selfRow, zeros, Engine.TensorOnesLike(gathered)).Reshape(new[] { d, D });
+        var wh = Engine.TensorWhere(selfRow, zeros, gathered).Reshape(new[] { d, D });
+
+        // Wo [j*h + k] = draw[j, (d-1)*h + k]
+        var wo = Engine.TensorSlice(draws, new[] { 0, (d - 1) * h }, new[] { d, h }).Reshape(new[] { D });
+        return (wh, wo, inputMask);
+    }
+
+    /// <summary>[d*h, d] selector with 1 where hidden unit j*h + k belongs to network j.</summary>
+    private Tensor<T> BlockDiagonalSelector(int d, int h)
+    {
+        var networkIndex = new int[d * h];
+        for (int u = 0; u < d * h; u++) networkIndex[u] = u / h;
+        return Engine.TensorIndexSelect(Engine.TensorEye<T>(d), new Tensor<int>(networkIndex, new[] { d * h }), 0);
+    }
+
+    /// <summary>
+    /// Mean-squared-error gradients of every network: pred_j = sigmoid(Xs Wh_j) Wo_j,
+    /// resid = (2/n)(pred - x); gWo = H^T resid (own network only), gWh = Xs^T (resid Wo^T ∘ H ∘ (1 - H)).
+    /// </summary>
+    private (Tensor<T> GWh, Tensor<T> GWo) ReconstructionGradients(Tensor<T> Xs, Tensor<T> XsT, Tensor<T> Wh,
+        Tensor<T> Wo, Tensor<T> networkOf, T gradScale, CastleBuffers b)
+    {
+        int d = Wh.Shape[0];
+        int D = Wh.Shape[1];
+        var axes2 = new[] { 1, 0 };
+
+        // Block-diagonal output weights: WoBlock[j*h + k, j] = Wo_j[k]
+        var woBlock = Engine.TensorMultiply(networkOf, Engine.TensorBroadcastTo(Wo.Reshape(new[] { D, 1 }), new[] { D, d }));
+
+        Engine.MatMulInto(b.HPre, Xs, Wh);                                          // [n,d*h]
+        Engine.SigmoidInto(b.H, b.HPre);                                            // [n,d*h]
+        Engine.MatMulInto(b.Pred, b.H, woBlock);                                    // [n,d]
+
+        // resid = (2/n)·(pred − x)
+        Engine.TensorSubtractInto(b.ResidRaw, b.Pred, Xs);
+        Engine.TensorMultiplyScalarInto(b.Resid, b.ResidRaw, gradScale);            // [n,d]
+
+        Engine.TransposeInto(b.HT, b.H, axes2);
+        Engine.MatMulInto(b.OutputGrad, b.HT, b.Resid);                             // [d*h,d]
+        var gWo = Engine.ReduceSum(Engine.TensorMultiply(b.OutputGrad, networkOf), new[] { 1 }, false); // [d*h]
+
+        Engine.MatMulInto(b.DPred, b.Resid, Engine.TensorTranspose(woBlock));       // [n,d*h]
+        Engine.TensorMultiplyScalarInto(b.NegH, b.H, NumOps.FromDouble(-1.0));
+        Engine.TensorAddScalarInto(b.OneMinusH, b.NegH, NumOps.One);
+        Engine.TensorMultiplyInto(b.DPredH, b.DPred, b.H);
+        Engine.TensorMultiplyInto(b.DH, b.DPredH, b.OneMinusH);                     // [n,d*h]
+        var gWh = new Tensor<T>(new[] { d, D });
+        Engine.MatMulInto(gWh, XsT, b.DH);                                          // [d,d*h]
+        return (gWh, gWo);
+    }
+
+    /// <summary>A_sq[i, j] = ‖Wh_j[i,:]‖² off the diagonal, zero on it.</summary>
+    private Tensor<T> SquaredGroupNorms(Tensor<T> Wh, int d, int h)
+    {
+        var sums = Engine.ReduceSum(Engine.TensorSquare(Wh.Reshape(new[] { d, d, h })), new[] { 2 }, false);
+        return Engine.TensorMultiply(sums, OffDiagonalMask(d));
+    }
+
+    /// <summary>
+    /// Adds the group-lasso subgradient λ1·Wh_j[i,k]/‖Wh_j[i,:]‖ and the acyclicity gradient
+    /// 2(α+ρh)·exp(A_sq)[j,i]·Wh_j[i,k] to the off-diagonal first-layer rows. The adjacency used
+    /// by the constraint is A_sq[i,j] = ‖Wh_j[i,:]‖² (the squared influence of variable i on
+    /// network j); h(A_sq) = tr(exp(A_sq)) − d, and ∂h/∂A_sq[i,j] = exp(A_sq)^T[i,j] = exp(A_sq)[j,i].
+    /// No dual ascent and no rho escalation: the reference keeps both fixed at 1.0 for the whole run.
+    /// </summary>
+    private Tensor<T> AddSparsityAndAcyclicityGradient(Tensor<T> gWh, Tensor<T> Wh, T alpha, T rho, int d, int h)
+    {
+        var aSq = SquaredGroupNorms(Wh, d, h);
+        var expAsq = Tensor<T>.FromMatrix(MatrixExponentialTaylor(aSq.ToMatrix(), d));
+        T hVal = NumOps.Subtract(Engine.TensorTrace(expAsq), NumOps.FromDouble(d));
+        T twoAlRhoH = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Add(alpha, NumOps.Multiply(rho, hVal)));
+
+        // Row norm ‖Wh_j[i,:]‖ for the group-lasso subgradient: λ1 / sqrt(A_sq + 1e-8)
+        var l1Coef = Engine.TensorReciprocal(Engine.TensorSqrt(Engine.TensorAddScalar(aSq, NumOps.FromDouble(1e-8))));
+        l1Coef = Engine.TensorMultiplyScalar(l1Coef, NumOps.FromDouble(0.02));
+        var acycCoef = Engine.TensorMultiplyScalar(Engine.TensorTranspose(expAsq), twoAlRhoH);
+        var coef = Engine.TensorMultiply(Engine.TensorAdd(l1Coef, acycCoef), OffDiagonalMask(d));
+
+        var shape = new[] { d, d, h };
+        var perWeight = Engine.TensorMultiply(Engine.TensorBroadcastTo(coef.Reshape(new[] { d, d, 1 }), shape),
+            Wh.Reshape(shape));
+        return Engine.TensorAdd(gWh, perWeight.Reshape(new[] { d, d * h }));
+    }
+
+    /// <summary>
+    /// Adam (β1 0.9, β2 0.999, ε 1e-8): p - lr·m̂/(sqrt(v̂)+ε); entries where <paramref name="mask"/>
+    /// is zero keep their parameter and moments unchanged.
+    /// </summary>
+    private (Tensor<T> Parameter, Tensor<T> M, Tensor<T> V) CastleAdamStep(Tensor<T> parameter, Tensor<T> g,
+        Tensor<T> m, Tensor<T> v, int t, double lr, Tensor<T>? mask)
+    {
+        var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, NumOps.FromDouble(0.9)),
+            Engine.TensorMultiplyScalar(g, NumOps.FromDouble(0.1)));
+        var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, NumOps.FromDouble(0.999)),
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(g, g), NumOps.FromDouble(0.001)));
+        var mhat = Engine.TensorDivideScalar(newM, NumOps.FromDouble(1.0 - Math.Pow(0.9, t)));
+        var vhat = Engine.TensorDivideScalar(newV, NumOps.FromDouble(1.0 - Math.Pow(0.999, t)));
+        var stepVal = Engine.TensorDivide(Engine.TensorMultiplyScalar(mhat, NumOps.FromDouble(lr)),
+            Engine.TensorAddScalar(Engine.TensorSqrt(vhat), NumOps.FromDouble(1e-8)));
+        var updated = Engine.TensorSubtract(parameter, stepVal);
+        if (mask is null)
+            return (updated, newM, newV);
+
+        return (Engine.TensorWhere(mask, updated, parameter), Engine.TensorWhere(mask, newM, m),
+            Engine.TensorWhere(mask, newV, v));
     }
 
 }

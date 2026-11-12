@@ -69,17 +69,21 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
     private double _lastH;
     private double _lastLoss;
 
-    // MLP parameters per variable
-    private Matrix<T>[] _W1 = [];
-    private double[][] _b1 = [];
-    private double[][] _W2 = [];
-    private double[] _b2 = [];
+    // MLP parameters, one MLP per output variable j:
+    // _W1 [j, i, k] (input i to hidden k), _b1 [j, k], _W2 [j, k], _b2 [j].
+    private Tensor<T> _W1 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _b1 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _W2 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _b2 = new Tensor<T>(new[] { 1 });
+
+    // 1 where input i may feed MLP j (i != j), broadcast over hidden units: [j, i, k].
+    private Tensor<T> _inputMask = new Tensor<T>(new[] { 1 });
 
     // Adam state
-    private Matrix<T>[] _mW1 = [], _vW1 = [];
-    private double[][] _mb1 = [], _vb1 = [];
-    private double[][] _mW2 = [], _vW2 = [];
-    private double[] _mb2 = [], _vb2 = [];
+    private Tensor<T> _mW1 = new Tensor<T>(new[] { 1 }), _vW1 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _mb1 = new Tensor<T>(new[] { 1 }), _vb1 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _mW2 = new Tensor<T>(new[] { 1 }), _vW2 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _mb2 = new Tensor<T>(new[] { 1 }), _vb2 = new Tensor<T>(new[] { 1 });
 
     #endregion
 
@@ -157,9 +161,7 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
                 AdamUpdate(gW1, gB1, gW2, gB2, d, h, adamStep);
 
                 // Zero diagonal in W1
-                for (int j = 0; j < d; j++)
-                    for (int k = 0; k < h; k++)
-                        _W1[j][j, k] = NumOps.Zero;
+                ZeroSelfInputs();
 
                 if (inner % CHECKPOINT_INTERVAL == 0)
                 {
@@ -197,148 +199,123 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         var rng = RandomHelper.CreateSeededRandom(_seed);
         double scale = Math.Sqrt(2.0 / d);
 
-        _W1 = new Matrix<T>[d]; _b1 = new double[d][];
-        _W2 = new double[d][]; _b2 = new double[d];
-        _mW1 = new Matrix<T>[d]; _vW1 = new Matrix<T>[d];
-        _mb1 = new double[d][]; _vb1 = new double[d][];
-        _mW2 = new double[d][]; _vW2 = new double[d][];
-        _mb2 = new double[d]; _vb2 = new double[d];
+        // Draw order of the reference initialization: for each output variable j, the (d-1)*h
+        // first-layer weights (inputs i != j, hidden k inner) and then its h second-layer weights.
+        var draws = Tensor<T>.CreateRandom(rng, d, d * h);
+        var uniform = Engine.TensorSubtract(
+            Engine.TensorMultiplyScalar(draws, NumOps.FromDouble(scale)),
+            Engine.TensorFullLike(draws, NumOps.FromDouble(scale / 2.0)));
 
+        // W1[j, i, k] = draw[j, slot(i) * h + k] where slot skips input j; self inputs stay zero.
+        var w1Source = new int[d * d * h];
         for (int j = 0; j < d; j++)
-        {
-            _W1[j] = new Matrix<T>(d, h); _b1[j] = new double[h];
-            _W2[j] = new double[h]; _b2[j] = 0;
-            _mW1[j] = new Matrix<T>(d, h); _vW1[j] = new Matrix<T>(d, h);
-            _mb1[j] = new double[h]; _vb1[j] = new double[h];
-            _mW2[j] = new double[h]; _vW2[j] = new double[h];
-
             for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
                 for (int k = 0; k < h; k++)
-                    _W1[j][i, k] = NumOps.FromDouble(rng.NextDouble() * scale - scale / 2.0);
-            }
+                    w1Source[(j * d + i) * h + k] = j * d * h + (i == j ? 0 : ((i < j ? i : i - 1) * h + k));
 
-            for (int k = 0; k < h; k++)
-                _W2[j][k] = rng.NextDouble() * scale - scale / 2.0;
-        }
+        _inputMask = Engine.TensorBroadcastTo(OffDiagonalMask(d).Reshape(new[] { d, d, 1 }), new[] { d, d, h });
+        var w1 = Engine.TensorIndexSelect(uniform.Reshape(new[] { d * d * h }),
+            new Tensor<int>(w1Source, new[] { d * d * h }), 0).Reshape(new[] { d, d, h });
+        _W1 = Engine.TensorWhere(_inputMask, w1, Engine.TensorZerosLike(w1));
+        _W2 = Engine.TensorSlice(uniform, new[] { 0, (d - 1) * h }, new[] { d, h });
+        _b1 = new Tensor<T>(new[] { d, h });
+        _b2 = new Tensor<T>(new[] { d });
+
+        _mW1 = new Tensor<T>(new[] { d, d, h }); _vW1 = new Tensor<T>(new[] { d, d, h });
+        _mb1 = new Tensor<T>(new[] { d, h }); _vb1 = new Tensor<T>(new[] { d, h });
+        _mW2 = new Tensor<T>(new[] { d, h }); _vW2 = new Tensor<T>(new[] { d, h });
+        _mb2 = new Tensor<T>(new[] { d }); _vb2 = new Tensor<T>(new[] { d });
     }
 
-    private (double output, double[] hidden) ForwardMLP(Matrix<T> data, int sample, int j, int d)
+    /// <summary>Sets the first-layer weights from input j into MLP j to zero.</summary>
+    private void ZeroSelfInputs()
     {
-        int h = _b1[j].Length;
-        var hidden = new double[h];
+        _W1 = Engine.TensorWhere(_inputMask, _W1, Engine.TensorZerosLike(_W1));
+    }
 
-        for (int k = 0; k < h; k++)
-        {
-            double sum = _b1[j][k];
-            for (int i = 0; i < d; i++)
-                sum += NumOps.ToDouble(data[sample, i]) * NumOps.ToDouble(_W1[j][i, k]);
-            hidden[k] = 1.0 / (1.0 + Math.Exp(-sum));
-        }
+    /// <summary>
+    /// Runs every per-variable MLP on every sample.
+    /// </summary>
+    /// <returns>Predictions [n, d] and sigmoid hidden activations [n, d, h].</returns>
+    private (Tensor<T> Output, Tensor<T> Hidden) ForwardMLP(Tensor<T> x, int n, int d, int h)
+    {
+        // pre[s, j, k] = b1[j, k] + sum_i x[s, i] * W1[j, i, k]
+        var weightsByInput = Engine.Reshape(Engine.TensorPermute(_W1, new[] { 1, 0, 2 }), new[] { d, d * h });
+        var pre = Engine.TensorMatMul(x, weightsByInput).Reshape(new[] { n, d, h });
+        pre = Engine.TensorAdd(pre, Engine.TensorBroadcastTo(_b1.Reshape(new[] { 1, d, h }), new[] { n, d, h }));
+        var hidden = Engine.TensorSigmoid(pre);
 
-        double output = _b2[j];
-        for (int k = 0; k < h; k++)
-            output += hidden[k] * _W2[j][k];
+        // output[s, j] = b2[j] + sum_k hidden[s, j, k] * W2[j, k]
+        var weighted = Engine.TensorMultiply(hidden,
+            Engine.TensorBroadcastTo(_W2.Reshape(new[] { 1, d, h }), new[] { n, d, h }));
+        var output = Engine.TensorAdd(Engine.ReduceSum(weighted, new[] { 2 }, false),
+            Engine.TensorBroadcastTo(_b2.Reshape(new[] { 1, d }), new[] { n, d }));
 
         return (output, hidden);
     }
 
+    /// <summary>A[i, j] = ||W1[j, i, :]||_2 for i != j, zero on the diagonal.</summary>
     private Matrix<T> ExtractAdjacencyMatrix(int d)
     {
-        int h = _b1[0].Length;
-        var A = new Matrix<T>(d, d);
-        for (int j = 0; j < d; j++)
-        {
-            for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
-                double norm = 0;
-                for (int k = 0; k < h; k++)
-                {
-                    double w = NumOps.ToDouble(_W1[j][i, k]);
-                    norm += w * w;
-                }
-                A[i, j] = NumOps.FromDouble(Math.Sqrt(norm));
-            }
-        }
-
-        return A;
+        var norms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(_W1), new[] { 2 }, false)); // [j, i]
+        var A = Engine.TensorTranspose(norms);
+        return Engine.TensorWhere(OffDiagonalMask(d), A, Engine.TensorZerosLike(A)).ToMatrix();
     }
 
     private (double H, Matrix<T> Gradient) ComputeLogDetConstraintFromA(Matrix<T> A, double s, int d)
     {
         // M = sI - A∘A
-        var M = new Matrix<T>(d, d);
-        T sT = NumOps.FromDouble(s);
-        for (int i = 0; i < d; i++)
-        {
-            M[i, i] = sT;
-            for (int j = 0; j < d; j++)
-                M[i, j] = NumOps.Subtract(M[i, j], NumOps.Multiply(A[i, j], A[i, j]));
-        }
+        var a = Tensor<T>.FromMatrix(A);
+        var M = Engine.TensorSubtract(Engine.TensorMultiplyScalar(Engine.TensorEye<T>(d), NumOps.FromDouble(s)),
+            Engine.TensorMultiply(a, a));
 
-        double logDet = ComputeLogDeterminant(M, d);
+        double logDet = LogAbsDeterminant(M);
         double hVal = -logDet + d * Math.Log(s);
 
-        var invM = InvertMatrix(M, d);
-        var gradient = new Matrix<T>(d, d);
+        var invM = InvertSmallMatrix(M.ToMatrix());
         if (invM == null)
         {
             System.Diagnostics.Trace.TraceWarning("DAGMA-NL: M matrix is singular; returning zero gradient for h(W).");
-        }
-        else
-        {
-            T two = NumOps.FromDouble(2.0);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    gradient[i, j] = NumOps.Multiply(two, NumOps.Multiply(A[i, j], invM[j, i]));
+            return (hVal, new Matrix<T>(d, d));
         }
 
-        return (hVal, gradient);
+        T two = NumOps.FromDouble(2.0);
+        var gradient = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(a, Engine.TensorTranspose(Tensor<T>.FromMatrix(invM))), two);
+        return (hVal, gradient.ToMatrix());
     }
 
     #endregion
 
     #region Gradient Computation
 
-    private (double obj, Matrix<T>[] gW1, double[][] gB1, double[][] gW2, double[] gB2)
+    private (double obj, Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2)
         ComputeObjectiveAndGradients(Matrix<T> data, int n, int d, int h, double mu, double s)
     {
-        var gW1 = new Matrix<T>[d];
-        var gB1 = new double[d][];
-        var gW2 = new double[d][];
-        var gB2 = new double[d];
-        for (int j = 0; j < d; j++)
-        {
-            gW1[j] = new Matrix<T>(d, h); gB1[j] = new double[h]; gW2[j] = new double[h];
-        }
+        var x = Tensor<T>.FromMatrix(data);
+        var (pred, hidden) = ForwardMLP(x, n, d, h);
+        var residual = Engine.TensorSubtract(pred, x);
+        double totalLoss = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(residual)));
 
-        double totalLoss = 0;
+        // Backward pass through every MLP, summed over samples
+        var dOutput = Engine.TensorDivideScalar(residual, NumOps.FromDouble(n));
+        var gB2 = Engine.ReduceSum(dOutput, new[] { 0 }, false);
+        var dOutputPerUnit = Engine.TensorBroadcastTo(dOutput.Reshape(new[] { n, d, 1 }), new[] { n, d, h });
+        var gW2 = Engine.ReduceSum(Engine.TensorMultiply(dOutputPerUnit, hidden), new[] { 0 }, false);
 
-        for (int sample = 0; sample < n; sample++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                var (pred, hidden) = ForwardMLP(data, sample, j, d);
-                double residual = pred - NumOps.ToDouble(data[sample, j]);
-                totalLoss += residual * residual;
+        // dHidden = dOutput * W2 * hidden * (1 - hidden)
+        var dHidden = Engine.TensorMultiply(
+            Engine.TensorMultiply(
+                Engine.TensorMultiply(dOutputPerUnit,
+                    Engine.TensorBroadcastTo(_W2.Reshape(new[] { 1, d, h }), new[] { n, d, h })),
+                hidden),
+            Engine.ScalarMinusTensor(NumOps.One, hidden));
+        var gB1 = Engine.ReduceSum(dHidden, new[] { 0 }, false);
 
-                double dOutput = residual / n;
-                gB2[j] += dOutput;
-                for (int k = 0; k < h; k++)
-                    gW2[j][k] += dOutput * hidden[k];
-
-                for (int k = 0; k < h; k++)
-                {
-                    double dHidden = dOutput * _W2[j][k] * hidden[k] * (1 - hidden[k]);
-                    gB1[j][k] += dHidden;
-                    for (int i = 0; i < d; i++)
-                        gW1[j][i, k] = NumOps.Add(gW1[j][i, k],
-                            NumOps.FromDouble(dHidden * NumOps.ToDouble(data[sample, i])));
-                }
-            }
-        }
+        // gW1[j, i, k] = sum_s x[s, i] * dHidden[s, j, k]
+        var gradByInput = Engine.TensorMatMul(Engine.TensorTranspose(x), dHidden.Reshape(new[] { n, d * h }));
+        var gW1 = Engine.Reshape(Engine.TensorPermute(gradByInput.Reshape(new[] { d, d, h }), new[] { 1, 0, 2 }),
+            new[] { d, d, h });
 
         totalLoss *= 0.5 / n;
 
@@ -347,158 +324,43 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         var (hVal, hGrad) = ComputeLogDetConstraintFromA(A, s, d);
         double obj = totalLoss + Lambda1 * ComputeL1NormFromA(A, d) + mu * hVal;
 
-        for (int j = 0; j < d; j++)
-        {
-            for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
-                double aij = NumOps.ToDouble(A[i, j]);
-                if (aij < 1e-12) continue;
-
-                double dhda = mu * NumOps.ToDouble(hGrad[i, j]);
-                for (int k = 0; k < h; k++)
-                {
-                    double w1val = NumOps.ToDouble(_W1[j][i, k]);
-                    double grad = dhda * w1val / aij + Lambda1 * Math.Sign(w1val);
-                    gW1[j][i, k] = NumOps.Add(gW1[j][i, k], NumOps.FromDouble(grad));
-                }
-            }
-        }
+        // For i != j with A[i, j] >= 1e-12:
+        // gW1[j, i, k] += mu * hGrad[i, j] * W1[j, i, k] / A[i, j] + lambda1 * sign(W1[j, i, k])
+        var adjacency = Engine.TensorTranspose(Tensor<T>.FromMatrix(A)); // [j, i]
+        var dhda = Engine.TensorMultiplyScalar(Engine.TensorTranspose(Tensor<T>.FromMatrix(hGrad)), NumOps.FromDouble(mu));
+        var ones = Engine.TensorOnesLike(adjacency);
+        var usable = Engine.TensorMultiply(OffDiagonalMask(d),
+            Engine.TensorSubtract(ones, Engine.TensorLessThan(adjacency, NumOps.FromDouble(1e-12))));
+        var shape = new[] { d, d, h };
+        var usablePerUnit = Engine.TensorBroadcastTo(usable.Reshape(new[] { d, d, 1 }), shape);
+        var safeAdjacency = Engine.TensorWhere(usable, adjacency, ones);
+        var constraintGrad = Engine.TensorDivide(
+            Engine.TensorMultiply(Engine.TensorBroadcastTo(dhda.Reshape(new[] { d, d, 1 }), shape), _W1),
+            Engine.TensorBroadcastTo(safeAdjacency.Reshape(new[] { d, d, 1 }), shape));
+        var extra = Engine.TensorAdd(constraintGrad,
+            Engine.TensorMultiplyScalar(Engine.TensorSign(_W1), NumOps.FromDouble(Lambda1)));
+        gW1 = Engine.TensorAdd(gW1, Engine.TensorWhere(usablePerUnit, extra, Engine.TensorZerosLike(extra)));
 
         return (obj, gW1, gB1, gW2, gB2);
     }
 
-    private void AdamUpdate(Matrix<T>[] gW1, double[][] gB1, double[][] gW2, double[] gB2,
+    private void AdamUpdate(Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2,
         int d, int h, int step)
     {
         double bc1 = 1 - Math.Pow(ADAM_BETA1, step);
         double bc2 = 1 - Math.Pow(ADAM_BETA2, step);
 
-        for (int j = 0; j < d; j++)
-        {
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < h; k++)
-                {
-                    double gVal = NumOps.ToDouble(gW1[j][i, k]);
-                    double mVal = ADAM_BETA1 * NumOps.ToDouble(_mW1[j][i, k]) + (1 - ADAM_BETA1) * gVal;
-                    double vVal = ADAM_BETA2 * NumOps.ToDouble(_vW1[j][i, k]) + (1 - ADAM_BETA2) * gVal * gVal;
-                    _mW1[j][i, k] = NumOps.FromDouble(mVal);
-                    _vW1[j][i, k] = NumOps.FromDouble(vVal);
-                    double wVal = NumOps.ToDouble(_W1[j][i, k]);
-                    wVal -= _learningRate * (mVal / bc1) / (Math.Sqrt(vVal / bc2) + 1e-8);
-                    _W1[j][i, k] = NumOps.FromDouble(wVal);
-                }
-
-            for (int k = 0; k < h; k++)
-            {
-                _mb1[j][k] = ADAM_BETA1 * _mb1[j][k] + (1 - ADAM_BETA1) * gB1[j][k];
-                _vb1[j][k] = ADAM_BETA2 * _vb1[j][k] + (1 - ADAM_BETA2) * gB1[j][k] * gB1[j][k];
-                _b1[j][k] -= _learningRate * (_mb1[j][k] / bc1) / (Math.Sqrt(_vb1[j][k] / bc2) + 1e-8);
-            }
-
-            for (int k = 0; k < h; k++)
-            {
-                _mW2[j][k] = ADAM_BETA1 * _mW2[j][k] + (1 - ADAM_BETA1) * gW2[j][k];
-                _vW2[j][k] = ADAM_BETA2 * _vW2[j][k] + (1 - ADAM_BETA2) * gW2[j][k] * gW2[j][k];
-                _W2[j][k] -= _learningRate * (_mW2[j][k] / bc1) / (Math.Sqrt(_vW2[j][k] / bc2) + 1e-8);
-            }
-
-            _mb2[j] = ADAM_BETA1 * _mb2[j] + (1 - ADAM_BETA1) * gB2[j];
-            _vb2[j] = ADAM_BETA2 * _vb2[j] + (1 - ADAM_BETA2) * gB2[j] * gB2[j];
-            _b2[j] -= _learningRate * (_mb2[j] / bc1) / (Math.Sqrt(_vb2[j] / bc2) + 1e-8);
-        }
+        (_W1, _mW1, _vW1) = AdamUpdate(_W1, gW1, _mW1, _vW1, ADAM_BETA1, ADAM_BETA2, 1e-8, _learningRate, bc1, bc2);
+        (_b1, _mb1, _vb1) = AdamUpdate(_b1, gB1, _mb1, _vb1, ADAM_BETA1, ADAM_BETA2, 1e-8, _learningRate, bc1, bc2);
+        (_W2, _mW2, _vW2) = AdamUpdate(_W2, gW2, _mW2, _vW2, ADAM_BETA1, ADAM_BETA2, 1e-8, _learningRate, bc1, bc2);
+        (_b2, _mb2, _vb2) = AdamUpdate(_b2, gB2, _mb2, _vb2, ADAM_BETA1, ADAM_BETA2, 1e-8, _learningRate, bc1, bc2);
     }
 
-    private static double ComputeL1NormFromA(Matrix<T> A, int d)
+    private double ComputeL1NormFromA(Matrix<T> A, int d)
     {
-        double sum = 0;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j) sum += Math.Abs(numOps.ToDouble(A[i, j]));
-        return sum;
-    }
-
-    #endregion
-
-    #region Matrix Utilities
-
-    private double ComputeLogDeterminant(Matrix<T> matrix, int d)
-    {
-        var LU = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                LU[i, j] = matrix[i, j];
-
-        for (int k = 0; k < d; k++)
-        {
-            int maxRow = k;
-            for (int i = k + 1; i < d; i++)
-                if (NumOps.GreaterThan(NumOps.Abs(LU[i, k]), NumOps.Abs(LU[maxRow, k])))
-                    maxRow = i;
-
-            if (maxRow != k)
-                for (int j = 0; j < d; j++)
-                    (LU[k, j], LU[maxRow, j]) = (LU[maxRow, j], LU[k, j]);
-
-            if (NumOps.LessThan(NumOps.Abs(LU[k, k]), NumOps.FromDouble(1e-15)))
-                return double.NegativeInfinity;
-
-            for (int i = k + 1; i < d; i++)
-            {
-                LU[i, k] = NumOps.Divide(LU[i, k], LU[k, k]);
-                for (int j = k + 1; j < d; j++)
-                    LU[i, j] = NumOps.Subtract(LU[i, j], NumOps.Multiply(LU[i, k], LU[k, j]));
-            }
-        }
-
-        double logDet = 0;
-        for (int i = 0; i < d; i++)
-            logDet += Math.Log(Math.Abs(NumOps.ToDouble(LU[i, i])));
-        return logDet;
-    }
-
-    private Matrix<T>? InvertMatrix(Matrix<T> matrix, int d)
-    {
-        var aug = new Matrix<T>(d, 2 * d);
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++) aug[i, j] = matrix[i, j];
-            aug[i, i + d] = NumOps.One;
-        }
-
-        for (int col = 0; col < d; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < d; row++)
-                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
-                    maxRow = row;
-
-            if (NumOps.LessThan(NumOps.Abs(aug[maxRow, col]), NumOps.FromDouble(1e-12))) return null;
-
-            if (maxRow != col)
-                for (int j = 0; j < 2 * d; j++)
-                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            T pivot = aug[col, col];
-            for (int j = 0; j < 2 * d; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
-
-            for (int row = 0; row < d; row++)
-            {
-                if (row != col)
-                {
-                    T factor = aug[row, col];
-                    for (int j = 0; j < 2 * d; j++)
-                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
-                }
-            }
-        }
-
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i, j] = aug[i, j + d];
-        return result;
+        var a = Tensor<T>.FromMatrix(A);
+        var offDiagonal = Engine.TensorWhere(OffDiagonalMask(d), Engine.TensorAbs(a), Engine.TensorZerosLike(a));
+        return NumOps.ToDouble(Engine.TensorSum(offDiagonal));
     }
 
     #endregion

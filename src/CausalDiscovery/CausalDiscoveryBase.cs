@@ -729,13 +729,13 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
 
         // Strongest first; the stable sort keeps (from, to) order among equal magnitudes.
         var positionIndex = new Tensor<int>(positions, new[] { positions.Length });
-        int[] order = Engine.TensorArgsort(Engine.TensorIndexSelect(rank, positionIndex, 0), -1, true).ToArray();
+        int[] order = CausalTensorHelpers.StableArgsort(Engine.TensorIndexSelect(rank, positionIndex, 0), descending: true);
 
         var reachable = new bool[d, d];
         var kept = new List<int>();
-        foreach (int rank in order)
+        foreach (int sortedIndex in order)
         {
-            int position = positions[rank];
+            int position = positions[sortedIndex];
             int from = position / d, to = position % d;
 
             // Adding from -> to creates a cycle exactly when to already reaches from.

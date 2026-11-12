@@ -88,7 +88,7 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
             partition.Add([v]);
 
         double currentScore = ComputePartitionScore(data, partition, d);
-        var edgeCounts = new Matrix<T>(d, d);
+        var edgeCounts = new Tensor<T>(new[] { d, d });
         int sampleCount = 0;
 
         for (int iter = 0; iter < NumSamples + _burnIn; iter++)
@@ -106,27 +106,13 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
             if (iter >= _burnIn)
             {
                 var dag = BuildDAGFromPartition(data, partition, d, cov);
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                        if (!NumOps.Equals(dag[i, j], NumOps.Zero))
-                            edgeCounts[i, j] = NumOps.Add(edgeCounts[i, j], NumOps.One);
+                edgeCounts = AccumulateEdgeCounts(edgeCounts, dag);
                 sampleCount++;
             }
         }
 
-        var result = new Matrix<T>(d, d);
-        if (sampleCount == 0) return result;
-        T sampleCountT = NumOps.FromDouble(sampleCount);
-        T halfT = NumOps.FromDouble(0.5);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                T freq = NumOps.Divide(edgeCounts[i, j], sampleCountT);
-                if (NumOps.GreaterThan(freq, halfT))
-                    result[i, j] = freq;
-            }
-
-        return result;
+        if (sampleCount == 0) return new Matrix<T>(d, d);
+        return MajorityEdgeFrequencies(edgeCounts, sampleCount);
     }
 
     private List<List<int>> ProposeMove(List<List<int>> partition, int d, Random rng)
@@ -210,7 +196,7 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
 
     private Matrix<T> BuildDAGFromPartition(Matrix<T> data, List<List<int>> partition, int d, Matrix<T> cov)
     {
-        var W = new Matrix<T>(d, d);
+        var isParent = new bool[d * d];
         var predecessors = new HashSet<int>();
 
         foreach (var element in partition)
@@ -219,25 +205,16 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
             {
                 var parents = SelectBestParents(data, target, predecessors);
                 foreach (int parent in parents)
-                {
-                    T weight = ComputeOLSWeight(cov, parent, target);
-                    if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(1e-6)))
-                        W[parent, target] = weight;
-                }
+                    isParent[parent * d + target] = true;
             }
             foreach (int v in element)
                 predecessors.Add(v);
         }
 
-        return W;
-    }
-
-    private T ComputeOLSWeight(Matrix<T> cov, int from, int to)
-    {
-        T varFrom = cov[from, from];
-        T eps = NumOps.FromDouble(1e-10);
-        if (!NumOps.GreaterThan(varFrom, eps))
-            return NumOps.Zero;
-        return NumOps.Divide(cov[from, to], varFrom);
+        // Pairwise OLS weight of each selected parent edge, dropped when |weight| <= 1e-6.
+        var weights = ComputePairwiseOLSWeights(cov);
+        var significant = KeepWhereAbove(Engine.TensorAbs(weights), 1e-6, weights);
+        return Engine.TensorWhere(isParent, significant.Reshape(new[] { d * d }), Engine.TensorZerosLike(significant.Reshape(new[] { d * d })))
+            .Reshape(new[] { d, d }).ToMatrix();
     }
 }

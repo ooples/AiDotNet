@@ -97,7 +97,7 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
         var cov = ComputeCovarianceMatrix(data);
 
         double currentScore = ComputeOrderingScore(data, ordering, d);
-        var edgeCounts = new Matrix<T>(d, d);
+        var edgeCounts = new Tensor<T>(new[] { d, d });
         int sampleCount = 0;
 
         for (int iter = 0; iter < NumSamples + _burnIn; iter++)
@@ -123,27 +123,13 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
             if (iter >= _burnIn)
             {
                 var dag = BuildDAGFromOrdering(data, ordering, d, cov);
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                        if (!NumOps.Equals(dag[i, j], NumOps.Zero))
-                            edgeCounts[i, j] = NumOps.Add(edgeCounts[i, j], NumOps.One);
+                edgeCounts = AccumulateEdgeCounts(edgeCounts, dag);
                 sampleCount++;
             }
         }
 
         // Return edges in >50% of posterior samples with averaged weights
-        var result = new Matrix<T>(d, d);
-        T sampleCountT = NumOps.FromDouble(sampleCount);
-        T halfT = NumOps.FromDouble(0.5);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                T freq = NumOps.Divide(edgeCounts[i, j], sampleCountT);
-                if (NumOps.GreaterThan(freq, halfT))
-                    result[i, j] = freq;
-            }
-
-        return result;
+        return MajorityEdgeFrequencies(edgeCounts, sampleCount);
     }
 
     /// <summary>
@@ -198,19 +184,13 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
             // the edge even when OLS gives a near-zero weight by using a
             // minimum weight, preventing coefficient estimation from erasing
             // structurally selected parents.
-            for (int p = 0; p < parents.Length; p++)
-            {
-                T absWeight = NumOps.Abs(weights[p]);
-                double wDouble = NumOps.ToDouble(weights[p]);
-                if (double.IsNaN(wDouble) || double.IsInfinity(wDouble))
-                {
-                    // NaN/Infinity coefficient — skip edge (no meaningful causal effect)
-                    continue;
-                }
-                if (NumOps.GreaterThan(absWeight, NumOps.FromDouble(MinEdgeWeight)))
-                    W[parents[p], target] = weights[p];
-                // else: coefficient below threshold — leave edge as zero (no effect)
-            }
+            // NaN/Infinity coefficients are skipped (no meaningful causal effect), and
+            // coefficients at or below MinEdgeWeight leave the edge as zero.
+            var finiteWeights = Engine.TensorWhere(Engine.TensorIsFinite(weights), weights, Engine.TensorZerosLike(weights));
+            var kept = KeepWhereAbove(Engine.TensorAbs(finiteWeights), MinEdgeWeight, finiteWeights);
+            var column = Engine.TensorScatter(new Tensor<T>(new[] { d }),
+                new Tensor<int>(parents, new[] { parents.Length }), kept, 0);
+            Engine.SetColumn(W, target, column.ToVector());
         }
         return W;
     }
@@ -219,7 +199,7 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
     /// Computes multivariate OLS regression weights: beta = Cov(parents,parents)^{-1} * Cov(parents,target).
     /// This correctly accounts for correlations among parents, yielding unbiased partial regression coefficients.
     /// </summary>
-    private T[] ComputeMultivariateOLSWeights(Matrix<T> cov, int[] parents, int target)
+    private Tensor<T> ComputeMultivariateOLSWeights(Matrix<T> cov, int[] parents, int target)
     {
         int k = parents.Length;
         T eps = NumOps.FromDouble(RegularizationEpsilon);
@@ -229,99 +209,27 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
         {
             T varFrom = cov[parents[0], parents[0]];
             if (!NumOps.GreaterThan(varFrom, eps))
-                return [NumOps.Zero];
-            return [NumOps.Divide(cov[parents[0], target], varFrom)];
+                return new Tensor<T>(new[] { 1 });
+            return new Tensor<T>(new[] { NumOps.Divide(cov[parents[0], target], varFrom) }, new[] { 1 });
         }
 
         // Extract Cov(parents, parents) sub-matrix and Cov(parents, target) vector
-        var covPP = new Matrix<T>(k, k);
-        var covPT = new T[k];
-        for (int i = 0; i < k; i++)
-        {
-            covPT[i] = cov[parents[i], target];
-            for (int j = 0; j < k; j++)
-            {
-                covPP[i, j] = cov[parents[i], parents[j]];
-            }
-        }
+        var parentIndex = new Tensor<int>(parents, new[] { k });
+        var parentRows = Engine.TensorIndexSelect(Tensor<T>.FromMatrix(cov), parentIndex, 0);
+        var covPP = Engine.TensorIndexSelect(parentRows, parentIndex, 1);
+        var covPT = Engine.TensorIndexSelect(parentRows, new Tensor<int>(new[] { target }, new[] { 1 }), 1);
 
         // Add small regularization to diagonal for numerical stability
-        for (int i = 0; i < k; i++)
-        {
-            covPP[i, i] = NumOps.Add(covPP[i, i], eps);
-        }
+        covPP = Engine.TensorAdd(covPP, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(k), eps));
 
-        // Solve covPP * beta = covPT using Cholesky-like forward/back substitution
-        // (Gaussian elimination with partial pivoting for small k)
-        var augmented = new double[k, k + 1];
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                augmented[i, j] = NumOps.ToDouble(covPP[i, j]);
-            }
-            augmented[i, k] = NumOps.ToDouble(covPT[i]);
-        }
+        // Gaussian elimination with partial pivoting: singular or near-singular (a pivot below
+        // PivotTolerance) returns zeros.
+        var (_, _, u) = LinalgDispatch<T>.LU(covPP);
+        var smallPivots = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorDiagonal(u)), NumOps.FromDouble(PivotTolerance));
+        if (Engine.TensorCountNonzero(smallPivots) > 0)
+            return new Tensor<T>(new[] { k });
 
-        // Gaussian elimination with partial pivoting
-        for (int col = 0; col < k; col++)
-        {
-            // Find pivot
-            int pivotRow = col;
-            double pivotVal = Math.Abs(augmented[col, col]);
-            for (int row = col + 1; row < k; row++)
-            {
-                double val = Math.Abs(augmented[row, col]);
-                if (val > pivotVal)
-                {
-                    pivotVal = val;
-                    pivotRow = row;
-                }
-            }
-
-            // Swap rows
-            if (pivotRow != col)
-            {
-                for (int j = 0; j <= k; j++)
-                {
-                    (augmented[col, j], augmented[pivotRow, j]) = (augmented[pivotRow, j], augmented[col, j]);
-                }
-            }
-
-            // Singular or near-singular: return zeros
-            if (Math.Abs(augmented[col, col]) < PivotTolerance)
-            {
-                return new T[k];
-            }
-
-            // Eliminate below
-            for (int row = col + 1; row < k; row++)
-            {
-                double factor = augmented[row, col] / augmented[col, col];
-                for (int j = col; j <= k; j++)
-                {
-                    augmented[row, j] -= factor * augmented[col, j];
-                }
-            }
-        }
-
-        // Back substitution
-        var beta = new double[k];
-        for (int i = k - 1; i >= 0; i--)
-        {
-            double sum = augmented[i, k];
-            for (int j = i + 1; j < k; j++)
-            {
-                sum -= augmented[i, j] * beta[j];
-            }
-            beta[i] = sum / augmented[i, i];
-        }
-
-        var result = new T[k];
-        for (int i = 0; i < k; i++)
-        {
-            result[i] = NumOps.FromDouble(beta[i]);
-        }
-        return result;
+        var (solution, _) = LinalgDispatch<T>.SolveEx(covPP, covPT);
+        return solution.Reshape(new[] { k });
     }
 }
