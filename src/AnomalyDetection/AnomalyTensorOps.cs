@@ -563,6 +563,90 @@ internal static class AnomalyTensorOps
         return engine.TensorLessThan(rank, numOps.FromDouble(count));
     }
 
+    /// <summary>
+    /// The k nearest reference rows of every query row: their Euclidean distances ([m, k], ascending) and,
+    /// in <paramref name="indices"/>, their row indices. With <paramref name="excludeSelf"/> (query and
+    /// reference are the same rows) each row's own entry is pushed past every real distance first.
+    /// </summary>
+    internal static Tensor<T> NearestNeighbors<T>(Tensor<T> query, Tensor<T> reference, int k, bool excludeSelf,
+        out Tensor<int> indices)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int m = query.Shape[0];
+        var distances = PairwiseDistances(query, reference);
+        if (excludeSelf)
+        {
+            var self = engine.TensorEqScalar(engine.TensorEye<T>(m), numOps.One);
+            distances = engine.TensorMaskedFill(distances, self, numOps.MaxValue);
+        }
+
+        var (sorted, order) = engine.TensorSort(distances, 1, false);
+        indices = engine.TensorSlice(order, new[] { 0, 0 }, new[] { m, k });
+        return engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k });
+    }
+
+    /// <summary>values[indices[i, j]] for every entry of a [m, k] index tensor, as a [m, k] tensor.</summary>
+    internal static Tensor<T> GatherByIndex<T>(Tensor<T> values, Tensor<int> indices)
+    {
+        var engine = Engine;
+        int m = indices.Shape[0];
+        int k = indices.Shape[1];
+        if (m == 0 || k == 0)
+        {
+            return Tensor<T>.CreateZeros(new[] { m, k });
+        }
+
+        var flat = engine.Reshape(indices, new[] { m * k });
+        return engine.Reshape(engine.TensorGather(values, flat, 0), new[] { m, k });
+    }
+
+    /// <summary>The rows of a [n, k] int tensor as separate arrays.</summary>
+    internal static int[][] ToJagged(Tensor<int> indices)
+    {
+        int n = indices.Shape[0];
+        int k = indices.Shape[1];
+        var flat = indices.ToArray();
+        var rows = new int[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rows[i] = new int[k];
+            Array.Copy(flat, i * k, rows[i], 0, k);
+        }
+
+        return rows;
+    }
+
+    /// <summary>Equal-length int rows as one [n, k] int tensor.</summary>
+    internal static Tensor<int> FromJagged(int[][] rows, int k)
+    {
+        int n = rows.Length;
+        var flat = new int[n * k];
+        for (int i = 0; i < n; i++)
+        {
+            Array.Copy(rows[i], 0, flat, i * k, k);
+        }
+
+        return Tensor<int>.FromVector(Vector<int>.Wrap(flat), new[] { n, k });
+    }
+
+    /// <summary>The rows of a [n, k] tensor as separate vectors.</summary>
+    internal static Vector<T>[] RowVectors<T>(Tensor<T> m)
+    {
+        int n = m.Shape[0];
+        var rows = new Vector<T>[n];
+        for (int i = 0; i < n; i++)
+        {
+            rows[i] = Engine.TensorSliceAxis(m, 0, i).ToVector();
+        }
+
+        return rows;
+    }
+
+    /// <summary>Equal-length vectors as the rows of one [n, k] tensor.</summary>
+    internal static Tensor<T> StackRows<T>(Vector<T>[] rows)
+        => Engine.TensorStack(rows.Select(r => r.AsTensor()).ToArray(), 0);
+
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
     {
