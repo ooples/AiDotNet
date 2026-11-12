@@ -252,6 +252,12 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         T betaRangeT = NumOps.FromDouble(_betaEnd - _betaStart);
         T maxDenom = NumOps.FromDouble(Math.Max(1, _diffusionSteps - 1));
 
+        if (_diffusionSteps == 0)
+        {
+            // An empty schedule has no first alpha-bar; this is the index error the schedule always raised.
+            throw new ArgumentOutOfRangeException("index");
+        }
+
         // Linear betas start + range * t / max(1, n - 1), then alpha-bar as the running product of alphas.
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var steps = Engine.TensorArange<T>(0, _diffusionSteps, 1);

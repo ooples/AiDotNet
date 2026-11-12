@@ -764,6 +764,25 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var flat = Engine.Reshape(paths, new[] { paths.Length });
         var grid = Engine.Reshape(Engine.TensorNarrow(flat, 0, 0, samples * outputLen), new[] { samples, outputLen });
+        if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) > 0)
+        {
+            // NaN compares equal to everything under the reference comparer, so where it lands (and
+            // which value becomes the median) depends on the comparison sort itself. Run that exact
+            // sort for every column so NaN is placed precisely where it always was.
+            var result = new Tensor<T>(new[] { outputLen });
+            var column = new T[samples];
+            for (int i = 0; i < outputLen; i++)
+            {
+                for (int s = 0; s < samples; s++) column[s] = paths[s * outputLen + i];
+                Array.Sort(column, (a, b) => NumOps.LessThan(a, b) ? -1 : NumOps.LessThan(b, a) ? 1 : 0);
+                result[i] = (samples % 2) == 1
+                    ? column[samples / 2]
+                    : NumOps.Divide(NumOps.Add(column[samples / 2 - 1], column[samples / 2]), NumOps.FromDouble(2.0));
+            }
+
+            return result;
+        }
+
         var sorted = Engine.TensorSort(grid, 0, false).Values;
         var upper = Engine.Reshape(Engine.TensorNarrow(sorted, 0, samples / 2, 1), new[] { outputLen });
         if ((samples % 2) == 1)
