@@ -989,9 +989,9 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
 
     /// <summary>
     /// The <c>[frames, bins]</c> mask for <paramref name="stem"/>: element (t, f) is
-    /// <c>masks[0, stem, t, f]</c> when a rank-4 mask covers it, else <c>masks[stem, t, f]</c> when the
-    /// mask has rank 3 or more and <c>stem &lt; masks.Shape[0]</c> (an index count only a rank-3 mask
-    /// accepts), else 0. Reads the indexer would reject throw as the indexer does.
+    /// <c>masks[0, stem, t, f]</c> when a rank-4 mask covers it (0 in the region a partial rank-4 mask
+    /// does not cover), else <c>masks[stem, t, f]</c> when the mask has rank 3 and
+    /// <c>stem &lt; masks.Shape[0]</c>, else 0. Reads the indexer would reject throw as the indexer does.
     /// </summary>
     private Tensor<T> StemMask(Tensor<T> masks, int stem, int numFrames, int numBins)
     {
@@ -1010,7 +1010,8 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
             coveredBins = Math.Min(numBins, masks.Shape[3]);
         }
         bool anyCovered = coveredFrames > 0 && coveredBins > 0;
-        bool fallbackReads = !(coveredFrames == numFrames && coveredBins == numBins) && stem < masks.Shape[0];
+        // A rank-4 mask never falls back to the rank-3 layout: its uncovered region is zero-filled.
+        bool fallbackReads = rank != 4 && !(coveredFrames == numFrames && coveredBins == numBins) && stem < masks.Shape[0];
 
         if ((anyCovered && rank != 4) || (fallbackReads && rank != 3))
             throw new ArgumentException("Number of indices must match the tensor's rank.");
@@ -1065,10 +1066,10 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         if (numFrames == 0 || numBins == 0)
             return (new Tensor<T>([numFrames, numBins]), new Tensor<T>([numFrames, numBins]));
 
-        // Soft masks: m * h / (h + p + 1e-10) and m * p / (h + p + 1e-10)
+        // Soft masks: m * h / (h + p + eps) and m * p / (h + p + eps)
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var m = Engine.TensorSlice(magnitude, [0, 0], [numFrames, numBins]);
-        var sum = Engine.TensorAddScalar(Engine.TensorAdd(harmonicEnhanced, percussiveEnhanced), NumOps.FromDouble(1e-10));
+        var sum = Engine.TensorAddScalar(Engine.TensorAdd(harmonicEnhanced, percussiveEnhanced), NumOps.FromDouble(HpssMaskEpsilon));
         var harmonicMag = Engine.TensorDivide(Engine.TensorMultiply(m, harmonicEnhanced), sum);
         var percussiveMag = Engine.TensorDivide(Engine.TensorMultiply(m, percussiveEnhanced), sum);
 
@@ -1094,18 +1095,17 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
     {
         int numFrames = input.Shape[0];
         int numBins = input.Shape[1];
-        var output = new Tensor<T>([numFrames, numBins]);
         int halfKernel = kernelSize / 2;
         int windowSize = (2 * halfKernel) + 1;
         int length = axis == 0 ? numFrames : numBins;
         int other = axis == 0 ? numBins : numFrames;
 
         if (other == 0)
-            return output;
+            return new Tensor<T>([numFrames, numBins]);
         if (windowSize < 0)
             throw new OverflowException("Arithmetic operation resulted in an overflow.");
         if (length == 0)
-            return output;
+            return new Tensor<T>([numFrames, numBins]);
 
         T negativeInfinity = AudioEngineOps.NegativeInfinityOrMin<T>();
         T nan = AudioEngineOps.NaNOrZero<T>();
@@ -1113,7 +1113,7 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         T middleIndex = NumOps.FromDouble(halfKernel);
 
         // Window rows are processed in blocks to bound the gathered [rows, window, other] tensor
-        int blockRows = (int)Math.Max(1, Math.Min(length, (1L << 22) / ((long)other * windowSize)));
+        int blockRows = (int)Math.Max(1, Math.Min(length, MedianBlockBudget / ((long)other * windowSize)));
         var pieces = new List<Tensor<T>>();
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         for (int start = 0; start < length; start += blockRows)
@@ -1172,30 +1172,52 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         return _stft.Inverse(stft);
     }
 
+    /// <summary>Lower edge (Hz) of the band treated as mostly vocal.</summary>
+    private const double VocalLowHz = 300.0;
+    /// <summary>Upper edge (Hz) of the band treated as mostly vocal.</summary>
+    private const double VocalHighHz = 4000.0;
+    /// <summary>Vocal weight inside the vocal band.</summary>
+    private const double VocalCoreWeight = 0.7;
+    /// <summary>Vocal weight at the band edges, where the rise ends and the fall starts.</summary>
+    private const double VocalShoulderWeight = 0.3;
+    /// <summary>Bins over which the vocal weight rises below the band.</summary>
+    private const double VocalRiseBins = 50;
+    /// <summary>Bins over which the vocal weight falls above the band.</summary>
+    private const double VocalFallBins = 100;
+    /// <summary>Highest frequency (Hz) kept fully in the bass line.</summary>
+    private const double BassMaxHz = 250.0;
+    /// <summary>Bins over which the bass weight fades out above <see cref="BassMaxHz"/>.</summary>
+    private const double BassFadeBins = 20;
+    /// <summary>Added to the HPSS mask denominator so silent bins do not divide by zero.</summary>
+    private const double HpssMaskEpsilon = 1e-10;
+    /// <summary>Most gathered values one block of the sliding median materializes.</summary>
+    private const long MedianBlockBudget = 1L << 22;
+
     private (Tensor<T> vocals, Tensor<T> other) SeparateVocals(Tensor<T> harmonicMag, Tensor<T> phase)
     {
         int numBins = harmonicMag.Shape[1];
 
-        double vocalLowBin = 300.0 * _options.FftSize / _options.SampleRate;
-        double vocalHighBin = 4000.0 * _options.FftSize / _options.SampleRate;
+        double vocalLowBin = VocalLowHz * _options.FftSize / _options.SampleRate;
+        double vocalHighBin = VocalHighHz * _options.FftSize / _options.SampleRate;
 
-        // Per-bin vocal weight: 0.7 inside [low, high], a 50-bin rise below it, a 100-bin fall above it
+        // Per-bin vocal weight: VocalCoreWeight inside [low, high], rising from 0 over VocalRiseBins
+        // below it to VocalShoulderWeight, and falling from VocalShoulderWeight over VocalFallBins above it
         var bins = Engine.TensorArange<T>(0, numBins, 1);
         var binShape = new[] { numBins };
         var ones = Tensor<T>.CreateDefault(binShape, NumOps.One);
         var rise = Engine.TensorDivideScalar(
-            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(vocalLowBin - 50)), NumOps.FromDouble(0.3)),
-            NumOps.FromDouble(50));
+            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(vocalLowBin - VocalRiseBins)), NumOps.FromDouble(VocalShoulderWeight)),
+            NumOps.FromDouble(VocalRiseBins));
         var fall = Engine.TensorMultiplyScalar(
-            Engine.TensorSubtract(ones, Engine.TensorDivideScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(vocalHighBin)), NumOps.FromDouble(100))),
-            NumOps.FromDouble(0.3));
+            Engine.TensorSubtract(ones, Engine.TensorDivideScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(vocalHighBin)), NumOps.FromDouble(VocalFallBins))),
+            NumOps.FromDouble(VocalShoulderWeight));
         var vocalWeight = Engine.TensorWhere(
             BinBand(bins, vocalLowBin, true, vocalHighBin, true),
-            Tensor<T>.CreateDefault(binShape, NumOps.FromDouble(0.7)),
+            Tensor<T>.CreateDefault(binShape, NumOps.FromDouble(VocalCoreWeight)),
             Engine.TensorWhere(
-                BinBand(bins, vocalLowBin - 50, true, vocalLowBin, false),
+                BinBand(bins, vocalLowBin - VocalRiseBins, true, vocalLowBin, false),
                 rise,
-                Engine.TensorWhere(BinBand(bins, vocalHighBin, false, vocalHighBin + 100, true), fall, new Tensor<T>(binShape))));
+                Engine.TensorWhere(BinBand(bins, vocalHighBin, false, vocalHighBin + VocalFallBins, true), fall, new Tensor<T>(binShape))));
 
         var vocalMag = WeightBins(harmonicMag, vocalWeight);
         var otherMag = WeightBins(harmonicMag, Engine.TensorSubtract(ones, vocalWeight));
@@ -1206,18 +1228,19 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
     private Tensor<T> ExtractBassline(Tensor<T> harmonicMag, Tensor<T> phase)
     {
         int numBins = harmonicMag.Shape[1];
-        double bassMaxBin = 250.0 * _options.FftSize / _options.SampleRate;
+        double bassMaxBin = BassMaxHz * _options.FftSize / _options.SampleRate;
 
-        // Per-bin weight: 1 up to bassMaxBin, then a linear fade over the next 20 bins, 0 after
+        // Per-bin weight: 1 up to bassMaxBin, then a linear fade over the next BassFadeBins bins, 0 after
         var bins = Engine.TensorArange<T>(0, numBins, 1);
         var binShape = new[] { numBins };
         var fade = Engine.TensorSubtract(
             Tensor<T>.CreateDefault(binShape, NumOps.One),
-            Engine.TensorDivideScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(bassMaxBin)), NumOps.FromDouble(20)));
+            Engine.TensorDivideScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(bassMaxBin)), NumOps.FromDouble(BassFadeBins)));
         var weight = Engine.TensorWhere(
-            BinBand(bins, double.NegativeInfinity, true, bassMaxBin, true),
+            // Bin indices start at 0, so 0 is an open lower bound that decimal can also represent
+            BinBand(bins, 0, true, bassMaxBin, true),
             Tensor<T>.CreateDefault(binShape, NumOps.One),
-            Engine.TensorWhere(BinBand(bins, bassMaxBin, false, bassMaxBin + 20, true), fade, new Tensor<T>(binShape)));
+            Engine.TensorWhere(BinBand(bins, bassMaxBin, false, bassMaxBin + BassFadeBins, true), fade, new Tensor<T>(binShape)));
 
         var bassMag = WeightBins(harmonicMag, weight);
         return ReconstructFromMagnitudePhase(bassMag, phase);
