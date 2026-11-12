@@ -131,24 +131,10 @@ public class SpectralDeltaKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        double result = 0;
-
-        // For each dimension, compute spectral delta contribution
-        for (int d = 0; d < x1.Length; d++)
-        {
-            double tau = _numOps.ToDouble(x1[d]) - _numOps.ToDouble(x2[d]);
-            double tau2 = tau * tau;
-
-            // Envelope: exp(-2π²τ²σ²)
-            double envelope = Math.Exp(-2.0 * Math.PI * Math.PI * tau2 * _bandwidth * _bandwidth);
-
-            // Oscillation: cos(2πτμ)
-            double oscillation = Math.Cos(2.0 * Math.PI * tau * _frequency);
-
-            result += _variance * envelope * oscillation;
-        }
-
-        return _numOps.FromDouble(result);
+        // Single-component spectral mixture (Wilson & Adams 2013, eq. 12): the dimensions combine
+        // as a product, k(τ) = σ² Π_d exp(-2π²τ_d²σ_f²) cos(2πτ_d μ), so k(x, x) = σ² in any dimension.
+        return _numOps.Multiply(_numOps.FromDouble(_variance),
+            SpectralMixtureKernel<T>.SeparableComponent(x1, x2, _frequency, _bandwidth));
     }
 
     /// <summary>
