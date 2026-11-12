@@ -176,15 +176,18 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Tensor<T> IqrOutlierMask(Tensor<T> values)
     {
         // Quartiles of the finite values only; NaN would otherwise sort into the order statistics.
-        var sortedSeries = TimeSeries
-            .Where(x => !NumOps.IsNaN(x) && !NumOps.IsInfinity(x))
-            .OrderBy(x => x)
-            .ToList();
-        int n = sortedSeries.Count;
+        // Non-finite entries become +infinity, so they sort after the n finite values.
+        var series = Tensor<T>.FromVector(TimeSeries);
+        var finite = Engine.TensorIsFinite(series);
+        int n = Engine.TensorCountNonzero(
+            Engine.TensorWhere(finite, Engine.TensorOnesLike(series), Engine.TensorZerosLike(series)));
         if (n == 0)
         {
             return Engine.TensorZerosLike(values);
         }
+
+        var (sortedSeries, _) = Engine.TensorSort(
+            Engine.TensorWhere(finite, series, Engine.TensorFullLike(series, NumOps.FromDouble(double.PositiveInfinity))), 0);
 
         T q1 = sortedSeries[n / 4];
         T q3 = sortedSeries[3 * n / 4];
