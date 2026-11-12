@@ -534,4 +534,39 @@ public class PreprocessingReferenceTests
         Assert.Equal(0.1, transformer.Transform(M(new double[,] { { 2.0 } }))[0, 0], Tolerance);
         Assert.Equal(2.0, transformer.InverseTransform(M(new double[,] { { 0.1 } }))[0, 0], Tolerance);
     }
+
+    // sklearn PowerTransformer fits lambda by maximum likelihood with scipy.optimize.brent (not a 0.1 grid) and
+    // standardizes with StandardScaler. Reference values from scikit-learn 1.9.1 on [1, 2, 3, 5, 8, 13, 21]:
+    // Yeo-Johnson lambda -0.10907583494172068, transform(4) -0.2551259365003003; Box-Cox lambda
+    // 0.055747783607017924, transform(4) -0.2265160870380528. On [-3, -1, 0, 0.5, 2, 7, 20] (Yeo-Johnson):
+    // lambda 0.43543662095254776, transform([-2, 1]) = [-1.1220341395151565, 0.012290038542442674].
+    [Fact(Timeout = 120000)]
+    public async Task PowerTransformer_MaximumLikelihoodLambda_MatchesSklearn()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,] { { 1 }, { 2 }, { 3 }, { 5 }, { 8 }, { 13 }, { 21 } });
+
+        var yeoJohnson = new PowerTransformer<double>(PowerTransformMethod.YeoJohnson);
+        yeoJohnson.Fit(data);
+        var yeoJohnsonLambdas = yeoJohnson.Lambdas;
+        Assert.NotNull(yeoJohnsonLambdas);
+        Assert.Equal(-0.10907583494172068, yeoJohnsonLambdas[0], 1e-6);
+        Assert.Equal(-0.2551259365003003, yeoJohnson.Transform(M(new double[,] { { 4 } }))[0, 0], 1e-6);
+
+        var boxCox = new PowerTransformer<double>(PowerTransformMethod.BoxCox);
+        boxCox.Fit(data);
+        var boxCoxLambdas = boxCox.Lambdas;
+        Assert.NotNull(boxCoxLambdas);
+        Assert.Equal(0.055747783607017924, boxCoxLambdas[0], 1e-6);
+        Assert.Equal(-0.2265160870380528, boxCox.Transform(M(new double[,] { { 4 } }))[0, 0], 1e-6);
+
+        var mixed = new PowerTransformer<double>(PowerTransformMethod.YeoJohnson);
+        mixed.Fit(M(new double[,] { { -3 }, { -1 }, { 0 }, { 0.5 }, { 2 }, { 7 }, { 20 } }));
+        var mixedLambdas = mixed.Lambdas;
+        Assert.NotNull(mixedLambdas);
+        Assert.Equal(0.43543662095254776, mixedLambdas[0], 1e-6);
+        var transformed = mixed.Transform(M(new double[,] { { -2 }, { 1 } }));
+        Assert.Equal(-1.1220341395151565, transformed[0, 0], 1e-6);
+        Assert.Equal(0.012290038542442674, transformed[1, 0], 1e-6);
+    }
 }

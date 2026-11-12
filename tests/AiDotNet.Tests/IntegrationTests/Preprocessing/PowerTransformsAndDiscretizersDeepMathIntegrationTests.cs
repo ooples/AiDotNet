@@ -34,7 +34,7 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
             method: PowerTransformMethod.BoxCox, standardize: false);
         var result = transformer.FitTransform(matrix);
 
-        // Lambda should be found via grid search [-2, 2] with step 0.1
+        // Lambda is the maximum-likelihood estimate (scipy.optimize.brent bracketed from (-2, 2))
         Assert.NotNull(transformer.Lambdas);
         double lambda = transformer.Lambdas[0];
 
@@ -305,7 +305,7 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PowerTransformer_LambdaGridSearch_BoundsAreRespected()
     {
-        // Lambda search is in [-2, 2] with step 0.1
+        // scikit-learn PowerTransformer(standardize=False).fit(1..10).lambdas_ = [0.7303877], inside [-2, 2]
         var data = new double[,]
         {
             { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 },
