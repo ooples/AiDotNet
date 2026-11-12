@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interpretability;
@@ -153,7 +154,7 @@ public sealed class FaithfulnessAuditor<T>
     {
         var engine = AiDotNetEngine.Current;
         var magnitudes = engine.TensorAbs(attributions.GetSubVector(0, d).AsTensor());
-        return engine.TensorArgsort(magnitudes, 0, true).AsSpan().ToArray();
+        return ExplainerTensorOps<T>.StableDescendingOrder(magnitudes);
     }
 
     private T CurveAuc(Func<Vector<T>, T> score, Tensor<T> x, Tensor<T> baseline, Tensor<T> stepMask, int[] stepShape,

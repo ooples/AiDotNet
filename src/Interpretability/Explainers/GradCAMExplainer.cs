@@ -402,11 +402,12 @@ public class GradCAMExplanation<T>
         }
 
         // Row-major positions at or above the threshold, then ordered by descending importance
-        // (the stable argsort keeps equal importances in row-major order, as OrderByDescending did).
+        // (equal importances stay in row-major order, as OrderByDescending kept them).
         var nonzero = engine.TensorNonzero(above);
         var positions = nonzero.Reshape(new[] { nonzero.Shape[0] });
         var selected = engine.TensorIndexSelect(values, positions, 0);
-        var order = engine.TensorArgsort(selected, 0, true);
+        var orderIndices = ExplainerTensorOps<T>.StableDescendingOrder(selected);
+        var order = new Tensor<int>(orderIndices, new[] { orderIndices.Length });
         var orderedPositions = engine.TensorIndexSelect(positions, order, 0).AsSpan().ToArray();
         var orderedValues = engine.TensorIndexSelect(selected, order, 0).ToVector();
         return orderedPositions

@@ -13,6 +13,30 @@ internal static class ExplainerTensorOps<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Indices that order a tensor's values descending, equal values kept in index order, as LINQ
+    /// <c>OrderByDescending</c> does.
+    /// </summary>
+    public static int[] StableDescendingOrder(Tensor<T> values)
+    {
+        int count = values.Length;
+        if (count == 0)
+            return Array.Empty<int>();
+
+        var engine = AiDotNetEngine.Current;
+        var flat = values.Rank == 1 ? values : engine.Reshape(values, new[] { count });
+        var sorted = engine.TensorSort(flat, 0, false).Item1;
+
+        // descending rank #{m : v[m] > v[j]} = count - #{m : v[m] <= v[j]}; the engine argsort is not
+        // documented as stable, so it sorts the distinct key (rank, index), whose order is unique
+        var atMost = engine.TensorSearchSorted(sorted, flat, true).AsSpan().ToArray();
+        var keys = new long[count];
+        for (int j = 0; j < count; j++)
+            keys[j] = (long)(count - atMost[j]) * count + j;
+
+        return engine.TensorArgsort(new Tensor<long>(keys, new[] { count }), 0, false).AsSpan().ToArray();
+    }
+
+    /// <summary>
     /// A [1, n] tensor holding a copy of <paramref name="row"/>.
     /// </summary>
     public static Tensor<T> RowTensor(Vector<T> row)
