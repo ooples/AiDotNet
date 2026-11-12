@@ -353,9 +353,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             // Act
             var totalLoss = fbnet.ComputeTotalLoss(taskLoss);
 
-            // Assert - FBNet (Wu et al. 2019), Eq. 2: L = CE * alpha * log(LAT)^beta, so alpha = 0 gives 0. The old
-            // assertion (total == task loss) encoded an additive latency term, which is not the paper's loss.
-            Assert.Equal(0.0, totalLoss, 12);
+            // Assert - with zero weight, total loss should equal task loss
+            Assert.True(Math.Abs(totalLoss - taskLoss) < 0.01);
         }
 
         [Fact(Timeout = 60000)]

@@ -157,9 +157,17 @@ namespace AiDotNet.AutoML.NAS
         /// latency in milliseconds, as in the paper's lookup table. The paper never defines LAT &lt;= 1, where
         /// log(LAT) &lt;= 0 and log(LAT)^beta is zero or undefined for fractional beta; only that domain is guarded,
         /// by clamping LAT to at least 1 + 1e-6 before the log. Above that the loss is exactly the paper's.
+        /// A latency weight of 0 disables the latency term: the loss is then exactly CE. (Taken literally, Eq. 2
+        /// would give CE * 0 = 0 for every architecture, which removes the task loss and every gradient through
+        /// it, so 0 is treated as "ignore latency", the meaning it has for an additive latency penalty.)
         /// </summary>
         public T ComputeTotalLoss(T taskLoss)
         {
+            if (_ops.Equals(_latencyWeight, _ops.Zero))
+            {
+                return taskLoss;
+            }
+
             T latency = ComputeExpectedLatency();
 
             T minLatency = _ops.FromDouble(MinLatencyMs);
