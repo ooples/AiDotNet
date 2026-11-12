@@ -341,10 +341,10 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
 
             // tau random hyper-planes over q attributes without replacement, coefficients uniform in [-1, 1];
             // keep the one whose best split has the highest Sdgain (the first on ties)
-            Vector<T>? bestWeights = null;
-            T bestGain = _ops.Negate(_ops.MaxValue);
-            T bestSplit = _ops.Zero;
-            Tensor<T>? bestProjections = null;
+            var trialWeights = new List<Vector<T>>();
+            var trialProjections = new List<Tensor<T>>();
+            var trialGains = new List<Tensor<T>>();
+            var trialSplits = new List<Tensor<T>>();
             for (int trial = 0; trial < _hyperplanesPerNode; trial++)
             {
                 var pool = Enumerable.Range(0, _nFeatures).ToArray();
@@ -360,20 +360,25 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
                     Tensor<double>.FromVector(Vector<double>.Wrap(coefficients), new[] { _nFeatures }).Cast<T>(), inverseStd).ToVector();
                 var projections = AnomalyTensorOps.Project(data, weights);
                 var (gain, split) = BestSdGainSplit(projections);
-                if (_ops.GreaterThan(gain, bestGain))
-                {
-                    bestGain = gain;
-                    bestSplit = split;
-                    bestWeights = weights;
-                    bestProjections = projections;
-                }
+                trialWeights.Add(weights);
+                trialProjections.Add(projections);
+                trialGains.Add(Tensor<T>.CreateDefault(new[] { 1 }, gain));
+                trialSplits.Add(Tensor<T>.CreateDefault(new[] { 1 }, split));
             }
 
-            if (bestWeights is null || bestProjections is null)
+            var gains = engine.Concat(trialGains, 0);
+            int best = AnomalyTensorOps.FirstArgMax(gains);
+            T bestGain = engine.TensorSlice(gains, new[] { best }, new[] { 1 }).ToVector()[0];
+            if (!_ops.GreaterThan(bestGain, _ops.Negate(_ops.MaxValue)))
             {
+                // Every hyper-plane projects the node's rows onto a single value: nothing separates them
                 _isLeaf = true;
                 return;
             }
+
+            var bestWeights = trialWeights[best];
+            var bestProjections = trialProjections[best];
+            T bestSplit = engine.TensorSlice(engine.Concat(trialSplits, 0), new[] { best }, new[] { 1 }).ToVector()[0];
 
             // f(x) = w . x - p: f < 0 goes left; acceptable range [-v, v] with v = max f - min f
             var f = engine.TensorSubtractScalar(bestProjections, bestSplit);

@@ -22,7 +22,12 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 /// 1. Encoder maps input to latent space z
 /// 2. Decoder reconstructs from z
 /// 3. Second encoder re-encodes the reconstruction
-/// 4. Anomaly score is the difference between original encoding and re-encoding
+/// 4. A discriminator D (h = LeakyReLU(x W1 + b1), p = sigmoid(h W2 + b2)) tells real rows from
+///    reconstructions; its hidden layer h is the feature map f(.) of the adversarial loss
+/// 5. The generator minimizes w_adv ||f(x) - f(x')||^2 + w_con |x - x'| + w_enc ||z - z'||^2 (element means,
+///    w_adv = 1, w_con = 50, w_enc = 1) and the discriminator minimizes the binary cross-entropy of real rows
+///    as 1 and reconstructions as 0, both with Adam (beta1 = 0.5, beta2 = 0.999) as in the reference code
+/// 6. Anomaly score is the mean squared difference between the encoding and the re-encoding
 /// </para>
 /// <para>
 /// <b>When to use:</b>
@@ -35,7 +40,9 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 /// - Latent dimensions: 32
 /// - Hidden dimensions: 64
 /// - Epochs: 100
-/// - Learning rate: 0.0002
+/// - Learning rate: 0.0002 (Adam, beta1 = 0.5)
+/// - Batch size: 64
+/// - Loss weights: adversarial 1, contextual 50, encoder 1
 /// - Contamination: 0.1 (10%)
 /// </para>
 /// <para>
@@ -87,6 +94,25 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _reEncB2;
 
+    // Discriminator weights (feature layer and real/fake classifier)
+    [AiDotNet.Attributes.TrainableParameter]
+    private Matrix<T>? _discW1;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Vector<T>? _discB1;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Matrix<T>? _discW2;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Vector<T>? _discB2;
+
+    private readonly double _adversarialWeight;
+    private readonly double _contextualWeight;
+    private readonly double _encoderWeight;
+
+    // Adam moments for the 16 parameters in TrainingParameters() order, and the step count
+    private Tensor<T>[]? _adamM;
+    private Tensor<T>[]? _adamV;
+    private int _adamStep;
+
     private int _inputDim;
 
     // Normalization parameters
@@ -114,8 +140,12 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
     /// <param name="learningRate">Learning rate. Default is 0.0002.</param>
     /// <param name="contamination">Expected proportion of anomalies. Default is 0.1 (10%).</param>
     /// <param name="randomSeed">Random seed for reproducibility. Default is 42.</param>
+    /// <param name="adversarialWeight">Weight w_adv of the feature-matching adversarial loss. Default is 1.</param>
+    /// <param name="contextualWeight">Weight w_con of the L1 reconstruction loss. Default is 50.</param>
+    /// <param name="encoderWeight">Weight w_enc of the latent (encoder) loss. Default is 1.</param>
     public GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100,
-        double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42)
+        double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42,
+        double adversarialWeight = 1, double contextualWeight = 50, double encoderWeight = 1)
         : base(contamination, randomSeed)
     {
         if (latentDim < 1)
@@ -142,10 +172,19 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
                 "Learning rate must be positive. Recommended is 0.0002.");
         }
 
+        if (adversarialWeight < 0 || contextualWeight < 0 || encoderWeight < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(adversarialWeight),
+                "Loss weights must be non-negative. Recommended are 1 (adversarial), 50 (contextual), 1 (encoder).");
+        }
+
         _latentDim = latentDim;
         _hiddenDim = hiddenDim;
         _epochs = epochs;
         _learningRate = learningRate;
+        _adversarialWeight = adversarialWeight;
+        _contextualWeight = contextualWeight;
+        _encoderWeight = encoderWeight;
     }
 
     /// <inheritdoc/>
@@ -210,6 +249,16 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         _reEncB1 = new Vector<T>(_hiddenDim);
         _reEncW2 = InitializeMatrix(_hiddenDim, _latentDim, scale2);
         _reEncB2 = new Vector<T>(_latentDim);
+
+        // Discriminator: input -> hidden (features) -> 1 (real/fake logit)
+        _discW1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
+        _discB1 = new Vector<T>(_hiddenDim);
+        _discW2 = InitializeMatrix(_hiddenDim, 1, Math.Sqrt(2.0 / (_hiddenDim + 1)));
+        _discB2 = new Vector<T>(1);
+
+        _adamM = null;
+        _adamV = null;
+        _adamStep = 0;
     }
 
     private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
@@ -231,7 +280,7 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
     private void Train(Matrix<T> data)
     {
         int n = data.Rows;
-        int batchSize = Math.Min(32, n);
+        int batchSize = Math.Min(64, n);
         var values = AnomalyTensorOps.ToTensor(data);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
@@ -244,9 +293,9 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
                 var batchRows = new int[actualBatchSize];
                 Array.Copy(indices, batch, batchRows, 0, actualBatchSize);
 
-                // Forward pass, then gradients summed over the batch and a step of learningRate / batch size
-                var forward = Forward(AnomalyTensorOps.SelectRows(values, batchRows));
-                Backward(forward, NumOps.FromDouble(_learningRate / actualBatchSize));
+                // Generator and discriminator gradients from the same forward pass (the reconstruction is
+                // detached for the discriminator), then one Adam step on every parameter
+                AdamUpdate(TrainingGradients(AnomalyTensorOps.SelectRows(values, batchRows)));
             }
         }
     }
@@ -264,6 +313,14 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         public required Tensor<T> ReEncHiddenPre { get; init; }
         public required Tensor<T> ReEncHidden { get; init; }
         public required Tensor<T> ZRecon { get; init; }
+    }
+
+    // Discriminator activations: pre-activation and features of the hidden layer, and the real/fake logit.
+    private sealed class DiscriminatorResult
+    {
+        public required Tensor<T> HiddenPre { get; init; }
+        public required Tensor<T> Features { get; init; }
+        public required Tensor<T> Logit { get; init; }
     }
 
     // Each sub-network is h = LeakyReLU(input W1 + b1, 0.2), output = h W2 + b2 (linear).
@@ -316,6 +373,27 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         };
     }
 
+    private DiscriminatorResult Discriminate(Tensor<T> x)
+    {
+        var discW1 = _discW1;
+        var discB1 = _discB1;
+        var discW2 = _discW2;
+        var discB2 = _discB2;
+        if (discW1 == null || discB1 == null || discW2 == null || discB2 == null)
+        {
+            throw new InvalidOperationException("Discriminator weights not initialized.");
+        }
+
+        var hiddenPre = Affine(x, discW1, discB1);
+        var features = Engine.LeakyReLU(hiddenPre, NumOps.FromDouble(0.2));
+        return new DiscriminatorResult
+        {
+            HiddenPre = hiddenPre,
+            Features = features,
+            Logit = Affine(features, discW2, discB2)
+        };
+    }
+
     // input W + b (bias broadcast over the rows)
     private Tensor<T> Affine(Tensor<T> input, Matrix<T> weights, Vector<T> bias)
         => Engine.TensorAdd(Engine.TensorMatMul(input, Tensor<T>.FromMatrix(weights)),
@@ -326,11 +404,40 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(
             Engine.TensorLessThan(preActivation, NumOps.Zero), NumOps.FromDouble(-0.8)), NumOps.One);
 
-    // Back-propagates the batch sum of the reconstruction loss ||x - xRecon||^2 and the latent consistency
-    // loss ||z - zRecon||^2 (both with weight 1) and applies w = w - lr * g to every weight. The re-encoder
-    // learns zRecon -> z; the encoder receives the reconstruction gradient through the decoder plus the
-    // latent consistency gradient on z (the re-encoder path does not feed back into the decoder).
-    private void Backward(ForwardResult forward, T lr)
+    /// <summary>
+    /// The generator loss of Akcay et al. (2018), Eq. 4: w_adv mean((f(x) - f(x'))^2) + w_con mean(|x - x'|)
+    /// + w_enc mean((z - z')^2), each mean over all elements of the batch, with f the discriminator features.
+    /// </summary>
+    internal T GeneratorLoss(Tensor<T> x)
+    {
+        var engine = Engine;
+        var forward = Forward(x);
+        T adversarial = engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(
+            Discriminate(forward.XRecon).Features, Discriminate(x).Features)));
+        T contextual = engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(forward.XRecon, x)));
+        T encoder = engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(forward.ZRecon, forward.Z)));
+        return NumOps.Add(NumOps.Add(NumOps.Multiply(NumOps.FromDouble(_adversarialWeight), adversarial),
+            NumOps.Multiply(NumOps.FromDouble(_contextualWeight), contextual)),
+            NumOps.Multiply(NumOps.FromDouble(_encoderWeight), encoder));
+    }
+
+    /// <summary>
+    /// The discriminator loss of the reference code: (BCE(D(x), 1) + BCE(D(x'), 0)) / 2, each a batch mean.
+    /// </summary>
+    internal T DiscriminatorLoss(Tensor<T> x)
+    {
+        var engine = Engine;
+        var forward = Forward(x);
+        T real = engine.TensorMean(engine.Softplus(engine.TensorNegate(Discriminate(x).Logit)));
+        T fake = engine.TensorMean(engine.Softplus(Discriminate(forward.XRecon).Logit));
+        return NumOps.Multiply(NumOps.Add(real, fake), NumOps.FromDouble(0.5));
+    }
+
+    /// <summary>
+    /// The parameters in a fixed order: encoder W1, b1, W2, b2, decoder W1, b1, W2, b2, re-encoder W1, b1,
+    /// W2, b2, discriminator W1, b1, W2, b2.
+    /// </summary>
+    internal Tensor<T>[] TrainingParameters()
     {
         var encW1 = _encW1;
         var encB1 = _encB1;
@@ -344,68 +451,178 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         var reEncB1 = _reEncB1;
         var reEncW2 = _reEncW2;
         var reEncB2 = _reEncB2;
+        var discW1 = _discW1;
+        var discB1 = _discB1;
+        var discW2 = _discW2;
+        var discB2 = _discB2;
 
         if (encW1 == null || encB1 == null || encW2 == null || encB2 == null ||
             decW1 == null || decB1 == null || decW2 == null || decB2 == null ||
-            reEncW1 == null || reEncB1 == null || reEncW2 == null || reEncB2 == null)
+            reEncW1 == null || reEncB1 == null || reEncW2 == null || reEncB2 == null ||
+            discW1 == null || discB1 == null || discW2 == null || discB2 == null)
         {
             throw new InvalidOperationException("Weights not initialized.");
         }
 
+        return new[]
+        {
+            Tensor<T>.FromMatrix(encW1), encB1.AsTensor(), Tensor<T>.FromMatrix(encW2), encB2.AsTensor(),
+            Tensor<T>.FromMatrix(decW1), decB1.AsTensor(), Tensor<T>.FromMatrix(decW2), decB2.AsTensor(),
+            Tensor<T>.FromMatrix(reEncW1), reEncB1.AsTensor(), Tensor<T>.FromMatrix(reEncW2), reEncB2.AsTensor(),
+            Tensor<T>.FromMatrix(discW1), discB1.AsTensor(), Tensor<T>.FromMatrix(discW2), discB2.AsTensor()
+        };
+    }
+
+    /// <summary>
+    /// Replaces the parameters, given in <see cref="TrainingParameters"/> order.
+    /// </summary>
+    internal void SetTrainingParameters(Tensor<T>[] parameters)
+    {
+        if (parameters is null || parameters.Length != 16)
+        {
+            throw new ArgumentException("Expected the 16 GANomaly parameters.", nameof(parameters));
+        }
+
+        _encW1 = parameters[0].ToMatrix();
+        _encB1 = parameters[1].ToVector();
+        _encW2 = parameters[2].ToMatrix();
+        _encB2 = parameters[3].ToVector();
+        _decW1 = parameters[4].ToMatrix();
+        _decB1 = parameters[5].ToVector();
+        _decW2 = parameters[6].ToMatrix();
+        _decB2 = parameters[7].ToVector();
+        _reEncW1 = parameters[8].ToMatrix();
+        _reEncB1 = parameters[9].ToVector();
+        _reEncW2 = parameters[10].ToMatrix();
+        _reEncB2 = parameters[11].ToVector();
+        _discW1 = parameters[12].ToMatrix();
+        _discB1 = parameters[13].ToVector();
+        _discW2 = parameters[14].ToMatrix();
+        _discB2 = parameters[15].ToVector();
+    }
+
+    /// <summary>
+    /// Gradients in <see cref="TrainingParameters"/> order: the 12 generator gradients of <see cref="GeneratorLoss"/>
+    /// (the discriminator is held fixed) and the 4 discriminator gradients of <see cref="DiscriminatorLoss"/>
+    /// (the reconstruction is detached, as in the reference code).
+    /// </summary>
+    internal Tensor<T>[] TrainingGradients(Tensor<T> x)
+    {
+        var p = TrainingParameters();
         var engine = Engine;
-        T two = NumOps.FromDouble(2);
         var axis0 = new[] { 0 };
-        var encW2Tensor = Tensor<T>.FromMatrix(encW2);
-        var decW1Tensor = Tensor<T>.FromMatrix(decW1);
-        var decW2Tensor = Tensor<T>.FromMatrix(decW2);
-        var reEncW2Tensor = Tensor<T>.FromMatrix(reEncW2);
+        int batch = x.Shape[0];
+        var forward = Forward(x);
+        var real = Discriminate(x);
+        var fake = Discriminate(forward.XRecon);
 
-        // === Backprop for reconstruction loss: ||x - xRecon||^2 ===
-        var dXRecon = engine.TensorMultiplyScalar(engine.TensorSubtract(forward.XRecon, forward.X), two);
-        var gDecW2 = engine.TensorMatMul(engine.TensorTranspose(forward.DecHidden), dXRecon);
-        var gDecB2 = engine.ReduceSum(dXRecon, axis0, false);
-        var dDecH1 = engine.TensorMultiply(engine.TensorMatMul(dXRecon, engine.TensorTranspose(decW2Tensor)),
-            LeakySlope(forward.DecHiddenPre));
-        var gDecW1 = engine.TensorMatMul(engine.TensorTranspose(forward.Z), dDecH1);
-        var gDecB1 = engine.ReduceSum(dDecH1, axis0, false);
-        var dZFromRecon = engine.TensorMatMul(dDecH1, engine.TensorTranspose(decW1Tensor));
+        // === Generator: adversarial feature matching, w_adv mean((f(x') - f(x))^2) ===
+        T adversarialScale = NumOps.FromDouble(2 * _adversarialWeight / ((double)batch * _hiddenDim));
+        var dFakeFeatures = engine.TensorMultiplyScalar(engine.TensorSubtract(fake.Features, real.Features), adversarialScale);
+        var dFakePre = engine.TensorMultiply(dFakeFeatures, LeakySlope(fake.HiddenPre));
+        var dXReconAdversarial = engine.TensorMatMul(dFakePre, engine.TensorTranspose(p[12]));
 
-        // === Backprop for latent consistency loss: ||z - zRecon||^2 ===
-        var dZRecon = engine.TensorMultiplyScalar(engine.TensorSubtract(forward.ZRecon, forward.Z), two);
-        var dZFromLatent = engine.TensorNegate(dZRecon);
+        // === Contextual loss: w_con mean(|x' - x|) ===
+        var dXReconContextual = engine.TensorMultiplyScalar(engine.TensorSign(engine.TensorSubtract(forward.XRecon, x)),
+            NumOps.FromDouble(_contextualWeight / ((double)batch * _inputDim)));
+
+        // === Encoder loss: w_enc mean((z' - z)^2), through the re-encoder back into the reconstruction ===
+        var dZRecon = engine.TensorMultiplyScalar(engine.TensorSubtract(forward.ZRecon, forward.Z),
+            NumOps.FromDouble(2 * _encoderWeight / ((double)batch * _latentDim)));
         var gReEncW2 = engine.TensorMatMul(engine.TensorTranspose(forward.ReEncHidden), dZRecon);
         var gReEncB2 = engine.ReduceSum(dZRecon, axis0, false);
-        var dReEncH1 = engine.TensorMultiply(engine.TensorMatMul(dZRecon, engine.TensorTranspose(reEncW2Tensor)),
+        var dReEncH1 = engine.TensorMultiply(engine.TensorMatMul(dZRecon, engine.TensorTranspose(p[10])),
             LeakySlope(forward.ReEncHiddenPre));
         var gReEncW1 = engine.TensorMatMul(engine.TensorTranspose(forward.XRecon), dReEncH1);
         var gReEncB1 = engine.ReduceSum(dReEncH1, axis0, false);
+        var dXReconEncoder = engine.TensorMatMul(dReEncH1, engine.TensorTranspose(p[8]));
 
-        // === Backprop through encoder ===
-        var dZ = engine.TensorAdd(dZFromRecon, dZFromLatent);
+        // === Decoder ===
+        var dXRecon = engine.TensorAdd(engine.TensorAdd(dXReconAdversarial, dXReconContextual), dXReconEncoder);
+        var gDecW2 = engine.TensorMatMul(engine.TensorTranspose(forward.DecHidden), dXRecon);
+        var gDecB2 = engine.ReduceSum(dXRecon, axis0, false);
+        var dDecH1 = engine.TensorMultiply(engine.TensorMatMul(dXRecon, engine.TensorTranspose(p[6])),
+            LeakySlope(forward.DecHiddenPre));
+        var gDecW1 = engine.TensorMatMul(engine.TensorTranspose(forward.Z), dDecH1);
+        var gDecB1 = engine.ReduceSum(dDecH1, axis0, false);
+
+        // === Encoder: decoder path plus the direct -dZRecon of the encoder loss ===
+        var dZ = engine.TensorSubtract(engine.TensorMatMul(dDecH1, engine.TensorTranspose(p[4])), dZRecon);
         var gEncW2 = engine.TensorMatMul(engine.TensorTranspose(forward.EncHidden), dZ);
         var gEncB2 = engine.ReduceSum(dZ, axis0, false);
-        var dEncH1 = engine.TensorMultiply(engine.TensorMatMul(dZ, engine.TensorTranspose(encW2Tensor)),
+        var dEncH1 = engine.TensorMultiply(engine.TensorMatMul(dZ, engine.TensorTranspose(p[2])),
             LeakySlope(forward.EncHiddenPre));
-        var gEncW1 = engine.TensorMatMul(engine.TensorTranspose(forward.X), dEncH1);
+        var gEncW1 = engine.TensorMatMul(engine.TensorTranspose(x), dEncH1);
         var gEncB1 = engine.ReduceSum(dEncH1, axis0, false);
 
-        _encW1 = Step(Tensor<T>.FromMatrix(encW1), gEncW1, lr).ToMatrix();
-        _encB1 = Step(encB1.AsTensor(), gEncB1, lr).ToVector();
-        _encW2 = Step(encW2Tensor, gEncW2, lr).ToMatrix();
-        _encB2 = Step(encB2.AsTensor(), gEncB2, lr).ToVector();
-        _decW1 = Step(decW1Tensor, gDecW1, lr).ToMatrix();
-        _decB1 = Step(decB1.AsTensor(), gDecB1, lr).ToVector();
-        _decW2 = Step(decW2Tensor, gDecW2, lr).ToMatrix();
-        _decB2 = Step(decB2.AsTensor(), gDecB2, lr).ToVector();
-        _reEncW1 = Step(Tensor<T>.FromMatrix(reEncW1), gReEncW1, lr).ToMatrix();
-        _reEncB1 = Step(reEncB1.AsTensor(), gReEncB1, lr).ToVector();
-        _reEncW2 = Step(reEncW2Tensor, gReEncW2, lr).ToMatrix();
-        _reEncB2 = Step(reEncB2.AsTensor(), gReEncB2, lr).ToVector();
+        // === Discriminator: (mean softplus(-logit_real) + mean softplus(logit_fake)) / 2 ===
+        T half = NumOps.FromDouble(0.5 / batch);
+        var dRealLogit = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorSigmoid(real.Logit), NumOps.One), half);
+        var dFakeLogit = engine.TensorMultiplyScalar(engine.TensorSigmoid(fake.Logit), half);
+        var gDiscW2 = engine.TensorAdd(engine.TensorMatMul(engine.TensorTranspose(real.Features), dRealLogit),
+            engine.TensorMatMul(engine.TensorTranspose(fake.Features), dFakeLogit));
+        var gDiscB2 = engine.TensorAdd(engine.ReduceSum(dRealLogit, axis0, false), engine.ReduceSum(dFakeLogit, axis0, false));
+        var discW2Transposed = engine.TensorTranspose(p[14]);
+        var dRealPre = engine.TensorMultiply(engine.TensorMatMul(dRealLogit, discW2Transposed), LeakySlope(real.HiddenPre));
+        var dFakeDiscPre = engine.TensorMultiply(engine.TensorMatMul(dFakeLogit, discW2Transposed), LeakySlope(fake.HiddenPre));
+        var gDiscW1 = engine.TensorAdd(engine.TensorMatMul(engine.TensorTranspose(x), dRealPre),
+            engine.TensorMatMul(engine.TensorTranspose(forward.XRecon), dFakeDiscPre));
+        var gDiscB1 = engine.TensorAdd(engine.ReduceSum(dRealPre, axis0, false), engine.ReduceSum(dFakeDiscPre, axis0, false));
+
+        return new[]
+        {
+            gEncW1, gEncB1, gEncW2, gEncB2, gDecW1, gDecB1, gDecW2, gDecB2,
+            gReEncW1, gReEncB1, gReEncW2, gReEncB2, gDiscW1, gDiscB1, gDiscW2, gDiscB2
+        };
     }
 
-    // weights - lr * gradients
-    private Tensor<T> Step(Tensor<T> weights, Tensor<T> gradients, T lr)
-        => Engine.TensorSubtract(weights, Engine.TensorMultiplyScalar(gradients, lr));
+    // Adam (beta1 = 0.5, beta2 = 0.999, eps = 1e-8, the reference code's optimizer) on every parameter:
+    // m = b1 m + (1 - b1) g, v = b2 v + (1 - b2) g^2, w = w - lr (m / (1 - b1^t)) / (sqrt(v / (1 - b2^t)) + eps)
+    private void AdamUpdate(Tensor<T>[] gradients)
+    {
+        const double beta1 = 0.5;
+        const double beta2 = 0.999;
+        var engine = Engine;
+        var parameters = TrainingParameters();
+        var adamM = _adamM;
+        var adamV = _adamV;
+        if (adamM is null || adamV is null)
+        {
+            adamM = new Tensor<T>[parameters.Length];
+            adamV = new Tensor<T>[parameters.Length];
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                adamM[i] = Tensor<T>.CreateZeros(parameters[i].Shape.ToArray());
+                adamV[i] = Tensor<T>.CreateZeros(parameters[i].Shape.ToArray());
+            }
+
+            _adamM = adamM;
+            _adamV = adamV;
+        }
+
+        _adamStep++;
+        T b1 = NumOps.FromDouble(beta1);
+        T oneMinusB1 = NumOps.FromDouble(1 - beta1);
+        T b2 = NumOps.FromDouble(beta2);
+        T oneMinusB2 = NumOps.FromDouble(1 - beta2);
+        T firstCorrection = NumOps.FromDouble(1 - Math.Pow(beta1, _adamStep));
+        T secondCorrection = NumOps.FromDouble(1 - Math.Pow(beta2, _adamStep));
+        T lr = NumOps.FromDouble(_learningRate);
+        T eps = NumOps.FromDouble(1e-8);
+        var updated = new Tensor<T>[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            adamM[i] = engine.TensorAdd(engine.TensorMultiplyScalar(adamM[i], b1), engine.TensorMultiplyScalar(gradients[i], oneMinusB1));
+            adamV[i] = engine.TensorAdd(engine.TensorMultiplyScalar(adamV[i], b2),
+                engine.TensorMultiplyScalar(engine.TensorSquare(gradients[i]), oneMinusB2));
+            var mHat = engine.TensorDivideScalar(adamM[i], firstCorrection);
+            var vHat = engine.TensorDivideScalar(adamV[i], secondCorrection);
+            var step = engine.TensorDivide(mHat, engine.TensorAddScalar(engine.TensorSqrt(vHat), eps));
+            updated[i] = engine.TensorSubtract(parameters[i], engine.TensorMultiplyScalar(step, lr));
+        }
+
+        SetTrainingParameters(updated);
+    }
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
@@ -425,12 +642,13 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
         }
 
-        // Anomaly score: ||z - zRecon||^2 (latent consistency) after encode, decode, re-encode of the normalized rows
+        // Anomaly score (reference code): mean((z - zRecon)^2) over the latent dimensions after encode, decode,
+        // re-encode of the normalized rows
         var engine = Engine;
         var normalized = AnomalyTensorOps.DivideRow(
             AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
         var forward = Forward(normalized);
-        return engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(forward.Z, forward.ZRecon)),
+        return engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(forward.Z, forward.ZRecon)),
             new[] { 1 }, false).ToVector();
     }
 }
