@@ -754,4 +754,30 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(-15.0, product[1], Precision);
         Assert.Equal(-3.0, product[2], Precision);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedBABU_MaskHeadGradientsFreezesTheSameLayersExtractHeadReturns()
+    {
+        await Task.Yield();
+
+        // Head fraction 0.5 of four layers: ordinal order a, b, c, d -> head is {c, d}. The gradients are
+        // inserted in another order; masking used insertion order and zeroed {a, b} instead.
+        var babu = new AiDotNet.FederatedLearning.Personalization.FedBABUPersonalization<double>(headFraction: 0.5);
+        var gradients = new Dictionary<string, double[]>
+        {
+            ["d"] = new[] { 1.0 },
+            ["c"] = new[] { 2.0 },
+            ["b"] = new[] { 3.0 },
+            ["a"] = new[] { 4.0 },
+        };
+
+        var head = babu.ExtractHead(gradients);
+        Assert.Equal(new[] { "c", "d" }, head.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray());
+
+        var masked = babu.MaskHeadGradients(gradients);
+        Assert.Equal(new[] { 0.0 }, masked["c"]);
+        Assert.Equal(new[] { 0.0 }, masked["d"]);
+        Assert.Equal(new[] { 3.0 }, masked["b"]);
+        Assert.Equal(new[] { 4.0 }, masked["a"]);
+    }
 }
