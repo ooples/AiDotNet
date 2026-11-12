@@ -48,7 +48,6 @@ namespace AiDotNet.MetaLearning.Models;
 [PipelineStage(PipelineStage.Training)]
 public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly RelationNetworkOptions<T, TInput, TOutput> _options;
@@ -110,8 +109,8 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
         _classSlots = episode.ClassSlots;
         _shotSlots = RelationScorer<T>.ShotSlots(parts.Labels);
         int numClasses = parts.Options.NumClasses;
-        _classColumns = new Tensor<T>(new[] { _classSlots.Length, numClasses });
-        for (int c = 0; c < _classSlots.Length; c++) _classColumns[c * numClasses + _classSlots[c]] = NumOps.One;
+        // classColumns[c, slot_c] = 1: each episode column moves to its class label's column.
+        _classColumns = AiDotNetEngine.Current.TensorOneHot<T>(PrototypeEpisode<T>.IndexTensor(_classSlots), numClasses);
 
         _scorer = new RelationScorer<T>(
             parts.RelationType, parts.Hidden, parts.Options.AggregationMethod, parts.Heads, parts.RelationWeights,
@@ -131,75 +130,15 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
 
         if (typeof(TOutput) == typeof(Vector<T>))
         {
-            int rows = scores.Shape[0], classes = scores.Shape[1];
-            var predicted = new Vector<T>(rows);
-            for (int r = 0; r < rows; r++)
-            {
-                int best = 0;
-                for (int c = 1; c < classes; c++)
-                {
-                    if (NumOps.GreaterThan(scores[r * classes + c], scores[r * classes + best])) best = c;
-                }
-
-                predicted[r] = NumOps.FromDouble(_classSlots[best]);
-            }
-
-            return (TOutput)(object)predicted;
+            // The highest-scoring column of each row (the first on a tie), read out as its class label.
+            int rows = scores.Shape[0];
+            if (rows == 0) return (TOutput)(object)new Vector<T>(0);
+            var best = engine.TensorArgMax(scores, 1);
+            var slots = PrototypeEpisode<T>.IndexTensor(_classSlots).Cast<T>();
+            return (TOutput)(object)engine.TensorIndexSelect(slots, best, 0).ToVector();
         }
 
         return ClassifierOutputs<T>.ToOutput<TOutput>(engine.TensorMatMul(scores, _classColumns));
-    }
-
-    /// <summary>
-    /// Encodes a tensor sample using the feature encoder.
-    /// </summary>
-    private Vector<T> EncodeSample(Tensor<T> sample)
-    {
-        if (sample is TInput input)
-        {
-            var output = _featureEncoder.Predict(input);
-            return ConversionsHelper.ConvertToVector<T, TOutput>(output);
-        }
-
-        // Fallback: use the sample data directly as features
-        var vector = new Vector<T>(sample.Length);
-        for (int i = 0; i < sample.Length; i++)
-        {
-            vector[i] = sample.GetFlat(i);
-        }
-        return vector;
-    }
-
-    /// <summary>
-    /// Computes difference features between query and support.
-    /// </summary>
-    private Tensor<T> ComputeDifferenceFeatures(Vector<T> query, Vector<T> support)
-    {
-        int length = Math.Min(query.Length, support.Length);
-        var diff = new Tensor<T>(new int[] { length });
-
-        for (int i = 0; i < length; i++)
-        {
-            diff.SetFlat(i, NumOps.Subtract(query[i], support[i]));
-        }
-
-        return diff;
-    }
-
-    /// <summary>
-    /// Computes element-wise product features between query and support.
-    /// </summary>
-    private Tensor<T> ComputeProductFeatures(Vector<T> query, Vector<T> support)
-    {
-        int length = Math.Min(query.Length, support.Length);
-        var product = new Tensor<T>(new int[] { length });
-
-        for (int i = 0; i < length; i++)
-        {
-            product.SetFlat(i, NumOps.Multiply(query[i], support[i]));
-        }
-
-        return product;
     }
 
     /// <inheritdoc/>
@@ -219,13 +158,7 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
     public Vector<T> GetParameters()
     {
         var encoderParams = InterfaceGuard.Parameterizable(_featureEncoder).GetParameters();
-        var combined = new Vector<T>(encoderParams.Length + _relationWeights.Length);
-        for (int i = 0; i < encoderParams.Length; i++)
-            combined[i] = encoderParams[i];
-        for (int i = 0; i < _relationWeights.Length; i++)
-            combined[encoderParams.Length + i] = _relationWeights[i];
-
-        return combined;
+        return Vector<T>.Concatenate(encoderParams, _relationWeights);
     }
 
     /// <inheritdoc/>
@@ -277,8 +210,7 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
             var encoder = featureEncoder.DeepCopy();
             var (support, labels) = Embed(encoder, supportInputs, supportOutputs, options);
             relationModule.EnsureInitialized(support.Shape[1], RandomHelper.CreateSecureRandom());
-            var weights = new Vector<T>(relationModule.Weights.Length);
-            for (int i = 0; i < weights.Length; i++) weights[i] = relationModule.Weights[i];
+            var weights = relationModule.Weights.Clone();
             return new Parts(encoder, options, support, labels, relationModule.RelationType, relationModule.HiddenDimension, 1,
                 weights, new Vector<T>(0), new Vector<T>(0), new Vector<T>(0));
         }
@@ -301,8 +233,7 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
             RelationNetworkOptions<T, TInput, TOutput> options)
         {
             var labelTensor = ClassifierOutputs<T>.Labels(supportOutputs, options.NumClasses);
-            var labels = new int[labelTensor.Length];
-            for (int i = 0; i < labels.Length; i++) labels[i] = (int)Math.Round(NumOps.ToDouble(labelTensor[i]));
+            var labels = AiDotNetEngine.Current.TensorRound(labelTensor).Cast<int>().ToArray();
             if (labels.Length == 0)
             {
                 throw new ArgumentException("The support set is empty, so there is nothing to compare with.", nameof(supportOutputs));
