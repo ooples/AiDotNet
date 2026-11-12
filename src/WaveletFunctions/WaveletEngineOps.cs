@@ -358,7 +358,50 @@ internal static class ComplexWaveletEngineOps<T>
         return Engine.TensorComplex(real, imag).ToVector();
     }
 
-    private static Vector<Complex<T>> Zeros(int length)
+    /// <summary>
+    /// Concatenates the non-empty parts into one vector (pure data movement).
+    /// </summary>
+    internal static Vector<Complex<T>> Concat(params Vector<Complex<T>>[] parts)
+    {
+        var nonEmpty = new List<Vector<Complex<T>>>();
+        foreach (var part in parts)
+        {
+            if (part.Length > 0)
+            {
+                nonEmpty.Add(part);
+            }
+        }
+
+        return nonEmpty.Count == 0 ? new Vector<Complex<T>>(0) : Vector<Complex<T>>.Concatenate(nonEmpty);
+    }
+
+    /// <summary>
+    /// The first <paramref name="count"/> entries of <paramref name="input"/> (empty when <paramref name="count"/>
+    /// is not positive).
+    /// </summary>
+    internal static Vector<Complex<T>> Head(Vector<Complex<T>> input, int count)
+    {
+        return Slice(input, 0, count);
+    }
+
+    /// <summary>
+    /// <paramref name="count"/> entries of <paramref name="input"/> starting at <paramref name="start"/> (empty
+    /// when <paramref name="count"/> is not positive).
+    /// </summary>
+    internal static Vector<Complex<T>> Slice(Vector<Complex<T>> input, int start, int count)
+    {
+        if (count <= 0)
+        {
+            return new Vector<Complex<T>>(0);
+        }
+
+        return start == 0 && count == input.Length ? input : input.GetSubVector(start, count);
+    }
+
+    /// <summary>
+    /// A complex vector of zeros.
+    /// </summary>
+    internal static Vector<Complex<T>> Zeros(int length)
     {
         var zeros = new Vector<Complex<T>>(length);
         zeros.Fill(new Complex<T>(NumOps.Zero, NumOps.Zero));
