@@ -155,16 +155,14 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T CalculateLogLikelihood(Vector<T> y)
     {
-        T logLikelihood = NumOps.Zero;
         Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1)); // Create a dummy input matrix
 
-        for (int t = 0; t < y.Length; t++)
+        // Assuming Gaussian errors, the log-likelihood is proportional to the negative sum of squared errors
+        T logLikelihood = NumOps.Zero;
+        if (y.Length > 0)
         {
-            T error = NumOps.Subtract(y[t], predictions[t]);
-            T squaredError = NumOps.Multiply(error, error);
-
-            // Assuming Gaussian errors, the log-likelihood is proportional to the negative sum of squared errors
-            logLikelihood = NumOps.Subtract(logLikelihood, squaredError);
+            Vector<T> errors = Engine.Subtract(y, predictions.GetSubVector(0, y.Length));
+            logLikelihood = NumOps.Subtract(logLikelihood, Engine.Sum(Engine.Multiply(errors, errors)));
         }
 
         // Add a penalty term for model complexity
@@ -200,57 +198,47 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     {
         int horizon = input.Rows;
         int n = _level.Length;
-        Vector<T> predictions = new Vector<T>(horizon);
 
-        for (int t = 0; t < horizon; t++)
+        // In-sample: return training values directly (fitted values approach)
+        int fitted = _trainingSeries.Length > 0 ? Math.Max(0, Math.Min(horizon, _trainingSeries.Length)) : 0;
+        Vector<T> predictions = _trainingSeries.GetSubVector(0, fitted);
+        if (horizon <= fitted)
         {
-            if (t < _trainingSeries.Length && _trainingSeries.Length > 0)
-            {
-                // In-sample: return training values directly (fitted values approach)
-                predictions[t] = _trainingSeries[t];
-            }
-            else if (t < n)
-            {
-                // In-sample but no stored training series: use decomposed components
-                T prediction = _level[t];
-                prediction = NumOps.Add(prediction, _trend[t]);
-
-                for (int i = 0; i < _seasonalComponents.Count; i++)
-                {
-                    int period = _tbatsOptions.SeasonalPeriods[i];
-                    int sLen = _seasonalComponents[i].Length;
-                    int sIdx = t % Math.Min(period, sLen);
-                    if (_tbatsOptions.BoxCoxLambda == 1)
-                        prediction = NumOps.Add(prediction, _seasonalComponents[i][sIdx]);
-                    else
-                        prediction = NumOps.Multiply(prediction, _seasonalComponents[i][sIdx]);
-                }
-
-                predictions[t] = prediction;
-            }
-            else
-            {
-                // Out-of-sample: use last level + trend, extrapolate
-                T prediction = _level[n - 1];
-                T trendSlope = _trend[n - 1];
-                prediction = NumOps.Add(prediction, NumOps.Multiply(trendSlope, NumOps.FromDouble(t - n + 1)));
-
-                for (int i = 0; i < _seasonalComponents.Count; i++)
-                {
-                    int period = _tbatsOptions.SeasonalPeriods[i];
-                    int sLen = _seasonalComponents[i].Length;
-                    int sIdx = t % Math.Min(period, sLen);
-                    if (_tbatsOptions.BoxCoxLambda == 1)
-                        prediction = NumOps.Add(prediction, _seasonalComponents[i][sIdx]);
-                    else
-                        prediction = NumOps.Multiply(prediction, _seasonalComponents[i][sIdx]);
-                }
-
-                predictions[t] = prediction;
-            }
+            return predictions;
         }
 
-        return predictions;
+        // In-sample but no stored training series: use decomposed components (level + trend)
+        int componentEnd = Math.Max(fitted, Math.Min(horizon, n));
+        Vector<T> components = Engine.Add(
+            _level.GetSubVector(fitted, componentEnd - fitted), _trend.GetSubVector(fitted, componentEnd - fitted));
+
+        // Out-of-sample: use last level + trend, extrapolate: level[n - 1] + trend[n - 1] · (t - n + 1)
+        if (horizon > componentEnd)
+        {
+            T lastLevel = _level[n - 1];
+            T trendSlope = _trend[n - 1];
+            var steps = Engine.TensorArange<T>(componentEnd - n + 1, horizon - n + 1, 1).ToVector();
+            components = Vector<T>.Concatenate(components,
+                Engine.Add(Engine.Fill(horizon - componentEnd, lastLevel), Engine.Multiply(steps, trendSlope)));
+        }
+
+        // Seasonal factor of each component at t % min(period, length), added or multiplied in order
+        for (int i = 0; i < _seasonalComponents.Count; i++)
+        {
+            int cycle = Math.Min(_tbatsOptions.SeasonalPeriods[i], _seasonalComponents[i].Length);
+            if (cycle == 0)
+            {
+                throw new DivideByZeroException(); // the season index t % cycle is undefined
+            }
+
+            Vector<T> seasonal = TimeSeriesEngineOps<T>.RepeatPeriodic(_seasonalComponents[i].GetSubVector(0, cycle), horizon)
+                .GetSubVector(fitted, horizon - fitted);
+            components = _tbatsOptions.BoxCoxLambda == 1
+                ? Engine.Add(components, seasonal)
+                : Engine.Multiply(components, seasonal);
+        }
+
+        return Vector<T>.Concatenate(predictions, components);
     }
 
     /// <summary>
@@ -276,30 +264,24 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
 
-        // Initialize level using a robust moving median
+        // Initialize level using a robust moving median of the last windowSize points
         int windowSize = Math.Min(14, n); // Use two weeks' worth of data or less if not available
-        _level = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            int start = Math.Max(0, i - windowSize + 1);
-            int end = i + 1;
-            _level[i] = StatisticsHelper<T>.CalculateMedian(y.Slice(start, end - start));
-        }
+        _level = new Vector<T>(Enumerable.Range(0, n)
+            .Select(i => StatisticsHelper<T>.CalculateMedian(y.Slice(Math.Max(0, i - windowSize + 1), i + 1 - Math.Max(0, i - windowSize + 1))))
+            .ToArray());
 
-        // Initialize trend using robust slope estimation
-        _trend = new Vector<T>(n);
-        for (int i = windowSize; i < n; i++)
-        {
-            Vector<T> x = Vector<T>.Range(0, windowSize);
-            Vector<T> yWindow = y.Slice(i - windowSize, windowSize);
-            Vector<T> coefficients = RobustLinearRegression(x, yWindow);
-            _trend[i] = coefficients[1]; // Slope
-        }
+        // Initialize trend using robust slope estimation over the preceding window
+        Vector<T> x = Vector<T>.Range(0, windowSize);
+        var slopeList = Enumerable.Range(windowSize, Math.Max(0, n - windowSize))
+            .Select(i => RobustLinearRegression(x, y.Slice(i - windowSize, windowSize)).GetSubVector(1, 1)) // Slope
+            .ToArray();
+        Vector<T> slopes = slopeList.Length > 0 ? Vector<T>.Concatenate(slopeList) : new Vector<T>(0);
 
         // Extrapolate trend for the first windowSize points
-        for (int i = 0; i < windowSize; i++)
+        _trend = Vector<T>.Concatenate(new Vector<T>(windowSize), slopes);
+        if (windowSize > 0)
         {
-            _trend[i] = _trend[windowSize];
+            Engine.Fill(windowSize, _trend[windowSize]).CopyTo(_trend.AsWritableSpan());
         }
 
         // Initialize seasonal components using STL decomposition with robust fitting
@@ -337,18 +319,24 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> RobustLinearRegression(Vector<T> x, Vector<T> y)
     {
-        // Implement Theil-Sen estimator for robust linear regression
-        List<T> slopes = new List<T>();
-        for (int i = 0; i < x.Length; i++)
+        // Implement Theil-Sen estimator for robust linear regression:
+        // slopes (y[j] - y[i]) / (x[j] - x[i]) of every pair i < j, in row-major pair order
+        int n = x.Length;
+        Vector<T> slopes = new Vector<T>(0);
+        if (n > 1)
         {
-            for (int j = i + 1; j < x.Length; j++)
-            {
-                T slope = NumOps.Divide(NumOps.Subtract(y[j], y[i]), NumOps.Subtract(x[j], x[i]));
-                slopes.Add(slope);
-            }
+            var yRows = Engine.TensorBroadcastTo(Tensor<T>.FromVector(y, new[] { 1, n }), new[] { n, n });
+            var yColumns = Engine.TensorBroadcastTo(Tensor<T>.FromVector(y, new[] { n, 1 }), new[] { n, n });
+            var xRows = Engine.TensorBroadcastTo(Tensor<T>.FromVector(x, new[] { 1, n }), new[] { n, n });
+            var xColumns = Engine.TensorBroadcastTo(Tensor<T>.FromVector(x, new[] { n, 1 }), new[] { n, n });
+            // The unused diagonal gets a unit denominator so no 0 / 0 is ever evaluated.
+            var denominators = Engine.TensorAdd(Engine.TensorSubtract(xRows, xColumns), Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(n)));
+            var allSlopes = Engine.TensorDivide(Engine.TensorSubtract(yRows, yColumns), denominators);
+            var upperPairs = Enumerable.Range(0, n).SelectMany(i => Enumerable.Range(i + 1, n - i - 1).Select(j => i * n + j));
+            slopes = TimeSeriesEngineOps<T>.Gather(allSlopes.ToVector(), upperPairs);
         }
 
-        T medianSlope = StatisticsHelper<T>.CalculateMedian(new Vector<T>(slopes.ToArray()));
+        T medianSlope = StatisticsHelper<T>.CalculateMedian(slopes);
         T intercept = NumOps.Subtract(StatisticsHelper<T>.CalculateMedian(y),
                                       NumOps.Multiply(medianSlope, StatisticsHelper<T>.CalculateMedian(x)));
 
@@ -380,34 +368,20 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     private Vector<T> InitializeSeasonalComponentRobust(Vector<T> y, int period)
     {
         int n = y.Length;
-        Vector<T> seasonal = new Vector<T>(period);
-        Vector<T> detrended = new Vector<T>(n);
 
-        // Detrend the series
-        for (int i = 0; i < n; i++)
-        {
-            detrended[i] = NumOps.Subtract(y[i], NumOps.Add(_level[i], NumOps.Multiply(_trend[i], NumOps.FromDouble(i))));
-        }
+        // Detrend the series: y[i] - (level[i] + trend[i] · i)
+        var positions = Engine.TensorArange<T>(0, n, 1).ToVector();
+        Vector<T> detrended = Engine.Subtract(y,
+            Engine.Add(_level.GetSubVector(0, n), Engine.Multiply(_trend.GetSubVector(0, n), positions)));
 
-        // Calculate seasonal indices using median
-        for (int i = 0; i < period; i++)
-        {
-            List<T> values = new List<T>();
-            for (int j = i; j < n; j += period)
-            {
-                values.Add(detrended[j]);
-            }
-            seasonal[i] = StatisticsHelper<T>.CalculateMedian(new Vector<T>(values.ToArray()));
-        }
+        // Calculate seasonal indices using the median of each phase
+        Vector<T> seasonal = new Vector<T>(Enumerable.Range(0, period)
+            .Select(i => StatisticsHelper<T>.CalculateMedian(Engine.StridedGather(detrended, i, period)))
+            .ToArray());
 
         // Normalize seasonal component
         T seasonalMedian = StatisticsHelper<T>.CalculateMedian(seasonal);
-        for (int i = 0; i < period; i++)
-        {
-            seasonal[i] = NumOps.Divide(seasonal[i], seasonalMedian);
-        }
-
-        return seasonal;
+        return period > 0 ? Engine.Divide(seasonal, seasonalMedian) : seasonal;
     }
 
     /// <summary>
@@ -497,26 +471,19 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T[] CalculateRobustAutocorrelations(Vector<T> y, int maxLag)
     {
-        T[] autocorrelations = new T[maxLag + 1];
         T median = StatisticsHelper<T>.CalculateMedian(y);
         T mad = StatisticsHelper<T>.CalculateMedianAbsoluteDeviation(y);
 
-        for (int lag = 0; lag <= maxLag; lag++)
-        {
-            List<T> products = new List<T>();
-            int n = y.Length - lag;
-
-            for (int t = 0; t < n; t++)
-            {
-                T diff1 = NumOps.Divide(NumOps.Subtract(y[t], median), mad);
-                T diff2 = NumOps.Divide(NumOps.Subtract(y[t + lag], median), mad);
-                products.Add(NumOps.Multiply(diff1, diff2));
-            }
-
-            autocorrelations[lag] = StatisticsHelper<T>.CalculateMedian(new Vector<T>(products.ToArray()));
-        }
-
-        return autocorrelations;
+        // Median of the products of the standardized values (y - median) / MAD at each lag;
+        // lags without any pair have the median of nothing (zero).
+        int computed = Math.Max(0, Math.Min(maxLag, y.Length - 1) + 1);
+        Vector<T> standardized = y.Length > 0
+            ? Engine.Divide(Engine.Subtract(y, Engine.Fill(y.Length, median)), mad)
+            : y;
+        var robust = Enumerable.Range(0, computed)
+            .Select(lag => StatisticsHelper<T>.CalculateMedian(Engine.Multiply(
+                standardized.GetSubVector(0, y.Length - lag), standardized.GetSubVector(lag, y.Length - lag))));
+        return Vector<T>.Concatenate(new Vector<T>(robust.ToArray()), new Vector<T>(maxLag + 1 - computed)).ToArray();
     }
 
     /// <summary>
@@ -543,30 +510,27 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CalculateRobustResiduals(Vector<T> y)
     {
-        Vector<T> residuals = new Vector<T>(y.Length);
         Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1)); // Create a dummy input matrix
-
-        for (int t = 0; t < y.Length; t++)
-        {
-            residuals[t] = NumOps.Subtract(y[t], predictions[t]);
-        }
+        Vector<T> residuals = y.Length > 0 ? Engine.Subtract(y, predictions.GetSubVector(0, y.Length)) : new Vector<T>(0);
 
         // Apply Huber's M-estimator to make residuals more robust
         T median = StatisticsHelper<T>.CalculateMedian(residuals);
         T mad = StatisticsHelper<T>.CalculateMedianAbsoluteDeviation(residuals);
         T k = NumOps.Multiply(NumOps.FromDouble(1.345), mad); // Tuning constant for 95% efficiency
-
-        for (int t = 0; t < residuals.Length; t++)
+        if (residuals.Length == 0)
         {
-            T scaledResidual = NumOps.Divide(NumOps.Subtract(residuals[t], median), mad);
-            if (NumOps.GreaterThan(NumOps.Abs(scaledResidual), k))
-            {
-                T sign = NumOps.GreaterThan(scaledResidual, NumOps.Zero) ? NumOps.One : NumOps.FromDouble(-1);
-                residuals[t] = NumOps.Add(median, NumOps.Multiply(NumOps.Multiply(sign, k), mad));
-            }
+            return residuals;
         }
 
-        return residuals;
+        // |scaled| > k → median + sign(scaled) · k · MAD
+        var scaled = Tensor<T>.FromVector(Engine.Divide(Engine.Subtract(residuals, Engine.Fill(residuals.Length, median)), mad));
+        var signedK = Engine.TensorWhere(
+            Engine.TensorGreaterThan(scaled, NumOps.Zero),
+            Engine.TensorFullLike(scaled, NumOps.Multiply(NumOps.One, k)),
+            Engine.TensorFullLike(scaled, NumOps.Multiply(NumOps.FromDouble(-1), k)));
+        var clipped = Engine.TensorAdd(Engine.TensorFullLike(scaled, median), Engine.TensorMultiplyScalar(signedK, mad));
+        var outlier = Engine.TensorGreaterThan(Engine.TensorAbs(scaled), k);
+        return Engine.TensorWhere(outlier, clipped, Tensor<T>.FromVector(residuals)).ToVector();
     }
 
     /// <summary>
@@ -591,27 +555,15 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> InitializeSeasonalComponent(Vector<T> y, int period)
     {
-        int n = y.Length;
-        Vector<T> seasonal = new Vector<T>(period);
-
-        // Calculate seasonal indices
-        for (int i = 0; i < period; i++)
-        {
-            List<T> values = new List<T>();
-            for (int j = i; j < n; j += period)
-            {
-                values.Add(y[j]);
-            }
-            Vector<T> valuesVec = new Vector<T>(values.ToArray());
-            seasonal[i] = StatisticsHelper<T>.CalculateMean(valuesVec);
-        }
+        // Calculate seasonal indices: the mean of each phase
+        Vector<T> seasonal = new Vector<T>(Enumerable.Range(0, period)
+            .Select(i => StatisticsHelper<T>.CalculateMean(Engine.StridedGather(y, i, period)))
+            .ToArray());
 
         // Normalize seasonal component
         T seasonalMean = StatisticsHelper<T>.CalculateMean(seasonal);
         // VECTORIZED: Use Engine division for normalization
-        var meanVec = new Vector<T>(period);
-        for (int idx = 0; idx < period; idx++) meanVec[idx] = seasonalMean;
-        seasonal = (Vector<T>)Engine.Divide(seasonal, meanVec);
+        seasonal = (Vector<T>)Engine.Divide(seasonal, Engine.Fill(period, seasonalMean));
 
         return seasonal;
     }
@@ -698,15 +650,8 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CalculateResiduals(Vector<T> y)
     {
-        Vector<T> residuals = new Vector<T>(y.Length);
         Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1)); // Create a dummy input matrix
-
-        for (int t = 0; t < y.Length; t++)
-        {
-            residuals[t] = NumOps.Subtract(y[t], predictions[t]);
-        }
-
-        return residuals;
+        return y.Length > 0 ? Engine.Subtract(y, predictions.GetSubVector(0, y.Length)) : new Vector<T>(0);
     }
 
     /// <summary>
@@ -970,30 +915,8 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T[] CalculateAutocorrelations(Vector<T> y, int maxLag)
     {
-        T[] autocorrelations = new T[maxLag + 1];
-        T mean = StatisticsHelper<T>.CalculateMean(y);
-        T variance = StatisticsHelper<T>.CalculateVariance(y);
-
-        // VECTORIZED: Calculate mean-centered values using Engine operations
-        var meanVec = new Vector<T>(y.Length);
-        for (int idx = 0; idx < y.Length; idx++) meanVec[idx] = mean;
-        var centered = (Vector<T>)Engine.Subtract(y, meanVec);
-
-        for (int lag = 0; lag <= maxLag; lag++)
-        {
-            T sum = NumOps.Zero;
-            int n = y.Length - lag;
-
-            // VECTORIZED: Compute lagged products
-            for (int t = 0; t < n; t++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(centered[t], centered[t + lag]));
-            }
-
-            autocorrelations[lag] = NumOps.Divide(sum, NumOps.Multiply(NumOps.FromDouble(n), variance));
-        }
-
-        return autocorrelations;
+        // ρ(lag) = Σ_t (y[t] - mean)(y[t + lag] - mean) / ((n - lag) · variance)
+        return TimeSeriesEngineOps<T>.Autocorrelations(y, maxLag).ToArray();
     }
 
     /// <summary>
@@ -1221,9 +1144,7 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         // Store training series for in-sample predictions
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
 
         // Initialize components
         InitializeComponents(y);
@@ -1239,26 +1160,26 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
             T newLogLikelihood = CalculateLogLikelihood(y);
 
             // Check for convergence
-            T improvement = NumOps.Abs(NumOps.Subtract(newLogLikelihood, oldLogLikelihood));
-            T tolerance = NumOps.FromDouble(_tbatsOptions.Tolerance);
-
-            if (NumOps.LessThan(improvement, tolerance))
+            if (HasConverged(oldLogLikelihood, newLogLikelihood))
             {
                 // Model has converged
                 break;
             }
         }
 
-        // Store learned state as ModelParameters for GetParameters()
-        int arLen = _arCoefficients.Length;
-        int maLen = _maCoefficients.Length;
-        ModelParameters = new Vector<T>(2 + arLen + maLen);
-        ModelParameters[0] = _level.Length > 0 ? _level[_level.Length - 1] : NumOps.Zero;
-        ModelParameters[1] = _trend.Length > 0 ? _trend[_trend.Length - 1] : NumOps.Zero;
-        for (int i = 0; i < arLen; i++)
-            ModelParameters[2 + i] = _arCoefficients[i];
-        for (int i = 0; i < maLen; i++)
-            ModelParameters[2 + arLen + i] = _maCoefficients[i];
+        // Store learned state as ModelParameters for GetParameters(): [level, trend, AR..., MA...]
+        T lastLevel = _level.Length > 0 ? _level[_level.Length - 1] : NumOps.Zero;
+        T lastTrend = _trend.Length > 0 ? _trend[_trend.Length - 1] : NumOps.Zero;
+        ModelParameters = Vector<T>.Concatenate(
+            new Vector<T>(new[] { lastLevel, lastTrend }), _arCoefficients, _maCoefficients);
+    }
+
+    /// <summary>Whether the log-likelihood changed by less than the configured tolerance.</summary>
+    private bool HasConverged(T oldLogLikelihood, T newLogLikelihood)
+    {
+        T improvement = NumOps.Abs(NumOps.Subtract(newLogLikelihood, oldLogLikelihood));
+        T tolerance = NumOps.FromDouble(_tbatsOptions.Tolerance);
+        return NumOps.LessThan(improvement, tolerance);
     }
 
     /// <summary>
@@ -1286,11 +1207,7 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     public override T PredictSingle(Vector<T> input)
     {
         // Create a matrix with a single row for the prediction request
-        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputMatrix[0, i] = input[i];
-        }
+        Matrix<T> inputMatrix = Matrix<T>.CreateFromVector(input);
 
         // Generate the prediction
         Vector<T> predictions = Predict(inputMatrix);
@@ -1310,13 +1227,10 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     private T CalculateAverageSeasonalFactor(Vector<T> seasonalComponent, int period)
     {
-        T sum = NumOps.Zero;
         int count = Math.Min(period, seasonalComponent.Length);
-        for (int i = 0; i < count; i++)
-        {
-            sum = NumOps.Add(sum, seasonalComponent[i]);
-        }
-        return count > 0 ? NumOps.Divide(sum, NumOps.FromDouble(count)) : NumOps.One;
+        return count > 0
+            ? NumOps.Divide(Engine.Sum(seasonalComponent.GetSubVector(0, count)), NumOps.FromDouble(count))
+            : NumOps.One;
     }
 
     /// <summary>
@@ -1326,12 +1240,9 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     {
         // For JIT approximation, we compute an average ARMA effect
         // This is a simplification - stateful JIT would track actual errors
-        T contribution = NumOps.Zero;
-        for (int p = 0; p < _arCoefficients.Length; p++)
-        {
-            // Average contribution assumes small typical errors
-            contribution = NumOps.Add(contribution, NumOps.Multiply(_arCoefficients[p], NumOps.FromDouble(0.01)));
-        }
-        return contribution;
+        // Average contribution assumes small typical errors: Σ φ_p · 0.01
+        return _arCoefficients.Length > 0
+            ? Engine.Sum(Engine.Multiply(_arCoefficients, NumOps.FromDouble(0.01)))
+            : NumOps.Zero;
     }
 }
