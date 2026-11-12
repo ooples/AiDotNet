@@ -41,7 +41,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[]? _featureWeights;
+    private Vector<T>? _featureWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -58,7 +58,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
     /// <summary>
     /// Gets the computed feature weights.
     /// </summary>
-    public double[]? FeatureWeights => _featureWeights;
+    public Vector<T>? FeatureWeights => _featureWeights;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -127,163 +127,93 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to double arrays
-        var X = new double[n, p];
-        var y = new double[n];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var featureShape = new[] { p };
 
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        // Normalize features to [0, 1] for distance computation (0 for a column whose range is not above 1e-10)
+        var minVals = PreprocessingTensorOps.ColumnMin(X);
+        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), minVals);
+        var varying = engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10));
+        var safeRange = engine.TensorWhere(varying, range, PreprocessingTensorOps.Filled(featureShape, NumOps.One));
+        var Xnorm = engine.TensorMultiply(
+            engine.TensorDivide(engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.Reshape(minVals, new[] { 1, p }), new[] { n, p })),
+                engine.TensorBroadcastTo(engine.Reshape(safeRange, new[] { 1, p }), new[] { n, p })),
+            engine.TensorBroadcastTo(engine.Reshape(varying, new[] { 1, p }), new[] { n, p }));
 
-        // Normalize features to [0, 1] for distance computation
-        var minVals = new double[p];
-        var maxVals = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            minVals[j] = double.MaxValue;
-            maxVals[j] = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                if (X[i, j] < minVals[j]) minVals[j] = X[i, j];
-                if (X[i, j] > maxVals[j]) maxVals[j] = X[i, j];
-            }
-        }
-
-        var Xnorm = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double range = maxVals[j] - minVals[j];
-                Xnorm[i, j] = range > 1e-10 ? (X[i, j] - minVals[j]) / range : 0;
-            }
-        }
-
-        // Get class information
-        var classLabels = y.Distinct().ToArray();
-        var classPriors = new Dictionary<double, double>();
-        var classIndices = new Dictionary<double, List<int>>();
-
-        foreach (double c in classLabels)
-        {
-            classIndices[c] = new List<int>();
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            classIndices[y[i]].Add(i);
-        }
-
-        foreach (double c in classLabels)
-        {
-            classPriors[c] = (double)classIndices[c].Count / n;
-        }
-
-        // Initialize weights
-        _featureWeights = new double[p];
+        // Get class information (distinct target values) and the miss coefficients
+        // prior_c / (1 - prior_class) for every other class c (0 on the diagonal)
+        var classLabels = PreprocessingTensorOps.SortedUnique(y);
+        int numClasses = classLabels.Length;
+        var classIndexTensor = PreprocessingTensorOps.LookupSorted(classLabels, y, out _);
+        var classIndex = classIndexTensor.AsSpan().ToArray();
+        var classPriors = engine.TensorDivideScalar(
+            PreprocessingTensorOps.CategoryCounts<T>(classIndexTensor, numClasses), NumOps.FromDouble(n));
+        var eye = engine.TensorEye<T>(numClasses);
+        var missCoefficients = engine.TensorWhere(eye, new Tensor<T>(new[] { numClasses, numClasses }),
+            engine.TensorOuter(engine.TensorReciprocal(PreprocessingTensorOps.OneMinus(classPriors)), classPriors));
 
         // Number of iterations
         int m = _nIterations > 0 ? _nIterations : n;
         int k = Math.Min(_nNeighbors, n - 1);
+        T scale = NumOps.FromDouble(1.0 / ((double)m * k));
+        var zeroRow = new Tensor<T>(new[] { 1, p });
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
         // ReliefF algorithm
+        var weights = new Tensor<T>(featureShape);
         for (int iter = 0; iter < m; iter++)
         {
             int idx = random.Next(n);
-            double instanceClass = y[idx];
+            int instanceClass = classIndex[idx];
+            var instance = PreprocessingTensorOps.Row(Xnorm, idx);
+            var absDiffs = engine.TensorAbs(engine.TensorSubtract(Xnorm, engine.TensorBroadcastTo(instance, new[] { n, p })));
 
-            // Find k nearest hits (same class)
-            var hits = FindNearestNeighbors(Xnorm, idx, classIndices[instanceClass], k, p);
-
-            // Find k nearest misses from each other class
-            var missesPerClass = new Dictionary<double, int[]>();
-            foreach (double c in classLabels)
+            // k nearest neighbours of every class (Euclidean, ties in index order), excluding the instance
+            var order = PreprocessingTensorOps.StableOrder(
+                engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(
+                    engine.TensorSubtract(Xnorm, engine.TensorBroadcastTo(instance, new[] { n, p }))), new[] { 1 }, false)),
+                descending: false);
+            var neighbours = new List<int>[numClasses];
+            for (int c = 0; c < numClasses; c++)
+                neighbours[c] = new List<int>();
+            foreach (int candidate in order)
             {
-                if (Math.Abs(c - instanceClass) > 1e-10)
-                {
-                    missesPerClass[c] = FindNearestNeighbors(Xnorm, idx, classIndices[c], k, p);
-                }
+                var bucket = neighbours[classIndex[candidate]];
+                if (candidate != idx && bucket.Count < k)
+                    bucket.Add(candidate);
             }
 
-            // Update weights
-            for (int f = 0; f < p; f++)
+            // Per-class sums of |x_idx - x_neighbour| ([numClasses, p])
+            var classSums = new Tensor<T>[numClasses];
+            for (int c = 0; c < numClasses; c++)
             {
-                // Contribution from hits (same class - decrease weight if different)
-                double hitSum = 0;
-                foreach (int h in hits)
-                {
-                    hitSum += Math.Abs(Xnorm[idx, f] - Xnorm[h, f]);
-                }
-                hitSum /= (double)m * k;
-
-                // Contribution from misses (different class - increase weight if different)
-                double missSum = 0;
-                foreach (double c in classLabels)
-                {
-                    if (Math.Abs(c - instanceClass) > 1e-10 && missesPerClass.TryGetValue(c, out var misses))
-                    {
-                        double classMissSum = 0;
-                        foreach (int miss in misses)
-                        {
-                            classMissSum += Math.Abs(Xnorm[idx, f] - Xnorm[miss, f]);
-                        }
-                        // Weight by prior probability
-                        missSum += (classPriors[c] / (1 - classPriors[instanceClass])) * classMissSum / k;
-                    }
-                }
-                missSum /= m;
-
-                _featureWeights[f] += missSum - hitSum;
+                classSums[c] = neighbours[c].Count == 0
+                    ? zeroRow
+                    : engine.ReduceSum(engine.TensorIndexSelect(absDiffs,
+                        new Tensor<int>(neighbours[c].ToArray(), new[] { neighbours[c].Count }), 0), new[] { 0 }, true);
             }
+
+            // Hits (same class) decrease the weight; misses (other classes, prior-weighted) increase it
+            var hitSum = engine.Reshape(classSums[instanceClass], featureShape);
+            var missSum = engine.Reshape(engine.TensorMatMul(PreprocessingTensorOps.Row(missCoefficients, instanceClass),
+                engine.TensorConcatenate(classSums, 0)), featureShape);
+            weights = engine.TensorAdd(weights, engine.TensorSubtract(
+                engine.TensorMultiplyScalar(missSum, scale), engine.TensorMultiplyScalar(hitSum, scale)));
         }
+
+        _featureWeights = weights.ToVector();
 
         // Select top features
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureWeights
-            .Select((w, idx) => (Weight: w, Index: idx))
-            .OrderByDescending(x => x.Weight)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, nToSelect);
 
         IsFitted = true;
     }
-
-    private int[] FindNearestNeighbors(double[,] Xnorm, int idx, List<int> candidates, int k, int p)
-    {
-        var distances = new List<(int Index, double Distance)>();
-
-        foreach (int candIdx in candidates)
-        {
-            if (candIdx == idx) continue;
-
-            double dist = 0;
-            for (int f = 0; f < p; f++)
-            {
-                double diff = Xnorm[idx, f] - Xnorm[candIdx, f];
-                dist += diff * diff;
-            }
-
-            distances.Add((candIdx, Math.Sqrt(dist)));
-        }
-
-        return distances
-            .OrderBy(d => d.Distance)
-            .Take(k)
-            .Select(d => d.Index)
-            .ToArray();
-    }
-
     /// <summary>
     /// Fits and transforms the data.
     /// </summary>
@@ -303,19 +233,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
             throw new InvalidOperationException("ReliefF has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numCols; j++)
-            {
-                result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <summary>
