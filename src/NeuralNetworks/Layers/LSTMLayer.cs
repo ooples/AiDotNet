@@ -447,6 +447,25 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _initialCell;
     [AiDotNet.Attributes.Scratch]
     private bool _stateStepping;
+    private double _stateCellClip;
+    private Func<Tensor<T>, Tensor<T>, Tensor<T>>? _stateZoneout;
+
+    /// <summary>Runs the recurrent states with optional cell clipping and a ZoneOut transition.</summary>
+    internal Tensor<T> ForwardWithStateRegularization(
+        Tensor<T> input, double cellClip, Func<Tensor<T>, Tensor<T>, Tensor<T>>? zoneout)
+    {
+        _stateCellClip = cellClip;
+        _stateZoneout = zoneout;
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            _stateCellClip = 0;
+            _stateZoneout = null;
+        }
+    }
 
     /// <summary>
     /// Runs <paramref name="input"/> <c>[B, T, F]</c> starting from the given hidden and cell state instead of zeros,
@@ -1229,7 +1248,8 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
         bool standardActivations = (_useVectorActivation ? _tanhVectorActivation?.GetType() : _tanhActivation?.GetType()) == typeof(TanhActivation<T>)
             && (_useVectorActivation ? _sigmoidVectorActivation?.GetType() : _sigmoidActivation?.GetType()) == typeof(SigmoidActivation<T>);
-        if (standardActivations && timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
+        if (standardActivations && _stateCellClip == 0 && _stateZoneout is null
+            && timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
             Tensor<T>? fusedOutput = null;
             try { fusedOutput = TryFusedLstmForward(input3D, tapeActive || graphActive); }
@@ -1305,9 +1325,11 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         for (int t = 0; t < timeSteps; t++)
         {
             var gates = Engine.TensorAdd(Engine.TensorSqueeze(Engine.TensorNarrow(projected, 1, t, 1), 1), Engine.TensorMatMul(currentH, wh));
-            currentH = standardActivations
-                ? LstmGateDispatch<T>.Forward(Engine, gates, currentC, out currentC)
-                : LstmGateDispatch<T>.Forward(Engine, gates, currentC, Activate, Recurrent, out currentC);
+            var candidateH = standardActivations && _stateCellClip == 0
+                ? LstmGateDispatch<T>.Forward(Engine, gates, currentC, out var candidateC)
+                : LstmGateDispatch<T>.Forward(Engine, gates, currentC, Activate, Recurrent, out candidateC, _stateCellClip);
+            currentH = _stateZoneout is null ? candidateH : _stateZoneout(currentH, candidateH);
+            currentC = _stateZoneout is null ? candidateC : _stateZoneout(currentC, candidateC);
             // Collect the hidden state for the tape-connected output concat below.
             hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
         }

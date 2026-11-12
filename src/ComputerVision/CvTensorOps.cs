@@ -309,6 +309,46 @@ internal static class CvTensorOps<T>
     }
 
     /// <summary>
+    /// <see cref="ConcatenateOutputs"/> for a raw regression step, with the outputs listed in
+    /// <paramref name="dataOutputs"/> taken out of the loss. Those outputs are data the step cannot change,
+    /// such as the boxes a two-stage detector's head received, so their positions carry the target's own
+    /// values: their squared error is zero and they no longer dominate the loss. When
+    /// <paramref name="target"/> is null or shaped differently, those positions are zero.
+    /// </summary>
+    public static Tensor<T> ConcatenateTrainableOutputs(IReadOnlyList<Tensor<T>> outputs, IReadOnlyCollection<int> dataOutputs,
+        Tensor<T>? target)
+    {
+        var prediction = ConcatenateOutputs(outputs);
+        if (dataOutputs.Count == 0)
+        {
+            return prediction;
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var keep = new Tensor<T>[outputs.Count];
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            keep[i] = new Tensor<T>(outputs[i].Shape.ToArray());
+            if (!dataOutputs.Contains(i)) keep[i].Fill(ops.One);
+        }
+
+        var keepMask = ConcatenateOutputs(keep);
+        var kept = Engine.TensorMultiply(prediction, keepMask);
+        if (target is null || !target.Shape.ToArray().SequenceEqual(prediction.Shape.ToArray()))
+        {
+            return kept;
+        }
+
+        var dataMask = new Tensor<T>(keepMask.Shape.ToArray());
+        for (int i = 0; i < dataMask.Length; i++)
+        {
+            dataMask[i] = ops.Subtract(ops.One, keepMask[i]);
+        }
+
+        return Engine.TensorAdd(kept, Engine.TensorMultiply(target, dataMask));
+    }
+
+    /// <summary>
     /// Builds a Swin relative-position bias <c>[1, H, L, L]</c> from a learnable table
     /// <c>[R, H]</c> and an index map <c>index[i, j]</c> into its rows. The lookup is a gather, so the
     /// table receives gradients.
@@ -475,19 +515,53 @@ internal static class CvTensorOps<T>
             return new Tensor<T>(new[] { 0, features.Shape[1], outputSize, outputSize });
         }
 
-        // The engine's rows are (batch index, x1, y1, x2, y2).
+        return Engine.RoIAlign(features, RoIRows(boxes, batchIndices), outputSize, outputSize, (float)spatialScale,
+            samplingRatio, aligned: false);
+    }
+
+    /// <summary>
+    /// RoIAlign exactly as torchvision's <c>roi_align</c> (and mmcv's <c>RoIAlign</c>) computes it, on the tape over the
+    /// features: with <paramref name="aligned"/> the box is shifted by half a pixel and its size is not clamped to 1; each
+    /// bin averages <c>samplingRatio²</c> bilinear samples over ALL samples (a sample beyond [-1, size] contributes zero but
+    /// still counts); and a sample in [-1, 0] reads the edge, as does one at or past size - 1. The engine kernel computes
+    /// exactly that; this entry point only fixes the sampling ratio and exposes the alignment.
+    /// </summary>
+    /// <param name="features">Feature map <c>[N, C, H, W]</c>.</param>
+    /// <param name="boxes">Per-RoI <c>(x1, y1, x2, y2)</c> in image coordinates, length <c>4 * R</c>.</param>
+    /// <param name="batchIndices">Per-RoI image index into <paramref name="features"/>, length <c>R</c>.</param>
+    /// <param name="spatialScale">Image-to-feature-map scale.</param>
+    /// <param name="outputSize">Pooled grid side.</param>
+    /// <param name="samplingRatio">Samples per bin side (positive).</param>
+    /// <param name="aligned">Whether to shift the box by half a pixel (torchvision's <c>aligned=True</c>).</param>
+    /// <returns>Pooled features <c>[R, C, outputSize, outputSize]</c>.</returns>
+    public static Tensor<T> RoIAlignExact(
+        Tensor<T> features, double[] boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio, bool aligned)
+    {
+        if (samplingRatio <= 0) throw new ArgumentOutOfRangeException(nameof(samplingRatio));
+        if (batchIndices.Length == 0) return new Tensor<T>(new[] { 0, features.Shape[1], outputSize, outputSize });
+        // The engine takes the scale as a float, and 1/stride is not exact in float: a double model's region features
+        // read 7e-7 off torchvision's. A double model scales the boxes here, in its own precision, and passes exactly 1.
+        // A float model keeps the kernel's float product, which is the reference's own arithmetic.
+        bool scaleHere = typeof(T) != typeof(float);
+        return Engine.RoIAlign(features, RoIRows(boxes, batchIndices, scaleHere ? spatialScale : 1.0), outputSize,
+            outputSize, scaleHere ? 1f : (float)spatialScale, samplingRatio, aligned);
+    }
+
+    // The engine's RoI rows: (batch index, x1, y1, x2, y2) per RoI, the box coordinates multiplied by boxScale.
+    private static Tensor<T> RoIRows(double[] boxes, int[] batchIndices, double boxScale = 1.0)
+    {
+        int rois = batchIndices.Length;
         var rows = new T[rois * 5];
         for (int r = 0; r < rois; r++)
         {
             rows[5 * r] = NumOps.FromDouble(batchIndices[r]);
             for (int k = 0; k < 4; k++)
             {
-                rows[(5 * r) + 1 + k] = NumOps.FromDouble(boxes[(4 * r) + k]);
+                rows[(5 * r) + 1 + k] = NumOps.FromDouble(boxes[(4 * r) + k] * boxScale);
             }
         }
 
-        var boxTensor = new Tensor<T>(new[] { rois, 5 }, new Vector<T>(rows));
-        return Engine.RoIAlign(features, boxTensor, outputSize, outputSize, (float)spatialScale, samplingRatio, aligned: false);
+        return new Tensor<T>(new[] { rois, 5 }, new Vector<T>(rows));
     }
 
     /// <summary>

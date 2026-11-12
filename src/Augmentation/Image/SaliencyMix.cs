@@ -28,9 +28,6 @@ public class SaliencyMix<T> : ImageMixingAugmenterBase<T>
         // Compute simple saliency map of image2 using gradient magnitude
         var saliency = ComputeSaliency(image2);
 
-        // Find most salient region
-        int bestY = 0, bestX = 0;
-        double bestSaliency = double.MinValue;
         double lambda = SampleLambda(context);
         LastMixingLambda = NumOps.FromDouble(lambda);
 
@@ -39,33 +36,31 @@ public class SaliencyMix<T> : ImageMixingAugmenterBase<T>
         cropH = Math.Max(1, Math.Min(cropH, image1.Height));
         cropW = Math.Max(1, Math.Min(cropW, image1.Width));
 
-        // Search for most salient location (stride for efficiency)
+        // Search for most salient location (stride for efficiency): every candidate (y, x) on the stride
+        // grid scores the saliency summed at (y + dy, x + dx) for stride-spaced offsets inside the crop
+        // and the image; the first (row-major) best candidate wins
+        var engine = Engine;
         int stride = Math.Max(1, Math.Min(cropH, cropW) / 4);
-        for (int y = 0; y <= image2.Height - cropH; y += stride)
-            for (int x = 0; x <= image2.Width - cropW; x += stride)
-            {
-                double s = 0;
-                for (int dy = 0; dy < cropH; dy += stride)
-                    for (int dx = 0; dx < cropW; dx += stride)
-                        if (y + dy < image2.Height && x + dx < image2.Width)
-                            s += saliency[y + dy, x + dx];
-
-                if (s > bestSaliency) { bestSaliency = s; bestY = y; bestX = x; }
-            }
+        var rowSampler = WindowSampler(engine, image2.Height, cropH, stride);
+        var colSampler = WindowSampler(engine, image2.Width, cropW, stride);
+        var scores = engine.TensorMatMul(engine.TensorMatMul(rowSampler, saliency), engine.TensorTranspose(colSampler));
+        int candidatesX = colSampler.Shape[0];
+        int best = engine.TensorArgMax(engine.Reshape(scores, [scores.Length]), 0).GetFlat(0);
+        int bestY = best / candidatesX * stride;
+        int bestX = best % candidatesX * stride;
 
         // Paste most salient region from image2 onto image1
         int pasteY = context.GetRandomInt(0, Math.Max(1, image1.Height - cropH));
         int pasteX = context.GetRandomInt(0, Math.Max(1, image1.Width - cropW));
 
-        for (int y = 0; y < cropH; y++)
-            for (int x = 0; x < cropW; x++)
-            {
-                if (pasteY + y >= image1.Height || pasteX + x >= image1.Width) continue;
-                if (bestY + y >= image2.Height || bestX + x >= image2.Width) continue;
-                for (int c = 0; c < Math.Min(image1.Channels, image2.Channels); c++)
-                    result.SetPixel(pasteY + y, pasteX + x, c,
-                        image2.GetPixel(bestY + y, bestX + x, c));
-            }
+        int copyH = Math.Min(cropH, Math.Min(image1.Height - pasteY, image2.Height - bestY));
+        int copyW = Math.Min(cropW, Math.Min(image1.Width - pasteX, image2.Width - bestX));
+        if (copyH > 0 && copyW > 0)
+        {
+            int channels = Math.Min(image1.Channels, image2.Channels);
+            var patch = engine.TensorSlice(image2.ToPlanarTensor(), [0, bestY, bestX], [channels, copyH, copyW]);
+            result.SetFromPlanarTensor(engine.TensorSetSlice(result.ToPlanarTensor(), patch, [0, pasteY, pasteX]));
+        }
 
         if (labels1 is not null && labels2 is not null)
         {
@@ -78,26 +73,29 @@ public class SaliencyMix<T> : ImageMixingAugmenterBase<T>
         return result;
     }
 
-    private static double[,] ComputeSaliency(ImageTensor<T> image)
+    private static Tensor<T> ComputeSaliency(ImageTensor<T> image)
     {
-        var saliency = new double[image.Height, image.Width];
+        // Gradient magnitude summed over channels (central differences), 0 on the border
+        return ImageTensor<T>.GradientMagnitude(image.ToPlanarTensor());
+    }
 
-        for (int y = 1; y < image.Height - 1; y++)
-            for (int x = 1; x < image.Width - 1; x++)
-            {
-                double grad = 0;
-                for (int c = 0; c < image.Channels; c++)
-                {
-                    double dx = NumOps.ToDouble(image.GetPixel(y, x + 1, c)) -
-                                NumOps.ToDouble(image.GetPixel(y, x - 1, c));
-                    double dy = NumOps.ToDouble(image.GetPixel(y + 1, x, c)) -
-                                NumOps.ToDouble(image.GetPixel(y - 1, x, c));
-                    grad += Math.Sqrt(dx * dx + dy * dy);
-                }
-                saliency[y, x] = grad;
-            }
-
-        return saliency;
+    /// <summary>
+    /// [candidates, size] matrix: candidate i starts at i * stride (for starts 0 .. size - window) and
+    /// samples positions start + k * stride for k * stride &lt; window, clipped to the axis.
+    /// </summary>
+    private static Tensor<T> WindowSampler(IEngine engine, int size, int window, int stride)
+    {
+        int candidates = (size - window) / stride + 1;
+        int[] shape = [candidates, size];
+        var start = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorMultiplyScalar(engine.TensorArange<int>(0, candidates, 1), stride), [candidates, 1]), shape);
+        var position = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<int>(0, size, 1), [1, size]), shape);
+        var offset = engine.TensorSubtract(position, start);
+        var inWindow = engine.TensorMultiply(
+            engine.ScalarMinusTensor(1, engine.TensorLessThan(offset, 0)), engine.TensorLessThan(offset, window));
+        var onStride = engine.TensorEquals(
+            engine.TensorSubtract(offset, engine.TensorMultiplyScalar(engine.TensorDivideScalar(offset, stride), stride)), 0);
+        return engine.TensorMultiply(inWindow, onStride).Cast<T>();
     }
 
     /// <inheritdoc />

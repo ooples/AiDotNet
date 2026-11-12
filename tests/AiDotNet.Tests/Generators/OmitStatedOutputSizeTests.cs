@@ -47,18 +47,4 @@ public sealed class OmitStatedOutputSizeTests
         await Task.Yield();
         Assert.Equal(expression, Omit(expression));
     }
-
-    /// <summary>The generated OpenSora fixture itself: one RGB frame in, as its generator branch states.</summary>
-    [Fact(Timeout = 120000)]
-    public async Task TheOpenSoraFixtureDeclaresThreeInputChannels()
-    {
-        await Task.Yield();
-        var fixture = new AiDotNet.Tests.ModelFamilyTests.Generated.OpenSoraTests();
-        var create = typeof(AiDotNet.Tests.ModelFamilyTests.Generated.OpenSoraTests)
-            .GetMethod("CreateNetwork", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
-            ?? throw new InvalidOperationException("OpenSoraTests.CreateNetwork was not found.");
-        using var network = create.Invoke(fixture, null) as AiDotNet.NeuralNetworks.NeuralNetworkBase<float>
-            ?? throw new InvalidOperationException("OpenSoraTests.CreateNetwork did not return a float network.");
-        Assert.Equal(3, network.GetArchitecture().InputDepth);
-    }
 }

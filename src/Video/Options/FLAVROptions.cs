@@ -1,32 +1,22 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the FLAVR flow-agnostic video representations model.
+/// Configuration options for <see cref="AiDotNet.Video.FrameInterpolation.FLAVR{T}"/>, flow-agnostic video
+/// representations for fast frame interpolation (Kalluri et al., WACV 2023).
 /// </summary>
 /// <remarks>
 /// <para>
-/// FLAVR (Kalluri et al., CVPR 2023) uses 3D convolutions for flow-free interpolation:
-/// - 3D spatio-temporal convolutions: processes multiple input frames simultaneously using
-///   3D (space + time) convolutions that capture temporal relationships without explicit
-///   optical flow estimation
-/// - 3D encoder-decoder: a U-Net style architecture where the encoder uses strided 3D
-///   convolutions to downsample in both space and time, and the decoder uses transposed
-///   3D convolutions to upsample back to full resolution
-/// - Multi-frame input: takes 4 input frames (2 before and 2 after the target) for richer
-///   temporal context, unlike 2-frame methods
-/// - Direct synthesis: directly outputs the target frame pixels without intermediate flow
-///   or warping operations, avoiding flow estimation errors entirely
+/// The defaults are the release's (tarun005/FLAVR: model/FLAVR_arch.py, model/resnet_3D.py, config.py, main.py): the
+/// unet_18 encoder (R3D-18 with feature gating, no batch norm), four input frames and one output frame for 2x
+/// interpolation; <see cref="Deep"/> returns the unet_34 encoder. Setting <see cref="NumOutputFrames"/> to 3 or 7 gives
+/// the release's 4x and 8x models.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Most frame interpolation methods first figure out how objects move
-/// (optical flow), then use that to warp frames. FLAVR skips the flow step entirely by using
-/// 3D convolutions that "see" multiple frames at once and directly paint the intermediate
-/// frame. This makes it faster and avoids the ghosting artifacts that come from bad flow
-/// estimates, especially in scenes with transparent objects or repetitive patterns.
+/// <b>For Beginners:</b> FLAVR never estimates motion. It stacks four frames into a short clip, runs 3D (space and
+/// time) convolutions over it in a U-Net, and directly paints the in-between frame or frames.
 /// </para>
 /// </remarks>
 public class FLAVROptions : NeuralNetworkOptions
@@ -43,44 +33,60 @@ public class FLAVROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public FLAVROptions(FLAVROptions other)
+    public FLAVROptions(FLAVROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumResBlocks = other.NumResBlocks;
-        NumLevels = other.NumLevels;
+        Seed = other.Seed;
+        BaseChannels = other.BaseChannels;
+        LayerBlocks = (int[])other.LayerBlocks.Clone();
         NumInputFrames = other.NumInputFrames;
-        TemporalKernelSize = other.TemporalKernelSize;
+        NumOutputFrames = other.NumOutputFrames;
+        LearningRate = other.LearningRate;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        PlateauFactor = other.PlateauFactor;
+        PlateauPatience = other.PlateauPatience;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
     }
+
+    /// <summary>The release's unet_34 encoder (R3D-34 block counts).</summary>
+    public static FLAVROptions Deep() => new() { LayerBlocks = new[] { 3, 4, 6, 3 } };
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the encoder's first width; the four stages are 1, 2, 4 and 8 times it (64).</summary>
+    public int BaseChannels { get; set; } = 64;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the residual blocks in each of the encoder's four stages (unet_18: 2, 2, 2, 2).</summary>
+    public int[] LayerBlocks { get; set; } = { 2, 2, 2, 2 };
 
-    /// <summary>Gets or sets the number of 3D residual blocks per encoder level.</summary>
-    public int NumResBlocks { get; set; } = 2;
-
-    /// <summary>Gets or sets the number of encoder/decoder levels.</summary>
-    /// <remarks>Each level halves/doubles spatial resolution. Paper uses 4 levels.</remarks>
-    public int NumLevels { get; set; } = 4;
-
-    /// <summary>Gets or sets the number of input frames (temporal context window).</summary>
-    /// <remarks>FLAVR uses 4 frames: 2 past + 2 future for maximum temporal context.</remarks>
+    /// <summary>Gets or sets the context frames, half before and half after the gap (4).</summary>
     public int NumInputFrames { get; set; } = 4;
 
-    /// <summary>Gets or sets the temporal kernel size for 3D convolutions.</summary>
-    public int TemporalKernelSize { get; set; } = 3;
+    /// <summary>Gets or sets the evenly spaced frames synthesized in the gap (1 for 2x; 3 for 4x; 7 for 8x).</summary>
+    public int NumOutputFrames { get; set; } = 1;
+
+    #endregion
+
+    #region Training
+
+    /// <summary>Gets or sets Adam's initial learning rate (2e-4).</summary>
+    public double LearningRate { get; set; } = 2e-4;
+
+    /// <summary>Gets or sets Adam's first-moment decay (0.9).</summary>
+    public double Beta1 { get; set; } = 0.9;
+
+    /// <summary>Gets or sets Adam's second-moment decay (0.99).</summary>
+    public double Beta2 { get; set; } = 0.99;
+
+    /// <summary>Gets or sets the factor the rate is multiplied by when the validation loss plateaus (0.5).</summary>
+    public double PlateauFactor { get; set; } = 0.5;
+
+    /// <summary>Gets or sets the epochs without improvement before the rate drops (5).</summary>
+    public int PlateauPatience { get; set; } = 5;
 
     #endregion
 
@@ -91,16 +97,6 @@ public class FLAVROptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-
-    #endregion
-
-    #region Training
-
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
-
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
 
     #endregion
 }

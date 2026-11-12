@@ -1,11 +1,14 @@
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.NeMo;
 
-/// <summary>Options for Parakeet-CTC (NVIDIA NeMo, 2024): 1.1B Conformer-CTC with word-piece tokenization.</summary>
+/// <summary>Options for Parakeet-CTC.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the ParakeetCTC model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para>The defaults: 24 Conformer blocks, width 1024, 8 heads, a 9-wide depthwise kernel and a CTC layer.</para>
+/// <para><b>For Beginners:</b> These options set the size of the Conformer encoder, the feature front end and
+/// the training augmentation.</para>
 /// </remarks>
 public class ParakeetCTCOptions : ModelOptions
 {
@@ -20,46 +23,91 @@ public class ParakeetCTCOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Seed = other.Seed;
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        FeedForwardDim = other.FeedForwardDim;
-        NumMels = other.NumMels;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        ConvKernel = other.ConvKernel;
+        RopeTheta = other.RopeTheta;
+        SubsamplingChannels = other.SubsamplingChannels;
+        FrequencyMasks = other.FrequencyMasks;
+        FrequencyMaskWidth = other.FrequencyMaskWidth;
+        TimeMasks = other.TimeMasks;
+        TimeMaskRatio = other.TimeMaskRatio;
         VocabSize = other.VocabSize;
-        MaxTextLength = other.MaxTextLength;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        Language = other.Language;
     }
 
-    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
+    /// <summary>Audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 16000;
-    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
+
+    /// <summary>Longest audio a transcription covers, in seconds; longer input is truncated.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
-    /// <summary>Gets or sets the hidden width of the encoder.</summary>
-    public int EncoderDim { get; set; } = 1024;
-    /// <summary>Gets or sets the number of encoder layers.</summary>
-    public int NumEncoderLayers { get; set; } = 24;
-    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
-    public int NumAttentionHeads { get; set; } = 16;
-    /// <summary>Gets or sets the inner width of each feed-forward block.</summary>
-    public int FeedForwardDim { get; set; } = 4096;
-    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
+
+    /// <summary>Log-mel bins (section 3.1: 80-channel filterbanks over 25 ms windows with a 10 ms stride).</summary>
     public int NumMels { get; set; } = 80;
-    /// <summary>Gets or sets the number of output tokens the model predicts over.</summary>
+
+    /// <summary>Conformer width.</summary>
+    public int EncoderDim { get; set; } = 1024;
+
+    /// <summary>Conformer blocks.</summary>
+    public int NumEncoderLayers { get; set; } = 24;
+
+    /// <summary>Attention heads per block.</summary>
+    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Expansion of each half-step feed-forward module (section 2.3: 4).</summary>
+    public int FeedForwardMultiplier { get; set; } = 4;
+
+    /// <summary>Depthwise convolution kernel (Fast Conformer, section 3.1: 9).</summary>
+    public int ConvKernel { get; set; } = 9;
+
+    /// <summary>Rotary base of the attention's relative position encoding, standing in for the paper's relative
+    /// sinusoidal encoding (section 2.1).</summary>
+    public double RopeTheta { get; set; } = 10000.0;
+
+    /// <summary>Channels of the 8x depthwise-separable subsampling (section 3.1: 256).</summary>
+    public int SubsamplingChannels { get; set; } = 256;
+
+    /// <summary>SpecAugment frequency masks (section 3.1: 2).</summary>
+    public int FrequencyMasks { get; set; } = 2;
+
+    /// <summary>Largest frequency mask, in mel bins (section 3.1: F = 27).</summary>
+    public int FrequencyMaskWidth { get; set; } = 27;
+
+    /// <summary>SpecAugment time masks (section 3.1: 10).</summary>
+    public int TimeMasks { get; set; } = 10;
+
+    /// <summary>Largest time mask as a fraction of the utterance (section 3.1: pS = 0.05).</summary>
+    public double TimeMaskRatio { get; set; } = 0.05;
+
+    /// <summary>Output vocabulary size, blank (token 0) included (Parakeet: 1024 SentencePiece tokens).</summary>
     public int VocabSize { get; set; } = 1024;
-    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
-    public int MaxTextLength { get; set; } = 512;
-    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
-    public string? ModelPath { get; set; }
-    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
-    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
-    public double DropoutRate { get; set; } = 0.1;
-    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
+
+    /// <summary>The text of each token; tokens past the list decode as Unicode code points, and tokens in angle brackets
+    /// decode to nothing.</summary>
+    public string[] Vocabulary { get; set; } = { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Language reported for transcriptions.</summary>
     public string Language { get; set; } = "en";
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    internal ConformerAsrConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
+        NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, ConvKernel = ConvKernel, RopeTheta = RopeTheta,
+        Subsampling = ConformerAsrSubsampling.DepthwiseStriding8x, SubsamplingChannels = SubsamplingChannels, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
+        VocabSize = VocabSize,
+    };
 }

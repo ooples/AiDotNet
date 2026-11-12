@@ -127,6 +127,12 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     [Buffer(Name = "causal-adjacency", Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Matrix<T>? _adjacency;
 
+    // X^T X / n of the transformed training rows: the NOTEARS least-squares loss (1/2n)||X - XW||^2 has gradient
+    // (1/n) X^T (XW - X) = Gram (W - I), so the Gram is all the adjacency update needs from the data. Fit rebuilds it
+    // from the rows it is given, so it is training scratch, not state.
+    [Scratch]
+    private Matrix<T>? _dataGram;
+
     // Augmented Lagrangian parameters for NOTEARS DAG constraint
     private double _lagrangeAlpha;
     private double _lagrangeRho;
@@ -186,6 +192,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CausalGANOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -260,7 +267,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             // tests masked it because Fit() rebuilds the stack via RebuildLayersWithActualDimensions.
             int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
             Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            _genBNLayers.Add(new BatchNormalizationLayer<T>());
+            _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
         }
 
         // Output layer: produces raw features (no activation). Its input is likewise the last hidden
@@ -367,6 +374,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _transformer.Fit(data, _columns);
         _dataWidth = _transformer.TransformedWidth;
         var transformedData = _transformer.Transform(data);
+        _dataGram = ComputeDataGram(transformedData);
 
         // Step 2: Initialize adjacency matrix with small random values (zero diagonal)
         _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
@@ -432,6 +440,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _transformer.Fit(data, _columns);
             _dataWidth = _transformer.TransformedWidth;
             var transformedData = _transformer.Transform(data);
+            _dataGram = ComputeDataGram(transformedData);
 
             _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
             for (int i = 0; i < _dataWidth; i++)
@@ -656,7 +665,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _options.GradientPenaltyWeight,
             _discriminatorOptimizer,
             _random,
-            ref _wganFusedStep);
+            ref _wganFusedStep, maxGradNorm: _options.MaxGradNorm);
     }
 
     /// <summary>
@@ -699,6 +708,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 forward: Fwd,
                 computeLoss: Loss,
                 optimizer: _generatorOptimizer,
+                maxGradNorm: _options.MaxGradNorm,
                 extraTensors: genParams);
         }
     }
@@ -968,14 +978,14 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         }
         double constraintValue = trace - d;
 
-        // Gradient: dh/dW = 2 * e^(W hadamard W) hadamard W
+        // Gradient: dh/dW = 2 * transpose(e^(W hadamard W)) hadamard W
         var gradient = new double[d, d];
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++)
             {
                 double w = NumOps.ToDouble(_adjacency[i, j]);
-                gradient[i, j] = 2.0 * expMatrix[i, j] * w;
+                gradient[i, j] = 2.0 * expMatrix[j, i] * w;
             }
         }
 
@@ -983,8 +993,26 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     /// <summary>
+    /// X^T X / n of the transformed rows, the data statistic of the NOTEARS least-squares score.
+    /// </summary>
+    private Matrix<T> ComputeDataGram(Matrix<T> transformedData)
+    {
+        if (transformedData.Columns != _dataWidth)
+            throw new InvalidOperationException(
+                $"The transformed data has {transformedData.Columns} columns but the adjacency spans {_dataWidth}.");
+        if (transformedData.Rows == 0)
+            throw new InvalidOperationException("CausalGAN needs at least one training row to score the causal structure.");
+        return transformedData.Transpose().Multiply(transformedData).Multiply(NumOps.FromDouble(1.0 / transformedData.Rows));
+    }
+
+    /// <summary>
     /// Updates the adjacency matrix using the augmented Lagrangian method for the NOTEARS constraint.
     /// </summary>
+    /// <remarks>
+    /// NOTEARS (Zheng et al., 2018) minimises the least-squares score (1/2n)||X - XW||^2 + lambda ||W||_1 subject to
+    /// h(W) = 0, so each step follows the score's gradient (1/n) X^T (XW - X) alongside the acyclicity and sparsity terms.
+    /// Without the score, W never leaves its near-zero start and the acyclicity penalty has nothing to push against.
+    /// </remarks>
     private void UpdateAdjacencyAugmentedLagrangian(T lr)
     {
         if (_adjacency is null) return;
@@ -992,7 +1020,10 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         double adjLr = NumOps.ToDouble(lr) * 0.01;
 
         var (h, notearGrad) = ComputeNOTEARSConstraintAndGradient();
-        double lagrangianCoeff = _lagrangeAlpha + _lagrangeRho * h;
+        // Gram (W - I) = Gram W - Gram.
+        var scoreGrad = _dataGram is null ? null : _dataGram.Multiply(_adjacency).Subtract(_dataGram);
+        // The configured linear acyclicity penalty accompanies the augmented constraint.
+        double lagrangianCoeff = _options.DAGPenaltyWeight + _lagrangeAlpha + _lagrangeRho * h;
 
         for (int i = 0; i < _dataWidth; i++)
         {
@@ -1003,8 +1034,9 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 double wij = NumOps.ToDouble(_adjacency[i, j]);
                 double dagGrad = notearGrad[i, j] * lagrangianCoeff;
                 double sparseGrad = _options.SparsityWeight * Math.Sign(wij);
+                double dataGrad = scoreGrad is null ? 0.0 : NumOps.ToDouble(scoreGrad[i, j]);
 
-                wij -= adjLr * (dagGrad + sparseGrad);
+                wij -= adjLr * (dataGrad + dagGrad + sparseGrad);
                 _adjacency[i, j] = NumOps.FromDouble(wij);
             }
         }

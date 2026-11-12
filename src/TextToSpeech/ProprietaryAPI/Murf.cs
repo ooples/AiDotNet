@@ -1,199 +1,71 @@
-using AiDotNet.Attributes;
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using System.Net.Http;
+using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
-/// <summary>Murf: enterprise AI voice platform with studio-quality text-to-speech generation.</summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <summary>A client of the Murf text-to-speech API.</summary>
+/// <typeparam name="T">The numeric type of the returned waveform.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> Murf is an enterprise-grade AI voice platform that generates
-/// studio-quality speech. It supports 120+ voices across 20+ languages with fine-grained
-/// control over pitch, speed, and emphasis. Commonly used for e-learning, marketing videos,
-/// and audiobook production. This local implementation provides offline inference.</para>
+/// <para>Sends <c>POST https://api.murf.ai/v1/speech/generate</c> with the <c>api-key</c> header and
+/// <c>{ text, voiceId, format: "WAV", sampleRate, channelType: "MONO", encodeAsBase64: true[, style, rate, pitch,
+/// multiNativeLocale] }</c>; the response's <c>encodedAudio</c> is a base64 WAV file.</para>
+/// <para><b>For Beginners:</b> <c>new Murf&lt;float&gt;(new MurfOptions { ApiKey = "…" }).Synthesize("Hello")</c> returns the
+/// spoken audio.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generative,
-///     inputSize: 256, outputSize: 22050);
-///
-/// var model = new Murf&lt;float&gt;(architecture, "murf.onnx");
-/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Murf!");
-/// </code>
-/// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ResearchPaper("Murf AI", "https://murf.ai")]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public partial class Murf<T> : TtsModelBase<T>, IEndToEndTts<T>
+public class Murf<T> : CloudTtsClientBase<T>
 {
-    private readonly MurfOptions _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public Murf(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        MurfOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>
+    public Murf(MurfOptions? options = null, HttpClient? httpClient = null)
+        : base(options ?? new MurfOptions(), httpClient)
     {
-        _options = options ?? new MurfOptions();
-        Options = _options;
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public Murf(
-        NeuralNetworkArchitecture<T> architecture,
-        MurfOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new MurfOptions();
-        Options = _options;
-        _useNativeMode = true;
-        // The configured rate and decay: AdamW's own defaults (1e-3, 0.01) ignored both options.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay
-            });
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
-    }
+    private MurfOptions Options => (MurfOptions)Settings;
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
     /// <inheritdoc />
-    public int MaxTextLength => _options.MaxTextLength;
-    /// <inheritdoc />
-    public new int HiddenDim => _options.HiddenDim;
-    /// <inheritdoc />
-    public int NumFlowSteps => _options.NumFlowSteps;
+    public override string ProviderName => "Murf";
 
-    /// <summary>Synthesizes speech using Murf's API-compatible local inference pipeline.</summary>
-    public Tensor<T> Synthesize(string text)
+    /// <inheritdoc />
+    protected override void ValidateConfiguration()
     {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var output = Predict(input);
-        return PostprocessAudio(output);
+        RequireApiKey();
+        RequireSampleRate(8000, 24000, 44100, 48000);
+        if (string.IsNullOrWhiteSpace(Options.VoiceId)) throw new InvalidOperationException("Murf needs a voice id.");
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
+    protected override HttpRequestMessage CreateRequest(string text)
     {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultProprietaryTTSLayers(
-                    _options.HiddenDim,
-                    _options.HiddenDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    /// <inheritdoc />
-    public override ModelMetadata<T> GetModelMetadata()
-    {
-        var m = new ModelMetadata<T>
+        var o = Options;
+        var body = new JObject
         {
-            Name = _useNativeMode ? "Murf-Native" : "Murf-ONNX",
-            Description = "Murf AI Studio TTS",
-            FeatureCount = _options.HiddenDim,
+            ["text"] = text,
+            ["voiceId"] = o.VoiceId,
+            ["format"] = "WAV",
+            ["sampleRate"] = o.SampleRate,
+            ["channelType"] = "MONO",
+            ["encodeAsBase64"] = true,
         };
-        m.AdditionalInfo["Architecture"] = "Murf";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = _options.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(Murf<T>));
+        if (!string.IsNullOrWhiteSpace(o.Style)) body["style"] = o.Style;
+        if (o.Rate is int rate) body["rate"] = rate;
+        if (o.Pitch is int pitch) body["pitch"] = pitch;
+        if (!string.IsNullOrWhiteSpace(o.Locale)) body["multiNativeLocale"] = o.Locale;
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl("https://api.murf.ai")}/v1/speech/generate")
+        {
+            Content = new StringContent(body.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add("api-key", o.ApiKey);
+        return request;
     }
 
     /// <inheritdoc />
-    protected override void Dispose(bool disposing)
+    protected override Tensor<T> DecodeAudio(byte[] body, string? mediaType)
     {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        var json = JObject.Parse(Encoding.UTF8.GetString(body));
+        var encoded = json["encodedAudio"]?.ToString();
+        if (string.IsNullOrEmpty(encoded))
+            throw new InvalidDataException("Murf returned no encodedAudio.");
+        return FromWav(Convert.FromBase64String(encoded!));
     }
 }

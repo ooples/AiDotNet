@@ -5635,8 +5635,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         //     all, so the push is pure dead weight that accumulates one entry
         //     per Forward call indefinitely.
         //
+        //   - A NoGradScope with training mode on: no tape records and no eager backward follows, so each forward
+        //     pushed one tensor per layer for good. A finite-difference gradient check (thousands of training-mode
+        //     objective evaluations under NoGradScope) grew DemucsNoise past 13 GB and killed the CI runner.
+        //
         // Only push when we know the eager backward will drain it: training
-        // mode ON, not inside an inference scope, no tape recording.
+        // mode ON, not inside an inference or no-grad scope, no tape recording.
         // The tape path already preserves the pre-activation reference through its
         // recorded GradFn closures, and an InferenceMode scope guarantees no backward
         // at all — both make the cache redundant (and leaving it set would alias arena
@@ -5644,6 +5648,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         bool eagerBackwardWillRun =
             IsTrainingMode
             && !InferenceMode.IsActive
+            && !NoGradScope<T>.IsSuppressed
             && GradientTape<T>.Current is null;
         if (eagerBackwardWillRun)
         {
@@ -6904,10 +6909,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     nameof(source));
             }
 
+            // Span and data-vector writes do not bump a tensor's version, and the engine's derived caches (packed
+            // GEMM weights, resident device copies) and compiled plans compare versions: without the bump a clone
+            // or checkpoint load kept computing with whatever weights were packed before it.
             if (_lowPrecisionTensor is not null)
             {
                 MathHelper.GetNumericOperations<T>().ToHalfSpan(
                     source.AsSpan(), _lowPrecisionTensor.AsWritableSpan());
+                _lowPrecisionTensor.IncrementVersion();
                 return;
             }
 
@@ -6917,9 +6926,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 for (int i = 0; i < sparse.NonZeroCount; i++)
                     sparse.DataVector[i] = source.GetFlat(i);
+                sparse.IncrementVersion();
                 return;
             }
             AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, _tensor);
+            // Writes through the slot must invalidate version-keyed caches, as the sparse and half paths above do.
+            _tensor.IncrementVersion();
         }
     }
 
@@ -8103,6 +8115,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 or DeclaredParameterComponentKind.Buffer)
             {
                 int count = ParameterComponentScalarCount(component);
+                if (component.LowPrecisionTensor is null && component.Tensor is { } dense
+                    && dense is not SparseTensor<T> && dense.Length == count)
+                {
+                    // One span copy for a dense slot, as the slot's own CopyFrom does. Writing it a scalar at a time
+                    // through SetFlat cost about 150 ns per value: 1.6 s to load ResNet-18's 11.7M weights.
+                    source.AsSpan().Slice(offset, count).CopyTo(dense.AsWritableSpan());
+                    // A span write does not bump the tensor's version, and observers of parameter changes (policy
+                    // ownership, compiled-plan caches) compare versions: mark the slot written, as SetFlat did.
+                    dense.IncrementVersion();
+                    offset += count;
+                    continue;
+                }
                 for (int j = 0; j < count; j++)
                     WriteParameterComponentScalar(component, j, source[offset++]);
                 continue;
@@ -10415,6 +10439,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // The lazy contract still works here because the WithSeededRandom /
         // EagerInitializationStrategy branch below handles both lazy and
         // non-lazy strategies uniformly when RandomSeed is set.
+        // A strategy that cannot be re-seeded is used as configured even under a pinned seed: one that loads external
+        // weights (FromFile) keeps its per-layer cursor only on the shared instance, so a seeded clone made every layer
+        // load weights_0 while its biases advanced; and a custom IInitializationStrategy outside InitializationStrategyBase
+        // has no WithSeededRandom, so replacing it with seeded Xavier discarded the caller's distribution.
+        if (InitializationStrategy is { IsLazy: false } configured
+            && (configured.LoadFromExternal || configured is not Initialization.InitializationStrategyBase<T>))
+        {
+            configured.InitializeWeights(tensor, fanIn, fanOut);
+            return;
+        }
+
         if (RandomSeed.HasValue)
         {
             // Mix the tensor shape (fanIn, fanOut) into the derivation alongside

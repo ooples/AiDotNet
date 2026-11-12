@@ -1,6 +1,8 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 using AiDotNet.VisionLanguage.Encoders;
 
@@ -41,5 +43,52 @@ public class SAMEncoderTests : VisionLanguageTestBase<double>
             DropoutRate = 0.0,
         };
         return new SAM<double>(architecture, options);
+    }
+
+    // SAM trains on an image and its ground-truth mask through the paper's interactive prompt simulation, not on a
+    // target for its embedding. Every invariant trains it on a mask derived from the image, so a given image always
+    // carries the same mask.
+    protected override void TrainOn(INeuralNetworkModel<double> network, Tensor<double> input, Tensor<double> target)
+    {
+        if (network is SAM<double> sam)
+        {
+            sam.Train(input, MaskFor(input));
+            return;
+        }
+        base.TrainOn(network, input, target);
+    }
+
+    // Measured on the objective SAM trains (focal + dice + IoU over simulated prompts), with the prompts drawn from a
+    // fixed seed so two measurements of the same weights agree.
+    protected override double MeasureLoss(
+        INeuralNetworkModel<double> network, Tensor<double> input, Tensor<double> output, Tensor<double> target)
+    {
+        if (network is not SAM<double> sam)
+            return base.MeasureLoss(network, input, output, target);
+        using var noGrad = new NoGradScope<double>();
+        var training = new AiDotNet.ComputerVision.Segmentation.Foundation.SamTraining<double>(
+            AiDotNetEngine.Current, sam.Network, 20.0, 1.0, 2.0, 0.25);
+        var loss = training.Objective(input, MaskFor(input), new Random(MeasurementSeed))();
+        return loss[0];
+    }
+
+    // GetLastLoss is one random draw of the prompts; the memorization probe measures the fixed-seed objective instead.
+    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;
+
+    private const int MeasurementSeed = 7;
+
+    // Foreground where the pixel's channel mean is above one half: one H*W mask per image.
+    private static Tensor<double> MaskFor(Tensor<double> image)
+    {
+        int channels = image.Shape[1], height = image.Shape[2], width = image.Shape[3];
+        var mask = new double[height * width];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                double sum = 0;
+                for (int c = 0; c < channels; c++) sum += image[0, c, y, x];
+                mask[y * width + x] = sum / channels > 0.5 ? 1.0 : 0.0;
+            }
+        return new Tensor<double>(new[] { height * width }, new Vector<double>(mask));
     }
 }

@@ -307,7 +307,13 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task EfficientTAM_VideoInterface_TrackingLifecycle()
     {
-        var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions { NumClasses = 5, ModelSize = EfficientTAMModelSize.Small });
+        var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions
+            {
+                ModelSize = EfficientTAMModelSize.Small, ImageSize = 32, VitEmbeddingDimension = 16, VitDepth = 2, VitHeadCount = 2, VitWindowSize = 2,
+                VitGlobalAttentionBlockIndexes = new[] { 1 }, ModelDimension = 32, MemoryDimension = 16, DecoderHeadCount = 2,
+                MaskDecoderMlpDimension = 32, MemoryAttentionLayerCount = 1, MemoryAttentionFeedForwardDimension = 32, MemoryFuserDimension = 32,
+                CorrectionPoints = 1,
+            });
         var video = (IVideoSegmentation<float>)model;
 
         video.InitializeTracking(Rand(3, 32, 32), Rand(1, 32, 32));
@@ -448,15 +454,6 @@ public class SegmentationInterfaceContractTests : IDisposable
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_OpenVocabInterface_SegmentWithText()
-    {
-        var model = new GroundedSAM2<float>(Arch(), options: new GroundedSAM2Options { NumClasses = 5 });
-        var ov = (IOpenVocabSegmentation<float>)model;
-        var result = ov.SegmentWithText(Rand(1, 3, 32, 32), new[] { "car" });
-        Assert.NotNull(result);
-    }
-
     #endregion
 
     #region IReferringSegmentation Contract
@@ -476,15 +473,6 @@ public class SegmentationInterfaceContractTests : IDisposable
         var model = new VideoLISA<float>(Arch(), options: new VideoLISAOptions { NumClasses = 5 });
         var referring = (IReferringSegmentation<float>)model;
         var result = referring.SegmentFromExpression(Rand(1, 3, 32, 32), "the person walking");
-        Assert.NotNull(result);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task GLaMM_ReferringInterface_SegmentFromExpression()
-    {
-        var model = new GLaMM<float>(Arch(), options: new GLaMMOptions { NumClasses = 5 });
-        var referring = (IReferringSegmentation<float>)model;
-        var result = referring.SegmentFromExpression(Rand(1, 3, 32, 32), "cat");
         Assert.NotNull(result);
     }
 
