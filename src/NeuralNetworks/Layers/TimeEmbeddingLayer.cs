@@ -201,9 +201,16 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // sin/cos frequency regardless of embeddingDim.
         int halfDim = embeddingDim / 2;
         double logMax = Math.Log(10000.0);
-        _frequencies = new Tensor<T>([halfDim, 1]);
-        for (int i = 0; i < halfDim; i++)
-            _frequencies[i, 0] = NumOps.FromDouble(Math.Exp(-logMax * i / halfDim));
+        // freq_i = exp(-ln(10000) * i / halfDim).
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            _frequencies = halfDim == 0
+                ? new Tensor<T>([0, 1])
+                : Engine.Reshape(
+                    Engine.TensorExp(Engine.TensorMultiplyScalar(
+                        Engine.TensorArange<T>(0, halfDim, 1), NumOps.FromDouble(-logMax / halfDim))),
+                    [halfDim, 1]);
+        }
 
         // Initialize weights with Xavier/Glorot
         for (int i = 0; i < embeddingDim; i++)

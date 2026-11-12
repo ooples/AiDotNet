@@ -72,9 +72,13 @@ public abstract partial class NeuralNetworkBase<T>
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
         if (clamp is null) throw new ArgumentNullException(nameof(clamp));
-        var ops = MathHelper.GetNumericOperations<T>();
-        var ids = new int[Math.Min(target.Length, maxCount)];
-        for (int i = 0; i < ids.Length; i++) ids[i] = clamp((int)Math.Round(ops.ToDouble(target.Data.Span[i])));
+        int count = Math.Min(target.Length, maxCount);
+        if (count == 0) return new int[0];
+        // Round half to even (Math.Round's default) in one pass, then clamp each id.
+        var engine = AiDotNetEngine.Current;
+        var leading = engine.TensorSlice(engine.Reshape(target, new[] { target.Length }), new[] { 0 }, new[] { count });
+        var ids = engine.TensorRound(leading).Cast<int>().ToArray();
+        for (int i = 0; i < ids.Length; i++) ids[i] = clamp(ids[i]);
         return ids;
     }
 
@@ -96,24 +100,21 @@ public abstract partial class NeuralNetworkBase<T>
     protected internal static Tensor<T> TokenTensor(IReadOnlyList<int> ids)
     {
         if (ids is null) throw new ArgumentNullException(nameof(ids));
-        var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) result[i] = ops.FromDouble(ids[i]);
-        return result;
+        return new Tensor<int>(ids.ToArray(), new[] { ids.Count }).Cast<T>();
     }
     /// <summary>The highest-scoring token of row <paramref name="row"/>. The first maximum wins.</summary>
     protected internal static int GreedyToken(Tensor<T> logits, int row)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
+        int vocab = logits.Shape[1];
+        if (vocab == 0) return 0;
         var ops = MathHelper.GetNumericOperations<T>();
-        int best = 0;
-        double bestValue = double.NegativeInfinity;
-        for (int v = 0; v < logits.Shape[1]; v++)
-        {
-            double value = ops.ToDouble(logits[row, v]);
-            if (value > bestValue) { bestValue = value; best = v; }
-        }
-        return best;
+        var engine = AiDotNetEngine.Current;
+        var scores = engine.TensorSlice(logits, new[] { row, 0 }, new[] { 1, vocab });
+        // NaN never beats the running best, so it ranks as -inf; an all -inf/NaN row gives token 0.
+        var ranked = engine.TensorWhere(
+            engine.TensorIsNan(scores), engine.TensorFullLike(scores, ops.FromDouble(double.NegativeInfinity)), scores);
+        return engine.TensorArgMax(ranked, 1)[0];
     }
 
     /// <summary>

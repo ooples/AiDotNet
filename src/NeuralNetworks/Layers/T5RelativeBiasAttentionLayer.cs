@@ -536,8 +536,8 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
                 var offset = Engine.TensorSubtract(
-                    Engine.Reshape(Engine.TensorArange<int>(0, sk), new[] { 1, sk }),
-                    Engine.Reshape(Engine.TensorArange<int>(0, sq), new[] { sq, 1 }));
+                    Engine.Reshape(Engine.TensorArange<int>(0, sk, 1), new[] { 1, sk }),
+                    Engine.Reshape(Engine.TensorArange<int>(0, sq, 1), new[] { sq, 1 }));
                 mask = Engine.TensorMultiplyScalar(Engine.TensorGreaterThan(offset, shift).Cast<T>(), blocked);
             }
             scores = Engine.TensorAdd(scores, mask);

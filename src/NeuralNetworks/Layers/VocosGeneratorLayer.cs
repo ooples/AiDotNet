@@ -209,14 +209,12 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
         for (int stage = 0, length = 2; stage < bits; stage++, length *= 2)
         {
             int half = length / 2;
-            _inverseFftCosines[stage] = new Tensor<T>([1, 1, 1, half]);
-            _inverseFftSines[stage] = new Tensor<T>([1, 1, 1, half]);
-            for (int j = 0; j < half; j++)
-            {
-                double angle = 2.0 * Math.PI * j / length;
-                _inverseFftCosines[stage][j] = NumOps.FromDouble(Math.Cos(angle));
-                _inverseFftSines[stage][j] = NumOps.FromDouble(Math.Sin(angle));
-            }
+            // Twiddle angles 2*pi*j / length for j < half.
+            var angles = Engine.Reshape(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, half, 1), NumOps.FromDouble(2.0 * Math.PI / length)),
+                [1, 1, 1, half]);
+            _inverseFftCosines[stage] = Engine.TensorCos(angles);
+            _inverseFftSines[stage] = Engine.TensorSin(angles);
             RegisterBuffer(_inverseFftCosines[stage], $"ifft_cos_{length}");
             RegisterBuffer(_inverseFftSines[stage], $"ifft_sin_{length}");
         }
@@ -347,21 +345,23 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
 
         // Normalize by the Hann-window squared envelope. This tensor is a fixed coefficient,
         // independent of the trainable graph; multiplying by it preserves every upstream gradient.
-        var inverseEnvelope = new Tensor<T>([1, 1, 1, paddedLength]);
-        var envelope = new double[paddedLength];
-        for (int frame = 0; frame < frames; frame++)
+        // Overlap-add of the squared window: frame f adds w^2 at samples f * hop .. f * hop + nFft - 1.
+        Tensor<T> inverseEnvelope;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int offset = frame * _hopLength;
-            for (int sample = 0; sample < _nFft; sample++)
-            {
-                double w = NumOps.ToDouble(_window[sample]);
-                envelope[offset + sample] += w * w;
-            }
-        }
-        for (int sample = 0; sample < paddedLength; sample++)
-        {
-            inverseEnvelope[sample] = NumOps.FromDouble(
-                envelope[sample] > 1e-8 ? 1.0 / envelope[sample] : 0.0);
+            var squaredWindow = Engine.TensorMultiply(_window, _window);
+            var frameSquares = Engine.Reshape(
+                Engine.TensorTile(Engine.Reshape(squaredWindow, [1, _nFft]), [frames, 1]), [frames * _nFft]);
+            var samplePositions = Engine.Reshape(
+                Engine.TensorAdd(
+                    Engine.Reshape(Engine.TensorArange<int>(0, frames * _hopLength, _hopLength), [frames, 1]),
+                    Engine.Reshape(Engine.TensorArange<int>(0, _nFft, 1), [1, _nFft])),
+                [frames * _nFft]);
+            var envelope = Engine.TensorScatterAdd(new Tensor<T>([paddedLength]), samplePositions, frameSquares, 0);
+            var covered = Engine.TensorGreaterThan(envelope, NumOps.FromDouble(1e-8));
+            inverseEnvelope = Engine.Reshape(
+                Engine.TensorWhere(covered, Engine.TensorReciprocal(envelope), Engine.TensorZerosLike(envelope)),
+                [1, 1, 1, paddedLength]);
         }
         var normalized = Engine.TensorMultiply(overlapAdded, inverseEnvelope);
 
