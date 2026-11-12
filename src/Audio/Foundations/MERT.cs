@@ -191,12 +191,12 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
         if (layerOutputs.Count == 0) return c;
 
         int count = layerOutputs.Count;
-        var weights = new double[count];
-
+        // Layer weights: uniform 1 / count, or the given weights normalized by their sum when that
+        // sum is positive (as given otherwise)
+        T[] weights;
         if (layerWeights is null)
         {
-            for (int li = 0; li < count; li++)
-                weights[li] = 1.0 / count;
+            weights = Tensor<T>.CreateDefault([count], NumOps.FromDouble(1.0 / count)).ToArray();
         }
         else
         {
@@ -205,18 +205,11 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
                     $"layerWeights length ({layerWeights.Length}) must match the number of transformer layers ({count}).",
                     nameof(layerWeights));
 
-            double sum = 0;
-            for (int li = 0; li < count; li++)
-            {
-                weights[li] = NumOps.ToDouble(layerWeights[li]);
-                sum += weights[li];
-            }
-
-            if (sum > 0)
-            {
-                for (int li = 0; li < count; li++)
-                    weights[li] /= sum;
-            }
+            var given = new Tensor<T>(layerWeights, [count]);
+            T sum = Engine.TensorSum(given);
+            weights = NumOps.GreaterThan(sum, NumOps.Zero)
+                ? Engine.TensorDivideScalar(given, sum).ToArray()
+                : (T[])layerWeights.Clone();
         }
 
         // Weighted layer-output sum vectorised via Engine.TensorMultiplyScalar
@@ -225,7 +218,7 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
         var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         for (int li = 0; li < count; li++)
         {
-            T wT = NumOps.FromDouble(weights[li]);
+            T wT = weights[li];
             if (layerOutputs[li].Length == result.Length
                 && layerOutputs[li]._shape.SequenceEqual(result._shape))
             {
@@ -234,8 +227,10 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
             }
             else
             {
-                for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)
-                    result[i] = NumOps.Add(result[i], NumOps.Multiply(layerOutputs[li][i], wT));
+                var layer = layerOutputs[li];
+                int overlap = Math.Min(result.Length, layer.Length);
+                result = AudioEngineOps.MapPrefix(Engine, result, overlap, head =>
+                    Engine.TensorAdd(head, Engine.TensorMultiplyScalar(AudioEngineOps.FitLength(Engine, layer, overlap), wT)));
             }
         }
         return result;
