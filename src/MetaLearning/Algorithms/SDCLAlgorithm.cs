@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
@@ -84,10 +85,12 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
 
         // Initialize teacher as copy of student
-        var initParams = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters();
-        _teacherParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) _teacherParams[d] = initParams[d];
+        _teacherParams = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Clone();
+        _distillationLoss = new TemperatureDistillationLoss(options.DistillationTemperature);
     }
+
+    /// <summary>tau^2 KL(softmax(teacher / tau) || softmax(student / tau)), the inner loop's distillation loss.</summary>
+    private readonly TemperatureDistillationLoss _distillationLoss;
 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
@@ -101,45 +104,19 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
         foreach (var task in taskBatch.Tasks)
         {
-            // Get teacher's soft targets on support set
+            // Get teacher's soft targets on support and query sets
             paramModel.SetParameters(_teacherParams);
-            var teacherSupportPred = ConvertToVector(MetaModel.Predict(task.SupportInput))
-                ?? throw new InvalidOperationException("Teacher model returned non-vectorizable prediction for support input.");
+            var teacherSupport = MetaModel.Predict(task.SupportInput);
             var teacherQueryPred = ConvertToVector(MetaModel.Predict(task.QueryInput))
                 ?? throw new InvalidOperationException("Teacher model returned non-vectorizable prediction for query input.");
 
             // Inner loop: adapt student with task loss + distillation loss
-            var studentParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) studentParams[d] = initParams[d];
+            var studentParams = AdaptStudent(initParams, task, teacherSupport);
 
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                paramModel.SetParameters(studentParams);
-                var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Compute distillation gradient: encourage student to match teacher's soft outputs
-                var distillGrad = ComputeDistillationGradient(studentParams, teacherSupportPred, task.SupportInput);
-
-                // Combined gradient
-                var stepGradient = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.DistillationWeight * NumOps.ToDouble(distillGrad[d]);
-                    stepGradient[d] = NumOps.FromDouble(combined);
-                }
-                studentParams = ApplyInnerGradients(studentParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
-
-            // Evaluate on query set
+            // Evaluate on query set, plus the distillation loss there
             paramModel.SetParameters(studentParams);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-
-            // Add distillation loss on query set
-            var studentQueryPred = ConvertToVector(MetaModel.Predict(task.QueryInput)) ?? new Vector<T>(1);
-            double distillLoss = ComputeKLDivergence(teacherQueryPred, studentQueryPred);
-            var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(_algoOptions.DistillationWeight * distillLoss));
-
-            losses.Add(totalLoss);
+            var queryOutput = MetaModel.Predict(task.QueryInput);
+            losses.Add(WithDistillation(ComputeLossFromOutput(queryOutput, task.QueryOutput), teacherQueryPred, queryOutput));
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -150,7 +127,6 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             paramModel.SetParameters(initParams);
             throw;
         }
-
         // Outer loop: update student
         paramModel.SetParameters(initParams);
         if (metaGradients.Count > 0)
@@ -159,13 +135,8 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             var newParams = ApplyOuterGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
             paramModel.SetParameters(newParams);
 
-            // Update teacher via EMA
-            double alpha = _algoOptions.TeacherEmaDecay;
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double teacher = alpha * NumOps.ToDouble(_teacherParams[d]) + (1 - alpha) * NumOps.ToDouble(newParams[d]);
-                _teacherParams[d] = NumOps.FromDouble(teacher);
-            }
+            // Update teacher via EMA: theta_T <- alpha theta_T + (1 - alpha) theta_S.
+            _teacherParams = Engine.Lerp(newParams, _teacherParams, NumOps.FromDouble(_algoOptions.TeacherEmaDecay));
         }
 
         return ComputeMean(losses);
@@ -179,119 +150,83 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Get teacher predictions
         paramModel.SetParameters(_teacherParams);
-        var teacherPred = ConvertToVector(MetaModel.Predict(task.SupportInput)) ?? new Vector<T>(1);
-
-        var studentParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) studentParams[d] = initParams[d];
-
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            paramModel.SetParameters(studentParams);
-            var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-            var distillGrad = ComputeDistillationGradient(studentParams, teacherPred, task.SupportInput);
-
-            var stepGradient = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.DistillationWeight * NumOps.ToDouble(distillGrad[d]);
-                stepGradient[d] = NumOps.FromDouble(combined);
-            }
-            studentParams = ApplyInnerGradients(studentParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-        }
-
+        var teacherSupport = MetaModel.Predict(task.SupportInput);
+        var studentParams = AdaptStudent(initParams, task, teacherSupport);
         paramModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, studentParams);
     }
 
-    private const double SpsaPerturbScale = 0.01;
-
     /// <summary>
-    /// Computes the distillation gradient: ∂KL(teacher || student) / ∂θ_student.
-    /// Uses SPSA (Simultaneous Perturbation Stochastic Approximation) for finite-difference
-    /// gradient estimation when analytical gradients are not available.
+    /// The inner loop: theta_S &lt;- theta_S - eta * (grad L_task + w * grad L_distill), both gradients by backpropagation.
     /// </summary>
-    private Vector<T> ComputeDistillationGradient(Vector<T> studentParams, Vector<T> teacherPred, TInput supportInput)
+    private Vector<T> AdaptStudent(Vector<T> initParams, IMetaLearningTask<T, TInput, TOutput> task, TOutput teacherSupport)
     {
-        var grad = new Vector<T>(_paramDim);
-
-        // SPSA: perturb all parameters simultaneously with Rademacher random variables
-        var delta = new double[_paramDim];
-        for (int d = 0; d < _paramDim; d++)
-            delta[d] = RandomGenerator.NextDouble() < 0.5 ? -1.0 : 1.0;
-
-        // Compute loss at studentParams + perturbation
-        var paramsPlus = new Vector<T>(_paramDim);
-        var paramsMinus = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
+        var studentParams = initParams.Clone();
+        var weight = NumOps.FromDouble(_algoOptions.DistillationWeight);
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            double p = NumOps.ToDouble(studentParams[d]);
-            paramsPlus[d] = NumOps.FromDouble(p + SpsaPerturbScale * delta[d]);
-            paramsMinus[d] = NumOps.FromDouble(p - SpsaPerturbScale * delta[d]);
+            ParamModel.SetParameters(studentParams);
+            var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+            var distillGrad = ComputeDistillationGradient(task.SupportInput, teacherSupport);
+            var stepGradient = Engine.Add(taskGrad, Engine.Multiply(distillGrad, weight));
+            studentParams = ApplyInnerGradients(studentParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
 
-        double lossPlus = ComputeKLDivergence(teacherPred, GetPredictionWithParams(paramsPlus, supportInput));
-        double lossMinus = ComputeKLDivergence(teacherPred, GetPredictionWithParams(paramsMinus, supportInput));
-
-        // SPSA gradient estimate: g_d = (L+ - L-) / (2 * c * delta_d)
-        double gradScale = (lossPlus - lossMinus) / (2.0 * SpsaPerturbScale);
-        for (int d = 0; d < _paramDim; d++)
-        {
-            grad[d] = NumOps.FromDouble(gradScale / delta[d]);
-        }
-
-        return grad;
+        return studentParams;
     }
 
     /// <summary>
-    /// Gets a prediction by temporarily setting model parameters and running forward pass.
+    /// d/d theta of tau^2 KL(softmax(teacher / tau) || softmax(f(x; theta) / tau)) at the current parameters, by
+    /// backpropagating the temperature distillation loss through the model (it was a one-sample SPSA estimate).
     /// </summary>
-    private Vector<T> GetPredictionWithParams(Vector<T> parameters, TInput input)
+    private Vector<T> ComputeDistillationGradient(TInput supportInput, TOutput teacherSupport)
+        => ComputeGradients(MetaModel, supportInput, teacherSupport, _distillationLoss);
+
+    /// <summary>queryLoss + w * tau^2 KL(teacher || student) on the query predictions.</summary>
+    private T WithDistillation(T queryLoss, Vector<T> teacherQueryPred, TOutput studentQueryOutput)
     {
-        var paramModel = ParamModel;
-        var snapshot = new AiDotNet.Training.ModelParameterCheckpoint<T, TInput, TOutput>(paramModel);
-        snapshot.Capture();
-        try
-        {
-            paramModel.SetParameters(parameters);
-            return ConvertToVector(MetaModel.Predict(input)) ?? new Vector<T>(1);
-        }
-        finally { snapshot.Restore(); }
+        var studentQueryPred = ConvertToVector(studentQueryOutput) ?? new Vector<T>(1);
+        return NumOps.Add(queryLoss, NumOps.Multiply(
+            NumOps.FromDouble(_algoOptions.DistillationWeight), ComputeKLDivergence(teacherQueryPred, studentQueryPred)));
     }
 
     /// <summary>
-    /// Computes symmetric KL divergence between two output vectors treated as soft distributions.
-    /// KL(p || q) ≈ Σ_i (p_i - q_i)² / (2 * max(q_i, ε)) for numerical stability.
+    /// tau^2 KL(softmax(teacher / tau) || softmax(student / tau)) over the first min(lengths) outputs.
     /// </summary>
-    private double ComputeKLDivergence(Vector<T> teacherPred, Vector<T> studentPred)
+    internal T ComputeKLDivergence(Vector<T> teacherPred, Vector<T> studentPred)
     {
-        double temp = _algoOptions.DistillationTemperature;
         int dim = Math.Min(teacherPred.Length, studentPred.Length);
-        if (dim == 0) return 0;
+        if (dim == 0) return NumOps.Zero;
+        return _distillationLoss.CalculateLoss(studentPred.GetSubVector(0, dim), teacherPred.GetSubVector(0, dim));
+    }
 
-        // Compute softened distributions
-        // Temperature-scaled softmax via Engine (SIMD)
-        T tempT = NumOps.FromDouble(temp);
-        var teacherLogits = new Vector<T>(dim);
-        var studentLogits = new Vector<T>(dim);
-        for (int i = 0; i < dim; i++)
+    /// <summary>
+    /// Hinton-style distillation loss tau^2 KL(p_T || p_S), p = softmax(logits / tau); "actual" is the teacher's
+    /// logits, "predicted" the student's. Terms with p_T &lt;= 1e-10 contribute nothing, and p_S is offset by 1e-10.
+    /// </summary>
+    private sealed class TemperatureDistillationLoss : LossFunctionBase<T>
+    {
+        private readonly double _temperature;
+
+        public TemperatureDistillationLoss(double temperature) => _temperature = temperature;
+
+        public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
+            => ComputeTapeLoss(Tensor<T>.FromVector(predicted), Tensor<T>.FromVector(actual)).GetFlat(0);
+
+        public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
         {
-            teacherLogits[i] = NumOps.Divide(teacherPred[i], tempT);
-            studentLogits[i] = NumOps.Divide(studentPred[i], tempT);
+            int axis = predicted.Rank - 1;
+            T inverseTemperature = NumOps.FromDouble(1.0 / _temperature);
+            var pTeacher = Engine.TensorSoftmax(Engine.TensorMultiplyScalar(target, inverseTemperature), axis);
+            var pStudent = Engine.TensorSoftmax(Engine.TensorMultiplyScalar(predicted, inverseTemperature), axis);
+            var mask = Engine.TensorGreaterThan(pTeacher, NumOps.FromDouble(1e-10));
+            var logRatio = Engine.TensorSubtract(
+                Engine.TensorLog(Engine.TensorMax(pTeacher, NumOps.FromDouble(1e-10))),
+                Engine.TensorLog(Engine.TensorAddScalar(pStudent, NumOps.FromDouble(1e-10))));
+            var terms = Engine.TensorMultiply(mask, Engine.TensorMultiply(pTeacher, logRatio));
+            var allAxes = Enumerable.Range(0, terms.Rank).ToArray();
+            return Engine.TensorMultiplyScalar(
+                Engine.ReduceSum(terms, allAxes, keepDims: false), NumOps.FromDouble(_temperature * _temperature));
         }
-        var pTeacher = Softmax(teacherLogits);
-        var pStudent = Softmax(studentLogits);
-
-        // KL(teacher || student)
-        double kl = 0;
-        for (int i = 0; i < dim; i++)
-        {
-            double pT = NumOps.ToDouble(pTeacher[i]);
-            double pS = NumOps.ToDouble(pStudent[i]);
-            if (pT > 1e-10)
-                kl += pT * Math.Log(pT / (pS + 1e-10));
-        }
-
-        return temp * temp * kl;
     }
 }
