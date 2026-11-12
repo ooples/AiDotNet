@@ -239,28 +239,21 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <returns>Probabilities that sum to 1.</returns>
     protected Tensor<T> Softmax(Tensor<T> logits)
     {
-        double maxVal = double.MinValue;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal)
-                maxVal = v;
-        }
+        if (logits.Length == 0)
+            return new Tensor<T>(logits._shape);
 
-        var result = new Tensor<T>(logits._shape);
-        double sum = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = Math.Exp(NumOps.ToDouble(logits[i]) - maxVal);
-            result[i] = NumOps.FromDouble(v);
-            sum += v;
-        }
+        // Softmax over every element (not one axis). NaN logits are ignored when finding the max,
+        // and when no finite or +inf logit exists the shift is zero, so exp(-inf) stays 0.
+        var negInf = new Tensor<T>(logits._shape);
+        negInf.Fill(NumOps.FromDouble(double.NegativeInfinity));
+        T maxVal = Engine.TensorMaxValue(Engine.TensorWhere(Engine.TensorIsNan(logits), negInf, logits));
+        if (!NumOps.GreaterThan(maxVal, NumOps.FromDouble(double.NegativeInfinity)))
+            maxVal = NumOps.Zero;
 
-        if (sum > 1e-8)
-        {
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.FromDouble(NumOps.ToDouble(result[i]) / sum);
-        }
+        var result = Engine.TensorExp(Engine.TensorSubtractScalar(logits, maxVal));
+        T sum = Engine.TensorSum(result);
+        if (NumOps.GreaterThan(sum, NumOps.FromDouble(1e-8)))
+            result = Engine.TensorDivideScalar(result, sum);
 
         return result;
     }
@@ -272,22 +265,26 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <returns>Unit-normalized embedding.</returns>
     protected Tensor<T> L2Normalize(Tensor<T> embedding)
     {
-        double norm = 0;
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            double v = NumOps.ToDouble(embedding[i]);
-            norm += v * v;
-        }
-
-        norm = Math.Sqrt(norm);
-        if (norm < 1e-8)
+        T norm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorMultiply(embedding, embedding)));
+        if (NumOps.LessThan(norm, NumOps.FromDouble(1e-8)))
             return embedding;
 
-        var result = new Tensor<T>(embedding._shape);
-        for (int i = 0; i < embedding.Length; i++)
-            result[i] = NumOps.FromDouble(NumOps.ToDouble(embedding[i]) / norm);
+        return Engine.TensorDivideScalar(embedding, norm);
+    }
 
-        return result;
+    /// <summary>
+    /// Converts the first <paramref name="length"/> tokenizer ids into a rank-1 tensor of ids.
+    /// </summary>
+    /// <param name="tokenIds">Token ids produced by the tokenizer.</param>
+    /// <param name="length">Number of leading ids to keep.</param>
+    /// <returns>A [length] tensor holding the ids converted to <typeparamref name="T"/>.</returns>
+    protected static Tensor<T> TokenIdsToTensor(List<int> tokenIds, int length)
+    {
+        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+        if (length <= 0)
+            return new Tensor<T>([length]);
+
+        return new Tensor<int>(new[] { length }, Vector<int>.FromList(tokenIds.GetRange(0, length))).Cast<T>();
     }
 
     /// <summary>
