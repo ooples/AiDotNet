@@ -17,8 +17,8 @@ internal static class StreamingOptimizerResolver<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         bool useStreamingDefaults)
     {
-        if (useStreamingDefaults) return true; // streaming default is Adam
         if (optimizer is Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>) return false; // preserve requested 8-bit / BF16 compressed moments
+        if (useStreamingDefaults) return true; // streaming default is Adam
         return Resolve(optimizer, 0.0).Kind == StreamingKind.Adam;
     }
 

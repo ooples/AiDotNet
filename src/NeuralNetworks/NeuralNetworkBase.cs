@@ -12510,6 +12510,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : NumOps.One;
 
             double curNormSq = 0.0;
+            bool gpuAccumNorm = Engine is DirectGpuTensorEngine;
+            Tensor<T>? gpuNormSqAcc = null;
             void ApplyFastClipped(Tensor<T> source, Tensor<T> grad)
             {
                 if (grad is null || grad.Length == 0) return;
@@ -12517,7 +12519,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
                 if (clipSet.Contains(source))
                 {
-                    curNormSq += ComputeStreamingGradNormSquared(grad);
+                    if (gpuAccumNorm)
+                    {
+                        using var noGrad = new NoGradScope<T>();
+                        var sq = Engine.TensorMultiply(grad, grad);
+                        var axes = Enumerable.Range(0, sq.Rank).ToArray();
+                        var sum = Engine.ReduceSum(sq, axes, keepDims: false);
+                        sq.Dispose();
+                        if (gpuNormSqAcc is null)
+                        {
+                            gpuNormSqAcc = TensorScope.Detach(sum);
+                        }
+                        else
+                        {
+                            var nextAcc = TensorScope.Detach(Engine.TensorAdd(gpuNormSqAcc, sum));
+                            sum.Dispose();
+                            gpuNormSqAcc.Dispose();
+                            gpuNormSqAcc = nextAcc;
+                        }
+                    }
+                    else
+                    {
+                        curNormSq += ComputeStreamingGradNormSquared(grad);
+                    }
                     if (scaleDown) ScaleStreamingGradInPlace(grad, scale);
                 }
                 ClampStreamingGradientByValue(grad, optimizerClipValue);
@@ -12536,12 +12560,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             try
             {
                 tape.ComputeGradientsStreaming(lossTensor, sources, ApplyFastClipped);
+                if (gpuNormSqAcc is not null)
+                {
+                    curNormSq += NumOps.ToDouble(gpuNormSqAcc[0]);
+                }
             }
             finally
             {
                 _activeCheckpointGradientConsumer = null;
+                gpuNormSqAcc?.Dispose();
             }
-
             double curNorm = Math.Sqrt(curNormSq);
             _fastClipEmaNorm = haveEma
                 ? FastClipEmaBeta * emaNorm + (1.0 - FastClipEmaBeta) * curNorm
@@ -12726,9 +12754,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ?? (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
                 ? _baseTrainOptimizer
                 : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer);
-        bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
-
+        bool useStreamingDefaults = configuredOptimizer is null
+            && resolvedOptimizer is not Optimizers.Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>
+            && ReferenceEquals(resolvedOptimizer, _baseTrainOptimizer);
         // Memory-bounded streaming training path (optimizer-in-backward). The
         // autotuner engages it only when the model's estimated full-precision
         // training footprint (weights + grads + optimizer moments) would not
