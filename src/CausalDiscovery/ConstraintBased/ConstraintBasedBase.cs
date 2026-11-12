@@ -130,24 +130,10 @@ public abstract class ConstraintBasedBase<T> : CausalDiscoveryBase<T>
     private Tensor<T> ComputeResiduals(Matrix<T> data, int target, List<int> predictors)
     {
         var source = Tensor<T>.FromMatrix(data);
-        var y = SelectColumns(source, new[] { target });
+        if (predictors.Count == 0) return SelectColumns(source, new[] { target });
 
-        if (predictors.Count == 0) return y;
-
-        int dim = predictors.Count + 1;
-        var Z = Engine.TensorConcatenate(
-            new[] { Engine.TensorOnesLike(y), SelectColumns(source, predictors.ToArray()) }, 1);
-        var Zt = Engine.TensorTranspose(Z);
-
-        // Normal equations with ridge: (ZtZ + ridge*I) * beta = Zty
-        var ZtZ = Engine.TensorAdd(Engine.TensorMatMul(Zt, Z),
-            Engine.TensorMultiplyScalar(Engine.TensorEye<T>(dim), NumOps.FromDouble(1e-6)));
-        var Zty = Engine.TensorMatMul(Zt, y).Reshape(new[] { dim }).ToVector();
-
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ.ToMatrix(), Zty, MatrixDecompositionType.Lu);
-
-        var prediction = Engine.TensorMatMul(Z, Tensor<T>.FromVector(beta).Reshape(new[] { dim, 1 }));
-        return Engine.TensorSubtract(y, prediction);
+        // Least squares on [1 | data[:, predictors]] with ridge 1e-6.
+        return CausalTensorHelpers.InterceptOlsResidual(source, target, predictors, 1e-6);
     }
 
     /// <summary>

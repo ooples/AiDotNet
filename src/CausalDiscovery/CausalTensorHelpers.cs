@@ -200,12 +200,27 @@ internal static class CausalTensorHelpers
     internal static T InterceptOlsRss<T>(Matrix<T> data, int target, IReadOnlyList<int> predictors, double ridge)
     {
         var engine = AiDotNetEngine.Current;
+        var residual = InterceptOlsResidual(Tensor<T>.FromMatrix(data), target, predictors, ridge);
+        return engine.TensorSum(engine.TensorSquare(residual));
+    }
+
+    /// <summary>
+    /// Residuals [n x 1] of the least-squares fit of column <paramref name="target"/> of the [n x d]
+    /// <paramref name="source"/> on an intercept and <paramref name="predictors"/>: normal equations
+    /// (Z'Z + ridge I) beta = Z'y over Z = [1 | X], with Z'Z symmetrized, solved by LU. With no predictors
+    /// the fit is the intercept alone.
+    /// </summary>
+    internal static Tensor<T> InterceptOlsResidual<T>(Tensor<T> source, int target, IReadOnlyList<int> predictors,
+        double ridge)
+    {
+        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        int n = data.Rows;
+        int n = source.Shape[0];
         int dim = predictors.Count + 1;
-        var x = Tensor<T>.FromMatrix(data);
-        var y = engine.TensorSliceAxis(x, 1, target).Reshape(new[] { n, 1 });
-        var z = engine.TensorConcatenate(new[] { engine.TensorOnesLike(y), SelectColumns(x, predictors) }, 1);
+        var y = engine.TensorSliceAxis(source, 1, target).Reshape(new[] { n, 1 });
+        var z = predictors.Count == 0
+            ? engine.TensorOnesLike(y)
+            : engine.TensorConcatenate(new[] { engine.TensorOnesLike(y), SelectColumns(source, predictors) }, 1);
         var zt = engine.TensorTranspose(z);
         var gram = Symmetrize(engine.TensorMatMul(zt, z));
         gram = engine.TensorAdd(gram, engine.TensorMultiplyScalar(engine.TensorEye<T>(dim), ops.FromDouble(ridge)));
@@ -213,7 +228,7 @@ internal static class CausalTensorHelpers
 
         var beta = MatrixSolutionHelper.SolveLinearSystem<T>(gram.ToMatrix(), zty, MatrixDecompositionType.Lu);
         var prediction = engine.TensorMatMul(z, beta.AsTensor().Reshape(new[] { dim, 1 }));
-        return engine.TensorSum(engine.TensorSquare(engine.TensorSubtract(y, prediction)));
+        return engine.TensorSubtract(y, prediction);
     }
 
     /// <summary>
