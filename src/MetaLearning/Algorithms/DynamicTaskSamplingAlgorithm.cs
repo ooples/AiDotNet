@@ -111,8 +111,7 @@ public partial class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLear
             for (int t = 0; t < taskBatch.Tasks.Length; t++)
             {
                 var task = taskBatch.Tasks[t];
-                var adaptedParams = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+                var adaptedParams = initParams.Clone();
 
                 for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
                 {
@@ -123,13 +122,9 @@ public partial class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLear
 
                 ParamModel.SetParameters(adaptedParams);
                 var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-                double lossVal = NumOps.ToDouble(queryLoss);
 
-                // Update difficulty estimate
+                // The difficulty estimate of slot t is updated from the collected losses in UpdateDifficulty.
                 _taskVisits[t]++;
-                double diffD = _algoOptions.DifficultyDecay * NumOps.ToDouble(_taskDifficulty[t])
-                             + (1.0 - _algoOptions.DifficultyDecay) * lossVal;
-                _taskDifficulty[t] = NumOps.FromDouble(diffD);
 
                 losses.Add(queryLoss);
                 metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -138,36 +133,34 @@ public partial class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLear
         finally
         {
             ParamModel.SetParameters(initParams);
+            UpdateDifficulty(losses);
         }
 
-        // Compute difficulty-proportional weights with UCB exploration
+        // Difficulty-proportional weights with UCB exploration:
+        // w_t = difficulty_t / temperature + c * sqrt(log(N + 1) / max(visits_t, 1)), then a softmax.
         int numTasks = taskBatch.Tasks.Length;
-        var weights = new double[numTasks];
-        double maxWeight = double.NegativeInfinity;
-        double logN = Math.Log(_totalIterations + 1);
+        var visits = new int[numTasks];
+        Array.Copy(_taskVisits, visits, numTasks);
+        var visitCounts = Engine.Max(new Tensor<int>(visits, new[] { numTasks }).Cast<T>().ToVector(), Engine.Fill(numTasks, NumOps.One));
+        var ucbBonus = Engine.Multiply(Engine.ReciprocalSqrt(visitCounts),
+            NumOps.FromDouble(_algoOptions.ExplorationCoeff * Math.Sqrt(Math.Log(_totalIterations + 1))));
+        var logits = Engine.Add(
+            Engine.Divide(_taskDifficulty.GetSubVector(0, numTasks), NumOps.FromDouble(_algoOptions.TaskTemperature)), ucbBonus);
 
-        for (int t = 0; t < numTasks; t++)
-        {
-            double ucbBonus = _algoOptions.ExplorationCoeff
-                            * Math.Sqrt(logN / Math.Max(_taskVisits[t], 1));
-            weights[t] = NumOps.ToDouble(_taskDifficulty[t]) / _algoOptions.TaskTemperature + ucbBonus;
-            if (weights[t] > maxWeight) maxWeight = weights[t];
-        }
-
-        // Softmax normalization
-        double sumExp = 0;
-        for (int t = 0; t < numTasks; t++) { weights[t] = Math.Exp(weights[t] - maxWeight); sumExp += weights[t]; }
+        // Softmax normalization (max-shifted, with the epsilon in the denominator)
         const double SoftmaxEpsilon = 1e-10;
-        for (int t = 0; t < numTasks; t++) weights[t] /= (sumExp + SoftmaxEpsilon);
+        var logitsTensor = Tensor<T>.FromVector(logits);
+        var exps = Engine.TensorExp(Engine.TensorAddScalar(logitsTensor, NumOps.Negate(Engine.TensorMaxValue(logitsTensor))));
+        var weights = Engine.TensorDivideScalar(exps, NumOps.Add(Engine.TensorSum(exps), NumOps.FromDouble(SoftmaxEpsilon)));
 
-        // Weighted meta-gradient
+        // Weighted meta-gradient: sum_t w_t g_t
         if (metaGradients.Count > 0)
         {
-            var weightedGrad = new Vector<T>(_paramDim);
+            var gradRows = new Tensor<T>[numTasks];
             for (int t = 0; t < numTasks; t++)
-                for (int d = 0; d < _paramDim; d++)
-                    weightedGrad[d] = NumOps.Add(weightedGrad[d],
-                        NumOps.FromDouble(weights[t] * NumOps.ToDouble(metaGradients[t][d])));
+                gradRows[t] = Tensor<T>.FromVector(metaGradients[t]);
+            var weightedGrad = Engine.TensorMatMul(
+                Engine.Reshape(weights, new[] { 1, numTasks }), Engine.TensorStack(gradRows, 0)).ToVector();
 
             ParamModel.SetParameters(ApplyOuterGradients(initParams, weightedGrad, _algoOptions.OuterLearningRate));
         }
@@ -180,8 +173,7 @@ public partial class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLear
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -192,5 +184,23 @@ public partial class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLear
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+    }
+
+    /// <summary>
+    /// EMA difficulty update for the first <c>losses.Count</c> task slots:
+    /// difficulty_t = decay * difficulty_t + (1 - decay) * loss_t.
+    /// </summary>
+    private void UpdateDifficulty(List<T> losses)
+    {
+        int n = losses.Count;
+        if (n == 0)
+            return;
+
+        var updated = Engine.Add(
+            Engine.Multiply(_taskDifficulty.GetSubVector(0, n), NumOps.FromDouble(_algoOptions.DifficultyDecay)),
+            Engine.Multiply(new Vector<T>(losses), NumOps.FromDouble(1.0 - _algoOptions.DifficultyDecay)));
+        _taskDifficulty = n == _taskDifficulty.Length
+            ? updated
+            : Vector<T>.Concatenate(updated, _taskDifficulty.GetSubVector(n, _taskDifficulty.Length - n));
     }
 }
