@@ -2862,7 +2862,6 @@
 3	ADNELEM001|AiDotNet.Diffusion.Alignment.RewardGuidance<T>.ClipGradientNorm(AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 2	ADNELEM001|AiDotNet.Diffusion.Attention.FactorizedSpatioTemporalAttention<T>.CopyParams(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>, ref int)
 2	ADNELEM001|AiDotNet.Diffusion.Attention.FactorizedSpatioTemporalAttention<T>.ExtractParams(AiDotNet.Tensors.LinearAlgebra.Vector<T>, int, ref int)
-2	ADNELEM001|AiDotNet.Diffusion.Attention.MotionModule<T>.SetSubParams(AiDotNet.NeuralNetworks.Layers.LayerBase<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>, ref int)
 1	ADNELEM001|AiDotNet.Diffusion.Audio.MelSpectrogram<T>.MelSpectrogram(int, int, int, int?, double, double?, AiDotNet.Interfaces.IWindowFunction<T>?, bool, double, double, double?)
 2	ADNELEM001|AiDotNet.Diffusion.Audio.ProjectionLayer<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 4	ADNELEM001|AiDotNet.Diffusion.Audio.ProjectionLayer<T>.GetParameters()
