@@ -202,15 +202,17 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
 
         int d = clientImportances.Values.First().Length;
         var aggregated = new Vector<T>(d);
-        double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
-        if (totalWeight <= 0)
+        // Normalize over the weights actually applied: participating clients, with 1.0 for a missing entry.
+        double totalWeight = clientImportances.Keys.Sum(id => clientWeights?.GetValueOrDefault(id, 1.0) ?? 1.0);
+        bool uniform = totalWeight <= 0;
+        if (uniform)
         {
             totalWeight = clientImportances.Count;
         }
 
         foreach (var (clientId, importance) in clientImportances)
         {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+            double w = uniform ? 1.0 : clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             var clientImportance = importance.Length == d ? importance : importance.GetSubVector(0, d);
             aggregated = Engine.Add(aggregated, Engine.Multiply(clientImportance, NumOps.FromDouble(w / totalWeight)));
         }

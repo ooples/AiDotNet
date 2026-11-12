@@ -449,4 +449,27 @@ public class FederatedElementwiseSweep29bReferenceTests
             new Dictionary<int, Vector<double>> { [0] = new Vector<double>(new[] { 2.0 }) },
             new Dictionary<int, double> { [0] = 0.0 }));
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task ContinualLearning_ImportanceAggregationNormalizesOverParticipatingClientWeights()
+    {
+        await Task.Yield();
+
+        // Weights for clients 0 and 1 are 1 and 3; client 9 is not participating and must not dilute the
+        // average. Client 2 has no weight entry and counts as 1. Expected: (1*[4] + 3*[8] + 1*[0]) / 5 = [5.6].
+        var importances = new Dictionary<int, Vector<double>>
+        {
+            [0] = new Vector<double>(new[] { 4.0 }),
+            [1] = new Vector<double>(new[] { 8.0 }),
+            [2] = new Vector<double>(new[] { 0.0 }),
+        };
+        var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 3.0, [9] = 100.0 };
+
+        var replay = new AiDotNet.FederatedLearning.ContinualLearning.FederatedExperienceReplay<double>();
+        var agc = new AiDotNet.FederatedLearning.ContinualLearning.FedAGCContinualLearning<double>();
+        var cil = new AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<double>();
+        Assert.Equal(5.6, replay.AggregateImportance(importances, weights)[0], Precision);
+        Assert.Equal(5.6, agc.AggregateImportance(importances, weights)[0], Precision);
+        Assert.Equal(5.6, cil.AggregateImportance(importances, weights)[0], Precision);
+    }
 }
