@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 using AiDotNet.Tests.Helpers;
 
-
+namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
 /// <summary>
 /// Integration tests for Open-Vocabulary (OpenVocabSAM, CATSeg, MaskAdapter, SAN, SED),

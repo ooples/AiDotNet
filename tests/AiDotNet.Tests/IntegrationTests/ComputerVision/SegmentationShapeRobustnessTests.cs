@@ -22,7 +22,7 @@ using System.Threading.Tasks;
 
 using AiDotNet.Tests.Helpers;
 
-
+namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
 /// <summary>
 /// Tests tensor shape robustness across all segmentation models.

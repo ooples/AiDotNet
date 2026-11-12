@@ -23,7 +23,7 @@ using System.Threading.Tasks;
 
 using AiDotNet.Tests.Helpers;
 
-
+namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
 /// <summary>
 /// Tests interface contract compliance, model metadata, parameter counts,

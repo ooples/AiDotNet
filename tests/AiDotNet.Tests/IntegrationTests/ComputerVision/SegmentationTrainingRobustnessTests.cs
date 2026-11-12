@@ -22,7 +22,7 @@ using System.Threading.Tasks;
 
 using AiDotNet.Tests.Helpers;
 
-
+namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
 /// <summary>
 /// Tests training robustness: multi-step training, predict-after-train consistency,
