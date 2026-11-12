@@ -78,6 +78,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("WaveNet: A Generative Model for Raw Audio", "https://arxiv.org/abs/1609.03499", Year = 2016, Authors = "Aaron van den Oord, Sander Dieleman, Heiga Zen, Karen Simonyan, Oriol Vinyals, Alex Graves, Nal Kalchbrenner, Andrew Senior, Koray Kavukcuoglu")]
+[DistinctImplementationOf(typeof(AiDotNet.TextToSpeech.Vocoders.WaveNet<>), "the paper's dilated causal convolution stack applied to time-series forecasting; the vocoder is the audio network with mu-law output and mel conditioning")]
 public partial class WaveNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -540,17 +541,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -725,10 +716,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
@@ -744,10 +732,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
@@ -768,13 +753,18 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     {
         if (a.Length != b.Length)
         {
+            // Add over the shared prefix, keep a's tail; a detached result shaped like a, as before.
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a._shape);
-            for (int i = 0; i < minLen; i++)
-                result[i] = NumOps.Add(a[i], b[i]);
-            for (int i = minLen; i < a.Length; i++)
-                result[i] = a[i];
-            return result;
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (minLen == 0)
+                return a.Clone();
+            var aFlat = Engine.Reshape(a.Contiguous(), new[] { a.Length });
+            var bFlat = Engine.Reshape(b.Contiguous(), new[] { b.Length });
+            var head = Engine.TensorAdd(Engine.TensorNarrow(aFlat, 0, 0, minLen), Engine.TensorNarrow(bFlat, 0, 0, minLen));
+            var summed = minLen == a.Length
+                ? head
+                : Engine.TensorConcatenate(new[] { head, Engine.TensorNarrow(aFlat, 0, minLen, a.Length - minLen) }, 0);
+            return Engine.Reshape(summed, a._shape);
         }
 
         return Engine.TensorAdd(a, b);
@@ -794,11 +784,18 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     {
         if (a.Length != b.Length)
         {
+            // Product over the shared prefix, zeros after it; a detached result shaped like a, as before.
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a._shape);
-            for (int i = 0; i < minLen; i++)
-                result[i] = NumOps.Multiply(a[i], b[i]);
-            return result;
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (minLen == 0)
+                return new Tensor<T>(a._shape);
+            var head = Engine.TensorMultiply(
+                Engine.TensorNarrow(Engine.Reshape(a.Contiguous(), new[] { a.Length }), 0, 0, minLen),
+                Engine.TensorNarrow(Engine.Reshape(b.Contiguous(), new[] { b.Length }), 0, 0, minLen));
+            var product = minLen == a.Length
+                ? head
+                : Engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { a.Length - minLen }) }, 0);
+            return Engine.Reshape(product, a._shape);
         }
 
         return Engine.TensorMultiply(a, b);
@@ -861,6 +858,29 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 1, totalSteps });
 
         int batchSize = predictions[0].Shape[0];
+        if (batchSize > 0 && totalSteps > 0 && predictions.TrueForAll(p => p.Length / batchSize * batchSize <= p.Length))
+        {
+            // Row b takes the leading steps of each prediction's row b (rows are p.Length / batchSize long), then zeros (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
+            foreach (var p in predictions)
+            {
+                int rowLength = p.Length / batchSize;
+                int take = Math.Min(rowLength, totalSteps - filled);
+                if (take <= 0)
+                    continue;
+                var rows = Engine.Reshape(
+                    Engine.TensorNarrow(Engine.Reshape(p.Contiguous(), new[] { p.Length }), 0, 0, batchSize * rowLength).Contiguous(),
+                    new[] { batchSize, rowLength });
+                parts.Add(Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { batchSize, take }));
+                filled += take;
+            }
+            if (filled < totalSteps)
+                parts.Add(new Tensor<T>(new[] { batchSize, totalSteps - filled }));
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         var result = new Tensor<T>(new[] { batchSize, totalSteps });
 
         int currentStep = 0;

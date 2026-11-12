@@ -184,7 +184,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // A masked run cannot be expressed here: the config below carries decay as a single float, so
         // the compiled kernel would decay every parameter including the ones the mask exempts. Decline
         // rather than diverge from the eager path.
-        if (_options.WeightDecayMask is not null) return false;
+        if (_options.WeightDecayMask is not null || _options.LearningRateMask is not null) return false;
         // The eager tape step clips before the update. The compiled plan can reproduce a global-norm
         // clip (carried below) but not a per-element value clip, so a value-clipped run stays eager.
         bool clips = GradientOptions.EnableGradientClipping;
@@ -348,6 +348,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         }
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var configuredMask = GetValidatedWeightDecayMask(parameters.Length);
+        var rateMask = GetValidatedLearningRateMask(parameters.Length);
 
         // Right-size _m/_v/_vMax to gradient on first call or after lazy-layer
         // expansion. Mirrors the AdamOptimizer #1221 fix: lazy-shape models
@@ -361,7 +362,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             var newM = new Vector<T>(gradient.Length);
             var newV = new Vector<T>(gradient.Length);
             int copyLen = Math.Min(_m.Length, gradient.Length);
-            for (int i = 0; i < copyLen; i++) { newM[i] = _m[i]; newV[i] = _v[i]; }
+            _m.AsSpan().Slice(0, copyLen).CopyTo(newM.AsWritableSpan());
+            _v.AsSpan().Slice(0, copyLen).CopyTo(newV.AsWritableSpan());
             _m = newM;
             _v = newV;
             if (_options.UseAMSGrad)
@@ -370,7 +372,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 if (_vMax != null)
                 {
                     int copyVMax = Math.Min(_vMax.Length, gradient.Length);
-                    for (int i = 0; i < copyVMax; i++) newVMax[i] = _vMax[i];
+                    _vMax.AsSpan().Slice(0, copyVMax).CopyTo(newVMax.AsWritableSpan());
                 }
                 _vMax = newVMax;
             }
@@ -431,6 +433,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (configuredMask is { } decayMask)
             weightDecayTerm = Engine.Multiply(weightDecayTerm, decayMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, CurrentLearningRate);
+        if (rateMask is { } rates)
+        {
+            scaledAdamUpdate = Engine.Multiply(scaledAdamUpdate, rates);
+            scaledWeightDecay = Engine.Multiply(scaledWeightDecay, rates);
+        }
 
         // Combine: parameters = parameters - scaledAdamUpdate - scaledWeightDecay
         var afterAdamUpdate = (Vector<T>)Engine.Subtract(parameters, scaledAdamUpdate);
@@ -455,6 +462,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         }
 
         var configuredMask = GetValidatedWeightDecayMask(parameters.Length);
+        var rateMask = GetValidatedLearningRateMask(parameters.Length);
 
         if (_m == null || _v == null || _m.Length != parameters.Length || _v.Length != parameters.Length)
         {
@@ -504,69 +512,59 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
         // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
-        // ONE FUSED IN-PLACE PASS -- the same rewrite as AdamOptimizer, for the same reason.
+        // Whole-vector engine ops in T: _m, _v (and the AMSGrad running max) are updated in place and
+        // every constant stays a scalar operand.
         //
-        // What this replaces: ~19 Engine.Multiply/Add/Divide/Sqrt/Subtract calls, each RETURNING a
-        // fresh full-length vector, plus a Vector<T>.CreateDefault that broadcast the scalar epsilon
-        // into a full-length constant vector purely so it could be passed to a vector-vector Add.
-        // Measured on Adam's near-identical chain at 2,000,000 double parameters: 701.9 MB
-        // allocated per step and ~290 ms/step, against 15.3 MB and 17.0 ms for the fused loop.
-        //
-        // Per-element operand and association order is preserved exactly, including AdamW's
-        // DECOUPLED weight decay -- applied to the parameters rather than folded into the gradient
+        // Per-element operand and association order is preserved, including AdamW's DECOUPLED weight
+        // decay -- applied to the parameters rather than folded into the gradient
         // (Loshchilov & Hutter 2019) -- and its order relative to the Adam step:
         //   out = (p - (mHat / (sqrt(vHat) + eps)) * lr) - ((p * wd) * lr)
-        // The decay term uses the ORIGINAL p, not the post-Adam value, exactly as before.
-        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        // The decay term uses the ORIGINAL p, not the post-Adam value.
+        var engine = Engine;
+        var p = parameters.AsTensor();
+        var g = gradient.AsTensor();
+        var mState = _m.AsTensor();
+        var vState = _v.AsTensor();
 
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var mSpan = _m.AsWritableSpan();
-        var vSpan = _v.AsWritableSpan();
-        var outSpan = updatedParameters.AsWritableSpan();
-        bool amsGrad = _options.UseAMSGrad && _vMax != null;
-        var vMaxSpan = amsGrad ? (_vMax ?? throw new InvalidOperationException("_vMax is null where it is required.")).AsWritableSpan() : default;
-        // Empty when no mask is configured, which keeps the per-element branch off the common path.
-        var maskSpan = configuredMask is { } wdMask ? wdMask.AsSpan() : default;
-        T learningRate = CurrentLearningRate;
+        var m = engine.TensorAddScaled(mState, g, beta1, oneMinusBeta1);
+        var v = engine.TensorAdd(
+            engine.TensorMultiplyScalar(vState, beta2),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), oneMinusBeta2));
+        engine.TensorCopy(m, mState);
+        engine.TensorCopy(v, vState);
 
-        for (int i = 0; i < pSpan.Length; i++)
+        Tensor<T> vHat;
+        if (_options.UseAMSGrad && _vMax is { } vMaxVector)
         {
-            T g = gSpan[i];
-            T p = pSpan[i];
-
-            T m = NumOps.Add(NumOps.Multiply(mSpan[i], beta1), NumOps.Multiply(g, oneMinusBeta1));
-            mSpan[i] = m;
-
-            T v = NumOps.Add(
-                NumOps.Multiply(vSpan[i], beta2),
-                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
-            vSpan[i] = v;
-
-            T mHat = NumOps.Divide(m, biasCorrection1);
-            T vHat = NumOps.Divide(v, biasCorrection2);
-
-            if (amsGrad)
-            {
-                // Running max of the RAW v, bias-corrected at use (PyTorch AdamW(amsgrad=True)).
-                T vMax = NumOps.GreaterThan(vMaxSpan[i], v) ? vMaxSpan[i] : v;
-                vMaxSpan[i] = vMax;
-                vHat = NumOps.Divide(vMax, biasCorrection2);
-            }
-
-            T adamUpdate = NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon));
-            T afterAdam = NumOps.Subtract(p, NumOps.Multiply(adamUpdate, learningRate));
-            // Per-parameter exemption (see AdamWOptimizerOptions.WeightDecayMask). Null means decay
-            // everything, which is the behaviour every caller had before the mask existed.
-            T decayForThisParameter = weightDecay;
-            if (maskSpan.Length > 0)
-                decayForThisParameter = NumOps.Multiply(decayForThisParameter, maskSpan[i]);
-            outSpan[i] = NumOps.Subtract(
-                afterAdam,
-                NumOps.Multiply(NumOps.Multiply(p, decayForThisParameter), learningRate));
+            // Running max of the RAW v, bias-corrected at use (PyTorch AdamW(amsgrad=True)).
+            var vMaxState = vMaxVector.AsTensor();
+            var vMax = engine.TensorMax(vMaxState, v);
+            engine.TensorCopy(vMax, vMaxState);
+            vHat = engine.TensorDivideScalar(vMax, biasCorrection2);
+        }
+        else
+        {
+            vHat = engine.TensorDivideScalar(v, biasCorrection2);
         }
 
-        return updatedParameters;
+        var mHat = engine.TensorDivideScalar(m, biasCorrection1);
+        var adamUpdate = engine.TensorDivide(mHat, engine.TensorAddScalar(engine.TensorSqrt(vHat), epsilon));
+        Tensor<T>? perElementLr = rateMask is { } lrMask
+            ? engine.TensorMultiplyScalar(lrMask.AsTensor(), CurrentLearningRate)
+            : null;
+        var afterAdam = perElementLr is not null
+            ? engine.TensorSubtract(p, engine.TensorMultiply(adamUpdate, perElementLr))
+            : engine.TensorSubtract(p, engine.TensorMultiplyScalar(adamUpdate, CurrentLearningRate));
+
+        // Per-parameter exemption (see AdamWOptimizerOptions.WeightDecayMask). Null means decay
+        // everything, which is the behaviour every caller had before the mask existed.
+        var decayed = configuredMask is { } wdMask
+            ? engine.TensorMultiply(p, engine.TensorMultiplyScalar(wdMask.AsTensor(), weightDecay))
+            : engine.TensorMultiplyScalar(p, weightDecay);
+        var scaledDecay = perElementLr is not null
+            ? engine.TensorMultiply(decayed, perElementLr)
+            : engine.TensorMultiplyScalar(decayed, CurrentLearningRate);
+        return engine.TensorSubtract(afterAdam, scaledDecay).AsVector();
     }
 
     /// <summary>
@@ -576,6 +574,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     {
         int totalSize = parameters.Rows * parameters.Columns;
         GetValidatedWeightDecayMask(totalSize);
+        GetValidatedLearningRateMask(totalSize);
 
         if (_m == null || _v == null || _m.Length != totalSize)
         {
@@ -591,33 +590,15 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _t++;
 
         // Flatten matrix to vector
-        var paramVec = new Vector<T>(totalSize);
-        var gradVec = new Vector<T>(totalSize);
-        int idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                paramVec[idx] = parameters[i, j];
-                gradVec[idx] = gradient[i, j];
-                idx++;
-            }
-        }
+        var paramVec = parameters.ToRowVector();
+        var gradVec = gradient.ToRowVector();
 
         // Apply AdamW update
         var updatedVec = UpdateParametersInternal(paramVec, gradVec);
 
         // Unflatten vector back to matrix
         var updatedMatrix = new Matrix<T>(parameters.Rows, parameters.Columns);
-        idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                updatedMatrix[i, j] = updatedVec[idx];
-                idx++;
-            }
-        }
+        updatedVec.AsSpan().CopyTo(updatedMatrix.AsWritableSpan());
 
         return updatedMatrix;
     }
@@ -628,6 +609,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     private Vector<T> UpdateParametersInternal(Vector<T> parameters, Vector<T> gradient)
     {
         var configuredMask = GetValidatedWeightDecayMask(parameters.Length);
+        var rateMask = GetValidatedLearningRateMask(parameters.Length);
         T beta1 = NumOps.FromDouble(_options.Beta1);
         T beta2 = NumOps.FromDouble(_options.Beta2);
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
@@ -674,6 +656,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (configuredMask is { } decayMask)
             weightDecayTerm = Engine.Multiply(weightDecayTerm, decayMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, CurrentLearningRate);
+        if (rateMask is { } rates)
+        {
+            scaledAdamUpdate = Engine.Multiply(scaledAdamUpdate, rates);
+            scaledWeightDecay = Engine.Multiply(scaledWeightDecay, rates);
+        }
 
         var afterAdamUpdate = (Vector<T>)Engine.Subtract(parameters, scaledAdamUpdate);
         return (Vector<T>)Engine.Subtract(afterAdamUpdate, scaledWeightDecay);
@@ -693,7 +680,13 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         int flattenedParameterCount = 0;
         foreach (var parameter in context.Parameters)
             flattenedParameterCount = checked(flattenedParameterCount + parameter.Length);
-        var configuredMask = GetValidatedWeightDecayMask(flattenedParameterCount);
+        // With MaskParameters the masks describe that list, and a step may reach only part of it.
+        var maskOffsets = MaskOffsets();
+        int maskLength = maskOffsets?.Length ?? flattenedParameterCount;
+        var configuredMask = GetValidatedWeightDecayMask(maskLength);
+        var rateMask = GetValidatedLearningRateMask(maskLength);
+        // Either mask makes the update elementwise, which the scalar fast paths below cannot express.
+        bool masked = configuredMask is not null || rateMask is not null;
 
         // Global-norm gradient clipping BEFORE the AdamW update. AdamW is the
         // canonical optimizer for transformer / classifier fine-tuning, and
@@ -704,7 +697,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // gradients large enough to drive logits past float range in a few
         // iterations — ODISE diverged 770× (initial MSE 0.24 → final 184.69)
         // before clipping was wired into the tape path.
-        if (GradientOptions.EnableGradientClipping)
+        // Gradients clipped ahead of the step (regularization after the clip) are not clipped again.
+        if (GradientOptions.EnableGradientClipping && !GradientsClippedAhead)
         {
             switch (GradientOptions.GradientClippingMethod)
             {
@@ -739,14 +733,21 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // GPU-RESIDENT ADAMW: see AdamOptimizer.Step for the rationale — run the
         // update on the GPU (GpuOptimizer.TryAdamWStep -> backend.AdamWUpdate, decoupled weight decay) so grads
         // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise.
-        bool gpuAdam = configuredMask is null && typeof(T) == typeof(float) && !_options.UseAMSGrad
+        bool gpuAdam = !masked && typeof(T) == typeof(float) && !_options.UseAMSGrad
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         int maskOffset = 0;
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
+        T decayScale = NumOps.Multiply(CurrentLearningRate, weightDecay);
         foreach (var param in context.Parameters)
         {
             int parameterMaskOffset = maskOffset;
             maskOffset += param.Length;
+            if (maskOffsets is not null && (configuredMask is not null || rateMask is not null))
+            {
+                if (!maskOffsets.Value.Offsets.TryGetValue(param, out parameterMaskOffset))
+                    throw new InvalidOperationException("A stepped parameter is not among AdamWOptimizerOptions.MaskParameters.");
+            }
             // Cheap presence check — defer sparse→dense materialization until after
             // the sparse fast path declines, so a sparse-only embedding param isn't
             // ToDense'd into a full [vocab, dim] tensor that the scatter path below
@@ -787,10 +788,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // which the helper applies per-row when weightDecay > 0. AMSGrad
             // keeps the dense path (vMax invariant requires touching every row).
             if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param)
-                && configuredMask is null && !_options.UseAMSGrad
+                && !masked && !_options.UseAMSGrad
                 && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
                     param, m, v,
-                    NumOps.ToDouble(CurrentLearningRate),
+                    learningRateValue,
                     _options.Beta1, _options.Beta2,
                     1.0 - Math.Pow(_options.Beta1, _tapeStep),
                     1.0 - Math.Pow(_options.Beta2, _tapeStep),
@@ -812,7 +813,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamWStep(
                         (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
                         (Tensor<float>)(object)m, (Tensor<float>)(object)v,
-                        (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2,
+                        (float)learningRateValue, (float)_options.Beta1, (float)_options.Beta2,
                         (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep))
                 {
                     continue;
@@ -822,8 +823,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // Host fast path: one fused pass per parameter (m, v and the decayed parameter updated in place),
             // chunked across the pool. The tensor-op path below runs ~15 full-size engine ops per parameter, each
             // allocating its result: ~400 ms of a Track B LM step (31M parameters) vs a few ms here.
-            if (configuredMask is null && !_options.UseAMSGrad
-                && TryFusedHostAdamWStep(param, grad, m, v, NumOps.ToDouble(CurrentLearningRate),
+            if (!masked && !_options.UseAMSGrad
+                && TryFusedHostAdamWStep(param, grad, m, v, learningRateValue,
                     1.0 - Math.Pow(_options.Beta1, _tapeStep), 1.0 - Math.Pow(_options.Beta2, _tapeStep)))
             {
                 continue;
@@ -870,17 +871,24 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             Tensor<T> decayTerm;
             if (configuredMask is null)
             {
-                decayTerm = Engine.TensorMultiplyScalar(param, NumOps.Multiply(CurrentLearningRate, weightDecay));
+                decayTerm = Engine.TensorMultiplyScalar(param, decayScale);
             }
             else
             {
-                using var parameterDecayMultiplier = new Tensor<T>(param._shape);
-                var multiplierSpan = parameterDecayMultiplier.Data.Span;
-                var configuredMaskSpan = configuredMask.AsSpan();
-                T decayScale = NumOps.Multiply(CurrentLearningRate, weightDecay);
-                for (int i = 0; i < param.Length; i++)
-                    multiplierSpan[i] = NumOps.Multiply(decayScale, configuredMaskSpan[parameterMaskOffset + i]);
+                var parameterMask = Engine.Reshape(
+                    Vector<T>.FromSpan(configuredMask.AsSpan().Slice(parameterMaskOffset, param.Length)).AsTensor(), param._shape);
+                using var parameterDecayMultiplier = Engine.TensorMultiplyScalar(parameterMask, decayScale);
                 decayTerm = Engine.TensorMultiply(param, parameterDecayMultiplier);
+            }
+
+            if (rateMask is not null)
+            {
+                using var parameterRates = new Tensor<T>(param._shape);
+                var rateSpan = parameterRates.Data.Span;
+                var rateMaskSpan = rateMask.AsSpan();
+                for (int i = 0; i < param.Length; i++) rateSpan[i] = rateMaskSpan[parameterMaskOffset + i];
+                adamUpdate = Engine.TensorMultiply(adamUpdate, parameterRates);
+                decayTerm = Engine.TensorMultiply(decayTerm, parameterRates);
             }
 
             Engine.TensorSubtractInPlace(param, adamUpdate);
@@ -947,17 +955,72 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 nameof(_options.WeightDecayMask));
         }
 
-        for (int i = 0; i < mask.Length; i++)
+        if (mask.Length > 0)
         {
-            double multiplier = NumOps.ToDouble(mask[i]);
-            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier < 0.0 || multiplier > 1.0)
+            // Valid entries are finite and in [0, 1]: NaN/Inf are mapped outside the range first, then an entry is
+            // valid exactly when clamping it to [0, 1] leaves it unchanged. One reduction finds any invalid entry and
+            // an arg-min locates the first one for the message.
+            var maskTensor = mask.AsTensor();
+            var finiteMask = Engine.TensorNanToNum(maskTensor, nan: -1.0, posinf: -1.0, neginf: -1.0);
+            var valid = Engine.TensorEquals(Engine.TensorClamp(finiteMask, NumOps.Zero, NumOps.One), maskTensor);
+            if (NumOps.Equals(Engine.TensorMinValue(valid), NumOps.Zero))
             {
+                int i = Engine.TensorArgMin(valid, 0).AsSpan()[0];
+                double multiplier = NumOps.ToDouble(mask[i]);
                 throw new ArgumentOutOfRangeException(
                     nameof(_options.WeightDecayMask),
                     $"Weight-decay mask entry {i} must be finite and in [0, 1]; got {multiplier}.");
             }
         }
 
+        return mask;
+    }
+
+    private IReadOnlyList<Tensor<T>>? _maskOffsetsFor;
+    private (Dictionary<Tensor<T>, int> Offsets, int Length)? _maskOffsets;
+
+    /// <summary>Each of <see cref="AdamWOptimizerOptions{T, TInput, TOutput}.MaskParameters"/>' offset into the masks, and
+    /// their total length; null when the masks are positional.</summary>
+    private (Dictionary<Tensor<T>, int> Offsets, int Length)? MaskOffsets()
+    {
+        var parameters = _options.MaskParameters;
+        if (parameters is null) return null;
+        if (ReferenceEquals(parameters, _maskOffsetsFor) && _maskOffsets is not null) return _maskOffsets;
+        var offsets = new Dictionary<Tensor<T>, int>(TensorReferenceComparer<Tensor<T>>.Instance);
+        int length = 0;
+        foreach (var p in parameters)
+        {
+            if (!offsets.ContainsKey(p)) offsets[p] = length;
+            length = checked(length + p.Length);
+        }
+        _maskOffsetsFor = parameters;
+        _maskOffsets = (offsets, length);
+        return _maskOffsets;
+    }
+
+    /// <summary>
+    /// Validates the mutable learning-rate mask at the point of use and returns it when configured.
+    /// </summary>
+    private Vector<T>? GetValidatedLearningRateMask(int expectedLength)
+    {
+        var mask = _options.LearningRateMask;
+        if (mask is null) return null;
+        if (mask.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Learning-rate mask length ({mask.Length}) must match the flattened parameter length ({expectedLength}).",
+                nameof(_options.LearningRateMask));
+        }
+        for (int i = 0; i < mask.Length; i++)
+        {
+            double multiplier = NumOps.ToDouble(mask[i]);
+            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier < 0.0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(_options.LearningRateMask),
+                    $"Learning-rate mask entry {i} must be finite and non-negative; got {multiplier}.");
+            }
+        }
         return mask;
     }
 
@@ -1027,6 +1090,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (configuredMask is { } reverseMask)
             weightDecayTerm = Engine.Multiply(weightDecayTerm, reverseMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, currentLrVec);
+        if (GetValidatedLearningRateMask(updatedParameters.Length) is { } reverseRates)
+        {
+            scaledAdamUpdate = Engine.Multiply(scaledAdamUpdate, reverseRates);
+            scaledWeightDecay = Engine.Multiply(scaledWeightDecay, reverseRates);
+        }
 
         var afterAdamReverse = (Vector<T>)Engine.Add(updatedParameters, scaledAdamUpdate);
         return (Vector<T>)Engine.Add(afterAdamReverse, scaledWeightDecay);

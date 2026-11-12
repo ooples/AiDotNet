@@ -368,35 +368,20 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
         // Accumulate squared gradients: accSqGrad = accSqGrad + gradient^2
-        // ONE FUSED IN-PLACE PASS -- same rewrite as Adam/AdamW, same reason.
+        // Whole-vector engine ops with scalar operands (no broadcast constant vectors); the
+        // accumulator is updated in place.
         //
-        // Replaces 7 Engine calls that each RETURNED a fresh full-length vector, including TWO
-        // Vector<T>.CreateDefault calls that broadcast the scalar epsilon and the scalar learning
-        // rate into full-length constant vectors purely to feed vector-vector ops. Measured on
-        // Adam's near-identical chain at 2,000,000 double parameters: 701.9 MB/step and ~290 ms/step
-        // before, 15.3 MB and 17.0 ms after.
-        //
-        // Per-element operand and association order preserved exactly (Duchi et al. 2011):
+        // Duchi et al. 2011:
         //   accSqGrad += g*g ;  out = p - (lr / (sqrt(accSqGrad) + eps)) * g
-        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var engine = Engine;
+        var g = gradient.AsTensor();
+        var acc = _accumulatedSquaredGradients.AsTensor();
+        engine.TensorAddInPlace(acc, engine.TensorMultiply(g, g));
 
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var accSpan = _accumulatedSquaredGradients.AsWritableSpan();
-        var outSpan = updatedParams.AsWritableSpan();
-        T learningRate = CurrentLearningRate;
-
-        for (int i = 0; i < pSpan.Length; i++)
-        {
-            T g = gSpan[i];
-            T acc = NumOps.Add(accSpan[i], NumOps.Multiply(g, g));
-            accSpan[i] = acc;
-
-            T adaptiveLr = NumOps.Divide(learningRate, NumOps.Add(NumOps.Sqrt(acc), epsilon));
-            outSpan[i] = NumOps.Subtract(pSpan[i], NumOps.Multiply(adaptiveLr, g));
-        }
-
-        return updatedParams;
+        // (lr / (sqrt(acc) + eps)) * g evaluated as (lr * g) / (sqrt(acc) + eps).
+        var denominator = engine.TensorAddScalar(engine.TensorSqrt(acc), epsilon);
+        var step = engine.TensorDivide(engine.TensorMultiplyScalar(g, CurrentLearningRate), denominator);
+        return engine.TensorSubtract(parameters.AsTensor(), step).AsVector();
     }
 
     // Per-parameter accumulated squared gradient for tape-based training
@@ -413,6 +398,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         bool gpuAdam = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
         foreach (var param in context.Parameters)
         {
             // True sparse scatter: accumulator + param at touched rows only.
@@ -421,7 +407,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
                 if (!_tapeAccSqGrad.TryGetValue(param, out var accSqSp)) { accSqSp = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSqSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyAdagradSparse(
                         param, accSqSp,
-                        NumOps.ToDouble(CurrentLearningRate),
+                        learningRateValue,
                         _options.Epsilon, weightDecay: 0.0))
                 {
                     continue;
@@ -435,7 +421,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdagradStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)accSq,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Epsilon, 0f))
+                    (float)learningRateValue, (float)_options.Epsilon, 0f))
                 continue;
 
             // accSqGrad += grad^2

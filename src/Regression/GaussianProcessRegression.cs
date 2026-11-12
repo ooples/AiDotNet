@@ -169,60 +169,31 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         // Default is too small for typical data ranges, causing kernel to be nearly diagonal
         if (Math.Abs(Options.LengthScale - 1.0) < 1e-10)
         {
-            double totalVar = 0;
-            for (int j = 0; j < x.Columns; j++)
-            {
-                double mean = 0;
-                for (int i = 0; i < x.Rows; i++)
-                    mean += NumOps.ToDouble(x[i, j]);
-                mean /= x.Rows;
-                double variance = 0;
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    double d = NumOps.ToDouble(x[i, j]) - mean;
-                    variance += d * d;
-                }
-                totalVar += variance / x.Rows;
-            }
-            Options.LengthScale = Math.Max(Math.Sqrt(totalVar / x.Columns), 0.1);
+            // Sum over features of the population variance of each column (two-pass: mean, then deviations)
+            var xTensor = Tensor<T>.FromMatrix(x);
+            var columnMeans = Engine.ReduceMean(xTensor, new[] { 0 }, keepDims: true);
+            var deviations = Engine.TensorSubtract(xTensor, Engine.TensorBroadcastTo(columnMeans, new[] { x.Rows, x.Columns }));
+            var columnVariances = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorSquare(deviations), new[] { 0 }, keepDims: false), NumOps.FromDouble(x.Rows));
+            T totalVar = Engine.TensorSum(columnVariances);
+
+            // LengthScale is a double-valued option, so the scalar result is converted once here.
+            Options.LengthScale = Math.Max(Math.Sqrt(NumOps.ToDouble(totalVar) / x.Columns), 0.1);
         }
 
         // Sync Gamma with LengthScale for the RBF kernel: gamma = 1/(2*lengthScale²)
         Options.Gamma = 1.0 / (2.0 * Options.LengthScale * Options.LengthScale);
 
         int n = x.Rows;
-        _kernelMatrix = new Matrix<T>(n, n);
 
         // Compute the kernel matrix using GP-specific RBF kernel with LengthScale
         double ls = Options.LengthScale;
         double sv = Options.SignalVariance;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                T value = RBFKernel(x.GetRow(i), x.GetRow(j), ls, sv);
-                _kernelMatrix[i, j] = value;
-                _kernelMatrix[j, i] = value;
-            }
-        }
+        _kernelMatrix = RBFKernelMatrix(x, x, ls, sv);
 
         // Add noise to the diagonal for numerical stability (vectorized)
-        var diagonal = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            diagonal[i] = _kernelMatrix[i, i];
-        }
-
-        var noiseVec = new Vector<T>(n);
         T noise = NumOps.FromDouble(Options.NoiseLevel);
-        noiseVec.Fill(noise);
-
-        diagonal = (Vector<T>)Engine.Add(diagonal, noiseVec);
-
-        for (int i = 0; i < n; i++)
-        {
-            _kernelMatrix[i, i] = diagonal[i];
-        }
+        _kernelMatrix = Engine.MatrixAdd(_kernelMatrix, Matrix<T>.CreateDiagonal(Engine.Fill(n, noise)));
 
         if (Options.OptimizeHyperparameters)
         {
@@ -235,10 +206,7 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         if (regularizationStrength > 0)
         {
             T regTerm = NumOps.FromDouble(regularizationStrength);
-            for (int i = 0; i < n; i++)
-            {
-                _kernelMatrix[i, i] = NumOps.Add(_kernelMatrix[i, i], regTerm);
-            }
+            _kernelMatrix = Engine.MatrixAdd(_kernelMatrix, Matrix<T>.CreateDiagonal(Engine.Fill(n, regTerm)));
         }
 
         // Solve (K + σ²I) α = y. Rasmussen & Williams 2006 §2.2 requires
@@ -305,8 +273,7 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
                 double targetTotalJitter   = baseNoise * Math.Pow(10, attempt + 1);
                 double previousTotalJitter = baseNoise * Math.Pow(10, attempt);
                 T delta = NumOps.FromDouble(targetTotalJitter - previousTotalJitter);
-                for (int i = 0; i < n; i++)
-                    K[i, i] = NumOps.Add(K[i, i], delta);
+                Engine.MatrixAdd(K, Matrix<T>.CreateDiagonal(Engine.Fill(n, delta))).AsSpan().CopyTo(K.AsWritableSpan());
             }
         }
         // Unreachable — loop either returns or falls back to QR above.
@@ -335,22 +302,8 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
 
             // Add noise to the diagonal for numerical stability (vectorized)
             int kSize = K.Rows;
-            var diagonal = new Vector<T>(kSize);
-            for (int i = 0; i < kSize; i++)
-            {
-                diagonal[i] = K[i, i];
-            }
-
-            var noiseVec = new Vector<T>(kSize);
             T noise = NumOps.FromDouble(Options.NoiseLevel);
-            noiseVec.Fill(noise);
-
-            diagonal = (Vector<T>)Engine.Add(diagonal, noiseVec);
-
-            for (int i = 0; i < kSize; i++)
-            {
-                K[i, i] = diagonal[i];
-            }
+            K = Engine.MatrixAdd(K, Matrix<T>.CreateDiagonal(Engine.Fill(kSize, noise)));
 
             // Compute the log likelihood
             double logLikelihood = ComputeLogLikelihood(K, y);
@@ -389,35 +342,32 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// <returns>The computed kernel matrix.</returns>
     private Matrix<T> ComputeKernelMatrix(Matrix<T> x, double lengthScale, double signalVariance)
     {
-        int n = x.Rows;
-        var K = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                T value = RBFKernel(x.GetRow(i), x.GetRow(j), lengthScale, signalVariance);
-                K[i, j] = value;
-                K[j, i] = value;
-            }
-        }
-
-        return K;
+        return RBFKernelMatrix(x, x, lengthScale, signalVariance);
     }
 
     /// <summary>
-    /// Computes the RBF (Radial Basis Function) kernel value between two feature vectors.
+    /// Computes the RBF (Radial Basis Function) kernel value for every pair of rows:
+    /// signalVariance * exp(-||a - b||^2 / (2 * lengthScale^2)).
     /// </summary>
-    /// <param name="x1">The first feature vector.</param>
-    /// <param name="x2">The second feature vector.</param>
+    /// <param name="left">The first set of feature rows.</param>
+    /// <param name="right">The second set of feature rows.</param>
     /// <param name="lengthScale">The length scale hyperparameter of the RBF kernel.</param>
     /// <param name="signalVariance">The signal variance hyperparameter of the RBF kernel.</param>
-    /// <returns>The computed kernel value.</returns>
-    private T RBFKernel(Vector<T> x1, Vector<T> x2, double lengthScale, double signalVariance)
+    /// <returns>The [left.Rows, right.Rows] kernel matrix.</returns>
+    private Matrix<T> RBFKernelMatrix(Matrix<T> left, Matrix<T> right, double lengthScale, double signalVariance)
     {
-        T squaredDistance = x1.Subtract(x2).PointwiseMultiply(x1.Subtract(x2)).Sum();
-        return NumOps.Multiply(NumOps.FromDouble(signalVariance),
-            NumOps.Exp(NumOps.Divide(NumOps.Negate(squaredDistance), NumOps.FromDouble(2 * lengthScale * lengthScale))));
+        return RBFKernelFromSquaredDistances(
+            RegressionEngineOps.PairwiseSquaredDistances(left, right), lengthScale, signalVariance);
+    }
+
+    /// <summary>
+    /// signalVariance * exp(-d / (2 * lengthScale^2)) for every squared distance d.
+    /// </summary>
+    private Matrix<T> RBFKernelFromSquaredDistances(Matrix<T> squaredDistances, double lengthScale, double signalVariance)
+    {
+        var scaled = Engine.TensorDivideScalar(
+            Engine.TensorNegate(Tensor<T>.FromMatrix(squaredDistances)), NumOps.FromDouble(2 * lengthScale * lengthScale));
+        return Engine.TensorMultiplyScalar(Engine.TensorExp(scaled), NumOps.FromDouble(signalVariance)).ToMatrix();
     }
 
     /// <summary>
@@ -427,13 +377,15 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     {
         double ls = Options.LengthScale;
         double sv = Options.SignalVariance;
-        T result = B;
-        for (int i = 0; i < SupportVectors.Rows; i++)
+        if (SupportVectors.Rows == 0)
         {
-            result = NumOps.Add(result, NumOps.Multiply(Alphas[i],
-                RBFKernel(input, SupportVectors.GetRow(i), ls, sv)));
+            return B;
         }
-        return result;
+
+        var queryRow = new Tensor<T>(new[] { 1, input.Length }, input).ToMatrix();
+        var kernelValues = RBFKernelMatrix(queryRow, SupportVectors, ls, sv).GetRow(0);
+        var alphas = Alphas.Length == kernelValues.Length ? Alphas : Alphas.GetSubVector(0, kernelValues.Length);
+        return NumOps.Add(B, Engine.DotProduct(alphas, kernelValues));
     }
 
     /// <summary>
@@ -447,11 +399,8 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         var choleskyDecomposition = new CholeskyDecomposition<T>(K);
         Vector<T> alpha = choleskyDecomposition.Solve(y);
 
-        double logDeterminant = 0;
-        for (int i = 0; i < K.Rows; i++)
-        {
-            logDeterminant += Math.Log(Convert.ToDouble(K[i, i]));
-        }
+        // The method reports a double log likelihood, so the scalar log-determinant is converted once.
+        double logDeterminant = K.Rows == 0 ? 0 : NumOps.ToDouble(Engine.Sum(Engine.Log(K.Diagonal())));
 
         return -0.5 * Convert.ToDouble(y.DotProduct(alpha)) - 0.5 * logDeterminant - 0.5 * K.Rows * Math.Log(2 * Math.PI);
     }
@@ -491,44 +440,19 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// <returns>The computed derivative matrix.</returns>
     private Matrix<T> ComputeKernelMatrixDerivative(Matrix<T> x, double lengthScale, double signalVariance, bool isLengthScale)
     {
-        int n = x.Rows;
-        var dK = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                T value = RBFKernelDerivative(x.GetRow(i), x.GetRow(j), lengthScale, signalVariance, isLengthScale);
-                dK[i, j] = value;
-                dK[j, i] = value;
-            }
-        }
-
-        return dK;
-    }
-
-    /// <summary>
-    /// Computes the derivative of the RBF kernel with respect to the specified hyperparameter.
-    /// </summary>
-    /// <param name="x1">The first feature vector.</param>
-    /// <param name="x2">The second feature vector.</param>
-    /// <param name="lengthScale">The current length scale hyperparameter.</param>
-    /// <param name="signalVariance">The current signal variance hyperparameter.</param>
-    /// <param name="isLengthScale">True if computing derivative with respect to length scale, false for signal variance.</param>
-    /// <returns>The computed derivative value.</returns>
-    private T RBFKernelDerivative(Vector<T> x1, Vector<T> x2, double lengthScale, double signalVariance, bool isLengthScale)
-    {
-        T squaredDistance = x1.Subtract(x2).PointwiseMultiply(x1.Subtract(x2)).Sum();
-        T kernelValue = RBFKernel(x1, x2, lengthScale, signalVariance);
+        var squaredDistances = RegressionEngineOps.PairwiseSquaredDistances(x, x);
+        var kernelValues = RBFKernelFromSquaredDistances(squaredDistances, lengthScale, signalVariance);
 
         if (isLengthScale)
         {
-            return NumOps.Multiply(kernelValue, NumOps.Divide(squaredDistance, NumOps.FromDouble(lengthScale * lengthScale * lengthScale)));
+            // dK/dl = K * d / l^3
+            var scaledDistances = Engine.TensorDivideScalar(
+                Tensor<T>.FromMatrix(squaredDistances), NumOps.FromDouble(lengthScale * lengthScale * lengthScale));
+            return Engine.TensorMultiply(Tensor<T>.FromMatrix(kernelValues), scaledDistances).ToMatrix();
         }
-        else
-        {
-            return NumOps.Divide(kernelValue, NumOps.FromDouble(signalVariance));
-        }
+
+        // dK/ds = K / s
+        return Engine.TensorDivideScalar(Tensor<T>.FromMatrix(kernelValues), NumOps.FromDouble(signalVariance)).ToMatrix();
     }
 
     /// <summary>

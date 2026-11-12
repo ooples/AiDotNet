@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Audio.Enhancement;
 
@@ -134,19 +135,17 @@ public class SpectralSubtractionEnhancer<T> : AudioEnhancerBase<T>
         if (_runningNoiseEstimate is null || _previousMagnitudes is null)
             InitializeState();
 
-        var enhanced = new T[magnitudes.Length];
+        var engine = AiDotNetEngine.Current;
+        int numBins = magnitudes.Length;
         var strength = EnhancementStrength;
 
         // Use provided noise profile or running estimate
         var noiseEstimate = _noiseProfile ?? _runningNoiseEstimate;
 
         // Calculate frame energy for VAD
-        double frameEnergy = 0;
-        for (int i = 0; i < magnitudes.Length; i++)
-        {
-            frameEnergy += NumOps.ToDouble(magnitudes[i]) * NumOps.ToDouble(magnitudes[i]);
-        }
-        frameEnergy = Math.Sqrt(frameEnergy / magnitudes.Length);
+        var magnitude = new Tensor<T>(magnitudes, [numBins]);
+        var power = engine.TensorSquare(magnitude);
+        double frameEnergy = Math.Sqrt(NumOps.ToDouble(engine.TensorSum(power)) / numBins);
 
         // Simple VAD: update noise estimate during low-energy frames
         if (_adaptiveNoiseEstimation && frameEnergy < GetNoiseThreshold())
@@ -154,31 +153,33 @@ public class SpectralSubtractionEnhancer<T> : AudioEnhancerBase<T>
             UpdateNoiseEstimate(magnitudes);
         }
 
+        if (numBins == 0)
+            return new T[0];
+
         // Apply spectral subtraction
-        for (int i = 0; i < magnitudes.Length; i++)
-        {
-            double mag = NumOps.ToDouble(magnitudes[i]);
-            double noise = NumOps.ToDouble((noiseEstimate ?? throw new InvalidOperationException("noiseEstimate is null where it is required."))[i]);
+        var noiseBins = noiseEstimate ?? throw new InvalidOperationException("noiseEstimate is null where it is required.");
+        var previousBins = _previousMagnitudes ?? throw new InvalidOperationException("_previousMagnitudes has not been initialized.");
+        if (noiseBins.Length < numBins || previousBins.Length < numBins)
+            throw new IndexOutOfRangeException("The noise estimate has fewer bins than the spectral frame.");
 
-            // Spectral subtraction with over-subtraction
-            double subtracted = mag * mag - _alpha * strength * noise * noise;
+        var noise = AudioEngineOps.FitLength(engine, new Tensor<T>(noiseBins, [noiseBins.Length]), numBins);
+        var previous = AudioEngineOps.FitLength(engine, new Tensor<T>(previousBins, [previousBins.Length]), numBins);
 
-            // Spectral flooring
-            double floor = _beta * mag * mag;
-            subtracted = Math.Max(subtracted, floor);
+        // Spectral subtraction with over-subtraction
+        var subtracted = engine.TensorSubtract(power, engine.TensorMultiplyScalar(engine.TensorSquare(noise), NumOps.FromDouble(_alpha * strength)));
 
-            // Take square root and apply smoothing
-            double enhancedMag = Math.Sqrt(subtracted);
+        // Spectral flooring (max(subtracted, floor); NaN propagates as Math.Max does)
+        var floor = engine.TensorMultiplyScalar(power, NumOps.FromDouble(_beta));
+        subtracted = engine.TensorWhere(engine.TensorLessThan(subtracted, floor), floor, subtracted);
 
-            // Temporal smoothing to reduce musical noise
-            double prevMag = NumOps.ToDouble((_previousMagnitudes ?? throw new InvalidOperationException("_previousMagnitudes has not been initialized."))[i]);
-            enhancedMag = 0.3 * prevMag + 0.7 * enhancedMag;
+        // Take square root, then temporal smoothing to reduce musical noise
+        var enhanced = engine.TensorAdd(
+            engine.TensorMultiplyScalar(previous, NumOps.FromDouble(0.3)),
+            engine.TensorMultiplyScalar(engine.TensorSqrt(subtracted), NumOps.FromDouble(0.7)));
 
-            enhanced[i] = NumOps.FromDouble(enhancedMag);
-            _previousMagnitudes[i] = enhanced[i];
-        }
-
-        return enhanced;
+        var result = enhanced.ToArray();
+        result.AsSpan().CopyTo(previousBins.AsSpan(0, numBins));
+        return result;
     }
 
     /// <summary>
@@ -188,15 +189,18 @@ public class SpectralSubtractionEnhancer<T> : AudioEnhancerBase<T>
     {
         if (_runningNoiseEstimate is null) return;
 
-        for (int i = 0; i < magnitudes.Length; i++)
-        {
-            double current = NumOps.ToDouble(_runningNoiseEstimate[i]);
-            double newMag = NumOps.ToDouble(magnitudes[i]);
+        int numBins = magnitudes.Length;
+        if (numBins == 0) return;
+        if (_runningNoiseEstimate.Length < numBins)
+            throw new IndexOutOfRangeException("The running noise estimate has fewer bins than the spectral frame.");
 
-            // Exponential smoothing
-            double updated = _smoothingFactor * current + (1 - _smoothingFactor) * newMag;
-            _runningNoiseEstimate[i] = NumOps.FromDouble(updated);
-        }
+        // Exponential smoothing
+        var engine = AiDotNetEngine.Current;
+        var current = AudioEngineOps.FitLength(engine, new Tensor<T>(_runningNoiseEstimate, [_runningNoiseEstimate.Length]), numBins);
+        var updated = engine.TensorAdd(
+            engine.TensorMultiplyScalar(current, NumOps.FromDouble(_smoothingFactor)),
+            engine.TensorMultiplyScalar(new Tensor<T>(magnitudes, [numBins]), NumOps.FromDouble(1 - _smoothingFactor)));
+        updated.CopyTo(_runningNoiseEstimate.AsSpan(0, numBins));
     }
 
     /// <summary>
@@ -206,11 +210,7 @@ public class SpectralSubtractionEnhancer<T> : AudioEnhancerBase<T>
     {
         if (_runningNoiseEstimate is null) return 0.01;
 
-        double sum = 0;
-        for (int i = 0; i < _runningNoiseEstimate.Length; i++)
-        {
-            sum += NumOps.ToDouble(_runningNoiseEstimate[i]);
-        }
+        double sum = NumOps.ToDouble(AiDotNetEngine.Current.TensorSum(new Tensor<T>(_runningNoiseEstimate, [_runningNoiseEstimate.Length])));
         return sum / _runningNoiseEstimate.Length * 2.0;
     }
 

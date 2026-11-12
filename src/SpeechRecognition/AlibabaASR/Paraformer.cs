@@ -1,7 +1,10 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
+using AiDotNet.Audio.Foundations;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -11,28 +14,35 @@ using AiDotNet.Optimizers;
 namespace AiDotNet.SpeechRecognition.AlibabaASR;
 
 /// <summary>
-/// Paraformer: fast and accurate parallel Transformer for non-autoregressive ASR
+/// Paraformer (Gao et al. 2022): a non-autoregressive recognizer whose CIF predictor counts the tokens and extracts one
+/// acoustic embedding per token, which a parallel decoder turns into the transcript in one pass.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Paraformer: Fast and Accurate Parallel Transformer for Non-autoregressive End-to-End Speech Recognition" (Gao et al., Alibaba DAMO, 2022)</item></list></para>
-/// <para><b>For Beginners:</b> Paraformer uses Continuous Integrate-and-Fire (CIF) to predict token counts and extract acoustic embeddings in a single forward pass, enabling non-autoregressive parallel decoding. The CIF module accumulates encoder hidden states weighted by learn...</para>
+/// <para><b>For Beginners:</b> Instead of writing the transcript word by word, Paraformer first predicts how many tokens
+/// the audio holds and gathers the stretch of audio belonging to each, then a decoder fills in every token at once. In
+/// training a "glancing" step shows the decoder some of the correct tokens so it learns how neighbouring tokens depend on
+/// each other.</para>
 /// <para>
-/// Paraformer uses Continuous Integrate-and-Fire (CIF) to predict token counts and extract acoustic embeddings in a single forward pass, enabling non-autoregressive parallel decoding. The CIF module accumulates encoder hidden states weighted by learned firing probabilities. When cumulative weight exceeds a threshold, an acoustic embedding is emitted. A glancing language model (GLM) decoder then generates all tokens in parallel from these embeddings. This achieves comparable accuracy to autoregressive models with much lower latency.
+/// This is FunASR's AISHELL-1 recipe (<c>paraformer_conformer_12e_6d_2048_256</c>), the configuration of the paper's
+/// benchmark results: 80-band log-mel features, a Conformer encoder (4x convolution subsampling, width 256, 4 heads,
+/// feed-forward 2048, convolution kernel 15, 12 blocks), the depthwise CIF predictor (context 1 each side, tail weight
+/// 0.45), and a 6-block SAN decoder (self-attention without a causal mask, cross-attention and a ReLU feed-forward). A CTC
+/// layer on the encoder is weighted 0.3. Training minimizes 0.7 times the label-smoothed (0.1) decoder loss with the
+/// glancing sampler (λ = 0.4), 0.3 times the CTC loss, and the MAE between the target length and the predicted count;
+/// SpecAugment masks two frequency bands of up to 30 bins and two time spans (the recipe's time warp is not applied).
+/// The recipe's optimizer is Adam at 5e-4 with 30,000 warmup steps and gradient clipping at 5. The encoder's blocks use
+/// rotary relative positions in place of the recipe's Transformer-XL encoding (see <see cref="ConformerAsrNetwork{T}"/>).
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Paraformer model for non-autoregressive parallel ASR
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
-///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
-/// var model = new Paraformer&lt;double&gt;(architecture);
-///
-/// // Or load a pre-trained ONNX model for CIF-based parallel decoding
-/// var onnxModel = new Paraformer&lt;double&gt;(architecture, "paraformer.onnx");
+///     inputSize: 16000, outputSize: 8404);
+/// var model = new Paraformer&lt;float&gt;(architecture);
+/// var text = model.Transcribe(waveform).Text;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -41,165 +51,252 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Paraformer: Fast and Accurate Parallel Transformer for Non-autoregressive End-to-End Speech Recognition", "https://arxiv.org/abs/2206.08317", Year = 2022, Authors = "Gao et al.")]
-public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, WarmupSteps = 30000, Schedule = LearningRateSchedulerType.Noam, MaxGradientNorm = 5,
+                Source = "FunASR's AISHELL-1 Paraformer recipe (paraformer_conformer_12e_6d_2048_256.yaml): Adam at 5e-4, warmuplr with 30000 warmup steps, grad_clip 5.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
+public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
-    private readonly ParaformerOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     /// <inheritdoc />
+    /// <remarks>The output vocabulary, blank (0), start (1) and end (2) included.</remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
+    private readonly ParaformerOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private ConformerAsrNetwork<T>? _encoder;
+    private ParaformerNetwork<T>? _network;
+    private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
+    internal ParaformerNetwork<T>? Network => _network;
+    internal ConformerAsrNetwork<T>? Encoder => _encoder;
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
     /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
-    public Paraformer(NeuralNetworkArchitecture<T> architecture, string modelPath, ParaformerOptions? options = null) : base(architecture) { _options = options ?? new ParaformerOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public Paraformer(NeuralNetworkArchitecture<T> architecture, ParaformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public Paraformer(NeuralNetworkArchitecture<T> architecture, string modelPath, ParaformerOptions? options = null) : base(architecture)
     {
-        _options = options ?? new ParaformerOptions();
-        Options = _options;
-        if (_options.LearningRate <= 0.0 || double.IsNaN(_options.LearningRate) || double.IsInfinity(_options.LearningRate))
-            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be finite and greater than zero.");
-        if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
-            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay must be finite and non-negative.");
-
-        _useNativeMode = true;
-        _optimizerIsDefault = optimizer is null;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-        SupportedLanguages = new[] { "en" };
-        InitializeLayers();
+        _options = options ?? new ParaformerOptions(); Options = _options; _useNativeMode = false;
+        base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
     }
 
-    /// <summary>
-    /// Transcribes audio using CIF-based parallel decoding.
-    /// Per Gao et al. (2022): the Conformer encoder processes mel features, CIF predicts
-    /// token count and extracts acoustic embeddings, then the GLM decoder generates all
-    /// tokens in a single parallel forward pass.
-    /// </summary>
+    public Paraformer(NeuralNetworkArchitecture<T> architecture, ParaformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new ParaformerOptions(); Options = _options; _useNativeMode = true;
+        _optimizer = optimizer ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, warmupStepsOverride: _options.WarmupSteps) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
+        SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The model's optimizer, unless a base training optimizer was set explicitly.</remarks>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <summary>Transcribes audio: the CIF token count and acoustic embeddings, then one parallel decoder pass.</summary>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
-        var features = PreprocessAudio(audio);
-        Tensor<T> logits;
-
-        if (IsOnnxMode && OnnxEncoder is not null)
+        if (ResolveReturnTimestamps(includeTimestamps)) throw new NotSupportedException("Word-level timestamps are not supported for Paraformer.");
+        var waveform = PreprocessAudio(audio);
+        List<int> tokens;
+        using (new Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            logits = OnnxEncoder.Run(features);
+            if (_network is null || _encoder is null) tokens = ConformerAsrNetwork<T>.GreedyCtc(Logits(waveform, training: false));
+            else tokens = _network.Greedy(_encoder.Encode(_encoder.Features(Samples(waveform, 0, waveform.Length)), training: false), _options.MaxTextLength);
         }
-        else
-        {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
-        }
-
-        var (tokens, confidence) = GreedyDecodeWithConfidence(logits);
-        var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-
         return new TranscriptionResult<T>
         {
-            Text = text,
-            Language = language ?? _options.Language,
-            Confidence = NumOps.FromDouble(confidence),
-            DurationSeconds = duration,
-            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
+            Text = Text(tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Count > 0 ? 1.0 : 0.0),
+            DurationSeconds = audio.Length / (double)SampleRate, Segments = Array.Empty<TranscriptionSegment<T>>(),
         };
     }
 
-    /// <inheritdoc />
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Transcribe(audio, language, includeTimestamps); }, cancellationToken);
-    /// <inheritdoc />
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = GreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    /// <inheritdoc />
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
-    {
-        var detected = DetectLanguage(audio);
-        var result = new Dictionary<string, T>();
-        foreach (var lang in SupportedLanguages)
-            result[lang] = NumOps.FromDouble(lang == detected ? 1.0 : 0.0);
-        return result;
-    }
-    /// <inheritdoc />
+    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Paraformer does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultParaformerLayers(encoderDim: _options.EncoderDim, decoderDim: _options.DecoderDim, numEncoderLayers: _options.NumEncoderLayers, numDecoderLayers: _options.NumDecoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardDim: _options.FeedForwardDim, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    // Each token is its vocabulary entry when a vocabulary is configured, otherwise its Unicode code point.
+    private string Text(List<int> tokens)
+    {
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (int t in tokens)
+        {
+            if (vocabulary is not null && t < vocabulary.Length) { string s = vocabulary[t]; if (!s.StartsWith("<", StringComparison.Ordinal)) sb.Append(s); }
+            else if (t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t));
+        }
+        return sb.ToString().Trim();
+    }
+
+    protected override void InitializeLayers() => InitializeLayersCore();
+
+    private void InitializeLayersCore()
+    {
+        if (!_useNativeMode) return;
+        _encoder = null; _network = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network (see the class remarks). It used to be a generic Paraformer template.
+        var o = _options;
+        if (o.FeedForwardDim % o.EncoderDim != 0) throw new ArgumentException("FeedForwardDim must be a multiple of EncoderDim.", nameof(o.FeedForwardDim));
+        var layers = new List<LayerBase<T>>();
+        _encoder = new ConformerAsrNetwork<T>(Engine, layers, new ConformerAsrConfiguration
+        {
+            SampleRate = o.SampleRate, NumMels = o.NumMels, EncoderDim = o.EncoderDim, NumEncoderLayers = o.NumEncoderLayers,
+            NumAttentionHeads = o.NumAttentionHeads, FeedForwardMultiplier = o.FeedForwardDim / o.EncoderDim, ConvKernel = o.ConvKernel,
+            FrequencyMasks = o.FrequencyMasks, FrequencyMaskWidth = o.FrequencyMaskWidth, TimeMasks = o.TimeMasks, TimeMaskRatio = o.TimeMaskRatio,
+            VocabSize = o.VocabSize,
+        });
+        _network = new ParaformerNetwork<T>(Engine, layers, new ParaformerConfiguration
+        {
+            Width = o.EncoderDim, Heads = o.NumAttentionHeads, FeedForward = o.FeedForwardDim, DecoderLayers = o.NumDecoderLayers,
+            Decoder = ParaformerDecoderKind.San, Predictor = CifPredictorKind.DepthwiseResidual, VocabSize = o.VocabSize,
+            TailThreshold = o.TailThreshold, SamplingRatio = o.SamplingRatio, LabelSmoothing = o.LabelSmoothing, CtcWeight = o.CtcWeight,
+            PredictorWeight = o.PredictorWeight,
+        });
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((o.Seed ?? 42) + 1);
+        Layers.AddRange(layers);
+    }
+
+    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_network is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private double[] Samples(Tensor<T> waveform, int offset, int count)
+    {
+        var samples = new double[count];
+        var span = waveform.Data.Span;
+        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
+        return samples;
+    }
+
+    // The decoder's logits [1, vocabulary] for the first acoustic token of a waveform [S] (at least one token is
+    // integrated), or [batch, 1, vocabulary] for [batch, S].
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_network is null || _encoder is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+        {
+            var encoded = _encoder.Encode(_encoder.Features(Samples(input, r * samples, samples)), training);
+            var acoustic = _network.AcousticEmbeddings(encoded, minimumTokens: 1) ?? throw new InvalidOperationException("No acoustic token.");
+            var logits = _network.Decode(encoded, acoustic);
+            outputs[r] = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { 1, logits.Shape[1] });
+        }
+        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    // The labels a training target names: label ids [length], or one distribution per position [n, vocabulary] read as a
+    // CTC alignment (the most likely symbol per row, repeats merged, blanks removed).
+    private int[] Labels(Tensor<T> target)
+    {
+        if (target.Rank >= 2 && target.Shape[^1] == _options.VocabSize)
+            return ConformerAsrNetwork<T>.GreedyCtc(Engine.Reshape(target, new[] { target.Length / _options.VocabSize, _options.VocabSize })).ToArray();
+        var labels = new int[target.Length];
+        var span = target.Data.Span;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            double value = Math.Round(NumOps.ToDouble(span[i]));
+            if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
+            labels[i] = (int)value;
+        }
+        return labels;
+    }
+
+    private int[][] RowLabels(Tensor<T> input, Tensor<T> target)
+    {
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], perRow = target.Length / rows;
+        var labels = new int[rows][];
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            labels[r] = Labels(row);
+        }
+        return labels;
+    }
+
+    // One utterance's loss (ParaformerNetwork.Loss), the encoder's CTC loss included.
+    private Tensor<T> Loss(double[,] features, int[] labels, bool training)
+    {
+        var encoder = _encoder ?? throw new InvalidOperationException("No native network.");
+        var network = _network ?? throw new InvalidOperationException("No native network.");
+        var encoded = encoder.Encode(features, training);
+        var ctc = _options.CtcWeight > 0 && labels.Length > 0 ? encoder.CtcLoss(encoder.CtcLogits(encoded), labels) : null;
+        return network.Loss(encoded, labels, _random, ctc);
+    }
+
     /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    /// <remarks>The recipe's loss over SpecAugmented features, averaged over the batch.</remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        var encoder = _encoder;
+        if (encoder is null || _network is null) return false;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
+        var labels = RowLabels(input, target);
+        TrainWithCustomLoss(input, _ =>
+        {
+            Tensor<T>? total = null;
+            for (int r = 0; r < rows; r++)
+            {
+                var loss = Loss(encoder.SpecAugment(encoder.Features(Samples(input, r * samples, samples)), _random), labels[r], training: true);
+                total = total is null ? loss : Engine.TensorAdd(total, loss);
+            }
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+        });
+        return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes, on unaugmented features in inference mode
+    /// without the glancing sampler, averaged over the batch.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var encoder = _encoder ?? throw new NotSupportedException("The objective is defined on the native network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
+        var labels = RowLabels(input, target);
+        double total = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            var encoded = encoder.Encode(encoder.Features(Samples(input, r * samples, samples)), training: false);
+            var ctc = _options.CtcWeight > 0 && labels[r].Length > 0 ? encoder.CtcLoss(encoder.CtcLogits(encoded), labels[r]) : null;
+            total += NumOps.ToDouble((_network ?? throw new InvalidOperationException("No native network.")).Loss(encoded, labels[r], _random, ctc, sample: false)[0]);
+        }
+        return NumOps.FromDouble(total / rows);
+    }
+
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    /// <inheritdoc />
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Paraformer-Native" : "Paraformer-ONNX", Description = "Paraformer: CIF + parallel Transformer (Alibaba DAMO, 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
-    /// <summary>Whether <c>_optimizer</c> is the one this class built rather than the caller's.</summary>
-    private bool _optimizerIsDefault;
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Paraformer-Native" : "Paraformer-ONNX", Description = "Paraformer: a Conformer encoder, CIF predictor and parallel SAN decoder (Gao et al. 2022)", FeatureCount = 1, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
-    /// <summary>
-    /// Builds the default optimizer from the CURRENT options.
-    /// </summary>
-    /// <remarks>
-    /// Must run again after deserialization. LearningRate and WeightDecay are baked into the optimizer
-    /// at construction, so restoring a checkpoint that saved different values left the optimizer on the
-    /// constructor's -- the model then trained at settings the checkpoint did not choose, with the
-    /// options object reading correctly the whole time.
-    /// </remarks>
-    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay
-            });
-
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>Every field appended after the original layout is read only if bytes remain.</b>
-    /// <c>LearningRate</c> and <c>WeightDecay</c> were appended alongside the three decoder fields but
-    /// read unconditionally, so a checkpoint written before they existed -- which ends after
-    /// <c>Language</c> -- threw <see cref="EndOfStreamException"/> on the first <c>ReadDouble</c> and
-    /// could not be loaded at all. Anything absent keeps the option's default, which is the value the
-    /// build that wrote the payload was using.
-    /// </para>
-    /// <para>
-    /// The remaining-bytes test is sound HERE specifically because this payload owns its stream end:
-    /// <c>NeuralNetworkBase.Serialize</c> writes it last, and the clone path hands it a dedicated
-    /// <see cref="MemoryStream"/>. It would NOT be sound for a field inserted mid-stream, where there
-    /// is no shortage of bytes -- only a misalignment -- and a version marker is required instead.
-    /// </para>
-    /// </remarks>
-
-
-    private (List<int> tokens, double confidence) GreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private string TokensToText(List<int> tokens)
-    {
-        var vocab = _options.Vocabulary;
-        if (vocab is not null && vocab.Length > 0)
-        {
-            var sb = new System.Text.StringBuilder();
-            foreach (var t in tokens)
-            {
-                if (t > 0 && t < vocab.Length) sb.Append(vocab[t]);
-            }
-            return sb.ToString().Trim();
-        }
-        // Fallback: Unicode codepoint mapping for models that use Unicode-based tokens
-        var fb = new System.Text.StringBuilder();
-        foreach (var t in tokens)
-        {
-            if (t > 0 && t <= char.MaxValue) fb.Append((char)t);
-            else if (t > char.MaxValue && t <= 0x10FFFF) fb.Append(char.ConvertFromUtf32(t));
-        }
-        return fb.ToString().Trim();
-    }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> _) => _options.Language;
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Paraformer<T>)); }
     /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }

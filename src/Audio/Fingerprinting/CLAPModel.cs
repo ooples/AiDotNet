@@ -187,6 +187,10 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         // drop-path, dropout); held only in _options, the seed reached nothing but the crop generator.
         Options = _options;
         _options.Validate();
+        // Before the towers are built: Options.Seed seeds their initial weights and every stochastic layer's stream
+        // (dropout, drop-path, SpecAugment stripes, the fusion branch's random "longer" clip). It used to reach only the
+        // front end, so the same seeded model trained differently in every process.
+        ApplyOptionsSeed(_options.Seed);
         _frontEnd = new ClapAudioFrontEnd<T>(_options);
         _trainingRandom = RandomHelper.CreateSeededRandom(_options.Seed ?? 0);
         SampleRate = _options.SampleRate;
@@ -231,48 +235,13 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             // Callers wanting full control of BOTH stacks should switch to
             // AudioTextDualStreamArchitecture.
             Layers.AddRange(Architecture.Layers);
-            TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
-                vocabSize: _options.VocabSize,
-                maxPositions: _options.TextMaxPositions,
-                textHiddenDim: _options.TextHiddenDim,
-                textEncoderLayers: _options.TextEncoderLayers,
-                textEncoderHeads: _options.TextEncoderHeads,
-                intermediateDim: _options.TextIntermediateDim,
-                paddingTokenId: _options.TextPaddingTokenId,
-                dropoutRate: _options.TextDropoutRate,
-                layerNormEpsilon: _options.TextLayerNormEpsilon,
-                projectionDim: _options.ProjectionDim));
+            TextEncoderLayers.AddRange(TextTower(_options));
         }
         else
         {
             // Default both stacks from the paper-faithful LayerHelper factories.
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
-                numMelBands: _options.NumMelBands,
-                specSize: _options.SpecSize,
-                patchSize: _options.AudioPatchSize,
-                embedDim: _options.AudioEmbedDim,
-                stageDepths: _options.AudioStageDepths,
-                stageHeads: _options.AudioStageHeads,
-                windowSize: _options.SwinWindowSize,
-                mlpRatio: _options.AudioMlpRatio,
-                dropPathRate: _options.AudioDropPathRate,
-                featureFusion: _options.EnableFeatureFusion,
-                projectionDim: _options.ProjectionDim,
-                specAugmentTimeDropWidth: _options.SpecAugmentTimeDropWidth,
-                specAugmentTimeStripes: _options.SpecAugmentTimeStripes,
-                specAugmentFreqDropWidth: _options.SpecAugmentFreqDropWidth,
-                specAugmentFreqStripes: _options.SpecAugmentFreqStripes));
-            TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
-                vocabSize: _options.VocabSize,
-                maxPositions: _options.TextMaxPositions,
-                textHiddenDim: _options.TextHiddenDim,
-                textEncoderLayers: _options.TextEncoderLayers,
-                textEncoderHeads: _options.TextEncoderHeads,
-                intermediateDim: _options.TextIntermediateDim,
-                paddingTokenId: _options.TextPaddingTokenId,
-                dropoutRate: _options.TextDropoutRate,
-                layerNormEpsilon: _options.TextLayerNormEpsilon,
-                projectionDim: _options.ProjectionDim));
+            Layers.AddRange(AudioTower(_options));
+            TextEncoderLayers.AddRange(TextTower(_options));
         }
 
         // Learnable temperature τ in log space (CLIP / CLAP convention).
@@ -281,6 +250,42 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         _logTemperature = new Tensor<T>([1]);
         _logTemperature[0] = NumOps.FromDouble(Math.Log(1.0 / _options.InitialTemperature));
     }
+
+    /// <summary>The audio tower: HTS-AT (bn0 over the mel bins, the image fold, patch embedding, four Swin stages,
+    /// the token mean) and the Linear-ReLU-Linear projection into the joint space.</summary>
+    /// <remarks>Shared with the classification adapter <see cref="AiDotNet.Audio.Classification.CLAP{T}"/>, so CLAP
+    /// has one network.</remarks>
+    internal static IEnumerable<ILayer<T>> AudioTower(CLAPModelOptions o) =>
+        LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
+            numMelBands: o.NumMelBands,
+            specSize: o.SpecSize,
+            patchSize: o.AudioPatchSize,
+            embedDim: o.AudioEmbedDim,
+            stageDepths: o.AudioStageDepths,
+            stageHeads: o.AudioStageHeads,
+            windowSize: o.SwinWindowSize,
+            mlpRatio: o.AudioMlpRatio,
+            dropPathRate: o.AudioDropPathRate,
+            featureFusion: o.EnableFeatureFusion,
+            projectionDim: o.ProjectionDim,
+            specAugmentTimeDropWidth: o.SpecAugmentTimeDropWidth,
+            specAugmentTimeStripes: o.SpecAugmentTimeStripes,
+            specAugmentFreqDropWidth: o.SpecAugmentFreqDropWidth,
+            specAugmentFreqStripes: o.SpecAugmentFreqStripes);
+
+    /// <summary>The text tower: RoBERTa and its pooled &lt;s&gt; output through the projection.</summary>
+    internal static IEnumerable<ILayer<T>> TextTower(CLAPModelOptions o) =>
+        LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
+            vocabSize: o.VocabSize,
+            maxPositions: o.TextMaxPositions,
+            textHiddenDim: o.TextHiddenDim,
+            textEncoderLayers: o.TextEncoderLayers,
+            textEncoderHeads: o.TextEncoderHeads,
+            intermediateDim: o.TextIntermediateDim,
+            paddingTokenId: o.TextPaddingTokenId,
+            dropoutRate: o.TextDropoutRate,
+            layerNormEpsilon: o.TextLayerNormEpsilon,
+            projectionDim: o.ProjectionDim);
 
     #endregion
 
@@ -416,16 +421,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
 
     // The audio tower is a plain sequence except for the fusion patch embedding, which also reads the mask.
     private Tensor<T> RunAudioTower(Tensor<T> features, Tensor<T>? longer)
-    {
-        var hidden = features;
-        foreach (var layer in Layers)
-        {
-            hidden = layer is HtsatFusionPatchEmbeddingLayer<T> fusion && longer is not null
-                ? fusion.Forward(hidden, longer)
-                : layer.Forward(hidden);
-        }
-        return hidden;
-    }
+        => RunAudioTower(Layers, Layers.Count, features, longer);
 
     /// <summary>
     /// Runs <paramref name="inference"/> with the towers in evaluation mode and restores the previous mode, as PredictCore
@@ -444,6 +440,23 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         {
             if (wasTraining) SetTrainingMode(true);
         }
+    }
+
+    /// <summary>
+    /// Runs the first <paramref name="count"/> audio-tower layers on the front end's features. The fusion patch
+    /// embedding also reads LAION-CLAP's per-sample fusion mask. Shared with the classification adapter.
+    /// </summary>
+    internal static Tensor<T> RunAudioTower(IReadOnlyList<ILayer<T>> layers, int count, Tensor<T> features, Tensor<T>? longer)
+    {
+        var hidden = features;
+        for (int i = 0; i < count; i++)
+        {
+            var layer = layers[i];
+            hidden = layer is HtsatFusionPatchEmbeddingLayer<T> fusion && longer is not null
+                ? fusion.Forward(hidden, longer)
+                : layer.Forward(hidden);
+        }
+        return hidden;
     }
 
     /// <summary>
@@ -487,9 +500,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public Tensor<T> EncodeText(int[] tokenIds)
     {
         Guard.NotNull(tokenIds);
-        var tokenTensor = new Tensor<T>([1, tokenIds.Length]);
-        for (int i = 0; i < tokenIds.Length; i++)
-            tokenTensor[0, i] = NumOps.FromDouble(tokenIds[i]);
+        var tokenTensor = tokenIds.Length == 0
+            ? new Tensor<T>([1, 0])
+            : new Tensor<int>(tokenIds, [1, tokenIds.Length]).Cast<T>();
         return EncodeText(tokenTensor);
     }
 
@@ -513,7 +526,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         Guard.NotNull(captions);
         Guard.NotNull(tokenizer);
         int length = _options.MaxTextLength;
-        var ids = new Tensor<T>(new[] { captions.Count, length });
+        var ids = new int[captions.Count * Math.Max(0, length)];
         var encoding = new AiDotNet.Tokenization.Models.EncodingOptions
         {
             AddSpecialTokens = true,
@@ -525,9 +538,11 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         {
             var tokens = tokenizer.Encode(captions[c] ?? string.Empty, encoding).TokenIds;
             for (int i = 0; i < length; i++)
-                ids[c, i] = NumOps.FromDouble(i < tokens.Count ? tokens[i] : _options.TextPaddingTokenId);
+                ids[c * length + i] = i < tokens.Count ? tokens[i] : _options.TextPaddingTokenId;
         }
-        return ids;
+        if (ids.Length == 0)
+            return new Tensor<T>(new[] { captions.Count, length });
+        return new Tensor<int>(ids, new[] { captions.Count, length }).Cast<T>();
     }
 
     /// <summary>
@@ -543,9 +558,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     private int[] TokenIdsOf(string label, ITokenizer tokenizer)
     {
         var ids = Tokenize(new[] { label }, tokenizer);
-        var result = new int[ids.Shape[1]];
-        for (int i = 0; i < result.Length; i++) result[i] = (int)Math.Round(NumOps.ToDouble(ids[0, i]));
-        return result;
+        int length = ids.Shape[1];
+        if (length == 0) return new int[0];
+        return Engine.TensorRound(Engine.TensorSlice(ids, [0, 0], [1, length])).Cast<int>().ToArray();
     }
 
     /// <summary>
@@ -596,9 +611,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 nameof(audio));
 
         var embedding = EncodeAudio(audio);
-        var flat = embedding.ToVector();
-        var data = new T[flat.Length];
-        for (int i = 0; i < flat.Length; i++) data[i] = flat[i];
+        var data = embedding.ToArray();
         return new AudioFingerprint<T>
         {
             Data = data,
@@ -680,10 +693,17 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public IReadOnlyCollection<string> LoadLaionWeights(Func<string, int[], double[]> read)
     {
         Guard.NotNull(read);
+        return LoadLaionWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Loads a LAION-CLAP checkpoint straight from <paramref name="source"/>; returns the names read.</summary>
+    internal IReadOnlyCollection<string> LoadLaionWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
+        Guard.NotNull(source);
         if (!_useNativeMode)
             throw new NotSupportedException("LAION weights load into the native network; this instance is in ONNX mode.");
         MaterializeForLoading();
-        var loader = new TorchStateDictLoader<T>(read, Engine);
+        var loader = new TorchStateDictLoader<T>(source, Engine);
 
         int index = 0;
         ILayer<T> Next() => index < Layers.Count
@@ -935,13 +955,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
     {
         Guard.NotNull(proposedTarget);
-        var ids = new Tensor<T>(proposedTarget._shape);
-        for (int i = 0; i < ids.Length; i++)
-        {
-            double id = Math.Round(Math.Abs(NumOps.ToDouble(proposedTarget.GetFlat(i))));
-            ids.SetFlat(i, NumOps.FromDouble(Math.Min(id, _options.VocabSize - 1)));
-        }
-        return ids;
+        // min(round(|x|), VocabSize - 1) with banker's rounding; NaN stays NaN (a fresh tensor)
+        using var noGrad = new NoGradScope<T>();
+        var id = Engine.TensorRound(Engine.TensorAbs(proposedTarget));
+        T cap = NumOps.FromDouble(_options.VocabSize - 1);
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(id, cap), Tensor<T>.CreateDefault(id.Shape.ToArray(), cap), id);
     }
 
     /// <inheritdoc />
@@ -971,13 +990,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         // We need the diagonal entry of log_softmax. Easiest: compute
         // log_softmax row by row using engine ops, then sum along the
         // diagonal via a one-hot-style multiply.
-        var rowMaxes = new Tensor<T>(new[] { batchSize, 1 });
-        for (int i = 0; i < batchSize; i++)
+        // The row max is a constant shift (log_softmax is invariant to it), taken off the tape as before.
+        Tensor<T> rowMaxes;
+        using (new NoGradScope<T>())
         {
-            T m = logits[i, 0];
-            for (int j = 1; j < batchSize; j++)
-                if (NumOps.GreaterThan(logits[i, j], m)) m = logits[i, j];
-            rowMaxes[i, 0] = m;
+            rowMaxes = Engine.ReduceMax(
+                Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, batchSize }), new[] { 1 }, keepDims: true);
         }
         var rowMaxTiled = Engine.TensorTile(rowMaxes, new[] { 1, batchSize });
         var shifted = Engine.TensorSubtract<T>(logits, rowMaxTiled);
@@ -988,8 +1006,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         var logSoftmax = Engine.TensorSubtract<T>(shifted, logRowSumTiled);
 
         // Diagonal mask: 1 at (i, i), 0 elsewhere.
-        var diagMask = new Tensor<T>(new[] { batchSize, batchSize });
-        for (int i = 0; i < batchSize; i++) diagMask[i, i] = NumOps.One;
+        var diagMask = Engine.TensorEye<T>(batchSize);
         var picked = Engine.TensorMultiply<T>(logSoftmax, diagMask);
         // Sum all entries; only the diagonal survives.
         var sumAxes = new[] { 0, 1 };
@@ -1011,27 +1028,30 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// reduces to a plain dot product downstream. Engine-routed to stay
     /// generic in <typeparamref name="T"/> and BLAS-accelerated.
     /// </summary>
-    private Tensor<T> L2Normalize(Tensor<T> x)
+    private Tensor<T> L2Normalize(Tensor<T> x) => L2Normalize(Engine, x);
+
+    /// <summary>Scales each row of <paramref name="x"/> to unit length along its last axis.</summary>
+    internal static Tensor<T> L2Normalize(IEngine engine, Tensor<T> x)
     {
         // ||x||² along the last axis, then 1/√(·+ε) via Sqrt + Reciprocal.
-        var sq = Engine.TensorMultiply(x, x);
+        var sq = engine.TensorMultiply(x, x);
         int lastAxis = x.Shape.Length - 1;
-        var sumSq = Engine.ReduceSum(sq, [lastAxis], keepDims: true);
-        var eps = NumOps.FromDouble(1e-12);
-        var sumSqPlusEps = Engine.TensorAddScalar(sumSq, eps);
-        var norm = Engine.TensorSqrt(sumSqPlusEps);
-        var invNorm = Engine.TensorReciprocal(norm);
-        return Engine.TensorMultiply(x, invNorm);
+        var sumSq = engine.ReduceSum(sq, [lastAxis], keepDims: true);
+        var eps = MathHelper.GetNumericOperations<T>().FromDouble(1e-12);
+        var sumSqPlusEps = engine.TensorAddScalar(sumSq, eps);
+        var norm = engine.TensorSqrt(sumSqPlusEps);
+        var invNorm = engine.TensorReciprocal(norm);
+        return engine.TensorMultiply(x, invNorm);
     }
 
     /// <summary>Cosine similarity between two row-aligned embeddings (already L2-normalised).</summary>
     private double ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
         int len = Math.Min(a.Length, b.Length);
-        double dot = 0.0;
-        for (int i = 0; i < len; i++)
-            dot += Convert.ToDouble(a[i]) * Convert.ToDouble(b[i]);
-        return dot;
+        if (len == 0) return 0.0;
+        var x = AudioEngineOps.FitLength(Engine, a, len);
+        var y = AudioEngineOps.FitLength(Engine, b, len);
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(x, y)));
     }
 
     private void ThrowIfDisposed()

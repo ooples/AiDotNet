@@ -69,7 +69,7 @@ public class CodeExecutionService
         "AudioProcessor",
         "Whisper",
         "MusicGen",
-        "TtsModel",
+        "FastSpeech2",
         // Models
         "Transformer",
         "ResNet",
@@ -1079,7 +1079,7 @@ public class CodeExecutionService
 
             // Audio Processing
             if ((api.Contains("Whisper") || api.Contains("AudioProcessor") ||
-                 api.Contains("MusicGen") || api.Contains("TtsModel")) &&
+                 api.Contains("MusicGen") || api.Contains("FastSpeech2")) &&
                 !processedCategories.Contains("audio"))
             {
                 processedCategories.Add("audio");
@@ -1101,7 +1101,7 @@ public class CodeExecutionService
                     output.AppendLine("  Sample rate: 32000 Hz");
                     output.AppendLine("  Generation complete!");
                 }
-                else if (api.Contains("TtsModel"))
+                else if (api.Contains("FastSpeech2"))
                 {
                     output.AppendLine("Generating speech...");
                     output.AppendLine("  Input: \"Hello, welcome to AiDotNet!\"");

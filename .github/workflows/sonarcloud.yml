@@ -341,19 +341,18 @@ jobs:
           upload: always
 
 
-  # The traced analysis: what build-less extraction reads less precisely (source-generated code) is
-  # analyzed from a real build, on master pushes, the nightly schedule and manual runs. Its own category
-  # keeps it from ever being the baseline a build-less pull request is compared with. Not a CI Gate
-  # dependency: on a pull request it is skipped by design, and the ruleset's required CodeQL result is
-  # the build-less job's.
+  # Trace source-generated code as well as running the quick build-less analysis.
+  # Both categories exist on master, so PRs must upload both; skipping the traced category
+  # leaves GitHub's CodeQL check blocked by a missing analysis configuration.
   codeql-traced:
     name: CodeQL Analysis (traced)
     runs-on: ubuntu-latest
     needs: [validation-source, select-shards]
-    # Recent traced runs took 66-71 minutes (about 26 traced build + 31 analysis) and trace Serving and
-    # the playground functions as well; 85 keeps the margin.
-    timeout-minutes: 85
-    if: "${{ always() && !cancelled() && !inputs.sonar_only && github.event_name != 'pull_request' && fromJSON(needs.validation-source.outputs.execute_quality) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # PR #2294's full traced build took 43 minutes, then its analysis was cancelled after
+    # another 37 minutes by the 85-minute job limit. Keep the full build and query suite,
+    # with enough time for analysis and upload on the expanded native model source.
+    timeout-minutes: 120
+    if: "${{ always() && !cancelled() && !inputs.sonar_only && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
       security-events: write
@@ -436,6 +435,47 @@ jobs:
 
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
+  # A DRAFT runs this compile check and nothing else: every other job gates on
+  # `github.event.pull_request.draft != true`, so drafts no longer queue CodeQL, the shards or the
+  # paper-fidelity slices behind the PRs that are ready to merge. Marking the PR ready
+  # (ready_for_review) starts the full run. Superseded draft builds cancel each other.
+  draft-build:
+    name: Draft build check
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    concurrency:
+      group: draft-build-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/swift /usr/local/share/boost /usr/local/share/chromium || true
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Build (Release, net10.0)
+        run: |
+          dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
+          dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 -m:4
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -689,21 +729,20 @@ jobs:
       # then the test project for net471 ONLY, which is the compatibility check itself and
       # pulls the satellites to net471 with it.
       #
-      # -m:2 is kept HERE and only here: this is the job that actually runs net8/net10/net471
-      # csc processes together, the combination that reached the 16-GB ceiling and got a
-      # compiler killed with exit 137.
-      # ONE solution build, so tools/ and the satellites stay covered exactly as they were
-      # and projects still compile in parallel. CompatBuildOnly narrows the test project to
-      # net471 -- its net10.0 compile is the most expensive in the repo and the Build job
-      # just did it, so repeating it on a second runner would burn CI minutes for nothing.
+      # ONE solution build, so tools/ and the satellites stay covered exactly as they were.
+      # CompatBuildOnly narrows the test project to net471 -- its net10.0 compile is the most
+      # expensive in the repo and the Build job just did it, so repeating it on a second runner
+      # would burn CI minutes for nothing.
       #
-      # -m:2 is kept HERE and only here: this is the job that actually runs net8/net10/net471
-      # csc processes together, the combination that reached the 16-GB ceiling and got a
-      # compiler killed with exit 137.
+      # RunAnalyzers=false: analyzers add ~2.7 GB to every csc (src/AiDotNet's net471 compile peaks at
+      # 7.45 GB with them on master, 4.79 GB without; source generators still run), and the Build job
+      # already runs every analyzer on net10.0 over the same source. With them, two compiles under -m:2
+      # passed the 16-GB ceiling and the OOM kill surfaced only as "The runner has received a shutdown
+      # signal". Code compiled only for net471/net8 (#if branches) is not analyzed here.
       # A pull request compiles the test project for net471 only and skips the pack: nothing consumes
       # the package it produced, and master pushes still pack every framework.
       - name: Build (Release, compat frameworks)
-        run: dotnet build -c Release --no-restore -m:2 -p:CompatBuildOnly=true ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
+        run: dotnet build -c Release --no-restore -m:2 -p:RunAnalyzers=false -p:CompatBuildOnly=true ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
 
       - name: Build NuGet package
         if: github.event_name != 'pull_request'
@@ -1324,6 +1363,11 @@ jobs:
           $workloads = Split-CiWorkloads -Shards @($matrixShards)
           $plan = Get-SelfHostedShardPlan -Config $env:SELF_HOSTED_RUNNERS `
               -Runners (Get-SelfHostedRunners -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN)
+          if ($plan.Count -gt 0) {
+            $pending = Get-SelfHostedPendingJobs -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN -Label $plan.Label
+            $plan = Get-SelfHostedShardPlan -Config $env:SELF_HOSTED_RUNNERS -Pending $pending `
+                -Runners (Get-SelfHostedRunners -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN)
+          }
           Write-Host "Self-hosted routing: $($plan.Count) shard(s). $($plan.Reason)"
           if ($plan.Warning) { Write-Host "::warning::Self-hosted routing is off: $($plan.Reason)" }
           "self_hosted_shards=$($plan.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8

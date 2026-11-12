@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 ///
 /// The NOTEARS constraint is: h(W) = tr(e^(W * W)) - d = 0
 /// where d is the number of features. This is zero if and only if W encodes a DAG.
-/// The matrix exponential is computed via truncated Taylor series.
+/// The matrix exponential is computed by scaling and squaring, as scipy.linalg.expm in the NOTEARS reference code.
 ///
 /// This implementation follows the standard neural network architecture pattern with:
 /// - Proper inheritance from NeuralNetworkBase
@@ -128,6 +128,12 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     [Buffer(Name = "causal-adjacency", Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Matrix<T>? _adjacency;
 
+    // X^T X / n of the transformed training rows: the NOTEARS least-squares loss (1/2n)||X - XW||^2 has gradient
+    // (1/n) X^T (XW - X) = Gram (W - I), so the Gram is all the adjacency update needs from the data. Fit rebuilds it
+    // from the rows it is given, so it is training scratch, not state.
+    [Scratch]
+    private Matrix<T>? _dataGram;
+
     // Augmented Lagrangian parameters for NOTEARS DAG constraint
     private double _lagrangeAlpha;
     private double _lagrangeRho;
@@ -141,11 +147,11 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private readonly List<DropoutLayer<T>> _discDropoutLayers = new();
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
 
-    // Cached pre-activations for proper backward passes
+    // Tensor view of the transformed training matrix, rebuilt when a different matrix is passed in.
     [Scratch]
-    private readonly List<Tensor<T>> _genPreActivations = new();
+    private Matrix<T>? _realDataSource;
     [Scratch]
-    private readonly List<Tensor<T>> _discPreActivations = new();
+    private Tensor<T>? _realDataTensor;
 
     // Whether custom layers are being used
     private bool _usingCustomLayers;
@@ -187,6 +193,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CausalGANOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -261,7 +268,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             // tests masked it because Fit() rebuilds the stack via RebuildLayersWithActualDimensions.
             int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
             Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            _genBNLayers.Add(new BatchNormalizationLayer<T>());
+            _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
         }
 
         // Output layer: produces raw features (no activation). Its input is likewise the last hidden
@@ -358,6 +365,21 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </remarks>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        try
+        {
+            FitCore(data, columns, epochs);
+        }
+        finally
+        {
+            // The cached training rows only serve the training loop: a fitted generator, or one whose Fit failed,
+            // does not keep a copy of its training data.
+            _realDataSource = null;
+            _realDataTensor = null;
+        }
+    }
+
+    private void FitCore(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs)
+    {
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
@@ -368,19 +390,10 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _transformer.Fit(data, _columns);
         _dataWidth = _transformer.TransformedWidth;
         var transformedData = _transformer.Transform(data);
+        _dataGram = ComputeDataGram(transformedData);
 
         // Step 2: Initialize adjacency matrix with small random values (zero diagonal)
-        _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
-        for (int i = 0; i < _dataWidth; i++)
-        {
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                if (i != j)
-                {
-                    _adjacency[i, j] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
-                }
-            }
-        }
+        _adjacency = InitialAdjacency(_dataWidth);
 
         // Step 3: Reset augmented Lagrangian parameters
         _lagrangeAlpha = 0.0;
@@ -433,18 +446,9 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _transformer.Fit(data, _columns);
             _dataWidth = _transformer.TransformedWidth;
             var transformedData = _transformer.Transform(data);
+            _dataGram = ComputeDataGram(transformedData);
 
-            _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
-            for (int i = 0; i < _dataWidth; i++)
-            {
-                for (int j = 0; j < _dataWidth; j++)
-                {
-                    if (i != j)
-                    {
-                        _adjacency[i, j] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
-                    }
-                }
-            }
+            _adjacency = InitialAdjacency(_dataWidth);
 
             _lagrangeAlpha = 0.0;
             _lagrangeRho = 1.0;
@@ -490,8 +494,9 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
         }
 
-        var result = new Matrix<T>(numSamples, _dataWidth);
+        var generated = new Tensor<T>(new[] { numSamples, _dataWidth });
 
+        // Rows are generated one at a time, in order, so each row's noise draws keep their RNG order.
         for (int i = 0; i < numSamples; i++)
         {
             var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
@@ -504,15 +509,16 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             }
 
             // Apply output activations
-            genOutput = ApplyOutputActivations(genOutput);
-
-            for (int j = 0; j < _dataWidth && j < genOutput.Length; j++)
-            {
-                result[i, j] = genOutput[j];
-            }
+            SyntheticTensorOps<T>.WriteRow(generated, i, ApplyOutputActivations(genOutput), _dataWidth);
         }
 
-        return _transformer.InverseTransform(result);
+        // The VGM head is decoded as in CTGAN: each mode and category block is drawn from its distribution
+        // (gumbel_softmax then argmax), not set to its most likely entry.
+        // Decoded in bounded blocks, so only one block's intermediates are alive at a time.
+        TabularDataTransformer<T> transformer = _transformer;
+        int columnCount = _columns.Count;
+        return SyntheticTensorOps<T>.DecodeInBlocks(generated, block => transformer.InverseTransform(
+            SyntheticTensorOps<T>.SampleCategoricalBlocks(block, transformer, columnCount, _random).ToMatrix()));
     }
 
     #endregion
@@ -524,7 +530,6 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </summary>
     private Tensor<T> GeneratorForward(Tensor<T> input)
     {
-        _genPreActivations.Clear();
         var inputTensor = input;
         var current = input;
 
@@ -543,7 +548,6 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 current = _genBNLayers[i].Forward(current);
             }
 
-            _genPreActivations.Add(CloneTensor(current));
             current = ApplyReLU(current);
         }
 
@@ -603,32 +607,6 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         return activations;
     }
 
-    /// <summary>
-    /// Discriminator forward pass with pre-activation caching and optional Dropout.
-    /// </summary>
-    private Tensor<T> DiscriminatorForward(Tensor<T> input, bool isTraining)
-    {
-        _discPreActivations.Clear();
-        var current = input;
-
-        for (int i = 0; i < _discLayers.Count - 1; i++)
-        {
-            current = _discLayers[i].Forward(current);
-            _discPreActivations.Add(CloneTensor(current));
-            current = ApplyLeakyReLU(current);
-
-            if (isTraining)
-            {
-                current = _discDropoutLayers[i].Forward(current);
-            }
-        }
-
-        // Final layer: no activation (raw Wasserstein score)
-        current = _discLayers[^1].Forward(current);
-
-        return current;
-    }
-
     #endregion
 
     #region Training Steps
@@ -657,7 +635,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _options.GradientPenaltyWeight,
             _discriminatorOptimizer,
             _random,
-            ref _wganFusedStep);
+            ref _wganFusedStep, maxGradNorm: _options.MaxGradNorm);
     }
 
     /// <summary>
@@ -700,6 +678,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 forward: Fwd,
                 computeLoss: Loss,
                 optimizer: _generatorOptimizer,
+                maxGradNorm: _options.MaxGradNorm,
                 extraTensors: genParams);
         }
     }
@@ -712,13 +691,18 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         var fakeCausal = _adjacency is not null ? ApplyCausalStructureBatched(fakeRaw) : fakeRaw;
         var fakeBatch = ApplyOutputActivationsBatched(fakeCausal);
 
-        var realBatch = new Tensor<T>([batchSize, _dataWidth]);
+        var rowIndices = new int[batchSize];
         for (int b = 0; b < batchSize; b++)
         {
-            int rowIdx = _random.Next(transformedData.Rows);
-            int cols = Math.Min(_dataWidth, transformedData.Columns);
-            for (int j = 0; j < cols; j++) realBatch[b, j] = transformedData[rowIdx, j];
+            rowIndices[b] = _random.Next(transformedData.Rows);
         }
+
+        if (_realDataTensor is null || !ReferenceEquals(_realDataSource, transformedData))
+        {
+            _realDataTensor = Tensor<T>.FromMatrix(transformedData);
+            _realDataSource = transformedData;
+        }
+        var realBatch = SyntheticTensorOps<T>.GatherRows(_realDataTensor, rowIndices, _dataWidth);
         return (realBatch, fakeBatch);
     }
 
@@ -734,16 +718,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
         var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
         var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
-        var noiseData = new T[totalElements];
-        var z1Arr = z1.ToArray();
-        var z2Arr = z2.ToArray();
-        for (int i = 0; i < halfElements; i++)
-        {
-            int idx = i * 2;
-            if (idx < totalElements) noiseData[idx] = z1Arr[i];
-            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
-        }
-        return new Tensor<T>(noiseData, [batchSize, embedDim]);
+        return SyntheticTensorOps<T>.InterleaveNormalPairs(z1, z2, batchSize, embedDim);
     }
 
     /// <summary>
@@ -802,13 +777,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         if (_adjacency is null) return fakeBatch;
 
         // Build (I + A) as a Tensor<T> of shape [dataWidth, dataWidth].
-        int d = _dataWidth;
-        var iPlusA = new Tensor<T>([d, d]);
-        for (int i = 0; i < d; i++)
-        for (int j = 0; j < d; j++)
-            iPlusA[i, j] = i == j
-                ? NumOps.Add(NumOps.One, _adjacency[i, j])
-                : _adjacency[i, j];
+        var iPlusA = Engine.TensorAdd(Engine.TensorEye<T>(_dataWidth), Tensor<T>.FromMatrix(_adjacency));
 
         // [B, d] × [d, d] -> [B, d]
         return Engine.TensorMatMul(fakeBatch, iPlusA);
@@ -874,147 +843,102 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     {
         if (_adjacency is null) return features;
 
-        var result = new Tensor<T>(features._shape);
-        for (int j = 0; j < _dataWidth && j < features.Length; j++)
+        // y_j = x_j + sum_{i != j} W_ij x_i over the first min(dataWidth, length) entries; later entries are 0.
+        var engine = Engine;
+        int n = Math.Min(_dataWidth, features.Length);
+        var flat = features.Reshape([features.Length]);
+        var x = engine.TensorSlice(flat, [0], [n]).Reshape([1, n]);
+        var weights = engine.TensorSlice(Tensor<T>.FromMatrix(_adjacency), [0, 0], [n, n]);
+        var identity = engine.TensorEye<T>(n);
+        var offDiagonal = engine.TensorMultiply(weights, engine.ScalarMinusTensor(NumOps.One, identity));
+        var y = engine.TensorMatMul(x, engine.TensorAdd(identity, offDiagonal)).Reshape([n]);
+        if (n < features.Length)
         {
-            double val = NumOps.ToDouble(features[j]);
-
-            for (int i = 0; i < _dataWidth && i < features.Length; i++)
-            {
-                if (i == j) continue;
-                double weight = NumOps.ToDouble(_adjacency[i, j]);
-                val += weight * NumOps.ToDouble(features[i]);
-            }
-
-            result[j] = NumOps.FromDouble(val);
+            y = engine.TensorConcatenate([y, new Tensor<T>([features.Length - n])], 0);
         }
 
-        return result;
+        return y.Reshape(features._shape);
     }
 
     /// <summary>
     /// Computes the NOTEARS acyclicity constraint and its gradient.
     /// h(W) = tr(e^(W hadamard W)) - d; gradient = 2 * e^(W hadamard W) hadamard W.
-    /// Uses truncated Taylor series (order 8) for the matrix exponential.
+    /// Uses a scaling-and-squaring matrix exponential (SyntheticTensorOps.MatrixExponential).
     /// </summary>
-    private (double ConstraintValue, double[,] Gradient) ComputeNOTEARSConstraintAndGradient()
+    private (T ConstraintValue, Tensor<T> Gradient) ComputeNOTEARSConstraintAndGradient()
     {
         if (_adjacency is null)
         {
-            return (0.0, new double[0, 0]);
+            return (NumOps.Zero, new Tensor<T>([0, 0]));
         }
 
-        int d = _dataWidth;
-
-        // Compute W hadamard W (element-wise square)
-        var wSquared = new double[d, d];
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double w = NumOps.ToDouble(_adjacency[i, j]);
-                wSquared[i, j] = w * w;
-            }
-        }
-
-        // Compute e^(W hadamard W) using truncated Taylor series
-        var expMatrix = new double[d, d];
-        for (int i = 0; i < d; i++)
-        {
-            expMatrix[i, i] = 1.0;
-        }
-
-        var power = new double[d, d];
-        Array.Copy(wSquared, power, d * d);
-
-        double factorial = 1.0;
-        int maxOrder = 8;
-
-        for (int k = 1; k <= maxOrder; k++)
-        {
-            factorial *= k;
-
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    expMatrix[i, j] += power[i, j] / factorial;
-                }
-            }
-
-            if (k < maxOrder)
-            {
-                var nextPower = new double[d, d];
-                for (int i = 0; i < d; i++)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        double sum = 0;
-                        for (int m = 0; m < d; m++)
-                        {
-                            sum += power[i, m] * wSquared[m, j];
-                        }
-                        nextPower[i, j] = sum;
-                    }
-                }
-                Array.Copy(nextPower, power, d * d);
-            }
-        }
-
-        // h(W) = tr(e^(W hadamard W)) - d
-        double trace = 0;
-        for (int i = 0; i < d; i++)
-        {
-            trace += expMatrix[i, i];
-        }
-        double constraintValue = trace - d;
-
-        // Gradient: dh/dW = 2 * e^(W hadamard W) hadamard W
-        var gradient = new double[d, d];
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double w = NumOps.ToDouble(_adjacency[i, j]);
-                gradient[i, j] = 2.0 * expMatrix[i, j] * w;
-            }
-        }
-
+        // Zheng et al. (2018): h(W) = tr(e^(W o W)) - d, grad h = (e^(W o W))^T o 2W, with the exact matrix
+        // exponential the reference code takes from scipy.linalg.expm (not a truncated Taylor series).
+        var engine = Engine;
+        var w = Tensor<T>.FromMatrix(_adjacency);
+        var expMatrix = SyntheticTensorOps<T>.MatrixExponential(engine.TensorMultiply(w, w));
+        T constraintValue = NumOps.Subtract(engine.TensorTrace(expMatrix), NumOps.FromDouble(_dataWidth));
+        var gradient = engine.TensorMultiplyScalar(
+            engine.TensorMultiply(engine.TensorTranspose(expMatrix), w), NumOps.FromDouble(2.0));
         return (constraintValue, gradient);
+    }
+
+    /// <summary>
+    /// Small uniform weights in [-0.005, 0.005) off the diagonal and zero on it: no variable starts as its own
+    /// parent, as DAG-structure learning requires (Zheng et al. 2018's acyclicity term is zero on a DAG).
+    /// </summary>
+    private Matrix<T> InitialAdjacency(int width)
+    {
+        var draws = Engine.TensorRandomUniformRange<T>([width, width], NumOps.FromDouble(-0.005), NumOps.FromDouble(0.005), _random.Next());
+        var offDiagonal = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorEye<T>(width));
+        return Engine.TensorMultiply(draws, offDiagonal).ToMatrix();
+    }
+
+    /// <summary>
+    /// X^T X / n of the transformed rows, the data statistic of the NOTEARS least-squares score.
+    /// </summary>
+    private Matrix<T> ComputeDataGram(Matrix<T> transformedData)
+    {
+        if (transformedData.Columns != _dataWidth)
+            throw new InvalidOperationException(
+                $"The transformed data has {transformedData.Columns} columns but the adjacency spans {_dataWidth}.");
+        if (transformedData.Rows == 0)
+            throw new InvalidOperationException("CausalGAN needs at least one training row to score the causal structure.");
+        return transformedData.Transpose().Multiply(transformedData).Multiply(NumOps.FromDouble(1.0 / transformedData.Rows));
     }
 
     /// <summary>
     /// Updates the adjacency matrix using the augmented Lagrangian method for the NOTEARS constraint.
     /// </summary>
+    /// <remarks>
+    /// NOTEARS (Zheng et al., 2018) minimises the least-squares score (1/2n)||X - XW||^2 + lambda ||W||_1 subject to
+    /// h(W) = 0, so each step follows the score's gradient (1/n) X^T (XW - X) alongside the acyclicity and sparsity terms.
+    /// Without the score, W never leaves its near-zero start and the acyclicity penalty has nothing to push against.
+    /// </remarks>
     private void UpdateAdjacencyAugmentedLagrangian(T lr)
     {
         if (_adjacency is null) return;
 
+        var engine = Engine;
         double adjLr = NumOps.ToDouble(lr) * 0.01;
 
-        var (h, notearGrad) = ComputeNOTEARSConstraintAndGradient();
-        double lagrangianCoeff = _lagrangeAlpha + _lagrangeRho * h;
+        var (hT, notearGrad) = ComputeNOTEARSConstraintAndGradient();
+        double h = NumOps.ToDouble(hT);
+        var w = Tensor<T>.FromMatrix(_adjacency);
+        // Gram (W - I) = Gram W - Gram.
+        var scoreGrad = _dataGram is null
+            ? new Tensor<T>([_dataWidth, _dataWidth])
+            : Tensor<T>.FromMatrix(_dataGram.Multiply(_adjacency).Subtract(_dataGram));
+        // The configured linear acyclicity penalty accompanies the augmented constraint.
+        double lagrangianCoeff = _options.DAGPenaltyWeight + _lagrangeAlpha + _lagrangeRho * h;
 
-        for (int i = 0; i < _dataWidth; i++)
-        {
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                if (i == j) continue;
-
-                double wij = NumOps.ToDouble(_adjacency[i, j]);
-                double dagGrad = notearGrad[i, j] * lagrangianCoeff;
-                double sparseGrad = _options.SparsityWeight * Math.Sign(wij);
-
-                wij -= adjLr * (dagGrad + sparseGrad);
-                _adjacency[i, j] = NumOps.FromDouble(wij);
-            }
-        }
-
-        // Enforce zero diagonal
-        for (int i = 0; i < _dataWidth; i++)
-        {
-            _adjacency[i, i] = NumOps.Zero;
-        }
+        // W <- W - lr (data + DAG + sparsity gradients), with the diagonal held at zero.
+        var step = engine.TensorAdd(engine.TensorAdd(scoreGrad,
+                engine.TensorMultiplyScalar(notearGrad, NumOps.FromDouble(lagrangianCoeff))),
+            engine.TensorMultiplyScalar(engine.TensorSign(w), NumOps.FromDouble(_options.SparsityWeight)));
+        var updated = engine.TensorSubtract(w, engine.TensorMultiplyScalar(step, NumOps.FromDouble(adjLr)));
+        var offDiagonal = engine.ScalarMinusTensor(NumOps.One, engine.TensorEye<T>(_dataWidth));
+        _adjacency = engine.TensorMultiply(updated, offDiagonal).ToMatrix();
 
         // Update augmented Lagrangian parameters
         _lagrangeAlpha += _lagrangeRho * h;
@@ -1036,81 +960,11 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
     #region Backward Passes
 
-    private void UpdateGeneratorParameters(T learningRate)
-    {
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-        foreach (var bn in _genBNLayers)
-        {
-            bn.UpdateParameters(learningRate);
-        }
-    }
-
-    private void UpdateDiscriminatorParameters(T learningRate)
-    {
-        foreach (var layer in _discLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-    }
-
     #endregion
 
     #region Activation Functions
 
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < len; i++)
-        {
-            if (NumOps.GreaterThan(preActivation[i], NumOps.Zero))
-            {
-                result[i] = gradOutput[i];
-            }
-            else
-            {
-                result[i] = NumOps.Multiply(slope, gradOutput[i]);
-            }
-        }
-        return result;
-    }
+    private Tensor<T> ApplyReLU(Tensor<T> input) => SyntheticTensorOps<T>.ReLU(input);
 
     /// <summary>
     /// Applies output activations per column type: tanh for continuous, softmax for categorical.
@@ -1118,85 +972,12 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private Tensor<T> ApplyOutputActivations(Tensor<T> output)
     {
         if (_transformer is null) return output;
-
-        var result = new Tensor<T>(output._shape);
-        int idx = 0;
-
-        for (int col = 0; col < _columns.Count && idx < output.Length; col++)
-        {
-            var transform = _transformer.GetTransformInfo(col);
-
-            if (transform.IsContinuous)
-            {
-                if (idx < output.Length)
-                {
-                    double val = NumOps.ToDouble(output[idx]);
-                    result[idx] = NumOps.FromDouble(Math.Tanh(val));
-                    idx++;
-                }
-
-                int numModes = transform.Width - 1;
-                if (numModes > 0)
-                {
-                    ApplySoftmaxBlock(output, result, ref idx, numModes);
-                }
-            }
-            else
-            {
-                ApplySoftmaxBlock(output, result, ref idx, transform.Width);
-            }
-        }
-
-        return result;
-    }
-
-    private static void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
-    {
-        if (count <= 0) return;
-        int actualCount = Math.Min(count, input.Length - idx);
-        if (actualCount <= 0) return;
-        var slice = new Tensor<T>([actualCount]);
-        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
-        var result = AiDotNetEngine.Current.Softmax(slice, -1);
-        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
-        idx += actualCount;
+        return SyntheticTensorOps<T>.ApplyOutputActivations(output, _transformer, _columns.Count);
     }
 
     #endregion
 
     #region Gradient Safety Utilities
-
-    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
-    {
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                grad[i] = NumOps.Zero;
-            }
-        }
-
-        if (maxNorm <= 0) return grad;
-
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            normSq += v * v;
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm <= maxNorm) return grad;
-
-        double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad._shape);
-        for (int i = 0; i < grad.Length; i++)
-        {
-            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-        }
-        return clipped;
-    }
 
     #endregion
 
@@ -1270,67 +1051,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     private List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
-    {
-        var prepared = new List<ColumnMetadata>(columns.Count);
-
-        for (int col = 0; col < columns.Count; col++)
-        {
-            var meta = columns[col].Clone();
-            meta.ColumnIndex = col;
-
-            if (meta.IsNumerical)
-            {
-                ComputeColumnStatistics(data, col, meta);
-            }
-            else if (meta.IsCategorical && meta.NumCategories == 0)
-            {
-                var categories = new HashSet<string>();
-                for (int row = 0; row < data.Rows; row++)
-                {
-                    var val = NumOps.ToDouble(data[row, col]);
-                    categories.Add(val.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-                meta.Categories = categories.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
-            }
-
-            prepared.Add(meta);
-        }
-
-        return prepared;
-    }
-
-    private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
-    {
-        int n = data.Rows;
-        double sum = 0;
-        double min = double.MaxValue;
-        double max = double.MinValue;
-
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            sum += val;
-            if (val < min) min = val;
-            if (val > max) max = val;
-        }
-
-        double mean = sum / n;
-        double sumSqDiff = 0;
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            double diff = val - mean;
-            sumSqDiff += diff * diff;
-        }
-
-        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
-        if (std < 1e-10) std = 1e-10;
-
-        meta.Min = min;
-        meta.Max = max;
-        meta.Mean = mean;
-        meta.Std = std;
-    }
+        => SyntheticTabularGeneratorBase<T>.PrepareColumns(data, columns);
 
     #endregion
 
@@ -1358,48 +1079,9 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
     #region Helpers
 
-    private static Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var v = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            v[j] = matrix[row, j];
-        }
-        return v;
-    }
+    private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
-
-    private static Vector<T> TensorToVector(Tensor<T> t, int length)
-    {
-        var v = new Vector<T>(length);
-        int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
-    }
-
-    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
-    {
-        var result = new Tensor<T>([a.Length + b.Length]);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
-    }
-
-    private static Tensor<T> CloneTensor(Tensor<T> source)
-    {
-        var clone = new Tensor<T>(source._shape);
-        for (int i = 0; i < source.Length; i++)
-        {
-            clone[i] = source[i];
-        }
-        return clone;
-    }
+    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b) => SyntheticTensorOps<T>.Concat1D(a, b);
 
     #endregion
 

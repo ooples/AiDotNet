@@ -18,6 +18,16 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class AdafactorOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Initializes a new instance of the AdafactorOptimizerOptions class with the paper's defaults.
+    /// </summary>
+    public AdafactorOptimizerOptions()
+    {
+        // Adafactor bounds its updates itself (update clipping, Shazeer and Stern 2018, Sec. 6), in place of
+        // gradient clipping; transformers' Adafactor applies no gradient-norm clip. Opt in explicitly if wanted.
+        EnableGradientClipping = false;
+    }
+
     /// <summary>Samples per optimizer step.</summary>
     public int BatchSize { get; set; } = 32;
 
@@ -70,6 +80,21 @@ public class AdafactorOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimi
     /// reason its state is so small.
     /// </summary>
     public double Beta1 { get; set; } = double.NaN;
+
+    /// <summary>
+    /// Whether matrices keep the factored (row and column) second moment; false keeps a full one per element.
+    /// </summary>
+    /// <remarks>PaLM trains with Adafactor "without factorization" (Chowdhery et al. 2022 §5), which makes it Adam
+    /// with parameter scaling.</remarks>
+    public bool Factored { get; set; } = true;
+
+    /// <summary>
+    /// Whether the step size is multiplied by the RMS of the parameters it updates (floored at
+    /// <see cref="ParameterScaleFloor"/>); null does so exactly when <see cref="UseRelativeStepSize"/> is on.
+    /// </summary>
+    /// <remarks>The reference implementations' <c>scale_parameter</c> / <c>multiply_by_parameter_scale</c>. PaLM
+    /// keeps it with a stated rate.</remarks>
+    public bool? MultiplyByParameterScale { get; set; }
 
     /// <summary>Decoupled weight decay, applied to the parameters rather than the gradient.</summary>
     public double WeightDecay { get; set; } = 0.0;

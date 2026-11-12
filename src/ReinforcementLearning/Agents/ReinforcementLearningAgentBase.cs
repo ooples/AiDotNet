@@ -1066,6 +1066,9 @@ public class ReinforcementLearningOptions<T> : ModelOptions
     /// <summary>
     /// Exploration decay rate.
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt(
+        "QMIX uses linear EpsilonAnnealSteps annealing; this inherited exponential-decay setting applies to other agents.",
+        ModelType = typeof(AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<>))]
     public double EpsilonDecay { get; init; } = 0.995;
 
     /// <summary>

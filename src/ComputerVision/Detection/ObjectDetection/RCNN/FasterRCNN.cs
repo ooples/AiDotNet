@@ -151,6 +151,11 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         };
     }
 
+    /// <summary>Output 2, the proposal boxes the detection head classified, is data: training cannot change it.</summary>
+    protected override IReadOnlyCollection<int> DataOutputIndices => ProposalBoxesOutput;
+
+    private static readonly int[] ProposalBoxesOutput = { 2 };
+
     /// <summary>Proposals kept after the RPN's NMS (Ren et al. 2015 with FPN; torchvision's post_nms_top_n).</summary>
     internal const int PostNmsTopK = 1000;
 
@@ -168,6 +173,97 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         for (int head = 0; head < 3; head++)
             outputs[head] = CvTensorOps<T>.PadRows(outputs[head], PostNmsTopK);
         return outputs;
+    }
+
+    /// <summary>
+    /// Raw-output regression over the RoIs the network actually scored: mean squared error against
+    /// <paramref name="expectedOutput"/>, laid out like <see cref="Forward"/>'s padded prediction.
+    /// </summary>
+    /// <remarks>
+    /// The zero rows <see cref="Forward"/> pads the per-RoI heads with are layout, not predictions: no weight
+    /// produces them. Counting them in the mean made the loss depend on how many proposals NMS kept, so a step that
+    /// lowered every scored RoI's error still raised the loss when more proposals survived it (measured 185, 221 and
+    /// 246 kept RoIs over three steps). Ren et al. 2015 (Eq. 1) normalize the detection loss by the RoIs the head
+    /// classified; this step does the same. The proposal boxes (output 2) are data and stay out of the loss, as in
+    /// <see cref="DataOutputIndices"/>. A target not laid out like the padded prediction is the caller's raw
+    /// layout and goes to the base step unchanged.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
+        if (expectedOutput.Length != PaddedPredictionLength(input))
+        {
+            base.Train(input, expectedOutput);
+            return;
+        }
+
+        var target = expectedOutput.ToArray();
+        TrainWithTargets(input, expectedOutput,
+            image => ForwardDetection(image, null, out _),
+            (heads, _) => ScoredRoiSquaredError(heads, target));
+    }
+
+    /// <summary>The element count of <see cref="Forward"/>'s padded prediction for an input of this shape.</summary>
+    private int PaddedPredictionLength(Tensor<T> input)
+    {
+        if (_paddedLengthShape is not null && _paddedLengthShape.SequenceEqual(input.Shape.ToArray()))
+            return _paddedLength;
+
+        int length;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            bool wasTraining = IsTrainingMode;
+            try
+            {
+                SetTrainingMode(false);
+                length = Forward(input).Sum(head => head.Length);
+            }
+            finally
+            {
+                SetTrainingMode(wasTraining);
+            }
+        }
+
+        _paddedLengthShape = input.Shape.ToArray();
+        _paddedLength = length;
+        return length;
+    }
+
+    [AiDotNet.Attributes.Scratch]
+    private int[]? _paddedLengthShape;
+
+    [AiDotNet.Attributes.Scratch]
+    private int _paddedLength;
+
+    /// <summary>
+    /// Mean squared error of the scored RoI rows and the RPN maps against the matching elements of the padded target.
+    /// </summary>
+    private Tensor<T> ScoredRoiSquaredError(List<Tensor<T>> heads, T[] target)
+    {
+        var predicted = new List<Tensor<T>>(heads.Count);
+        var expected = new List<Tensor<T>>(heads.Count);
+        int offset = 0;
+        for (int head = 0; head < heads.Count; head++)
+        {
+            var output = heads[head];
+            bool perRoi = head < 3;
+            int rowWidth = 1;
+            for (int axis = 1; axis < output.Shape.Length; axis++) rowWidth *= output.Shape[axis];
+            int padded = perRoi ? PostNmsTopK * rowWidth : output.Length;
+            if (head != ProposalBoxesOutput[0] && output.Length > 0)
+            {
+                predicted.Add(Engine.Reshape(output, new[] { 1, output.Length }));
+                var slice = new T[output.Length];
+                Array.Copy(target, offset, slice, 0, output.Length);
+                expected.Add(new Tensor<T>(new[] { 1, output.Length }, new Vector<T>(slice)));
+            }
+
+            offset += padded;
+        }
+
+        return AiDotNet.ComputerVision.TensorModelTrainer<T>.MeanSquaredError(
+            CvTensorOps<T>.ConcatenateOutputs(predicted), CvTensorOps<T>.ConcatenateOutputs(expected));
     }
 
     /// <summary>Trains the proposal network and the detection head with the Faster R-CNN objectives.</summary>

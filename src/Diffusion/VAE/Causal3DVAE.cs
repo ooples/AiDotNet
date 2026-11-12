@@ -196,17 +196,13 @@ public partial class Causal3DVAE<T> : VAEModelBase<T>, IVideoVAEModel<T>
     public IReadOnlyCollection<string> LoadCogVideoXWeights(Func<string, int[], double[]> read)
     {
         if (read is null) throw new ArgumentNullException(nameof(read));
-        var names = new List<string>();
-        foreach (var (name, tensor) in _encoder.NamedTensors("encoder").Concat(_decoder.NamedTensors("decoder")))
-        {
-            var values = read(name, tensor.Shape.ToArray());
-            if (values is null || values.Length != tensor.Length)
-                throw new ArgumentException($"'{name}' needs {tensor.Length} values; {values?.Length ?? 0} were given.", nameof(read));
-            for (int i = 0; i < values.Length; i++) tensor[i] = NumOps.FromDouble(values[i]);
-            names.Add(name);
-        }
-        return names;
+        return LoadCogVideoXWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
     }
+
+    /// <summary>Loads a diffusers <c>AutoencoderKLCogVideoX</c> state dict straight from <paramref name="source"/> into the
+    /// weights.</summary>
+    internal IReadOnlyCollection<string> LoadCogVideoXWeights(AiDotNet.ModelLoading.TorchTensorSource source) =>
+        KlModule<T>.Load(_encoder.NamedTensors("encoder").Concat(_decoder.NamedTensors("decoder")), source);
 
     private static bool RequireVideoOrImage(Tensor<T> x, int channels, string name)
     {

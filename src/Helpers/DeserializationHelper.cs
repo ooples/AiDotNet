@@ -372,6 +372,26 @@ public static class DeserializationHelper
                 TryGetDouble(additionalParams, "LocalizationMargin") ?? 0.01)
                 ?? throw new MissingLayerCtorException("Cannot construct SVTRThinPlateSplineLayer.");
         }
+        else if (genericDef == typeof(ObliviousDecisionTreeLayer<>))
+        {
+            // Reached only when the generated factory declined, which it does when a [LayerState] key is
+            // absent. A checkpoint written before the choice functions existed carries no
+            // "choiceFunction" key and was trained with softmax feature choice and sigmoid splits, so it
+            // is rebuilt with those and master's optional-argument defaults. With the key present, the
+            // generated factory could only have declined over a missing architectural key: a damaged file.
+            var state = new AiDotNet.Serialization.LayerStateBag(additionalParams, layerType);
+            if (state.Has("choiceFunction"))
+            {
+                throw new InvalidOperationException(
+                    "ObliviousDecisionTreeLayer metadata names a choiceFunction but lacks depth, outputDim or initScale.");
+            }
+
+            instance = new ObliviousDecisionTreeLayer<T>(
+                state.Int32("depth", 6),
+                state.Int32("outputDim", 1),
+                state.Double("initScale", 0.01),
+                ObliviousTreeChoiceFunction.SoftmaxSigmoid);
+        }
         else if (genericDef == typeof(PatchGANDiscriminator<>))
         {
             instance = new PatchGANDiscriminator<T>(
@@ -548,6 +568,38 @@ public static class DeserializationHelper
                 ?? (outputShape.Length > 0 ? outputShape[^1] : 9);
 
             instance = new BiaffineSpanScorerLayer<T>(inputDim, spanDim, numCategories);
+        }
+        else if (genericDef == typeof(TriaffineSpanLayer<>))
+        {
+            int inputDim = TryGetInt(additionalParams, "InputDim") ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (inputDim <= 0) throw new InvalidOperationException("TriaffineSpanLayer requires a positive InputDim in metadata or input shape.");
+            instance = new TriaffineSpanLayer<T>(inputDim, TryGetInt(additionalParams, "Dim") ?? 256,
+                TryGetInt(additionalParams, "NumLabels") ?? (outputShape.Length > 0 ? outputShape[^1] : 9), TryGetInt(additionalParams, "TopM") ?? 30);
+        }
+        else if (genericDef == typeof(PyramidSpanLayer<>))
+        {
+            int dim = TryGetInt(additionalParams, "Dim") ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (dim <= 0) throw new InvalidOperationException("PyramidSpanLayer requires a positive Dim in metadata or input shape.");
+            instance = new PyramidSpanLayer<T>(dim, TryGetInt(additionalParams, "NumLayers") ?? 16, TryGetInt(additionalParams, "NumClasses") ?? (outputShape.Length > 0 ? outputShape[^1] : 9));
+        }
+        else if (genericDef == typeof(WordPairGridLayer<>))
+        {
+            int inputDim = TryGetInt(additionalParams, "InputDim") ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (inputDim <= 0) throw new InvalidOperationException("WordPairGridLayer requires a positive InputDim in metadata or input shape.");
+            instance = new WordPairGridLayer<T>(inputDim, TryGetInt(additionalParams, "Channels") ?? 96, TryGetInt(additionalParams, "HiddenDim") ?? 128,
+                TryGetInt(additionalParams, "BiaffineDim") ?? 768, TryGetInt(additionalParams, "NumRelations") ?? (outputShape.Length > 0 ? outputShape[^1] : 3));
+        }
+        else if (genericDef == typeof(SpanRepresentationScorerLayer<>))
+        {
+            // PURE / SpERT span scorer: every dimension is persisted in the metadata.
+            var kind = Enum.TryParse<SpanRepresentationKind>(additionalParams?.TryGetValue("Kind", out var k) == true ? k?.ToString() : null, out var parsed)
+                ? parsed : SpanRepresentationKind.Endpoints;
+            int inputDim = TryGetInt(additionalParams, "InputDim") ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (inputDim <= 0)
+                throw new InvalidOperationException("SpanRepresentationScorerLayer requires a positive InputDim in metadata or input shape.");
+            instance = new SpanRepresentationScorerLayer<T>(kind, inputDim,
+                TryGetInt(additionalParams, "WidthDim") ?? 150, TryGetInt(additionalParams, "MaxWidth") ?? 8,
+                TryGetInt(additionalParams, "HiddenDim") ?? 150, TryGetInt(additionalParams, "NumCategories") ?? (outputShape.Length > 0 ? outputShape[^1] : 9));
         }
         else if (genericDef == typeof(ConvNeXtV2Block<>))
         {
@@ -1217,7 +1269,7 @@ public static class DeserializationHelper
             // TransformerDecoderLayer(int numHeads, int feedForwardDim,
             //                          int sequenceLength = 512,
             //                          IActivationFunction<T>? ffnActivation = null,
-            //                          bool causal = false)
+            //                          double dropoutRate = 0.0, bool causal = true)
             // _embeddingSize is resolved lazily from input.Shape[^1] on first Forward
             // (or eagerly via ResolveFromShape after this method returns).
             int embeddingSize = inputShape[^1];
@@ -1247,24 +1299,26 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType);
 
-            // The [LayerState] key is the parameter name. A model saved before the flag existed has no entry and
-            // was built bidirectional, which is the constructor default.
-            bool? parsedCausal = TryGetBool(additionalParams, "causal");
-            if (additionalParams is not null && additionalParams.ContainsKey("causal") && !parsedCausal.HasValue)
+            // The generated [LayerState] bag writes the parameter names ("dropoutRate", "causal"); GetMetadata also
+            // writes "DropoutRate" and "Causal". A model saved before the causal flag existed has neither and was
+            // built bidirectional (the self-attention was unmasked), so a missing flag restores it that way.
+            string causalKey = additionalParams is not null && additionalParams.ContainsKey("causal") ? "causal" : "Causal";
+            bool? parsedCausal = TryGetBool(additionalParams, causalKey);
+            if (additionalParams is not null && additionalParams.ContainsKey(causalKey) && !parsedCausal.HasValue)
             {
                 throw new InvalidOperationException(
-                    $"TransformerDecoderLayer has invalid 'causal' metadata '{additionalParams["causal"]}'; expected true or false.");
+                    $"TransformerDecoderLayer has invalid '{causalKey}' metadata '{additionalParams[causalKey]}'; expected true or false.");
             }
 
             bool causal = parsedCausal ?? false;
-
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType, typeof(bool) });
+            double dropoutRate = TryGetDouble(additionalParams, "dropoutRate") ?? TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType, typeof(double), typeof(bool) });
             if (ctor is null)
             {
                 throw new MissingLayerCtorException(
-                    "Cannot find TransformerDecoderLayer constructor with (int numHeads, int feedForwardDim, int sequenceLength, IActivationFunction<T>?, bool causal).");
+                    "Cannot find TransformerDecoderLayer constructor with (int numHeads, int feedForwardDim, int sequenceLength, IActivationFunction<T>?, double dropoutRate, bool causal).");
             }
-            instance = ctor.Invoke(new object?[] { numHeads, feedForwardDim, sequenceLength, activation, causal });
+            instance = ctor.Invoke(new object?[] { numHeads, feedForwardDim, sequenceLength, activation, dropoutRate, causal });
         }
         else if (genericDef == typeof(SelfAttentionLayer<>))
         {
@@ -2520,7 +2574,26 @@ public static class DeserializationHelper
                 experts.Add(new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
 
             var router = new DenseLayer<T>(numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
-            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK);
+            // Files written before the option existed carry no W_noise weights: restore them with the
+            // router-logit noise they were trained with. A key that is present but holds an
+            // unparseable or undefined value is a damaged file: reject it rather than silently
+            // rebuilding a different parameter layout.
+            var gatingNoise = MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits;
+            if (additionalParams is not null && additionalParams.ContainsKey("GatingNoise"))
+            {
+                string? rawNoise = TryGetString(additionalParams, "GatingNoise");
+                if (rawNoise is null
+                    || !Enum.TryParse<MixtureOfExpertsGatingNoise>(rawNoise, out var parsedNoise)
+                    || !Enum.IsDefined(typeof(MixtureOfExpertsGatingNoise), parsedNoise))
+                {
+                    throw new InvalidOperationException(
+                        $"MixtureOfExpertsLayer has invalid GatingNoise metadata '{rawNoise}'.");
+                }
+
+                gatingNoise = parsedNoise;
+            }
+            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK,
+                gatingNoise: gatingNoise);
         }
         else if (genericDef == typeof(ReservoirLayer<>))
         {
@@ -3923,9 +3996,15 @@ public static class DeserializationHelper
         int attentionGroupSize = TryGetInt(additionalParams, "AttentionGroupSize") ?? 1;
         double ropeTheta = TryGetDouble(additionalParams, "RopeTheta") ?? 10000.0;
         int maxSeq = TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
+        int attentionChunkSize = TryGetInt(additionalParams, "AttentionChunkSize") ?? 0;
+        bool causal = TryGetBool(additionalParams, "Causal") ?? false;
+        int attentionLeftChunks = TryGetInt(additionalParams, "AttentionLeftChunks") ?? 0;
+        bool causalConvolution = TryGetBool(additionalParams, "CausalConvolution") ?? false;
+        int feedForwardUnits = TryGetInt(additionalParams, "FeedForwardUnits") ?? 0;
 
         return new ConformerBlockLayer<T>(
-            modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq, attentionGroupSize);
+            modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq, attentionGroupSize, attentionChunkSize, causal,
+            attentionLeftChunks, causalConvolution, feedForwardUnits);
     }
 
     /// <summary>Reconstructs a paper-faithful Vocos generator from serialized layer metadata.</summary>
@@ -4513,6 +4592,19 @@ public static class DeserializationHelper
         if (layer is MultiHeadAttentionLayer<T> attention)
         {
             RestoreMultiHeadAttentionConfiguration(attention, additionalParams);
+            return;
+        }
+
+        // Older checkpoints omit the rank-3 layout and retain Infer.
+        if (layer is BatchNormalizationLayer<T> batchNorm)
+        {
+            string? layout = TryGetString(additionalParams, "Layout");
+            if (!string.IsNullOrEmpty(layout))
+            {
+                if (!Enum.TryParse<BatchNormDataLayout>(layout, ignoreCase: false, out var parsed))
+                    throw new InvalidOperationException($"BatchNormalizationLayer persisted an unknown layout '{layout}'.");
+                batchNorm.Layout = parsed;
+            }
             return;
         }
 

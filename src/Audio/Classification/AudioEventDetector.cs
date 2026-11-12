@@ -24,10 +24,11 @@ namespace AiDotNet.Audio.Classification;
 /// Based on AudioSet ontology with 527+ event classes organized hierarchically.
 /// </para>
 /// <para>
-/// <b>Architecture:</b> This model extends <see cref="AudioClassifierBase{T}"/>
-/// and implements <see cref="IAudioEventDetector{T}"/> for multi-label event detection.
-/// Unlike single-label classification, event detection identifies multiple overlapping
-/// events with their temporal boundaries.
+/// <b>Architecture:</b> Hershey et al. 2017's best classifier, ResNet-50 adapted to audio (section 3.3.5): the
+/// stride of 2 is removed from the first 7x7 convolution and the final average pool covers the 6 x 4 activations of a
+/// 96 x 64 log-mel patch (960 ms of 25 ms windows every 10 ms, 64 mel bins, log after a small offset). Batch
+/// normalization follows every convolution and one sigmoid unit per label replaces the softmax, trained with
+/// cross-entropy and Adam (section 3.1). Audio is classified in non-overlapping 960 ms windows.
 /// </para>
 /// <para><b>For Beginners:</b> Audio event detection answers "What sounds are in this audio?":
 /// <list type="bullet">
@@ -50,7 +51,8 @@ namespace AiDotNet.Audio.Classification;
 ///
 /// Usage with training:
 /// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 64, outputSize: 50);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.TwoDimensional,
+///     NeuralNetworkTaskType.MultiLabelClassification, inputHeight: 96, inputWidth: 64, outputSize: 50);
 /// var detector = new AudioEventDetector&lt;float&gt;(architecture, new AudioEventDetectorOptions());
 /// detector.Train(features, labels);
 /// </code>
@@ -66,6 +68,8 @@ namespace AiDotNet.Audio.Classification;
 // detector implements. The previous entry paired that id with the title and author list of the
 // companion Audio Set dataset paper (Gemmeke et al., ICASSP 2017) — two different papers.
 [ResearchPaper("CNN Architectures for Large-Scale Audio Classification", "https://arxiv.org/abs/1609.09430", Year = 2017, Authors = "Shawn Hershey, Sourish Chaudhuri, Daniel P. W. Ellis, Jort F. Gemmeke, Aren Jansen, R. Channing Moore, Manoj Plakal, Devin Platt, Rif A. Saurous, Bryan Seybold, Malcolm Slaney, Ron J. Weiss, Kevin Wilson")]
+[AiDotNet.Attributes.PreprocessesInput("The forward reshapes the caller's [frames, bins] (or [batch, frames, bins]) log-mel patch to a single-channel [B, 1, frames, bins] image before the first convolution.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -74,6 +78,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
 
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // The stem's 3x3 max pooling pads by one on each side (ResNet's stem), and the global average pooling ends the
+    // convolutional trunk; both -1 with custom layers.
+    private int _stemPoolIndex = -1;
+    private int _globalPoolIndex = -1;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -138,7 +146,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             hopLength: _options.HopLength,
             fMin: _options.FMin,
             fMax: _options.FMax,
-            logMel: true);
+            logMel: true,
+            // Section 3.1: "the magnitude of each bin is log-transformed after adding a small offset"; 0.01 in the
+            // authors' released front end.
+            logOffset: 0.01);
 
         // Load ONNX model
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
@@ -171,7 +182,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>
     /// <param name="options">Detection options.</param>
-    /// <param name="optimizer">Optional custom optimizer (defaults to AdamW).</param>
+    /// <param name="optimizer">Optional custom optimizer (defaults to Adam, the paper's optimizer).</param>
     /// <param name="lossFunction">
     /// Optional custom training loss; defaults to binary cross-entropy with logits for multi-label detection.
     /// </param>
@@ -185,7 +196,8 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         _options = options ?? new AudioEventDetectorOptions();
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Section 3.1: trained with Adam (learning rate by grid search), no dropout or weight decay.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         base.SampleRate = _options.SampleRate;
 
@@ -200,7 +212,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             hopLength: _options.HopLength,
             fMin: _options.FMin,
             fMax: _options.FMax,
-            logMel: true);
+            logMel: true,
+            // Section 3.1: "the magnitude of each bin is log-transformed after adding a small offset"; 0.01 in the
+            // authors' released front end.
+            logOffset: 0.01);
 
         // Create feature extractors
 
@@ -226,7 +241,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     public AudioEventDetector(AudioEventDetectorOptions? options = null)
         : this(
             new NeuralNetworkArchitecture<T>(
-                inputFeatures: (options ?? new AudioEventDetectorOptions()).NumMels,
+                inputType: InputType.TwoDimensional,
+                taskType: NeuralNetworkTaskType.MultiLabelClassification,
+                inputHeight: (options ?? new AudioEventDetectorOptions()).PatchFrames,
+                inputWidth: (options ?? new AudioEventDetectorOptions()).NumMels,
                 outputSize: (options?.CustomLabels ?? CommonEventLabels).Length),
             options)
     {
@@ -313,7 +331,6 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     {
         ThrowIfDisposed();
 
-        double thresholdValue = NumOps.ToDouble(threshold);
         double totalDuration = audio.Length / (double)_options.SampleRate;
 
         // Split audio into windows
@@ -333,20 +350,16 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             var scores = ClassifyWindow(melSpec, window);
 
             // Get events above threshold
-            for (int i = 0; i < scores.Length && i < ClassLabels.Count; i++)
+            foreach (int i in AudioEventDetectionOps.IndicesAtOrAbove(Engine, scores, ClassLabels.Count, threshold))
             {
-                double score = NumOps.ToDouble(scores[i]);
-                if (score >= thresholdValue)
+                allEvents.Add(new AudioEvent<T>
                 {
-                    allEvents.Add(new AudioEvent<T>
-                    {
-                        EventType = ClassLabels[i],
-                        Confidence = scores[i],
-                        StartTime = startTime,
-                        EndTime = Math.Min(startTime + _options.WindowSize, totalDuration),
-                        PeakTime = startTime + _options.WindowSize / 2
-                    });
-                }
+                    EventType = ClassLabels[i],
+                    Confidence = scores[i],
+                    StartTime = startTime,
+                    EndTime = Math.Min(startTime + _options.WindowSize, totalDuration),
+                    PeakTime = startTime + _options.WindowSize / 2
+                });
             }
         }
 
@@ -411,7 +424,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         ThrowIfDisposed();
 
         var windows = SplitIntoWindows(audio);
-        var probabilities = new Tensor<T>([windows.Count, ClassLabels.Count]);
+        var rows = new List<Tensor<T>>(windows.Count);
 
         for (int windowIdx = 0; windowIdx < windows.Count; windowIdx++)
         {
@@ -419,15 +432,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             var melSpec = _melSpectrogram?.Forward(window) ??
                 throw new InvalidOperationException("MelSpectrogram not initialized.");
 
-            var scores = ClassifyWindow(melSpec, window);
-
-            for (int i = 0; i < ClassLabels.Count && i < scores.Length; i++)
-            {
-                probabilities[windowIdx, i] = scores[i];
-            }
+            rows.Add(AudioEventDetectionOps.ScoreRow(ClassifyWindow(melSpec, window), ClassLabels.Count));
         }
 
-        return probabilities;
+        return AudioEventDetectionOps.StackScoreRows(Engine, rows, ClassLabels.Count);
     }
 
     /// <summary>
@@ -458,11 +466,21 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     public List<AudioEvent> DetectLegacy(Tensor<T> audio)
     {
         var result = Detect(audio);
+        return ToLegacyEvents(result.Events);
+    }
 
-        return result.Events.Select(e => new AudioEvent
+    /// <summary>
+    /// Converts generic events to the legacy double-confidence events, converting all confidences in
+    /// one tensor cast (the legacy type's contract is double).
+    /// </summary>
+    private static List<AudioEvent> ToLegacyEvents(IReadOnlyList<AudioEvent<T>> events)
+    {
+        if (events.Count == 0) return new List<AudioEvent>();
+        double[] confidences = new Tensor<T>(events.Select(e => e.Confidence).ToArray(), [events.Count]).Cast<double>().ToArray();
+        return events.Select((e, k) => new AudioEvent
         {
             Label = e.EventType,
-            Confidence = NumOps.ToDouble(e.Confidence),
+            Confidence = confidences[k],
             StartTime = e.StartTime,
             EndTime = e.EndTime
         }).ToList();
@@ -477,13 +495,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     {
         var result = await DetectAsync(audio, cancellationToken);
 
-        return result.Events.Select(e => new AudioEvent
-        {
-            Label = e.EventType,
-            Confidence = NumOps.ToDouble(e.Confidence),
-            StartTime = e.StartTime,
-            EndTime = e.EndTime
-        }).ToList();
+        return ToLegacyEvents(result.Events);
     }
 
     /// <summary>
@@ -499,9 +511,13 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         var scores = ClassifyWindow(melSpec, audio);
 
         var result = new Dictionary<string, double>();
-        for (int i = 0; i < scores.Length && i < ClassLabels.Count; i++)
+        int count = Math.Min(scores.Length, ClassLabels.Count);
+        if (count == 0) return result;
+        // The legacy contract is double: convert the scores with one tensor cast.
+        double[] values = new Tensor<T>(scores.AsSpan(0, count).ToArray(), [count]).Cast<double>().ToArray();
+        for (int i = 0; i < count; i++)
         {
-            result[ClassLabels[i]] = NumOps.ToDouble(scores[i]);
+            result[ClassLabels[i]] = values[i];
         }
 
         return result;
@@ -531,18 +547,32 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     {
         if (!_useNativeMode) return;
 
+        _stemPoolIndex = -1;
+        _globalPoolIndex = -1;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
         }
         else
         {
-            // Use same architecture as genre classifier for event detection
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGenreClassifierLayers(
-                numMels: _options.NumMels,
-                numClasses: ClassLabels.Count,
-                hiddenDim: 256,
-                dropoutRate: 0.3));
+            // Hershey et al.'s audio ResNet-50 (section 3.3.5): ResNet-50 with the stride of 2 removed from the first
+            // 7x7 convolution, batch normalization after every convolution, and an average pool over the 6 x 4 final
+            // activations of a 96 x 64 patch, under one sigmoid unit per label (section 3.1).
+            Layers.Add(new ConvolutionalLayer<T>(_options.BaseChannels, kernelSize: 7, stride: 1, padding: 3,
+                activationFunction: new IdentityActivation<T>()));
+            Layers.Add(new BatchNormalizationLayer<T>());
+            Layers.Add(new ActivationLayer<T>((IActivationFunction<T>)new ReLUActivation<T>()));
+            _stemPoolIndex = Layers.Count;
+            Layers.Add(new MaxPoolingLayer<T>(poolSize: 3, stride: 2));
+            for (int stage = 0; stage < _options.StageDepths.Length; stage++)
+            {
+                for (int block = 0; block < _options.StageDepths[stage]; block++)
+                    Layers.Add(new BottleneckBlock<T>(_options.BaseChannels << stage, stride: stage > 0 && block == 0 ? 2 : 1));
+            }
+            _globalPoolIndex = Layers.Count;
+            Layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
+            Layers.Add(new FlattenLayer<T>());
+            Layers.Add(new DenseLayer<T>(ClassLabels.Count, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
     }
 
@@ -558,19 +588,59 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             return OnnxEncoder.Run(input);
         }
 
-        // Native mode: run through layers to per-class logits, then apply a per-class SIGMOID.
-        // Sound event detection is a MULTI-LABEL task (Kong et al. 2020, "PANNs": each of the N
-        // events is independently present/absent), so the inference output is a per-class presence
-        // PROBABILITY in [0, 1] — not raw logits and not a softmax over mutually-exclusive classes.
-        // Training runs on the raw logits (ForwardForTraining walks the same layers WITHOUT this
-        // sigmoid, and the loss is applied to logits), the standard train-on-logits / predict-with-
-        // sigmoid pattern; this keeps the class scores non-negative and bounded at inference.
-        var current = input;
-        foreach (var layer in Layers)
+        // Native mode: per-label logits, then a per-label SIGMOID. The paper's examples carry several labels at once,
+        // so "all models used a final sigmoid layer rather than a softmax layer" (section 3.1). Training runs on the
+        // raw logits (ForwardForTraining) with cross-entropy, the standard train-on-logits / predict-with-sigmoid
+        // pattern.
+        return Engine.Sigmoid(Logits(input));
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Logits(input);
+
+    /// <summary>
+    /// Per-label logits of log-mel patches: <c>[frames, mels]</c> gives <c>[labels]</c>, <c>[batch, frames, mels]</c> gives
+    /// <c>[batch, labels]</c>.
+    /// </summary>
+    private Tensor<T> Logits(Tensor<T> input)
+    {
+        var current = Run(input, Layers.Count);
+        return input.Rank == 2 && current.Rank == 2 && current.Shape[0] == 1 ? Engine.Reshape(current, new[] { current.Shape[1] }) : current;
+    }
+
+    /// <summary>The convolutional trunk's output <c>[batch, channels, height, width]</c> for log-mel patches, the
+    /// activations the global average pooling reduces (6 x 4 for a 96 x 64 patch).</summary>
+    internal Tensor<T> TrunkActivations(Tensor<T> input) =>
+        Run(input, _globalPoolIndex >= 0 ? _globalPoolIndex : Layers.Count);
+
+    private Tensor<T> Run(Tensor<T> input, int end)
+    {
+        var current = input.Rank switch
         {
-            current = layer.Forward(current);
+            2 => Engine.Reshape(input, new[] { 1, 1, input.Shape[0], input.Shape[1] }),
+            3 => Engine.Reshape(input, new[] { input.Shape[0], 1, input.Shape[1], input.Shape[2] }),
+            _ => input,
+        };
+        for (int i = 0; i < end; i++)
+        {
+            // The stem pooling pads by one; after the ReLU every value is non-negative, so zeros never win a maximum.
+            if (i == _stemPoolIndex) current = Engine.TensorConstantPad(current, new[] { 1, 1, 1, 1 }, NumOps.Zero);
+            current = Layers[i].Forward(current);
         }
-        return Engine.Sigmoid(current);
+        return current;
+    }
+
+    /// <summary>
+    /// The classifier input of one window's log-mel spectrogram: its first <see cref="AudioEventDetectorOptions.PatchFrames"/>
+    /// frames, zero-padded when shorter (a 960 ms window gives 97 frames with centred framing).
+    /// </summary>
+    internal Tensor<T> Patch(Tensor<T> melSpec)
+    {
+        int frames = _options.PatchFrames, bins = melSpec.Shape[melSpec.Rank - 1], available = melSpec.Length / bins;
+        var patch = new Tensor<T>(new[] { frames, bins });
+        int copy = Math.Min(frames, available) * bins;
+        melSpec.Data.Span.Slice(0, copy).CopyTo(patch.Data.Span);
+        return patch;
     }
 
     /// <inheritdoc />
@@ -596,14 +666,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         // Apply sigmoid for multi-label classification
-        var result = new Tensor<T>(modelOutput._shape);
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            double logit = NumOps.ToDouble(modelOutput[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-logit));
-            result[i] = NumOps.FromDouble(sigmoid);
-        }
-        return result;
+        return AudioEventDetectionOps.SigmoidDetached(Engine, modelOutput);
     }
 
     /// <summary>
@@ -614,7 +677,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         var metadata = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "AudioEventDetector-Native" : "AudioEventDetector-ONNX",
-            Description = "Audio event detection model for identifying sounds (AudioSet-style)",
+            Description = "Audio event detection with the audio ResNet-50 of Hershey et al. 2017",
             FeatureCount = ClassLabels.Count,
             Complexity = 1
         };
@@ -642,53 +705,15 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
 
     private List<Tensor<T>> SplitIntoWindows(Tensor<T> audio)
     {
-        var windows = new List<Tensor<T>>();
         int windowSamples = (int)(_options.WindowSize * _options.SampleRate);
         int hopSamples = (int)(windowSamples * (1 - _options.WindowOverlap));
 
         // Ensure we don't divide by zero
         if (hopSamples <= 0) hopSamples = 1;
 
-        int lastStart = 0;
-        for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
-        {
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < windowSamples; i++)
-            {
-                window[i] = audio[start + i];
-            }
-            windows.Add(window);
-            lastStart = start + hopSamples;
-        }
-
-        // Handle last partial window - include remaining samples that weren't captured
-        int remainingStart = windows.Count > 0 ? lastStart : 0;
-        int remainingSamples = audio.Length - remainingStart;
-
-        // Add partial window if there's significant remaining audio (at least 10% of window size)
-        if (remainingSamples > windowSamples / 10)
-        {
-            // Pad partial window to full window size for consistent processing
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < remainingSamples && i < windowSamples; i++)
-            {
-                window[i] = audio[remainingStart + i];
-            }
-            // Remaining values stay at default (zero-padded)
-            windows.Add(window);
-        }
-        else if (windows.Count == 0 && audio.Length > 0)
-        {
-            // No full windows and not enough for partial - still process what we have
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < audio.Length; i++)
-            {
-                window[i] = audio[i];
-            }
-            windows.Add(window);
-        }
-
-        return windows;
+        // Full windows every hop, then a zero-padded partial window if at least 10% of a window
+        // remains; audio too short for either is still zero-padded into one window.
+        return AudioEventDetectionOps.SplitIntoWindows(Engine, audio, windowSamples, hopSamples, windowSamples / 10);
     }
 
     private T[] ClassifyWindow(Tensor<T> melSpec, Tensor<T> audio)
@@ -715,14 +740,8 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             throw new InvalidOperationException("Model not loaded.");
 
         // Prepare input (add batch and channel dimensions)
-        var input = new Tensor<T>([1, 1, melSpec.Shape[0], melSpec.Shape[1]]);
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                input[0, 0, t, f] = melSpec[t, f];
-            }
-        }
+        var patch = Patch(melSpec);
+        var input = Engine.Reshape(patch, new[] { 1, 1, patch.Shape[0], patch.Shape[1] });
 
         var output = OnnxEncoder.Run(input);
 
@@ -737,63 +756,11 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         return scores;
     }
 
-    /// <summary>
-    /// Reduces per-frame class scores to one score per class by taking each class's maximum over
-    /// the frame axis.
-    /// </summary>
-    /// <param name="framewise">Either <c>[frames, numClasses]</c> or an already-pooled vector.</param>
-    /// <param name="numClasses">Number of classes to emit.</param>
-    private Tensor<T> MaxPoolOverFrames(Tensor<T> framewise, int numClasses)
-    {
-        if (framewise.Shape.Length < 2) return framewise;
-
-        int frames = framewise.Shape[0];
-        int classes = Math.Min(numClasses, framewise.Shape[framewise.Shape.Length - 1]);
-        var pooled = new Tensor<T>(new[] { classes });
-
-        for (int c = 0; c < classes; c++)
-        {
-            var best = framewise[0, c];
-            for (int f = 1; f < frames; f++)
-            {
-                var v = framewise[f, c];
-                if (NumOps.GreaterThan(v, best)) best = v;
-            }
-
-            pooled[c] = best;
-        }
-
-        return pooled;
-    }
-
     private T[] ClassifyWithNative(Tensor<T> melSpec)
     {
-        // Pass the spectrogram through as a SEQUENCE, [frames, mels]. This used to flatten it into
-        // one long vector, which destroyed the time axis the stack is built around: the layer chain
-        // is Dense -> LayerNorm -> PositionalEncoding(maxFrames, hiddenDim) -> MultiHeadAttention xN,
-        // and positional encoding and attention are meaningless without frames to order and attend
-        // over. MultiHeadAttentionLayer rejected the rank-1 input outright, which is how this
-        // surfaced; had it not, the model would have been silently attending over nothing.
-        var input = melSpec;
-
-        // Run through network. PredictCore already applies the per-class SIGMOID for this
-        // MULTI-LABEL task (each event is independently present/absent), so `output` is already
-        // per-class presence PROBABILITIES in [0, 1]. Copy them directly — re-applying a sigmoid
-        // here would compute sigmoid(sigmoid(x)) and flatten every native-mode / Detect* score.
-        var framewise = Predict(input);
-
-        // Temporal MAX pooling over frames. The stack emits per-frame class scores and the caller
-        // wants one score per class for the window, so the frame axis has to be reduced.
-        //
-        // Max is the multiple-instance-learning aggregation standard for weakly-labelled sound
-        // event detection -- frame-level predictions are pooled by temporal max to match clip-level
-        // targets (Wang et al., "A Comparison of Five Multiple Instance Learning Pooling Functions
-        // for Sound Event Detection with Weak Labeling", 2018). It also states the right thing for
-        // THIS model, whose scores are independent per-class presence probabilities: an event is
-        // present in the window if it is present in ANY frame. Mean pooling would dilute a short
-        // event across a long window, which is the opposite of what a detector wants.
-        var output = MaxPoolOverFrames(framewise, ClassLabels.Count);
-
+        // One 96 x 64 patch per 960 ms window; PredictCore already applies the per-label sigmoid, so these are the
+        // presence probabilities.
+        var output = Predict(Patch(melSpec));
         var scores = new T[ClassLabels.Count];
         for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
         {
@@ -848,64 +815,34 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
 
     private double ComputeEnergy(Tensor<T> audio)
     {
-        double sum = 0;
-        for (int i = 0; i < audio.Length; i++)
-        {
-            double val = NumOps.ToDouble(audio[i]);
-            sum += val * val;
-        }
-        return sum / audio.Length;
+        if (audio.Length == 0) return 0.0 / audio.Length;
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(audio))) / audio.Length;
     }
 
     private double ComputeZeroCrossingRate(Tensor<T> audio)
-    {
-        int crossings = 0;
-        for (int i = 1; i < audio.Length; i++)
-        {
-            double prev = NumOps.ToDouble(audio[i - 1]);
-            double curr = NumOps.ToDouble(audio[i]);
-            if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0))
-                crossings++;
-        }
-        return (double)crossings / audio.Length;
-    }
+        => AudioEngineOps.ZeroCrossingCount(Engine, audio) / (double)audio.Length;
 
     private double ComputeSpectralCentroid(Tensor<T> melSpec)
     {
-        double weightedSum = 0;
-        double totalSum = 0;
+        int frames = melSpec.Shape[0], bins = melSpec.Shape[1];
+        if (frames == 0 || bins == 0) return 0;
 
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                double mag = NumOps.ToDouble(melSpec[t, f]);
-                weightedSum += f * mag;
-                totalSum += mag;
-            }
-        }
+        // weightedSum = sum_f f * (sum_t mag[t, f]); totalSum = sum of all magnitudes.
+        var binTotals = Engine.ReduceSum(melSpec, [0], keepDims: false);
+        double weightedSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(binTotals, Engine.TensorArange<T>(0, bins))));
+        double totalSum = NumOps.ToDouble(Engine.TensorSum(binTotals));
 
         return totalSum > 0 ? weightedSum / totalSum : 0;
     }
 
     private double ComputeSpectralFlatness(Tensor<T> melSpec)
     {
-        double logSum = 0;
-        double sum = 0;
-        int count = 0;
-
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                double mag = Math.Max(NumOps.ToDouble(melSpec[t, f]), 1e-10);
-                logSum += Math.Log(mag);
-                sum += mag;
-                count++;
-            }
-        }
-
+        int count = melSpec.Shape[0] * melSpec.Shape[1];
         if (count == 0) return 0;
+
+        var mag = Engine.TensorMax(melSpec, NumOps.FromDouble(1e-10));
+        double logSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorLog(mag)));
+        double sum = NumOps.ToDouble(Engine.TensorSum(mag));
 
         double geometricMean = Math.Exp(logSum / count);
         double arithmeticMean = sum / count;
@@ -915,19 +852,13 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
 
     private double ComputeBandEnergy(Tensor<T> melSpec, int startBin, int endBin)
     {
-        double sum = 0;
-        int count = 0;
+        int frames = melSpec.Shape[0];
+        int stop = Math.Min(endBin, melSpec.Shape[1]);
+        int width = stop - startBin;
+        if (frames == 0 || width <= 0) return 0;
 
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = startBin; f < endBin && f < melSpec.Shape[1]; f++)
-            {
-                sum += NumOps.ToDouble(melSpec[t, f]);
-                count++;
-            }
-        }
-
-        return count > 0 ? sum / count : 0;
+        var band = Engine.TensorSlice(melSpec, [0, startBin], [frames, width]);
+        return NumOps.ToDouble(Engine.TensorSum(band)) / (frames * width);
     }
 
     private static double ComputeEventScore(
@@ -1012,75 +943,12 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         return Math.Max(score, 0.05); // Minimum baseline
     }
 
+    // Overlapping or adjacent (within 100ms) detections merge, keeping the higher confidence.
     private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events)
-    {
-        if (events.Count == 0) return events;
-
-        // Group by event type
-        var grouped = events.GroupBy(e => e.EventType);
-        var merged = new List<AudioEvent<T>>();
-
-        foreach (var group in grouped)
-        {
-            var sortedEvents = group.OrderBy(e => e.StartTime).ToList();
-            var currentEvent = sortedEvents[0];
-
-            for (int i = 1; i < sortedEvents.Count; i++)
-            {
-                var next = sortedEvents[i];
-
-                // Check if events overlap or are adjacent
-                if (next.StartTime <= currentEvent.EndTime + 0.1)
-                {
-                    // Merge - keep higher confidence
-                    double currentConf = NumOps.ToDouble(currentEvent.Confidence);
-                    double nextConf = NumOps.ToDouble(next.Confidence);
-
-                    currentEvent = new AudioEvent<T>
-                    {
-                        EventType = currentEvent.EventType,
-                        StartTime = currentEvent.StartTime,
-                        EndTime = Math.Max(currentEvent.EndTime, next.EndTime),
-                        Confidence = currentConf > nextConf ? currentEvent.Confidence : next.Confidence,
-                        PeakTime = currentConf > nextConf ? currentEvent.PeakTime : next.PeakTime
-                    };
-                }
-                else
-                {
-                    merged.Add(currentEvent);
-                    currentEvent = next;
-                }
-            }
-
-            merged.Add(currentEvent);
-        }
-
-        return merged.OrderBy(e => e.StartTime).ToList();
-    }
+        => AudioEventDetectionOps.MergeEvents(Engine, events, 0.1);
 
     private Dictionary<string, EventStatistics<T>> ComputeEventStatistics(IReadOnlyList<AudioEvent<T>> events)
-    {
-        var stats = new Dictionary<string, EventStatistics<T>>();
-
-        var grouped = events.GroupBy(e => e.EventType);
-        foreach (var group in grouped)
-        {
-            var eventList = group.ToList();
-            double totalDuration = eventList.Sum(e => e.Duration);
-            double avgConfidence = eventList.Average(e => NumOps.ToDouble(e.Confidence));
-            double maxConfidence = eventList.Max(e => NumOps.ToDouble(e.Confidence));
-
-            stats[group.Key] = new EventStatistics<T>
-            {
-                Count = eventList.Count,
-                TotalDuration = totalDuration,
-                AverageConfidence = NumOps.FromDouble(avgConfidence),
-                MaxConfidence = NumOps.FromDouble(maxConfidence)
-            };
-        }
-
-        return stats;
-    }
+        => AudioEventDetectionOps.ComputeEventStatistics(Engine, events);
 
     private void ThrowIfDisposed()
     {
@@ -1172,20 +1040,13 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
                 }
 
                 // Add to buffer
-                for (int i = 0; i < audioChunk.Length; i++)
-                {
-                    _buffer.Add(audioChunk[i]);
-                }
+                _buffer.AddRange(audioChunk.ToArray());
 
                 // Process complete windows (inside lock for thread-safety)
                 while (_buffer.Count >= _windowSamples)
                 {
                     // Extract window
-                    var window = new Tensor<T>([_windowSamples]);
-                    for (int i = 0; i < _windowSamples; i++)
-                    {
-                        window[i] = _buffer[i];
-                    }
+                    var window = new Tensor<T>(_buffer.GetRange(0, _windowSamples).ToArray(), [_windowSamples]);
 
                     // Process window
                     var melSpec = _detector._melSpectrogram?.Forward(window) ??
@@ -1193,28 +1054,28 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
                     var scores = _detector.ClassifyWindow(melSpec, window);
 
                     // Update state and check for events
-                    double thresholdValue = _detector.NumOps.ToDouble(_threshold);
-                    for (int i = 0; i < scores.Length && i < _detector.ClassLabels.Count; i++)
+                    int classCount = Math.Min(scores.Length, _detector.ClassLabels.Count);
+                    for (int i = 0; i < classCount; i++)
                     {
                         _currentState[_detector.ClassLabels[i]] = scores[i];
+                    }
 
-                        if (_detector.NumOps.ToDouble(scores[i]) >= thresholdValue)
+                    foreach (int i in AudioEventDetectionOps.IndicesAtOrAbove(_detector.Engine, scores, classCount, _threshold))
+                    {
+                        var evt = new AudioEvent<T>
                         {
-                            var evt = new AudioEvent<T>
-                            {
-                                EventType = _detector.ClassLabels[i],
-                                Confidence = scores[i],
-                                StartTime = _processedTime,
-                                EndTime = _processedTime + _detector._options.WindowSize,
-                                PeakTime = _processedTime + _detector._options.WindowSize / 2
-                            };
+                            EventType = _detector.ClassLabels[i],
+                            Confidence = scores[i],
+                            StartTime = _processedTime,
+                            EndTime = _processedTime + _detector._options.WindowSize,
+                            PeakTime = _processedTime + _detector._options.WindowSize / 2
+                        };
 
-                            _newEvents.Add(evt);
+                        _newEvents.Add(evt);
 
-                            // Collect event for raising outside lock
-                            eventsToRaise ??= new List<AudioEvent<T>>();
-                            eventsToRaise.Add(evt);
-                        }
+                        // Collect event for raising outside lock
+                        eventsToRaise ??= new List<AudioEvent<T>>();
+                        eventsToRaise.Add(evt);
                     }
 
                     // Advance buffer (with overlap)

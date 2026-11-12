@@ -270,9 +270,7 @@ public partial class BayesianRegression<T> : RegressionBase<T>
     {
         Matrix<T> design = CreatePredictionDesign(input);
         var predictions = design.Multiply(Coefficients);
-        for (int i = 0; i < predictions.Length; i++)
-            predictions[i] = NumOps.Add(predictions[i], Intercept);
-        return predictions;
+        return Engine.Add(predictions, Engine.Fill(predictions.Length, Intercept));
     }
 
     /// <summary>
@@ -319,14 +317,14 @@ public partial class BayesianRegression<T> : RegressionBase<T>
             augmentedInput = augmentedInput.AddConstantColumn(NumOps.One);
         }
 
-        var variance = new Vector<T>(augmentedInput.Rows);
-
-        for (int i = 0; i < augmentedInput.Rows; i++)
-        {
-            var x = augmentedInput.GetRow(i);
-            var xCov = x.DotProduct(_posteriorCovariance.Multiply(x));
-            variance[i] = NumOps.Add(xCov, NumOps.FromDouble(1.0 / _bayesOptions.Beta));
-        }
+        // variance_i = x_i^T * Sigma * x_i + 1/beta, for every row at once: rowSum((X * Sigma) .* X)
+        var engine = Engine;
+        var xSigma = engine.MatrixMultiply(augmentedInput, _posteriorCovariance);
+        var quadratic = engine.ReduceSum(
+            engine.TensorMultiply(Tensor<T>.FromMatrix(xSigma), Tensor<T>.FromMatrix(augmentedInput)),
+            new[] { 1 },
+            keepDims: false).ToVector();
+        var variance = engine.Add(quadratic, engine.Fill(quadratic.Length, NumOps.FromDouble(1.0 / _bayesOptions.Beta)));
 
         return (mean, variance);
     }
@@ -393,73 +391,40 @@ public partial class BayesianRegression<T> : RegressionBase<T>
             throw new ArgumentException("Kernel operands must have the same feature count.");
         }
 
-        var result = new Matrix<T>(left.Rows, right.Rows);
-        for (int i = 0; i < left.Rows; i++)
+        if (left.Rows == 0 || right.Rows == 0)
         {
-            Vector<T> leftRow = left.GetRow(i);
-            for (int j = 0; j < right.Rows; j++)
-            {
-                Vector<T> rightRow = right.GetRow(j);
-                result[i, j] = _bayesOptions.KernelType switch
-                {
-                    KernelType.RBF => RbfKernel(leftRow, rightRow),
-                    KernelType.Polynomial => PolynomialKernel(leftRow, rightRow),
-                    KernelType.Sigmoid => SigmoidKernel(leftRow, rightRow),
-                    KernelType.Laplacian => LaplacianKernel(leftRow, rightRow),
-                    _ => throw new ArgumentException(
-                        $"Unsupported cross-kernel type: {_bayesOptions.KernelType}"),
-                };
-            }
+            return new Matrix<T>(left.Rows, right.Rows);
         }
 
-        return result;
+        var engine = Engine;
+        Tensor<T> gram = _bayesOptions.KernelType switch
+        {
+            // exp(-gamma * ||a - b||^2)
+            KernelType.RBF => engine.TensorExp(engine.TensorMultiplyScalar(
+                Tensor<T>.FromMatrix(RegressionEngineOps.PairwiseDistanceSums(left, right, absolute: false)),
+                NumOps.Negate(NumOps.FromDouble(_bayesOptions.Gamma)))),
+            // (gamma * a.b + coef0)^degree
+            KernelType.Polynomial => engine.TensorPower(
+                engine.TensorAddScalar(
+                    engine.TensorMultiplyScalar(RegressionEngineOps.CrossDotProducts(left, right), NumOps.FromDouble(_bayesOptions.Gamma)),
+                    NumOps.FromDouble(_bayesOptions.Coef0)),
+                NumOps.FromDouble(_bayesOptions.PolynomialDegree)),
+            // tanh(gamma * a.b + coef0)
+            KernelType.Sigmoid => engine.TensorTanh(
+                engine.TensorAddScalar(
+                    engine.TensorMultiplyScalar(RegressionEngineOps.CrossDotProducts(left, right), NumOps.FromDouble(_bayesOptions.Gamma)),
+                    NumOps.FromDouble(_bayesOptions.Coef0))),
+            // exp(-gamma * ||a - b||_1)
+            KernelType.Laplacian => engine.TensorExp(engine.TensorMultiplyScalar(
+                Tensor<T>.FromMatrix(RegressionEngineOps.PairwiseDistanceSums(left, right, absolute: true)),
+                NumOps.Negate(NumOps.FromDouble(_bayesOptions.LaplacianGamma)))),
+            _ => throw new ArgumentException(
+                $"Unsupported cross-kernel type: {_bayesOptions.KernelType}"),
+        };
+
+        return gram.ToMatrix();
     }
 
-    /// <summary>
-    /// Evaluates the Gaussian radial-basis kernel
-    /// <c>K(x,y) = exp(-gamma * ||x-y||^2)</c>.
-    /// </summary>
-    private T RbfKernel(Vector<T> left, Vector<T> right)
-    {
-        var difference = (Vector<T>)Engine.Subtract(left, right);
-        T squaredDistance = difference.DotProduct(difference);
-        return NumOps.Exp(NumOps.Negate(
-            NumOps.Multiply(NumOps.FromDouble(_bayesOptions.Gamma), squaredDistance)));
-    }
-
-    /// <summary>
-    /// Evaluates the polynomial kernel
-    /// <c>K(x,y) = (gamma * x^T y + coef0)^degree</c>.
-    /// </summary>
-    private T PolynomialKernel(Vector<T> left, Vector<T> right)
-    {
-        T scaledDot = NumOps.Multiply(
-            NumOps.FromDouble(_bayesOptions.Gamma), left.DotProduct(right));
-        return NumOps.Power(
-            NumOps.Add(scaledDot, NumOps.FromDouble(_bayesOptions.Coef0)),
-            NumOps.FromDouble(_bayesOptions.PolynomialDegree));
-    }
-
-    /// <summary>
-    /// Evaluates the sigmoid kernel <c>K(x,y) = tanh(gamma * x^T y + coef0)</c>.
-    /// </summary>
-    /// <remarks>The sigmoid kernel is not positive-semidefinite for every parameter choice.</remarks>
-    private T SigmoidKernel(Vector<T> left, Vector<T> right)
-    {
-        T scaledDot = NumOps.Multiply(
-            NumOps.FromDouble(_bayesOptions.Gamma), left.DotProduct(right));
-        return MathHelper.Tanh(NumOps.Add(scaledDot, NumOps.FromDouble(_bayesOptions.Coef0)));
-    }
-
-    /// <summary>
-    /// Evaluates the Laplacian kernel <c>K(x,y) = exp(-gamma * ||x-y||_1)</c>.
-    /// </summary>
-    private T LaplacianKernel(Vector<T> left, Vector<T> right)
-    {
-        T distance = CalculateManhattanDistance(left, right);
-        return NumOps.Exp(NumOps.Negate(
-            NumOps.Multiply(NumOps.FromDouble(_bayesOptions.LaplacianGamma), distance)));
-    }
 
     /// <inheritdoc />
     public override byte[] Serialize()
@@ -526,38 +491,6 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < columns; c++) matrix[r, c] = NumOps.FromDouble(reader.ReadDouble());
         return matrix;
-    }
-
-    /// <summary>
-    /// Calculates the Manhattan distance between two vectors.
-    /// </summary>
-    /// <param name="x">The first vector.</param>
-    /// <param name="y">The second vector.</param>
-    /// <returns>The Manhattan distance between x and y.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the Manhattan distance (also known as L1 distance or taxicab distance) between two vectors.
-    /// The Manhattan distance is the sum of the absolute differences between corresponding elements of the vectors.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates the "city block" distance between two points.
-    /// 
-    /// Imagine a city with a grid layout like Manhattan, New York. To get from one point to another,
-    /// you can only travel along the grid (streets), not diagonally through blocks.
-    /// 
-    /// For example, to get from (1,1) to (4,5):
-    /// - You need to go 3 blocks east (from 1 to 4)
-    /// - You need to go 4 blocks north (from 1 to 5)
-    /// - Total Manhattan distance: 3 + 4 = 7 blocks
-    /// 
-    /// This is different from the straight-line (Euclidean) distance, which would be shorter
-    /// but wouldn't follow the street grid.
-    /// </para>
-    /// </remarks>
-    private T CalculateManhattanDistance(Vector<T> x, Vector<T> y)
-    {
-        var diff = (Vector<T>)Engine.Subtract(x, y);
-        var absDiff = (Vector<T>)Engine.Abs(diff);
-        return Engine.Sum(absDiff);
     }
 
 }

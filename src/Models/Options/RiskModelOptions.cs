@@ -8,6 +8,21 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class RiskModelOptions<T> : FinancialNeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance with the default settings.</summary>
+    public RiskModelOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by copying every setting of another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    protected RiskModelOptions(RiskModelOptions<T> other) : base(other)
+    {
+        NumFeatures = other.NumFeatures;
+        ConfidenceLevel = other.ConfidenceLevel;
+        TimeHorizon = other.TimeHorizon;
+        LossFunction = other.LossFunction;
+    }
+
     /// <summary>
     /// Number of input features used for risk calculation.
     /// </summary>
@@ -17,6 +32,7 @@ public class RiskModelOptions<T> : FinancialNeuralNetworkOptions
     /// If your data has 10 indicators (price, volume, volatility, etc.), set this to 10.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Synthetic tabular generators derive their feature count from fitted column metadata; native generator tests fit and sample three-column schemas independently of risk-model metadata.", ModelType = typeof(AiDotNet.NeuralNetworks.SyntheticData.NeuralSyntheticTabularGeneratorBase<>))]
     public int NumFeatures { get; set; } = 10;
 
     /// <summary>
@@ -28,6 +44,7 @@ public class RiskModelOptions<T> : FinancialNeuralNetworkOptions
     /// Higher values are more conservative but may reduce returns.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("A synthetic table generator samples rows rather than confidence intervals; native generator schema tests exercise differing inherited risk metadata.", ModelType = typeof(AiDotNet.NeuralNetworks.SyntheticData.NeuralSyntheticTabularGeneratorBase<>))]
     public double ConfidenceLevel { get; set; } = 0.95;
 
     /// <summary>
@@ -39,6 +56,7 @@ public class RiskModelOptions<T> : FinancialNeuralNetworkOptions
     /// A value of 1 means "tomorrow," while 10 means "the next 10 days."
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("A synthetic table generator samples rows rather than a financial forecast horizon; native generator schema tests exercise differing inherited risk metadata.", ModelType = typeof(AiDotNet.NeuralNetworks.SyntheticData.NeuralSyntheticTabularGeneratorBase<>))]
     public int TimeHorizon { get; set; } = 1;
 
     /// <summary>
