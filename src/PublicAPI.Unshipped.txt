@@ -22588,3 +22588,12 @@ AiDotNet.MetaLearning.Options.ReptileOptions<T, TInput, TOutput>.FinalOuterLearn
 *REMOVED*static AiDotNet.MetaLearning.Data.TaskDifficultyEstimator<T>.EstimateFisherDifficulty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportX, AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportY, int numWays) -> double
 static AiDotNet.MetaLearning.Data.TaskDifficultyEstimator<T>.EstimateDifficulty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportX, AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportY, int numWays, int numShots) -> T
 static AiDotNet.MetaLearning.Data.TaskDifficultyEstimator<T>.EstimateFisherDifficulty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportX, AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportY, int numWays) -> T
+*REMOVED*AiDotNet.MetaLearning.Options.PMFOptions<T, TInput, TOutput>.DistanceMetric.get -> string!
+AiDotNet.MetaLearning.Options.PMFOptions<T, TInput, TOutput>.DistanceMetric.get -> AiDotNet.MetaLearning.Options.PMFDistanceMetric
+AiDotNet.MetaLearning.Options.PMFOptions<T, TInput, TOutput>.LearnTemperature.get -> bool
+AiDotNet.MetaLearning.Options.PMFOptions<T, TInput, TOutput>.LearnTemperature.set -> void
+AiDotNet.MetaLearning.Options.PMFOptions<T, TInput, TOutput>.Temperature.get -> double
+AiDotNet.MetaLearning.Options.PMFOptions<T, TInput, TOutput>.Temperature.set -> void
+AiDotNet.MetaLearning.Options.PMFDistanceMetric
+AiDotNet.MetaLearning.Options.PMFDistanceMetric.Cosine = 0 -> AiDotNet.MetaLearning.Options.PMFDistanceMetric
+AiDotNet.MetaLearning.Options.PMFDistanceMetric.SquaredEuclidean = 1 -> AiDotNet.MetaLearning.Options.PMFDistanceMetric
