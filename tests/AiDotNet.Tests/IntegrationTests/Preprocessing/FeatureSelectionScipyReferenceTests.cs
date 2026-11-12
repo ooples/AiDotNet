@@ -7,6 +7,7 @@ using AiDotNet.Preprocessing.FeatureSelection.Nonparametric;
 using AiDotNet.Preprocessing.FeatureSelection.Projection;
 using AiDotNet.Preprocessing.FeatureSelection.Quantile;
 using AiDotNet.Preprocessing.FeatureSelection.Range;
+using AiDotNet.Preprocessing.FeatureSelection.Redundancy;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -289,6 +290,33 @@ public class FeatureSelectionScipyReferenceTests
         AssertValues(expected, nonparametric.DcorScores, 1e-12);
         Assert.Equal(new[] { 1 }, nonlinear.SelectedIndices);
         Assert.Equal(new[] { 1 }, nonparametric.SelectedIndices);
+    }
+
+    [Fact]
+    public void RedundancySelectors_MatchGreedyNumpyReference()
+    {
+        // Columns: the spiral data plus column 3 = 2 * column 1 + 0.1 * column 2 (redundant with column 1).
+        // relevance = |corrcoef(x_j, y)|, C = |corrcoef(X)|; mRMR picks argmax relevance, then repeatedly
+        // argmax(relevance_j - mean_s C[j, s]); clustering walks features by relevance and lets each
+        // unassigned one absorb the unassigned features with C >= 0.9.
+        var spiral = SpiralData();
+        var x = new Matrix<double>(spiral.Rows, 4);
+        for (int i = 0; i < spiral.Rows; i++)
+        {
+            for (int j = 0; j < 3; j++)
+                x[i, j] = spiral[i, j];
+            x[i, 3] = 2 * spiral[i, 1] + 0.1 * spiral[i, 2];
+        }
+
+        var mrmr = new MinimalRedundancySelector<double>(nFeaturesToSelect: 3);
+        mrmr.Fit(x, SpiralClasses());
+        var cluster = new CorrelationClusterSelector<double>(nFeaturesToSelect: 2, correlationThreshold: 0.9);
+        cluster.Fit(x, SpiralClasses());
+
+        AssertValues(new[] { -0.0758795489570683, -0.06823528274167653, 0.18860838403857944, 0.0 }, mrmr.MRMRScores, 1e-12);
+        Assert.Equal(new[] { 0, 1, 2 }, mrmr.SelectedIndices);
+        AssertValues(new[] { 0.0, 0.10691055606830033, 0.18860838403857944, 0.0 }, cluster.ClusterRepresentativeScores, 1e-12);
+        Assert.Equal(new[] { 1, 2 }, cluster.SelectedIndices);
     }
 
     private static void AssertValues(double[] expected, Vector<double>? actual, double tolerance = Tolerance)

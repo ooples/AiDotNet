@@ -22631,3 +22631,7 @@ AiDotNet.Preprocessing.FeatureSelection.Nonparametric.KendallTauSelector<T>.TauS
 AiDotNet.Preprocessing.FeatureSelection.Nonlinear.DistanceCorrelationSelector<T>.DCorValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.DistanceCorrelationSelector<T>.DcorScores.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.Nonparametric.DistanceCorrelationSelector<T>.DcorScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Redundancy.MinimalRedundancySelector<T>.MRMRScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Redundancy.MinimalRedundancySelector<T>.MRMRScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Redundancy.CorrelationClusterSelector<T>.ClusterRepresentativeScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Redundancy.CorrelationClusterSelector<T>.ClusterRepresentativeScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?

@@ -379,6 +379,35 @@ internal static class FeatureSelectionTensorOps
             engine.TensorMean(distances));
     }
 
+    /// <summary>
+    /// Pearson correlations between the columns of <paramref name="a"/> ([n, pa]) and of <paramref name="b"/>
+    /// ([n, pb]) as a [pa, pb] tensor; 0 where <c>sqrt(sxx * syy)</c> is not above 1e-10.
+    /// </summary>
+    public static Tensor<T> ColumnCorrelations<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int pa = a.Shape[1];
+        int pb = b.Shape[1];
+        var ac = engine.TensorSubtract(a, engine.ReduceMean(a, new[] { 0 }, true));
+        var bc = engine.TensorSubtract(b, engine.ReduceMean(b, new[] { 0 }, true));
+        var cross = engine.TensorMatMul(engine.TensorTranspose(ac), bc);
+        var aSq = engine.ReduceSum(engine.TensorSquare(ac), new[] { 0 }, false);
+        var bSq = engine.ReduceSum(engine.TensorSquare(bc), new[] { 0 }, false);
+        var denominator = engine.TensorSqrt(engine.TensorOuter(aSq, bSq));
+        var defined = engine.TensorGreaterThan(denominator, ops.FromDouble(1e-10));
+        var safe = engine.TensorWhere(defined, denominator, Filled(new[] { pa, pb }, ops.One));
+        return engine.TensorWhere(defined, engine.TensorDivide(cross, safe), new Tensor<T>(new[] { pa, pb }));
+    }
+
+    /// <summary>A 1-D tensor of the given length that is 1 at <paramref name="index"/> and 0 elsewhere.</summary>
+    public static Tensor<T> OneHot<T>(int index, int length) =>
+        AiDotNetEngine.Current.Reshape(
+            AiDotNetEngine.Current.TensorOneHot<T>(new Tensor<int>(new[] { index }, new[] { 1 }), length), new[] { length });
+
+    /// <summary>A count (or other integer) as a scalar of type T.</summary>
+    public static T Count<T>(int value) => MathHelper.GetNumericOperations<T>().FromDouble(value);
+
     /// <summary>The 0/1 mask of the strictly upper-triangular entries (i &lt; j) of an [n, n] matrix.</summary>
     public static Tensor<T> StrictUpperMask<T>(int n) =>
         AiDotNetEngine.Current.TensorTriu(Filled(new[] { n, n }, MathHelper.GetNumericOperations<T>().One), 1);
