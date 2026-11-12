@@ -22625,3 +22625,5 @@ static AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Lagged(AiDotN
 static AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.VolatilityParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 virtual AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Backcast(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! residuals) -> T
 virtual AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.MeanReversionSpeed(AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> T
+*REMOVED*static AiDotNet.Finance.Volatility.HarRvModel<T>.ForecastVolFromReturns(System.Collections.Generic.IReadOnlyList<double>! returns, double periodsPerYear = 252) -> double
+static AiDotNet.Finance.Volatility.HarRvModel<T>.ForecastVolFromReturns(System.Collections.Generic.IReadOnlyList<T>! returns, double periodsPerYear = 252) -> T
