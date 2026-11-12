@@ -135,6 +135,47 @@ public static class StatisticsHelper<T>
     private static Tensor<T> AbsoluteErrors(Vector<T> a, Vector<T> b)
         => Engine.TensorAbs(Engine.TensorSubtract(AsTensor(a), Prefix(b, a.Length)));
 
+    /// <summary>
+    /// CalculateQuantile(sortedData, q) for every q, in order, including the exception the scalar loop would hit
+    /// first: Convert.ToInt32 overflows on a non-finite or out-of-int-range floor, and an index outside
+    /// [0, n) fails the array read.
+    /// </summary>
+    private static T[] InterpolatedQuantilesInOrder(T[] sortedData, Tensor<T> quantiles)
+    {
+        int n = sortedData.Length;
+        var shape = quantiles._shape;
+        var one = Filled(shape, _numOps.One);
+        var position = Engine.TensorMultiplyScalar(quantiles, _numOps.FromDouble(n - 1));
+        var floor = Engine.TensorFloor(position);
+
+        var outsideInt = Engine.TensorAdd(AtLeast(floor, _numOps.FromDouble(2147483648.0)),
+            Engine.TensorLessThan(floor, _numOps.FromDouble(-2147483648.0)));
+        var overflow = Engine.TensorWhere(Engine.TensorIsFinite(floor), outsideInt, one);
+        var outOfRange = Engine.TensorAdd(Engine.TensorLessThan(floor, _numOps.Zero), AtLeast(floor, _numOps.FromDouble(n)));
+        var failing = Engine.TensorNonzero(Engine.TensorAdd(overflow, outOfRange));
+        if (failing.Shape[0] > 0)
+        {
+            int first = failing.GetFlat(0);
+            if (!_numOps.Equals(overflow.GetFlat(first), _numOps.Zero))
+            {
+                throw new OverflowException("Value was either too large or too small for an Int32.");
+            }
+
+            throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+        }
+
+        // Linear interpolation between sortedData[index] and sortedData[index + 1]; the last index has no neighbour.
+        var data = AsTensor(new Vector<T>(sortedData));
+        var next = Engine.TensorAddScalar(floor, _numOps.One);
+        var lower = Engine.TensorIndexSelect(data, floor.Cast<int>(), 0);
+        var upper = Engine.TensorIndexSelect(data, Engine.TensorMin(next, _numOps.FromDouble(n - 1)).Cast<int>(), 0);
+        var fraction = Engine.TensorSubtract(position, floor);
+        var interpolated = Engine.TensorAdd(Engine.TensorMultiply(lower, Engine.TensorSubtract(one, fraction)),
+            Engine.TensorMultiply(upper, fraction));
+        var hasNext = Engine.TensorLessThan(next, _numOps.FromDouble(n));
+        return Engine.TensorWhere(hasNext, interpolated, lower).ToVector().ToArray();
+    }
+
     /// <summary>Gathers <paramref name="values"/> at <paramref name="indices"/> into a rank-1 tensor.</summary>
     private static Tensor<T> Gather(Tensor<T> values, List<int> indices)
         => Engine.TensorIndexSelect(values, new Tensor<int>(indices.ToArray(), new[] { indices.Count }), 0);
@@ -3095,11 +3136,11 @@ public static class StatisticsHelper<T>
         T sumSquaredErrors = _numOps.Zero;
         T meanPredicted = _numOps.Zero;
 
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            T error = _numOps.Subtract(actual[i], predicted[i]);
-            sumSquaredErrors = _numOps.Add(sumSquaredErrors, _numOps.Multiply(error, error));
-            meanPredicted = _numOps.Add(meanPredicted, predicted[i]);
+            var predictedPrefix = Prefix(predicted, n);
+            sumSquaredErrors = SumOfSquaredDifferences(AsTensor(actual), predictedPrefix);
+            meanPredicted = Engine.TensorSum(predictedPrefix);
         }
 
         meanPredicted = _numOps.Divide(meanPredicted, _numOps.FromDouble(n));
@@ -3428,17 +3469,23 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static List<(T Quantile, T Lower, T Upper)> CalculateQuantileIntervals(Vector<T> actual, Vector<T> predicted, T[] quantiles)
     {
-        var result = new List<(T Quantile, T Lower, T Upper)>();
-        var sortedPredictions = new Vector<T>([.. predicted.OrderBy(x => x)]);
-
-        foreach (var q in quantiles)
+        if (quantiles.Length == 0)
         {
-            T lowerQuantile = CalculateQuantile(sortedPredictions, _numOps.Subtract(q, _numOps.FromDouble(0.025)));
-            T upperQuantile = CalculateQuantile(sortedPredictions, _numOps.Add(q, _numOps.FromDouble(0.025)));
-            result.Add((q, lowerQuantile, upperQuantile));
+            return new List<(T Quantile, T Lower, T Upper)>();
         }
 
-        return result;
+        var sortedPredictions = predicted.OrderBy(x => x).ToArray();
+
+        // Interleaved [q0 - 0.025, q0 + 0.025, q1 - 0.025, ...] so errors surface in the scalar loop's order.
+        var q = AsTensor(quantiles);
+        var halfWidth = _numOps.FromDouble(0.025);
+        var bounds = Engine.TensorStack(new[] { Engine.TensorSubtractScalar(q, halfWidth), Engine.TensorAddScalar(q, halfWidth) }, 1)
+            .Reshape(new[] { 2 * quantiles.Length });
+        var values = InterpolatedQuantilesInOrder(sortedPredictions, bounds);
+
+        return Enumerable.Range(0, quantiles.Length)
+            .Select(k => (quantiles[k], values[2 * k], values[2 * k + 1]))
+            .ToList();
     }
 
     /// <summary>
@@ -3546,24 +3593,18 @@ public static class StatisticsHelper<T>
             return (predicted[0], predicted[0]);
         }
 
-        var jackknifeSamples = new List<T>();
+        // Leave-one-out means theta_i = (sum - predicted_i) / (n - 1).
+        var p = AsTensor(predicted);
+        T total = Engine.TensorSum(p);
+        var jackknifeSamples = Engine.TensorDivideScalar(
+            Engine.TensorSubtract(Filled(p._shape, total), p), _numOps.FromDouble(n - 1));
+        T jackknifeEstimate = _numOps.Divide(Engine.TensorSum(jackknifeSamples), _numOps.FromDouble(n));
 
-        for (int i = 0; i < n; i++)
-        {
-            var sample = new Vector<T>(n - 1);
-            int index = 0;
-            for (int j = 0; j < n; j++)
-            {
-                if (j != i)
-                {
-                    sample[index++] = predicted[j];
-                }
-            }
-            jackknifeSamples.Add(sample.Average());
-        }
-
-        T jackknifeEstimate = new Vector<T>([.. jackknifeSamples]).Average();
-        T jackknifeStdError = CalculateStandardDeviation(new Vector<T>([.. jackknifeSamples]));
+        // Jackknife standard error sqrt((n - 1) / n * sum (theta_i - theta_bar)^2) (Efron & Tibshirani,
+        // astropy.stats.jackknife_stats). For the mean this is exactly s / sqrt(n).
+        T jackknifeStdError = _numOps.Sqrt(_numOps.Multiply(
+            _numOps.Divide(_numOps.FromDouble(n - 1), _numOps.FromDouble(n)),
+            SumOfSquaredDeviations(jackknifeSamples, jackknifeEstimate)));
         T tValue = CalculateTValue(n - 1, _numOps.FromDouble(0.95));
         T margin = _numOps.Multiply(tValue, jackknifeStdError);
 
@@ -4179,35 +4220,44 @@ public static class StatisticsHelper<T>
     public static Matrix<T> CalculateCorrelationMatrix(Matrix<T> features, ModelStatsOptions options)
     {
         int featureCount = features.Columns;
-        var correlationMatrix = new Matrix<T>(featureCount, featureCount);
-
-        for (int i = 0; i < featureCount; i++)
+        if (featureCount == 0)
         {
-            for (int j = 0; j < featureCount; j++)
-            {
-                if (i == j)
-                {
-                    correlationMatrix[i, j] = _numOps.One;
-                }
-                else
-                {
-                    Vector<T> vectorI = features.GetColumn(i);
-                    Vector<T> vectorJ = features.GetColumn(j);
-
-                    T correlation = CalculatePearsonCorrelation(vectorI, vectorJ);
-                    correlationMatrix[i, j] = correlation;
-
-                    // Check for multicollinearity
-                    if (_numOps.GreaterThan(_numOps.Abs(correlation), _numOps.FromDouble(options.MulticollinearityThreshold)))
-                    {
-                        // You might want to log this or handle it in some way
-                        Console.WriteLine($"High correlation detected between features {i} and {j}: {correlation}");
-                    }
-                }
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return correlationMatrix;
+        // Pearson correlation of every column pair with the raw-sum formula of CalculatePearsonCorrelation:
+        // r = (n Sxy - Sx Sy) / (sqrt(n Sxx - Sx^2) sqrt(n Syy - Sy^2)), with all Sxy from one Gram product.
+        int rows = features.Rows;
+        var x = Tensor<T>.FromMatrix(features);
+        var grid = new[] { featureCount, featureCount };
+        var gram = rows == 0 ? new Tensor<T>(grid) : Engine.TensorMatMul(Engine.TensorTranspose(x), x);
+        var sums = rows == 0
+            ? new Tensor<T>(new[] { featureCount })
+            : Engine.ReduceSum(x, new[] { 0 }, false);
+        T n = _numOps.FromDouble(rows);
+
+        var numerator = Engine.TensorSubtract(Engine.TensorMultiplyScalar(gram, n), Engine.TensorOuter(sums, sums));
+        var spread = Engine.TensorSqrt(Engine.TensorSubtract(
+            Engine.TensorMultiplyScalar(Engine.TensorDiagonal(gram), n), Engine.TensorMultiply(sums, sums)));
+        var correlation = Engine.TensorDivide(numerator, Engine.TensorOuter(spread, spread));
+
+        var identity = Engine.TensorEye<T>(featureCount);
+        correlation = Engine.TensorWhere(identity, Filled(grid, _numOps.One), correlation);
+
+        // Report highly correlated off-diagonal pairs in (i, j) row-major order, as the scalar loop did.
+        var high = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(Engine.TensorAbs(correlation), _numOps.FromDouble(options.MulticollinearityThreshold)),
+            Not(identity));
+        var highPairs = Engine.TensorNonzero(high).ToVector().ToArray();
+        var values = correlation.ToVector().ToArray();
+        for (int k = 0; k + 1 < highPairs.Length; k += 2)
+        {
+            int i = highPairs[k];
+            int j = highPairs[k + 1];
+            Console.WriteLine($"High correlation detected between features {i} and {j}: {values[i * featureCount + j]}");
+        }
+
+        return correlation.ToMatrix();
     }
 
     /// <summary>
@@ -4232,11 +4282,7 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static List<T> CalculateVIF(Matrix<T> correlationMatrix, ModelStatsOptions options)
     {
-        var vifValues = new List<T>();
-
-        // The correct formula for VIF from a correlation matrix is:
-        // VIF_i = (R^-1)_ii where R^-1 is the inverse of the correlation matrix
-        // This gives the diagonal elements of the inverse correlation matrix
+        // VIF_i is the i-th diagonal entry of the inverse correlation matrix (equivalently 1 / (1 - R_i^2)).
         Matrix<T> inverseCorrelationMatrix;
         try
         {
@@ -4244,21 +4290,17 @@ public static class StatisticsHelper<T>
         }
         catch (InvalidOperationException)
         {
-            // Correlation matrix is singular (e.g., single feature or perfect collinearity).
-            // Return VIF = 1.0 for all features (no multicollinearity detected).
-            for (int i = 0; i < correlationMatrix.Rows; i++)
-                vifValues.Add(_numOps.One);
-            return vifValues;
+            // Singular correlation matrix: no meaningful VIF, so every feature gets the neutral value 1.
+            return Enumerable.Repeat(_numOps.One, correlationMatrix.Rows).ToList();
         }
 
-        for (int i = 0; i < correlationMatrix.Rows; i++)
+        if (correlationMatrix.Rows == 0)
         {
-            // VIF is the diagonal element of the inverse correlation matrix
-            var vif = inverseCorrelationMatrix[i, i];
-            vifValues.Add(vif);
+            return new List<T>();
         }
 
-        return vifValues;
+        return Engine.TensorDiagonal(Tensor<T>.FromMatrix(inverseCorrelationMatrix)).ToVector()
+            .Take(correlationMatrix.Rows).ToList();
     }
 
     /// <summary>
@@ -4592,11 +4634,9 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateLOO<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
-        // LOO = -2 * (S log(p(yi | y-i)))
-        // where p(yi | y-i) is the leave-one-out predictive density for the i-th observation
-        var looSum = modelStats.LeaveOneOutPredictiveDensities.Aggregate(_numOps.Zero,
-            (acc, density) => _numOps.Add(acc, _numOps.Log(density))
-        );
+        // LOO information criterion: -2 * sum of log leave-one-out predictive densities.
+        var densities = modelStats.LeaveOneOutPredictiveDensities;
+        T looSum = densities.Count == 0 ? _numOps.Zero : Engine.TensorSum(Engine.TensorLog(AsTensor(densities)));
 
         return _numOps.Multiply(_numOps.FromDouble(-2), looSum);
     }
@@ -4621,10 +4661,12 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculatePosteriorPredictiveCheck<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
-        // Calculate the proportion of posterior predictive samples that are more extreme than the observed data
+        // Posterior predictive p-value: share of posterior samples above the observed statistic.
         var observedStatistic = modelStats.ObservedTestStatistic;
         var posteriorPredictiveSamples = modelStats.PosteriorPredictiveSamples;
-        var moreExtremeSamples = posteriorPredictiveSamples.Count(sample => _numOps.GreaterThan(sample, observedStatistic));
+        int moreExtremeSamples = posteriorPredictiveSamples.Count == 0
+            ? 0
+            : Engine.TensorCountNonzero(Engine.TensorGreaterThan(AsTensor(posteriorPredictiveSamples), observedStatistic));
 
         return _numOps.Divide(_numOps.FromDouble(moreExtremeSamples), _numOps.FromDouble(posteriorPredictiveSamples.Count));
     }
@@ -4738,18 +4780,27 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static List<T> CalculateLeaveOneOutPredictiveDensities(Matrix<T> features, Vector<T> actualValues, Func<Matrix<T>, Vector<T>, Vector<T>> modelFitFunction)
     {
-        var looPredictiveDensities = new List<T>();
-
-        for (int i = 0; i < features.Rows; i++)
+        // Each fold refits the caller's model without row i (an opaque delegate, so the folds stay sequential);
+        // the Gaussian likelihoods of the held-out predictions are then evaluated in one pass.
+        int rows = features.Rows;
+        var predictions = new List<T>(rows);
+        for (int i = 0; i < rows; i++)
         {
             var trainingFeatures = features.RemoveRow(i);
             var trainingValues = actualValues.RemoveAt(i);
             var coefficients = modelFitFunction(trainingFeatures, trainingValues);
-            var predictedValue = features.GetRow(i).DotProduct(coefficients);
-            looPredictiveDensities.Add(CalculateLikelihood(actualValues[i], predictedValue));
+            predictions.Add(features.GetRow(i).DotProduct(coefficients));
         }
 
-        return looPredictiveDensities;
+        if (rows == 0)
+        {
+            return new List<T>();
+        }
+
+        // CalculateLikelihood(actual, predicted) = exp(-0.5 * (actual - predicted)^2)
+        var residual = Engine.TensorSubtract(Prefix(actualValues, rows), AsTensor(predictions));
+        var likelihood = Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorMultiply(residual, residual), _numOps.FromDouble(-0.5)));
+        return likelihood.ToVector().ToList();
     }
 
     /// <summary>
@@ -4861,15 +4912,17 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T FindPeakValue(Vector<T> x, Vector<T> y)
     {
-        T maxValue = _numOps.MinValue;
+        // First index whose y is strictly above every earlier y and above MinValue (NaN never is); index 0 otherwise.
         int maxIndex = 0;
-
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length > 0)
         {
-            if (_numOps.GreaterThan(y[i], maxValue))
+            var values = AsTensor(y);
+            var floor = Filled(values._shape, _numOps.MinValue);
+            var candidates = Engine.TensorWhere(Engine.TensorIsNan(values), floor, values);
+            T maxValue = Engine.TensorMaxValue(candidates);
+            if (_numOps.GreaterThan(maxValue, _numOps.MinValue))
             {
-                maxValue = y[i];
-                maxIndex = i;
+                maxIndex = Engine.TensorNonzero(Engine.TensorEquals(candidates, maxValue)).GetFlat(0);
             }
         }
 
@@ -4937,13 +4990,9 @@ public static class StatisticsHelper<T>
         {
             // X'X is singular (e.g., single feature or collinear features).
             // Fall back to the number of non-zero coefficients as effective parameters.
-            int count = 0;
-            for (int i = 0; i < coefficients.Length; i++)
-            {
-                if (!_numOps.Equals(coefficients[i], _numOps.Zero))
-                    count++;
-            }
-            return _numOps.FromDouble(count);
+            return coefficients.Length == 0
+                ? _numOps.Zero
+                : Count(Engine.TensorNotEquals(AsTensor(coefficients), _numOps.Zero));
         }
         var hatMatrix = features * (inverseMatrix * transposeFeatures);
 
@@ -4978,13 +5027,15 @@ public static class StatisticsHelper<T>
         {
             case TestStatisticType.ChiSquare:
                 // Chi-square test statistic
-                T chiSquare = _numOps.Zero;
-                for (int i = 0; i < actualValues.Length; i++)
+                if (actualValues.Length == 0)
                 {
-                    T residual = _numOps.Subtract(actualValues[i], predictedValues[i]);
-                    chiSquare = _numOps.Add(chiSquare, _numOps.Divide(_numOps.Multiply(residual, residual), predictedValues[i]));
+                    return _numOps.Zero;
                 }
-                return chiSquare;
+
+                // sum (actual - predicted)^2 / predicted
+                var expected = Prefix(predictedValues, actualValues.Length);
+                var residual = Engine.TensorSubtract(AsTensor(actualValues), expected);
+                return Engine.TensorSum(Engine.TensorDivide(Engine.TensorMultiply(residual, residual), expected));
 
             case TestStatisticType.FTest:
                 // F-test statistic

@@ -617,4 +617,19 @@ public class StatisticsHelperDeepMathIntegrationTests
         double mse2 = StatisticsHelper<double>.CalculateMeanSquaredError(b, a);
         Assert.Equal(mse1, mse2, Tol);
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task JackknifeInterval_OfMean_UsesStandardErrorOfMean()
+    {
+        // For the mean, the jackknife standard error sqrt((n - 1) / n * sum (theta_i - theta_bar)^2)
+        // equals s / sqrt(n) (Efron & Tibshirani; astropy.stats.jackknife_stats). Here s / sqrt(5) = sqrt(0.5).
+        var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
+        var predicted = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
+
+        var (lower, upper) = StatisticsHelper<double>.CalculateJackknifeInterval(actual, predicted);
+        double t = StatisticsHelper<double>.CalculateTValue(4, 0.95);
+
+        Assert.Equal(3.0, (lower + upper) / 2.0, 1e-12);
+        Assert.Equal(Math.Sqrt(0.5) * t, (upper - lower) / 2.0, 1e-12);
+    }
 }
