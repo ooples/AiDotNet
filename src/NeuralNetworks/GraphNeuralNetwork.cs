@@ -636,37 +636,40 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         // where A is the adjacency matrix and h are node representations
         T smoothnessLoss = NumOps.Zero;
         int numNodes = _lastNodeRepresentations.Shape[0];
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = 0; j < numNodes; j++)
-            {
-                // Get edge weight from adjacency matrix
-                T edgeWeight = _lastAdjacencyMatrix[new int[] { i, j }];
-
-                // Skip if no edge
-                if (NumOps.Equals(edgeWeight, NumOps.Zero))
-                    continue;
-
-                // Compute squared difference between node representations
-                var nodeI = _lastNodeRepresentations.GetRow(i);
-                var nodeJ = _lastNodeRepresentations.GetRow(j);
-                var diff = nodeI.Subtract(nodeJ);
-                T squaredDiff = diff.DotProduct(diff);
-
-                // Add weighted difference to smoothness loss
-                smoothnessLoss = NumOps.Add(smoothnessLoss, NumOps.Multiply(edgeWeight, squaredDiff));
-            }
-        }
-
-        // Normalize by number of edges
         int edgeCount = 0;
-        for (int i = 0; i < numNodes; i++)
+
+        if (numNodes > 0)
         {
-            for (int j = 0; j < numNodes; j++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                if (!NumOps.Equals(_lastAdjacencyMatrix[new int[] { i, j }], NumOps.Zero))
-                    edgeCount++;
+                // Edges are the nonzero adjacency entries (NaN counts as an edge), in row-major order
+                var adjacency = Engine.TensorSlice(_lastAdjacencyMatrix, [0, 0], [numNodes, numNodes]);
+                var edgeList = Engine.TensorNonzero(adjacency).ToArray();
+                edgeCount = edgeList.Length / 2;
+
+                if (edgeCount > 0)
+                {
+                    var sources = new int[edgeCount];
+                    var targets = new int[edgeCount];
+                    var flatIndex = new int[edgeCount];
+                    for (int e = 0; e < edgeCount; e++)
+                    {
+                        sources[e] = edgeList[2 * e];
+                        targets[e] = edgeList[2 * e + 1];
+                        flatIndex[e] = sources[e] * numNodes + targets[e];
+                    }
+
+                    // A_ij * ||h_i - h_j||^2 per edge, gathered without forming all pairwise distances
+                    var nodes = Engine.Reshape(_lastNodeRepresentations,
+                        [numNodes, _lastNodeRepresentations.Length / numNodes]);
+                    var diff = Engine.TensorSubtract(
+                        Engine.TensorGather(nodes, new Tensor<int>(sources, [edgeCount]), 0),
+                        Engine.TensorGather(nodes, new Tensor<int>(targets, [edgeCount]), 0));
+                    var squaredDiff = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
+                    var edgeWeights = Engine.TensorGather(
+                        Engine.Reshape(adjacency, [numNodes * numNodes]), new Tensor<int>(flatIndex, [edgeCount]), 0);
+                    smoothnessLoss = Engine.TensorSum(Engine.TensorMultiply(edgeWeights, squaredDiff));
+                }
             }
         }
 
