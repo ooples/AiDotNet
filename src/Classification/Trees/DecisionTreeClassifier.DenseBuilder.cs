@@ -51,21 +51,25 @@ public partial class DecisionTreeClassifier<T>
     [Scratch]
     private int[] _selectedFeatures = new int[0];
 
+    /// <summary>The number of rows (repeats counted) the tree is grown on; weights each node's impurity decrease.</summary>
+    [Scratch]
+    private int _denseSampleCount;
+
+    /// <summary>scikit-learn's tolerance on the minimum impurity decrease (<c>np.finfo(np.double).eps</c>).</summary>
+    private const double ImpurityEpsilon = 2.220446049250313e-16;
+
     private static readonly DenseTreeData EmptyDenseData = new(new double[0], 0, 0);
 
     /// <summary>Ranks <paramref name="x"/> for <see cref="BuildDense"/>.</summary>
     internal static DenseTreeData CreateDenseData(Matrix<T> x)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         int rows = x.Rows;
         int features = x.Columns;
-        var columnMajor = new double[rows * features];
-        for (int i = 0; i < rows; i++)
-        {
-            var row = x.GetRowReadOnlySpan(i);
-            for (int f = 0; f < features; f++)
-                columnMajor[f * rows + i] = numOps.ToDouble(row[f]);
-        }
+
+        // Column-major: the transpose of the [rows, features] matrix, converted to double in one pass.
+        var columnMajor = rows == 0 || features == 0
+            ? new double[0]
+            : AiDotNetEngine.Current.TensorTranspose(new Tensor<T>(new[] { rows, features }, x)).Cast<double>().ToArray();
 
         return new DenseTreeData(columnMajor, rows, features);
     }
@@ -86,14 +90,19 @@ public partial class DecisionTreeClassifier<T>
         _featurePool = new int[NumFeatures];
         _selectedFeatures = new int[NumFeatures];
 
-        // A bootstrap repeats about a third of its rows; each distinct row's class is looked up once. The skip reads
-        // the flag this loop writes, so it stays in the body rather than in a Where over the rows.
-        var labelled = new bool[data.Rows];
-        foreach (int row in rows)
+        _denseSampleCount = count;
+
+        // Each data row's index into the class labels: the column where its label equals a class. Rows outside the
+        // sample are never read, so a label absent from the sample's classes does no harm there.
+        if (data.Rows > 0)
         {
-            if (labelled[row]) continue;
-            labelled[row] = true;
-            _denseClasses[row] = GetClassIndex(y[row]);
+            var engine = AiDotNetEngine.Current;
+            var classes = ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized.");
+            var shape = new[] { data.Rows, NumClasses };
+            var matches = engine.TensorEquals(
+                engine.TensorBroadcastTo(engine.Reshape(y.AsTensor(), new[] { data.Rows, 1 }), shape),
+                engine.TensorBroadcastTo(engine.Reshape(classes.AsTensor(), new[] { 1, NumClasses }), shape));
+            _denseClasses = engine.TensorArgMax(matches, 1).ToArray();
         }
 
         try
@@ -104,6 +113,7 @@ public partial class DecisionTreeClassifier<T>
         {
             // The buffers are training scratch, not model state.
             _denseData = EmptyDenseData;
+            _denseSampleCount = 0;
             _denseClasses = new int[0];
             _denseRows = new int[0];
             _sortKeys = new ulong[0];
@@ -124,8 +134,13 @@ public partial class DecisionTreeClassifier<T>
             return CreateDenseLeaf(counts, count);
 
         var (bestFeature, bestThreshold, bestThresholdRank, bestGain) = FindBestDenseSplit(start, count, counts);
-        // Not "bestGain <= MinImpurityDecrease": a NaN gain must make a leaf, and only the negated form does.
-        if (bestFeature < 0 || !(bestGain > Options.MinImpurityDecrease))
+
+        // scikit-learn (_tree.pyx): the best split is taken even when it does not lower the impurity (XOR has no
+        // first split that does), and the node becomes a leaf only when its impurity decrease weighted by its share
+        // of the samples, N_t / N * gain, plus eps falls below min_impurity_decrease. Not "< MinImpurityDecrease":
+        // a NaN gain must make a leaf, and only the negated form does.
+        double weightedGain = count / (double)_denseSampleCount * bestGain;
+        if (bestFeature < 0 || !(weightedGain + ImpurityEpsilon >= Options.MinImpurityDecrease))
             return CreateDenseLeaf(counts, count);
 
         // Stable partition: the left child keeps rows whose value is <= the threshold, in their original order.
@@ -181,15 +196,11 @@ public partial class DecisionTreeClassifier<T>
 
     private DecisionNode<T> CreateDenseLeaf(int[] counts, int count)
     {
-        var probabilities = new Vector<T>(NumClasses);
-        T total = NumOps.FromDouble(count);
-        for (int c = 0; c < NumClasses; c++)
-            probabilities[c] = NumOps.Divide(NumOps.FromDouble(counts[c]), total);
+        var probabilities = AiDotNetEngine.Current.TensorDivideScalar(
+            new Tensor<int>(counts, new[] { counts.Length }).Cast<T>(), NumOps.FromDouble(count)).ToVector();
 
-        int predictedClass = 0;
-        for (int c = 1; c < NumClasses; c++)
-            if (counts[c] > counts[predictedClass])
-                predictedClass = c;
+        // The first class with the most rows, as numpy's argmax.
+        int predictedClass = Array.IndexOf(counts, counts.Max());
 
         return new DecisionNode<T>
         {
@@ -237,7 +248,7 @@ public partial class DecisionTreeClassifier<T>
         int bestFeature = -1;
         double bestThreshold = 0;
         int bestThresholdRank = 0;
-        double bestGain = 0;
+        double bestGain = double.NegativeInfinity;
 
         int featureCount = SelectDenseFeatures();
         double currentImpurity = DenseImpurity(totalCounts, count);
@@ -357,6 +368,7 @@ public partial class DecisionTreeClassifier<T>
             return 0;
 
         double totalD = total;
+        // Entropy in bits, as scikit-learn (the base sets the scale MinImpurityDecrease is compared on).
         if (Options.Criterion is ClassificationSplitCriterion.Entropy or ClassificationSplitCriterion.LogLoss)
         {
             double entropy = 0;
@@ -365,7 +377,7 @@ public partial class DecisionTreeClassifier<T>
                 if (classCounts[c] > 0)
                 {
                     double prob = classCounts[c] / totalD;
-                    entropy -= prob * Math.Log(prob);
+                    entropy -= prob * Math.Log(prob, 2.0);
                 }
             }
 
