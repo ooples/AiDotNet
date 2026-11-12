@@ -14,6 +14,7 @@ public class NeuralArchitectureSearch<T>
     private readonly SearchSpaceBase<T> _searchSpace;
     private readonly int _maxEpochs;
     private readonly Random _random;
+    private readonly DartsOptimizerOptions _optimizerOptions;
 
     public AutoMLStatus Status { get; private set; } = AutoMLStatus.NotStarted;
     public Architecture<T>? BestArchitecture { get; private set; }
@@ -22,14 +23,45 @@ public class NeuralArchitectureSearch<T>
     public NeuralArchitectureSearch(
         NeuralArchitectureSearchStrategy strategy = NeuralArchitectureSearchStrategy.GradientBased,
         int maxEpochs = 50)
+        : this(strategy, maxEpochs, new DartsOptimizerOptions())
     {
+    }
+
+    /// <summary>
+    /// Creates a search whose DARTS optimizers use <paramref name="optimizerOptions"/> (the defaults are those of
+    /// Liu et al. 2019, Sec. 5.1).
+    /// </summary>
+    /// <param name="strategy">The search strategy.</param>
+    /// <param name="maxEpochs">The number of search epochs.</param>
+    /// <param name="optimizerOptions">The architecture (Adam) and weight (SGD) optimizer settings.</param>
+    public NeuralArchitectureSearch(
+        NeuralArchitectureSearchStrategy strategy,
+        int maxEpochs,
+        DartsOptimizerOptions optimizerOptions)
+    {
+        if (optimizerOptions is null)
+        {
+            throw new ArgumentNullException(nameof(optimizerOptions));
+        }
+
+        if (optimizerOptions.ArchitectureLearningRate <= 0.0 || optimizerOptions.WeightMinLearningRate < 0.0
+            || optimizerOptions.WeightMaxLearningRate < optimizerOptions.WeightMinLearningRate)
+        {
+            throw new ArgumentOutOfRangeException(nameof(optimizerOptions),
+                "Learning rates must satisfy architecture > 0 and 0 <= weight min <= weight max.");
+        }
+
         _ops = MathHelper.GetNumericOperations<T>();
         _strategy = strategy;
         _searchSpace = new SearchSpaceBase<T>();
         _maxEpochs = maxEpochs;
         _random = RandomHelper.CreateSecureRandom();
+        _optimizerOptions = optimizerOptions;
         BestScore = _ops.Zero;
     }
+
+    /// <summary>The DARTS optimizer settings.</summary>
+    public DartsOptimizerOptions OptimizerOptions => _optimizerOptions;
 
     /// <summary>
     /// Runs the neural architecture search
@@ -94,16 +126,17 @@ public class NeuralArchitectureSearch<T>
         // DARTS (Liu et al. 2019, Sec. 5.1): alpha is trained with Adam (lr 3e-4, betas (0.5, 0.999), weight decay
         // 1e-3); the network weights with SGD (momentum 0.9, weight decay 3e-4, gradient-norm clipping at 5) and a
         // learning rate cosine-annealed from 0.025 to 0.001.
-        T architectureLR = _ops.FromDouble(DartsArchitectureLearningRate);
-        T beta1 = _ops.FromDouble(DartsArchitectureBeta1);
-        T beta2 = _ops.FromDouble(DartsArchitectureBeta2);
-        T epsilon = _ops.FromDouble(1e-8);
-        T architectureWeightDecay = _ops.FromDouble(DartsArchitectureWeightDecay);
-        T momentum = _ops.FromDouble(DartsWeightMomentum);
-        T weightDecay = _ops.FromDouble(DartsWeightDecay);
-        T gradientClipNorm = _ops.FromDouble(DartsGradientClipNorm);
+        var settings = _optimizerOptions;
+        T architectureLR = _ops.FromDouble(settings.ArchitectureLearningRate);
+        T beta1 = _ops.FromDouble(settings.ArchitectureBeta1);
+        T beta2 = _ops.FromDouble(settings.ArchitectureBeta2);
+        T epsilon = _ops.FromDouble(settings.ArchitectureEpsilon);
+        T architectureWeightDecay = _ops.FromDouble(settings.ArchitectureWeightDecay);
+        T momentum = _ops.FromDouble(settings.WeightMomentum);
+        T weightDecay = _ops.FromDouble(settings.WeightDecay);
+        T gradientClipNorm = _ops.FromDouble(settings.GradientClipNorm);
         T[] weightLearningRates = CosineAnnealedLearningRates(_maxEpochs,
-            _ops.FromDouble(DartsWeightMaxLearningRate), _ops.FromDouble(DartsWeightMinLearningRate));
+            _ops.FromDouble(settings.WeightMaxLearningRate), _ops.FromDouble(settings.WeightMinLearningRate));
 
         // Initialize Adam momentum buffers for architecture parameters
         var archMomentum = new List<Matrix<T>>();
@@ -195,16 +228,6 @@ public class NeuralArchitectureSearch<T>
 
         return finalArchitecture;
     }
-
-    private const double DartsArchitectureLearningRate = 3e-4;
-    private const double DartsArchitectureBeta1 = 0.5;
-    private const double DartsArchitectureBeta2 = 0.999;
-    private const double DartsArchitectureWeightDecay = 1e-3;
-    private const double DartsWeightMaxLearningRate = 0.025;
-    private const double DartsWeightMinLearningRate = 0.001;
-    private const double DartsWeightMomentum = 0.9;
-    private const double DartsWeightDecay = 3e-4;
-    private const double DartsGradientClipNorm = 5.0;
 
     /// <summary>
     /// Cosine annealing without restarts for epochs 0..epochs (inclusive):
@@ -320,11 +343,12 @@ public class NeuralArchitectureSearch<T>
 
         // Shared-weight training: the DARTS weight optimizer (SGD, momentum 0.9, weight decay 3e-4, clipping at
         // 5, cosine learning rate), with a fresh uniformly sampled architecture each step.
-        T momentum = _ops.FromDouble(DartsWeightMomentum);
-        T weightDecay = _ops.FromDouble(DartsWeightDecay);
-        T gradientClipNorm = _ops.FromDouble(DartsGradientClipNorm);
+        var settings = _optimizerOptions;
+        T momentum = _ops.FromDouble(settings.WeightMomentum);
+        T weightDecay = _ops.FromDouble(settings.WeightDecay);
+        T gradientClipNorm = _ops.FromDouble(settings.GradientClipNorm);
         T[] weightLearningRates = CosineAnnealedLearningRates(_maxEpochs,
-            _ops.FromDouble(DartsWeightMaxLearningRate), _ops.FromDouble(DartsWeightMinLearningRate));
+            _ops.FromDouble(settings.WeightMaxLearningRate), _ops.FromDouble(settings.WeightMinLearningRate));
         var weightMomentum = new Dictionary<string, Vector<T>>();
 
         for (int epoch = 0; epoch < _maxEpochs; epoch++)
