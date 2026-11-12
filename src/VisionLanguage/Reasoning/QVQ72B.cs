@@ -224,44 +224,44 @@ public partial class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         int qLen = questionTokens.Length;
 
         // Step 3: Iterative reasoning with visual re-attention
-        var reasoningState = new double[dim];
+        var engine = Engine;
+        var reasoningState = new Tensor<T>([dim]);
+        int numPatches = Math.Min(visDim, 256);
+        var patchValues = numPatches > 0 ? CyclicTake(visualFeatures, numPatches) : new Tensor<T>([0]);
+        // Question-conditioned attention bias q[v % qLen] / vocab * 0.2 (the same every step).
+        var questionBias = numPatches > 0
+            ? engine.TensorMultiplyScalar(CyclicTake(questionTokens, numPatches), NumOps.FromDouble(0.2 / _options.VocabSize))
+            : new Tensor<T>([0]);
+        // Per-step coefficients: stepWeight = 1 / (step + 1) and the focus frequency (step + 1) * 0.01.
+        var stepNumber = engine.TensorArange<T>(1, numReasoningSteps + 1, 1);
+        var stepWeights = engine.TensorDivide(Tensor<T>.CreateDefault([numReasoningSteps], NumOps.One), stepNumber);
+        var stateKeep = engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(stepWeights, NumOps.FromDouble(0.3)));
+        var focusFrequency = engine.TensorMultiplyScalar(stepNumber, NumOps.FromDouble(0.01));
+        var patchNumber = engine.TensorArange<T>(1, numPatches + 1, 1);
+        T focusAmplitude = NumOps.FromDouble(0.3);
+        T temperature = NumOps.FromDouble(0.3);
+        T questionWeight = NumOps.FromDouble(0.2);
+        var qEmb = engine.TensorMultiplyScalar(CyclicTake(questionTokens, dim), NumOps.FromDouble(1.0 / _options.VocabSize));
 
         for (int step = 0; step < numReasoningSteps; step++)
         {
-            double stepWeight = 1.0 / (step + 1); // Later steps refine
+            // Visual re-attention at each reasoning step (the same for every output position):
+            // w_v = exp((vis_v + 0.3 sin((step + 1)(v + 1) 0.01) + 0.2 q[v % qLen] / vocab) * 0.3)
+            var stepBias = engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorMultiply(patchNumber, Pick(focusFrequency, step))), focusAmplitude);
+            var attention = engine.TensorExp(engine.TensorMultiplyScalar(
+                engine.TensorAdd(engine.TensorAdd(patchValues, stepBias), questionBias), temperature));
+            var visAttn = engine.TensorBroadcastTo(WeightedAverage(attention.Reshape([1, numPatches]), patchValues), [dim]);
 
-            for (int d = 0; d < dim; d++)
-            {
-                // Visual re-attention at each reasoning step
-                double visAttn = 0;
-                double attnSum = 0;
-                int numPatches = Math.Min(visDim, 256);
-                for (int v = 0; v < numPatches; v++)
-                {
-                    double visVal = NumOps.ToDouble(visualFeatures[v % visDim]);
-                    // Step-dependent attention: each step focuses on different aspects
-                    double stepBias = Math.Sin((step + 1.0) * (v + 1) * 0.01) * 0.3;
-                    // Question-conditioned attention
-                    double qBias =
-                        NumOps.ToDouble(questionTokens[v % qLen]) / _options.VocabSize * 0.2;
-                    double w = Math.Exp((visVal + stepBias + qBias) * 0.3);
-                    visAttn += w * visVal;
-                    attnSum += w;
-                }
-                visAttn /= Math.Max(attnSum, 1e-8);
-
-                // Accumulate reasoning: residual update
-                double prevReasoning = reasoningState[d];
-                double qEmb = NumOps.ToDouble(questionTokens[d % qLen]) / _options.VocabSize;
-                reasoningState[d] =
-                    prevReasoning * (1.0 - stepWeight * 0.3) + (visAttn + qEmb * 0.2) * stepWeight;
-            }
+            // Accumulate reasoning: residual update
+            reasoningState = engine.TensorAdd(
+                engine.TensorMultiply(reasoningState, Pick(stateKeep, step)),
+                engine.TensorMultiply(
+                    engine.TensorAdd(visAttn, engine.TensorMultiplyScalar(qEmb, questionWeight)), Pick(stepWeights, step)));
         }
 
         // Step 4: Final answer generation from reasoning chain
-        var chainInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-            chainInput[d] = NumOps.FromDouble(reasoningState[d]);
+        var chainInput = reasoningState;
 
         var output = chainInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
