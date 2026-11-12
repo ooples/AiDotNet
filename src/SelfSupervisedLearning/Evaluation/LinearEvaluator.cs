@@ -42,11 +42,17 @@ public class LinearEvaluator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     private readonly INeuralNetwork<T> _encoder;
     private readonly int _inputDim;
     private readonly int _numClasses;
-    private T[] _weights;
-    private T[] _bias;
+
+    /// <summary>Classifier weights, [inputDim, numClasses].</summary>
+    private Tensor<T> _weights;
+
+    /// <summary>Classifier bias, [numClasses].</summary>
+    private Tensor<T> _bias;
     private readonly double _learningRate;
     private readonly int _epochs;
 
@@ -86,13 +92,15 @@ public class LinearEvaluator<T>
         var rng = RandomHelper.Shared;
         var scale = Math.Sqrt(2.0 / inputDim);
 
-        _weights = new T[inputDim * numClasses];
-        _bias = new T[numClasses];
+        var initialWeights = new T[inputDim * numClasses];
 
-        for (int i = 0; i < _weights.Length; i++)
+        for (int i = 0; i < initialWeights.Length; i++)
         {
-            _weights[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
+            initialWeights[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
         }
+
+        _weights = new Tensor<T>(initialWeights, new[] { inputDim, numClasses });
+        _bias = new Tensor<T>(new[] { numClasses });
     }
 
     /// <summary>
@@ -119,7 +127,6 @@ public class LinearEvaluator<T>
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             // Training loop
-            T epochLoss = NumOps.Zero;
             int correct = 0;
 
             for (int i = 0; i < numSamples; i += batchSize)
@@ -137,10 +144,9 @@ public class LinearEvaluator<T>
                 var logits = Forward(representations);
 
                 // Compute loss and gradients
-                var (loss, gradWeights, gradBias) = ComputeCrossEntropyLossAndGrad(
+                // The batch loss is not reported, so only the gradients are kept
+                var (_, gradWeights, gradBias) = ComputeCrossEntropyLossAndGrad(
                     logits, batchLabels, representations);
-
-                epochLoss = NumOps.Add(epochLoss, loss);
 
                 // Update linear layer
                 var lr = GetLearningRate(epoch);
@@ -229,17 +235,7 @@ public class LinearEvaluator<T>
     private Tensor<T> ExtractBatch(Tensor<T> data, int startIdx, int batchSize)
     {
         var dim = data.Shape[1];
-        var batch = new T[batchSize * dim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                batch[b * dim + d] = data[startIdx + b, d];
-            }
-        }
-
-        return new Tensor<T>(batch, [batchSize, dim]);
+        return Engine.TensorSlice(data, new[] { startIdx, 0 }, new[] { batchSize, dim });
     }
 
     private Tensor<T> ExtractFeatures(Tensor<T> input)
@@ -250,150 +246,61 @@ public class LinearEvaluator<T>
 
     private Tensor<T> Forward(Tensor<T> representations)
     {
-        var batchSize = representations.Shape[0];
-        var logits = new T[batchSize * _numClasses];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                T sum = _bias[c];
-                for (int d = 0; d < _inputDim; d++)
-                {
-                    sum = NumOps.Add(sum,
-                        NumOps.Multiply(representations[b, d], _weights[d * _numClasses + c]));
-                }
-                logits[b * _numClasses + c] = sum;
-            }
-        }
-
-        return new Tensor<T>(logits, [batchSize, _numClasses]);
+        // logits = x[:, :inputDim] W + b
+        var inputs = InputColumns(representations);
+        return Engine.TensorAdd(Engine.TensorMatMul(inputs, _weights), _bias.Reshape(1, _numClasses));
     }
 
-    private (T loss, T[] gradWeights, T[] gradBias) ComputeCrossEntropyLossAndGrad(
+    /// <summary>
+    /// The first <c>inputDim</c> feature columns of a [batch, features] tensor.
+    /// </summary>
+    private Tensor<T> InputColumns(Tensor<T> representations)
+    {
+        var batchSize = representations.Shape[0];
+        return representations.Rank == 2 && representations.Shape[1] == _inputDim
+            ? representations
+            : Engine.TensorSlice(representations, new[] { 0, 0 }, new[] { batchSize, _inputDim });
+    }
+
+    private (T loss, Tensor<T> gradWeights, Tensor<T> gradBias) ComputeCrossEntropyLossAndGrad(
         Tensor<T> logits, int[] labels, Tensor<T> representations)
     {
         var batchSize = logits.Shape[0];
-        var gradWeights = new T[_inputDim * _numClasses];
-        var gradBias = new T[_numClasses];
-        T totalLoss = NumOps.Zero;
 
-        // Initialize gradients to zero
-        for (int i = 0; i < gradWeights.Length; i++)
-        {
-            gradWeights[i] = NumOps.Zero;
-        }
-        for (int i = 0; i < gradBias.Length; i++)
-        {
-            gradBias[i] = NumOps.Zero;
-        }
+        // Softmax per row (max-shifted)
+        var probs = Engine.TensorSoftmax(logits, 1);
+        var targets = Engine.TensorOneHot<T>(new Tensor<int>(labels, new[] { labels.Length }), _numClasses);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Softmax
-            T maxLogit = logits[b, 0];
-            for (int c = 1; c < _numClasses; c++)
-            {
-                if (NumOps.GreaterThan(logits[b, c], maxLogit))
-                    maxLogit = logits[b, c];
-            }
+        // Cross-entropy loss: -sum_b log(p[b, label_b] + 1e-8)
+        var trueProbs = Engine.ReduceSum(Engine.TensorMultiply(probs, targets), new[] { 1 }, keepDims: false);
+        T totalLoss = NumOps.Negate(Engine.TensorSum(
+            Engine.TensorLog(Engine.TensorAddScalar(trueProbs, NumOps.FromDouble(1e-8)))));
 
-            var probs = new T[_numClasses];
-            T sumExp = NumOps.Zero;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                probs[c] = NumOps.Exp(NumOps.Subtract(logits[b, c], maxLogit));
-                sumExp = NumOps.Add(sumExp, probs[c]);
-            }
-
-            for (int c = 0; c < _numClasses; c++)
-            {
-                probs[c] = NumOps.Divide(probs[c], sumExp);
-            }
-
-            // Cross-entropy loss
-            var trueProb = probs[labels[b]];
-            totalLoss = NumOps.Subtract(totalLoss,
-                NumOps.Log(NumOps.Add(trueProb, NumOps.FromDouble(1e-8))));
-
-            // Compute gradients: dL/dW = (prob - target) * input, dL/db = (prob - target)
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var grad = probs[c];
-                if (c == labels[b])
-                {
-                    grad = NumOps.Subtract(grad, NumOps.One);
-                }
-
-                // Accumulate bias gradients
-                gradBias[c] = NumOps.Add(gradBias[c], grad);
-
-                // Accumulate weight gradients: dL/dW[d,c] = grad * input[d]
-                for (int d = 0; d < _inputDim; d++)
-                {
-                    var inputVal = representations[b, d];
-                    gradWeights[d * _numClasses + c] = NumOps.Add(
-                        gradWeights[d * _numClasses + c],
-                        NumOps.Multiply(grad, inputVal));
-                }
-            }
-        }
-
-        // Scale gradients by 1/batchSize
+        // Compute gradients: dL/dW = x^T (prob - target), dL/db = sum_b (prob - target), scaled by 1/batchSize
         var scale = NumOps.FromDouble(1.0 / batchSize);
-        for (int i = 0; i < gradWeights.Length; i++)
-        {
-            gradWeights[i] = NumOps.Multiply(gradWeights[i], scale);
-        }
-        for (int i = 0; i < gradBias.Length; i++)
-        {
-            gradBias[i] = NumOps.Multiply(gradBias[i], scale);
-        }
+        var grad = Engine.TensorSubtract(probs, targets);
+        var inputs = InputColumns(representations);
+        var gradWeights = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(Engine.TensorTranspose(inputs), grad), scale);
+        var gradBias = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(grad, new[] { 0 }, keepDims: false), scale);
 
         return (NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize)), gradWeights, gradBias);
     }
 
-    private void UpdateParameters(T[] gradWeights, T[] gradBias, double lr)
+    private void UpdateParameters(Tensor<T> gradWeights, Tensor<T> gradBias, double lr)
     {
         var lrT = NumOps.FromDouble(lr);
 
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            _weights[i] = NumOps.Subtract(_weights[i],
-                NumOps.Multiply(lrT, gradWeights[i]));
-        }
-
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            _bias[i] = NumOps.Subtract(_bias[i],
-                NumOps.Multiply(lrT, gradBias[i]));
-        }
+        _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(gradWeights, lrT));
+        _bias = Engine.TensorSubtract(_bias, Engine.TensorMultiplyScalar(gradBias, lrT));
     }
 
     private int ComputeCorrect(Tensor<T> logits, int[] labels)
     {
-        var batchSize = logits.Shape[0];
-        int correct = 0;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int predicted = 0;
-            T maxLogit = logits[b, 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                if (NumOps.GreaterThan(logits[b, c], maxLogit))
-                {
-                    maxLogit = logits[b, c];
-                    predicted = c;
-                }
-            }
-
-            if (predicted == labels[b])
-                correct++;
-        }
-
-        return correct;
+        // Predicted class per row is the first index of the row maximum
+        var predicted = Engine.TensorArgMax(logits, 1).ToArray();
+        return predicted.Zip(labels, (p, label) => p == label ? 1 : 0).Sum();
     }
 
     private int ComputeTopKCorrect(Tensor<T> logits, int[] labels, int k)
