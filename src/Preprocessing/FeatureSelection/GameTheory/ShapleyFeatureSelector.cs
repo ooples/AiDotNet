@@ -28,14 +28,14 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nSamples;
     private readonly int? _randomState;
 
-    private double[]? _shapleyValues;
+    private Vector<T>? _shapleyValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NSamples => _nSamples;
-    public double[]? ShapleyValues => _shapleyValues;
+    public Vector<T>? ShapleyValues => _shapleyValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,143 +70,87 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _shapleyValues = new double[p];
+        var model = new SubsetRegression(FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
+        var totals = new Tensor<T>(new[] { p });
+        T zero = NumOps.Zero;
 
         // Monte Carlo approximation of Shapley values
+        var keys = new int[p];
+        var prefixScores = new T[p + 1];
+        prefixScores[0] = zero;
         for (int sample = 0; sample < _nSamples; sample++)
         {
-            // Random permutation of features
-            var permutation = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).ToArray();
-            var included = new HashSet<int>();
+            // Random permutation of features (one random key per feature, ties by index)
+            for (int j = 0; j < p; j++)
+                keys[j] = rand.Next();
+            var permutation = Enumerable.Range(0, p).OrderBy(j => keys[j]).ToArray();
 
-            double prevScore = 0;
-
+            // R^2 of every prefix of the permutation; feature permutation[i] adds score(i + 1) - score(i)
             for (int i = 0; i < p; i++)
-            {
-                int feature = permutation[i];
-                included.Add(feature);
-
-                double score = EvaluateSubset(X, y, included, n);
-                _shapleyValues[feature] += (score - prevScore);
-                prevScore = score;
-            }
+                prefixScores[i + 1] = model.RSquared(permutation.Take(i + 1).ToArray());
+            var scores = new Tensor<T>((T[])prefixScores.Clone(), new[] { p + 1 });
+            var marginal = Engine.TensorSubtract(
+                Engine.TensorSlice(scores, new[] { 1 }, new[] { p }), Engine.TensorSlice(scores, new[] { 0 }, new[] { p }));
+            totals = Engine.TensorAdd(totals, FeatureSelectionTensorOps.ScatterToFeatures(marginal, permutation, p, zero));
         }
 
         // Average over samples
-        for (int j = 0; j < p; j++)
-            _shapleyValues[j] /= _nSamples;
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _shapleyValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var shapley = Engine.TensorDivideScalar(totals, NumOps.FromDouble(_nSamples));
+        _shapleyValues = shapley.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(shapley, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
-    private double EvaluateSubset(double[,] X, double[] y, HashSet<int> features, int n)
+    // Linear regression R^2 of the centred target on a feature subset: beta solves (X_S' X_S + 1e-6 I) beta =
+    // X_S' (y - mean y) on the raw features, predictions are mean y + X_S beta, and R^2 = max(0, 1 - SSres / SStot)
+    // (0 for an empty subset or a constant target).
+    private sealed class SubsetRegression
     {
-        if (features.Count == 0) return 0;
+        private readonly Tensor<T> _x;
+        private readonly Tensor<T> _centered;
+        private readonly Tensor<T> _gram;
+        private readonly Tensor<T> _cross;
+        private readonly T _totalSquares;
 
-        var featureList = features.ToList();
-        int k = featureList.Count;
-
-        // Simple linear regression R²
-        var XtX = new double[k, k];
-        var Xty = new double[k];
-        double yMean = y.Average();
-
-        for (int i = 0; i < k; i++)
+        public SubsetRegression(Tensor<T> x, Tensor<T> y)
         {
-            int fi = featureList[i];
-            for (int j = 0; j < k; j++)
-            {
-                int fj = featureList[j];
-                for (int r = 0; r < n; r++)
-                    XtX[i, j] += X[r, fi] * X[r, fj];
-            }
-            for (int r = 0; r < n; r++)
-                Xty[i] += X[r, fi] * (y[r] - yMean);
+            var engine = AiDotNetEngine.Current;
+            int n = x.Shape[0];
+            _x = x;
+            _centered = engine.TensorSubtractScalar(y, engine.TensorMean(y));
+            _gram = engine.TensorMatMul(engine.TensorTranspose(x), x);
+            _cross = engine.Reshape(
+                engine.TensorMatMul(engine.TensorTranspose(x), engine.Reshape(_centered, new[] { n, 1 })), new[] { x.Shape[1] });
+            _totalSquares = engine.TensorSumOfSquares(_centered);
         }
 
-        // Add regularization
-        for (int i = 0; i < k; i++)
-            XtX[i, i] += 1e-6;
-
-        var beta = SolveSystem(XtX, Xty, k);
-
-        // Compute R²
-        double ssTot = 0, ssRes = 0;
-        for (int r = 0; r < n; r++)
+        public T RSquared(int[] subset)
         {
-            double pred = yMean;
-            for (int i = 0; i < k; i++)
-                pred += beta[i] * X[r, featureList[i]];
-            ssRes += (y[r] - pred) * (y[r] - pred);
-            ssTot += (y[r] - yMean) * (y[r] - yMean);
+            var ops = MathHelper.GetNumericOperations<T>();
+            var engine = AiDotNetEngine.Current;
+            int k = subset.Length;
+            if (k == 0 || !ops.GreaterThan(_totalSquares, ops.FromDouble(1e-10)))
+                return ops.Zero;
+
+            var index = new Tensor<int>((int[])subset.Clone(), new[] { k });
+            var gram = engine.TensorIndexSelect(engine.TensorIndexSelect(_gram, index, 0), index, 1);
+            var system = engine.TensorAdd(gram, engine.TensorMultiplyScalar(engine.TensorEye<T>(k), ops.FromDouble(1e-6)));
+            var beta = MatrixSolutionHelper.SolveLinearSystem(
+                system.ToMatrix(), engine.TensorIndexSelect(_cross, index, 0).ToVector(), MatrixDecompositionType.Lu);
+            var columns = engine.TensorIndexSelect(_x, index, 1);
+            var fitted = engine.Reshape(
+                engine.TensorMatMul(columns, engine.Reshape(FilterStatisticTensorOps.AsTensor(beta), new[] { k, 1 })),
+                new[] { _x.Shape[0] });
+            T residual = engine.TensorSumOfSquares(engine.TensorSubtract(_centered, fitted));
+            T rSquared = ops.Subtract(ops.One, ops.Divide(residual, _totalSquares));
+            return ops.GreaterThan(rSquared, ops.Zero) ? rSquared : ops.Zero;
         }
-
-        return ssTot > 1e-10 ? Math.Max(0, 1 - ssRes / ssTot) : 0;
-    }
-
-    private double[] SolveSystem(double[,] A, double[] b, int n)
-    {
-        var aug = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                aug[i, j] = A[i, j];
-            aug[i, n] = b[i];
-        }
-
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-
-            for (int row = col + 1; row < n; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= n; j++)
-                    aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, n];
-            for (int j = i + 1; j < n; j++)
-                x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
     }
 
     /// <inheritdoc />

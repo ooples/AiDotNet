@@ -29,14 +29,14 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly double _threshold;
     private readonly int? _randomState;
 
-    private double[]? _banzhafIndices;
+    private Vector<T>? _banzhafIndices;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Threshold => _threshold;
-    public double[]? BanzhafIndices => _banzhafIndices;
+    public Vector<T>? BanzhafIndices => _banzhafIndices;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -73,102 +73,59 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        // Random coalitions (each feature included with 50% probability), drawn sample by sample
+        var membership = new int[_nSamples * p];
+        for (int k = 0; k < membership.Length; k++)
+            membership[k] = rand.NextDouble() < 0.5 ? 1 : 0;
 
-        _banzhafIndices = new double[p];
-        var swingCounts = new int[p];
-        int totalCoalitions = 0;
+        // a coalition scores the mean absolute correlation of its features with the target (0 when empty)
+        var correlation = AbsoluteCorrelation(FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
+        var inCoalition = new Tensor<int>(membership, new[] { _nSamples, p }).Cast<T>();
+        var shape = new[] { _nSamples, p };
+        var sums = Engine.TensorBroadcastTo(
+            Engine.TensorMatMul(inCoalition, Engine.Reshape(correlation, new[] { p, 1 })), shape);
+        var counts = Engine.TensorBroadcastTo(Engine.ReduceSum(inCoalition, new[] { 1 }, true), shape);
+        T threshold = NumOps.FromDouble(_threshold);
+        var wins = OneMinusBelow(CoalitionScore(sums, counts), threshold);
 
-        // Monte Carlo sampling of coalitions
-        for (int sample = 0; sample < _nSamples; sample++)
-        {
-            // Random coalition (each feature included with 50% probability)
-            var coalition = new HashSet<int>();
-            for (int j = 0; j < p; j++)
-                if (rand.NextDouble() < 0.5)
-                    coalition.Add(j);
+        // flipping feature j: add it (+c_j, +1) when absent, remove it (-c_j, -1) when present
+        var direction = Engine.TensorSubtract(
+            FilterStatisticTensorOps.FilledLike(inCoalition, NumOps.One), Engine.TensorMultiplyScalar(inCoalition, NumOps.FromDouble(2)));
+        var flippedSums = Engine.TensorAdd(sums, Engine.TensorMultiply(direction, FilterStatisticTensorOps.RowBroadcast(correlation, _nSamples)));
+        var flippedWins = OneMinusBelow(CoalitionScore(flippedSums, Engine.TensorAdd(counts, direction)), threshold);
 
-            double coalitionScore = EvaluateSubset(X, y, coalition, n);
-            bool coalitionWins = coalitionScore >= _threshold;
-
-            // Check each feature for swing
-            for (int j = 0; j < p; j++)
-            {
-                var modifiedCoalition = new HashSet<int>(coalition);
-                if (coalition.Contains(j))
-                    modifiedCoalition.Remove(j);
-                else
-                    modifiedCoalition.Add(j);
-
-                double modifiedScore = EvaluateSubset(X, y, modifiedCoalition, n);
-                bool modifiedWins = modifiedScore >= _threshold;
-
-                // Is this feature a swing voter?
-                if (coalitionWins != modifiedWins)
-                    swingCounts[j]++;
-            }
-
-            totalCoalitions++;
-        }
-
-        // Compute Banzhaf indices
-        for (int j = 0; j < p; j++)
-            _banzhafIndices[j] = (double)swingCounts[j] / totalCoalitions;
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _banzhafIndices[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // Banzhaf index: the share of sampled coalitions in which the feature is a swing voter
+        var swings = Engine.ReduceSum(Engine.TensorAbs(Engine.TensorSubtract(wins, flippedWins)), new[] { 0 }, false);
+        var indices = Engine.TensorDivideScalar(swings, NumOps.FromDouble(_nSamples));
+        _banzhafIndices = indices.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(indices, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
-    private double EvaluateSubset(double[,] X, double[] y, HashSet<int> features, int n)
+    // mean of the member correlations: sum / count, 0 for an empty coalition
+    private static Tensor<T> CoalitionScore(Tensor<T> sums, Tensor<T> counts) =>
+        FilterStatisticTensorOps.GuardedDivide(sums, counts, 0.5, MathHelper.GetNumericOperations<T>().Zero);
+
+    // 1 where the value reaches the threshold, else 0
+    private Tensor<T> OneMinusBelow(Tensor<T> values, T threshold) =>
+        FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(values, threshold));
+
+    // |Pearson r| of every column with the target; 0 when the column or the target is (near) constant
+    private Tensor<T> AbsoluteCorrelation(Tensor<T> x, Tensor<T> y)
     {
-        if (features.Count == 0) return 0;
-
-        var featureList = features.ToList();
-        double yMean = y.Average();
-
-        // Simple correlation-based score
-        double totalCorr = 0;
-        foreach (int j in featureList)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++) xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xd = X[i, j] - xMean;
-                double yd = y[i] - yMean;
-                sxy += xd * yd;
-                sxx += xd * xd;
-                syy += yd * yd;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-            totalCorr += corr;
-        }
-
-        return totalCorr / featureList.Count;
+        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
+        T tolerance = NumOps.FromDouble(1e-10);
+        if (!NumOps.GreaterThan(syy, tolerance))
+            return FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
+        var correlation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
+            sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 0, NumOps.Zero));
+        return FeatureSelectionTensorOps.KeepOrFill(correlation, Engine.TensorGreaterThan(sxx, tolerance), NumOps.Zero);
     }
 
     /// <inheritdoc />
