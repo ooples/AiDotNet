@@ -128,28 +128,8 @@ public abstract class MetaLearningModelBase<T, TInput, TOutput> : ModelWrapperBa
 
         if (output is Matrix<T> matrix)
         {
-            if (matrix.Rows == 1)
-            {
-                var result = new Vector<T>(matrix.Columns);
-                for (int j = 0; j < matrix.Columns; j++)
-                {
-                    result[j] = matrix[0, j];
-                }
-                return result;
-            }
-            else
-            {
-                var result = new Vector<T>(matrix.Rows * matrix.Columns);
-                int idx = 0;
-                for (int i = 0; i < matrix.Rows; i++)
-                {
-                    for (int j = 0; j < matrix.Columns; j++)
-                    {
-                        result[idx++] = matrix[i, j];
-                    }
-                }
-                return result;
-            }
+            // Row-major flattening (a single row is that row).
+            return Tensor<T>.FromMatrix(matrix).ToVector();
         }
 
         if (output is T[] array)
