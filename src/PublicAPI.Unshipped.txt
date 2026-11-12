@@ -1219,3 +1219,4 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.KnowledgeDistillation.Strategies.FactorTransferDistillationStrategy<T>.FactorTransferDistillationStrategy(double factorWeight, AiDotNet.KnowledgeDistillation.Strategies.FactorMode mode, int numFactors, bool normalizeFactors, double temperature, double alpha, int? seed) -> void

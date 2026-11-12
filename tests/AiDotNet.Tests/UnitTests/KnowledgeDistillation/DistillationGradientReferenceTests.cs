@@ -201,4 +201,29 @@ public class DistillationGradientReferenceTests
             Assert.True(Math.Abs(strategy.ComputeFactorLoss(negated, features)) <= 1e-10, $"run {run}: negated features");
         }
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FactorTransfer_FixedSeed_GivesIdenticalFactorLosses()
+    {
+        await Task.Yield();
+        // Nearly equal variances keep power iteration from converging in its 10 steps, so the result
+        // depends on the random starting vectors: only a seeded generator makes it repeatable
+        var student = new Vector<double>[8];
+        var teacher = new Vector<double>[8];
+        for (int r = 0; r < student.Length; r++)
+        {
+            student[r] = new Vector<double>(new[] { Math.Sin(r + 0.1), 0.98 * Math.Cos(1.3 * r), 0.96 * Math.Sin(2.1 * r + 0.4), 0.95 * Math.Cos(0.7 * r) });
+            teacher[r] = new Vector<double>(new[] { Math.Cos(r + 0.5), 0.97 * Math.Sin(1.1 * r), 0.99 * Math.Cos(1.9 * r), 0.94 * Math.Sin(0.6 * r + 1.0) });
+        }
+
+        var first = new FactorTransferDistillationStrategy<double>(
+            1.0, FactorMode.FactorMatching, 3, true, 3.0, 0.3, seed: 7);
+        var second = new FactorTransferDistillationStrategy<double>(
+            1.0, FactorMode.FactorMatching, 3, true, 3.0, 0.3, seed: 7);
+
+        for (int call = 0; call < 3; call++)
+        {
+            Assert.Equal(first.ComputeFactorLoss(student, teacher), second.ComputeFactorLoss(student, teacher));
+        }
+    }
 }

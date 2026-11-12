@@ -65,6 +65,11 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
     private readonly int _numFactors;
     private readonly bool _normalizeFactors;
 
+    /// <summary>
+    /// Generator for the power-iteration starting vectors: seeded when a seed is given, otherwise secure.
+    /// </summary>
+    private readonly Random _random;
+
     public FactorTransferDistillationStrategy(
         double factorWeight = 0.5,
         FactorMode mode = FactorMode.LowRankApproximation,
@@ -72,6 +77,29 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         bool normalizeFactors = true,
         double temperature = 3.0,
         double alpha = 0.3)
+        : this(factorWeight, mode, numFactors, normalizeFactors, temperature, alpha, seed: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a factor transfer strategy whose power-iteration starts are drawn from a seeded generator.
+    /// </summary>
+    /// <param name="factorWeight">Weight of the factor loss (between 0 and 1).</param>
+    /// <param name="mode">How factors are compared.</param>
+    /// <param name="numFactors">Number of factors (eigenvectors) to extract.</param>
+    /// <param name="normalizeFactors">Whether extracted factors are normalized.</param>
+    /// <param name="temperature">Softmax temperature for the standard distillation loss.</param>
+    /// <param name="alpha">Weight of the hard-label loss in the standard distillation loss.</param>
+    /// <param name="seed">Seed for the power-iteration starting vectors; null uses a secure, unseeded generator.
+    /// With a fixed seed, the same sequence of calls gives identical factors.</param>
+    public FactorTransferDistillationStrategy(
+        double factorWeight,
+        FactorMode mode,
+        int numFactors,
+        bool normalizeFactors,
+        double temperature,
+        double alpha,
+        int? seed)
         : base(temperature, alpha)
     {
         if (factorWeight < 0 || factorWeight > 1)
@@ -84,6 +112,9 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         _mode = mode;
         _numFactors = numFactors;
         _normalizeFactors = normalizeFactors;
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc />
@@ -308,9 +339,9 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
     {
         // Power iteration to find dominant eigenvector
 
-        // Initialize with random values in [-0.5, 0.5) (unseeded, like the secure random it replaces)
+        // Initialize with random values in [-0.5, 0.5), one draw seeded from the strategy's generator
         var vector = Engine.TensorRandomUniformRange<T>(
-            [dim], NumOps.FromDouble(-0.5), NumOps.FromDouble(0.5)).ToVector();
+            [dim], NumOps.FromDouble(-0.5), NumOps.FromDouble(0.5), _random.Next()).ToVector();
         vector = VectorHelper.Normalize(vector);
 
         // Power iteration (10 iterations usually sufficient)
