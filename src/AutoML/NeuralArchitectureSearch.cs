@@ -100,6 +100,9 @@ public class NeuralArchitectureSearch<T>
         T architectureWeightDecay = _ops.FromDouble(DartsArchitectureWeightDecay);
         T momentum = _ops.FromDouble(DartsWeightMomentum);
         T weightDecay = _ops.FromDouble(DartsWeightDecay);
+        T gradientClipNorm = _ops.FromDouble(DartsGradientClipNorm);
+        T[] weightLearningRates = CosineAnnealedLearningRates(_maxEpochs,
+            _ops.FromDouble(DartsWeightMaxLearningRate), _ops.FromDouble(DartsWeightMinLearningRate));
 
         // Initialize Adam momentum buffers for architecture parameters
         var archMomentum = new List<Matrix<T>>();
@@ -152,8 +155,8 @@ public class NeuralArchitectureSearch<T>
             var weightGrads = supernet.GetWeightGradients();
             var weightKeys = weightParams.Keys.ToList();
 
-            T weightsLR = _ops.FromDouble(CosineAnnealedLearningRate(epoch, _maxEpochs, DartsWeightMaxLearningRate, DartsWeightMinLearningRate));
-            T clipScale = GradientClipScale(weightKeys.Select(key => weightGrads[key]), _ops.FromDouble(DartsGradientClipNorm));
+            T weightsLR = weightLearningRates[epoch];
+            T clipScale = GradientClipScale(weightKeys.Select(key => weightGrads[key]), gradientClipNorm);
 
             foreach (var key in weightKeys)
             {
@@ -203,12 +206,18 @@ public class NeuralArchitectureSearch<T>
     private const double DartsGradientClipNorm = 5.0;
 
     /// <summary>
-    /// Cosine annealing without restarts: lr = min + (max - min) * (1 + cos(pi * epoch / epochs)) / 2.
+    /// Cosine annealing without restarts for epochs 0..epochs (inclusive):
+    /// lr_e = min + (max - min) * (1 + cos(pi * e / epochs)) / 2.
     /// </summary>
-    internal static double CosineAnnealedLearningRate(int epoch, int epochs, double maxLearningRate, double minLearningRate)
+    internal static T[] CosineAnnealedLearningRates(int epochs, T maxLearningRate, T minLearningRate)
     {
-        double progress = epochs <= 0 ? 0.0 : (double)epoch / epochs;
-        return minLearningRate + (maxLearningRate - minLearningRate) * 0.5 * (1.0 + Math.Cos(Math.PI * progress));
+        var ops = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var epochIndex = engine.TensorArange<T>(0, epochs + 1, 1);
+        var angle = engine.TensorMultiplyScalar(epochIndex, ops.FromDouble(epochs <= 0 ? 0.0 : Math.PI / epochs));
+        var halfCosine = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(angle), ops.One), ops.FromDouble(0.5));
+        return engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(halfCosine, ops.Subtract(maxLearningRate, minLearningRate)), minLearningRate).ToArray();
     }
 
     /// <summary>

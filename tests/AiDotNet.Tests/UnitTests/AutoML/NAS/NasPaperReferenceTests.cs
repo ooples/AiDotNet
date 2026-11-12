@@ -286,9 +286,12 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
                 Assert.Equal(w0[i] - 0.025 * b, w[i], 1e-15);
             }
 
-            Assert.Equal(0.025, NeuralArchitectureSearch<double>.CosineAnnealedLearningRate(0, 50, 0.025, 0.001), 1e-15);
-            Assert.Equal(0.013, NeuralArchitectureSearch<double>.CosineAnnealedLearningRate(25, 50, 0.025, 0.001), 1e-15);
-            Assert.Equal(0.001, NeuralArchitectureSearch<double>.CosineAnnealedLearningRate(50, 50, 0.025, 0.001), 1e-15);
+            var schedule = NeuralArchitectureSearch<double>.CosineAnnealedLearningRates(50, 0.025, 0.001);
+            Assert.Equal(51, schedule.Length);
+            Assert.Equal(0.025, schedule[0], 1e-15);
+            Assert.Equal(0.013, schedule[25], 1e-15);
+            Assert.Equal(0.001, schedule[50], 1e-15);
+            Assert.Equal(0.001 + 0.024 * 0.5 * (1 + Math.Cos(Math.PI * 10 / 50)), schedule[10], 1e-15);
         }
 
         [Fact]

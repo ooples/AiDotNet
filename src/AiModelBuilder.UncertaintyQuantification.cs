@@ -465,6 +465,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var ridge = engine.TensorMultiplyScalar(engine.TensorEye<T>(2), numOps.FromDouble(1e-8));
         var singular = numOps.FromDouble(1e-18);
         var converged = numOps.FromDouble(1e-8);
+        var none = numOps.Zero;
+        var comparer = EqualityComparer<T>.Default;
 
         var theta = Tensor<T>.FromVector(new Vector<T>(new[] { numOps.One, numOps.Zero }), new[] { 2, 1 });
         for (int iter = 0; iter < 50; iter++)
@@ -475,7 +477,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var weightedDesign = engine.TensorMultiply(design, engine.TensorBroadcastTo(w.Reshape(new[] { batch, 1 }), new[] { batch, 2 }));
             var hessian = engine.TensorAdd(engine.TensorMatMul(designT, weightedDesign), ridge);
 
-            if (numOps.LessThan(numOps.Abs(LinalgDispatch<T>.Det(hessian).ToVector()[0]), singular))
+            // Stop on a singular Hessian (|det| < 1e-18); the flag is a 0/1 engine comparison.
+            var isSingular = engine.TensorSum(engine.TensorLessThan(engine.TensorAbs(LinalgDispatch<T>.Det(hessian)), singular));
+            if (!comparer.Equals(isSingular, none))
             {
                 break;
             }
@@ -483,7 +487,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var step = LinalgDispatch<T>.Solve(hessian, gradient);
             theta = engine.TensorSubtract(theta, step);
 
-            if (numOps.LessThan(engine.TensorSum(engine.TensorAbs(step)), converged))
+            var stepNorm = Tensor<T>.FromScalar(engine.TensorSum(engine.TensorAbs(step)));
+            if (!comparer.Equals(engine.TensorSum(engine.TensorLessThan(stepNorm, converged)), none))
             {
                 break;
             }
