@@ -120,6 +120,52 @@ public class MedicalSegmentationPostProcessingTests
         }
     }
 
+    [Fact]
+    public void Summarize_Half_AreaAndMeanStayExactBeyondTheHalfRange()
+    {
+        // 300 x 300 = 90000 pixels of class 1 (more than Half's largest finite value, 65504) plus 4 of class 0.
+        // Summing the 0/1 mask or the probabilities in Half rounded the area and overflowed to infinity.
+        int spatial = 90004;
+        var labelValues = Enumerable.Repeat((Half)1f, spatial).ToArray();
+        for (int i = 0; i < 4; i++) labelValues[i] = (Half)0f;
+        var probValues = new Half[2 * spatial];
+        for (int i = 0; i < spatial; i++)
+        {
+            probValues[i] = (Half)0.25f;
+            probValues[spatial + i] = (Half)0.75f;
+        }
+
+        var structures = SegmentationStructureStatistics.Summarize(
+            new Tensor<Half>(new[] { spatial }, new Vector<Half>(labelValues)),
+            new Tensor<Half>(new[] { 2, spatial }, new Vector<Half>(probValues)));
+
+        Assert.Equal(new[] { 0, 1 }, structures.Select(s => s.ClassId).ToArray());
+        Assert.Equal(4, structures[0].VolumeOrArea);
+        Assert.Equal(90000, structures[1].VolumeOrArea);
+        Assert.Equal(0.25, structures[0].MeanConfidence, 1e-3);
+        Assert.Equal(0.75, structures[1].MeanConfidence, 1e-3);
+    }
+
+    [Fact]
+    public void MaskedMean_Half_CountsInIntAndIgnoresValuesOutsideTheMask()
+    {
+        // MedSAM2's binary result: 100000 foreground pixels at 0.9 and 3 background pixels, one of them NaN.
+        int n = 100003;
+        var values = Enumerable.Repeat((Half)0.9f, n).ToArray();
+        var mask = Enumerable.Repeat((Half)1f, n).ToArray();
+        for (int i = 0; i < 3; i++) mask[i] = (Half)0f;
+        values[0] = Half.NaN;
+        var maskTensor = new Tensor<Half>(new[] { n }, new Vector<Half>(mask));
+
+        int count = SegmentationStructureStatistics.CountNonZero(maskTensor);
+        Half mean = SegmentationStructureStatistics.MaskedMean(
+            new Tensor<Half>(new[] { n }, new Vector<Half>(values)), maskTensor, count);
+
+        Assert.Equal(100000, count);
+        Assert.Equal(0.9, (double)(float)mean, 2e-3);
+        Assert.Equal(0.0, (double)(float)SegmentationStructureStatistics.MaskedMean(maskTensor, maskTensor, 0), Tolerance);
+    }
+
     private static void AssertClassAxisSumsToOne(Tensor<double> probs)
     {
         int classes = probs.Shape[0];

@@ -156,10 +156,12 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>, ITrainingOb
         // Foreground is every pixel not at or below 0.5 (so a NaN probability counts as foreground, as before).
         var labels = Engine.ScalarMinusTensor(NumOps.One,
             Engine.TensorLessEqual(probabilities, Engine.TensorFullLike(probabilities, NumOps.FromDouble(0.5))));
-        double area = NumOps.ToDouble(Engine.TensorSum(labels));
-        double confidence = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(labels, probabilities)));
+        // The area is counted in int: summing the 0/1 labels in Half rounds every area above 2048 pixels and
+        // overflows to infinity above 65504 (a 512 x 512 slice). The mean is taken over the foreground only.
+        int area = Common.SegmentationStructureStatistics.CountNonZero(labels);
+        double confidence = NumOps.ToDouble(Common.SegmentationStructureStatistics.MaskedMean(probabilities, labels, area));
         var structures = area > 0
-            ? new List<SegmentedStructure> { new() { ClassId = 1, Name = "Prompted structure", VolumeOrArea = area, MeanConfidence = confidence / area } }
+            ? new List<SegmentedStructure> { new() { ClassId = 1, Name = "Prompted structure", VolumeOrArea = area, MeanConfidence = confidence } }
             : new List<SegmentedStructure>();
         return new MedicalSegmentationResult<T>
         {

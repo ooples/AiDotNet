@@ -7,6 +7,11 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// Per-structure statistics of a medical segmentation (pixel/voxel count and mean confidence of every
 /// class present in a label map), computed with whole-tensor engine operations.
 /// </summary>
+/// <remarks>
+/// Counts are taken in <c>int</c> and means are formed from values pre-scaled by <c>1 / sqrt(count)</c>, so
+/// a narrow <typeparamref name="T"/> such as Half neither rounds a count above 2048 nor overflows a sum
+/// above 65504 (a 512 x 512 slice holds 262144 pixels).
+/// </remarks>
 internal static class SegmentationStructureStatistics
 {
     /// <summary>
@@ -35,20 +40,11 @@ internal static class SegmentationStructureStatistics
         var classIds = engine.Reshape(labels, new[] { spatial });
         var classIndex = classIds.Cast<int>();
 
-        // Pixel/voxel count of every class, and the probability each pixel/voxel gave its own class summed per class.
-        var counts = engine.TensorBinCount(classIndex, numClasses);
-        int[] areas = counts.ToArray();
+        // Pixel/voxel count of every class (exact, in int), and the probability each pixel/voxel gave its own class.
+        int[] areas = engine.TensorBinCount(classIndex, numClasses).ToArray();
         var probabilityByPixel = engine.TensorPermute(
             engine.Reshape(probabilities, new[] { numClasses, spatial }), new[] { 1, 0 });
         var assignedProbability = engine.TensorGatherClassValues(probabilityByPixel, classIds);
-        var confidenceSums = engine.TensorScatterAdd(
-            new Tensor<T>(new[] { numClasses }), classIndex, assignedProbability, 0);
-        var meanConfidence = engine.TensorDivide(
-            confidenceSums,
-            engine.TensorClampMin(counts.Cast<T>(), MathHelper.GetNumericOperations<T>().One));
-
-        // SegmentedStructure reports its statistics as double (shared by every medical model).
-        double[] meanConfidenceValues = meanConfidence.Cast<double>().ToArray();
 
         IEnumerable<int> classOrder = Enumerable.Range(0, numClasses);
         if (firstOccurrenceOrder)
@@ -59,6 +55,7 @@ internal static class SegmentationStructureStatistics
             classOrder = classOrder.OrderByDescending(c => areas[c] > 0 ? maxReversed[c] : int.MinValue);
         }
 
+        // SegmentedStructure reports its statistics as double (shared by every medical model).
         return classOrder
             .Where(c => areas[c] > 0 && c != skipClassId)
             .Select(c => new SegmentedStructure
@@ -66,8 +63,49 @@ internal static class SegmentationStructureStatistics
                 ClassId = c,
                 Name = $"Class_{c}",
                 VolumeOrArea = areas[c],
-                MeanConfidence = meanConfidenceValues[c],
+                MeanConfidence = ClassMeanAsDouble(assignedProbability, classIndex, c, areas[c]),
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// The number of non-zero entries of <paramref name="mask"/>, counted in <c>int</c>.
+    /// </summary>
+    /// <remarks>Summing a 0/1 mask in Half rounds every count above 2048 and overflows above 65504.</remarks>
+    public static int CountNonZero<T>(Tensor<T> mask)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var nonZero = engine.ScalarMinusTensor(numOps.One, engine.TensorEquals(mask, numOps.Zero));
+        return engine.TensorSum(nonZero.Cast<int>());
+    }
+
+    /// <summary>
+    /// The mean of <paramref name="values"/> over the <paramref name="count"/> positions where
+    /// <paramref name="mask"/> is non-zero, or zero when the mask is empty.
+    /// </summary>
+    /// <remarks>
+    /// Positions outside the mask are selected away, not multiplied by zero, so a NaN or infinite value
+    /// there cannot turn the mean into NaN. Each value is scaled by <c>1 / sqrt(count)</c> before the full
+    /// engine sum (accumulated in float for Half), so the sum stays near <c>sqrt(count)</c> instead of
+    /// <c>count</c> and cannot overflow a narrow <typeparamref name="T"/>.
+    /// </remarks>
+    public static T MaskedMean<T>(Tensor<T> values, Tensor<T> mask, int count)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (count <= 0) return numOps.Zero;
+
+        var engine = AiDotNetEngine.Current;
+        T scale = numOps.FromDouble(1.0 / Math.Sqrt(count));
+        var selected = engine.TensorWhere(mask,
+            engine.TensorMultiplyScalar(values, scale), engine.TensorFullLike(values, numOps.Zero));
+        return numOps.Multiply(engine.TensorSum(selected), scale);
+    }
+
+    /// <summary>The mean of <paramref name="assigned"/> over the pixels labelled <paramref name="classId"/>.</summary>
+    private static double ClassMeanAsDouble<T>(Tensor<T> assigned, Tensor<int> classIndex, int classId, int count)
+    {
+        var mask = AiDotNetEngine.Current.TensorEquals(classIndex, classId).Cast<T>();
+        return MathHelper.GetNumericOperations<T>().ToDouble(MaskedMean(assigned, mask, count));
     }
 }
