@@ -22587,3 +22587,5 @@ static AiDotNet.Kernels.CylindricalKernel<T>.WithRBF(int totalDims, int[]! angul
 *REMOVED*AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, double>! lengthScaleFunction, double variance = 1) -> void
 AiDotNet.Kernels.GibbsKernel<T>.GetLengthScale(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> T
 AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>! lengthScaleFunction, double variance = 1) -> void
+*REMOVED*AiDotNet.Kernels.RationalQuadraticKernel<T>.CalculateHyperparameterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Kernels.RationalQuadraticKernel<T>.CalculateHyperparameterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2) -> System.Collections.Generic.Dictionary<string!, T>!

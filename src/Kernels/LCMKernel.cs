@@ -325,12 +325,7 @@ public class LCMKernel<T> : IKernelFunction<T>
     /// </summary>
     private Vector<T> ExtractInput(Vector<T> extended)
     {
-        var result = new Vector<T>(extended.Length - 1);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = extended[i];
-        }
-        return result;
+        return extended.GetSubVector(0, extended.Length - 1);
     }
 
     /// <summary>
@@ -349,13 +344,7 @@ public class LCMKernel<T> : IKernelFunction<T>
         if (outputIndex < 0 || outputIndex >= _numOutputs)
             throw new ArgumentOutOfRangeException(nameof(outputIndex));
 
-        var extended = new Vector<T>(input.Length + 1);
-        for (int i = 0; i < input.Length; i++)
-        {
-            extended[i] = input[i];
-        }
-        extended[input.Length] = _numOps.FromDouble(outputIndex);
-        return extended;
+        return Vector<T>.Concatenate(input, Vector<T>.CreateDefault(1, _numOps.FromDouble(outputIndex)));
     }
 
     /// <summary>

@@ -107,13 +107,8 @@ public class SumKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        T sum = _numOps.Zero;
-        foreach (var kernel in _kernels)
-        {
-            sum = _numOps.Add(sum, kernel.Calculate(x1, x2));
-        }
-
-        return sum;
+        var values = new Vector<T>(_kernels.Select(kernel => kernel.Calculate(x1, x2)));
+        return AiDotNetEngine.Current.Sum(values);
     }
 
     /// <summary>

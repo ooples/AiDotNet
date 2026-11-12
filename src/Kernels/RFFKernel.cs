@@ -428,11 +428,6 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// </summary>
     private Vector<T> GetRow(Matrix<T> matrix, int row)
     {
-        var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            result[j] = matrix[row, j];
-        }
-        return result;
+        return matrix.GetRow(row);
     }
 }

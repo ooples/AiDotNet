@@ -143,6 +143,15 @@ public class MaternKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
+        // Closed forms for nu = 1/2, 3/2, 5/2 run generically in T with engine ops.
+        if (Math.Abs(_nu - 0.5) < 0.01 || Math.Abs(_nu - 1.5) < 0.01 || Math.Abs(_nu - 2.5) < 0.01)
+        {
+            var engine = AiDotNetEngine.Current;
+            var diffVector = engine.Subtract(x1, x2);
+            return ComputeClosedFormMatern(_numOps.Sqrt(engine.DotProduct(diffVector, diffVector)));
+        }
+
+        // General nu needs the modified Bessel function K_nu, which has no engine op yet.
         // Compute Euclidean distance
         double r = 0;
         for (int i = 0; i < x1.Length; i++)
@@ -161,6 +170,37 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <param name="r">The Euclidean distance.</param>
     /// <returns>The kernel value.</returns>
+    /// <summary>
+    /// Matérn closed forms for nu = 1/2, 3/2 and 5/2 (Rasmussen &amp; Williams 2006, eq. 4.16-4.17).
+    /// </summary>
+    private T ComputeClosedFormMatern(T r)
+    {
+        T variance = _numOps.FromDouble(_variance);
+        if (_numOps.LessThan(r, _numOps.FromDouble(1e-10)))
+        {
+            return variance;
+        }
+
+        T scaledR = _numOps.Divide(r, _numOps.FromDouble(_lengthScale));
+        if (Math.Abs(_nu - 0.5) < 0.01)
+        {
+            // Matérn 1/2 (exponential)
+            return _numOps.Multiply(variance, _numOps.Exp(_numOps.Negate(scaledR)));
+        }
+
+        if (Math.Abs(_nu - 1.5) < 0.01)
+        {
+            // Matérn 3/2
+            T sqrt3R = _numOps.Multiply(_numOps.FromDouble(Math.Sqrt(3.0)), scaledR);
+            return _numOps.Multiply(_numOps.Multiply(variance, _numOps.Add(_numOps.One, sqrt3R)), _numOps.Exp(_numOps.Negate(sqrt3R)));
+        }
+
+        // Matérn 5/2
+        T sqrt5R = _numOps.Multiply(_numOps.FromDouble(Math.Sqrt(5.0)), scaledR);
+        T polynomial = _numOps.Add(_numOps.Add(_numOps.One, sqrt5R), _numOps.Divide(_numOps.Multiply(sqrt5R, sqrt5R), _numOps.FromDouble(3.0)));
+        return _numOps.Multiply(_numOps.Multiply(variance, polynomial), _numOps.Exp(_numOps.Negate(sqrt5R)));
+    }
+
     private double ComputeMatern(double r)
     {
         if (r < 1e-10)
