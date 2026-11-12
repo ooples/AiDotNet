@@ -235,7 +235,7 @@ public partial class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
     /// <summary>
     /// The Sharpe ratio realized by an allocation over a return panel.
     /// </summary>
-    public double RealizedSharpe(Vector<T> weights, Tensor<T> assetReturns)
+    public T RealizedSharpe(Vector<T> weights, Tensor<T> assetReturns)
     {
         Guard.NotNull(weights);
         Guard.NotNull(assetReturns);
@@ -246,7 +246,7 @@ public partial class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
     /// <summary>
     /// The training loss <c>-ln(mu_p) + ln(sigma_p)</c> for an allocation over a return panel.
     /// </summary>
-    public double PortfolioLoss(Vector<T> weights, Tensor<T> assetReturns)
+    public T PortfolioLoss(Vector<T> weights, Tensor<T> assetReturns)
     {
         Guard.NotNull(weights);
         Guard.NotNull(assetReturns);
