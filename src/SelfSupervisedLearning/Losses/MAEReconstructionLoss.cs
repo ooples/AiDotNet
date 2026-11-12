@@ -69,59 +69,43 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
         if (original is null) throw new ArgumentNullException(nameof(original));
         if (mask is null) throw new ArgumentNullException(nameof(mask));
 
-        var batchSize = reconstructed.Shape[0];
-        var numPatches = reconstructed.Shape[1];
-        var patchDim = reconstructed.Shape[2];
-
-        T totalLoss = NumOps.Zero;
-        int maskedCount = 0;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int p = 0; p < numPatches; p++)
-            {
-                // Check if this patch is masked
-                if (!NumOps.GreaterThan(mask[b, p], NumOps.Zero))
-                    continue;
-
-                maskedCount++;
-
-                // Optionally normalize patches
-                T[] origPatch = new T[patchDim];
-                T[] reconPatch = new T[patchDim];
-
-                for (int d = 0; d < patchDim; d++)
-                {
-                    origPatch[d] = original[b, p, d];
-                    reconPatch[d] = reconstructed[b, p, d];
-                }
-
-                if (_perPatchNormalization)
-                {
-                    NormalizePatch(origPatch);
-                }
-
-                // Compute MSE for this patch
-                T patchLoss = NumOps.Zero;
-                for (int d = 0; d < patchDim; d++)
-                {
-                    var diff = NumOps.Subtract(reconPatch[d], origPatch[d]);
-                    patchLoss = NumOps.Add(patchLoss, NumOps.Multiply(diff, diff));
-                }
-
-                if (_normalize)
-                {
-                    patchLoss = NumOps.Divide(patchLoss, NumOps.FromDouble(patchDim));
-                }
-
-                totalLoss = NumOps.Add(totalLoss, patchLoss);
-            }
-        }
+        // Masked patches (mask > 0) and their MSE (optionally normalized targets)
+        var masked = Engine.TensorGreaterThan(mask, NumOps.Zero);
+        int maskedCount = Engine.TensorCountNonzero(masked);
 
         if (maskedCount == 0)
             return NumOps.Zero;
 
+        var patchLosses = MaskedPatchLosses(PatchDifferences(reconstructed, original), masked);
+        T totalLoss = Engine.TensorSum(patchLosses);
+
         return NumOps.Divide(totalLoss, NumOps.FromDouble(maskedCount));
+    }
+
+    /// <summary>
+    /// reconstructed - target for every patch, where the target is the original patch, per-patch
+    /// standardized when <c>perPatchNormalization</c> is set.
+    /// </summary>
+    private Tensor<T> PatchDifferences(Tensor<T> reconstructed, Tensor<T> original)
+    {
+        var target = _perPatchNormalization ? NormalizePatches(original) : original;
+        return Engine.TensorSubtract(reconstructed, target);
+    }
+
+    /// <summary>
+    /// Per-patch sum of squared differences ([batch, patches]), divided by patchDim when
+    /// <c>normalize</c> is set; patches outside the mask are selected to zero.
+    /// </summary>
+    private Tensor<T> MaskedPatchLosses(Tensor<T> diff, Tensor<T> masked)
+    {
+        var patchDim = diff.Shape[2];
+        var patchLosses = Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 2 }, keepDims: false);
+        if (_normalize)
+        {
+            patchLosses = Engine.TensorDivideScalar(patchLosses, NumOps.FromDouble(patchDim));
+        }
+
+        return Engine.TensorWhere(masked, patchLosses, new Tensor<T>(new[] { diff.Shape[0], diff.Shape[1] }));
     }
 
     /// <summary>
@@ -134,67 +118,29 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
         var numPatches = reconstructed.Shape[1];
         var patchDim = reconstructed.Shape[2];
 
-        var gradRecon = new T[batchSize * numPatches * patchDim];
-        T totalLoss = NumOps.Zero;
-        int maskedCount = 0;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int p = 0; p < numPatches; p++)
-            {
-                if (!NumOps.GreaterThan(mask[b, p], NumOps.Zero))
-                    continue;
-
-                maskedCount++;
-
-                T[] origPatch = new T[patchDim];
-                for (int d = 0; d < patchDim; d++)
-                {
-                    origPatch[d] = original[b, p, d];
-                }
-
-                if (_perPatchNormalization)
-                {
-                    NormalizePatch(origPatch);
-                }
-
-                T patchLoss = NumOps.Zero;
-                for (int d = 0; d < patchDim; d++)
-                {
-                    var diff = NumOps.Subtract(reconstructed[b, p, d], origPatch[d]);
-                    patchLoss = NumOps.Add(patchLoss, NumOps.Multiply(diff, diff));
-
-                    // Gradient: 2 * (recon - orig) / patchDim
-                    var grad = NumOps.Multiply(NumOps.FromDouble(2.0), diff);
-                    if (_normalize)
-                    {
-                        grad = NumOps.Divide(grad, NumOps.FromDouble(patchDim));
-                    }
-
-                    gradRecon[(b * numPatches + p) * patchDim + d] = grad;
-                }
-
-                if (_normalize)
-                {
-                    patchLoss = NumOps.Divide(patchLoss, NumOps.FromDouble(patchDim));
-                }
-
-                totalLoss = NumOps.Add(totalLoss, patchLoss);
-            }
-        }
+        var masked = Engine.TensorGreaterThan(mask, NumOps.Zero);
+        int maskedCount = Engine.TensorCountNonzero(masked);
 
         if (maskedCount == 0)
-            return (NumOps.Zero, new Tensor<T>(gradRecon, [batchSize, numPatches, patchDim]));
+            return (NumOps.Zero, new Tensor<T>(new[] { batchSize, numPatches, patchDim }));
+
+        var diff = PatchDifferences(reconstructed, original);
+        T totalLoss = Engine.TensorSum(MaskedPatchLosses(diff, masked));
+
+        // Gradient: 2 * (recon - orig) / patchDim on masked patches, zero elsewhere
+        var grad = Engine.TensorMultiplyScalar(diff, NumOps.FromDouble(2.0));
+        if (_normalize)
+        {
+            grad = Engine.TensorDivideScalar(grad, NumOps.FromDouble(patchDim));
+        }
+
+        var maskedElements = Engine.TensorTile(masked.Reshape(batchSize, numPatches, 1), new[] { 1, 1, patchDim });
+        grad = Engine.TensorWhere(maskedElements, grad, new Tensor<T>(new[] { batchSize, numPatches, patchDim }));
 
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(maskedCount));
         var scale = NumOps.FromDouble(1.0 / maskedCount);
 
-        for (int i = 0; i < gradRecon.Length; i++)
-        {
-            gradRecon[i] = NumOps.Multiply(gradRecon[i], scale);
-        }
-
-        return (avgLoss, new Tensor<T>(gradRecon, [batchSize, numPatches, patchDim]));
+        return (avgLoss, Engine.TensorMultiplyScalar(grad, scale));
     }
 
     /// <summary>
@@ -203,55 +149,17 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
     public T[] ComputePerSampleLoss(Tensor<T> reconstructed, Tensor<T> original, Tensor<T> mask)
     {
         var batchSize = reconstructed.Shape[0];
-        var numPatches = reconstructed.Shape[1];
-        var patchDim = reconstructed.Shape[2];
 
-        var losses = new T[batchSize];
+        var masked = Engine.TensorGreaterThan(mask, NumOps.Zero);
+        var patchLosses = MaskedPatchLosses(PatchDifferences(reconstructed, original), masked);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            T sampleLoss = NumOps.Zero;
-            int sampleMaskedCount = 0;
+        // Mean over each sample's masked patches; zero for a sample with none
+        var sampleLoss = Engine.ReduceSum(patchLosses, new[] { 1 }, keepDims: false);
+        var sampleMaskedCount = Engine.ReduceSum(masked, new[] { 1 }, keepDims: false);
+        var losses = Engine.TensorWhere(sampleMaskedCount,
+            Engine.TensorDivide(sampleLoss, sampleMaskedCount), new Tensor<T>(new[] { batchSize }));
 
-            for (int p = 0; p < numPatches; p++)
-            {
-                if (!NumOps.GreaterThan(mask[b, p], NumOps.Zero))
-                    continue;
-
-                sampleMaskedCount++;
-
-                T[] origPatch = new T[patchDim];
-                for (int d = 0; d < patchDim; d++)
-                {
-                    origPatch[d] = original[b, p, d];
-                }
-
-                if (_perPatchNormalization)
-                {
-                    NormalizePatch(origPatch);
-                }
-
-                T patchLoss = NumOps.Zero;
-                for (int d = 0; d < patchDim; d++)
-                {
-                    var diff = NumOps.Subtract(reconstructed[b, p, d], origPatch[d]);
-                    patchLoss = NumOps.Add(patchLoss, NumOps.Multiply(diff, diff));
-                }
-
-                if (_normalize)
-                {
-                    patchLoss = NumOps.Divide(patchLoss, NumOps.FromDouble(patchDim));
-                }
-
-                sampleLoss = NumOps.Add(sampleLoss, patchLoss);
-            }
-
-            losses[b] = sampleMaskedCount > 0
-                ? NumOps.Divide(sampleLoss, NumOps.FromDouble(sampleMaskedCount))
-                : NumOps.Zero;
-        }
-
-        return losses;
+        return losses.ToArray();
     }
 
     /// <summary>
@@ -286,31 +194,17 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
         return new Tensor<T>(mask, [batchSize, numPatches]);
     }
 
-    private void NormalizePatch(T[] patch)
+    private Tensor<T> NormalizePatches(Tensor<T> patches)
     {
-        // Compute mean
-        T mean = NumOps.Zero;
-        for (int i = 0; i < patch.Length; i++)
-        {
-            mean = NumOps.Add(mean, patch[i]);
-        }
-        mean = NumOps.Divide(mean, NumOps.FromDouble(patch.Length));
+        // Per-patch zero mean, unit std (population variance + 1e-6) over the last axis
+        var patchDim = NumOps.FromDouble(patches.Shape[2]);
+        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(patches, new[] { 2 }, keepDims: true), patchDim);
+        var centered = Engine.TensorSubtract(patches, mean);
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorSquare(centered), new[] { 2 }, keepDims: true), patchDim);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-6)));
 
-        // Compute std
-        T variance = NumOps.Zero;
-        for (int i = 0; i < patch.Length; i++)
-        {
-            var diff = NumOps.Subtract(patch[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(patch.Length));
-        var std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-6)));
-
-        // Normalize in-place
-        for (int i = 0; i < patch.Length; i++)
-        {
-            patch[i] = NumOps.Divide(NumOps.Subtract(patch[i], mean), std);
-        }
+        return Engine.TensorDivide(centered, std);
     }
 
     /// <summary>
@@ -391,7 +285,7 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
         var target = view2;
         if (_perPatchNormalization)
         {
-            // Per-patch zero mean, unit standard deviation -- the same transform NormalizePatch
+            // Per-patch zero mean, unit standard deviation -- the same transform NormalizePatches
             // applies element-wise in the masked path, expressed over the last axis so it stays
             // differentiable.
             var mean = Engine.TensorDivideScalar(
