@@ -22585,3 +22585,7 @@ AiDotNet.MetaLearning.Options.SparseMAMLOptions<T, TInput, TOutput>.GateFunction
 AiDotNet.MetaLearning.Options.SparseMAMLGateFunction
 AiDotNet.MetaLearning.Options.SparseMAMLGateFunction.Step = 0 -> AiDotNet.MetaLearning.Options.SparseMAMLGateFunction
 AiDotNet.MetaLearning.Options.SparseMAMLGateFunction.Sigmoid = 1 -> AiDotNet.MetaLearning.Options.SparseMAMLGateFunction
+*REMOVED*AiDotNet.MetaLearning.Options.OMLOptions<T, TInput, TOutput>.RepresentationRegWeight.get -> double
+*REMOVED*AiDotNet.MetaLearning.Options.OMLOptions<T, TInput, TOutput>.RepresentationRegWeight.set -> void
+AiDotNet.MetaLearning.Options.OMLOptions<T, TInput, TOutput>.OnlineInnerLoop.get -> bool
+AiDotNet.MetaLearning.Options.OMLOptions<T, TInput, TOutput>.OnlineInnerLoop.set -> void

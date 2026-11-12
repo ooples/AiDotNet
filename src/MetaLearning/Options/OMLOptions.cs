@@ -24,7 +24,8 @@ public class OMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <inheritdoc/>
     public double OuterLearningRate { get; set; } = 0.001;
     /// <inheritdoc/>
-    public int AdaptationSteps { get; set; } = 5;
+    /// <value>Passes over the support trajectory; 1, the paper's single online pass, by default.</value>
+    public int AdaptationSteps { get; set; } = 1;
     /// <inheritdoc/>
     public int MetaBatchSize { get; set; } = 4;
     /// <inheritdoc/>
@@ -68,16 +69,16 @@ public class OMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public double PlnFraction { get; set; } = 0.3;
 
     /// <summary>
-    /// L1 sparsity penalty on the RLN parameter activations to encourage
-    /// non-interfering, sparse representations. Default: 0.01.
+    /// Optional L1 penalty on the RLN parameters, added to the meta-loss. The paper adds none: sparse
+    /// representations emerge from the online meta-objective itself. Default: 0.
     /// </summary>
-    public double SparsityPenalty { get; set; } = 0.01;
+    public double SparsityPenalty { get; set; } = 0.0;
 
     /// <summary>
-    /// L2 regularization weight on RLN parameter changes to prevent catastrophic
-    /// forgetting of the learned representation. Default: 0.001.
+    /// Whether the inner loop is online, one update per support example in order (the paper's
+    /// Algorithm 1), rather than one full-batch update per step. Default: true.
     /// </summary>
-    public double RepresentationRegWeight { get; set; } = 0.001;
+    public bool OnlineInnerLoop { get; set; } = true;
 
     /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
     /// <param name="metaModel">The model whose parameters are meta-learned.</param>
@@ -87,7 +88,7 @@ public class OMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <inheritdoc/>
     public bool IsValid() =>
         MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 &&
-        PlnFraction > 0 && PlnFraction < 1 && SparsityPenalty >= 0 && RepresentationRegWeight >= 0;
+        PlnFraction > 0 && PlnFraction < 1 && SparsityPenalty >= 0 && AdaptationSteps > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new OMLOptions<T, TInput, TOutput>(MetaModel)
     {
@@ -97,7 +98,6 @@ public class OMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
         GradientClipThreshold = GradientClipThreshold, RandomSeed = RandomSeed, EvaluationTasks = EvaluationTasks,
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
-        PlnFraction = PlnFraction, SparsityPenalty = SparsityPenalty,
-        RepresentationRegWeight = RepresentationRegWeight
+        PlnFraction = PlnFraction, SparsityPenalty = SparsityPenalty, OnlineInnerLoop = OnlineInnerLoop
     };
 }
