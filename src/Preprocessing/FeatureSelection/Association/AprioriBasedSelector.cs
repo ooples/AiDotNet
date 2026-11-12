@@ -82,8 +82,11 @@ public class AprioriBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
         // Discretize features: bin = min(floor((x - min) / (max - min + 1e-10) * nBins), nBins - 1)
         var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(X), new[] { 1, p });
-        var range = engine.TensorAddScalar(
-            engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(X), new[] { 1, p }), min), NumOps.FromDouble(1e-10));
+        // A constant column (spread 0) bins at 0 as in master; dividing by 1 there instead of 1e-10 gives the same
+        // bin and avoids 0 / 0 in T types such as Half, where 1e-10 rounds to 0.
+        var spread = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(X), new[] { 1, p }), min);
+        var range = engine.TensorWhere(engine.TensorGreaterThan(spread, NumOps.Zero),
+            engine.TensorAddScalar(spread, NumOps.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
         var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(X, min), range), NumOps.FromDouble(_nBins));
         var bins = engine.TensorMin(engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
         var oneHot = PreprocessingTensorOps.OneHotBins(bins, _nBins);
@@ -93,8 +96,11 @@ public class AprioriBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         double targetSupport = (double)nPositive / n;
 
         // Per (feature, bin): transactions with the value and those that are also positive
-        var featureCount = engine.ReduceSum(oneHot, new[] { 0 }, false);
-        var jointCount = engine.Reshape(engine.TensorMatMul(positive, oneHot), new[] { p * _nBins });
+        // Counted as int: a sum of 0/1 entries in T stops counting at 2048 for Half (2048 + 1 rounds back to 2048)
+        var oneHotCounts = oneHot.Cast<int>();
+        var positiveRows = engine.TensorBroadcastTo(engine.Reshape(positive, new[] { n, 1 }).Cast<int>(), new[] { n, p * _nBins });
+        var featureCount = engine.ReduceSum(oneHotCounts, new[] { 0 }, false).Cast<T>();
+        var jointCount = engine.ReduceSum(engine.TensorMultiply(oneHotCounts, positiveRows), new[] { 0 }, false).Cast<T>();
 
         var support = engine.TensorDivideScalar(jointCount, count);
         var confidence = engine.TensorDivide(jointCount, featureCount);

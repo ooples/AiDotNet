@@ -83,7 +83,9 @@ public class FrequentPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         // Frequent 1-itemsets
         T count = NumOps.FromDouble(n);
-        var support1 = engine.TensorDivideScalar(engine.ReduceSum(positiveItems, new[] { 0 }, false), count);
+        // Counted as int: a sum of 0/1 entries in T stops counting at 2048 for Half (2048 + 1 rounds back to 2048)
+        var support1 = engine.TensorDivideScalar(
+            engine.ReduceSum(positiveItems.Cast<int>(), new[] { 0 }, false).Cast<T>(), count);
         var frequent1 = PreprocessingTensorOps.AtLeast(support1, NumOps.FromDouble(_minSupport));
         var freq1Keys = PreprocessingTensorOps.MaskPositions(frequent1).ToList();
 
@@ -116,13 +118,11 @@ public class FrequentPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 }
             }
 
-            // score += count / n / size for every frequent pattern
-            var denominators = new int[sizes];
-            for (int s = 0; s < sizes; s++)
-                denominators[s] = n * (s + 2);
-            var sizeScores = engine.TensorDivide(
-                new Tensor<int>(countSums, new[] { sizes, p }).Cast<T>(),
-                new Tensor<int>(denominators, new[] { sizes, 1 }).Cast<T>());
+            // score += count / n / size for every frequent pattern. The ratio is formed from the int counts: the
+            // summed counts and n * size overflow T types such as Half (max 65504), giving inf / inf = NaN.
+            var sizeScores = new Tensor<T>(Enumerable.Range(0, sizes * p)
+                .Select(k => NumOps.FromDouble((double)countSums[k] / ((double)n * (k / p + 2))))
+                .ToArray(), new[] { sizes, p });
             scores = engine.TensorAdd(scores, engine.ReduceSum(sizeScores, new[] { 0 }, false));
         }
 
