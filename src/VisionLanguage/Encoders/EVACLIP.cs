@@ -211,11 +211,8 @@ public partial class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     {
         var ie = EncodeImage(image);
         var te = EncodeTexts(labels);
-        var logits = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
-        for (int i = 0; i < labels.Length; i++)
-            logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(ie, te[i])) / temp);
-        var probs = Softmax(logits);
+        var logits = Engine.TensorDivideScalar(EmbeddingScores<T>.CosineToEach(Engine, ie, te), NumOps.FromDouble(_options.Temperature));
+        T[] probs = Softmax(logits).ToArray();
         var r = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
             r[labels[i]] = probs[i];

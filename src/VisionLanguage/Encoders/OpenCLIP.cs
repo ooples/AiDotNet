@@ -267,21 +267,11 @@ public partial class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisio
     {
         var imageEmb = EncodeImage(image);
         var textEmbs = EncodeTexts(labels);
-
-        // Compute logits: similarity / temperature
-        var logits = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double sim = NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i]));
-            logits[i] = NumOps.FromDouble(sim / temp);
-        }
-
-        var probs = Softmax(logits);
+        var logits = Engine.TensorDivideScalar(EmbeddingScores<T>.CosineToEach(Engine, imageEmb, textEmbs), NumOps.FromDouble(_options.Temperature));
+        T[] probs = Softmax(logits).ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
             result[labels[i]] = probs[i];
-
         return result;
     }
 

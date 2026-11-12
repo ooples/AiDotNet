@@ -206,13 +206,8 @@ public partial class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
     {
         var imageEmb = EncodeImage(image);
         var textEmbs = EncodeTexts(labels);
-        var logits = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
-        for (int i = 0; i < labels.Length; i++)
-            logits[i] = NumOps.FromDouble(
-                NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i])) / temp
-            );
-        var probs = Softmax(logits);
+        var logits = Engine.TensorDivideScalar(EmbeddingScores<T>.CosineToEach(Engine, imageEmb, textEmbs), NumOps.FromDouble(_options.Temperature));
+        T[] probs = Softmax(logits).ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
             result[labels[i]] = probs[i];

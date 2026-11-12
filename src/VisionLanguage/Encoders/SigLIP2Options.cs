@@ -184,7 +184,7 @@ public class SigLIP2Options : ContrastiveEncoderOptions
         TextEmbeddingDim = 768;
         ProjectionDim = 768;
         PatchSize = 16;
-        Temperature = 1.0; // SigLIP family uses higher temperature with sigmoid loss
+        Temperature = 0.1; // 1 / t with the paper's initial t = 10 (Zhai et al., 2023, Sec. 3.3)
         VocabSize = 250000; // Multilingual SentencePiece vocabulary
         MaxSequenceLength = 64; // Longer for multilingual text
         NumVisionLayers = 12;

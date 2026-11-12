@@ -220,14 +220,8 @@ public partial class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
     {
         var imageEmb = EncodeImage(image);
         var textEmbs = EncodeTexts(labels);
-        var logits = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double sim = NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i]));
-            logits[i] = NumOps.FromDouble(sim / temp);
-        }
-        var probs = Softmax(logits);
+        var logits = Engine.TensorDivideScalar(EmbeddingScores<T>.CosineToEach(Engine, imageEmb, textEmbs), NumOps.FromDouble(_options.Temperature));
+        T[] probs = Softmax(logits).ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
             result[labels[i]] = probs[i];

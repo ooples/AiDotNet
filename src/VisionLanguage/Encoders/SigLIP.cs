@@ -257,29 +257,16 @@ public partial class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionL
         var imageEmb = EncodeImage(image);
         var textEmbs = EncodeTexts(labels);
 
-        // SigLIP uses sigmoid scoring: sigmoid(sim/t + b) per pair
-        var scores = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
-        double bias = _options.SigmoidBias;
-
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double sim = NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i]));
-            double logit = sim / temp + bias;
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
-        }
-
-        // Normalize to probabilities
-        double total = 0;
-        for (int i = 0; i < scores.Length; i++)
-            total += NumOps.ToDouble(scores[i]);
-
+        // SigLIP scores every image-text pair on its own: sigmoid(sim / t + b) is the probability that the
+        // pair matches (Zhai et al., 2023), so the scores are not renormalized across the labels.
+        var logits = Engine.TensorAddScalar(
+            Engine.TensorDivideScalar(
+                EmbeddingScores<T>.CosineToEach(Engine, imageEmb, textEmbs), NumOps.FromDouble(_options.Temperature)),
+            NumOps.FromDouble(_options.SigmoidBias));
+        T[] probs = Engine.TensorSigmoid(logits).ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
-        {
-            double prob = total > 1e-8 ? NumOps.ToDouble(scores[i]) / total : 1.0 / labels.Length;
-            result[labels[i]] = NumOps.FromDouble(prob);
-        }
+            result[labels[i]] = probs[i];
 
         return result;
     }
