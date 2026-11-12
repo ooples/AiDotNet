@@ -158,7 +158,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // per-ordered-pair strength (max |partial correlation|). This is PCMCI's momentary
         // conditional-independence step; it yields a directed strength for i→j separate from
         // j→i, which the orientation phase turns into edges.
-        var linkStrength = new Matrix<T>(d, d);
+        var linkStrength = new Dictionary<int, double>();
         for (int j = 0; j < d; j++)
         {
             foreach (var (pVar, pLag) in parents[j])
@@ -175,8 +175,8 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (pValue <= _alpha)
                 {
                     double absPartCorr = Math.Abs(partCorr);
-                    if (absPartCorr > NumOps.ToDouble(linkStrength[pVar, j]))
-                        linkStrength[pVar, j] = NumOps.FromDouble(absPartCorr);
+                    if (absPartCorr > Strength(linkStrength, pVar * d + j))
+                        linkStrength[pVar * d + j] = absPartCorr;
                 }
             }
         }
@@ -187,10 +187,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // graph, fall back to the strongest UNCONDITIONAL lagged cross-correlation per pair
         // (single direction, past→present), preserving a meaningful, acyclic skeleton. This
         // only triggers when no link survived conditioning, so it never affects stochastic data.
-        bool hasEdges = false;
-        for (int i = 0; i < d && !hasEdges; i++)
-            for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && NumOps.ToDouble(linkStrength[i, j]) > 0.0) hasEdges = true;
+        bool hasEdges = linkStrength.Any(link => link.Key / d != link.Key % d && link.Value > 0.0);
 
         if (!hasEdges)
         {
@@ -209,7 +206,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                         if (cji > best) { best = cji; bi = j; bj = i; }
                     }
                     if (best > _correlationThreshold)
-                        linkStrength[bi, bj] = NumOps.FromDouble(best);
+                        linkStrength[bi * d + bj] = best;
                 }
             }
         }
@@ -224,13 +221,13 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // NON-ancestorship at both ends, carries no direction, and therefore is excluded
         // from the directed-portion acyclicity check and never manifests as a spurious
         // asymmetric bidirectional (directed-cycle) edge.
-        var result = new Matrix<T>(d, d);
+        var result = new Dictionary<int, double>();
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
-                double sij = NumOps.ToDouble(linkStrength[i, j]);
-                double sji = NumOps.ToDouble(linkStrength[j, i]);
+                double sij = Strength(linkStrength, i * d + j);
+                double sji = Strength(linkStrength, j * d + i);
                 bool hasIJ = sij > _correlationThreshold;
                 bool hasJI = sji > _correlationThreshold;
 
@@ -239,23 +236,29 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (hasIJ && hasJI)
                 {
                     // Both directions survive → bidirected, symmetric weight.
-                    T sym = NumOps.FromDouble(Math.Max(sij, sji));
-                    result[i, j] = sym;
-                    result[j, i] = sym;
+                    double sym = Math.Max(sij, sji);
+                    result[i * d + j] = sym;
+                    result[j * d + i] = sym;
                 }
                 else if (hasIJ)
                 {
-                    result[i, j] = linkStrength[i, j];
+                    result[i * d + j] = sij;
                 }
                 else
                 {
-                    result[j, i] = linkStrength[j, i];
+                    result[j * d + i] = sji;
                 }
             }
         }
 
-        return result;
+        return CausalTensorHelpers.FromStatistics<T>(d, d, result);
     }
+
+    /// <summary>
+    /// The recorded strength of a link (row-major position), 0 when none was recorded.
+    /// </summary>
+    private static double Strength(Dictionary<int, double> links, int position)
+        => links.TryGetValue(position, out double strength) ? strength : 0.0;
 
     /// <summary>
     /// Partial correlation between target(t) and source(t-lag), conditioned on a set of
@@ -267,124 +270,24 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         int n = data.Rows;
         int offset = n - effectiveN;
+        var x = Tensor<T>.FromMatrix(data);
 
-        var targetVals = new Vector<T>(effectiveN);
-        var sourceVals = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            targetVals[t] = data[offset + t, target];
-            sourceVals[t] = data[offset + t - lag, source]; // offset = MaxLag ≥ lag ⇒ index ≥ 0
-        }
+        var targetVals = LaggedSeries(x, target, 0, offset, effectiveN);
+        var sourceVals = LaggedSeries(x, source, lag, offset, effectiveN); // offset = MaxLag ≥ lag ⇒ index ≥ 0
 
         if (condSet.Count == 0)
-            return PearsonCorrelation(sourceVals, targetVals, effectiveN);
+            return SeriesCorrelation(sourceVals, targetVals);
 
-        int numCond = condSet.Count;
-        var condMatrix = new Matrix<T>(effectiveN, numCond);
-        int col = 0;
-        foreach (var (cVar, cLag) in condSet)
-        {
-            for (int t = 0; t < effectiveN; t++)
-            {
-                int tIdx = offset + t - cLag;
-                condMatrix[t, col] = (tIdx >= 0 && tIdx < n) ? data[tIdx, cVar] : NumOps.Zero;
-            }
-            col++;
-        }
+        // Conditioning columns x_k[t - cLag]; rows outside the data are 0
+        var condMatrix = Engine.TensorConcatenate(condSet
+            .Select(c => LaggedSeries(x, c.var, c.lag, offset, effectiveN).Reshape(new[] { effectiveN, 1 }))
+            .ToArray(), 1);
 
-        var residTarget = OLSResiduals(condMatrix, targetVals, effectiveN, numCond);
-        var residSource = OLSResiduals(condMatrix, sourceVals, effectiveN, numCond);
-        return PearsonCorrelation(residSource, residTarget, effectiveN);
-    }
-
-    /// <summary>
-    /// OLS residuals: y - Z (Z'Z)^{-1} Z'y via the (ridge-stabilized) normal equations, computed on
-    /// MEAN-CENTRED columns so the fit carries an implicit intercept.
-    /// </summary>
-    /// <remarks>
-    /// Centring is not cosmetic. Accumulating raw Z and y forces the regression through the origin,
-    /// and with non-zero means the omitted constant stays in the residuals -- in residTarget and
-    /// residSource alike. PearsonCorrelation's own centring cannot remove it, because the two
-    /// residual vectors remain correlated THROUGH that shared constant, so every partial correlation
-    /// is biased. Nothing else in this file centres the input, so this affected every PC1 and MCI
-    /// test run on data with non-zero means. Centring the columns is equivalent to fitting an
-    /// intercept and leaves the residuals unchanged for already-centred data.
-    /// </remarks>
-    private Vector<T> OLSResiduals(Matrix<T> Z, Vector<T> y, int n, int p)
-    {
-        var zMean = new T[p];
-        for (int i = 0; i < p; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int t = 0; t < n; t++) sum = NumOps.Add(sum, Z[t, i]);
-            zMean[i] = NumOps.Divide(sum, NumOps.FromDouble(n));
-        }
-
-        T ySum = NumOps.Zero;
-        for (int t = 0; t < n; t++) ySum = NumOps.Add(ySum, y[t]);
-        T yMean = NumOps.Divide(ySum, NumOps.FromDouble(n));
-
-        var ZtZ = new Matrix<T>(p, p);
-        var Zty = new Vector<T>(p);
-
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = i; j < p; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int t = 0; t < n; t++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(
-                        NumOps.Subtract(Z[t, i], zMean[i]), NumOps.Subtract(Z[t, j], zMean[j])));
-                ZtZ[i, j] = sum;
-                ZtZ[j, i] = sum;
-            }
-
-            T sumZy = NumOps.Zero;
-            for (int t = 0; t < n; t++)
-                sumZy = NumOps.Add(sumZy, NumOps.Multiply(
-                    NumOps.Subtract(Z[t, i], zMean[i]), NumOps.Subtract(y[t], yMean)));
-            Zty[i] = sumZy;
-        }
-
-        T ridge = NumOps.FromDouble(1e-10);
-        for (int i = 0; i < p; i++)
-            ZtZ[i, i] = NumOps.Add(ZtZ[i, i], ridge);
-
-        // Cholesky rather than LU: the ridge-adjusted normal matrix is symmetric positive-definite by
-        // construction, which is the case Cholesky exists for and solves in half the work.
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Cholesky);
-
-        // The residual of the CENTRED fit: (y - yMean) - sum_j beta_j * (Z_j - zMean_j). That is the
-        // residual of an intercept-carrying regression, since the fitted intercept is exactly
-        // yMean - sum_j beta_j * zMean_j and cancels here.
-        var residuals = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-        {
-            T pred = NumOps.Zero;
-            for (int j = 0; j < p; j++)
-                pred = NumOps.Add(pred,
-                    NumOps.Multiply(NumOps.Subtract(Z[t, j], zMean[j]), beta[j]));
-            residuals[t] = NumOps.Subtract(NumOps.Subtract(y[t], yMean), pred);
-        }
-
-        return residuals;
-    }
-
-    /// <summary>Pearson correlation between two vectors (0 when either is (near-)constant).</summary>
-    private double PearsonCorrelation(Vector<T> x, Vector<T> y, int n)
-    {
-        double mx = 0, my = 0;
-        for (int i = 0; i < n; i++) { mx += NumOps.ToDouble(x[i]); my += NumOps.ToDouble(y[i]); }
-        mx /= n; my /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = NumOps.ToDouble(x[i]) - mx, dy = NumOps.ToDouble(y[i]) - my;
-            sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        // Residuals of the CENTRED fit with ridge 1e-10. Cholesky rather than LU: the ridge-adjusted
+        // normal matrix is symmetric positive-definite by construction.
+        var residTarget = OlsResidualSeries(condMatrix, targetVals, true, 1e-10, MatrixDecompositionType.Cholesky);
+        var residSource = OlsResidualSeries(condMatrix, sourceVals, true, 1e-10, MatrixDecompositionType.Cholesky);
+        return SeriesCorrelation(residSource, residTarget);
     }
 
     private static double FisherZPValue(double r, int n, int condSetSize)
