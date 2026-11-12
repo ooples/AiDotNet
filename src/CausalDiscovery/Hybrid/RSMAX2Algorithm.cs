@@ -204,88 +204,26 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
         var residI = Residualize(data, i, condSet, n);
         var residJ = Residualize(data, j, condSet, n);
 
-        double meanI = residI.Average();
-        double meanJ = residJ.Average();
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int k = 0; k < n; k++)
-        {
-            double di = residI[k] - meanI;
-            double dj = residJ[k] - meanJ;
-            sxy += di * dj;
-            sxx += di * di;
-            syy += dj * dj;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return NumOps.ToDouble(CausalTensorHelpers.PearsonCorrelation(residI, residJ));
     }
 
-    private double[] Residualize(Matrix<T> data, int target, List<int> predictors, int n)
+    private Tensor<T> Residualize(Matrix<T> data, int target, List<int> predictors, int n)
     {
-        var residuals = new double[n];
-        var means = new double[predictors.Count + 1];
-
-        // Compute means
-        for (int i = 0; i < n; i++)
-        {
-            means[0] += NumOps.ToDouble(data[i, target]);
-            for (int j = 0; j < predictors.Count; j++)
-                means[j + 1] += NumOps.ToDouble(data[i, predictors[j]]);
-        }
-        for (int j = 0; j <= predictors.Count; j++) means[j] /= n;
+        var y = Engine.GetColumn(data, target).AsTensor();
+        var centeredY = Engine.TensorSubtractScalar(y, Engine.TensorMean(y));
 
         // Simple OLS via normal equations
         if (predictors.Count == 1)
         {
-            double cov = 0, varX = 0;
-            int pred = predictors[0];
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, pred]) - means[1];
-                double dy = NumOps.ToDouble(data[i, target]) - means[0];
-                cov += dx * dy;
-                varX += dx * dx;
-            }
-            double beta = varX > 1e-10 ? cov / varX : 0;
-            for (int i = 0; i < n; i++)
-                residuals[i] = NumOps.ToDouble(data[i, target]) - means[0] -
-                               beta * (NumOps.ToDouble(data[i, pred]) - means[1]);
-        }
-        else
-        {
-            // Multi-predictor OLS via normal equations
-            int p = predictors.Count;
-            var XtX = new double[p, p];
-            var Xty = new double[p];
-            var dx = new double[p];
-            for (int i = 0; i < n; i++)
-            {
-                double dy = NumOps.ToDouble(data[i, target]) - means[0];
-                for (int j = 0; j < p; j++)
-                    dx[j] = NumOps.ToDouble(data[i, predictors[j]]) - means[j + 1];
-                for (int a = 0; a < p; a++)
-                {
-                    Xty[a] += dx[a] * dy;
-                    for (int b = a; b < p; b++)
-                        XtX[a, b] += dx[a] * dx[b];
-                }
-            }
-            for (int a = 0; a < p; a++)
-            {
-                XtX[a, a] += 1e-10;
-                for (int b = a + 1; b < p; b++)
-                    XtX[b, a] = XtX[a, b];
-            }
-            var beta = SolveSmallSystem(XtX, Xty, p);
-            for (int i = 0; i < n; i++)
-            {
-                residuals[i] = NumOps.ToDouble(data[i, target]) - means[0];
-                for (int j = 0; j < p; j++)
-                    residuals[i] -= beta[j] * (NumOps.ToDouble(data[i, predictors[j]]) - means[j + 1]);
-            }
+            var x = Engine.GetColumn(data, predictors[0]).AsTensor();
+            T beta = CausalTensorHelpers.RegressionSlope(data, predictors[0], target);
+            return Engine.TensorSubtract(centeredY,
+                Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(x, Engine.TensorMean(x)), beta));
         }
 
-        return residuals;
+        // Multi-predictor OLS via normal equations on centered columns (ridge 1e-10)
+        var (_, residual) = FitCenteredRegression(Tensor<T>.FromMatrix(data), target, predictors.ToArray());
+        return residual;
     }
 
     private static bool WouldCreateCycle(HashSet<int>[] parents, int from, int to)
@@ -308,31 +246,16 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
 
     private Matrix<T> BuildWeightedMatrix(Matrix<T> data, HashSet<int>[] parentSets, int d, int n)
     {
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, T>();
         for (int child = 0; child < d; child++)
         {
             foreach (int parent in parentSets[child])
             {
-                double meanP = 0, meanC = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    meanP += NumOps.ToDouble(data[i, parent]);
-                    meanC += NumOps.ToDouble(data[i, child]);
-                }
-                meanP /= n; meanC /= n;
-
-                double cov = 0, varP = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double dp = NumOps.ToDouble(data[i, parent]) - meanP;
-                    cov += dp * (NumOps.ToDouble(data[i, child]) - meanC);
-                    varP += dp * dp;
-                }
-
-                W[parent, child] = NumOps.FromDouble(varP > 1e-10 ? cov / varP : 0);
+                weights[parent * d + child] = CausalTensorHelpers.RegressionSlope(data, parent, child);
             }
         }
-        return W;
+
+        return CausalTensorHelpers.FromValues(d, d, weights);
     }
 
     private static double NormalCDF(double x)
