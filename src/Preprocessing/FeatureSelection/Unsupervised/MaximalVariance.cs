@@ -27,14 +27,14 @@ public class MaximalVariance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFix
     private readonly int _nFeaturesToSelect;
     private readonly bool _normalize;
 
-    private double[]? _variances;
+    private Vector<T>? _variances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool Normalize => _normalize;
-    public double[]? Variances => _variances;
+    public Vector<T>? Variances => _variances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -60,43 +60,27 @@ public class MaximalVariance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFix
         int n = data.Rows;
         int p = data.Columns;
 
-        _variances = new double[p];
+        // Population mean and variance of every column
+        var x = Tensor<T>.FromMatrix(data);
+        T count = NumOps.FromDouble(n);
+        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(x, new[] { 0 }, false), count);
+        var variance = Engine.TensorDivideScalar(
+            SelectorTensorOps.ColumnSumOfSquares(SelectorTensorOps.CenterColumns(x)), count);
 
-        for (int j = 0; j < p; j++)
+        var scores = variance;
+        if (_normalize)
         {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            variance /= n;
-
-            if (_normalize && mean != 0)
-            {
-                // Coefficient of variation (relative variance)
-                _variances[j] = Math.Sqrt(variance) / Math.Abs(mean);
-            }
-            else
-            {
-                _variances[j] = variance;
-            }
+            // Coefficient of variation (relative variance) where the mean is non-zero
+            var nonZeroMean = Engine.TensorNotEquals(mean, NumOps.Zero);
+            var absMean = Engine.TensorAbs(mean);
+            var safeAbsMean = Engine.TensorWhere(nonZeroMean, absMean, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+            scores = Engine.TensorWhere(nonZeroMean, Engine.TensorDivide(Engine.TensorSqrt(variance), safeAbsMean), variance);
         }
 
+        _variances = scores.ToVector();
+
         // Select top features by variance
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _variances
-            .Select((v, idx) => (Variance: v, Index: idx))
-            .OrderByDescending(x => x.Variance)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -107,15 +91,7 @@ public class MaximalVariance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFix
         if (_selectedIndices is null)
             throw new InvalidOperationException("MaximalVariance has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
