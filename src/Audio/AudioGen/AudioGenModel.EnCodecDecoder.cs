@@ -8,17 +8,17 @@ namespace AiDotNet.Audio.AudioGen;
 public partial class AudioGenModel<T>
 {
     /// <summary>EnCodec latent dimension D (Défossez et al. 2022, §4.1).</summary>
-    private const int CodecLatentDim = 128;
+    private int CodecLatentDim => _options.EncodecDimension;
 
     /// <summary>
     /// SEANet base channel count C. AudioGen's own 16 kHz compression model
     /// (facebook/audiogen-medium, <c>seanet.n_filters: 64</c>) uses 64, so its first decoder
     /// convolution is 128 -> 1024 channels; the EnCodec paper's general models use 32.
     /// </summary>
-    private const int CodecBaseChannels = 64;
+    private int CodecBaseChannels => _options.EncodecFilters;
 
     /// <summary>LSTM layers in the SEANet decoder (Défossez et al. 2022, §3.1).</summary>
-    private const int CodecLstmLayers = 2;
+    private int CodecLstmLayers => _options.EncodecLstmLayers;
 
     /// <summary>Kernel of the first and last decoder convolutions.</summary>
     private const int CodecOuterKernel = 7;

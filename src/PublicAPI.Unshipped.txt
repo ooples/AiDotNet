@@ -1221,4 +1221,10 @@ override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGenerat
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecWeightsPath.get -> string?
 AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecWeightsPath.set -> void
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecDimension.get -> int
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecDimension.set -> void
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecFilters.get -> int
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecFilters.set -> void
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecLstmLayers.get -> int
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecLstmLayers.set -> void
 override AiDotNet.Audio.AudioGen.AudioGenModel<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void

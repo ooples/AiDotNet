@@ -408,8 +408,9 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
         // Set model dimensions based on size
         (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(_options.ModelSize);
-        _numCodebooks = 4;  // EnCodec standard
-        _codebookSize = 2048;  // AudioGen's EnCodec: 4 codebooks of 2048 entries
+        // The exported language model's logits are laid out per codebook, so these must match the export.
+        _numCodebooks = _options.NumCodebooks;
+        _codebookSize = _options.CodebookSize;
         _maxTextLength = _options.MaxTextLength;
 
         // Set audio base class properties
@@ -462,22 +463,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// Creates an AudioGen network using native library layers for training from scratch.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="modelSize">Model size variant (default: Medium).</param>
-    /// <param name="sampleRate">Output sample rate in Hz (default: 16000 for AudioGen).</param>
-    /// <param name="durationSeconds">Default generation duration in seconds (default: 5.0).</param>
-    /// <param name="maxDurationSeconds">Maximum generation duration in seconds (default: 30.0).</param>
-    /// <param name="temperature">Sampling temperature - higher values produce more random output (default: 1.0).</param>
-    /// <param name="topK">Top-k sampling - only consider top k tokens (default: 250).</param>
-    /// <param name="topP">Top-p (nucleus) sampling threshold (default: 0.0 = disabled).</param>
-    /// <param name="guidanceScale">Classifier-free guidance scale (default: 3.0).</param>
-    /// <param name="channels">Number of audio channels, 1=mono, 2=stereo (default: 1).</param>
-    /// <param name="textHiddenDim">Text encoder hidden dimension. If 0, uses model size default.</param>
-    /// <param name="lmHiddenDim">Language model hidden dimension. If 0, uses model size default.</param>
-    /// <param name="numLmLayers">Number of language model layers. If 0, uses model size default.</param>
-    /// <param name="numHeads">Number of attention heads. If 0, uses model size default.</param>
-    /// <param name="numCodebooks">Number of EnCodec codebooks (default: 4).</param>
-    /// <param name="codebookSize">Size of each codebook vocabulary (default: 1024).</param>
-    /// <param name="maxTextLength">Maximum text sequence length (default: 256).</param>
+    /// <param name="options">Model, sampling and codec settings; null uses the AudioGen defaults in <see cref="AudioGenOptions"/>.</param>
     /// <param name="seed">Random seed for reproducibility. Overrides <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/> on the options; null for both means non-deterministic generation.</param>
     /// <param name="tokenizer">Optional tokenizer for text processing. If null, creates a T5-style default.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>

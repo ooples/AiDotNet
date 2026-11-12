@@ -44,6 +44,9 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
         NumCodebooks = 4;
         CodebookSize = 2048;
         MaxTextLength = 256;
+        EncodecDimension = 128;
+        EncodecFilters = 64;
+        EncodecLstmLayers = 2;
     }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
@@ -73,6 +76,9 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
         CodebookSize = other.CodebookSize;
         MaxTextLength = other.MaxTextLength;
         EncodecWeightsPath = other.EncodecWeightsPath;
+        EncodecDimension = other.EncodecDimension;
+        EncodecFilters = other.EncodecFilters;
+        EncodecLstmLayers = other.EncodecLstmLayers;
     }
 
     /// <summary>
@@ -191,6 +197,36 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public string? EncodecWeightsPath { get; set; }
 
     /// <summary>
+    /// Gets or sets the EnCodec latent dimension D, the width of each codebook entry.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to 128 (Défossez et al. 2022, §4.1; audiogen-medium <c>seanet.dimension</c>). A
+    /// pretrained checkpoint loaded through <see cref="EncodecWeightsPath"/> requires 128.
+    /// </remarks>
+    public int EncodecDimension { get; set; }
+
+    /// <summary>
+    /// Gets or sets the SEANet base channel count C; the decoder's widest layer is C times
+    /// 2 to the number of upsampling stages.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to 64, AudioGen's own 16 kHz compression model (audiogen-medium
+    /// <c>seanet.n_filters</c>); the EnCodec paper's general models use 32. A pretrained checkpoint
+    /// requires 64. Lower it to shrink the frozen decoder, for example in small test fixtures.
+    /// </remarks>
+    public int EncodecFilters { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of LSTM layers in the SEANet decoder.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to 2 (Défossez et al. 2022, §3.1; audiogen-medium <c>seanet.lstm</c>). At least one
+    /// layer is required: audiocraft omits the LSTM module entirely at 0, which renumbers every later
+    /// checkpoint module. A pretrained checkpoint requires 2.
+    /// </remarks>
+    public int EncodecLstmLayers { get; set; }
+
+    /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
     /// </summary>
     /// <exception cref="ArgumentException">
@@ -199,5 +235,11 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public void Validate()
     {
         ValidateCore();
+        if (EncodecDimension <= 0)
+            throw new ArgumentException("EncodecDimension must be positive.", nameof(EncodecDimension));
+        if (EncodecFilters <= 0)
+            throw new ArgumentException("EncodecFilters must be positive.", nameof(EncodecFilters));
+        if (EncodecLstmLayers <= 0)
+            throw new ArgumentException("EncodecLstmLayers must be positive.", nameof(EncodecLstmLayers));
     }
 }
