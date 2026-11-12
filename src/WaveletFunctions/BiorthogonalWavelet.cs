@@ -48,10 +48,14 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     private readonly Vector<T> _reconstructionCoefficients;
 
     /// <summary>
-    /// The four PyWavelets filter-tap tables (<c>dec_lo</c>, <c>dec_hi</c>, <c>rec_lo</c>, <c>rec_hi</c>) of the
-    /// selected <c>bior{reconstructionOrder}.{decompositionOrder}</c> wavelet.
+    /// The decomposition order Nd of the selected <c>biorNr.Nd</c> wavelet.
     /// </summary>
-    private readonly (double[] DecLo, double[] DecHi, double[] RecLo, double[] RecHi) _taps;
+    private readonly int _decompositionOrder;
+
+    /// <summary>
+    /// The reconstruction order Nr of the selected <c>biorNr.Nd</c> wavelet.
+    /// </summary>
+    private readonly int _reconstructionOrder;
 
     /// <summary>
     /// Initializes a new instance of the BiorthogonalWavelet class with the specified decomposition and reconstruction orders.
@@ -104,9 +108,10 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
                 nameof(decompositionOrder));
         }
 
-        _taps = taps.Value;
-        _decompositionCoefficients = ToFilter(_taps.DecLo);
-        _reconstructionCoefficients = ToFilter(_taps.RecLo);
+        _decompositionOrder = decompositionOrder;
+        _reconstructionOrder = reconstructionOrder;
+        _decompositionCoefficients = taps.Value.DecLo;
+        _reconstructionCoefficients = taps.Value.RecLo;
     }
 
     /// <summary>
@@ -186,355 +191,502 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// <param name="decompositionOrder">The decomposition (analysis) order, the second number of the name.</param>
     /// <returns>
     /// The <c>dec_lo</c>, <c>dec_hi</c>, <c>rec_lo</c> and <c>rec_hi</c> taps of
-    /// <c>pywt.Wavelet("biorNr.Nd")</c>, or <c>null</c> when the pair is not a biorthogonal wavelet.
+    /// <c>pywt.Wavelet("biorNr.Nd")</c> as fresh vectors, or <c>null</c> when the pair is not a biorthogonal
+    /// wavelet. The taps are used as published: biorthogonal filters are not unit-norm, and rescaling them would
+    /// break perfect reconstruction.
     /// </returns>
-    private static (double[] DecLo, double[] DecHi, double[] RecLo, double[] RecHi)? GetFilterTaps(
+    private (Vector<T> DecLo, Vector<T> DecHi, Vector<T> RecLo, Vector<T> RecHi)? GetFilterTaps(
         int reconstructionOrder, int decompositionOrder)
     {
         return (reconstructionOrder, decompositionOrder) switch
         {
             (1, 1) => (
-                new[]
-                {
-                    0.7071067811865476, 0.7071067811865476
-                },
-                new[]
-                {
-                    -0.7071067811865476, 0.7071067811865476
-                },
-                new[]
-                {
-                    0.7071067811865476, 0.7071067811865476
-                },
-                new[]
-                {
-                    0.7071067811865476, -0.7071067811865476
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.7071067811865476), NumOps.FromDouble(0.7071067811865476)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(-0.7071067811865476)
+                ])),
             (1, 3) => (
-                new[]
-                {
-                    -0.08838834764831845, 0.08838834764831845, 0.7071067811865476, 0.7071067811865476,
-                    0.08838834764831845, -0.08838834764831845
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.7071067811865476, 0.7071067811865476, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.7071067811865476, 0.7071067811865476, 0.0, 0.0
-                },
-                new[]
-                {
-                    -0.08838834764831845, -0.08838834764831845, 0.7071067811865476, -0.7071067811865476,
-                    0.08838834764831845, 0.08838834764831845
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.08838834764831845), NumOps.FromDouble(0.08838834764831845),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476),
+                    NumOps.FromDouble(0.08838834764831845), NumOps.FromDouble(-0.08838834764831845)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.7071067811865476),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.7071067811865476),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.08838834764831845), NumOps.FromDouble(-0.08838834764831845),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(-0.7071067811865476),
+                    NumOps.FromDouble(0.08838834764831845), NumOps.FromDouble(0.08838834764831845)
+                ])),
             (1, 5) => (
-                new[]
-                {
-                    0.016572815184059706, -0.016572815184059706, -0.12153397801643785, 0.12153397801643785,
-                    0.7071067811865476, 0.7071067811865476, 0.12153397801643785, -0.12153397801643785,
-                    -0.016572815184059706, 0.016572815184059706
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.0, 0.0, -0.7071067811865476, 0.7071067811865476, -0.0, 0.0, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.0, 0.0, 0.7071067811865476, 0.7071067811865476, 0.0, 0.0, 0.0, 0.0
-                },
-                new[]
-                {
-                    0.016572815184059706, 0.016572815184059706, -0.12153397801643785, -0.12153397801643785,
-                    0.7071067811865476, -0.7071067811865476, 0.12153397801643785, 0.12153397801643785,
-                    -0.016572815184059706, -0.016572815184059706
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.016572815184059706), NumOps.FromDouble(-0.016572815184059706),
+                    NumOps.FromDouble(-0.12153397801643785), NumOps.FromDouble(0.12153397801643785),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476),
+                    NumOps.FromDouble(0.12153397801643785), NumOps.FromDouble(-0.12153397801643785),
+                    NumOps.FromDouble(-0.016572815184059706), NumOps.FromDouble(0.016572815184059706)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.7071067811865476), NumOps.FromDouble(0.7071067811865476),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.016572815184059706), NumOps.FromDouble(0.016572815184059706),
+                    NumOps.FromDouble(-0.12153397801643785), NumOps.FromDouble(-0.12153397801643785),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(-0.7071067811865476),
+                    NumOps.FromDouble(0.12153397801643785), NumOps.FromDouble(0.12153397801643785),
+                    NumOps.FromDouble(-0.016572815184059706), NumOps.FromDouble(-0.016572815184059706)
+                ])),
             (2, 2) => (
-                new[]
-                {
-                    0.0, -0.1767766952966369, 0.3535533905932738, 1.0606601717798212, 0.3535533905932738,
-                    -0.1767766952966369
-                },
-                new[]
-                {
-                    -0.0, 0.3535533905932738, -0.7071067811865476, 0.3535533905932738, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.3535533905932738, 0.7071067811865476, 0.3535533905932738, 0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.1767766952966369, 0.3535533905932738, -1.0606601717798212, 0.3535533905932738,
-                    0.1767766952966369
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(-0.1767766952966369),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(1.0606601717798212),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(-0.1767766952966369)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.3535533905932738),
+                    NumOps.FromDouble(-0.7071067811865476), NumOps.FromDouble(0.3535533905932738),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.3535533905932738),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.3535533905932738),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(-1.0606601717798212),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(0.1767766952966369)
+                ])),
             (2, 4) => (
-                new[]
-                {
-                    0.0, 0.03314563036811941, -0.06629126073623882, -0.1767766952966369, 0.4198446513295126,
-                    0.9943689110435825, 0.4198446513295126, -0.1767766952966369, -0.06629126073623882,
-                    0.03314563036811941
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.0, 0.3535533905932738, -0.7071067811865476, 0.3535533905932738, -0.0, 0.0, -0.0,
-                    0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.0, 0.3535533905932738, 0.7071067811865476, 0.3535533905932738, 0.0, 0.0, 0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, -0.03314563036811941, -0.06629126073623882, 0.1767766952966369, 0.4198446513295126,
-                    -0.9943689110435825, 0.4198446513295126, 0.1767766952966369, -0.06629126073623882,
-                    -0.03314563036811941
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.03314563036811941),
+                    NumOps.FromDouble(-0.06629126073623882), NumOps.FromDouble(-0.1767766952966369),
+                    NumOps.FromDouble(0.4198446513295126), NumOps.FromDouble(0.9943689110435825),
+                    NumOps.FromDouble(0.4198446513295126), NumOps.FromDouble(-0.1767766952966369),
+                    NumOps.FromDouble(-0.06629126073623882), NumOps.FromDouble(0.03314563036811941)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(-0.7071067811865476),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(0.7071067811865476),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(-0.03314563036811941),
+                    NumOps.FromDouble(-0.06629126073623882), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(0.4198446513295126), NumOps.FromDouble(-0.9943689110435825),
+                    NumOps.FromDouble(0.4198446513295126), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(-0.06629126073623882), NumOps.FromDouble(-0.03314563036811941)
+                ])),
             (2, 6) => (
-                new[]
-                {
-                    0.0, -0.006905339660024878, 0.013810679320049757, 0.04695630968816917, -0.1077232986963881,
-                    -0.16987135563661201, 0.4474660099696121, 0.966747552403483, 0.4474660099696121,
-                    -0.16987135563661201, -0.1077232986963881, 0.04695630968816917, 0.013810679320049757,
-                    -0.006905339660024878
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.0, 0.0, -0.0, 0.3535533905932738, -0.7071067811865476, 0.3535533905932738, -0.0,
-                    0.0, -0.0, 0.0, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.3535533905932738, 0.7071067811865476, 0.3535533905932738, 0.0, 0.0,
-                    0.0, 0.0, 0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.006905339660024878, 0.013810679320049757, -0.04695630968816917, -0.1077232986963881,
-                    0.16987135563661201, 0.4474660099696121, -0.966747552403483, 0.4474660099696121,
-                    0.16987135563661201, -0.1077232986963881, -0.04695630968816917, 0.013810679320049757,
-                    0.006905339660024878
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(-0.006905339660024878),
+                    NumOps.FromDouble(0.013810679320049757), NumOps.FromDouble(0.04695630968816917),
+                    NumOps.FromDouble(-0.1077232986963881), NumOps.FromDouble(-0.16987135563661201),
+                    NumOps.FromDouble(0.4474660099696121), NumOps.FromDouble(0.966747552403483),
+                    NumOps.FromDouble(0.4474660099696121), NumOps.FromDouble(-0.16987135563661201),
+                    NumOps.FromDouble(-0.1077232986963881), NumOps.FromDouble(0.04695630968816917),
+                    NumOps.FromDouble(0.013810679320049757), NumOps.FromDouble(-0.006905339660024878)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.3535533905932738),
+                    NumOps.FromDouble(-0.7071067811865476), NumOps.FromDouble(0.3535533905932738),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.3535533905932738),
+                    NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.3535533905932738),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.006905339660024878),
+                    NumOps.FromDouble(0.013810679320049757), NumOps.FromDouble(-0.04695630968816917),
+                    NumOps.FromDouble(-0.1077232986963881), NumOps.FromDouble(0.16987135563661201),
+                    NumOps.FromDouble(0.4474660099696121), NumOps.FromDouble(-0.966747552403483),
+                    NumOps.FromDouble(0.4474660099696121), NumOps.FromDouble(0.16987135563661201),
+                    NumOps.FromDouble(-0.1077232986963881), NumOps.FromDouble(-0.04695630968816917),
+                    NumOps.FromDouble(0.013810679320049757), NumOps.FromDouble(0.006905339660024878)
+                ])),
             (2, 8) => (
-                new[]
-                {
-                    0.0, 0.0015105430506304422, -0.0030210861012608843, -0.012947511862546647, 0.02891610982635418,
-                    0.05299848189069094, -0.13491307360773605, -0.16382918343409023, 0.46257144047591653,
-                    0.9516421218971786, 0.46257144047591653, -0.16382918343409023, -0.13491307360773605,
-                    0.05299848189069094, 0.02891610982635418, -0.012947511862546647, -0.0030210861012608843,
-                    0.0015105430506304422
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.3535533905932738, -0.7071067811865476,
-                    0.3535533905932738, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3535533905932738, 0.7071067811865476, 0.3535533905932738,
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, -0.0015105430506304422, -0.0030210861012608843, 0.012947511862546647, 0.02891610982635418,
-                    -0.05299848189069094, -0.13491307360773605, 0.16382918343409023, 0.46257144047591653,
-                    -0.9516421218971786, 0.46257144047591653, 0.16382918343409023, -0.13491307360773605,
-                    -0.05299848189069094, 0.02891610982635418, 0.012947511862546647, -0.0030210861012608843,
-                    -0.0015105430506304422
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0015105430506304422),
+                    NumOps.FromDouble(-0.0030210861012608843), NumOps.FromDouble(-0.012947511862546647),
+                    NumOps.FromDouble(0.02891610982635418), NumOps.FromDouble(0.05299848189069094),
+                    NumOps.FromDouble(-0.13491307360773605), NumOps.FromDouble(-0.16382918343409023),
+                    NumOps.FromDouble(0.46257144047591653), NumOps.FromDouble(0.9516421218971786),
+                    NumOps.FromDouble(0.46257144047591653), NumOps.FromDouble(-0.16382918343409023),
+                    NumOps.FromDouble(-0.13491307360773605), NumOps.FromDouble(0.05299848189069094),
+                    NumOps.FromDouble(0.02891610982635418), NumOps.FromDouble(-0.012947511862546647),
+                    NumOps.FromDouble(-0.0030210861012608843), NumOps.FromDouble(0.0015105430506304422)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(-0.7071067811865476),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(0.7071067811865476),
+                    NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0015105430506304422),
+                    NumOps.FromDouble(-0.0030210861012608843), NumOps.FromDouble(0.012947511862546647),
+                    NumOps.FromDouble(0.02891610982635418), NumOps.FromDouble(-0.05299848189069094),
+                    NumOps.FromDouble(-0.13491307360773605), NumOps.FromDouble(0.16382918343409023),
+                    NumOps.FromDouble(0.46257144047591653), NumOps.FromDouble(-0.9516421218971786),
+                    NumOps.FromDouble(0.46257144047591653), NumOps.FromDouble(0.16382918343409023),
+                    NumOps.FromDouble(-0.13491307360773605), NumOps.FromDouble(-0.05299848189069094),
+                    NumOps.FromDouble(0.02891610982635418), NumOps.FromDouble(0.012947511862546647),
+                    NumOps.FromDouble(-0.0030210861012608843), NumOps.FromDouble(-0.0015105430506304422)
+                ])),
             (3, 1) => (
-                new[]
-                {
-                    -0.3535533905932738, 1.0606601717798212, 1.0606601717798212, -0.3535533905932738
-                },
-                new[]
-                {
-                    -0.1767766952966369, 0.5303300858899106, -0.5303300858899106, 0.1767766952966369
-                },
-                new[]
-                {
-                    0.1767766952966369, 0.5303300858899106, 0.5303300858899106, 0.1767766952966369
-                },
-                new[]
-                {
-                    -0.3535533905932738, -1.0606601717798212, 1.0606601717798212, 0.3535533905932738
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.3535533905932738), NumOps.FromDouble(1.0606601717798212),
+                    NumOps.FromDouble(1.0606601717798212), NumOps.FromDouble(-0.3535533905932738)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.1767766952966369), NumOps.FromDouble(0.5303300858899106),
+                    NumOps.FromDouble(-0.5303300858899106), NumOps.FromDouble(0.1767766952966369)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.1767766952966369), NumOps.FromDouble(0.5303300858899106),
+                    NumOps.FromDouble(0.5303300858899106), NumOps.FromDouble(0.1767766952966369)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.3535533905932738), NumOps.FromDouble(-1.0606601717798212),
+                    NumOps.FromDouble(1.0606601717798212), NumOps.FromDouble(0.3535533905932738)
+                ])),
             (3, 3) => (
-                new[]
-                {
-                    0.06629126073623882, -0.1988737822087165, -0.15467960838455727, 0.9943689110435825,
-                    0.9943689110435825, -0.15467960838455727, -0.1988737822087165, 0.06629126073623882
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.1767766952966369, 0.5303300858899106, -0.5303300858899106, 0.1767766952966369,
-                    -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.1767766952966369, 0.5303300858899106, 0.5303300858899106, 0.1767766952966369, 0.0,
-                    0.0
-                },
-                new[]
-                {
-                    0.06629126073623882, 0.1988737822087165, -0.15467960838455727, -0.9943689110435825,
-                    0.9943689110435825, 0.15467960838455727, -0.1988737822087165, -0.06629126073623882
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.06629126073623882), NumOps.FromDouble(-0.1988737822087165),
+                    NumOps.FromDouble(-0.15467960838455727), NumOps.FromDouble(0.9943689110435825),
+                    NumOps.FromDouble(0.9943689110435825), NumOps.FromDouble(-0.15467960838455727),
+                    NumOps.FromDouble(-0.1988737822087165), NumOps.FromDouble(0.06629126073623882)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.1767766952966369),
+                    NumOps.FromDouble(0.5303300858899106), NumOps.FromDouble(-0.5303300858899106),
+                    NumOps.FromDouble(0.1767766952966369), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(0.5303300858899106), NumOps.FromDouble(0.5303300858899106),
+                    NumOps.FromDouble(0.1767766952966369), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.06629126073623882), NumOps.FromDouble(0.1988737822087165),
+                    NumOps.FromDouble(-0.15467960838455727), NumOps.FromDouble(-0.9943689110435825),
+                    NumOps.FromDouble(0.9943689110435825), NumOps.FromDouble(0.15467960838455727),
+                    NumOps.FromDouble(-0.1988737822087165), NumOps.FromDouble(-0.06629126073623882)
+                ])),
             (3, 5) => (
-                new[]
-                {
-                    -0.013810679320049757, 0.04143203796014927, 0.052480581416189075, -0.26792717880896527,
-                    -0.07181553246425873, 0.966747552403483, 0.966747552403483, -0.07181553246425873,
-                    -0.26792717880896527, 0.052480581416189075, 0.04143203796014927, -0.013810679320049757
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.0, 0.0, -0.1767766952966369, 0.5303300858899106, -0.5303300858899106,
-                    0.1767766952966369, -0.0, 0.0, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.0, 0.0, 0.1767766952966369, 0.5303300858899106, 0.5303300858899106,
-                    0.1767766952966369, 0.0, 0.0, 0.0, 0.0
-                },
-                new[]
-                {
-                    -0.013810679320049757, -0.04143203796014927, 0.052480581416189075, 0.26792717880896527,
-                    -0.07181553246425873, -0.966747552403483, 0.966747552403483, 0.07181553246425873,
-                    -0.26792717880896527, -0.052480581416189075, 0.04143203796014927, 0.013810679320049757
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.013810679320049757), NumOps.FromDouble(0.04143203796014927),
+                    NumOps.FromDouble(0.052480581416189075), NumOps.FromDouble(-0.26792717880896527),
+                    NumOps.FromDouble(-0.07181553246425873), NumOps.FromDouble(0.966747552403483),
+                    NumOps.FromDouble(0.966747552403483), NumOps.FromDouble(-0.07181553246425873),
+                    NumOps.FromDouble(-0.26792717880896527), NumOps.FromDouble(0.052480581416189075),
+                    NumOps.FromDouble(0.04143203796014927), NumOps.FromDouble(-0.013810679320049757)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.1767766952966369), NumOps.FromDouble(0.5303300858899106),
+                    NumOps.FromDouble(-0.5303300858899106), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.1767766952966369), NumOps.FromDouble(0.5303300858899106),
+                    NumOps.FromDouble(0.5303300858899106), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.013810679320049757), NumOps.FromDouble(-0.04143203796014927),
+                    NumOps.FromDouble(0.052480581416189075), NumOps.FromDouble(0.26792717880896527),
+                    NumOps.FromDouble(-0.07181553246425873), NumOps.FromDouble(-0.966747552403483),
+                    NumOps.FromDouble(0.966747552403483), NumOps.FromDouble(0.07181553246425873),
+                    NumOps.FromDouble(-0.26792717880896527), NumOps.FromDouble(-0.052480581416189075),
+                    NumOps.FromDouble(0.04143203796014927), NumOps.FromDouble(0.013810679320049757)
+                ])),
             (3, 7) => (
-                new[]
-                {
-                    0.0030210861012608843, -0.009063258303782653, -0.01683176542131064, 0.074663985074019,
-                    0.03133297870736289, -0.301159125922835, -0.02649924094534547, 0.9516421218971786,
-                    0.9516421218971786, -0.02649924094534547, -0.301159125922835, 0.03133297870736289,
-                    0.074663985074019, -0.01683176542131064, -0.009063258303782653, 0.0030210861012608843
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.1767766952966369, 0.5303300858899106, -0.5303300858899106,
-                    0.1767766952966369, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1767766952966369, 0.5303300858899106, 0.5303300858899106,
-                    0.1767766952966369, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-                },
-                new[]
-                {
-                    0.0030210861012608843, 0.009063258303782653, -0.01683176542131064, -0.074663985074019,
-                    0.03133297870736289, 0.301159125922835, -0.02649924094534547, -0.9516421218971786,
-                    0.9516421218971786, 0.02649924094534547, -0.301159125922835, -0.03133297870736289,
-                    0.074663985074019, 0.01683176542131064, -0.009063258303782653, -0.0030210861012608843
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0030210861012608843), NumOps.FromDouble(-0.009063258303782653),
+                    NumOps.FromDouble(-0.01683176542131064), NumOps.FromDouble(0.074663985074019),
+                    NumOps.FromDouble(0.03133297870736289), NumOps.FromDouble(-0.301159125922835),
+                    NumOps.FromDouble(-0.02649924094534547), NumOps.FromDouble(0.9516421218971786),
+                    NumOps.FromDouble(0.9516421218971786), NumOps.FromDouble(-0.02649924094534547),
+                    NumOps.FromDouble(-0.301159125922835), NumOps.FromDouble(0.03133297870736289),
+                    NumOps.FromDouble(0.074663985074019), NumOps.FromDouble(-0.01683176542131064),
+                    NumOps.FromDouble(-0.009063258303782653), NumOps.FromDouble(0.0030210861012608843)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.1767766952966369),
+                    NumOps.FromDouble(0.5303300858899106), NumOps.FromDouble(-0.5303300858899106),
+                    NumOps.FromDouble(0.1767766952966369), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(0.5303300858899106), NumOps.FromDouble(0.5303300858899106),
+                    NumOps.FromDouble(0.1767766952966369), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0030210861012608843), NumOps.FromDouble(0.009063258303782653),
+                    NumOps.FromDouble(-0.01683176542131064), NumOps.FromDouble(-0.074663985074019),
+                    NumOps.FromDouble(0.03133297870736289), NumOps.FromDouble(0.301159125922835),
+                    NumOps.FromDouble(-0.02649924094534547), NumOps.FromDouble(-0.9516421218971786),
+                    NumOps.FromDouble(0.9516421218971786), NumOps.FromDouble(0.02649924094534547),
+                    NumOps.FromDouble(-0.301159125922835), NumOps.FromDouble(-0.03133297870736289),
+                    NumOps.FromDouble(0.074663985074019), NumOps.FromDouble(0.01683176542131064),
+                    NumOps.FromDouble(-0.009063258303782653), NumOps.FromDouble(-0.0030210861012608843)
+                ])),
             (3, 9) => (
-                new[]
-                {
-                    -0.0006797443727836989, 0.002039233118351097, 0.005060319219611981, -0.020618912641105536,
-                    -0.014112787930175844, 0.09913478249423216, 0.012300136269419315, -0.32019196836077857,
-                    0.0020500227115698858, 0.9421257006782068, 0.9421257006782068, 0.0020500227115698858,
-                    -0.32019196836077857, 0.012300136269419315, 0.09913478249423216, -0.014112787930175844,
-                    -0.020618912641105536, 0.005060319219611981, 0.002039233118351097, -0.0006797443727836989
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.1767766952966369, 0.5303300858899106,
-                    -0.5303300858899106, 0.1767766952966369, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1767766952966369, 0.5303300858899106,
-                    0.5303300858899106, 0.1767766952966369, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-                },
-                new[]
-                {
-                    -0.0006797443727836989, -0.002039233118351097, 0.005060319219611981, 0.020618912641105536,
-                    -0.014112787930175844, -0.09913478249423216, 0.012300136269419315, 0.32019196836077857,
-                    0.0020500227115698858, -0.9421257006782068, 0.9421257006782068, -0.0020500227115698858,
-                    -0.32019196836077857, -0.012300136269419315, 0.09913478249423216, 0.014112787930175844,
-                    -0.020618912641105536, -0.005060319219611981, 0.002039233118351097, 0.0006797443727836989
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0006797443727836989), NumOps.FromDouble(0.002039233118351097),
+                    NumOps.FromDouble(0.005060319219611981), NumOps.FromDouble(-0.020618912641105536),
+                    NumOps.FromDouble(-0.014112787930175844), NumOps.FromDouble(0.09913478249423216),
+                    NumOps.FromDouble(0.012300136269419315), NumOps.FromDouble(-0.32019196836077857),
+                    NumOps.FromDouble(0.0020500227115698858), NumOps.FromDouble(0.9421257006782068),
+                    NumOps.FromDouble(0.9421257006782068), NumOps.FromDouble(0.0020500227115698858),
+                    NumOps.FromDouble(-0.32019196836077857), NumOps.FromDouble(0.012300136269419315),
+                    NumOps.FromDouble(0.09913478249423216), NumOps.FromDouble(-0.014112787930175844),
+                    NumOps.FromDouble(-0.020618912641105536), NumOps.FromDouble(0.005060319219611981),
+                    NumOps.FromDouble(0.002039233118351097), NumOps.FromDouble(-0.0006797443727836989)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.1767766952966369), NumOps.FromDouble(0.5303300858899106),
+                    NumOps.FromDouble(-0.5303300858899106), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.1767766952966369), NumOps.FromDouble(0.5303300858899106),
+                    NumOps.FromDouble(0.5303300858899106), NumOps.FromDouble(0.1767766952966369),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0006797443727836989), NumOps.FromDouble(-0.002039233118351097),
+                    NumOps.FromDouble(0.005060319219611981), NumOps.FromDouble(0.020618912641105536),
+                    NumOps.FromDouble(-0.014112787930175844), NumOps.FromDouble(-0.09913478249423216),
+                    NumOps.FromDouble(0.012300136269419315), NumOps.FromDouble(0.32019196836077857),
+                    NumOps.FromDouble(0.0020500227115698858), NumOps.FromDouble(-0.9421257006782068),
+                    NumOps.FromDouble(0.9421257006782068), NumOps.FromDouble(-0.0020500227115698858),
+                    NumOps.FromDouble(-0.32019196836077857), NumOps.FromDouble(-0.012300136269419315),
+                    NumOps.FromDouble(0.09913478249423216), NumOps.FromDouble(0.014112787930175844),
+                    NumOps.FromDouble(-0.020618912641105536), NumOps.FromDouble(-0.005060319219611981),
+                    NumOps.FromDouble(0.002039233118351097), NumOps.FromDouble(0.0006797443727836989)
+                ])),
             (4, 4) => (
-                new[]
-                {
-                    0.0, 0.03782845550726404, -0.023849465019556843, -0.11062440441843718, 0.37740285561283066,
-                    0.8526986790088938, 0.37740285561283066, -0.11062440441843718, -0.023849465019556843,
-                    0.03782845550726404
-                },
-                new[]
-                {
-                    -0.0, -0.06453888262869706, 0.04068941760916406, 0.41809227322161724, -0.7884856164055829,
-                    0.41809227322161724, 0.04068941760916406, -0.06453888262869706, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, -0.06453888262869706, -0.04068941760916406, 0.41809227322161724, 0.7884856164055829,
-                    0.41809227322161724, -0.04068941760916406, -0.06453888262869706, 0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, -0.03782845550726404, -0.023849465019556843, 0.11062440441843718, 0.37740285561283066,
-                    -0.8526986790088938, 0.37740285561283066, 0.11062440441843718, -0.023849465019556843,
-                    -0.03782845550726404
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.03782845550726404),
+                    NumOps.FromDouble(-0.023849465019556843), NumOps.FromDouble(-0.11062440441843718),
+                    NumOps.FromDouble(0.37740285561283066), NumOps.FromDouble(0.8526986790088938),
+                    NumOps.FromDouble(0.37740285561283066), NumOps.FromDouble(-0.11062440441843718),
+                    NumOps.FromDouble(-0.023849465019556843), NumOps.FromDouble(0.03782845550726404)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(-0.06453888262869706),
+                    NumOps.FromDouble(0.04068941760916406), NumOps.FromDouble(0.41809227322161724),
+                    NumOps.FromDouble(-0.7884856164055829), NumOps.FromDouble(0.41809227322161724),
+                    NumOps.FromDouble(0.04068941760916406), NumOps.FromDouble(-0.06453888262869706),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(-0.06453888262869706),
+                    NumOps.FromDouble(-0.04068941760916406), NumOps.FromDouble(0.41809227322161724),
+                    NumOps.FromDouble(0.7884856164055829), NumOps.FromDouble(0.41809227322161724),
+                    NumOps.FromDouble(-0.04068941760916406), NumOps.FromDouble(-0.06453888262869706),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(-0.03782845550726404),
+                    NumOps.FromDouble(-0.023849465019556843), NumOps.FromDouble(0.11062440441843718),
+                    NumOps.FromDouble(0.37740285561283066), NumOps.FromDouble(-0.8526986790088938),
+                    NumOps.FromDouble(0.37740285561283066), NumOps.FromDouble(0.11062440441843718),
+                    NumOps.FromDouble(-0.023849465019556843), NumOps.FromDouble(-0.03782845550726404)
+                ])),
             (5, 5) => (
-                new[]
-                {
-                    0.0, 0.0, 0.03968708834740544, 0.007948108637240322, -0.05446378846823691, 0.34560528195603346,
-                    0.7366601814282105, 0.34560528195603346, -0.05446378846823691, 0.007948108637240322,
-                    0.03968708834740544, 0.0
-                },
-                new[]
-                {
-                    -0.013456709459118716, -0.002694966880111507, 0.13670658466432914, -0.09350469740093886,
-                    -0.47680326579848425, 0.8995061097486484, -0.47680326579848425, -0.09350469740093886,
-                    0.13670658466432914, -0.002694966880111507, -0.013456709459118716, 0.0
-                },
-                new[]
-                {
-                    0.013456709459118716, -0.002694966880111507, -0.13670658466432914, -0.09350469740093886,
-                    0.47680326579848425, 0.8995061097486484, 0.47680326579848425, -0.09350469740093886,
-                    -0.13670658466432914, -0.002694966880111507, 0.013456709459118716, 0.0
-                },
-                new[]
-                {
-                    0.0, -0.0, 0.03968708834740544, -0.007948108637240322, -0.05446378846823691,
-                    -0.34560528195603346, 0.7366601814282105, -0.34560528195603346, -0.05446378846823691,
-                    -0.007948108637240322, 0.03968708834740544, -0.0
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.03968708834740544),
+                    NumOps.FromDouble(0.007948108637240322), NumOps.FromDouble(-0.05446378846823691),
+                    NumOps.FromDouble(0.34560528195603346), NumOps.FromDouble(0.7366601814282105),
+                    NumOps.FromDouble(0.34560528195603346), NumOps.FromDouble(-0.05446378846823691),
+                    NumOps.FromDouble(0.007948108637240322), NumOps.FromDouble(0.03968708834740544),
+                    NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.013456709459118716), NumOps.FromDouble(-0.002694966880111507),
+                    NumOps.FromDouble(0.13670658466432914), NumOps.FromDouble(-0.09350469740093886),
+                    NumOps.FromDouble(-0.47680326579848425), NumOps.FromDouble(0.8995061097486484),
+                    NumOps.FromDouble(-0.47680326579848425), NumOps.FromDouble(-0.09350469740093886),
+                    NumOps.FromDouble(0.13670658466432914), NumOps.FromDouble(-0.002694966880111507),
+                    NumOps.FromDouble(-0.013456709459118716), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.013456709459118716), NumOps.FromDouble(-0.002694966880111507),
+                    NumOps.FromDouble(-0.13670658466432914), NumOps.FromDouble(-0.09350469740093886),
+                    NumOps.FromDouble(0.47680326579848425), NumOps.FromDouble(0.8995061097486484),
+                    NumOps.FromDouble(0.47680326579848425), NumOps.FromDouble(-0.09350469740093886),
+                    NumOps.FromDouble(-0.13670658466432914), NumOps.FromDouble(-0.002694966880111507),
+                    NumOps.FromDouble(0.013456709459118716), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.03968708834740544),
+                    NumOps.FromDouble(-0.007948108637240322), NumOps.FromDouble(-0.05446378846823691),
+                    NumOps.FromDouble(-0.34560528195603346), NumOps.FromDouble(0.7366601814282105),
+                    NumOps.FromDouble(-0.34560528195603346), NumOps.FromDouble(-0.05446378846823691),
+                    NumOps.FromDouble(-0.007948108637240322), NumOps.FromDouble(0.03968708834740544),
+                    NumOps.FromDouble(-0.0)
+                ])),
             (6, 8) => (
-                new[]
-                {
-                    0.0, 0.0019088317364812906, -0.0019142861290887667, -0.016990639867602342, 0.01193456527972926,
-                    0.04973290349094079, -0.07726317316720414, -0.09405920349573646, 0.4207962846098268,
-                    0.8259229974584023, 0.4207962846098268, -0.09405920349573646, -0.07726317316720414,
-                    0.04973290349094079, 0.01193456527972926, -0.016990639867602342, -0.0019142861290887667,
-                    0.0019088317364812906
-                },
-                new[]
-                {
-                    -0.0, 0.0, -0.0, 0.014426282505624435, -0.014467504896790148, -0.07872200106262882,
-                    0.04036797903033992, 0.41784910915027457, -0.7589077294536541, 0.41784910915027457,
-                    0.04036797903033992, -0.07872200106262882, -0.014467504896790148, 0.014426282505624435, -0.0,
-                    0.0, -0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, 0.0, 0.0, 0.014426282505624435, 0.014467504896790148, -0.07872200106262882,
-                    -0.04036797903033992, 0.41784910915027457, 0.7589077294536541, 0.41784910915027457,
-                    -0.04036797903033992, -0.07872200106262882, 0.014467504896790148, 0.014426282505624435, 0.0,
-                    0.0, 0.0, 0.0
-                },
-                new[]
-                {
-                    0.0, -0.0019088317364812906, -0.0019142861290887667, 0.016990639867602342, 0.01193456527972926,
-                    -0.04973290349094079, -0.07726317316720414, 0.09405920349573646, 0.4207962846098268,
-                    -0.8259229974584023, 0.4207962846098268, 0.09405920349573646, -0.07726317316720414,
-                    -0.04973290349094079, 0.01193456527972926, 0.016990639867602342, -0.0019142861290887667,
-                    -0.0019088317364812906
-                }),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0019088317364812906),
+                    NumOps.FromDouble(-0.0019142861290887667), NumOps.FromDouble(-0.016990639867602342),
+                    NumOps.FromDouble(0.01193456527972926), NumOps.FromDouble(0.04973290349094079),
+                    NumOps.FromDouble(-0.07726317316720414), NumOps.FromDouble(-0.09405920349573646),
+                    NumOps.FromDouble(0.4207962846098268), NumOps.FromDouble(0.8259229974584023),
+                    NumOps.FromDouble(0.4207962846098268), NumOps.FromDouble(-0.09405920349573646),
+                    NumOps.FromDouble(-0.07726317316720414), NumOps.FromDouble(0.04973290349094079),
+                    NumOps.FromDouble(0.01193456527972926), NumOps.FromDouble(-0.016990639867602342),
+                    NumOps.FromDouble(-0.0019142861290887667), NumOps.FromDouble(0.0019088317364812906)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0),
+                    NumOps.FromDouble(0.014426282505624435), NumOps.FromDouble(-0.014467504896790148),
+                    NumOps.FromDouble(-0.07872200106262882), NumOps.FromDouble(0.04036797903033992),
+                    NumOps.FromDouble(0.41784910915027457), NumOps.FromDouble(-0.7589077294536541),
+                    NumOps.FromDouble(0.41784910915027457), NumOps.FromDouble(0.04036797903033992),
+                    NumOps.FromDouble(-0.07872200106262882), NumOps.FromDouble(-0.014467504896790148),
+                    NumOps.FromDouble(0.014426282505624435), NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(-0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.014426282505624435), NumOps.FromDouble(0.014467504896790148),
+                    NumOps.FromDouble(-0.07872200106262882), NumOps.FromDouble(-0.04036797903033992),
+                    NumOps.FromDouble(0.41784910915027457), NumOps.FromDouble(0.7589077294536541),
+                    NumOps.FromDouble(0.41784910915027457), NumOps.FromDouble(-0.04036797903033992),
+                    NumOps.FromDouble(-0.07872200106262882), NumOps.FromDouble(0.014467504896790148),
+                    NumOps.FromDouble(0.014426282505624435), NumOps.FromDouble(0.0), NumOps.FromDouble(0.0),
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(0.0)
+                ]),
+                new Vector<T>(
+                [
+                    NumOps.FromDouble(0.0), NumOps.FromDouble(-0.0019088317364812906),
+                    NumOps.FromDouble(-0.0019142861290887667), NumOps.FromDouble(0.016990639867602342),
+                    NumOps.FromDouble(0.01193456527972926), NumOps.FromDouble(-0.04973290349094079),
+                    NumOps.FromDouble(-0.07726317316720414), NumOps.FromDouble(0.09405920349573646),
+                    NumOps.FromDouble(0.4207962846098268), NumOps.FromDouble(-0.8259229974584023),
+                    NumOps.FromDouble(0.4207962846098268), NumOps.FromDouble(0.09405920349573646),
+                    NumOps.FromDouble(-0.07726317316720414), NumOps.FromDouble(-0.04973290349094079),
+                    NumOps.FromDouble(0.01193456527972926), NumOps.FromDouble(0.016990639867602342),
+                    NumOps.FromDouble(-0.0019142861290887667), NumOps.FromDouble(-0.0019088317364812906)
+                ])),
             _ => null,
         };
     }
@@ -690,7 +842,7 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetDecompositionLowPassFilter()
     {
-        return ToFilter(_taps.DecLo);
+        return SelectedTaps().DecLo;
     }
 
     /// <summary>
@@ -719,7 +871,7 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetDecompositionHighPassFilter()
     {
-        return ToFilter(_taps.DecHi);
+        return SelectedTaps().DecHi;
     }
 
     /// <summary>
@@ -746,7 +898,7 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetReconstructionLowPassFilter()
     {
-        return ToFilter(_taps.RecLo);
+        return SelectedTaps().RecLo;
     }
 
     /// <summary>
@@ -773,18 +925,21 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetReconstructionHighPassFilter()
     {
-        return ToFilter(_taps.RecHi);
+        return SelectedTaps().RecHi;
     }
 
     /// <summary>
-    /// Converts a table of PyWavelets filter taps to a vector of type T.
+    /// Gets fresh copies of the selected wavelet's four filters (validated in the constructor).
     /// </summary>
-    /// <param name="taps">The filter taps, in PyWavelets order.</param>
-    /// <returns>The taps as a vector of type T, unscaled.</returns>
-    private Vector<T> ToFilter(double[] taps)
+    private (Vector<T> DecLo, Vector<T> DecHi, Vector<T> RecLo, Vector<T> RecHi) SelectedTaps()
     {
-        // The taps are used as published: biorthogonal filters are not unit-norm, and rescaling them would
-        // break perfect reconstruction.
-        return new Vector<T>([.. taps.Select(c => NumOps.FromDouble(c))]);
+        var taps = GetFilterTaps(_reconstructionOrder, _decompositionOrder);
+        if (taps is null)
+        {
+            throw new InvalidOperationException(
+                $"bior{_reconstructionOrder}.{_decompositionOrder} is not a biorthogonal wavelet.");
+        }
+
+        return taps.Value;
     }
 }
