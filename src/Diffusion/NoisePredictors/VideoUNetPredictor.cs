@@ -1491,37 +1491,23 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> AddImageCondition(Tensor<T> videoFeatures, Tensor<T> imageCond, int numFrames)
     {
-        var result = new Tensor<T>(videoFeatures._shape);
-        var resultSpan = result.AsWritableSpan();
-        var videoSpan = videoFeatures.AsSpan();
-        var imageSpan = imageCond.AsSpan();
-
+        var engine = AiDotNetEngine.Current;
         int batch = videoFeatures.Shape[0];
         int channels = videoFeatures.Shape[1];
         int spatialSize = videoFeatures.Shape[3] * videoFeatures.Shape[4];
         int frameSize = channels * spatialSize;
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int f = 0; f < numFrames; f++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int s = 0; s < spatialSize; s++)
-                    {
-                        int videoIdx = b * numFrames * frameSize + f * frameSize + c * spatialSize + s;
-                        int imageIdx = b * frameSize + c * spatialSize + s;
-
-                        // Add image condition to first frame, scaled for others
-                        var scale = f == 0 ? NumOps.One : NumOps.FromDouble(0.1);
-                        resultSpan[videoIdx] = NumOps.Add(videoSpan[videoIdx],
-                            NumOps.Multiply(imageSpan[imageIdx], scale));
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Add the image condition to every frame: at full strength on the first frame, scaled by 0.1 on the others
+        var frameShape = new[] { batch, numFrames, frameSize };
+        var image = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorNarrow(engine.Reshape(imageCond, new[] { imageCond.Length }), 0, 0, batch * frameSize),
+                new[] { batch, 1, frameSize }), frameShape);
+        var frameScale = Vector<T>.Concatenate(
+            Vector<T>.Default(Math.Min(1, numFrames), NumOps.One),
+            Vector<T>.Default(Math.Max(0, numFrames - 1), NumOps.FromDouble(0.1)));
+        var scale = engine.TensorBroadcastTo(engine.Reshape(frameScale.AsTensor(), new[] { 1, numFrames, 1 }), frameShape);
+        var video = engine.Reshape(videoFeatures, frameShape);
+        return engine.Reshape(engine.TensorAdd(video, engine.TensorMultiply(image, scale)), videoFeatures._shape);
     }
 
     /// <summary>
@@ -1899,11 +1885,7 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
     {
         if (layer == null) return;
-        var layerParams = layer.GetParameters();
-        for (int i = 0; i < layerParams.Length; i++)
-        {
-            parameters.Add(layerParams[i]);
-        }
+        parameters.AddRange(layer.GetParameters().AsSpan().ToArray());
     }
 
     /// <inheritdoc />
@@ -1940,10 +1922,8 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
         for (int layerIndex = 0; layerIndex < layers.Length; layerIndex++)
         {
             int length = lengths[layerIndex];
-            var layerParameters = new Vector<T>(length);
-            for (int i = 0; i < length; i++)
-                layerParameters[i] = parameters[offset++];
-            layers[layerIndex].SetParameters(layerParameters);
+            layers[layerIndex].SetParameters(parameters.GetSubVector(offset, length));
+            offset += length;
         }
     }
 
@@ -2065,8 +2045,7 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void AddLayerGradients(List<T> gradients, ILayer<T>? layer)
     {
         if (layer == null) return;
-        var g = layer.GetParameterGradients();
-        for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        gradients.AddRange(layer.GetParameterGradients().AsSpan().ToArray());
     }
 
     #endregion
