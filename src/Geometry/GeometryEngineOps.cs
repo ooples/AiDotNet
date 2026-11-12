@@ -59,6 +59,11 @@ internal static class GeometryEngineOps<T>
     /// </summary>
     internal static Tensor<T> NormalizeRowsOrZero(Tensor<T> rows)
     {
+        if (rows.Shape[0] == 0)
+        {
+            return rows;
+        }
+
         var lengthSquared = RowSquaredNorms(rows);
         var positive = Engine.TensorGreaterThan(lengthSquared, NumOps.Zero);
         var inverseLength = Engine.TensorReciprocal(Engine.TensorSqrt(lengthSquared));
@@ -72,6 +77,11 @@ internal static class GeometryEngineOps<T>
     /// </summary>
     internal static Tensor<T> NormalizeRowsAbove(Tensor<T> rows, T minLength)
     {
+        if (rows.Shape[0] == 0)
+        {
+            return rows;
+        }
+
         var length = Engine.TensorBroadcastTo(Engine.TensorSqrt(RowSquaredNorms(rows)), rows.Shape);
         var usable = Engine.TensorGreaterThan(length, minLength);
         return Engine.TensorWhere(usable, Engine.TensorDivide(rows, length), rows);
@@ -108,5 +118,15 @@ internal static class GeometryEngineOps<T>
         var min = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(forMin), new[] { 0 }, false));
         var max = Engine.ReduceMax(forMax, new[] { 0 }, false);
         return (Engine.TensorMin(min, NumOps.MaxValue), Engine.TensorMax(max, NumOps.MinValue));
+    }
+
+    /// <summary>
+    /// Returns a 1/0 mask over the columns of a [rows, columns] tensor marking the columns that contain NaN.
+    /// </summary>
+    internal static Tensor<T> ColumnHasNan(Tensor<T> rows)
+    {
+        var isNan = Engine.TensorIsNan(rows);
+        var flags = Engine.TensorWhere(isNan, Engine.TensorOnesLike(rows), Engine.TensorZerosLike(rows));
+        return Engine.TensorGreaterThan(Engine.ReduceMax(flags, new[] { 0 }, false), NumOps.Zero);
     }
 }

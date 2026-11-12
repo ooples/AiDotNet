@@ -19,48 +19,13 @@ public static class MeshOperations<T>
     /// </summary>
     public static Tensor<T> ComputeFaceNormals(TriangleMeshData<T> mesh)
     {
-        int numFaces = mesh.NumFaces;
-        var normals = new T[numFaces * 3];
-
-        for (int f = 0; f < numFaces; f++)
+        if (mesh.NumFaces == 0)
         {
-            int v0 = mesh.Faces[f, 0];
-            int v1 = mesh.Faces[f, 1];
-            int v2 = mesh.Faces[f, 2];
-
-            double x0 = NumOps.ToDouble(mesh.Vertices[v0, 0]);
-            double y0 = NumOps.ToDouble(mesh.Vertices[v0, 1]);
-            double z0 = NumOps.ToDouble(mesh.Vertices[v0, 2]);
-
-            double x1 = NumOps.ToDouble(mesh.Vertices[v1, 0]);
-            double y1 = NumOps.ToDouble(mesh.Vertices[v1, 1]);
-            double z1 = NumOps.ToDouble(mesh.Vertices[v1, 2]);
-
-            double x2 = NumOps.ToDouble(mesh.Vertices[v2, 0]);
-            double y2 = NumOps.ToDouble(mesh.Vertices[v2, 1]);
-            double z2 = NumOps.ToDouble(mesh.Vertices[v2, 2]);
-
-            double e1x = x1 - x0, e1y = y1 - y0, e1z = z1 - z0;
-            double e2x = x2 - x0, e2y = y2 - y0, e2z = z2 - z0;
-
-            double nx = e1y * e2z - e1z * e2y;
-            double ny = e1z * e2x - e1x * e2z;
-            double nz = e1x * e2y - e1y * e2x;
-
-            double length = Math.Sqrt(nx * nx + ny * ny + nz * nz);
-            if (length > 1e-10)
-            {
-                nx /= length;
-                ny /= length;
-                nz /= length;
-            }
-
-            normals[f * 3] = NumOps.FromDouble(nx);
-            normals[f * 3 + 1] = NumOps.FromDouble(ny);
-            normals[f * 3 + 2] = NumOps.FromDouble(nz);
+            return new Tensor<T>(new[] { 0, 3 });
         }
 
-        return new Tensor<T>(normals, [numFaces, 3]);
+        var crossProducts = GeometryEngineOps<T>.FaceCrossProducts(mesh.Vertices, mesh.Faces);
+        return GeometryEngineOps<T>.NormalizeRowsAbove(crossProducts, NumOps.FromDouble(1e-10));
     }
 
     /// <summary>
@@ -68,48 +33,9 @@ public static class MeshOperations<T>
     /// </summary>
     public static Tensor<T> ComputeVertexNormals(TriangleMeshData<T> mesh)
     {
-        int numVertices = mesh.NumVertices;
-        int numFaces = mesh.NumFaces;
-
-        var normalSums = new double[numVertices * 3];
         var faceNormals = ComputeFaceNormals(mesh);
-
-        for (int f = 0; f < numFaces; f++)
-        {
-            double nx = NumOps.ToDouble(faceNormals[f, 0]);
-            double ny = NumOps.ToDouble(faceNormals[f, 1]);
-            double nz = NumOps.ToDouble(faceNormals[f, 2]);
-
-            for (int i = 0; i < 3; i++)
-            {
-                int v = mesh.Faces[f, i];
-                normalSums[v * 3] += nx;
-                normalSums[v * 3 + 1] += ny;
-                normalSums[v * 3 + 2] += nz;
-            }
-        }
-
-        var normals = new T[numVertices * 3];
-        for (int v = 0; v < numVertices; v++)
-        {
-            double nx = normalSums[v * 3];
-            double ny = normalSums[v * 3 + 1];
-            double nz = normalSums[v * 3 + 2];
-
-            double length = Math.Sqrt(nx * nx + ny * ny + nz * nz);
-            if (length > 1e-10)
-            {
-                nx /= length;
-                ny /= length;
-                nz /= length;
-            }
-
-            normals[v * 3] = NumOps.FromDouble(nx);
-            normals[v * 3 + 1] = NumOps.FromDouble(ny);
-            normals[v * 3 + 2] = NumOps.FromDouble(nz);
-        }
-
-        return new Tensor<T>(normals, [numVertices, 3]);
+        var sums = GeometryEngineOps<T>.AccumulateToVertices(faceNormals, mesh.Faces, mesh.NumVertices);
+        return GeometryEngineOps<T>.NormalizeRowsAbove(sums, NumOps.FromDouble(1e-10));
     }
 
     /// <summary>
@@ -118,7 +44,6 @@ public static class MeshOperations<T>
     public static List<int>[] BuildVertexAdjacency(TriangleMeshData<T> mesh)
     {
         int numVertices = mesh.NumVertices;
-        int numFaces = mesh.NumFaces;
 
         var adjacency = new List<int>[numVertices];
         for (int v = 0; v < numVertices; v++)
@@ -126,11 +51,12 @@ public static class MeshOperations<T>
             adjacency[v] = [];
         }
 
-        for (int f = 0; f < numFaces; f++)
+        var faces = mesh.Faces.Data.ToArray();
+        for (int offset = 0; offset + 2 < faces.Length; offset += 3)
         {
-            int v0 = mesh.Faces[f, 0];
-            int v1 = mesh.Faces[f, 1];
-            int v2 = mesh.Faces[f, 2];
+            int v0 = faces[offset];
+            int v1 = faces[offset + 1];
+            int v2 = faces[offset + 2];
 
             AddEdge(adjacency, v0, v1);
             AddEdge(adjacency, v1, v2);
@@ -227,66 +153,50 @@ public static class MeshOperations<T>
     /// <summary>
     /// Computes mesh statistics (surface area, volume, bounding box).
     /// </summary>
-    public static MeshStatistics ComputeStatistics(TriangleMeshData<T> mesh)
+    public static MeshStatistics<T> ComputeStatistics(TriangleMeshData<T> mesh)
     {
+        var engine = AiDotNetEngine.Current;
         int numFaces = mesh.NumFaces;
         int numVertices = mesh.NumVertices;
 
-        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
-        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
-
-        for (int v = 0; v < numVertices; v++)
+        var boundsMin = (NumOps.MaxValue, NumOps.MaxValue, NumOps.MaxValue);
+        var boundsMax = (NumOps.MinValue, NumOps.MinValue, NumOps.MinValue);
+        if (numVertices > 0)
         {
-            double x = NumOps.ToDouble(mesh.Vertices[v, 0]);
-            double y = NumOps.ToDouble(mesh.Vertices[v, 1]);
-            double z = NumOps.ToDouble(mesh.Vertices[v, 2]);
-
-            minX = Math.Min(minX, x);
-            minY = Math.Min(minY, y);
-            minZ = Math.Min(minZ, z);
-            maxX = Math.Max(maxX, x);
-            maxY = Math.Max(maxY, y);
-            maxZ = Math.Max(maxZ, z);
+            // Math.Min/Math.Max propagate NaN, so a column holding NaN reports NaN for both bounds.
+            var (min, max) = GeometryEngineOps<T>.ColumnBounds(mesh.Vertices);
+            var hasNan = GeometryEngineOps<T>.ColumnHasNan(mesh.Vertices);
+            var nan = engine.TensorFullLike(min, NumOps.FromDouble(double.NaN));
+            min = engine.TensorWhere(hasNan, nan, min);
+            max = engine.TensorWhere(hasNan, nan, max);
+            boundsMin = (min[0], min[1], min[2]);
+            boundsMax = (max[0], max[1], max[2]);
         }
 
-        double surfaceArea = 0;
-        for (int f = 0; f < numFaces; f++)
+        T surfaceArea = NumOps.Zero;
+        T signedVolume = NumOps.Zero;
+        if (numFaces > 0)
         {
-            surfaceArea += ComputeFaceArea(mesh, f);
+            var crossProducts = GeometryEngineOps<T>.FaceCrossProducts(mesh.Vertices, mesh.Faces);
+            var doubleAreas = engine.TensorSqrt(GeometryEngineOps<T>.RowSquaredNorms(crossProducts));
+            surfaceArea = NumOps.Multiply(NumOps.FromDouble(0.5), engine.TensorSum(doubleAreas));
+
+            // Divergence theorem: each face contributes p0 . (p1 x p2) / 6.
+            var p0 = GeometryEngineOps<T>.FaceCorner(mesh.Vertices, mesh.Faces, 0);
+            var p1 = GeometryEngineOps<T>.FaceCorner(mesh.Vertices, mesh.Faces, 1);
+            var p2 = GeometryEngineOps<T>.FaceCorner(mesh.Vertices, mesh.Faces, 2);
+            var tripleProducts = engine.TensorMultiply(p0, engine.TensorCross(p1, p2, 1));
+            signedVolume = NumOps.Divide(engine.TensorSum(tripleProducts), NumOps.FromDouble(6.0));
         }
 
-        double signedVolume = 0;
-        for (int f = 0; f < numFaces; f++)
-        {
-            int v0 = mesh.Faces[f, 0];
-            int v1 = mesh.Faces[f, 1];
-            int v2 = mesh.Faces[f, 2];
-
-            double x0 = NumOps.ToDouble(mesh.Vertices[v0, 0]);
-            double y0 = NumOps.ToDouble(mesh.Vertices[v0, 1]);
-            double z0 = NumOps.ToDouble(mesh.Vertices[v0, 2]);
-
-            double x1 = NumOps.ToDouble(mesh.Vertices[v1, 0]);
-            double y1 = NumOps.ToDouble(mesh.Vertices[v1, 1]);
-            double z1 = NumOps.ToDouble(mesh.Vertices[v1, 2]);
-
-            double x2 = NumOps.ToDouble(mesh.Vertices[v2, 0]);
-            double y2 = NumOps.ToDouble(mesh.Vertices[v2, 1]);
-            double z2 = NumOps.ToDouble(mesh.Vertices[v2, 2]);
-
-            signedVolume += (x0 * (y1 * z2 - y2 * z1) +
-                            x1 * (y2 * z0 - y0 * z2) +
-                            x2 * (y0 * z1 - y1 * z0)) / 6.0;
-        }
-
-        return new MeshStatistics(
+        return new MeshStatistics<T>(
             NumVertices: numVertices,
             NumFaces: numFaces,
             NumEdges: CountEdges(mesh),
             SurfaceArea: surfaceArea,
-            Volume: Math.Abs(signedVolume),
-            BoundingBoxMin: (minX, minY, minZ),
-            BoundingBoxMax: (maxX, maxY, maxZ));
+            Volume: NumOps.Abs(signedVolume),
+            BoundingBoxMin: boundsMin,
+            BoundingBoxMax: boundsMax);
     }
 
     private static double ComputeFaceArea(TriangleMeshData<T> mesh, int faceIdx)
@@ -319,14 +229,14 @@ public static class MeshOperations<T>
 
     private static int CountEdges(TriangleMeshData<T> mesh)
     {
-        int numFaces = mesh.NumFaces;
         var edges = new HashSet<(int, int)>();
+        var faces = mesh.Faces.Data.ToArray();
 
-        for (int f = 0; f < numFaces; f++)
+        for (int offset = 0; offset + 2 < faces.Length; offset += 3)
         {
-            int v0 = mesh.Faces[f, 0];
-            int v1 = mesh.Faces[f, 1];
-            int v2 = mesh.Faces[f, 2];
+            int v0 = faces[offset];
+            int v1 = faces[offset + 1];
+            int v2 = faces[offset + 2];
 
             edges.Add((Math.Min(v0, v1), Math.Max(v0, v1)));
             edges.Add((Math.Min(v1, v2), Math.Max(v1, v2)));
@@ -348,15 +258,15 @@ public static class MeshOperations<T>
         }
     }
 }
-
 /// <summary>
 /// Contains statistics about a triangle mesh.
 /// </summary>
-public record MeshStatistics(
+/// <typeparam name="T">The numeric type of the mesh coordinates.</typeparam>
+public record MeshStatistics<T>(
     int NumVertices,
     int NumFaces,
     int NumEdges,
-    double SurfaceArea,
-    double Volume,
-    (double X, double Y, double Z) BoundingBoxMin,
-    (double X, double Y, double Z) BoundingBoxMax);
+    T SurfaceArea,
+    T Volume,
+    (T X, T Y, T Z) BoundingBoxMin,
+    (T X, T Y, T Z) BoundingBoxMax);
