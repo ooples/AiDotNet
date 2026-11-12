@@ -168,6 +168,7 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
         // encodings, the parameter-free reconstruction this class documents; otherwise nothing would link a masked
         // patch to the encoder and the loss could never fall.
         var rows = new List<Tensor<T>>(batch);
+        var share = NumOps.FromDouble(1.0 / numVisible);
         for (int b = 0; b < batch; b++)
         {
             // select[visibleIndex[b][v], v] = 1
@@ -176,7 +177,6 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
             if (_decoder is null)
             {
                 // Masked rows share the visible encodings equally
-                var share = NumOps.FromDouble(1.0 / numVisible);
                 var maskedRows = Engine.TensorTile(
                     Engine.TensorSlice(weight, new[] { b, 0 }, new[] { 1, numPatches }).Reshape(numPatches, 1),
                     new[] { 1, numVisible });
