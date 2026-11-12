@@ -134,6 +134,27 @@ internal static class WrapperScoringOps
     }
 
     /// <summary>
+    /// <paramref name="x"/> ([m] or [m, k]) without its rows <paramref name="start"/> .. <paramref name="end"/> - 1.
+    /// </summary>
+    public static Tensor<T> ExcludeRows<T>(Tensor<T> x, int start, int end)
+    {
+        var engine = AiDotNetEngine.Current;
+        int m = x.Shape[0];
+        var parts = new List<Tensor<T>>();
+        if (start > 0)
+            parts.Add(RowBlock(x, 0, start));
+        if (end < m)
+            parts.Add(RowBlock(x, end, m - end));
+        return parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
+    }
+
+    /// <summary>Rows <paramref name="start"/> .. <paramref name="start"/> + <paramref name="count"/> - 1 of an [m] or [m, k] tensor.</summary>
+    public static Tensor<T> RowBlock<T>(Tensor<T> x, int start, int count) =>
+        x.Rank == 1
+            ? AiDotNetEngine.Current.TensorSlice(x, new[] { start }, new[] { count })
+            : AiDotNetEngine.Current.TensorSlice(x, new[] { start, 0 }, new[] { count, x.Shape[1] });
+
+    /// <summary>
     /// In-sample R^2 of the least-squares fit (with intercept) of <paramref name="target"/> on the given columns,
     /// scikit-learn's <c>LinearRegression().fit(X, y).score(X, y)</c>.
     /// </summary>
