@@ -224,22 +224,19 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// <param name="onnxModelPath">Path to a pretrained ONNX model file.</param>
     /// <param name="options">TemporalGCN-specific options.</param>
     /// <param name="adjacencyMatrix">Optional pre-defined adjacency matrix for the graph.</param>
-    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
+    /// <para>Every parameter is required: an ONNX model is inference-only, so it takes no optimizer or loss
+    /// function, and the native constructor is the one overload with optional parameters.</para>
     /// <para><b>For Beginners:</b> Use this constructor to load a pretrained TemporalGCN model.
     /// The ONNX model contains the trained graph convolution and temporal processing layers.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public TemporalGCN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        TemporalGCNOptions<T>? options = null,
-        Tensor<T>? adjacencyMatrix = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        TemporalGCNOptions<T>? options,
+        Tensor<T>? adjacencyMatrix)
+        : base(architecture, new MeanSquaredErrorLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -251,9 +248,8 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new TemporalGCNOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
+        _optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
@@ -289,7 +285,6 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// a default graph with nearby connections is used.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public TemporalGCN(
         NeuralNetworkArchitecture<T> architecture,
         TemporalGCNOptions<T>? options = null,

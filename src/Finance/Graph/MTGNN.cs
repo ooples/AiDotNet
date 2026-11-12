@@ -242,22 +242,19 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// <param name="onnxModelPath">Path to a pretrained ONNX model file.</param>
     /// <param name="options">MTGNN-specific options.</param>
     /// <param name="predefinedAdjacency">Optional predefined adjacency matrix to combine with learned graph.</param>
-    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
+    /// <para>Every parameter is required: an ONNX model is inference-only, so it takes no optimizer or loss
+    /// function, and the native constructor is the one overload with optional parameters.</para>
     /// <para><b>For Beginners:</b> Use this constructor to load a pretrained MTGNN model.
     /// The ONNX model includes both the learned graph structure and the forecasting layers.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public MTGNN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        MTGNNOptions<T>? options = null,
-        Tensor<T>? predefinedAdjacency = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        MTGNNOptions<T>? options,
+        Tensor<T>? predefinedAdjacency)
+        : base(architecture, new MeanSquaredErrorLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -269,9 +266,8 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new MTGNNOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
+        _optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
@@ -310,7 +306,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// Optionally provide a predefined adjacency to combine with the learned graph.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public MTGNN(
         NeuralNetworkArchitecture<T> architecture,
         MTGNNOptions<T>? options = null,
@@ -365,21 +360,14 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private void InitializeNodeEmbeddings()
     {
-        // Initialize with small random values: (u - 0.5) * 2 * scale, drawn E1 then E2 for each entry.
+        // Uniform on [-scale, scale], as master's (u - 0.5) * 2 * scale draws were, sampled by the engine in T.
+        // Each embedding's stream is seeded from the model's Random, so a fixed Seed reproduces both.
         double scale = Math.Sqrt(2.0 / (_numNodes + _nodeEmbeddingDim));
-        int entries = _numNodes * _nodeEmbeddingDim;
-        var uniforms = new double[2 * entries];
-        for (int i = 0; i < uniforms.Length; i++)
-            uniforms[i] = _random.NextDouble();
-
-        // Draws alternate E1, E2 per entry: column 0 of the [entries, 2] view is E1, column 1 is E2.
         var shape = new[] { _numNodes, _nodeEmbeddingDim };
-        var pairs = Engine.TensorMultiplyScalar(
-            Engine.TensorAddScalar(
-                new Tensor<double>(new[] { entries, 2 }, new Vector<double>(uniforms)).Cast<T>(), NumOps.FromDouble(-0.5)),
-            NumOps.FromDouble(2 * scale));
-        _nodeEmbedding1 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 0, 1).Contiguous(), shape);
-        _nodeEmbedding2 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 1, 1).Contiguous(), shape);
+        T low = NumOps.FromDouble(-scale);
+        T high = NumOps.FromDouble(scale);
+        _nodeEmbedding1 = Engine.TensorRandomUniformRange(shape, low, high, _random.Next());
+        _nodeEmbedding2 = Engine.TensorRandomUniformRange(shape, low, high, _random.Next());
     }
 
     /// <summary>

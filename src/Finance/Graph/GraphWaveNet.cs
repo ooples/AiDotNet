@@ -236,19 +236,18 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// Initializes a new instance of the GraphWaveNet model in ONNX mode for inference.
     /// </summary>
     /// <remarks>
+    /// <para>Every parameter is required: an ONNX model is inference-only, so it takes no optimizer or loss
+    /// function, and the native constructor is the one overload with optional parameters.</para>
     /// <para>
     /// <b>For Beginners:</b> In the GraphWaveNet model, GraphWaveNet sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public GraphWaveNet(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        GraphWaveNetOptions<T>? options = null,
-        Tensor<T>? predefinedAdjacency = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        GraphWaveNetOptions<T>? options,
+        Tensor<T>? predefinedAdjacency)
+        : base(architecture, new MeanSquaredErrorLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -260,9 +259,8 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new GraphWaveNetOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
+        _optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
@@ -298,7 +296,6 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, GraphWaveNet sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public GraphWaveNet(
         NeuralNetworkArchitecture<T> architecture,
         GraphWaveNetOptions<T>? options = null,
@@ -356,21 +353,14 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     private void InitializeNodeEmbeddings()
     {
-        // (u - 0.5) * 2 * scale, drawn E1 then E2 for each entry.
+        // Uniform on [-scale, scale], as master's (u - 0.5) * 2 * scale draws were, sampled by the engine in T.
+        // Each embedding's stream is seeded from the model's Random, so a fixed Seed reproduces both.
         double scale = Math.Sqrt(2.0 / (_numNodes + _nodeEmbeddingDim));
-        int entries = _numNodes * _nodeEmbeddingDim;
-        var uniforms = new double[2 * entries];
-        for (int i = 0; i < uniforms.Length; i++)
-            uniforms[i] = _random.NextDouble();
-
-        // Draws alternate E1, E2 per entry: column 0 of the [entries, 2] view is E1, column 1 is E2.
         var shape = new[] { _numNodes, _nodeEmbeddingDim };
-        var pairs = Engine.TensorMultiplyScalar(
-            Engine.TensorAddScalar(
-                new Tensor<double>(new[] { entries, 2 }, new Vector<double>(uniforms)).Cast<T>(), NumOps.FromDouble(-0.5)),
-            NumOps.FromDouble(2 * scale));
-        _nodeEmbedding1 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 0, 1).Contiguous(), shape);
-        _nodeEmbedding2 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 1, 1).Contiguous(), shape);
+        T low = NumOps.FromDouble(-scale);
+        T high = NumOps.FromDouble(scale);
+        _nodeEmbedding1 = Engine.TensorRandomUniformRange(shape, low, high, _random.Next());
+        _nodeEmbedding2 = Engine.TensorRandomUniformRange(shape, low, high, _random.Next());
     }
 
     /// <summary>
