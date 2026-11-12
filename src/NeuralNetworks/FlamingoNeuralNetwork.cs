@@ -458,15 +458,13 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         int hiddenDim = features.Shape[1];
         var result = new Vector<T>(hiddenDim);
 
-        for (int j = 0; j < hiddenDim; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < seqLen; i++)
-            {
-                sum = NumOps.Add(sum, features[i, j]);
-            }
-            result[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-        }
+        if (hiddenDim == 0) return result;
+
+        // Column sums over the sequence, divided by its length.
+        var sums = seqLen > 0
+            ? Engine.ReduceSum(Engine.TensorSlice(features, [0, 0], [seqLen, hiddenDim]), new[] { 0 }, keepDims: false)
+            : new Tensor<T>([hiddenDim]);
+        Engine.TensorDivideScalar(sums, NumOps.FromDouble(seqLen)).CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -483,11 +481,15 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         T norm1 = NumOps.Zero;
         T norm2 = NumOps.Zero;
 
-        for (int i = 0; i < embedding1.Length && i < embedding2.Length; i++)
+        // Over the common prefix of the two embeddings.
+        int length = Math.Min(embedding1.Length, embedding2.Length);
+        if (length > 0)
         {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(embedding1[i], embedding2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(embedding1[i], embedding1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(embedding2[i], embedding2[i]));
+            var first = embedding1.GetSubVector(0, length);
+            var second = embedding2.GetSubVector(0, length);
+            dotProduct = Engine.DotProduct(first, second);
+            norm1 = Engine.DotProduct(first, first);
+            norm2 = Engine.DotProduct(second, second);
         }
 
         T normProduct = NumOps.Multiply(NumOps.Sqrt(norm1), NumOps.Sqrt(norm2));
@@ -1054,12 +1056,16 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }
@@ -1083,12 +1089,16 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }

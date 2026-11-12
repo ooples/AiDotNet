@@ -1405,15 +1405,13 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         var result = new Vector<T>(hiddenDim);
 
-        for (int j = 0; j < hiddenDim; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < seqLen; i++)
-            {
-                sum = NumOps.Add(sum, tensor[i, j]);
-            }
-            result[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-        }
+        if (hiddenDim == 0) return result;
+
+        // Column sums over the sequence, divided by its length.
+        var sums = seqLen > 0
+            ? Engine.ReduceSum(Engine.TensorSlice(tensor, [0, 0], [seqLen, hiddenDim]), new[] { 0 }, keepDims: false)
+            : new Tensor<T>([hiddenDim]);
+        Engine.TensorDivideScalar(sums, NumOps.FromDouble(seqLen)).CopyTo(result.AsWritableSpan());
 
         return result;
     }
