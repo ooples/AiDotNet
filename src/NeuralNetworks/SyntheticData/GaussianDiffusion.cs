@@ -135,11 +135,12 @@ public class GaussianDiffusion<T>
 
         if (noise is null)
         {
-            noise = new Vector<T>(len);
+            var draws = new T[len];
             for (int i = 0; i < len; i++)
             {
-                noise[i] = SampleStandardNormal();
+                draws[i] = SampleStandardNormal();
             }
+            noise = new Tensor<T>(draws, new[] { len }).ToVector();
         }
 
         var engine = AiDotNetEngine.Current;
@@ -220,7 +221,7 @@ public class GaussianDiffusion<T>
         }
 
         // One standard normal per element, drawn in master's order.
-        var z = new Vector<T>(len);
+        var z = new T[len];
         for (int i = 0; i < len; i++)
         {
             z[i] = SampleStandardNormal();
@@ -228,7 +229,7 @@ public class GaussianDiffusion<T>
 
         T variance = _varianceType == ReverseDiffusionVariance.FixedSmall ? _posteriorVariance[t] : _betas[t];
         T sigma = NumOps.Sqrt(variance);
-        return engine.TensorAdd(meanPred, engine.TensorMultiplyScalar(Tensor<T>.FromVector(z), sigma)).ToVector();
+        return engine.TensorAdd(meanPred, engine.TensorMultiplyScalar(new Tensor<T>(z, new[] { len }), sigma)).ToVector();
     }
 
     /// <summary>
