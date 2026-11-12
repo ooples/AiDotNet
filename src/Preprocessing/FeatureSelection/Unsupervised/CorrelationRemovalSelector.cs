@@ -25,12 +25,12 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
 {
     private readonly double _threshold;
 
-    private double[,]? _correlationMatrix;
+    private Matrix<T>? _correlationMatrix;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Threshold => _threshold;
-    public double[,]? CorrelationMatrix => _correlationMatrix;
+    public Matrix<T>? CorrelationMatrix => _correlationMatrix;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -54,60 +54,15 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
 
-        // Compute correlation matrix
-        _correlationMatrix = new double[p, p];
-        var means = new double[p];
-        var stds = new double[p];
+        // Correlation matrix (sample covariance over sample std + 1e-10, unit diagonal)
+        var correlation = SelectorTensorOps.SampleCorrelationMatrix(Tensor<T>.FromMatrix(data), 1e-10);
+        _correlationMatrix = correlation.ToMatrix();
 
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-        }
-
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            _correlationMatrix[j1, j1] = 1.0;
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                double cov = 0;
-                for (int i = 0; i < n; i++)
-                    cov += (X[i, j1] - means[j1]) * (X[i, j2] - means[j2]);
-                cov /= (n - 1);
-                double corr = cov / (stds[j1] * stds[j2]);
-                _correlationMatrix[j1, j2] = corr;
-                _correlationMatrix[j2, j1] = corr;
-            }
-        }
-
-        // Select features by removing highly correlated ones
-        var toRemove = new HashSet<int>();
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            if (toRemove.Contains(j1)) continue;
-
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                if (toRemove.Contains(j2)) continue;
-
-                if (Math.Abs(_correlationMatrix[j1, j2]) > _threshold)
-                {
-                    // Remove the later feature
-                    toRemove.Add(j2);
-                }
-            }
-        }
-
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => !toRemove.Contains(j))
-            .ToArray();
+        // Walking the features in order, each kept feature removes every later one correlated above the threshold
+        var redundant = engine.TensorGreaterThan(engine.TensorAbs(correlation), NumOps.FromDouble(_threshold));
+        _selectedIndices = SelectorTensorOps.KeepFirstOfRedundantPairs(redundant);
 
         IsFitted = true;
     }
@@ -118,15 +73,7 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("CorrelationRemovalSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
