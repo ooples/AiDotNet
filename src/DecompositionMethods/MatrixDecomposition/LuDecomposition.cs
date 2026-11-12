@@ -43,8 +43,13 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     public Matrix<T> L { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
-    /// Gets the upper triangular matrix from the decomposition.
+    /// Gets the upper factor from the decomposition, with L U = P A.
     /// </summary>
+    /// <remarks>
+    /// For <see cref="LuAlgorithmType.CompletePivoting"/> this is U Q^T (the triangular factor of
+    /// P A Q = L U with the column permutation undone), which is not triangular when columns were
+    /// swapped; <see cref="Solve"/> uses the triangular factor and maps the result back.
+    /// </remarks>
     public Matrix<T> U { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
@@ -57,6 +62,19 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     /// The algorithm to use for LU decomposition.
     /// </summary>
     private readonly LuAlgorithmType _algorithm;
+
+    /// <summary>
+    /// Complete pivoting only: the upper-triangular factor of P A Q = L U before the column
+    /// permutation is undone. <see cref="U"/> holds U Q^T so that L U = P A; Solve needs this
+    /// triangular form.
+    /// </summary>
+    private Matrix<T> _pivotedU = new Matrix<T>(0, 0);
+
+    /// <summary>
+    /// Complete pivoting only: column order Q with (P A Q)[i, j] = A[P[i], Q[j]]; empty when no
+    /// column pivoting was done.
+    /// </summary>
+    private Vector<int> _columnOrder = new Vector<int>(0);
 
     /// <summary>
     /// Initializes a new instance of the LuDecomposition class and performs the decomposition.
@@ -87,6 +105,8 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     protected override void Decompose()
     {
+        _pivotedU = new Matrix<T>(0, 0);
+        _columnOrder = new Vector<int>(0);
         (L, U, P) = ComputeDecomposition(A, _algorithm);
     }
 
@@ -104,8 +124,18 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     {
         var pb = PermutateVector(b, P);
         var y = ForwardSubstitution(L, pb);
+        if (_columnOrder.Length == 0)
+        {
+            return BackSubstitution(U, y);
+        }
 
-        return BackSubstitution(U, y);
+        // Complete pivoting: P A Q = L U, so U z = y gives z = Q^T x, i.e. x[Q[j]] = z[j].
+        var z = BackSubstitution(_pivotedU, y);
+        return Engine.TensorIndexCopy(
+            new Tensor<T>(new[] { z.Length }),
+            0,
+            Tensor<int>.FromVector(_columnOrder),
+            Tensor<T>.FromVector(z)).ToVector();
     }
 
     /// <summary>
@@ -160,16 +190,10 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 $"LU factorization encountered a zero or non-finite pivot at index {index}.");
         }
 
-        // Row order P with (PA)[i] = A[P[i]] (pb[i] = b[P[i]]). Read it from whichever orientation
-        // of the returned permutation matrix reproduces L U.
-        var a = Tensor<T>.FromMatrix(matrix);
-        var lu = Engine.TensorMatMul(lower, upper);
-        T residual = Engine.TensorSumOfSquares(Engine.TensorSubtract(Engine.TensorMatMul(permutation, a), lu));
-        T transposedResidual = Engine.TensorSumOfSquares(Engine.TensorSubtract(
-            Engine.TensorMatMul(Engine.TensorTranspose(permutation), a), lu));
-        var rowOrder = NumOps.LessThanOrEquals(residual, transposedResidual)
-            ? Engine.TensorArgMax(permutation, 1)
-            : Engine.TensorArgMax(permutation, 0);
+        // Linalg.LU returns P with P A = L U (its documented contract: the identity with the getrf
+        // row swaps applied in order). Row i of P has its one in column P[i], so (PA)[i] = A[P[i]]
+        // and pb[i] = b[P[i]]: the row order is the argmax along axis 1.
+        var rowOrder = Engine.TensorArgMax(permutation, 1);
         return (lower.ToMatrix(), upper.ToMatrix(), rowOrder.ToVector());
     }
 
@@ -200,7 +224,12 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
             return (L, U, rowOrder);
         }
 
-        // Undo the column pivoting: column j of U belongs at original column Q[j].
+        // Solve works on the triangular factor of P A Q = L U and scatters x[Q[j]] = z[j].
+        _pivotedU = U;
+        _columnOrder = columnOrder;
+
+        // Undo the column pivoting for the public U (so L U = P A): column j of U belongs at
+        // original column Q[j]. This U is not triangular when Q is not the identity.
         var adjustedU = Engine.TensorIndexCopy(
             new Tensor<T>(new[] { n, n }),
             1,
