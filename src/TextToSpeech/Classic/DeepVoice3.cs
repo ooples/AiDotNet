@@ -248,7 +248,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
     /// </summary>
     private Tensor<T> PositionalEncoding(int length, int dimension, double rate)
     {
-        // angle[i, k] = Ï‰ (i + 1) Â· 10000^(âˆ’(k âˆ’ k mod 2) / d): the outer product of positions and inverse frequencies.
+        // angle[i, k] = ω (i + 1) · 10000^(−(k − k mod 2) / d): the outer product of positions and inverse frequencies.
         var evenIndex = new int[dimension];
         var isEven = new int[dimension];
         for (int k = 0; k < dimension; k++) { evenIndex[k] = k - k % 2; isEven[k] = k % 2 == 0 ? 1 : 0; }
@@ -358,7 +358,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
             lastHidden = hidden;
             int last = fed.Count - 1;
             fed.Add(Engine.TensorSlice(mel, new[] { last, 0 }, new[] { 1, group }).Clone());
-            // Ïƒ(logit) > 0.5 exactly when the logit is positive.
+            // σ(logit) > 0.5 exactly when the logit is positive.
             bool isDone = Engine.TensorGreaterThan(Engine.TensorSlice(done, new[] { last }, new[] { 1 }), zero).Cast<int>().ToArray()[0] != 0;
             if (isDone && step + 1 >= _options.MinDecoderSteps) break;
         }

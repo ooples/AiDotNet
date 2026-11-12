@@ -404,7 +404,7 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         int steps = _options.SamplingSteps;
         if (steps < 1) return noise;
-        // Î±_n = cos(Ï€Ï„_n/2) and Ïƒ_n = sin(Ï€Ï„_n/2) at Ï„_n = n / L, n = 0 â€¦ L, as T.
+        // α_n = cos(πτ_n/2) and σ_n = sin(πτ_n/2) at τ_n = n / L, n = 0 … L, as T.
         var angle = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, steps + 1), NumOps.FromDouble(Math.PI / (2.0 * steps)));
         var alphas = Engine.TensorCos(angle).ToArray();
         var sigmas = Engine.TensorSin(angle).ToArray();

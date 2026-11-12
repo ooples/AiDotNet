@@ -636,7 +636,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
-    /// <c>x / max(â€–xâ€–â‚‚, eps)</c> over the whole tensor (<c>torch.nn.functional.normalize</c>). The norm is taken after
+    /// <c>x / max(‖x‖₂, eps)</c> over the whole tensor (<c>torch.nn.functional.normalize</c>). The norm is taken after
     /// scaling by the peak magnitude, so its sum of squares cannot overflow a narrow T.
     /// </summary>
     protected Tensor<T> NormalizeL2(Tensor<T> tensor, double eps)
@@ -655,7 +655,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
 
     /// <summary>
     /// The index of the first largest element of a tensor read flat (a scan that keeps the earlier index on ties).
-    /// The ties are broken explicitly: each maximal element is keyed by <c>n âˆ’ index</c>, so the arg-max is unique.
+    /// The ties are broken explicitly: each maximal element is keyed by <c>n − index</c>, so the arg-max is unique.
     /// </summary>
     protected int FirstArgMax(Tensor<T> values)
     {
@@ -704,7 +704,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
-    /// Per-utterance outputs <c>[frames_b, â‰¥ columns]</c> as one <c>[batch, longest, columns]</c> tensor: the first
+    /// Per-utterance outputs <c>[frames_b, ≥ columns]</c> as one <c>[batch, longest, columns]</c> tensor: the first
     /// <paramref name="columns"/> channels of each, zero-padded after its last frame.
     /// </summary>
     protected Tensor<T> PadAndStack(IReadOnlyList<Tensor<T>> outputs, int columns)
