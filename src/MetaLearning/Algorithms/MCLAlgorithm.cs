@@ -282,23 +282,22 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         // The denominator runs over a != i, so the diagonal is pushed out of the log-sum-exp by a large negative
         // constant rather than dropped, which keeps every step a whole-tensor operation.
         var eye = engine.TensorEye<T>(rows);
-        var selfMask = engine.TensorMultiplyScalar(eye, NumOps.FromDouble(-1e9));
+        var selfMask = engine.TensorWhere(eye,
+            engine.TensorFullLike(eye, NumOps.MinValue), engine.TensorZerosLike(eye));
 
-        // positives[i, j] = 1 when j != i shares i's label; each anchor's positives are weighted 1 / count.
-        // An anchor with no positive has no term in the paper's sum, so it is left out of both the weights and the
-        // average.
+        // Label identity and positive counts must not round or overflow in the model's storage type.
         var square = new[] { rows, rows };
-        var labelColumn = new Tensor<int>(labels, new[] { rows, 1 }).Cast<T>();
+        var labelColumn = new Tensor<int>(labels, new[] { rows, 1 });
         var positives = engine.TensorSubtract(
             engine.TensorEquals(
                 engine.TensorBroadcastTo(labelColumn, square),
-                engine.TensorBroadcastTo(engine.Reshape(labelColumn, new[] { 1, rows }), square)),
-            eye);
+                engine.TensorBroadcastTo(engine.Reshape(labelColumn, new[] { 1, rows }), square)).Cast<double>(),
+            eye.Cast<double>());
         var counts = engine.ReduceSum(positives, new[] { 1 }, true);
-        var hasPositive = engine.TensorGreaterThan(counts, NumOps.Zero);
+        var hasPositive = engine.TensorGreaterThan(counts, 0.0);
         var safeCounts = engine.TensorWhere(hasPositive, counts, engine.TensorOnesLike(counts));
-        var weights = engine.TensorDivide(positives, engine.TensorBroadcastTo(safeCounts, square));
-        T anchors = engine.TensorSum(hasPositive);
+        var weights = engine.TensorDivide(positives, engine.TensorBroadcastTo(safeCounts, square)).Cast<T>();
+        double anchors = engine.TensorSum(hasPositive);
 
         var masked = engine.TensorAdd(similarity, selfMask);
         var max = engine.ReduceMax(masked, new[] { 1 }, true, out _);
@@ -308,14 +307,14 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 engine.TensorExp(engine.TensorAdd(masked, engine.TensorNegate(stable))), new[] { 1 }, keepDims: true)),
             stable);
 
-        if (!NumOps.GreaterThan(anchors, NumOps.Zero))
+        if (!(anchors > 0))
         {
             return Scalar(engine.TensorMultiplyScalar(engine.ReduceSum(similarity, null), NumOps.Zero));
         }
 
         var logProbabilities = engine.TensorAdd(similarity, engine.TensorNegate(logSumExp));
         var weighted = engine.ReduceSum(engine.TensorMultiply(logProbabilities, weights), null);
-        return Scalar(engine.TensorMultiplyScalar(weighted, NumOps.Negate(NumOps.Divide(NumOps.One, anchors))));
+        return Scalar(engine.TensorMultiplyScalar(weighted, NumOps.FromDouble(-1.0 / anchors)));
     }
 
     /// <summary>The projection head's two layers, <c>W2 relu(W1 h + b1) + b2</c>, one row per example.</summary>

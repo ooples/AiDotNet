@@ -52,11 +52,9 @@ internal static class ParameterModulation
     /// </summary>
     internal static Vector<T> MeanAbsGate<T>(IEngine engine, Vector<T> weights)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        T half = numOps.FromDouble(0.5);
-        T meanAbs = engine.Mean(engine.Abs(weights));
-        var gate = engine.Sigmoid(new Vector<T>(new[] { numOps.Subtract(meanAbs, numOps.One) }));
-        return engine.Add(engine.Multiply(gate, half), engine.Fill(1, half));
+        double meanAbs = engine.Mean(engine.Abs(weights.AsTensor().Cast<double>().ToVector()));
+        var gate = engine.Sigmoid(new Vector<double>(new[] { meanAbs - 1.0 }));
+        return engine.Add(engine.Multiply(gate, 0.5), engine.Fill(1, 0.5)).AsTensor().Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -74,22 +72,22 @@ internal static class ParameterModulation
             return null;
         }
 
-        var rawT = Tensor<T>.FromVector(raw.Length == n ? raw : raw.GetSubVector(0, n));
-        var adaptedT = Tensor<T>.FromVector(adapted.Length == n ? adapted : adapted.GetSubVector(0, n));
+        var rawT = Tensor<T>.FromVector(raw.Length == n ? raw : raw.GetSubVector(0, n)).Cast<double>();
+        var adaptedT = Tensor<T>.FromVector(adapted.Length == n ? adapted : adapted.GetSubVector(0, n)).Cast<double>();
 
         // 1 where |raw| > threshold (NaN compares false, so NaN entries are skipped like the scalar check).
-        var mask = engine.TensorGreaterThan(engine.TensorAbs(rawT), numOps.FromDouble(threshold));
-        T count = engine.TensorSum(mask);
-        if (!numOps.GreaterThan(count, numOps.Zero))
+        var mask = engine.TensorGreaterThan(engine.TensorAbs(rawT), threshold);
+        double count = engine.TensorSum(mask);
+        if (!(count > 0))
         {
             return null;
         }
 
         var safeRaw = engine.TensorWhere(mask, rawT, engine.TensorOnesLike(rawT));
         var ratio = engine.TensorClamp(
-            engine.TensorDivide(adaptedT, safeRaw), numOps.FromDouble(lower), numOps.FromDouble(upper));
-        T sum = engine.TensorSum(engine.TensorWhere(mask, ratio, engine.TensorZerosLike(rawT)));
-        return new Vector<T>(new[] { numOps.Divide(sum, count) });
+            engine.TensorDivide(adaptedT, safeRaw), lower, upper);
+        double sum = engine.TensorSum(engine.TensorWhere(mask, ratio, engine.TensorZerosLike(rawT)));
+        return new Vector<T>(new[] { numOps.FromDouble(sum / count) });
     }
 
     /// <summary>

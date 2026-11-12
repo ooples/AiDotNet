@@ -15,6 +15,11 @@ internal static class NearestNeighborGraph
     /// </summary>
     internal static Tensor<T> NearestMask<T>(IEngine engine, Tensor<T> distances, int k)
     {
+        if (typeof(T) != typeof(double))
+        {
+            return NearestMask(engine, distances.Cast<double>(), k).Cast<T>();
+        }
+
         var numOps = MathHelper.GetNumericOperations<T>();
         int n = distances.Shape[0];
         int take = Math.Min(k, n - 1);
@@ -27,8 +32,9 @@ internal static class NearestNeighborGraph
         var eye = engine.TensorEye<T>(n);
         var others = engine.TensorSubtract(engine.TensorOnesLike(eye), eye);
 
-        // The take-th smallest distance to another node: self sorts last behind the maximum value.
-        var withoutSelf = engine.TensorWhere(eye, engine.TensorFullLike(distances, numOps.MaxValue), distances);
+        // Infinity keeps self from displacing another node even when a valid distance is infinite.
+        var withoutSelf = engine.TensorWhere(eye,
+            engine.TensorFullLike(distances, numOps.FromDouble(double.PositiveInfinity)), distances);
         var sorted = engine.TensorSort(withoutSelf, 1, false).Values;
         var threshold = engine.TensorBroadcastTo(
             engine.TensorSlice(sorted, new[] { 0, take - 1 }, new[] { n, 1 }), square);

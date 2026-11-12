@@ -74,13 +74,14 @@ internal static class ClassifierOutputs<T>
 
         // 1 where a label is negative, at or above numClasses, or not a whole number (NaN compares false, as before).
         var engine = AiDotNetEngine.Current;
-        T classCount = Ops.FromDouble(numClasses);
-        var negative = engine.TensorLessThan(flat, Ops.Zero);
-        var tooLarge = engine.TensorAdd(engine.TensorGreaterThan(flat, classCount), engine.TensorEquals(flat, classCount));
+        var wide = flat.Cast<double>();
+        double classCount = numClasses;
+        var negative = engine.TensorLessThan(wide, 0.0);
+        var tooLarge = engine.TensorAdd(engine.TensorGreaterThan(wide, classCount), engine.TensorEquals(wide, classCount));
         var fractional = engine.TensorGreaterThan(
-            engine.TensorAbs(engine.TensorSubtract(flat, engine.TensorRound(flat))), Ops.FromDouble(1e-9));
+            engine.TensorAbs(engine.TensorSubtract(wide, engine.TensorRound(wide))), 1e-9);
         var invalid = engine.TensorAdd(engine.TensorAdd(negative, tooLarge), fractional);
-        if (Ops.GreaterThan(engine.TensorSum(invalid), Ops.Zero))
+        if (engine.TensorSum(invalid) > 0)
         {
             int i = engine.TensorArgMax(invalid, 0).ToArray()[0];
             double value = Ops.ToDouble(flat[i]);
@@ -180,10 +181,10 @@ internal static class ClassifierOutputs<T>
         // A label outside [0, classes) leaves its row all zero.
         int classes = logProbabilities.Shape.Length > 1 ? logProbabilities.Shape[1] : 1;
         var shape = new[] { labels.Length, classes };
-        var columns = new Tensor<int>(Enumerable.Range(0, classes).ToArray(), new[] { 1, classes }).Cast<T>();
+        var columns = new Tensor<int>(Enumerable.Range(0, classes).ToArray(), new[] { 1, classes }).Cast<double>();
         var oneHot = engine.TensorEquals(
-            engine.TensorBroadcastTo(engine.Reshape(engine.TensorRound(labels), new[] { labels.Length, 1 }), shape),
-            engine.TensorBroadcastTo(columns, shape));
+            engine.TensorBroadcastTo(engine.Reshape(engine.TensorRound(labels.Cast<double>()), new[] { labels.Length, 1 }), shape),
+            engine.TensorBroadcastTo(columns, shape)).Cast<T>();
 
         return loss.ComputeTapeLoss(logProbabilities, oneHot)[0];
     }
@@ -230,15 +231,15 @@ internal static class ClassifierOutputs<T>
 
         var engine = AiDotNetEngine.Current;
         int compared = Math.Min(n, predictedClasses.Length);
-        T wrong = Ops.FromDouble(n - compared);
+        double wrong = n - compared;
         if (compared > 0)
         {
-            var predicted = Tensor<T>.FromVector(predictedClasses.GetSubVector(0, compared));
-            var expected = engine.TensorSlice(labels, new[] { 0 }, new[] { compared });
-            var far = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(predicted, expected)), Ops.FromDouble(0.5));
-            wrong = Ops.Add(wrong, engine.TensorSum(far));
+            var predicted = Tensor<T>.FromVector(predictedClasses.GetSubVector(0, compared)).Cast<double>();
+            var expected = engine.TensorSlice(labels, new[] { 0 }, new[] { compared }).Cast<double>();
+            var far = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(predicted, expected)), 0.5);
+            wrong += engine.TensorSum(far);
         }
 
-        return Ops.Divide(wrong, Ops.FromDouble(n));
+        return Ops.FromDouble(wrong / n);
     }
 }

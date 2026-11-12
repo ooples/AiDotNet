@@ -425,13 +425,10 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private static double DifferenceStep(Vector<T> weights, Vector<T> bias, Vector<T> directionWeights, Vector<T> directionBias)
     {
         var engine = AiDotNetEngine.Current;
-        T directionSquared = NumOps.Add(
-            engine.DotProduct(directionWeights, directionWeights), engine.DotProduct(directionBias, directionBias));
-        T headSquared = NumOps.Add(engine.DotProduct(weights, weights), engine.DotProduct(bias, bias));
-
-        // The step is a scalar control value for the finite difference, so it leaves T once here.
-        double directionNorm = Math.Sqrt(NumOps.ToDouble(directionSquared));
-        return directionNorm == 0 ? 0 : 1e-5 * (1.0 + Math.Sqrt(NumOps.ToDouble(headSquared))) / directionNorm;
+        var direction = Vector<T>.Concatenate(directionWeights, directionBias).AsTensor().Cast<double>().ToVector();
+        var head = Vector<T>.Concatenate(weights, bias).AsTensor().Cast<double>().ToVector();
+        double directionNorm = Math.Sqrt(engine.DotProduct(direction, direction));
+        return directionNorm == 0 ? 0 : 1e-5 * (1.0 + Math.Sqrt(engine.DotProduct(head, head))) / directionNorm;
     }
 
     private static Vector<T> Shift(Vector<T> values, Vector<T> direction, double step)

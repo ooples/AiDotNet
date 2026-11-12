@@ -589,9 +589,10 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         var engine = AiDotNetEngine.Current;
 
-        // The step is a scalar control value for the finite difference, so it leaves T once here.
-        double directionNorm = Math.Sqrt(NumOps.ToDouble(engine.DotProduct(direction, direction)));
-        double pointNorm = NumOps.ToDouble(engine.DotProduct(point, point));
+        var wideDirection = direction.AsTensor().Cast<double>().ToVector();
+        var widePoint = point.AsTensor().Cast<double>().ToVector();
+        double directionNorm = Math.Sqrt(engine.DotProduct(wideDirection, wideDirection));
+        double pointNorm = engine.DotProduct(widePoint, widePoint);
         return directionNorm == 0 ? 0 : 1e-5 * (1.0 + Math.Sqrt(pointNorm)) / directionNorm;
     }
 

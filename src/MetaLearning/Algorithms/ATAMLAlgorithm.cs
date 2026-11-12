@@ -451,8 +451,9 @@ internal class ATAMLAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
 
         // alpha = theta_ATT . s, then c = alpha * s, logits = c W^T + b, scores = softmax(logits).
         var alpha = engine.TensorMatMul(used, attention);
-        var context = engine.TensorMultiply(used, alpha);
-        var logits = engine.TensorAdd(engine.TensorMatMul(context, engine.TensorTranspose(weights)), bias);
+        var context = engine.TensorMultiply(used, engine.TensorBroadcastTo(alpha, used.Shape.ToArray()));
+        var logits = engine.TensorAdd(engine.TensorMatMul(context, engine.TensorTranspose(weights)),
+            engine.TensorBroadcastTo(bias, new[] { rows, _classes }));
         var scores = engine.Softmax(logits, 1);
 
         return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
