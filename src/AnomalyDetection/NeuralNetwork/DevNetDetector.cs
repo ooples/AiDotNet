@@ -233,17 +233,15 @@ public partial class DevNetDetector<T> : AnomalyDetectorBase<T>
 
                 // Reference scores refMean + refStd * z with z ~ N(0, 1) drawn by Box-Muller, one per sample
                 // in batch order (same random draws as the per-sample loop)
-                var gaussian = new double[actualBatchSize];
+                var gaussian = Tensor<T>.CreateZeros(new[] { actualBatchSize, 1 });
                 for (int b = 0; b < actualBatchSize; b++)
                 {
                     double u1 = 1.0 - _random.NextDouble();
                     double u2 = 1.0 - _random.NextDouble();
-                    gaussian[b] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                    gaussian[b, 0] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
                 }
 
-                var refScores = engine.TensorAddScalar(engine.TensorMultiplyScalar(
-                    Tensor<double>.FromVector(Vector<double>.Wrap(gaussian), new[] { actualBatchSize, 1 }).Cast<T>(),
-                    _refStd), _refMean);
+                var refScores = engine.TensorAddScalar(engine.TensorMultiplyScalar(gaussian, _refStd), _refMean);
 
                 // Deviation loss (score - refScore)^2: gradient 2 * (score - refScore), clipped to [-10, 10], then
                 // back-propagated through the output layer and the two ReLU layers
