@@ -450,23 +450,20 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> TensorOf(IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return IdTensor(ids);
     }
 
     private int[] IdsOf(Tensor<T> tensor, int vocabulary)
     {
         if (tensor.Length == 0) throw new ArgumentException("Token tensor cannot be empty.", nameof(tensor));
-        var ids = new int[tensor.Length];
-        for (int i = 0; i < ids.Length; i++)
-        {
-            double value = NumOps.ToDouble(tensor[i]);
-            if (double.IsNaN(value) || value < 0 || value >= vocabulary || value != Math.Truncate(value))
-                throw new ArgumentException("Token IDs must be integers inside the configured vocabulary.", nameof(tensor));
-            ids[i] = (int)value;
-        }
-        return ids;
+        // Every id an integer in [0, vocabulary): no fractional part (NaN and infinities leave a NaN one) and inside the range.
+        var fraction = Engine.TensorAbs(Engine.TensorSubtract(tensor, Engine.TensorTrunc(tensor)));
+        if (NumOps.IsNaN(Engine.TensorSum(fraction))
+            || NumOps.GreaterThan(Engine.TensorMaxValue(fraction), NumOps.Zero)
+            || NumOps.LessThan(Engine.TensorMinValue(tensor), NumOps.Zero)
+            || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(tensor), NumOps.FromDouble(vocabulary)))
+            throw new ArgumentException("Token IDs must be integers inside the configured vocabulary.", nameof(tensor));
+        return tensor.Cast<int>().ToArray();
     }
 
     private void ConfigureBaseProperties()
