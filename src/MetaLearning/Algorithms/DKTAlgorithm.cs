@@ -139,25 +139,6 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         _kernelParams[1] = NumOps.FromDouble(Math.Log(noiseVariance));
     }
 
-    /// <summary>Computes the RBF kernel value between two feature vectors.</summary>
-    private double ComputeKernel(Vector<T> a, Vector<T> b)
-    {
-        double lengthScale = Math.Exp(NumOps.ToDouble(_kernelParams[0]));
-
-        // The kernel value feeds the double-precision GP solve, so the squared distance leaves T once here.
-        int minLen = Math.Min(a.Length, b.Length);
-        double sqDist = 0;
-        if (minLen > 0)
-        {
-            var diff = Engine.Subtract(
-                a.Length == minLen ? a : a.GetSubVector(0, minLen),
-                b.Length == minLen ? b : b.GetSubVector(0, minLen));
-            sqDist = NumOps.ToDouble(Engine.DotProduct(diff, diff));
-        }
-
-        return Math.Exp(-sqDist / (2.0 * lengthScale * lengthScale));
-    }
-
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
@@ -230,28 +211,6 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     }
 
     /// <summary>
-    /// Builds the GP kernel matrix between all pairs of feature vectors.
-    /// Uses the deep kernel: k(x,x') = RBF(f(x), f(x')) where f is the backbone.
-    /// </summary>
-    /// <param name="features">List of feature vectors.</param>
-    /// <returns>Kernel matrix K[i,j] = k(features[i], features[j]).</returns>
-    private double[,] BuildKernelMatrix(List<Vector<T>> features)
-    {
-        int n = features.Count;
-        var K = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                double kval = ComputeKernel(features[i], features[j]);
-                K[i, j] = kval;
-                K[j, i] = kval;
-            }
-        }
-        return K;
-    }
-
-    /// <summary>
     /// Computes the GP predictive mean for query points given support data.
     /// Splits flat feature vectors into per-example multi-dimensional vectors,
     /// builds the kernel matrix K_ss over support examples, then for each query
@@ -265,59 +224,66 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         if (supportFeatures == null || queryFeatures == null || supportFeatures.Length == 0)
             return supportFeatures;
 
-        double noiseVar = Math.Exp(NumOps.ToDouble(_kernelParams[1]));
-
         // Estimate feature dimensionality: assume support and query have the same per-example dim.
         // Use the GCD-based heuristic: if both lengths share a common factor, that's likely the dim.
         // Fallback: treat each feature as a vector if lengths are equal, or use sqrt heuristic.
         int featureDim = EstimateFeatureDim(supportFeatures.Length, queryFeatures.Length);
-        int nSupport = Math.Max(supportFeatures.Length / Math.Max(featureDim, 1), 1);
-        int nQuery = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
+        int width = Math.Max(featureDim, 1);
+        int nSupport = Math.Max(supportFeatures.Length / width, 1);
+        int nQuery = Math.Max(queryFeatures.Length / width, 1);
 
-        // Split into per-example multi-dimensional feature vectors
-        var supportVecs = SplitIntoVectors(supportFeatures, nSupport, featureDim);
-        var queryVecs = SplitIntoVectors(queryFeatures, nQuery, featureDim);
+        // Split into per-example multi-dimensional feature vectors (a shorter last example is zero-padded)
+        var (support, supportMask, supportCount) = ExampleRows.Split(Engine, supportFeatures, nSupport, width);
+        var (query, queryMask, queryCount) = ExampleRows.Split(Engine, queryFeatures, nQuery, width);
 
-        if (supportVecs.Count < 2)
+        if (supportCount < 2)
             return supportFeatures;
 
-        // Build K_ss (support kernel matrix) + noise on diagonal
-        var Kss = BuildKernelMatrix(supportVecs);
-        for (int i = 0; i < supportVecs.Count; i++)
-            Kss[i, i] += noiseVar;
+        // K_ss (support kernel matrix) + noise on the diagonal, and k_qs for every query
+        T noiseVar = NumOps.Exp(_kernelParams[1]);
+        var kss = Engine.TensorAdd(
+            KernelMatrix(support, supportMask, support, supportMask),
+            Engine.TensorMultiplyScalar(Engine.TensorEye<T>(supportCount), noiseVar));
 
         // Construct support labels: assume uniform class distribution
         // In a K-way N-shot task, assign class labels 0, 1, 2, ... cyclically
         int numClasses = Math.Max(_dktOptions.EvaluationTasks > 0 ? (int)Math.Sqrt(_dktOptions.EvaluationTasks) : 5, 2);
-        int shotsPerClass = Math.Max(supportVecs.Count / numClasses, 1);
-        var supportLabels = new double[supportVecs.Count];
-        for (int i = 0; i < supportVecs.Count; i++)
-            supportLabels[i] = (i / shotsPerClass) % numClasses;
+        int shotsPerClass = Math.Max(supportCount / numClasses, 1);
+        var supportLabels = new Tensor<int>(
+            Enumerable.Range(0, supportCount).Select(i => (i / shotsPerClass) % numClasses).ToArray(),
+            new[] { supportCount, 1 }).Cast<T>();
 
-        // For each query, compute GP predictive mean
         var result = new Vector<T>(nQuery);
-        for (int q = 0; q < nQuery; q++)
-        {
-            if (q >= queryVecs.Count) break;
+        if (queryCount == 0)
+            return result;
 
-            // Compute kernel between this query and all support examples
-            var kqs = new double[supportVecs.Count];
-            for (int s = 0; s < supportVecs.Count; s++)
-                kqs[s] = ComputeKernel(queryVecs[q], supportVecs[s]);
+        // GP predictive mean for every query: alpha = (K_ss + sigma^2 I)^-1 k_qs, mean = alpha^T y_s, with the
+        // SPD solve through a Cholesky factor as in GPyTorch and scikit-learn
+        var kqs = KernelMatrix(support, supportMask, query, queryMask);
+        var alpha = ExampleRows.SolveSymmetricPositiveDefinite(kss, kqs);
+        var means = Engine.Reshape(
+            Engine.TensorMatMul(Engine.TensorTranspose(alpha), supportLabels), new[] { queryCount }).ToVector();
 
-            // Solve (K_ss + sigma^2 I) alpha = k_qs
-            var alphaVec = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(
-                Kss, kqs, supportVecs.Count);
+        // Queries past the last example keep a zero mean
+        return queryCount == nQuery ? means : Vector<T>.Concatenate(means, new Vector<T>(nQuery - queryCount));
+    }
 
-            // GP predictive mean = alpha^T @ support_labels
-            double predMean = 0;
-            for (int s = 0; s < supportVecs.Count; s++)
-                predMean += alphaVec[s] * supportLabels[s];
-
-            result[q] = NumOps.FromDouble(predMean);
-        }
-
-        return result;
+    /// <summary>
+    /// The deep RBF kernel k(a_i, b_j) = exp(-||a_i - b_j||^2 / (2 l^2)) between the rows of two padded example
+    /// matrices, [rows of a, rows of b]. The distance runs over the entries both rows have (their common prefix).
+    /// </summary>
+    private Tensor<T> KernelMatrix(Tensor<T> a, Tensor<T> aMask, Tensor<T> b, Tensor<T> bMask)
+    {
+        // sum_k ma mb (a - b)^2 = (a o a) mb^T + ma (b o b)^T - 2 a b^T, the padded entries being zero
+        var squaredDistance = Engine.TensorSubtract(
+            Engine.TensorAdd(
+                Engine.TensorMatMul(Engine.TensorSquare(a), Engine.TensorTranspose(bMask)),
+                Engine.TensorMatMul(aMask, Engine.TensorTranspose(Engine.TensorSquare(b)))),
+            Engine.TensorMultiplyScalar(Engine.TensorMatMul(a, Engine.TensorTranspose(b)), NumOps.FromDouble(2.0)));
+        T lengthScale = NumOps.Exp(_kernelParams[0]);
+        T scale = NumOps.Negate(NumOps.Divide(NumOps.One,
+            NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(lengthScale, lengthScale))));
+        return Engine.TensorExp(Engine.TensorMultiplyScalar(squaredDistance, scale));
     }
 
     /// <summary>
@@ -357,20 +323,6 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             a = temp;
         }
         return Math.Abs(a);
-    }
-
-    /// <summary>Splits a flat feature vector into a list of per-example multi-dimensional vectors.</summary>
-    private static List<Vector<T>> SplitIntoVectors(Vector<T> flat, int numExamples, int featureDim)
-    {
-        var result = new List<Vector<T>>();
-        for (int i = 0; i < numExamples; i++)
-        {
-            int start = i * featureDim;
-            int len = Math.Min(featureDim, flat.Length - start);
-            if (len <= 0) break;
-            result.Add(flat.GetSubVector(start, len));
-        }
-        return result;
     }
 
     /// <inheritdoc/>

@@ -117,69 +117,6 @@ public partial class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         _frnOptions = options;
     }
 
-    /// <summary>
-    /// Computes the reconstruction error for a query given class support features.
-    /// Uses ridge regression: w* = (S^T S + lambda I)^-1 S^T q, error = ||q - S w*||^2
-    /// </summary>
-    /// <param name="queryFeature">Query feature vector.</param>
-    /// <param name="supportFeatures">List of support features for one class.</param>
-    /// <returns>Reconstruction error (lower = better match).</returns>
-    private double ComputeReconstructionError(Vector<T> queryFeature, List<Vector<T>> supportFeatures)
-    {
-        if (supportFeatures.Count == 0 || queryFeature.Length == 0)
-            return double.MaxValue;
-
-        double lambda = _frnOptions.ReconstructionLambda;
-        int n = supportFeatures.Count;
-        int d = queryFeature.Length;
-
-        // Compute S^T S (n x n gram matrix)
-        var gram = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                double dot = 0;
-                int minLen = Math.Min(supportFeatures[i].Length, supportFeatures[j].Length);
-                for (int k = 0; k < minLen; k++)
-                    dot += NumOps.ToDouble(supportFeatures[i][k]) * NumOps.ToDouble(supportFeatures[j][k]);
-                gram[i, j] = dot;
-                gram[j, i] = dot;
-            }
-            gram[i, i] += lambda; // Regularization
-        }
-
-        // Compute S^T q (n x 1)
-        var stq = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double dot = 0;
-            int minLen = Math.Min(supportFeatures[i].Length, d);
-            for (int k = 0; k < minLen; k++)
-                dot += NumOps.ToDouble(supportFeatures[i][k]) * NumOps.ToDouble(queryFeature[k]);
-            stq[i] = dot;
-        }
-
-        // Solve (S^T S + lambda I) w = S^T q using simple Gaussian elimination
-        var w = SolveLinearSystemStatic(gram, stq, n);
-
-        // Compute reconstruction: q_hat = S w
-        double error = 0;
-        for (int k = 0; k < d; k++)
-        {
-            double reconstructed = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (k < supportFeatures[i].Length)
-                    reconstructed += w[i] * NumOps.ToDouble(supportFeatures[i][k]);
-            }
-            double diff = NumOps.ToDouble(queryFeature[k]) - reconstructed;
-            error += diff * diff;
-        }
-
-        return error;
-    }
-
     /// <summary>Solves a linear system Ax = b using Gaussian elimination.</summary>
     internal static double[] SolveLinearSystemStatic(double[,] A, double[] b, int n)
     {
@@ -302,43 +239,38 @@ public partial class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         int actualComponents = Math.Min(numComponents, supportFeatures.Length / Math.Max(featureDim, 1));
         actualComponents = Math.Max(actualComponents, 1);
 
-        var supportList = new List<Vector<T>>();
-        for (int i = 0; i < actualComponents; i++)
-        {
-            int start = i * featureDim;
-            int len = Math.Min(featureDim, supportFeatures.Length - start);
-            if (len <= 0) break;
-            supportList.Add(supportFeatures.GetSubVector(start, len));
-        }
-
-        if (supportList.Count == 0)
+        // S [n, featureDim]: a shorter last example is zero-padded, which leaves every dot product unchanged
+        var (support, _, n) = ExampleRows.Split(Engine, supportFeatures, actualComponents, featureDim);
+        if (n == 0)
         {
             return Engine.Fill(queryFeatures.Length, NumOps.FromDouble(0.5));
         }
 
         // Split query features into per-example vectors using the same feature dimension
         int numQueries = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
-        var weights = new Vector<T>(numQueries);
-
-        for (int q = 0; q < numQueries; q++)
+        var (queries, queryMask, queryCount) = ExampleRows.Split(Engine, queryFeatures, numQueries, featureDim);
+        if (queryCount == 0)
         {
-            int qStart = q * featureDim;
-            int qLen = Math.Min(featureDim, queryFeatures.Length - qStart);
-            if (qLen <= 0) break;
-
-            var queryVec = queryFeatures.GetSubVector(qStart, qLen);
-
-            // Compute reconstruction error using ridge regression (lower = better match); the error comes from
-            // the double-precision solve (the engine has no linear solve), so the weight is written per query.
-            double error = ComputeReconstructionError(queryVec, supportList);
-
-            // Convert error to weight via sigmoid of negative error (scaled by feature dim)
-            double scaledError = error / Math.Max(featureDim, 1);
-            double weight = 1.0 / (1.0 + Math.Exp(scaledError));
-            weights[q] = NumOps.FromDouble(weight);
+            return new Vector<T>(numQueries);
         }
 
-        return weights;
+        // Ridge regression for every query at once: (S S^T + lambda I) W = S Q^T, error_q = ||q - W_q^T S||^2 over
+        // the query's own entries (lower = better match)
+        var gram = Engine.TensorAdd(
+            Engine.TensorMatMul(support, Engine.TensorTranspose(support)),
+            Engine.TensorMultiplyScalar(Engine.TensorEye<T>(n), NumOps.FromDouble(_frnOptions.ReconstructionLambda)));
+        var coefficients = ExampleRows.SolveSymmetricPositiveDefinite(
+            gram, Engine.TensorMatMul(support, Engine.TensorTranspose(queries)));
+        var reconstructed = Engine.TensorMatMul(Engine.TensorTranspose(coefficients), support);
+        var residual = Engine.TensorMultiply(Engine.TensorSubtract(queries, reconstructed), queryMask);
+        var errors = Engine.ReduceSum(Engine.TensorSquare(residual), new[] { 1 }, false);
+
+        // Convert error to weight via sigmoid of negative error (scaled by feature dim)
+        var weights = Engine.TensorSigmoid(
+            Engine.TensorMultiplyScalar(errors, NumOps.FromDouble(-1.0 / Math.Max(featureDim, 1)))).ToVector();
+        return queryCount == numQueries
+            ? weights
+            : Vector<T>.Concatenate(weights, new Vector<T>(numQueries - queryCount));
     }
 
 }
