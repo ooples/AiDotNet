@@ -132,13 +132,16 @@ public class LinearProjector<T> : IProjectorHead<T>, AiDotNet.Models.Parameters.
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var paramList = new List<T>();
+        // Bulk copy of each trainable tensor, in GetTrainableTensors order
+        var parameters = new Vector<T>(checked((int)ParameterCount));
+        int offset = 0;
         foreach (var tensor in GetTrainableTensors())
         {
-            for (int i = 0; i < tensor.Length; i++) paramList.Add(tensor[i]);
+            tensor.Contiguous().AsSpan().CopyTo(parameters.AsWritableSpan().Slice(offset, tensor.Length));
+            offset += tensor.Length;
         }
 
-        return new Vector<T>([.. paramList]);
+        return parameters;
     }
 
     /// <inheritdoc />
@@ -153,7 +156,8 @@ public class LinearProjector<T> : IProjectorHead<T>, AiDotNet.Models.Parameters.
         int offset = 0;
         foreach (var tensor in GetTrainableTensors())
         {
-            for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+            parameters.AsSpan().Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
+            offset += tensor.Length;
         }
     }
 
