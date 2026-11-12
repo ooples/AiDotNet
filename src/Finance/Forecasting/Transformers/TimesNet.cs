@@ -1048,6 +1048,21 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
         var newInput = new Tensor<T>(new[] { batchSize, _sequenceLength, features });
 
         int keepLen = _sequenceLength - steps;
+        if (steps >= 0 && keepLen >= 0 && batchSize > 0 && features > 0)
+        {
+            // Window = the last keepLen input steps followed by the first steps predictions (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new System.Collections.Generic.List<Tensor<T>>(2);
+            if (keepLen > 0)
+                parts.Add(Engine.TensorSlice(input, new[] { 0, steps, 0 }, new[] { batchSize, keepLen, features }));
+            if (steps > 0)
+                parts.Add(Engine.TensorSlice(predictions, new[] { 0, 0, 0 }, new[] { batchSize, steps, features }));
+            if (parts.Count == 0)
+                return newInput;
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
+        // Out-of-range step counts keep the element-wise copy so they fail exactly as before.
         for (int b = 0; b < batchSize; b++)
         {
             for (int t = 0; t < keepLen; t++)
