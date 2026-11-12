@@ -329,7 +329,7 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// that it has a high correlation (0.95) with feature 2, which explains why it was removed.
     /// </para>
     /// </remarks>
-    public Dictionary<int, double> GetCorrelationsWithSelected(int featureIndex)
+    public Dictionary<int, T> GetCorrelationsWithSelected(int featureIndex)
     {
         if (_selectedFeatures is null || _correlationMatrix is null)
         {
@@ -341,10 +341,11 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentOutOfRangeException(nameof(featureIndex));
         }
 
-        var correlations = new Dictionary<int, double>();
+        ReadOnlySpan<T> featureRow = _correlationMatrix.GetRowReadOnlySpan(featureIndex);
+        var correlations = new Dictionary<int, T>(_selectedFeatures.Length);
         foreach (int selectedIdx in _selectedFeatures)
         {
-            correlations[selectedIdx] = _correlationMatrix[featureIndex, selectedIdx];
+            correlations[selectedIdx] = featureRow[selectedIdx];
         }
 
         return correlations;

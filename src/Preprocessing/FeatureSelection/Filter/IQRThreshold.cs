@@ -26,12 +26,12 @@ public class IQRThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatur
 {
     private readonly double _threshold;
 
-    private Vector<T>? _iqrValues;
+    private double[]? _iqrValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Threshold => _threshold;
-    public Vector<T>? IQRValues => _iqrValues;
+    public double[]? IQRValues => _iqrValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -55,14 +55,28 @@ public class IQRThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatur
         int n = data.Rows;
         int p = data.Columns;
 
-        // IQR = sorted[3n/4] - sorted[n/4] per feature
-        var X = Tensor<T>.FromMatrix(data);
-        var iqrValues = Engine.TensorSubtract(
-            PreprocessingTensorOps.ColumnOrderStatistic(X, 3 * n / 4), PreprocessingTensorOps.ColumnOrderStatistic(X, n / 4));
-        _iqrValues = iqrValues.ToVector();
+        _iqrValues = new double[p];
 
-        _selectedIndices = PreprocessingTensorOps.MaskPositions(
-            Engine.TensorGreaterThan(iqrValues, NumOps.FromDouble(_threshold)));
+        for (int j = 0; j < p; j++)
+        {
+            var values = new double[n];
+            for (int i = 0; i < n; i++)
+                values[i] = NumOps.ToDouble(data[i, j]);
+
+            Array.Sort(values);
+
+            int q1Index = n / 4;
+            int q3Index = 3 * n / 4;
+
+            double q1 = values[q1Index];
+            double q3 = values[q3Index];
+
+            _iqrValues[j] = q3 - q1;
+        }
+
+        _selectedIndices = Enumerable.Range(0, p)
+            .Where(j => _iqrValues[j] > _threshold)
+            .ToArray();
 
         IsFitted = true;
     }
@@ -73,7 +87,15 @@ public class IQRThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatur
         if (_selectedIndices is null)
             throw new InvalidOperationException("IQRThreshold has not been fitted.");
 
-        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
+        int numRows = data.Rows;
+        int numCols = _selectedIndices.Length;
+        var result = new T[numRows, numCols];
+
+        for (int i = 0; i < numRows; i++)
+            for (int j = 0; j < numCols; j++)
+                result[i, j] = data[i, _selectedIndices[j]];
+
+        return new Matrix<T>(result);
     }
 
     /// <inheritdoc />
