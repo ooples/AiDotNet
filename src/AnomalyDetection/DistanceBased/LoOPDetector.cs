@@ -142,13 +142,17 @@ public partial class LoOPDetector<T> : AnomalyDetectorBase<T>
             engine.ReduceSum(AnomalyTensorOps.GatherByIndex(pdTraining, trainingNeighbors), new[] { 1 }, false), k);
         var trainingPlof = Plof(pdTraining, trainingExpected);
 
+        // nPLOF = lambda * sqrt(E[PLOF^2]) with the expectation over the whole training set: one aggregate
+        // normalization for every object (Kriegel et al. 2009, the aggregate nPLOF; ELKI computes it once per relation)
+        T nplof = NumOps.Multiply(NumOps.FromDouble(_lambda), NumOps.Sqrt(engine.TensorMean(engine.TensorSquare(trainingPlof))));
+
         // Query rows are scored in bounded blocks: only a [block, nTrain] distance matrix is live
         return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), trainingData.Rows,
-            query => ScoreBlock(query, training, pdTraining, trainingPlof)).ToVector();
+            query => ScoreBlock(query, training, pdTraining, nplof)).ToVector();
     }
 
-    // LoOP scores of one block of query rows against the training data.
-    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T> pdTraining, Tensor<T> trainingPlof)
+    // LoOP scores of one block of query rows against the training data, given the dataset-wide nPLOF.
+    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T> pdTraining, T nplof)
     {
         var engine = Engine;
         // Neighbourhood of every point: the k nearest training points at a positive distance. Distances
@@ -166,19 +170,18 @@ public partial class LoOPDetector<T> : AnomalyDetectorBase<T>
         var ePdist = engine.TensorDivide(
             MaskedRowSum(AnomalyTensorOps.GatherByIndex(pdTraining, order), neighborMask), count);
 
-        // PLOF (Probabilistic LOF) and its normalization nPLOF = lambda * sqrt(E[PLOF^2]) over the neighbours
+        // PLOF (Probabilistic LOF)
         var plof = Plof(pdist, ePdist);
-        var neighborPlof = AnomalyTensorOps.GatherByIndex(trainingPlof, order);
-        var nplof = engine.TensorMultiplyScalar(
-            engine.TensorSqrt(engine.TensorDivide(MaskedRowSum(engine.TensorSquare(neighborPlof), neighborMask), count)),
-            NumOps.FromDouble(_lambda));
 
         // LoOP = max(0, erf(PLOF / (sqrt(2) * nPLOF))) (Kriegel et al. 2009); with nPLOF = 0 it is 1 for a
         // positive PLOF and 0 otherwise
-        var z = engine.TensorDivide(plof, engine.TensorMultiplyScalar(nplof, NumOps.FromDouble(Math.Sqrt(2))));
-        var loop = engine.TensorMax(engine.TensorErf(z), NumOps.Zero);
-        var degenerate = engine.TensorGreaterThan(plof, NumOps.Zero);
-        return engine.TensorWhere(engine.TensorGreaterThan(nplof, NumOps.Zero), loop, degenerate);
+        if (!NumOps.GreaterThan(nplof, NumOps.Zero))
+        {
+            return engine.TensorGreaterThan(plof, NumOps.Zero);
+        }
+
+        var z = engine.TensorDivideScalar(plof, NumOps.Multiply(nplof, NumOps.FromDouble(Math.Sqrt(2))));
+        return engine.TensorMax(engine.TensorErf(z), NumOps.Zero);
     }
 
     // sum_j values[i, j] over the entries where mask[i, j] is 1 (masked-out entries never contribute,
