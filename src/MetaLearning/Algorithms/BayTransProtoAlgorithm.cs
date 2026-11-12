@@ -73,9 +73,7 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     {
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
-        _logVar = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-            _logVar[d] = NumOps.FromDouble(options.InitialLogVar);
+        _logVar = Engine.Fill(_paramDim, NumOps.FromDouble(options.InitialLogVar));
     }
 
     /// <inheritdoc/>
@@ -84,12 +82,13 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
+        T transductiveLR = NumOps.FromDouble(_algoOptions.TransductiveLR);
+        T klScale = NumOps.FromDouble(_algoOptions.KLWeight / _paramDim);
 
         foreach (var task in taskBatch.Tasks)
         {
             // Phase 1: Standard inner-loop adaptation
-            var adaptedMean = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedMean[d] = initParams[d];
+            var adaptedMean = initParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -104,9 +103,7 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
                 // Use query gradients to refine posterior mean
                 ParamModel.SetParameters(adaptedMean);
                 var queryGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
-                for (int d = 0; d < _paramDim; d++)
-                    adaptedMean[d] = NumOps.Subtract(adaptedMean[d],
-                        NumOps.FromDouble(_algoOptions.TransductiveLR * NumOps.ToDouble(queryGrad[d])));
+                adaptedMean = Engine.Subtract(adaptedMean, Engine.Multiply(queryGrad, transductiveLR));
             }
 
             // Final evaluation: ensemble loss
@@ -120,16 +117,9 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             var ensembleLoss = ComputeMean(finalLosses);
 
             // KL divergence: KL(N(adapted, σ²) || N(init, I))
-            double kl = 0;
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double logv = NumOps.ToDouble(_logVar[d]);
-                double v = Math.Exp(logv);
-                double meanDiff = NumOps.ToDouble(adaptedMean[d]) - NumOps.ToDouble(initParams[d]);
-                kl += 0.5 * (v + meanDiff * meanDiff - 1.0 - logv);
-            }
+            T kl = DiagonalGaussianKL(adaptedMean, initParams);
 
-            var totalLoss = NumOps.Add(ensembleLoss, NumOps.FromDouble(_algoOptions.KLWeight * kl / _paramDim));
+            var totalLoss = NumOps.Add(ensembleLoss, NumOps.Multiply(klScale, kl));
             losses.Add(totalLoss);
 
             ParamModel.SetParameters(adaptedMean);
@@ -147,8 +137,7 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedMean = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedMean[d] = initParams[d];
+        var adaptedMean = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -172,14 +161,23 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         return sample;
     }
 
+    /// <summary>KL(N(mean, diag exp(logVar)) || N(prior, I)) = 0.5 * sum_d [v_d + (mean_d - prior_d)^2 - 1 - log v_d].</summary>
+    private T DiagonalGaussianKL(Vector<T> mean, Vector<T> prior)
+    {
+        var diff = Engine.Subtract(mean, prior);
+        T kl = NumOps.Subtract(
+            NumOps.Add(Engine.Sum(Engine.Exp(_logVar)), Engine.DotProduct(diff, diff)),
+            NumOps.Add(NumOps.FromDouble(_paramDim), Engine.Sum(_logVar)));
+        return NumOps.Multiply(NumOps.FromDouble(0.5), kl);
+    }
+
     private double ComputeBayTransLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
         var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
-            var ap = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
+            var ap = initParams.Clone();
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 ParamModel.SetParameters(ap);
