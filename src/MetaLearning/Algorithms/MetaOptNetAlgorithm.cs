@@ -160,10 +160,7 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         if (_metaOptNetOptions.EncoderL2Regularization > 0)
         {
             T decay = NumOps.FromDouble(_metaOptNetOptions.EncoderL2Regularization);
-            for (int i = 0; i < bodyGradient.Length; i++)
-            {
-                bodyGradient[i] = NumOps.Add(bodyGradient[i], NumOps.Multiply(decay, body[i]));
-            }
+            bodyGradient = Engine.Add(bodyGradient, Engine.Multiply(body, decay));
         }
 
         if (_metaOptNetOptions.GradientClipThreshold.HasValue && _metaOptNetOptions.GradientClipThreshold.Value > 0)
@@ -203,15 +200,11 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 
         // One row per class of NumClasses, in class order: a class the task did not contain keeps a zero row, which
         // scores zero for every example.
-        var weights = new Matrix<T>(_metaOptNetOptions.NumClasses, _metaOptNetOptions.EmbeddingDimension);
         var primal = Primal(solved.Coefficients, support);
-        for (int c = 0; c < episode.ClassSlots.Length; c++)
-        {
-            for (int j = 0; j < _metaOptNetOptions.EmbeddingDimension; j++)
-            {
-                weights[episode.ClassSlots[c], j] = primal[c * _metaOptNetOptions.EmbeddingDimension + j];
-            }
-        }
+        var slotRows = Engine.TensorOneHot<T>(
+            new Tensor<int>(episode.ClassSlots, new[] { episode.ClassSlots.Length }), _metaOptNetOptions.NumClasses);
+        var weights = Engine.TensorMatMul(Engine.TensorTranspose(slotRows),
+            Tensor<T>.FromVector(primal, new[] { episode.ClassSlots.Length, _metaOptNetOptions.EmbeddingDimension })).ToMatrix();
 
         return new MetaOptNetModel<T, TInput, TOutput>(MetaModel, weights, _logitScale[0], _metaOptNetOptions);
     }
@@ -309,14 +302,12 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         var logSum = engine.TensorLog(engine.ReduceSum(engine.TensorExp(shifted), new[] { 1 }, keepDims: true));
         var logProbabilities = engine.TensorAdd(shifted, engine.TensorNegate(logSum));
 
-        var smoothed = new Tensor<T>(new[] { target.Length, classes });
+        // off everywhere, on at each row's (rounded) label
         T off = Ops.FromDouble(epsilon / classes);
         T on = Ops.FromDouble(1.0 - epsilon + epsilon / classes);
-        for (int r = 0; r < target.Length; r++)
-        {
-            int label = (int)Math.Round(Ops.ToDouble(target[r]));
-            for (int c = 0; c < classes; c++) smoothed[r * classes + c] = c == label ? on : off;
-        }
+        var labels = engine.TensorRound(engine.Reshape(target, new[] { target.Length })).Cast<int>();
+        var smoothed = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorOneHot<T>(labels, classes), Ops.Subtract(on, off)), off);
 
         var product = engine.TensorMultiply(logProbabilities, smoothed);
         return engine.TensorMultiplyScalar(
@@ -463,18 +454,20 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     private int[] ReadLabels(TOutput labels)
     {
         var tensor = ClassifierOutputs<T>.Labels(labels, _metaOptNetOptions.NumClasses);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
     }
 
+    /// <summary>Each support row's class slot: the last slot whose membership entry exceeds 0.5, else 0.</summary>
     private static int[] SupportLabels(PrototypeEpisode<T> episode, int rows)
     {
-        var labels = new int[rows];
-        for (int c = 0; c < episode.ClassSlots.Length; c++)
-            for (int r = 0; r < rows; r++)
-                if (Ops.ToDouble(episode.Membership[c * rows + r]) > 0.5) labels[r] = c;
-        return labels;
+        var engine = AiDotNetEngine.Current;
+        int classes = episode.ClassSlots.Length;
+        if (classes == 0 || rows == 0) return new int[rows];
+        var shape = new[] { classes, rows };
+        var member = engine.TensorGreaterThan(engine.Reshape(episode.Membership, shape), Ops.FromDouble(0.5));
+        var slot = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, classes, 1), new[] { classes, 1 }), shape);
+        var last = engine.ReduceMax(engine.TensorMultiply(member, slot), new[] { 0 }, keepDims: false);
+        return engine.TensorRound(last).Cast<int>().ToArray();
     }
 
     private (Tensor<T> Support, Tensor<T> Query) Embed(IMetaLearningTask<T, TInput, TOutput> task, PrototypeEpisode<T> episode)
@@ -568,20 +561,13 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     {
         if (sum is null)
         {
-            var copy = new Vector<T>(values.Length);
-            for (int i = 0; i < values.Length; i++) copy[i] = values[i];
-            return copy;
+            return values.Clone();
         }
 
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return AiDotNetEngine.Current.Add(sum, values);
     }
 
-    private static Vector<T> Scale(Vector<T> values, T divisor)
-    {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
-    }
+    private static Vector<T> Scale(Vector<T> values, T divisor) => AiDotNetEngine.Current.Divide(values, divisor);
 
     #endregion
 }
