@@ -22921,3 +22921,79 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.SegmentPanoptic(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! stuffClassNames, System.Collections.Generic.IReadOnlyList<string!>! thingClassNames) -> AiDotNet.Interfaces.PanopticSegmentationResult<T>!
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumClusterCenters.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumClusterCenters.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelEmbeddingDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelEmbeddingDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumKMeansIterations.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumKMeansIterations.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ClassThresholdThing.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ClassThresholdThing.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ClassThresholdStuff.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ClassThresholdStuff.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelConfidenceThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelConfidenceThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.OverlapThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.OverlapThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ReorderClassWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ReorderClassWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ReorderMaskWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ReorderMaskWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.ClassNames.get -> string![]?
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.ClassNames.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.InVocabularyClassNames.get -> string![]?
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.InVocabularyClassNames.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.Temperature.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.Temperature.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.InVocabularyClipWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.InVocabularyClipWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.OutOfVocabularyClipWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.OutOfVocabularyClipWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumQueries.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumQueries.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.PixelEmbeddingDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.PixelEmbeddingDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumDecoderLayers.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumDecoderLayers.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.ObjectMaskThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.ObjectMaskThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.OverlapThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.OverlapThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.ThingStuffThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.ThingStuffThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.InstanceScoreThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.InstanceScoreThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.OverlapThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.OverlapThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.StuffAreaThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.StuffAreaThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.IsThingClass(int classId) -> bool
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.FitThingStuffSplit(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! semanticPseudoLabels, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! instanceMasks) -> System.Collections.Generic.IReadOnlyList<bool>!
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.GeneratePanopticPseudoLabels(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! semanticPseudoLabels, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! instanceMasks) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! SemanticLabels, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! InstanceIds)
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MemoryTopK.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MemoryTopK.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MergeEvery.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MergeEvery.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MaxMemoryFrames.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MaxMemoryFrames.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.AssociationIoUThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.AssociationIoUThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MaxMissedMerges.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MaxMissedMerges.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.UniVSOptions.NumPromptPoints.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.UniVSOptions.NumPromptPoints.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.UniVSOptions.PromptMemoryLength.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.UniVSOptions.PromptMemoryLength.set -> void
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSegOptions.EncoderFeatures.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSegOptions.EncoderFeatures.set -> void
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSegOptions.DecoderFeatures.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSegOptions.DecoderFeatures.set -> void
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.SetSupportSet(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labels) -> void
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.ClearSupportSet() -> void
+override AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.ResolveLazyLayerShapes() -> void
