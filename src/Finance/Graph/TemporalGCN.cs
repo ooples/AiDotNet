@@ -268,8 +268,8 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         _useResidualConnections = _options.UseResidualConnections;
         _useBatchNormalization = _options.UseBatchNormalization;
 
-        RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
-        _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
+        RequireAdjacencyNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
+        _adjacencyMatrix = adjacencyMatrix ?? ProximityAdjacency(_numNodes, rowNormalize: false);
         _normalizedLaplacian = ComputeNormalizedLaplacian(_adjacencyMatrix);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
     }
@@ -317,8 +317,8 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         _useResidualConnections = _options.UseResidualConnections;
         _useBatchNormalization = _options.UseBatchNormalization;
 
-        RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
-        _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
+        RequireAdjacencyNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
+        _adjacencyMatrix = adjacencyMatrix ?? ProximityAdjacency(_numNodes, rowNormalize: false);
         _normalizedLaplacian = ComputeNormalizedLaplacian(_adjacencyMatrix);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
@@ -395,55 +395,6 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
             _gruLayers = allDense.Skip(gruStart).Take(_numTemporalLayers * 2).ToList();
 
             _outputLayer = allDense[allDense.Count - 1];
-        }
-    }
-
-    /// <summary>
-    /// Creates a default adjacency matrix for the graph.
-    /// </summary>
-    /// <param name="numNodes">Number of nodes in the graph.</param>
-    /// <returns>Adjacency matrix with proximity-based weights.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When no graph structure is provided, creates a
-    /// default matrix where nearby nodes (by index) are connected. In practice,
-    /// you should provide a real adjacency matrix based on actual relationships.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> CreateDefaultAdjacencyMatrix(int numNodes)
-    {
-        // Self-connections weigh 1; nodes within range = max(1, n / 10) of each other weigh
-        // exp(-|i - j| / range); everything else is unconnected.
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        int range = Math.Max(1, numNodes / 10);
-        var distance = new int[numNodes * numNodes];
-        var near = new int[numNodes * numNodes];
-        for (int i = 0; i < numNodes; i++)
-            for (int j = 0; j < numNodes; j++)
-            {
-                int d = Math.Abs(i - j);
-                distance[i * numNodes + j] = d;
-                near[i * numNodes + j] = d <= range ? 1 : 0;
-            }
-        var square = new[] { numNodes, numNodes };
-        var distances = new Tensor<int>(square, new Vector<int>(distance)).Cast<T>();
-        var weights = Engine.TensorExp(Engine.TensorDivideScalar(Engine.TensorNegate(distances), NumOps.FromDouble(range)));
-        var connected = Engine.TensorWhere(
-            new Tensor<int>(square, new Vector<int>(near)).Cast<T>(), weights, Engine.TensorZerosLike(weights));
-        return Engine.TensorWhere(Engine.TensorEquals(distances, NumOps.Zero), Engine.TensorFullLike(weights, NumOps.One), connected);
-    }
-
-    /// <summary>Requires a numNodes x numNodes adjacency matrix when one is given.</summary>
-    private static void RequireNodeCount(Tensor<T>? adjacency, int numNodes, string paramName)
-    {
-        if (adjacency is null) return;
-        int rows = adjacency.Rank > 0 ? adjacency.Shape[0] : 0;
-        int columns = adjacency.Rank > 1 ? adjacency.Shape[1] : 0;
-        if (adjacency.Rank != 2 || rows != numNodes || columns != numNodes)
-        {
-            throw new ArgumentException(
-                $"The adjacency matrix is {rows} x {columns}, but the model has {numNodes} " +
-                $"nodes (NumNodes). Pass a {numNodes} x {numNodes} matrix, or set NumNodes to the node count of the graph.",
-                paramName);
         }
     }
 
@@ -537,12 +488,9 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Training-mode forward: replicates <see cref="Forward"/> but
-    /// routes through a tape-aware Chebyshev convolution so gradients
-    /// can propagate back through the dense layers. The default
-    /// <see cref="ApplyChebyshevConvolution"/> serializes features via
-    /// <c>ToVector()</c> and rebuilds a new tensor from a
-    /// <c>Vector&lt;T&gt;</c>, which severs the gradient tape.
+    /// Training-mode forward: replicates <see cref="Forward"/>, routing through the tape-aware
+    /// <see cref="ApplyChebyshevConvolutionTape"/> so gradients can propagate back through the
+    /// dense layers.
     /// </summary>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
@@ -571,11 +519,8 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// <summary>
     /// Tape-aware Chebyshev (K=2) graph filter:
     /// <c>y = 0.5 * x + 0.5 * L x</c>. Uses
-    /// <see cref="IEngine.TensorMatMul"/> instead of the manual
-    /// double-accumulator loop in
-    /// <see cref="ApplyChebyshevConvolution"/>, so the gradient tape
-    /// sees every operation and can flow gradients back through the
-    /// preceding dense layers.
+    /// <see cref="IEngine.TensorMatMul"/>, so the gradient tape sees every operation and can
+    /// flow gradients back through the preceding dense layers. Both forwards use it.
     /// </summary>
     private Tensor<T> ApplyChebyshevConvolutionTape(Tensor<T> nodeFeatures)
     {
@@ -587,12 +532,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         if (featuresPerNode * _numNodes != totalSize)
             return nodeFeatures; // graceful no-op on shape mismatch
 
-        // Build the Laplacian as a Tensor<T> on demand. This is a
-        // constant (non-trainable) tensor; we reconstruct it every
-        // training step because _normalizedLaplacian is double[,] and
-        // caching a Tensor<T> copy would need threading a mutable
-        // field. The cost is O(numNodes^2) per step, which is small
-        // relative to a transformer-block forward.
+        // The Laplacian is a non-trainable constant tensor cached at construction.
         var laplacian = _normalizedLaplacian;
 
         // Reshape features to [numNodes, featuresPerNode] via the
@@ -869,44 +809,6 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
-    }
-
-    /// <summary>
-    /// Applies Chebyshev spectral graph convolution.
-    /// </summary>
-    /// <param name="nodeFeatures">Node feature tensor.</param>
-    /// <returns>Convolved features after spectral graph filtering.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Chebyshev convolution approximates spectral graph filtering
-    /// using Chebyshev polynomials. Instead of computing expensive eigendecomposition,
-    /// it uses recursive polynomial terms:
-    ///
-    /// T_0(L) = I (identity)
-    /// T_1(L) = L (Laplacian)
-    /// T_k(L) = 2*L*T_{k-1}(L) - T_{k-2}(L)
-    ///
-    /// The output is a weighted sum of these polynomial terms, where weights are learned.
-    /// Higher-order polynomials capture longer-range spatial dependencies.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyChebyshevConvolution(Tensor<T> nodeFeatures)
-    {
-        if (_normalizedLaplacian is null)
-            return nodeFeatures;
-
-        int totalSize = nodeFeatures.Length;
-        int featuresPerNode = totalSize / _numNodes;
-
-        if (featuresPerNode * _numNodes != totalSize)
-            return nodeFeatures;
-
-        // Simplified Chebyshev convolution (K=2): 0.5 * x + 0.5 * (L x), detached as before.
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var half = NumOps.FromDouble(0.5);
-        var x = Engine.Reshape(nodeFeatures.Contiguous(), new[] { _numNodes, featuresPerNode });
-        var combined = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(x, half), Engine.TensorMultiplyScalar(Engine.TensorMatMul(_normalizedLaplacian, x), half));
-        return Engine.Reshape(combined, nodeFeatures._shape);
     }
 
     #endregion

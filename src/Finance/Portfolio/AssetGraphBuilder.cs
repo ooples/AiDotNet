@@ -220,6 +220,8 @@ public class AssetGraphBuilder<T>
 
         int steps = panel.Shape[0];
         int assets = panel.Shape[1];
+        if (steps < 2)
+            throw new ArgumentException("At least 2 observations are required.", nameof(panel));
 
         // Columns are double-centred per block rather than once per partner. That loop called
         // DistanceCorrelation for every pair, and each of those calls centred BOTH of its arguments,

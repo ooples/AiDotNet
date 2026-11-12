@@ -112,7 +112,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     #endregion
 
     #region Graph Fields
-    private readonly double[,]? _adjacencyMatrix;
+    private readonly Tensor<T>? _adjacencyMatrix;
     private readonly Random _random;
     #endregion
 
@@ -225,7 +225,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         STGNNOptions<T>? options = null,
-        double[,]? adjacencyMatrix = null,
+        Tensor<T>? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -257,8 +257,8 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         _useGatedFusion = _options.UseGatedFusion;
         _useResidualConnections = _options.UseResidualConnections;
 
-        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
-        _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
+        RequireAdjacencyNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
+        _adjacencyMatrix = adjacencyMatrix ?? ProximityAdjacency(_numNodes, rowNormalize: true);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
     }
 
@@ -279,7 +279,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     public STGNN(
         NeuralNetworkArchitecture<T> architecture,
         STGNNOptions<T>? options = null,
-        double[,]? adjacencyMatrix = null,
+        Tensor<T>? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -304,8 +304,8 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         _useGatedFusion = _options.UseGatedFusion;
         _useResidualConnections = _options.UseResidualConnections;
 
-        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
-        _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
+        RequireAdjacencyNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
+        _adjacencyMatrix = adjacencyMatrix ?? ProximityAdjacency(_numNodes, rowNormalize: true);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeLayers();
@@ -372,59 +372,6 @@ public partial class STGNN<T> : ForecastingModelBase<T>
             _outputLayer = allDense[allDense.Count - 1];
         }
     }
-
-    /// <summary>
-    /// Creates a default adjacency matrix for the graph.
-    /// </summary>
-    /// <param name="numNodes">Number of nodes in the graph.</param>
-    /// <returns>Adjacency matrix with distance-based weights.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When no graph structure is provided, creates a
-    /// default matrix where nearby nodes (by index) are more connected. In practice,
-    /// you should provide a real adjacency matrix based on actual spatial relationships.
-    /// </para>
-    /// </remarks>
-    private double[,] CreateDefaultAdjacencyMatrix(int numNodes)
-    {
-        var adj = new double[numNodes, numNodes];
-
-        // Create a sparse adjacency with nearby connections
-        for (int i = 0; i < numNodes; i++)
-        {
-            adj[i, i] = 1.0; // Self-connections
-
-            // Connect to nearby nodes (simulate spatial proximity)
-            int range = Math.Max(1, numNodes / 10);
-            for (int j = Math.Max(0, i - range); j <= Math.Min(numNodes - 1, i + range); j++)
-            {
-                if (i != j)
-                {
-                    double distance = Math.Abs(i - j);
-                    adj[i, j] = Math.Exp(-distance / range); // Exponential decay
-                }
-            }
-        }
-
-        // Normalize rows
-        for (int i = 0; i < numNodes; i++)
-        {
-            double rowSum = 0;
-            for (int j = 0; j < numNodes; j++)
-            {
-                rowSum += adj[i, j];
-            }
-            if (rowSum > 0)
-            {
-                for (int j = 0; j < numNodes; j++)
-                {
-                    adj[i, j] /= rowSum;
-                }
-            }
-        }
-
-        return adj;
-    }
-
     /// <summary>
     /// Validates custom layers provided by the user.
     /// </summary>
@@ -760,26 +707,11 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         // new Tensor<T> detached the autodiff graph right before the loss and
         // zeroed every gradient. Express it as a tape-aware matmul against the
         // constant adjacency so gradients flow back through the layer stack.
-        var adj = BuildConstantMatrix(_adjacencyMatrix);                 // [numNodes, numNodes]
+        var adj = Engine.Reshape(_adjacencyMatrix.Contiguous(), new[] { _numNodes, _numNodes });
         var hMat = Engine.Reshape(nodeFeatures, new[] { _numNodes, featuresPerNode });
         var conv = Engine.TensorMatMul(adj, hMat);                       // A H
         return Engine.Reshape(conv, nodeFeatures._shape);
     }
-
-    /// <summary>
-    /// Builds a constant (non-trainable) <see cref="Tensor{T}"/> from the
-    /// adjacency matrix so it can participate in tape-aware matmuls without being
-    /// treated as a learnable parameter.
-    /// </summary>
-    private Tensor<T> BuildConstantMatrix(double[,] matrix)
-    {
-        var data = new T[_numNodes * _numNodes];
-        for (int i = 0; i < _numNodes; i++)
-            for (int j = 0; j < _numNodes; j++)
-                data[i * _numNodes + j] = NumOps.FromDouble(matrix[i, j]);
-        return new Tensor<T>(new[] { _numNodes, _numNodes }, new Vector<T>(data));
-    }
-
     #endregion
 
     #region Forecasting Methods

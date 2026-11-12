@@ -343,6 +343,12 @@ public class GIFTEvalBenchmark<T>
         if (count == 0)
             return (NumOps.FromDouble(double.NaN), 0);
         var kept = Engine.TensorWhere(finite, all, Engine.TensorZerosLike(all));
-        return (NumOps.Divide(Engine.TensorSum(kept), NumOps.FromDouble(count)), count);
+        T countT = NumOps.FromDouble(count);
+        T mean = NumOps.Divide(Engine.TensorSum(kept), countT);
+        // The sum of finite scores can overflow T (two float scores near 3e38) while their mean is finite:
+        // then divide each score by the count before summing.
+        if (NumOps.IsInfinity(mean))
+            mean = Engine.TensorSum(Engine.TensorDivideScalar(kept, countT));
+        return (mean, count);
     }
 }

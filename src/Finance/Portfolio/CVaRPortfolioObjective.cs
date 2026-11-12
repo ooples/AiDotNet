@@ -227,20 +227,22 @@ public class CVaRPortfolioObjective<T>
 
         // Max-subtracted tempered softmax, so a tiny temperature cannot overflow exp.
         var scoreTensor = Tensor<T>.FromVector(scores);
+        if (Engine.TensorCountNonzero(Engine.TensorIsNan(scoreTensor)) > 0
+            || Engine.TensorCountNonzero(Engine.TensorIsInf(scoreTensor)) > 0)
+            throw new ArgumentException("scores must be finite.", nameof(scores));
         T tau = NumOps.FromDouble(temperature);
         bool tauRepresentable = NumOps.GreaterThan(tau, NumOps.Zero);
         if (tauRepresentable)
         {
             var scaled = Engine.TensorDivideScalar(scoreTensor, tau);
-            if (Engine.TensorCountNonzero(Engine.TensorIsInf(scaled)) == 0
-                || Engine.TensorCountNonzero(Engine.TensorIsInf(scoreTensor)) > 0)
+            if (Engine.TensorCountNonzero(Engine.TensorIsInf(scaled)) == 0)
             {
                 var exps = Engine.TensorExp(Engine.TensorSubtractScalar(scaled, Engine.TensorMaxValue(scaled)));
                 return Engine.TensorDivideScalar(exps, Engine.TensorSum(exps)).ToVector();
             }
         }
 
-        // A valid temperature too small for T: s / tau overflows, or tau itself rounds to zero.
+        // A valid temperature too small for T with finite scores: s / tau overflows, or tau rounds to zero.
         // Subtracting the maximum score first keeps every exponent at or below zero, so no weight is NaN;
         // when tau is zero in T the softmax limit splits the weight evenly across the top-scoring assets.
         var shifted = Engine.TensorSubtractScalar(scoreTensor, Engine.TensorMaxValue(scoreTensor));

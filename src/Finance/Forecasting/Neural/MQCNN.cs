@@ -933,6 +933,9 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
     /// <summary>The per-level pinball coefficients, one row per <see cref="QuantileCoefficient"/>.</summary>
     private Tensor<T>? _quantileCoefficients;
 
+    /// <summary>The quantile levels <see cref="_quantileCoefficients"/> was built from.</summary>
+    private double[] _quantileCoefficientLevels = Array.Empty<double>();
+
     /// <summary>Rows of the cached per-level coefficient table.</summary>
     private enum QuantileCoefficient
     {
@@ -950,7 +953,9 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
     private Tensor<T> QuantileRow(QuantileCoefficient coefficient, int count)
     {
         int levels = _quantiles.Length;
-        if (_quantileCoefficients is null)
+        // Quantiles exposes the level array itself, so a caller can change a level after the table is built:
+        // rebuild whenever the levels differ from the ones it was built from.
+        if (_quantileCoefficients is null || !_quantileCoefficientLevels.SequenceEqual(_quantiles))
         {
             // The configured levels are converted once, as master did per use: FromDouble(q), FromDouble(q - 1), ...
             var table = _quantiles.Select(q => NumOps.FromDouble(q))
@@ -959,6 +964,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
                 .Concat(_quantiles.Select(q => NumOps.FromDouble(1 - q)))
                 .ToArray();
             _quantileCoefficients = new Tensor<T>(new[] { 4, levels }, new Vector<T>(table));
+            _quantileCoefficientLevels = (double[])_quantiles.Clone();
         }
 
         int rows = (count + levels - 1) / levels;

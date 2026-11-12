@@ -355,8 +355,8 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
             return new Tensor<T>(input._shape);
         // covered is batchSize * seqLen or the whole input, so it is always a whole number of rows.
         int fullRows = covered / seqLen;
-        var meanColumn = StatColumn(means, fullRows, NumOps.Zero);
-        var stdColumn = StatColumn(stds, fullRows, NumOps.One);
+        var meanColumn = StatColumn(means, fullRows);
+        var stdColumn = StatColumn(stds, fullRows);
         var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
         var pieces = new List<Tensor<T>>(3);
         if (fullRows > 0)
@@ -376,15 +376,12 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         return Engine.Reshape(joined.Contiguous(), input._shape);
     }
 
-    /// <summary>The first <paramref name="rows"/> statistics as a [rows, 1] column, padded with <paramref name="fill"/>.</summary>
-    private Tensor<T> StatColumn(T[] values, int rows, T fill)
-    {
-        int given = Math.Min(values.Length, rows);
-        var column = Engine.TensorFullLike(new Tensor<T>(new[] { rows, 1 }), fill);
-        if (given > 0)
-            values.AsSpan(0, given).CopyTo(column.Data.Span.Slice(0, given));
-        return column;
-    }
+    /// <summary>
+    /// The statistics as a [rows, 1] column. Both callers take them from <see cref="ComputeInstanceStats"/>,
+    /// which yields one value per row.
+    /// </summary>
+    private static Tensor<T> StatColumn(T[] values, int rows)
+        => new Tensor<T>(new[] { rows, 1 }, new Vector<T>(values));
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()

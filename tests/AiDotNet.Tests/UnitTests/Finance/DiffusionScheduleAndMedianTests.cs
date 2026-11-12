@@ -284,6 +284,19 @@ public class DiffusionScheduleAndMedianTests
         typeof(ITransformer<double>),
     };
 
+    [Fact]
+    public void Gift_eval_mean_of_large_finite_float_scores_stays_finite()
+    {
+        // Two float scores of 3e38 sum past float.MaxValue, but their mean is finite.
+        var method = typeof(GIFTEvalBenchmark<float>).GetMethod(
+            "FiniteMeanOrNaN", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var result = method?.Invoke(null, new object[] { new List<float> { 3e38f, 3e38f } });
+        var (mean, finite) = Assert.IsType<ValueTuple<float, int>>(result);
+        Assert.Equal(3e38f, mean);
+        Assert.Equal(2, finite);
+    }
+
     private static object RevinModel(Type modelType, int features) =>
         FinanceModelTestFactory.CreateNativeModel<double>(
             modelType, options => options.GetType().GetProperty("NumFeatures")?.SetValue(options, features));
