@@ -125,4 +125,73 @@ internal static class FeatureSelectionTensorOps
         return AiDotNetEngine.Current.TensorWhere(condition, values,
             PreprocessingTensorOps.Filled(values.Shape.ToArray(), ops.Zero));
     }
+
+    /// <summary>A [p, p] 0/1 mask of the strictly upper-triangular entries (column &gt; row).</summary>
+    public static Tensor<T> StrictUpperMask<T>(int p)
+    {
+        var engine = AiDotNetEngine.Current;
+        var index = engine.TensorArange<T>(0, p, 1);
+        var rows = engine.TensorBroadcastTo(engine.Reshape(index, new[] { p, 1 }), new[] { p, p });
+        var columns = engine.TensorBroadcastTo(engine.Reshape(index, new[] { 1, p }), new[] { p, p });
+        return engine.TensorGreaterThan(columns, rows);
+    }
+
+    /// <summary>
+    /// Pearson correlation matrix of the columns of an [n, p] tensor using sample covariances and sample
+    /// standard deviations offset by <paramref name="stdEpsilon"/>, with the diagonal set to 1. Returns [p, p].
+    /// </summary>
+    public static Tensor<T> SampleCorrelationMatrix<T>(Tensor<T> x, double stdEpsilon)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var centered = CenterColumns(x);
+        var covariance = engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(n - 1));
+        var std = engine.TensorAddScalar(
+            engine.TensorSqrt(engine.TensorDivideScalar(ColumnSumOfSquares(centered), ops.FromDouble(n - 1))),
+            ops.FromDouble(stdEpsilon));
+        var correlation = engine.TensorDivide(covariance, engine.TensorOuter(std, std));
+        return engine.TensorWhere(engine.TensorEye<T>(p), PreprocessingTensorOps.Filled(new[] { p, p }, ops.One), correlation);
+    }
+
+    /// <summary>
+    /// Greedy redundancy pruning: walking the features in order, each kept feature removes every later feature
+    /// whose entry in the [p, p] 0/1 <paramref name="redundant"/> matrix is set. Returns the kept indices, ascending.
+    /// </summary>
+    public static int[] KeepFirstOfRedundantPairs<T>(Tensor<T> redundant)
+    {
+        int p = redundant.Shape[0];
+        var pairs = PreprocessingTensorOps.MaskPositions(
+            AiDotNetEngine.Current.TensorMultiply(redundant, StrictUpperMask<T>(p)));
+        var removed = new bool[p];
+        foreach (int position in pairs)
+        {
+            int first = position / p;
+            int second = position % p;
+            if (!removed[first])
+                removed[second] = true;
+        }
+
+        return Enumerable.Range(0, p).Where(j => !removed[j]).ToArray();
+    }
+
+    /// <summary>
+    /// One Haar analysis step on every column of an [len, m] tensor (len &gt;= 2; a trailing odd row is dropped):
+    /// approximation <c>(x[2i] + x[2i+1]) / sqrt(2)</c> and detail <c>(x[2i] - x[2i+1]) / sqrt(2)</c>, each [len/2, m].
+    /// </summary>
+    public static (Tensor<T> Approximation, Tensor<T> Detail) HaarStep<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int half = x.Shape[0] / 2;
+        int m = x.Shape[1];
+        var pairs = engine.Reshape(engine.TensorSlice(x, new[] { 0, 0 }, new[] { 2 * half, m }), new[] { half, 2, m });
+        var even = engine.TensorSliceAxis(pairs, 1, 0);
+        var odd = engine.TensorSliceAxis(pairs, 1, 1);
+        T scale = ops.FromDouble(Math.Sqrt(2));
+        return (engine.TensorDivideScalar(engine.TensorAdd(even, odd), scale),
+            engine.TensorDivideScalar(engine.TensorSubtract(even, odd), scale));
+    }
 }
