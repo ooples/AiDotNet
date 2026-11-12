@@ -235,7 +235,7 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
 
         // Final: compute attention weights as learned edge probabilities (no self-edges)
         var finalAttn = AttentionWeights(attnLogits, eps);
-        var learnedP = ToDoubleGrid(Engine.TensorWhere(OffDiagonalMask(d), finalAttn, Engine.TensorZerosLike(finalAttn)), d);
+        var learnedP = Engine.TensorWhere(OffDiagonalMask(d), finalAttn, Engine.TensorZerosLike(finalAttn));
 
         return BuildFinalAdjacency(learnedP, cov, d);
     }

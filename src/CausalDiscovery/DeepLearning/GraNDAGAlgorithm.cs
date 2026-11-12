@@ -78,8 +78,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // (all variances scale by the same factor), preserving DiscoverStructure_IsInvariantToDataScaling.
         var rawData = Tensor<T>.FromMatrix(data);
         var rawCentered = CenterColumns(rawData);
-        var rawVariance = Engine.ReduceMean(Engine.TensorMultiply(rawCentered, rawCentered), new[] { 0 }, false)
-            .Cast<double>().ToArray();
+        var rawVariance = Engine.ReduceMean(Engine.TensorMultiply(rawCentered, rawCentered), new[] { 0 }, false);
 
         data = StandardizeColumns(data);
 
@@ -244,7 +243,6 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         var normalized = NumOps.GreaterThan(maxNorm, NumOps.Zero)
             ? Engine.TensorDivideScalar(offDiagonalAdj, maxNorm)
             : Engine.TensorZerosLike(rawAdj);
-        var learnedP = ToDoubleGrid(normalized, d);
 
         var cov = ComputeCovarianceMatrix(data);
         // Guarantee an acyclic output. BuildFinalAdjacency's direction tie-break only rules out
@@ -252,7 +250,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // DiscoverStructure_OutputIsAcyclic failure (topological sort visited 0/4 nodes). ProjectToDag
         // imposes a strict source-score topological order and keeps only forward edges, so the result
         // is a DAG by construction. Mirrors the sibling DAGGNNAlgorithm, which already routes through it.
-        return BuildFinalAdjacency(ProjectToDag(learnedP, d, rawVariance), cov, d);
+        return BuildFinalAdjacency(ProjectToDag(normalized, d, rawVariance), cov, d);
     }
 
     /// <summary>

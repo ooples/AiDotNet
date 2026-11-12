@@ -97,45 +97,23 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
             blankets[target] = FindMarkovBlanket(X, n, d, target);
         }
 
-        // Build adjacency: each linked pair carries its mutual information in both directions.
-        var pairs = new List<(int I, int J)>();
-        var mutualInformation = new List<double>();
+        // Build adjacency using Matrix<T>
+        var W = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
                 if (blankets[i].Contains(j) || blankets[j].Contains(i))
                 {
-                    pairs.Add((i, j));
-                    mutualInformation.Add(ComputeMI(X, i, j, n));
+                    double mi = ComputeMI(X, i, j, n);
+                    T miT = NumOps.FromDouble(mi);
+                    W[i, j] = miT;
+                    W[j, i] = miT;
                 }
             }
         }
 
-        return BuildSymmetricWeights(d, pairs, mutualInformation);
-    }
-
-    /// <summary>
-    /// Scatters one weight per linked pair (i, j) into both [i, j] and [j, i] of a [d x d] matrix.
-    /// </summary>
-    private Matrix<T> BuildSymmetricWeights(int d, List<(int I, int J)> pairs, List<double> weights)
-    {
-        var flat = new Tensor<T>(new[] { d * d });
-        if (pairs.Count == 0)
-            return flat.Reshape(new[] { d, d }).ToMatrix();
-
-        var forward = new int[pairs.Count];
-        var backward = new int[pairs.Count];
-        for (int p = 0; p < pairs.Count; p++)
-        {
-            forward[p] = pairs[p].I * d + pairs[p].J;
-            backward[p] = pairs[p].J * d + pairs[p].I;
-        }
-
-        var values = Vector<double>.FromList(weights).AsTensor().Cast<T>();
-        var scattered = Engine.TensorScatter(flat, new Tensor<int>(forward, new[] { forward.Length }), values, 0);
-        scattered = Engine.TensorScatter(scattered, new Tensor<int>(backward, new[] { backward.Length }), values, 0);
-        return scattered.Reshape(new[] { d, d }).ToMatrix();
+        return W;
     }
 
     private HashSet<int> FindMarkovBlanket(int[,] X, int n, int d, int target)

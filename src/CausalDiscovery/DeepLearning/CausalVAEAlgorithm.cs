@@ -102,7 +102,7 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
 
         // Final output: extract learned edge probabilities and build adjacency
         var learnedP = Engine.TensorMultiply(offDiagonal, ClampedSigmoid(ALogits, 1.0));
-        var result = Tensor<T>.FromMatrix(BuildFinalAdjacency(ToDoubleGrid(learnedP, d), cov, d));
+        var result = Tensor<T>.FromMatrix(BuildFinalAdjacency(learnedP, cov, d));
         var strong = Engine.TensorMultiply(offDiagonal,
             Engine.TensorGreaterEqual(Engine.TensorAbs(result), Engine.TensorFullLike(result, NumOps.FromDouble(EdgeThreshold))));
         if (Engine.TensorCountNonzero(strong) > 0)

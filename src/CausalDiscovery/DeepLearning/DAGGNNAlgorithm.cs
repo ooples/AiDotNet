@@ -61,8 +61,7 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
         // every variance by c², leaving the ordering — and therefore the oriented structure — unchanged.
         var rawColumns = Tensor<T>.FromMatrix(data);
         var rawSumSquares = Engine.ReduceSum(Engine.TensorSquare(CenterColumns(rawColumns)), new[] { 0 }, false);
-        var rawVar = Engine.TensorDivideScalar(rawSumSquares, NumOps.FromDouble(Math.Max(1, n - 1)))
-            .Cast<double>().ToArray();
+        var rawVar = Engine.TensorDivideScalar(rawSumSquares, NumOps.FromDouble(Math.Max(1, n - 1)));
 
         // Standardize columns so the LEARNING is invariant to per-variable scaling.
         data = StandardizeColumns(data);
@@ -129,7 +128,7 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
         // and cannot orient edges by itself; the variance ordering supplies the direction and is preserved
         // under uniform scaling (see rawVar above), so the result stays scale-invariant. BuildFinalAdjacency
         // then thresholds and weights the acyclic probabilities.
-        return BuildFinalAdjacency(ProjectToDag(ToDoubleGrid(undirected, d), d, rawVar), cov, d);
+        return BuildFinalAdjacency(ProjectToDag(undirected, d, rawVar), cov, d);
     }
 
     /// <summary>P[i,j] = sigmoid(Zs_i . Zt_j) off the diagonal (saturated beyond ±20), zero on it.</summary>

@@ -201,7 +201,7 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // covariance ratio.
         var cov = ComputeCovarianceMatrix(Xs.ToMatrix());
         var learnedP = Engine.TensorSqrt(SquaredGroupNorms(Wh, d, h));
-        return BuildFinalAdjacency(ToDoubleGrid(learnedP, d), cov, d, learnedThreshold: 0.3);
+        return BuildFinalAdjacency(learnedP, cov, d, learnedThreshold: 0.3);
     }
 
     /// <summary>Reused [n, ·] scratch tensors for the reconstruction pass.</summary>

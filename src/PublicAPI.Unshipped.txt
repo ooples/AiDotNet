@@ -1219,3 +1219,11 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(double[,]! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(double[,]! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d, double learnedThreshold) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*static AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(double[,]! p, int d) -> double[,]!
+*REMOVED*static AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(double[,]! p, int d, double[]! sourceScore) -> double[,]!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d, double learnedThreshold) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! p, int d) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! p, int d, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sourceScore) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
