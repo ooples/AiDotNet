@@ -687,8 +687,8 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), NumOps.ToDouble))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+            writer.Write(NumOps.ToDouble(tensor[i]));
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -699,11 +699,12 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
-
-        // Every stored value is read; the first tensor.Length of them fill the tensor (the rest stays zero)
-        double[] stored = Enumerable.Range(0, Math.Max(0, length)).Select(_ => reader.ReadDouble()).ToArray();
-        int used = Math.Min(stored.Length, tensor.Length);
-        Array.ConvertAll(stored, NumOps.FromDouble).AsSpan(0, used).CopyTo(tensor.Data.Span);
+        for (int i = 0; i < length; i++)
+        {
+            double v = reader.ReadDouble();
+            if (i < tensor.Length)
+                tensor[i] = NumOps.FromDouble(v);
+        }
         return tensor;
     }
 }
@@ -956,8 +957,8 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), NumOps.ToDouble))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+            writer.Write(NumOps.ToDouble(tensor[i]));
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -968,11 +969,12 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
-
-        // Every stored value is read; the first tensor.Length of them fill the tensor (the rest stays zero)
-        double[] stored = Enumerable.Range(0, Math.Max(0, length)).Select(_ => reader.ReadDouble()).ToArray();
-        int used = Math.Min(stored.Length, tensor.Length);
-        Array.ConvertAll(stored, NumOps.FromDouble).AsSpan(0, used).CopyTo(tensor.Data.Span);
+        for (int i = 0; i < length; i++)
+        {
+            double v = reader.ReadDouble();
+            if (i < tensor.Length)
+                tensor[i] = NumOps.FromDouble(v);
+        }
         return tensor;
     }
 

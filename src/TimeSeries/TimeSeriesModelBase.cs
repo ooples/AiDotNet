@@ -1280,9 +1280,9 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
                 ? _parameterRegistry.ParameterLayout
                 : ParameterLayout;
             writer.Write(parameterSnapshot.Length);
-            foreach (T value in parameterSnapshot)
+            for (int i = 0; i < parameterSnapshot.Length; i++)
             {
-                writer.Write(Convert.ToDouble(value));
+                writer.Write(Convert.ToDouble(parameterSnapshot[i]));
             }
             WriteParameterCheckpointLayout(writer, parameterLayout);
 
@@ -1394,8 +1394,11 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
                     throw new InvalidDataException(
                         $"Time-series checkpoint declares invalid parameter count {parameterCount}.");
                 }
-                double[] storedValues = Enumerable.Range(0, parameterCount).Select(_ => reader.ReadDouble()).ToArray();
-                parameterSnapshot = new Vector<T>(Array.ConvertAll(storedValues, NumOps.FromDouble));
+                parameterSnapshot = new Vector<T>(parameterCount);
+                for (int i = 0; i < parameterCount; i++)
+                {
+                    parameterSnapshot[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
                 if (serializationVersion >= 1)
                     checkpointLayout = ReadParameterCheckpointLayout(reader, parameterCount);
                 // Deserialize evaluation metrics

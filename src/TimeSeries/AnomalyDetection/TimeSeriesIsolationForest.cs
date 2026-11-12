@@ -148,12 +148,9 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         var scores = ComputeAnomalyScores(features);
 
         // Set threshold based on contamination rate
-        // Descending order of the scores as doubles (NaN last, like OrderByDescending)
-        double[] sortedScores = Array.ConvertAll(scores.ToArray(), _numOps.ToDouble);
-        Array.Sort(sortedScores);
-        Array.Reverse(sortedScores);
-        int thresholdIndex = (int)(_options.ContaminationRate * sortedScores.Length);
-        _anomalyThreshold = sortedScores[Math.Min(thresholdIndex, sortedScores.Length - 1)];
+        var sortedScores = scores.OrderByDescending(s => _numOps.ToDouble(s)).ToList();
+        int thresholdIndex = (int)(_options.ContaminationRate * sortedScores.Count);
+        _anomalyThreshold = _numOps.ToDouble(sortedScores[Math.Min(thresholdIndex, sortedScores.Count - 1)]);
 
         // Store ModelParameters for GetParameters() — use anomaly threshold + tree count
         ModelParameters = new Vector<T>(2);
@@ -194,8 +191,9 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
     public bool[] GetAnomalyLabels(Vector<T> timeSeries)
     {
         var scores = DetectAnomalies(timeSeries);
-        double[] values = Array.ConvertAll(scores.GetSubVector(0, timeSeries.Length).ToArray(), _numOps.ToDouble);
-        return Array.ConvertAll(values, IsAboveThreshold);
+        // score > threshold in T (NaN compares false, as the double comparison did)
+        return TimeSeriesEngineOps<T>.GreaterThan(
+            scores.GetSubVector(0, timeSeries.Length), _numOps.FromDouble(_anomalyThreshold));
     }
 
     /// <summary>
@@ -203,9 +201,6 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="timeSeries">The time series to analyze.</param>
     /// <returns>List of indices where anomalies were detected.</returns>
-    /// <summary>Whether a score (as a double) exceeds the anomaly threshold.</summary>
-    private bool IsAboveThreshold(double score) => score > _anomalyThreshold;
-
     public List<int> GetAnomalyIndices(Vector<T> timeSeries)
     {
         var labels = GetAnomalyLabels(timeSeries);
@@ -335,10 +330,15 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         // Select random feature
         int featureIndex = _random.Next(data.Columns);
 
-        // Find min and max for this feature (as doubles; Math.Min/Max propagate NaN)
-        double[] values = Array.ConvertAll(data.GetColumn(featureIndex).ToArray(), _numOps.ToDouble);
-        double minVal = values.Aggregate(double.MaxValue, Math.Min);
-        double maxVal = values.Aggregate(double.MinValue, Math.Max);
+        // Find min and max for this feature
+        double minVal = double.MaxValue;
+        double maxVal = double.MinValue;
+        for (int i = 0; i < n; i++)
+        {
+            double val = _numOps.ToDouble(data[i, featureIndex]);
+            minVal = Math.Min(minVal, val);
+            maxVal = Math.Max(maxVal, val);
+        }
 
         // If all values are the same, create leaf
         if (Math.Abs(maxVal - minVal) < 1e-10)
@@ -350,8 +350,16 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         double splitValue = minVal + _random.NextDouble() * (maxVal - minVal);
 
         // Partition data
-        var leftIndices = Enumerable.Range(0, n).Where(i => values[i] < splitValue).ToList();
-        var rightIndices = Enumerable.Range(0, n).Where(i => !(values[i] < splitValue)).ToList();
+        var leftIndices = new List<int>();
+        var rightIndices = new List<int>();
+
+        for (int i = 0; i < n; i++)
+        {
+            if (_numOps.ToDouble(data[i, featureIndex]) < splitValue)
+                leftIndices.Add(i);
+            else
+                rightIndices.Add(i);
+        }
 
         // Handle edge case where all points go to one side
         if (leftIndices.Count == 0 || rightIndices.Count == 0)
@@ -372,7 +380,7 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
 
     private Vector<T> ComputeAnomalyScores(Matrix<T> features)
     {
-        var scores = new List<double>(features.Rows);
+        var scores = new Vector<T>(features.Rows);
         double c = ComputeC(_effectiveSampleSize);
 
         for (int i = 0; i < features.Rows; i++)
@@ -389,10 +397,10 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
 
             // Anomaly score: s(x, n) = 2^(-E(h(x))/c(n))
             double score = Math.Pow(2, -avgPathLength / c);
-            scores.Add(score);
+            scores[i] = _numOps.FromDouble(score);
         }
 
-        return new Vector<T>(Array.ConvertAll(scores.ToArray(), _numOps.FromDouble));
+        return scores;
     }
 
     private double ComputePathLength(IsolationTree<T> tree, Vector<T> sample, int currentDepth)
