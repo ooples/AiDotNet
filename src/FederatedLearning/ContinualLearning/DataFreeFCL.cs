@@ -92,28 +92,25 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         // Data-free approach: importance is estimated from the model's output sensitivity
         // rather than from stored data. We use gradient magnitude as a proxy for importance.
         int paramCount = modelParameters.Length;
-        var importance = new T[paramCount];
 
         // Compute per-parameter sensitivity: parameters with larger magnitude relative
         // to layer statistics are considered more important (proxy for Fisher information).
-        double sumSquared = 0;
-        for (int i = 0; i < paramCount; i++)
+        T rms = paramCount > 0
+            ? NumOps.Divide(Engine.Norm(modelParameters), NumOps.Sqrt(NumOps.FromDouble(paramCount)))
+            : NumOps.Zero;
+
+        // Importance proportional to how far parameter is from zero relative to RMS, capped at 10 to
+        // avoid outliers.
+        Vector<T> importanceVector;
+        if (NumOps.GreaterThan(rms, NumOps.Zero))
         {
-            double v = NumOps.ToDouble(modelParameters[i]);
-            sumSquared += v * v;
+            var relative = Engine.Divide(Engine.Abs(modelParameters), rms);
+            importanceVector = Engine.TensorMin(relative.AsTensor(), NumOps.FromDouble(10.0)).ToVector();
         }
-
-        double rms = Math.Sqrt(sumSquared / Math.Max(paramCount, 1));
-
-        for (int i = 0; i < paramCount; i++)
+        else
         {
-            double v = Math.Abs(NumOps.ToDouble(modelParameters[i]));
-            // Importance proportional to how far parameter is from zero relative to RMS.
-            double imp = rms > 0 ? v / rms : 1.0;
-            importance[i] = NumOps.FromDouble(Math.Min(imp, 10.0)); // cap to avoid outliers
+            importanceVector = Engine.TensorOnesLike(modelParameters.AsTensor()).ToVector();
         }
-
-        var importanceVector = new Vector<T>(importance);
 
         // Accumulate across tasks (thread-safe for concurrent client calls).
         lock (_importanceLock)
@@ -124,19 +121,16 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
             }
             else
             {
-                var acc = new T[paramCount];
+                // Entries past the previous accumulation's length start from this task's importance.
+                var acc = importanceVector.Clone();
                 int len = Math.Min(paramCount, _accumulatedImportance.Length);
-                for (int i = 0; i < len; i++)
+                if (len > 0)
                 {
-                    acc[i] = NumOps.Add(_accumulatedImportance[i], importance[i]);
+                    var head = Engine.Add(_accumulatedImportance.GetSubVector(0, len), importanceVector.GetSubVector(0, len));
+                    head.AsSpan().CopyTo(acc.AsWritableSpan().Slice(0, len));
                 }
 
-                for (int i = len; i < paramCount; i++)
-                {
-                    acc[i] = importance[i];
-                }
-
-                _accumulatedImportance = new Vector<T>(acc);
+                _accumulatedImportance = acc;
             }
         }
 
@@ -149,19 +143,18 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
     {
         // Knowledge distillation regularization: penalize deviation from teacher model
         // weighted by importance (analogous to EWC but motivated by KD).
-        double penalty = 0;
         int len = Math.Min(currentParameters.Length,
             Math.Min(referenceParameters.Length, importanceWeights.Length));
 
-        for (int i = 0; i < len; i++)
+        T penalty = NumOps.Zero;
+        if (len > 0)
         {
-            double diff = NumOps.ToDouble(currentParameters[i]) - NumOps.ToDouble(referenceParameters[i]);
-            double importance = NumOps.ToDouble(importanceWeights[i]);
-            penalty += importance * diff * diff;
+            var diff = Engine.Subtract(Prefix(currentParameters, len), Prefix(referenceParameters, len));
+            penalty = Engine.Sum(Engine.Multiply(Prefix(importanceWeights, len), Engine.Multiply(diff, diff)));
         }
 
         // Scale by distillation weight and regularization strength.
-        return NumOps.FromDouble(_distillationWeight * regularizationStrength * penalty / Math.Max(len, 1));
+        return NumOps.Multiply(penalty, NumOps.FromDouble(_distillationWeight * regularizationStrength / Math.Max(len, 1)));
     }
 
     /// <inheritdoc/>
@@ -171,34 +164,36 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         // for previous tasks. This is gentler than hard orthogonal projection, suited to
         // the data-free setting where importance estimates are noisier.
         int len = Math.Min(gradient.Length, importanceWeights.Length);
-        var projected = new T[gradient.Length];
-
-        double maxImportance = 0;
-        for (int i = 0; i < len; i++)
+        var projected = gradient.Clone();
+        if (len == 0)
         {
-            double imp = NumOps.ToDouble(importanceWeights[i]);
-            if (imp > maxImportance)
-            {
-                maxImportance = imp;
-            }
+            return projected;
         }
 
-        for (int i = 0; i < len; i++)
+        var importance = Prefix(importanceWeights, len);
+        T maxImportance = Engine.ReduceMax(importance.AsTensor(), new[] { 0 }, true)[0];
+        if (NumOps.LessThan(maxImportance, NumOps.Zero))
         {
-            double g = NumOps.ToDouble(gradient[i]);
-            double imp = NumOps.ToDouble(importanceWeights[i]);
-            // Scale: high-importance → small gradient; low-importance → full gradient.
-            double scale = maxImportance > 0 ? 1.0 - (imp / maxImportance) * _distillationWeight : 1.0;
-            projected[i] = NumOps.FromDouble(g * Math.Max(scale, 0.01)); // floor to avoid zero gradients
+            maxImportance = NumOps.Zero;
         }
 
-        // Parameters beyond importance length pass through unchanged.
-        for (int i = len; i < gradient.Length; i++)
+        // Scale: high-importance → small gradient; low-importance → full gradient, floored at 0.01 to
+        // avoid zero gradients. Parameters beyond importance length pass through unchanged.
+        Vector<T> scale;
+        if (NumOps.GreaterThan(maxImportance, NumOps.Zero))
         {
-            projected[i] = gradient[i];
+            var reduction = Engine.Multiply(Engine.Divide(importance, maxImportance), NumOps.FromDouble(_distillationWeight));
+            scale = Engine.TensorMax(
+                Engine.TensorAddScalar(Engine.TensorNegate(reduction.AsTensor()), NumOps.One),
+                NumOps.FromDouble(0.01)).ToVector();
+        }
+        else
+        {
+            scale = Engine.TensorOnesLike(importance.AsTensor()).ToVector();
         }
 
-        return new Vector<T>(projected);
+        Engine.Multiply(Prefix(gradient, len), scale).AsSpan().CopyTo(projected.AsWritableSpan().Slice(0, len));
+        return projected;
     }
 
     /// <inheritdoc/>
@@ -219,32 +214,37 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         }
 
         double totalWeight = 0;
-        var aggregated = new double[maxLen];
+        var aggregated = new Vector<T>(maxLen);
 
         foreach (var (clientId, importance) in clientImportances)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
 
-            for (int i = 0; i < importance.Length; i++)
+            // Shorter importance vectors contribute zeros past their end.
+            var padded = importance;
+            if (importance.Length < maxLen)
             {
-                aggregated[i] += w * NumOps.ToDouble(importance[i]);
+                padded = new Vector<T>(maxLen);
+                importance.AsSpan().CopyTo(padded.AsWritableSpan());
             }
+
+            aggregated = Engine.Add(aggregated, Engine.Multiply(padded, NumOps.FromDouble(w)));
         }
 
-        var result = new T[maxLen];
         if (totalWeight <= 0)
         {
             // All weights were zero or negative — fall back to uniform averaging.
             totalWeight = clientImportances.Count;
         }
 
-        for (int i = 0; i < maxLen; i++)
-        {
-            result[i] = NumOps.FromDouble(aggregated[i] / totalWeight);
-        }
+        return Engine.Divide(aggregated, NumOps.FromDouble(totalWeight));
+    }
 
-        return new Vector<T>(result);
+    /// <summary>The first <paramref name="length"/> entries (the vector itself when it is that long).</summary>
+    private static Vector<T> Prefix(Vector<T> vector, int length)
+    {
+        return vector.Length == length ? vector : vector.GetSubVector(0, length);
     }
 
     /// <summary>
@@ -252,9 +252,11 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
     /// </summary>
     /// <param name="teacherLogits">Teacher model logits on synthetic data.</param>
     /// <param name="studentLogits">Student model logits on synthetic data.</param>
-    /// <returns>KL divergence loss scaled by temperature squared.</returns>
-    public double ComputeDistillationLoss(double[] teacherLogits, double[] studentLogits)
+    /// <returns>KL(teacher || student) of the temperature-softened distributions, scaled by temperature squared.</returns>
+    public T ComputeDistillationLoss(Vector<T> teacherLogits, Vector<T> studentLogits)
     {
+        Guard.NotNull(teacherLogits);
+        Guard.NotNull(studentLogits);
         if (teacherLogits.Length != studentLogits.Length)
         {
             throw new ArgumentException("Teacher and student logits must have the same length.");
@@ -263,39 +265,19 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         int n = teacherLogits.Length;
         if (n == 0)
         {
-            return 0;
+            return NumOps.Zero;
         }
 
-        // Softmax with temperature.
-        double teacherMax = teacherLogits.Max();
-        double studentMax = studentLogits.Max();
-        double teacherSum = 0, studentSum = 0;
+        // Softmax with temperature, in log space.
+        var temperature = NumOps.FromDouble(_distillationTemperature);
+        var teacherLog = Engine.TensorLogSoftmax(Engine.TensorDivideScalar(teacherLogits.AsTensor(), temperature), 0);
+        var studentLog = Engine.TensorLogSoftmax(Engine.TensorDivideScalar(studentLogits.AsTensor(), temperature), 0);
 
-        var teacherProbs = new double[n];
-        var studentProbs = new double[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            teacherProbs[i] = Math.Exp((teacherLogits[i] - teacherMax) / _distillationTemperature);
-            studentProbs[i] = Math.Exp((studentLogits[i] - studentMax) / _distillationTemperature);
-            teacherSum += teacherProbs[i];
-            studentSum += studentProbs[i];
-        }
-
-        // KL(teacher || student) = sum(teacher * log(teacher / student))
-        double kl = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double p = teacherProbs[i] / teacherSum;
-            double q = studentProbs[i] / studentSum;
-            if (p > 1e-10)
-            {
-                kl += p * Math.Log(p / Math.Max(q, 1e-10));
-            }
-        }
+        // KL(teacher || student) = sum(teacher * (log teacher - log student))
+        T kl = Engine.TensorSum(Engine.TensorMultiply(Engine.TensorExp(teacherLog), Engine.TensorSubtract(teacherLog, studentLog)));
 
         // Scale by T² as per standard knowledge distillation.
-        return kl * _distillationTemperature * _distillationTemperature;
+        return NumOps.Multiply(kl, NumOps.FromDouble(_distillationTemperature * _distillationTemperature));
     }
 
     /// <summary>
