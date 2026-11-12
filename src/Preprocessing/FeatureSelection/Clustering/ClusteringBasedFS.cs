@@ -29,13 +29,13 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
     private readonly int _maxIterations;
 
     private int[]? _clusterAssignments;
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NClusters => _nClusters;
     public int[]? ClusterAssignments => _clusterAssignments;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,11 +68,8 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to arrays
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
         // Compute feature correlation matrix
         var correlations = ComputeFeatureCorrelations(X, n, p);
@@ -81,160 +78,69 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int nClusters = Math.Min(_nClusters, p);
         _clusterAssignments = ClusterFeatures(correlations, p, nClusters);
 
-        // Select best feature from each cluster based on variance
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += X[i, j];
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = X[i, j] - mean;
-                variance += diff * diff;
-            }
-            _featureScores[j] = n > 1 ? variance / (n - 1) : 0;
-        }
+        // Select best feature from each cluster based on (sample) variance
+        var scores = n > 1
+            ? engine.TensorDivideScalar(FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n - 1))
+            : new Tensor<T>(new[] { p });
+        _featureScores = scores.ToVector();
 
         // Select one feature per cluster with highest variance
-        var selectedList = new List<int>();
-        for (int c = 0; c < nClusters; c++)
-        {
-            var clusterFeatures = Enumerable.Range(0, p)
-                .Where(j => _clusterAssignments[j] == c)
-                .ToList();
-
-            if (clusterFeatures.Count > 0)
-            {
-                int bestFeature = clusterFeatures
-                    .OrderByDescending(j => _featureScores[j])
-                    .First();
-                selectedList.Add(bestFeature);
-            }
-        }
-
-        _selectedIndices = selectedList.OrderBy(x => x).ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.BestPerGroup(scores, _clusterAssignments, nClusters)
+            .OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double[,] ComputeFeatureCorrelations(double[,] X, int n, int p)
+    private Tensor<T> ComputeFeatureCorrelations(Tensor<T> X, int n, int p)
     {
-        var corr = new double[p, p];
-        var means = new double[p];
-        var stds = new double[p];
+        var engine = Engine;
 
-        // Compute means
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
-        }
+        // Centered data and standard deviations (n - 1 denominator, plus 1e-10)
+        var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { n, p }));
+        T dof = NumOps.FromDouble(n - 1);
+        var stds = engine.TensorAddScalar(
+            engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false), dof)),
+            NumOps.FromDouble(1e-10));
 
-        // Compute standard deviations
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                double diff = X[i, j] - means[j];
-                stds[j] += diff * diff;
-            }
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-        }
-
-        // Compute correlations
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            corr[j1, j1] = 1.0;
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += (X[i, j1] - means[j1]) * (X[i, j2] - means[j2]);
-                corr[j1, j2] = sum / ((n - 1) * stds[j1] * stds[j2]);
-                corr[j2, j1] = corr[j1, j2];
-            }
-        }
-
-        return corr;
+        // Compute correlations; the diagonal is exactly 1
+        var cov = engine.TensorMatMul(engine.TensorTranspose(centered), centered);
+        var denom = engine.TensorMultiplyScalar(engine.TensorOuter(stds, stds), dof);
+        var corr = engine.TensorDivide(cov, denom);
+        return engine.TensorWhere(engine.TensorEye<T>(p), PreprocessingTensorOps.Filled(new[] { p, p }, NumOps.One), corr);
     }
 
-    private int[] ClusterFeatures(double[,] correlations, int p, int nClusters)
+    private int[] ClusterFeatures(Tensor<T> correlations, int p, int nClusters)
     {
+        var engine = Engine;
         var assignments = new int[p];
-        var centroids = new double[nClusters, p];
 
         // Initialize centroids randomly
         var rand = RandomHelper.CreateSecureRandom();
-        var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(nClusters).ToList();
-        for (int c = 0; c < nClusters; c++)
-        {
-            for (int j = 0; j < p; j++)
-                centroids[c, j] = correlations[indices[c], j];
-        }
+        var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(nClusters).ToArray();
+        var centroids = engine.TensorIndexSelect(correlations, new Tensor<int>(indices, new[] { nClusters }), 0);
 
         // K-means iterations
+        T zero = NumOps.Zero;
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            bool changed = false;
-
-            // Assign features to nearest centroid
-            for (int j = 0; j < p; j++)
-            {
-                double minDist = double.MaxValue;
-                int bestCluster = 0;
-
-                for (int c = 0; c < nClusters; c++)
-                {
-                    double dist = 0;
-                    for (int j2 = 0; j2 < p; j2++)
-                    {
-                        double diff = correlations[j, j2] - centroids[c, j2];
-                        dist += diff * diff;
-                    }
-
-                    if (dist < minDist)
-                    {
-                        minDist = dist;
-                        bestCluster = c;
-                    }
-                }
-
-                if (assignments[j] != bestCluster)
-                {
-                    assignments[j] = bestCluster;
-                    changed = true;
-                }
-            }
+            // Assign features to nearest centroid (first centroid among ties)
+            var best = FeatureSelectionTensorOps.FirstArgMinPerRow(
+                FeatureSelectionTensorOps.SquaredDistances(correlations, centroids));
+            bool changed = !best.SequenceEqual(assignments);
+            assignments = best;
 
             if (!changed)
                 break;
 
-            // Update centroids
-            for (int c = 0; c < nClusters; c++)
-            {
-                var clusterMembers = Enumerable.Range(0, p)
-                    .Where(j => assignments[j] == c)
-                    .ToList();
-
-                if (clusterMembers.Count == 0) continue;
-
-                for (int j = 0; j < p; j++)
-                {
-                    centroids[c, j] = 0;
-                    foreach (int member in clusterMembers)
-                        centroids[c, j] += correlations[member, j];
-                    centroids[c, j] /= clusterMembers.Count;
-                }
-            }
+            // Update centroids; an empty cluster keeps its centroid
+            var membership = PreprocessingTensorOps.ClassOneHot<T>(assignments, nClusters);
+            var means = FeatureSelectionTensorOps.GroupMeans(membership, correlations, out var counts);
+            var occupied = engine.TensorBroadcastTo(
+                engine.Reshape(engine.TensorGreaterThan(counts, zero), new[] { nClusters, 1 }), new[] { nClusters, p });
+            centroids = engine.TensorWhere(occupied, means, centroids);
         }
 
         return assignments;
     }
-
     /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
@@ -244,15 +150,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
             throw new ArgumentException(
                 $"Expected {_nInputFeatures} features, but got {data.Columns}.", nameof(data));
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
