@@ -56,7 +56,7 @@ public class CalibrationEngine<T>
         var bins = new List<CalibrationBin<T>>();
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var probs = new Tensor<T>(probabilities, new[] { n });
+        var probs = new Tensor<T>(probabilities, new[] { n }).Cast<double>();
         var actualTensor = new Tensor<T>(actuals, new[] { n });
 
         double ece = 0;
@@ -64,28 +64,17 @@ public class CalibrationEngine<T>
         if (n > 0 && numBins > 0)
         {
             // Create bins: bin i holds i/numBins <= p < (i+1)/numBins (the last bin also holds p == 1)
-            var shape = new[] { numBins, n };
-            var inBin = EvaluationTensorOps<T>.UniformBinMask(probs, numBins);
-            var broadcastProbs = engine.TensorBroadcastTo(engine.Reshape(probs, new[] { 1, n }), shape);
-            var positive = engine.TensorBroadcastTo(
-                engine.Reshape(EvaluationTensorOps<T>.GreaterOrEqualMask(actualTensor, NumOps.FromDouble(0.5)), new[] { 1, n }), shape);
-            var counts = engine.ReduceSum(inBin, new[] { 1 }, false);
-            var probSums = engine.ReduceSum(engine.TensorWhere(inBin, broadcastProbs, engine.TensorZerosLike(broadcastProbs)), new[] { 1 }, false);
-            var positiveSums = engine.ReduceSum(engine.TensorMultiply(inBin, positive), new[] { 1 }, false);
-
-            // Empty bins divide by 1 and get 0 / 0 = 0 means, so they add nothing to the errors below
-            var safeCounts = engine.TensorMax(counts, NumOps.One);
-            var meanProbs = engine.TensorDivide(probSums, safeCounts);
-            var frequencies = engine.TensorDivide(positiveSums, safeCounts);
+            var positive = EvaluationTensorOps<T>.GreaterOrEqualMask(actualTensor, NumOps.FromDouble(0.5)).Cast<double>();
+            var (counts, meanProbs, frequencies) = EvaluationBinOps.Averages(probs, positive, numBins);
             var gaps = engine.TensorAbs(engine.TensorSubtract(meanProbs, frequencies));
 
             // Calculate Expected Calibration Error (ECE) and Maximum Calibration Error (MCE)
-            ece = NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(counts, gaps))) / n;
-            mce = NumOps.ToDouble(engine.TensorMaxValue(gaps));
+            ece = engine.TensorSum(engine.TensorMultiply(counts, gaps)) / n;
+            mce = engine.TensorMaxValue(gaps);
 
             var countValues = counts.Cast<int>().ToArray();
-            var meanValues = meanProbs.ToArray();
-            var frequencyValues = frequencies.ToArray();
+            var meanValues = meanProbs.Cast<T>().ToArray();
+            var frequencyValues = frequencies.Cast<T>().ToArray();
             for (int i = 0; i < numBins; i++)
             {
                 if (countValues[i] > 0)
@@ -104,7 +93,7 @@ public class CalibrationEngine<T>
 
         // Calculate Brier Score
         var actualIsOne = EvaluationTensorOps<T>.EqualMask(actualTensor, NumOps.One);
-        double brier = NumOps.ToDouble(engine.TensorSumOfSquares(engine.TensorSubtract(probs, actualIsOne))) / n;
+        double brier = engine.TensorSumOfSquares(engine.TensorSubtract(probs, actualIsOne.Cast<double>())) / n;
 
         return new CalibrationResult<T>
         {
@@ -129,16 +118,16 @@ public class CalibrationEngine<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var probs = new Tensor<T>(probabilities, new[] { n });
-        var targets = EvaluationTensorOps<T>.EqualMask(new Tensor<T>(actuals, new[] { n }), NumOps.One);
+        var probs = new Tensor<T>(probabilities, new[] { n }).Cast<double>();
+        var targets = EvaluationTensorOps<T>.EqualMask(new Tensor<T>(actuals, new[] { n }), NumOps.One).Cast<double>();
 
         // Fit sigmoid: P_calibrated = 1 / (1 + exp(A * P_uncalibrated + B))
         // Using simple gradient descent; A and B are one-element tensors broadcast over the samples
         var shape = new[] { n };
-        var a = new Tensor<T>(new[] { NumOps.One }, new[] { 1 });
-        var b = new Tensor<T>(new[] { 1 });
-        var learningRate = NumOps.FromDouble(0.1);
-        var count = NumOps.FromDouble(n);
+        var a = new Tensor<double>(new[] { 1.0 }, new[] { 1 });
+        var b = new Tensor<double>(new[] { 1 });
+        const double learningRate = 0.1;
+        double count = n;
         int maxIterations = 1000;
 
         for (int iter = 0; iter < maxIterations; iter++)
@@ -156,9 +145,9 @@ public class CalibrationEngine<T>
 
         // Apply calibration
         var calibrated = engine.TensorSigmoid(engine.TensorAdd(
-            engine.TensorMultiply(probs, engine.TensorBroadcastTo(a, shape)), engine.TensorBroadcastTo(b, shape))).ToArray();
+            engine.TensorMultiply(probs, engine.TensorBroadcastTo(a, shape)), engine.TensorBroadcastTo(b, shape))).Cast<T>().ToArray();
 
-        return (calibrated, NumOps.ToDouble(a[0]), NumOps.ToDouble(b[0]));
+        return (calibrated, a[0], b[0]);
     }
 
     /// <summary>

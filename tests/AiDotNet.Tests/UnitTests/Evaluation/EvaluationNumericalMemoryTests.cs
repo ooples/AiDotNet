@@ -1,5 +1,9 @@
 #if NET5_0_OR_GREATER
 using AiDotNet.Evaluation;
+using AiDotNet.Enums;
+using AiDotNet.Evaluation.Calibration;
+using AiDotNet.Evaluation.Engines;
+using AiDotNet.Models.Options;
 using AiDotNet.Evaluation.Metrics.Classification;
 using AiDotNet.Evaluation.Metrics.Probabilistic;
 using AiDotNet.Evaluation.Metrics.Regression;
@@ -10,6 +14,31 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 
 public class EvaluationNumericalMemoryTests
 {
+    [Fact]
+    public void PlattScaling_PublicFitMatchesSmoothedClosedForm()
+    {
+        double[] scores = { 0, 0, 1, 1 };
+        double[] labels = { 0, 0, 1, 1 };
+        var options = new ProbabilityCalibratorOptions
+            { CalibratorMethod = ProbabilityCalibrationMethod.PlattScaling, MaxIterations = 20, Tolerance = 1e-12 };
+        var wide = new ProbabilityCalibrator<double>(options);
+        var result = wide.FitTransform(new Vector<double>(scores), new Vector<double>(labels));
+        var (a, b) = wide.GetPlattParameters();
+        Assert.Equal(2 * Math.Log(3), a, 6);
+        Assert.Equal(-Math.Log(3), b, 6);
+        for (int i = 0; i < scores.Length; i++)
+            Assert.Equal(i < 2 ? 0.25 : 0.75, result[i], 6);
+        var half = new ProbabilityCalibrator<Half>(options);
+        var halfResult = half.FitTransform(new Vector<Half>(scores.Select(x => (Half)x).ToArray()),
+            new Vector<Half>(labels.Select(x => (Half)x).ToArray()));
+        for (int i = 0; i < scores.Length; i++)
+            Assert.InRange(Math.Abs((double)halfResult[i] - (i < 2 ? 0.25 : 0.75)), 0, 0.001);
+        var (halfA, halfB) = half.GetPlattParameters();
+        Assert.InRange(Math.Abs((double)halfA - 2 * Math.Log(3)), 0, 0.002);
+        Assert.InRange(Math.Abs((double)halfB + Math.Log(3)), 0, 0.001);
+    }
+
+
     [Fact]
     public void HalfVarianceRatios_PreserveFiniteRatiosAndConstantCases()
     {
@@ -88,6 +117,85 @@ public class EvaluationNumericalMemoryTests
         Assert.Equal((Half)0.5, result.EffectSize);
         Assert.Equal((Half)0, result.Statistic);
         Assert.Equal((Half)1, result.PValue);
+    }
+
+    [Fact]
+    public void Calibration_HalfRetainsExactLargeBinCountsAndWideMeans()
+    {
+        var scores = new Vector<Half>(Enumerable.Repeat((Half)0.75, 70000).ToArray());
+        var labels = new Vector<Half>(Enumerable.Repeat((Half)1, scores.Length).ToArray());
+        var calibrator = new ProbabilityCalibrator<Half>();
+        Assert.Equal(0.25, calibrator.ComputeECE(scores, labels));
+        Assert.Equal(0.25, calibrator.ComputeMCE(scores, labels));
+        Assert.Equal(0.0625, calibrator.ComputeBrierScore(scores, labels));
+        var diagram = calibrator.GetReliabilityDiagram(scores, labels);
+        Assert.Equal(70000, diagram.binCounts[7]);
+        Assert.Equal((Half)0.75, diagram.meanPredicted[7]);
+        Assert.Equal((Half)1, diagram.fractionPositives[7]);
+        var analysis = new CalibrationEngine<Half>().Analyze(scores.ToArray(), labels.ToArray());
+        Assert.Equal(70000, Assert.Single(analysis.Bins).SampleCount);
+        Assert.Equal((Half)0.25, analysis.ExpectedCalibrationError);
+        Assert.Equal((Half)0.0625, analysis.BrierScore);
+    }
+
+    [Fact]
+    public void Calibration_BlockedHistogramMatchesAnalyticBinsAndFallbacks()
+    {
+        const int count = 131073;
+        var scores = new Vector<double>(Enumerable.Range(0, count).Select(i => i % 2 == 0 ? 0.25 : 0.75).ToArray());
+        var labels = new Vector<double>(Enumerable.Range(0, count).Select(i => i % 2 == 0 ? 0.0 : 1.0).ToArray());
+        var calibrator = new ProbabilityCalibrator<double>(new ProbabilityCalibratorOptions
+            { CalibratorMethod = ProbabilityCalibrationMethod.HistogramBinning, NumBins = 32 });
+        var diagram = calibrator.GetReliabilityDiagram(scores, labels, 32);
+        Assert.Equal(65537, diagram.binCounts[8]);
+        Assert.Equal(65536, diagram.binCounts[24]);
+        Assert.Equal(0.25, calibrator.ComputeECE(scores, labels, 32));
+        calibrator.Fit(scores, labels);
+        var calibrated = calibrator.Transform(scores);
+        for (int i = 0; i < count; i++) Assert.Equal(i % 2 == 0 ? 0.0 : 1.0, calibrated[i]);
+        Assert.All(calibrator.Transform(new Vector<double>(new[] { double.NaN, -1.0, 1.0, double.PositiveInfinity })).ToArray(),
+            value => Assert.Equal(0.984375, value));
+    }
+
+    [Theory]
+    [InlineData(ProbabilityCalibrationMethod.PlattScaling)]
+    [InlineData(ProbabilityCalibrationMethod.TemperatureScaling)]
+    [InlineData(ProbabilityCalibrationMethod.BetaCalibration)]
+    public void Calibration_HalfFittingMatchesWideReferenceAtProbabilityEndpoints(ProbabilityCalibrationMethod method)
+    {
+        var options = new ProbabilityCalibratorOptions { CalibratorMethod = method, MaxIterations = 5 };
+        double[] scores = { 0, 0, 0.5, 1, 1 };
+        double[] labels = { 0, 1, 0, 1, 1 };
+        var wide = new ProbabilityCalibrator<double>(options);
+        var half = new ProbabilityCalibrator<Half>(options);
+        var expected = wide.FitTransform(new Vector<double>(scores), new Vector<double>(labels));
+        var actual = half.FitTransform(new Vector<Half>(scores.Select(x => (Half)x).ToArray()),
+            new Vector<Half>(labels.Select(x => (Half)x).ToArray()));
+        for (int i = 0; i < scores.Length; i++) Assert.InRange(Math.Abs(expected[i] - (double)actual[i]), 0, 0.002);
+    }
+
+    [Fact]
+    public void Calibration_HalfBayesianBinningPreservesLargePrefixCounts()
+    {
+        var scores = new Vector<Half>(Enumerable.Range(0, 70000).Select(i => i < 35000 ? (Half)0.25 : (Half)0.75).ToArray());
+        var labels = new Vector<Half>(Enumerable.Range(0, 70000).Select(i => i < 35000 ? (Half)0 : (Half)1).ToArray());
+        var calibrator = new ProbabilityCalibrator<Half>(new ProbabilityCalibratorOptions
+            { CalibratorMethod = ProbabilityCalibrationMethod.BayesianBinning, NumBins = 4 });
+        calibrator.Fit(scores, labels);
+        Assert.Equal(new[] { (Half)0, (Half)1 }, calibrator.Transform(new Vector<Half>(new[] { (Half)0.25, (Half)0.75 })).ToArray());
+    }
+
+    [Fact]
+    public void CalibrationEngine_HalfPlattUsesWideOptimizerArithmetic()
+    {
+        double[] scores = { 0, 0.25, 0.75, 1 };
+        double[] labels = { 0, 0, 1, 1 };
+        var expected = new CalibrationEngine<double>().PlattScaling(scores, labels);
+        var actual = new CalibrationEngine<Half>().PlattScaling(scores.Select(x => (Half)x).ToArray(), labels.Select(x => (Half)x).ToArray());
+        Assert.Equal(expected.A, actual.A, 10);
+        Assert.Equal(expected.B, actual.B, 10);
+        for (int i = 0; i < scores.Length; i++)
+            Assert.Equal((Half)expected.CalibratedProbabilities[i], actual.CalibratedProbabilities[i]);
     }
 
     [Fact]
