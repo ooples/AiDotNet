@@ -80,10 +80,7 @@ internal static class ObjectiveOps
     /// </summary>
     internal static Tensor<T> Identity<T>(int n)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var identity = new Tensor<T>(new[] { n, n });
-        for (int i = 0; i < n; i++) identity[i, i] = ops.One;
-        return identity;
+        return AiDotNetEngine.Current.TensorEye<T>(n);
     }
 
     /// <summary>
