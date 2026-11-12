@@ -1,8 +1,10 @@
+using System;
 using System.Linq;
 using AiDotNet.Data.Structures;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.IntegrationTests.MetaLearning;
 using Xunit;
 
@@ -82,5 +84,30 @@ public class CACTUsPaperTests
         double loss = algorithm.MetaTrain(new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task }));
 
         Assert.False(double.IsNaN(loss) || double.IsInfinity(loss));
+    }
+
+    [Fact]
+    public void KMeans_SeparatesLargeMagnitudeGroupsInHalf()
+    {
+        // Groups near (300, 300) and (-300, -300). In Half ||c||^2 and x . c (about 180000) overflow to inf, so
+        // every distance was inf or inf - inf = NaN and the arg-min put every point in cluster 0.
+        float[] offsets = { 0f, 2f, -2f, 0f };
+        float[] other = { 2f, 0f, 0f, -2f };
+        var data = new Half[16];
+        for (int i = 0; i < 4; i++)
+        {
+            data[2 * i] = (Half)(300f + offsets[i]);
+            data[2 * i + 1] = (Half)(300f + other[i]);
+            data[8 + 2 * i] = (Half)(-300f - offsets[i]);
+            data[8 + 2 * i + 1] = (Half)(-300f - other[i]);
+        }
+
+        var algorithm = new UnsupervisedMetaLearnAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+            new UnsupervisedMetaLearnOptions<Half, Tensor<Half>, Tensor<Half>>(new MockFullModel<Half>()) { Seed = 17 });
+        var assignment = algorithm.KMeans(Tensor<Half>.FromVector(new Vector<Half>(data), new[] { 8, 2 }), 2);
+
+        Assert.All(assignment.Take(4), a => Assert.Equal(assignment[0], a));
+        Assert.All(assignment.Skip(4), a => Assert.Equal(assignment[4], a));
+        Assert.NotEqual(assignment[0], assignment[4]);
     }
 }

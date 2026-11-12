@@ -188,10 +188,21 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
     /// Lloyd's k-means from k distinct random examples; returns each example's cluster. Distances drop the
     /// per-example ||x||^2, which does not change the arg-min.
     /// </summary>
+    /// <remarks>
+    /// The embeddings are first scaled by 1 / (max|x| sqrt(dim)), so every ||x|| &lt;= 1: a positive scale changes
+    /// neither the arg-min nor the clustering, and it keeps ||c||^2 and x . c inside a narrow T (300^2 already
+    /// overflows Half). Cluster sizes are counted as ints and each mean is the one-hot rows weighted by 1 / size,
+    /// so neither a Half count (which stalls at 2048) nor an unnormalized column sum can saturate.
+    /// </remarks>
     internal int[] KMeans(Tensor<T> embeddings, int k)
     {
         int n = embeddings.Shape[0];
         int dim = embeddings.Shape[1];
+        T peak = Engine.TensorMaxValue(Engine.TensorAbs(embeddings));
+        if (NumOps.GreaterThan(peak, NumOps.Zero))
+            embeddings = Engine.TensorMultiplyScalar(
+                Engine.TensorDivideScalar(embeddings, peak), NumOps.FromDouble(1.0 / Math.Sqrt(dim)));
+
         var order = new int[n];
         for (int i = 0; i < n; i++) order[i] = i;
         for (int i = 0; i < k; i++)
@@ -206,11 +217,13 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
         var assignment = Assign(embeddings, centroids);
         for (int iter = 0; iter < _algoOptions.KMeansIterations; iter++)
         {
-            var oneHot = Engine.TensorOneHot<T>(assignment, k);
-            var sums = Engine.TensorMatMul(Engine.TensorTranspose(oneHot), embeddings);
-            var counts = Engine.ReduceSum(oneHot, new[] { 0 }, keepDims: false).Reshape(new[] { k, 1 });
-            var means = Engine.TensorDivide(sums, Engine.TensorBroadcastTo(Engine.TensorMax(counts, NumOps.One), new[] { k, dim }));
-            var occupied = Engine.TensorBroadcastTo(Engine.TensorGreaterThan(counts, NumOps.Zero), new[] { k, dim });
+            var counts = Engine.TensorBinCount(assignment, k).Cast<double>().Reshape(new[] { 1, k });
+            var inverseCounts = Engine.TensorReciprocal(Engine.TensorMax(counts, 1.0)).Cast<T>();
+            var weights = Engine.TensorMultiply(
+                Engine.TensorOneHot<T>(assignment, k), Engine.TensorBroadcastTo(inverseCounts, new[] { n, k }));
+            var means = Engine.TensorMatMul(Engine.TensorTranspose(weights), embeddings);
+            var occupied = Engine.TensorBroadcastTo(
+                Engine.TensorGreaterThan(counts, 0.0).Cast<T>().Reshape(new[] { k, 1 }), new[] { k, dim });
             centroids = Engine.TensorWhere(occupied, means, centroids);
             assignment = Assign(embeddings, centroids);
         }
