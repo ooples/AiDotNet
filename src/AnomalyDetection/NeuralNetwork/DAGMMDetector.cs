@@ -92,10 +92,10 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _estB2;
 
-    // GMM parameters (kept as double for numerical stability in probability computations)
-    private double[]? _phi; // Mixture weights
-    private double[][]? _mu; // Means
-    private double[][][]? _sigma; // Covariances
+    // GMM parameters
+    private Tensor<T>? _phi; // Mixture weights [numMixtures]
+    private Tensor<T>? _mu; // Means [numMixtures, zDim]
+    private Tensor<T>? _sigma; // Covariances [numMixtures, zDim, zDim]
 
     private int _inputDim;
     private int _zDim; // latent + reconstruction features
@@ -200,50 +200,14 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-
-        var means = new Vector<T>(d);
-        var stds = new Vector<T>(d);
-
-        // Compute means
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-        }
-
-        // Compute standard deviations
-        for (int j = 0; j < d; j++)
-        {
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
-            T eps = NumOps.FromDouble(1e-10);
-            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
-            stds[j] = stdVal;
-        }
-
-        // Normalize
-        var normalized = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                normalized[i, j] = NumOps.Divide(diff, stds[j]);
-            }
-        }
-
-        return (normalized, means, stds);
+        // Per-feature mean and population std (std below 1e-10 replaced by 1), then (x - mean) / std
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var (std, mean) = engine.TensorStdMean(values, new[] { 0 }, 0, false);
+        var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var stds = engine.TensorWhere(tiny, Tensor<T>.CreateOnes(new[] { data.Columns }), std);
+        var normalized = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(values, mean), stds);
+        return (normalized.ToMatrix(), mean.ToVector(), stds.ToVector());
     }
 
     private void InitializeWeights()
@@ -257,21 +221,21 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
 
         // Encoder
         _encW1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
-        _encB1 = InitializeVector(_hiddenDim);
+        _encB1 = new Vector<T>(_hiddenDim);
         _encW2 = InitializeMatrix(_hiddenDim, _latentDim, scale2);
-        _encB2 = InitializeVector(_latentDim);
+        _encB2 = new Vector<T>(_latentDim);
 
         // Decoder
         _decW1 = InitializeMatrix(_latentDim, _hiddenDim, scale3);
-        _decB1 = InitializeVector(_hiddenDim);
+        _decB1 = new Vector<T>(_hiddenDim);
         _decW2 = InitializeMatrix(_hiddenDim, _inputDim, scale4);
-        _decB2 = InitializeVector(_inputDim);
+        _decB2 = new Vector<T>(_inputDim);
 
         // Estimation network
         _estW1 = InitializeMatrix(_zDim, _hiddenDim, scale5);
-        _estB1 = InitializeVector(_hiddenDim);
+        _estB1 = new Vector<T>(_hiddenDim);
         _estW2 = InitializeMatrix(_hiddenDim, _numMixtures, scale6);
-        _estB2 = InitializeVector(_numMixtures);
+        _estB2 = new Vector<T>(_numMixtures);
     }
 
     private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
@@ -290,407 +254,61 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
         return matrix;
     }
 
-    private Vector<T> InitializeVector(int size)
-    {
-        var vector = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            vector[i] = NumOps.Zero;
-        }
-        return vector;
-    }
-
     private void InitializeGMM()
     {
-        _phi = new double[_numMixtures];
-        _mu = new double[_numMixtures][];
-        _sigma = new double[_numMixtures][][];
-
-        for (int k = 0; k < _numMixtures; k++)
+        // Equal mixture weights, means uniform in [-0.05, 0.05) (drawn component by component, feature by
+        // feature), identity covariances
+        var draws = new double[_numMixtures * _zDim];
+        for (int i = 0; i < draws.Length; i++)
         {
-            _phi[k] = 1.0 / _numMixtures;
-            _mu[k] = new double[_zDim];
-            _sigma[k] = new double[_zDim][];
-
-            for (int j = 0; j < _zDim; j++)
-            {
-                _mu[k][j] = (_random.NextDouble() - 0.5) * 0.1;
-                _sigma[k][j] = new double[_zDim];
-                _sigma[k][j][j] = 1.0; // Identity covariance
-            }
+            draws[i] = _random.NextDouble();
         }
+
+        var engine = Engine;
+        var uniform = Tensor<double>.FromVector(Vector<double>.Wrap(draws), new[] { _numMixtures, _zDim }).Cast<T>();
+        _phi = engine.Fill(_numMixtures, NumOps.FromDouble(1.0 / _numMixtures)).AsTensor();
+        _mu = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(uniform, NumOps.FromDouble(0.5)), NumOps.FromDouble(0.1));
+        _sigma = engine.TensorTile(engine.Reshape(engine.TensorEye(_zDim), new[] { 1, _zDim, _zDim }),
+            new[] { _numMixtures, 1, 1 });
     }
 
     private void Train(Matrix<T> data)
     {
         int n = data.Rows;
         int batchSize = Math.Min(64, n);
-        double lr = _learningRate;
-        double clipValue = 5.0;
-
-        // Capture weights
-        var encW1 = _encW1;
-        var encB1 = _encB1;
-        var encW2 = _encW2;
-        var encB2 = _encB2;
-        var decW1 = _decW1;
-        var decB1 = _decB1;
-        var decW2 = _decW2;
-        var decB2 = _decB2;
-        var estW1 = _estW1;
-        var estB1 = _estB1;
-        var estW2 = _estW2;
-        var estB2 = _estB2;
-
-        if (encW1 == null || encB1 == null || encW2 == null || encB2 == null ||
-            decW1 == null || decB1 == null || decW2 == null || decB2 == null ||
-            estW1 == null || estB1 == null || estW2 == null || estB2 == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
+        var values = AnomalyTensorOps.ToTensor(data);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             var indices = Enumerable.Range(0, n).OrderBy(_ => _random.NextDouble()).ToArray();
-            var allZ = new List<double[]>();
-            var allGamma = new List<double[]>();
+            var allZ = new List<Tensor<T>>();
+            var allGamma = new List<Tensor<T>>();
 
             for (int batch = 0; batch < n; batch += batchSize)
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
+                var batchRows = new int[actualBatchSize];
+                Array.Copy(indices, batch, batchRows, 0, actualBatchSize);
 
-                // Gradient accumulators (use double for numerical stability during accumulation)
-                var dEncW1 = new double[_inputDim, _hiddenDim];
-                var dEncB1 = new double[_hiddenDim];
-                var dEncW2 = new double[_hiddenDim, _latentDim];
-                var dEncB2 = new double[_latentDim];
-                var dDecW1 = new double[_latentDim, _hiddenDim];
-                var dDecB1 = new double[_hiddenDim];
-                var dDecW2 = new double[_hiddenDim, _inputDim];
-                var dDecB2 = new double[_inputDim];
-                var dEstW1 = new double[_zDim, _hiddenDim];
-                var dEstB1 = new double[_hiddenDim];
-                var dEstW2 = new double[_hiddenDim, _numMixtures];
-                var dEstB2 = new double[_numMixtures];
+                // Forward pass with caching; zc and gamma are stored for the GMM update
+                var forward = Forward(AnomalyTensorOps.SelectRows(values, batchRows));
+                allZ.Add(forward.Zc);
+                allGamma.Add(forward.Gamma);
 
-                for (int b = 0; b < actualBatchSize; b++)
-                {
-                    int idx = indices[batch + b];
-
-                    // Extract input
-                    var x = new Vector<T>(_inputDim);
-                    for (int i = 0; i < _inputDim; i++)
-                    {
-                        x[i] = data[idx, i];
-                    }
-
-                    // Forward pass with caching
-                    var (z, zc, xRecon, gamma, encH, decH, estH) = ForwardPassWithCache(x);
-
-                    // Store for GMM update (convert to double arrays)
-                    var zcDouble = new double[_zDim];
-                    for (int i = 0; i < _zDim; i++)
-                    {
-                        zcDouble[i] = NumOps.ToDouble(zc[i]);
-                    }
-                    allZ.Add(zcDouble);
-
-                    var gammaDouble = new double[_numMixtures];
-                    for (int i = 0; i < _numMixtures; i++)
-                    {
-                        gammaDouble[i] = NumOps.ToDouble(gamma[i]);
-                    }
-                    allGamma.Add(gammaDouble);
-
-                    // Compute reconstruction loss gradient: dL/dxRecon = 2 * (xRecon - x) / inputDim
-                    var dXRecon = new Vector<T>(_inputDim);
-                    for (int i = 0; i < _inputDim; i++)
-                    {
-                        T diff = NumOps.Subtract(xRecon[i], x[i]);
-                        dXRecon[i] = NumOps.Multiply(NumOps.FromDouble(2.0 / _inputDim), diff);
-                    }
-
-                    // Backprop through decoder output layer
-                    var dDecH = new double[_hiddenDim];
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        for (int j = 0; j < _inputDim; j++)
-                        {
-                            dDecW2[i, j] += NumOps.ToDouble(NumOps.Multiply(decH[i], dXRecon[j]));
-                            dDecH[i] += NumOps.ToDouble(NumOps.Multiply(decW2[i, j], dXRecon[j]));
-                        }
-                    }
-                    for (int j = 0; j < _inputDim; j++)
-                    {
-                        dDecB2[j] += NumOps.ToDouble(dXRecon[j]);
-                    }
-
-                    // Tanh derivative for decoder hidden layer
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(decH[i], decH[i]));
-                        dDecH[i] *= NumOps.ToDouble(tanhDeriv);
-                    }
-
-                    // Backprop through decoder hidden layer
-                    var dZ = new double[_latentDim];
-                    for (int i = 0; i < _latentDim; i++)
-                    {
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            dDecW1[i, j] += NumOps.ToDouble(z[i]) * dDecH[j];
-                            dZ[i] += NumOps.ToDouble(decW1[i, j]) * dDecH[j];
-                        }
-                    }
-                    for (int j = 0; j < _hiddenDim; j++)
-                    {
-                        dDecB1[j] += dDecH[j];
-                    }
-
-                    // Tanh derivative for z
-                    for (int i = 0; i < _latentDim; i++)
-                    {
-                        T zTanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(z[i], z[i]));
-                        dZ[i] *= NumOps.ToDouble(zTanhDeriv);
-                    }
-
-                    // Backprop through encoder output layer
-                    var dEncH = new double[_hiddenDim];
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        for (int j = 0; j < _latentDim; j++)
-                        {
-                            dEncW2[i, j] += NumOps.ToDouble(encH[i]) * dZ[j];
-                            dEncH[i] += NumOps.ToDouble(encW2[i, j]) * dZ[j];
-                        }
-                    }
-                    for (int j = 0; j < _latentDim; j++)
-                    {
-                        dEncB2[j] += dZ[j];
-                    }
-
-                    // Tanh derivative for encoder hidden layer
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(encH[i], encH[i]));
-                        dEncH[i] *= NumOps.ToDouble(tanhDeriv);
-                    }
-
-                    // Backprop through encoder hidden layer
-                    for (int i = 0; i < _inputDim; i++)
-                    {
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            dEncW1[i, j] += NumOps.ToDouble(x[i]) * dEncH[j];
-                        }
-                    }
-                    for (int j = 0; j < _hiddenDim; j++)
-                    {
-                        dEncB1[j] += dEncH[j];
-                    }
-
-                    // Backprop through estimation network
-                    // Compute energy-based gradient for end-to-end DAGMM training
-                    var dGamma = new double[_numMixtures];
-
-                    // Compute GMM component log-likelihoods for this sample
-                    var componentLogLikelihood = new double[_numMixtures];
-                    double maxLogLik = double.MinValue;
-
-                    // Use current GMM parameters (if available) to compute responsibilities
-                    var phi = _phi;
-                    var mu = _mu;
-                    var sigma = _sigma;
-
-                    if (phi != null && mu != null && sigma != null)
-                    {
-                        // Compute log-likelihood for each component using full covariance
-                        for (int k = 0; k < _numMixtures; k++)
-                        {
-                            // Attempt Cholesky for this component
-                            var Lk = new double[_zDim][];
-                            for (int ii = 0; ii < _zDim; ii++)
-                                Lk[ii] = new double[_zDim];
-
-                            bool cholOk = true;
-                            for (int ii = 0; ii < _zDim; ii++)
-                            {
-                                for (int jj = 0; jj <= ii; jj++)
-                                {
-                                    double s = sigma[k][ii][jj];
-                                    for (int mm = 0; mm < jj; mm++)
-                                        s -= Lk[ii][mm] * Lk[jj][mm];
-                                    if (ii == jj)
-                                    {
-                                        if (s <= 0) { cholOk = false; break; }
-                                        Lk[ii][jj] = Math.Sqrt(s);
-                                    }
-                                    else
-                                    {
-                                        Lk[ii][jj] = s / Lk[jj][jj];
-                                    }
-                                }
-                                if (!cholOk) break;
-                            }
-
-                            double logDet;
-                            double mahal;
-
-                            if (cholOk)
-                            {
-                                // Log det from Cholesky
-                                logDet = 0;
-                                for (int ii = 0; ii < _zDim; ii++)
-                                    logDet += Math.Log(Lk[ii][ii]);
-                                logDet *= 2;
-
-                                // Forward substitution for Mahalanobis
-                                var yy = new double[_zDim];
-                                for (int ii = 0; ii < _zDim; ii++)
-                                {
-                                    double s = zcDouble[ii] - mu[k][ii];
-                                    for (int jj = 0; jj < ii; jj++)
-                                        s -= Lk[ii][jj] * yy[jj];
-                                    yy[ii] = s / Lk[ii][ii];
-                                }
-                                mahal = 0;
-                                for (int ii = 0; ii < _zDim; ii++)
-                                    mahal += yy[ii] * yy[ii];
-                            }
-                            else
-                            {
-                                // Diagonal fallback
-                                logDet = 0;
-                                mahal = 0;
-                                for (int d = 0; d < _zDim; d++)
-                                {
-                                    logDet += Math.Log(sigma[k][d][d] + 1e-10);
-                                    double diff = zcDouble[d] - mu[k][d];
-                                    mahal += diff * diff / (sigma[k][d][d] + 1e-10);
-                                }
-                            }
-
-                            componentLogLikelihood[k] = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDet + mahal)
-                                                       + Math.Log(phi[k] + 1e-10);
-                            if (componentLogLikelihood[k] > maxLogLik)
-                                maxLogLik = componentLogLikelihood[k];
-                        }
-
-                        // Compute soft responsibilities via softmax over log-likelihoods
-                        var responsibilities = new double[_numMixtures];
-                        double sumResp = 0;
-                        for (int k = 0; k < _numMixtures; k++)
-                        {
-                            responsibilities[k] = Math.Exp(componentLogLikelihood[k] - maxLogLik);
-                            sumResp += responsibilities[k];
-                        }
-                        for (int k = 0; k < _numMixtures; k++)
-                        {
-                            responsibilities[k] /= (sumResp + 1e-10);
-                        }
-
-                        // Energy gradient: encourage gamma to match GMM responsibilities
-                        // dGamma[k] = (gamma[k] - responsibility[k]) is the gradient to minimize KL divergence
-                        // This provides end-to-end training signal from GMM to estimation network
-                        double energyWeight = 0.1; // Weight for energy loss relative to reconstruction
-                        for (int k = 0; k < _numMixtures; k++)
-                        {
-                            dGamma[k] = energyWeight * (gammaDouble[k] - responsibilities[k]);
-                        }
-                    }
-                    else
-                    {
-                        // GMM not yet initialized, use uniform target as fallback
-                        double uniformProb = 1.0 / _numMixtures;
-                        for (int k = 0; k < _numMixtures; k++)
-                        {
-                            dGamma[k] = (gammaDouble[k] - uniformProb) * 0.01;
-                        }
-                    }
-
-                    var dEstH = new double[_hiddenDim];
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        for (int j = 0; j < _numMixtures; j++)
-                        {
-                            dEstW2[i, j] += NumOps.ToDouble(estH[i]) * dGamma[j];
-                            dEstH[i] += NumOps.ToDouble(estW2[i, j]) * dGamma[j];
-                        }
-                    }
-                    for (int j = 0; j < _numMixtures; j++)
-                    {
-                        dEstB2[j] += dGamma[j];
-                    }
-
-                    // Tanh derivative for estimation hidden
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(estH[i], estH[i]));
-                        dEstH[i] *= NumOps.ToDouble(tanhDeriv);
-                    }
-
-                    for (int i = 0; i < _zDim; i++)
-                    {
-                        double zcVal = zcDouble[i];
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            dEstW1[i, j] += zcVal * dEstH[j];
-                        }
-                    }
-                    for (int j = 0; j < _hiddenDim; j++)
-                    {
-                        dEstB1[j] += dEstH[j];
-                    }
-                }
-
-                // Apply weight updates with gradient clipping
-                double scale = 1.0 / actualBatchSize;
-                ApplyGradients(encW1, dEncW1, lr * scale, clipValue);
-                ApplyGradients(encB1, dEncB1, lr * scale, clipValue);
-                ApplyGradients(encW2, dEncW2, lr * scale, clipValue);
-                ApplyGradients(encB2, dEncB2, lr * scale, clipValue);
-                ApplyGradients(decW1, dDecW1, lr * scale, clipValue);
-                ApplyGradients(decB1, dDecB1, lr * scale, clipValue);
-                ApplyGradients(decW2, dDecW2, lr * scale, clipValue);
-                ApplyGradients(decB2, dDecB2, lr * scale, clipValue);
-                ApplyGradients(estW1, dEstW1, lr * scale, clipValue);
-                ApplyGradients(estB1, dEstB1, lr * scale, clipValue);
-                ApplyGradients(estW2, dEstW2, lr * scale, clipValue);
-                ApplyGradients(estB2, dEstB2, lr * scale, clipValue);
+                TrainStep(forward, actualBatchSize);
             }
 
             // Update GMM parameters using all samples
             if (allZ.Count > 0)
             {
-                UpdateGMM(allZ.ToArray(), allGamma.ToArray());
+                UpdateGMM(Engine.Concat(allZ, 0), Engine.Concat(allGamma, 0));
             }
         }
     }
 
-    private void ApplyGradients(Matrix<T> weights, double[,] grads, double lr, double clipValue)
-    {
-        int rows = weights.Rows;
-        int cols = weights.Columns;
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                double clipped = Math.Max(-clipValue, Math.Min(clipValue, grads[i, j]));
-                weights[i, j] = NumOps.Subtract(weights[i, j], NumOps.FromDouble(lr * clipped));
-            }
-        }
-    }
-
-    private void ApplyGradients(Vector<T> weights, double[] grads, double lr, double clipValue)
-    {
-        for (int i = 0; i < weights.Length; i++)
-        {
-            double clipped = Math.Max(-clipValue, Math.Min(clipValue, grads[i]));
-            weights[i] = NumOps.Subtract(weights[i], NumOps.FromDouble(lr * clipped));
-        }
-    }
-
-    private (Vector<T> z, Vector<T> zc, Vector<T> xRecon, Vector<T> gamma, Vector<T> encH, Vector<T> decH, Vector<T> estH) ForwardPassWithCache(Vector<T> x)
+    // Back-propagates the batch, summing per-sample gradients, then applies
+    // w = w - (learningRate / batch size) * clip(g, -5, 5) to every weight.
+    private void TrainStep(ForwardResult forward, int actualBatchSize)
     {
         var encW1 = _encW1;
         var encB1 = _encB1;
@@ -712,437 +330,282 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Vectorized encoder/decoder forward using Engine.TensorMatMul
-        // Each linear layer: output = tanh(input @ W + b)
+        var engine = Engine;
+        var axis0 = new[] { 0 };
+        var encW2Tensor = Tensor<T>.FromMatrix(encW2);
+        var decW1Tensor = Tensor<T>.FromMatrix(decW1);
+        var decW2Tensor = Tensor<T>.FromMatrix(decW2);
+        var estW2Tensor = Tensor<T>.FromMatrix(estW2);
 
-        // Encoder layer 1: encH = tanh(x @ encW1 + encB1)
-        var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var encH1 = Engine.TensorMatMul(xTensor, Tensor<T>.FromMatrix(encW1));
-        encH1 = Engine.TensorAdd(encH1, Tensor<T>.FromVector(encB1).Reshape(1, _hiddenDim));
-        encH1 = Engine.Tanh(encH1);
-        var encH = encH1.Reshape(_hiddenDim).ToVector();
+        // Reconstruction loss gradient: dL/dxRecon = 2 * (xRecon - x) / inputDim, back through the decoder
+        // (tanh hidden layer), the tanh latent layer and the encoder (tanh hidden layer)
+        var dXRecon = engine.TensorMultiplyScalar(engine.TensorSubtract(forward.XRecon, forward.X),
+            NumOps.FromDouble(2.0 / _inputDim));
+        var dDecW2 = engine.TensorMatMul(engine.TensorTranspose(forward.DecH), dXRecon);
+        var dDecB2 = engine.ReduceSum(dXRecon, axis0, false);
+        var dDecH = engine.TensorMultiply(engine.TensorMatMul(dXRecon, engine.TensorTranspose(decW2Tensor)),
+            TanhDerivative(forward.DecH));
+        var dDecW1 = engine.TensorMatMul(engine.TensorTranspose(forward.Z), dDecH);
+        var dDecB1 = engine.ReduceSum(dDecH, axis0, false);
+        var dZ = engine.TensorMultiply(engine.TensorMatMul(dDecH, engine.TensorTranspose(decW1Tensor)),
+            TanhDerivative(forward.Z));
+        var dEncW2 = engine.TensorMatMul(engine.TensorTranspose(forward.EncH), dZ);
+        var dEncB2 = engine.ReduceSum(dZ, axis0, false);
+        var dEncH = engine.TensorMultiply(engine.TensorMatMul(dZ, engine.TensorTranspose(encW2Tensor)),
+            TanhDerivative(forward.EncH));
+        var dEncW1 = engine.TensorMatMul(engine.TensorTranspose(forward.X), dEncH);
+        var dEncB1 = engine.ReduceSum(dEncH, axis0, false);
 
-        // Encoder layer 2: z = tanh(encH @ encW2 + encB2)
-        var encH2 = Engine.TensorMatMul(encH1, Tensor<T>.FromMatrix(encW2));
-        encH2 = Engine.TensorAdd(encH2, Tensor<T>.FromVector(encB2).Reshape(1, _latentDim));
-        encH2 = Engine.Tanh(encH2);
-        var z = encH2.Reshape(_latentDim).ToVector();
-
-        // Decoder layer 1: decH = tanh(z @ decW1 + decB1)
-        var decH1 = Engine.TensorMatMul(encH2, Tensor<T>.FromMatrix(decW1));
-        decH1 = Engine.TensorAdd(decH1, Tensor<T>.FromVector(decB1).Reshape(1, _hiddenDim));
-        decH1 = Engine.Tanh(decH1);
-        var decH = decH1.Reshape(_hiddenDim).ToVector();
-
-        // Decoder layer 2: xRecon = z @ decW2 + decB2 (no activation)
-        var decH2 = Engine.TensorMatMul(decH1, Tensor<T>.FromMatrix(decW2));
-        decH2 = Engine.TensorAdd(decH2, Tensor<T>.FromVector(decB2).Reshape(1, _inputDim));
-        var xRecon = decH2.Reshape(_inputDim).ToVector();
-
-        // Compute reconstruction features using Engine.DotProduct
-        var diffVec = new Vector<T>(_inputDim);
-        for (int i = 0; i < _inputDim; i++)
+        // Backprop through estimation network
+        // Compute energy-based gradient for end-to-end DAGMM training
+        var phi = _phi;
+        Tensor<T> dGamma;
+        if (phi != null && _mu != null && _sigma != null)
         {
-            diffVec[i] = NumOps.Subtract(x[i], xRecon[i]);
+            // Soft responsibilities exp(l_k - max) / (sum + 1e-10) of the component log-likelihoods
+            // l_k = log N(zc | mu_k, sigma_k) + log(phi_k + 1e-10) under the current GMM parameters
+            int rows = forward.Zc.Shape[0];
+            var logPhi = engine.TensorLog(engine.TensorAddScalar(phi, NumOps.FromDouble(1e-10)));
+            var logLikelihood = engine.TensorAdd(ComponentLogDensities(forward.Zc),
+                AnomalyTensorOps.BroadcastRow(logPhi, rows));
+            var maxLogLik = engine.ReduceMax(logLikelihood, new[] { 1 }, false);
+            var expShifted = engine.TensorExp(AnomalyTensorOps.SubtractColumn(logLikelihood, maxLogLik));
+            var responsibilities = AnomalyTensorOps.DivideColumn(expShifted,
+                engine.TensorAddScalar(engine.ReduceSum(expShifted, new[] { 1 }, false), NumOps.FromDouble(1e-10)));
+
+            // Energy gradient: encourage gamma to match GMM responsibilities
+            // dGamma[k] = (gamma[k] - responsibility[k]) is the gradient to minimize KL divergence
+            // This provides end-to-end training signal from GMM to estimation network
+            // (energy weight 0.1 relative to reconstruction)
+            dGamma = engine.TensorMultiplyScalar(engine.TensorSubtract(forward.Gamma, responsibilities), NumOps.FromDouble(0.1));
         }
-        T eucDistSq = Engine.DotProduct(diffVec, diffVec);
-        T dotProduct = Engine.DotProduct(x, xRecon);
-        T normXSq = Engine.DotProduct(x, x);
-        T normReconSq = Engine.DotProduct(xRecon, xRecon);
-
-        T eucDist = NumOps.Sqrt(eucDistSq);
-        T normX = NumOps.Sqrt(normXSq);
-        T normRecon = NumOps.Sqrt(normReconSq);
-        T epsNorm = NumOps.FromDouble(1e-10);
-        T cosSim = (NumOps.GreaterThan(normX, epsNorm) && NumOps.GreaterThan(normRecon, epsNorm))
-            ? NumOps.Divide(dotProduct, NumOps.Multiply(normX, normRecon))
-            : NumOps.Zero;
-
-        // Concatenate z with reconstruction features
-        var zc = new Vector<T>(_zDim);
-        for (int i = 0; i < _latentDim; i++)
+        else
         {
-            zc[i] = z[i];
-        }
-        zc[_latentDim] = eucDist;
-        zc[_latentDim + 1] = cosSim;
-
-        // Estimation network layer 1: estH = tanh(zc @ estW1 + estB1)
-        var zcTensor = Tensor<T>.FromVector(zc).Reshape(1, _zDim);
-        var estH1 = Engine.TensorMatMul(zcTensor, Tensor<T>.FromMatrix(estW1));
-        estH1 = Engine.TensorAdd(estH1, Tensor<T>.FromVector(estB1).Reshape(1, _hiddenDim));
-        estH1 = Engine.Tanh(estH1);
-        var estH = estH1.Reshape(_hiddenDim).ToVector();
-
-        // Estimation network layer 2: logits = estH @ estW2 + estB2
-        var estH2 = Engine.TensorMatMul(estH1, Tensor<T>.FromMatrix(estW2));
-        estH2 = Engine.TensorAdd(estH2, Tensor<T>.FromVector(estB2).Reshape(1, _numMixtures));
-        var logitVec = estH2.Reshape(_numMixtures).ToVector();
-        var logits = new double[_numMixtures];
-        double maxLogit = double.MinValue;
-        for (int j = 0; j < _numMixtures; j++)
-        {
-            logits[j] = NumOps.ToDouble(logitVec[j]);
-            if (logits[j] > maxLogit) maxLogit = logits[j];
+            // GMM not yet initialized, use uniform target as fallback
+            dGamma = engine.TensorMultiplyScalar(
+                engine.TensorSubtractScalar(forward.Gamma, NumOps.FromDouble(1.0 / _numMixtures)), NumOps.FromDouble(0.01));
         }
 
-        // Softmax
-        var gamma = new Vector<T>(_numMixtures);
-        double sumExp = 0;
-        for (int k = 0; k < _numMixtures; k++)
-        {
-            double expVal = Math.Exp(logits[k] - maxLogit);
-            gamma[k] = NumOps.FromDouble(expVal);
-            sumExp += expVal;
-        }
-        for (int k = 0; k < _numMixtures; k++)
-        {
-            gamma[k] = NumOps.Divide(gamma[k], NumOps.FromDouble(sumExp));
-        }
+        var dEstW2 = engine.TensorMatMul(engine.TensorTranspose(forward.EstH), dGamma);
+        var dEstB2 = engine.ReduceSum(dGamma, axis0, false);
+        var dEstH = engine.TensorMultiply(engine.TensorMatMul(dGamma, engine.TensorTranspose(estW2Tensor)),
+            TanhDerivative(forward.EstH));
+        var dEstW1 = engine.TensorMatMul(engine.TensorTranspose(forward.Zc), dEstH);
+        var dEstB1 = engine.ReduceSum(dEstH, axis0, false);
 
-        return (z, zc, xRecon, gamma, encH, decH, estH);
+        // Apply weight updates with gradient clipping
+        T lr = NumOps.FromDouble(_learningRate * (1.0 / actualBatchSize));
+        _encW1 = ApplyGradients(Tensor<T>.FromMatrix(encW1), dEncW1, lr).ToMatrix();
+        _encB1 = ApplyGradients(encB1.AsTensor(), dEncB1, lr).ToVector();
+        _encW2 = ApplyGradients(encW2Tensor, dEncW2, lr).ToMatrix();
+        _encB2 = ApplyGradients(encB2.AsTensor(), dEncB2, lr).ToVector();
+        _decW1 = ApplyGradients(decW1Tensor, dDecW1, lr).ToMatrix();
+        _decB1 = ApplyGradients(decB1.AsTensor(), dDecB1, lr).ToVector();
+        _decW2 = ApplyGradients(decW2Tensor, dDecW2, lr).ToMatrix();
+        _decB2 = ApplyGradients(decB2.AsTensor(), dDecB2, lr).ToVector();
+        _estW1 = ApplyGradients(Tensor<T>.FromMatrix(estW1), dEstW1, lr).ToMatrix();
+        _estB1 = ApplyGradients(estB1.AsTensor(), dEstB1, lr).ToVector();
+        _estW2 = ApplyGradients(estW2Tensor, dEstW2, lr).ToMatrix();
+        _estB2 = ApplyGradients(estB2.AsTensor(), dEstB2, lr).ToVector();
     }
 
-    private (Vector<T> z, Vector<T> zc, Vector<T> xRecon, Vector<T> gamma) ForwardPass(Vector<T> x)
+    // weights - lr * clip(gradients, -5, 5)
+    private Tensor<T> ApplyGradients(Tensor<T> weights, Tensor<T> gradients, T lr)
     {
-        // Encode
-        var z = Encode(x);
-
-        // Decode
-        var xRecon = Decode(z);
-
-        // Compute reconstruction features using Engine.DotProduct
-        var diffVec2 = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            diffVec2[j] = NumOps.Subtract(x[j], xRecon[j]);
-        }
-        T eucDistSq = Engine.DotProduct(diffVec2, diffVec2);
-        T dotProduct = Engine.DotProduct(x, xRecon);
-        T normXSq = Engine.DotProduct(x, x);
-        T normReconSq = Engine.DotProduct(xRecon, xRecon);
-
-        T eucDist = NumOps.Sqrt(eucDistSq);
-        T normX = NumOps.Sqrt(normXSq);
-        T normRecon = NumOps.Sqrt(normReconSq);
-        T epsNorm = NumOps.FromDouble(1e-10);
-        T cosSim = (NumOps.GreaterThan(normX, epsNorm) && NumOps.GreaterThan(normRecon, epsNorm))
-            ? NumOps.Divide(dotProduct, NumOps.Multiply(normX, normRecon))
-            : NumOps.Zero;
-
-        // Concatenate z with reconstruction features
-        var zc = new Vector<T>(_zDim);
-        for (int j = 0; j < _latentDim; j++)
-        {
-            zc[j] = z[j];
-        }
-        zc[_latentDim] = eucDist;
-        zc[_latentDim + 1] = cosSim;
-
-        // Estimate GMM membership
-        var gamma = EstimateGamma(zc);
-
-        return (z, zc, xRecon, gamma);
+        var engine = Engine;
+        T clipValue = NumOps.FromDouble(5.0);
+        var clipped = engine.TensorClamp(gradients, NumOps.Negate(clipValue), clipValue);
+        return engine.TensorSubtract(weights, engine.TensorMultiplyScalar(clipped, lr));
     }
 
-    private Vector<T> Encode(Vector<T> x)
+    // Tanh derivative from the activation: 1 - h^2.
+    private Tensor<T> TanhDerivative(Tensor<T> activation)
+        => Engine.ScalarMinusTensor(NumOps.One, Engine.TensorSquare(activation));
+
+    // input W + b (bias broadcast over the rows)
+    private Tensor<T> Affine(Tensor<T> input, Matrix<T> weights, Vector<T> bias)
+        => Engine.TensorAdd(Engine.TensorMatMul(input, Tensor<T>.FromMatrix(weights)),
+            AnomalyTensorOps.BroadcastRow(bias.AsTensor(), input.Shape[0]));
+
+    // Activations of a batched forward pass.
+    private sealed class ForwardResult
+    {
+        public required Tensor<T> X { get; init; }
+        public required Tensor<T> EncH { get; init; }
+        public required Tensor<T> Z { get; init; }
+        public required Tensor<T> DecH { get; init; }
+        public required Tensor<T> XRecon { get; init; }
+        public required Tensor<T> Zc { get; init; }
+        public required Tensor<T> EstH { get; init; }
+        public required Tensor<T> Gamma { get; init; }
+    }
+
+    // Batched forward pass. Encoder: encH = tanh(x encW1 + encB1), z = tanh(encH encW2 + encB2). Decoder:
+    // decH = tanh(z decW1 + decB1), xRecon = decH decW2 + decB2 (no activation). zc = [z, ||x - xRecon||,
+    // cos(x, xRecon)] (cosine 0 unless both norms exceed 1e-10). Estimation: estH = tanh(zc estW1 + estB1),
+    // gamma = softmax(estH estW2 + estB2).
+    private ForwardResult Forward(Tensor<T> x)
     {
         var encW1 = _encW1;
         var encB1 = _encB1;
         var encW2 = _encW2;
         var encB2 = _encB2;
-
-        if (encW1 == null || encB1 == null || encW2 == null || encB2 == null)
-        {
-            throw new InvalidOperationException("Encoder weights not initialized.");
-        }
-
-        // Layer 1
-        var h = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = encB1[j];
-            { var wCol_6 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_6[ii] = encW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_6)); }
-            T exp2xH = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
-            h[j] = NumOps.Divide(NumOps.Subtract(exp2xH, NumOps.One), NumOps.Add(exp2xH, NumOps.One));
-        }
-
-        // Layer 2
-        var z = new Vector<T>(_latentDim);
-        for (int j = 0; j < _latentDim; j++)
-        {
-            T sum = encB2[j];
-            { var wCol_7 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_7[ii] = encW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, wCol_7)); }
-            T exp2xZ = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
-            z[j] = NumOps.Divide(NumOps.Subtract(exp2xZ, NumOps.One), NumOps.Add(exp2xZ, NumOps.One));
-        }
-
-        return z;
-    }
-
-    private Vector<T> Decode(Vector<T> z)
-    {
         var decW1 = _decW1;
         var decB1 = _decB1;
         var decW2 = _decW2;
         var decB2 = _decB2;
-
-        if (decW1 == null || decB1 == null || decW2 == null || decB2 == null)
-        {
-            throw new InvalidOperationException("Decoder weights not initialized.");
-        }
-
-        // Layer 1
-        var h = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = decB1[j];
-            { var wCol_8 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_8[ii] = decW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, wCol_8)); }
-            T exp2xH = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
-            h[j] = NumOps.Divide(NumOps.Subtract(exp2xH, NumOps.One), NumOps.Add(exp2xH, NumOps.One));
-        }
-
-        // Layer 2
-        var xRecon = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = decB2[j];
-            { var wCol_9 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_9[ii] = decW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, wCol_9)); }
-            xRecon[j] = sum;
-        }
-
-        return xRecon;
-    }
-
-    private Vector<T> EstimateGamma(Vector<T> zc)
-    {
         var estW1 = _estW1;
         var estB1 = _estB1;
         var estW2 = _estW2;
         var estB2 = _estB2;
 
-        if (estW1 == null || estB1 == null || estW2 == null || estB2 == null)
+        if (encW1 == null || encB1 == null || encW2 == null || encB2 == null ||
+            decW1 == null || decB1 == null || decW2 == null || decB2 == null ||
+            estW1 == null || estB1 == null || estW2 == null || estB2 == null)
         {
-            throw new InvalidOperationException("Estimation network weights not initialized.");
+            throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Layer 1
-        var h = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = estB1[j];
-            { var wCol_10 = new Vector<T>(_zDim); for (int ii = 0; ii < _zDim; ii++) wCol_10[ii] = estW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(zc, wCol_10)); }
-            T exp2xH = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
-            h[j] = NumOps.Divide(NumOps.Subtract(exp2xH, NumOps.One), NumOps.Add(exp2xH, NumOps.One));
-        }
+        var engine = Engine;
+        int rows = x.Shape[0];
+        var axis1 = new[] { 1 };
+        var encH = engine.Tanh(Affine(x, encW1, encB1));
+        var z = engine.Tanh(Affine(encH, encW2, encB2));
+        var decH = engine.Tanh(Affine(z, decW1, decB1));
+        var xRecon = Affine(decH, decW2, decB2);
 
-        // Layer 2
-        var logits = new double[_numMixtures];
-        double maxLogit = double.MinValue;
-        for (int j = 0; j < _numMixtures; j++)
-        {
-            T sum = estB2[j];
-            { var wCol_11 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_11[ii] = estW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, wCol_11)); }
-            logits[j] = NumOps.ToDouble(sum);
-            if (logits[j] > maxLogit) maxLogit = logits[j];
-        }
+        // Reconstruction features
+        var eucDist = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(x, xRecon)), axis1, false));
+        var dotProduct = engine.ReduceSum(engine.TensorMultiply(x, xRecon), axis1, false);
+        var normX = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(x), axis1, false));
+        var normRecon = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(xRecon), axis1, false));
+        T epsNorm = NumOps.FromDouble(1e-10);
+        var valid = engine.TensorMultiply(engine.TensorGreaterThan(normX, epsNorm), engine.TensorGreaterThan(normRecon, epsNorm));
+        var ones = Tensor<T>.CreateOnes(new[] { rows });
+        var cosSim = engine.TensorWhere(valid,
+            engine.TensorDivide(dotProduct, engine.TensorWhere(valid, engine.TensorMultiply(normX, normRecon), ones)),
+            Tensor<T>.CreateZeros(new[] { rows }));
 
-        // Softmax
-        var gamma = new Vector<T>(_numMixtures);
-        double sumExp = 0;
-        for (int k = 0; k < _numMixtures; k++)
+        // Concatenate z with reconstruction features
+        var zc = engine.Concat(new[]
         {
-            double expVal = Math.Exp(logits[k] - maxLogit);
-            gamma[k] = NumOps.FromDouble(expVal);
-            sumExp += expVal;
-        }
-        for (int k = 0; k < _numMixtures; k++)
-        {
-            gamma[k] = NumOps.Divide(gamma[k], NumOps.FromDouble(sumExp));
-        }
+            z, engine.Reshape(eucDist, new[] { rows, 1 }), engine.Reshape(cosSim, new[] { rows, 1 })
+        }, 1);
 
-        return gamma;
+        var estH = engine.Tanh(Affine(zc, estW1, estB1));
+        var gamma = engine.TensorSoftmax(Affine(estH, estW2, estB2), 1);
+
+        return new ForwardResult
+        {
+            X = x,
+            EncH = encH,
+            Z = z,
+            DecH = decH,
+            XRecon = xRecon,
+            Zc = zc,
+            EstH = estH,
+            Gamma = gamma
+        };
     }
 
-    private void UpdateGMM(double[][] allZ, double[][] allGamma)
+    // GMM update from the epoch's zc rows and memberships: phi_k = mean gamma_k; mu_k = sum gamma_k zc / sum gamma_k
+    // (0 when sum gamma_k is 0); sigma_k = sum gamma_k (zc - mu_k)(zc - mu_k)^T / sum gamma_k (identity when sum
+    // gamma_k is 0), with the diagonal floored at 1e-6 for numerical stability.
+    private void UpdateGMM(Tensor<T> allZ, Tensor<T> allGamma)
     {
-        int n = allZ.Length;
-
-        // Capture nullable fields
-        var phi = _phi;
-        var mu = _mu;
-        var sigma = _sigma;
-
-        if (phi == null || mu == null || sigma == null)
+        if (_phi == null || _mu == null || _sigma == null)
         {
             throw new InvalidOperationException("GMM parameters not initialized.");
         }
 
-        // Update phi (mixture weights)
-        for (int k = 0; k < _numMixtures; k++)
-        {
-            double sumGamma = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sumGamma += allGamma[i][k];
-            }
-            phi[k] = sumGamma / n;
-        }
+        var engine = Engine;
+        int n = allZ.Shape[0];
+        int k = _numMixtures;
+        int d = _zDim;
 
-        // Update mu (means)
-        for (int k = 0; k < _numMixtures; k++)
-        {
-            double sumGamma = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sumGamma += allGamma[i][k];
-            }
+        var sumGamma = engine.ReduceSum(allGamma, new[] { 0 }, false);
+        _phi = engine.TensorDivideScalar(sumGamma, NumOps.FromDouble(n));
 
-            for (int j = 0; j < _zDim; j++)
-            {
-                double sumWeighted = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    sumWeighted += allGamma[i][k] * allZ[i][j];
-                }
-                mu[k][j] = sumGamma > 0 ? sumWeighted / sumGamma : 0;
-            }
-        }
+        var positive = engine.TensorGreaterThan(sumGamma, NumOps.Zero);
+        var safeSum = engine.TensorWhere(positive, sumGamma, Tensor<T>.CreateOnes(new[] { k }));
+        var weighted = AnomalyTensorOps.DivideColumn(engine.TensorMatMul(engine.TensorTranspose(allGamma), allZ), safeSum);
+        var mu = engine.TensorWhere(AnomalyTensorOps.BroadcastColumn(positive, d), weighted, Tensor<T>.CreateZeros(new[] { k, d }));
+        _mu = mu;
 
-        // Update sigma (full covariance)
-        for (int k = 0; k < _numMixtures; k++)
-        {
-            double sumGamma = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sumGamma += allGamma[i][k];
-            }
+        // diffs[c, i, :] = zc_i - mu_c; covariance = (gamma-weighted diffs)^T diffs / sum gamma
+        var diffs = engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(allZ, new[] { 1, n, d }), new[] { k, n, d }),
+            engine.TensorBroadcastTo(engine.Reshape(mu, new[] { k, 1, d }), new[] { k, n, d }));
+        var gammaWeights = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorTranspose(allGamma), new[] { k, n, 1 }), new[] { k, n, d });
+        var scatter = engine.TensorBatchMatMul(engine.TensorSwapAxes(engine.TensorMultiply(diffs, gammaWeights), 1, 2), diffs);
+        var covariance = engine.TensorDivide(scatter,
+            engine.TensorBroadcastTo(engine.Reshape(safeSum, new[] { k, 1, 1 }), new[] { k, d, d }));
+        var identity = engine.TensorBroadcastTo(engine.Reshape(engine.TensorEye(d), new[] { 1, d, d }), new[] { k, d, d });
+        covariance = engine.TensorWhere(
+            engine.TensorBroadcastTo(engine.Reshape(positive, new[] { k, 1, 1 }), new[] { k, d, d }), covariance, identity);
 
-            for (int j1 = 0; j1 < _zDim; j1++)
-            {
-                for (int j2 = 0; j2 < _zDim; j2++)
-                {
-                    double sumWeighted = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        double diff1 = allZ[i][j1] - mu[k][j1];
-                        double diff2 = allZ[i][j2] - mu[k][j2];
-                        sumWeighted += allGamma[i][k] * diff1 * diff2;
-                    }
-                    sigma[k][j1][j2] = sumGamma > 0 ? sumWeighted / sumGamma : (j1 == j2 ? 1.0 : 0.0);
-                }
-                // Add regularization to diagonal for numerical stability
-                sigma[k][j1][j1] = Math.Max(1e-6, sigma[k][j1][j1]);
-            }
-        }
+        // Add regularization to diagonal for numerical stability: diag = max(1e-6, diag)
+        var diagonal = LinalgDispatch<T>.Diagonal(covariance);
+        var raised = engine.TensorSubtract(engine.TensorClampMin(diagonal, NumOps.FromDouble(1e-6)), diagonal);
+        _sigma = engine.TensorAdd(covariance, engine.TensorMultiply(identity,
+            engine.TensorBroadcastTo(engine.Reshape(raised, new[] { k, 1, d }), new[] { k, d, d })));
     }
 
-    private double ComputeEnergy(Vector<T> zc)
+    // log N(zc_i | mu_k, sigma_k) for every row and component ([rows, numMixtures]): log|sigma| and the
+    // Mahalanobis distance from the Cholesky factor (forward substitution), or, when sigma_k is not
+    // positive definite, from the diagonal of sigma_k plus 1e-10.
+    private Tensor<T> ComponentLogDensities(Tensor<T> zc)
     {
-        // Capture nullable fields
-        var phi = _phi;
         var mu = _mu;
         var sigma = _sigma;
-
-        if (phi == null || mu == null || sigma == null)
+        if (mu == null || sigma == null)
         {
             throw new InvalidOperationException("GMM parameters not initialized.");
         }
 
-        // Compute negative log-likelihood under GMM using full covariance
-        double energy = 0;
+        var engine = Engine;
+        int rows = zc.Shape[0];
+        var axis0 = new[] { 0 };
+        var axis1 = new[] { 1 };
+        var componentRows = new int[1];
+        var logDets = new Tensor<T>[_numMixtures];
+        var mahalanobis = new Tensor<T>[_numMixtures];
 
-        for (int k = 0; k < _numMixtures; k++)
+        for (int c = 0; c < _numMixtures; c++)
         {
-            // Compute Cholesky decomposition L such that sigma = L * L^T
-            var L = new double[_zDim][];
-            for (int i = 0; i < _zDim; i++)
+            componentRows[0] = c;
+            var sigmaK = engine.Reshape(AnomalyTensorOps.SelectRows(engine.Reshape(sigma, new[] { _numMixtures, _zDim * _zDim }),
+                componentRows), new[] { _zDim, _zDim });
+            var diff = AnomalyTensorOps.SubtractRow(zc,
+                engine.Reshape(AnomalyTensorOps.SelectRows(mu, componentRows), new[] { _zDim }));
+
+            var (factor, info) = LinalgDispatch<T>.CholeskyEx(sigmaK);
+            Tensor<T> mahal;
+            if (info.ToArray()[0] == 0)
             {
-                L[i] = new double[_zDim];
+                // Log determinant from Cholesky: log|sigma| = 2 * sum(log(L_ii)); Mahalanobis = ||L^-1 (z - mu)||^2
+                // via forward substitution
+                var logDiagonal = engine.TensorLog(LinalgDispatch<T>.Diagonal(factor));
+                logDets[c] = engine.ReduceSum(engine.TensorAdd(logDiagonal, logDiagonal), axis0, true);
+                var y = LinalgDispatch<T>.SolveTriangular(factor, engine.TensorTranspose(diff), false);
+                mahal = engine.ReduceSum(engine.TensorSquare(y), axis0, false);
+            }
+            else
+            {
+                // Diagonal fallback
+                var variances = engine.TensorAddScalar(LinalgDispatch<T>.Diagonal(sigmaK), NumOps.FromDouble(1e-10));
+                logDets[c] = engine.ReduceSum(engine.TensorLog(variances), axis0, true);
+                mahal = engine.ReduceSum(AnomalyTensorOps.DivideRow(engine.TensorSquare(diff), variances), axis1, false);
             }
 
-            bool choleskySuccess = true;
-            for (int i = 0; i < _zDim; i++)
-            {
-                for (int j = 0; j <= i; j++)
-                {
-                    double sum = sigma[k][i][j];
-                    for (int m = 0; m < j; m++)
-                    {
-                        sum -= L[i][m] * L[j][m];
-                    }
-
-                    if (i == j)
-                    {
-                        if (sum <= 0)
-                        {
-                            choleskySuccess = false;
-                            break;
-                        }
-                        L[i][j] = Math.Sqrt(sum);
-                    }
-                    else
-                    {
-                        L[i][j] = sum / L[j][j];
-                    }
-                }
-                if (!choleskySuccess) break;
-            }
-
-            // Fall back to diagonal if Cholesky fails
-            if (!choleskySuccess)
-            {
-                double logDet = 0;
-                double mahal = 0;
-                for (int j = 0; j < _zDim; j++)
-                {
-                    logDet += Math.Log(sigma[k][j][j] + 1e-10);
-                    double diff = NumOps.ToDouble(zc[j]) - mu[k][j];
-                    mahal += diff * diff / (sigma[k][j][j] + 1e-10);
-                }
-                double logPdfFallback = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDet + mahal);
-                energy += phi[k] * Math.Exp(logPdfFallback);
-                continue;
-            }
-
-            // Log determinant from Cholesky: log|sigma| = 2 * sum(log(L_ii))
-            double logDetChol = 0;
-            for (int i = 0; i < _zDim; i++)
-            {
-                logDetChol += Math.Log(L[i][i]);
-            }
-            logDetChol *= 2;
-
-            // Mahalanobis distance via forward substitution: solve L * y = (z - mu)
-            var diff2 = new double[_zDim];
-            for (int j = 0; j < _zDim; j++)
-            {
-                diff2[j] = NumOps.ToDouble(zc[j]) - mu[k][j];
-            }
-
-            var y = new double[_zDim];
-            for (int i = 0; i < _zDim; i++)
-            {
-                double sum = diff2[i];
-                for (int j = 0; j < i; j++)
-                {
-                    sum -= L[i][j] * y[j];
-                }
-                y[i] = sum / L[i][i];
-            }
-
-            // Mahalanobis = y^T * y
-            double mahalDist = 0;
-            for (int i = 0; i < _zDim; i++)
-            {
-                mahalDist += y[i] * y[i];
-            }
-
-            double logPdf = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDetChol + mahalDist);
-            energy += phi[k] * Math.Exp(logPdf);
+            mahalanobis[c] = engine.Reshape(mahal, new[] { rows, 1 });
         }
 
-        return -Math.Log(energy + 1e-10);
+        // -0.5 * (zDim * log(2 pi) + log|sigma_k| + mahalanobis)
+        var logDet = engine.TensorAddScalar(engine.Concat(logDets, 0), NumOps.FromDouble(_zDim * Math.Log(2 * Math.PI)));
+        return engine.TensorMultiplyScalar(
+            engine.TensorAdd(engine.Concat(mahalanobis, 1), AnomalyTensorOps.BroadcastRow(logDet, rows)), NumOps.FromDouble(-0.5));
     }
 
     /// <inheritdoc/>
@@ -1170,27 +633,14 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Normalize
-            var x = new Vector<T>(_inputDim);
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
-                x[j] = NumOps.Divide(diff, dataStds[j]);
-            }
-
-            // Forward pass
-            var (_, zc, _, _) = ForwardPass(x);
-
-            // Compute energy (anomaly score)
-            double energy = ComputeEnergy(zc);
-
-            scores[i] = NumOps.FromDouble(energy);
-        }
-
-        return scores;
+        // Energy (anomaly score) of the normalized rows: -log(sum_k phi_k N(zc | mu_k, sigma_k) + 1e-10)
+        var phi = _phi ?? throw new InvalidOperationException("GMM parameters not initialized.");
+        var engine = Engine;
+        var normalized = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
+        var forward = Forward(normalized);
+        var densities = AnomalyTensorOps.MultiplyRow(engine.TensorExp(ComponentLogDensities(forward.Zc)), phi);
+        var energy = engine.ReduceSum(densities, new[] { 1 }, false);
+        return engine.TensorNegate(engine.TensorLog(engine.TensorAddScalar(energy, NumOps.FromDouble(1e-10)))).ToVector();
     }
 }
