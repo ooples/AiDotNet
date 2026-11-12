@@ -112,7 +112,7 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _attentionScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -153,7 +153,7 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var back = NeuralSelectorOps.VecMat(ds, w1); // W1^T ds [hidden]
         var gradW2 = engine.TensorMultiply(back, hidden);
         var throughTanh = engine.TensorMultiply(
-            engine.TensorMultiply(back, w2), FeatureSelectionTensorOps.OneMinus(engine.TensorSquare(hidden)));
+            engine.TensorMultiply(back, w2), PreprocessingTensorOps.OneMinus(engine.TensorSquare(hidden)));
         var gradW1 = engine.TensorAdd(
             NeuralSelectorOps.Outer(ds, engine.TensorMultiply(hidden, w2)), NeuralSelectorOps.Outer(x, throughTanh));
         return (gradW1, gradW2, gradPred);
@@ -172,7 +172,7 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("AttentionBasedSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

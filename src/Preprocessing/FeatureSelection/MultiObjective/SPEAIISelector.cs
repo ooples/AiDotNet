@@ -127,7 +127,7 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var tradeOff = engine.TensorSubtract(archiveAccuracy, engine.TensorMultiplyScalar(archiveCount, NumOps.FromDouble(0.1 / p)));
         var best = PopulationSearchOps.Row(archive, PopulationSearchOps.ArgMax(tradeOff));
 
-        _selectedIndices = FeatureSelectionTensorOps.MaskPositions(best)
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(best)
             .Take(_nFeaturesToSelect)
             .ToArray();
 
@@ -143,7 +143,7 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var engine = Engine;
         int m = masks.Shape[0];
         var count = engine.ReduceSum(masks, new[] { 1 }, false);
-        var emptyCount = FeatureSelectionTensorOps.Filled(new[] { m }, NumOps.FromDouble(masks.Shape[1]));
+        var emptyCount = PreprocessingTensorOps.Filled(new[] { m }, NumOps.FromDouble(masks.Shape[1]));
         return (PopulationSearchOps.SubsetFitness(masks, scores, 0, NumOps.Zero, NumOps.Zero),
                 engine.TensorWhere(engine.TensorGreaterThan(count, NumOps.Zero), count, emptyCount));
     }
@@ -173,7 +173,7 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var sorted = engine.TensorSort(distances, 1, false).Item1;
         var kth = engine.Reshape(engine.TensorSlice(sorted, new[] { 0, k }, new[] { m, 1 }), new[] { m });
         var density = engine.TensorDivide(
-            FeatureSelectionTensorOps.Filled(new[] { m }, ops.One), engine.TensorAddScalar(kth, ops.FromDouble(2)));
+            PreprocessingTensorOps.Filled(new[] { m }, ops.One), engine.TensorAddScalar(kth, ops.FromDouble(2)));
         return engine.TensorAdd(raw, density);
     }
 
@@ -187,11 +187,11 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        var nondominated = FeatureSelectionTensorOps.MaskPositions(engine.TensorLessThan(fitness, ops.One));
+        var nondominated = PreprocessingTensorOps.MaskPositions(engine.TensorLessThan(fitness, ops.One));
         if (nondominated.Length <= archiveSize)
         {
             // Nondominated solutions have F < 1 <= F of every dominated one, so they lead the fitness order
-            return FeatureSelectionTensorOps.StableOrder(fitness, descending: false)
+            return PreprocessingTensorOps.StableOrder(fitness, descending: false)
                 .Take(Math.Min(archiveSize, fitness.Length))
                 .ToArray();
         }
@@ -213,9 +213,9 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int count = sortedRows.Shape[0];
-        var candidates = FeatureSelectionTensorOps.Filled(new[] { count }, ops.One);
-        var excluded = FeatureSelectionTensorOps.Filled(new[] { count }, ops.MaxValue);
-        for (int c = 1; c < count && FeatureSelectionTensorOps.CountNonZero(candidates) > 1; c++)
+        var candidates = PreprocessingTensorOps.Filled(new[] { count }, ops.One);
+        var excluded = PreprocessingTensorOps.Filled(new[] { count }, ops.MaxValue);
+        for (int c = 1; c < count && PreprocessingTensorOps.CountNonZero(candidates) > 1; c++)
         {
             var column = engine.Reshape(engine.TensorSlice(sortedRows, new[] { 0, c }, new[] { count, 1 }), new[] { count });
             var masked = engine.TensorWhere(engine.TensorGreaterThan(candidates, ops.Zero), column, excluded);
@@ -223,7 +223,7 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             candidates = engine.TensorMultiply(candidates, engine.TensorEquals(masked, smallest));
         }
 
-        return FeatureSelectionTensorOps.MaskPositions(candidates)[0];
+        return PreprocessingTensorOps.MaskPositions(candidates)[0];
     }
 
     /// <summary>Binary tournament with replacement: the solution with the smaller fitness wins (the second on ties).</summary>
@@ -247,7 +247,7 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("SPEAIISelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

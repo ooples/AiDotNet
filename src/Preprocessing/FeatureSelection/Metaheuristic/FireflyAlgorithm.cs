@@ -113,7 +113,7 @@ public class FireflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         _featureScores = best.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(best, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(best, numToSelect);
 
         IsFitted = true;
     }
@@ -190,7 +190,7 @@ public class FireflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("FireflyAlgorithm has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

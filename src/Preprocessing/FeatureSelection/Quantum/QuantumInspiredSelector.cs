@@ -83,7 +83,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         // and every qubit starts in the 50-50 superposition theta = pi / 4
         var qubits = new Tensor<T>[_populationSize];
         for (int i = 0; i < _populationSize; i++)
-            qubits[i] = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.FromDouble(Math.PI / 4));
+            qubits[i] = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(Math.PI / 4));
 
         // Best solution tracking
         var bestSolution = new Tensor<T>(new[] { p });
@@ -122,7 +122,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _featureScores = featureScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(featureScores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(featureScores, numToSelect);
 
         IsFitted = true;
     }
@@ -148,7 +148,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         var up = engine.TensorMultiply(
             engine.TensorMultiply(differs, best), engine.TensorLessThan(theta, ops.FromDouble(Math.PI / 2)));
         var down = engine.TensorMultiply(
-            engine.TensorMultiply(differs, FeatureSelectionTensorOps.OneMinus(best)), engine.TensorGreaterThan(theta, ops.Zero));
+            engine.TensorMultiply(differs, PreprocessingTensorOps.OneMinus(best)), engine.TensorGreaterThan(theta, ops.Zero));
         return engine.TensorAdd(theta, engine.TensorMultiplyScalar(engine.TensorSubtract(up, down), ops.FromDouble(angle)));
     }
 
@@ -165,7 +165,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("QuantumInspiredSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

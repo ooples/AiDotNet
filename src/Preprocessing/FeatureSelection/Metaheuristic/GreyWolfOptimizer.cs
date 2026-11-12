@@ -113,7 +113,7 @@ public class GreyWolfOptimizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         _featureScores = alpha.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(alpha, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(alpha, numToSelect);
 
         IsFitted = true;
     }
@@ -158,7 +158,7 @@ public class GreyWolfOptimizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         var engine = AiDotNetEngine.Current;
         var pool = leaders is null ? positions : engine.TensorConcatenate(new[] { leaders, positions }, 0);
         var poolFitness = leaderFitness is null ? fitness : engine.TensorConcatenate(new[] { leaderFitness, fitness }, 0);
-        var top = FeatureSelectionTensorOps.StableOrder(poolFitness, descending: true).Take(3).ToArray();
+        var top = PreprocessingTensorOps.StableOrder(poolFitness, descending: true).Take(3).ToArray();
         var topFitness = PopulationSearchOps.Rows(engine.Reshape(poolFitness, new[] { poolFitness.Length, 1 }), top);
         return (PopulationSearchOps.Rows(pool, top), engine.Reshape(topFitness, new[] { top.Length }));
     }
@@ -176,7 +176,7 @@ public class GreyWolfOptimizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("GreyWolfOptimizer has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -168,7 +168,7 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 
         // Select top features by SHAP importance
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(shapValues, nToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(shapValues, nToSelect);
 
         IsFitted = true;
     }
@@ -199,7 +199,7 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         // Keep the coalitions that are neither empty nor full
         var joined = engine.TensorGreaterThan(draws, ops.FromDouble(0.5));
         var sizes = engine.ReduceSum(joined, new[] { 1 }, false);
-        var proper = FeatureSelectionTensorOps.MaskPositions(engine.TensorMultiply(
+        var proper = PreprocessingTensorOps.MaskPositions(engine.TensorMultiply(
             engine.TensorGreaterThan(sizes, ops.Zero), engine.TensorLessThan(sizes, ops.FromDouble(p))));
         if (proper.Length == 0)
             return engine.TensorDivideScalar(engine.TensorBroadcastTo(gap, new[] { p }), ops.FromDouble(p));
@@ -217,7 +217,7 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var f = engine.TensorSubtract(predict(masked), engine.TensorBroadcastTo(emptyPrediction, new[] { m }));
 
         var weights = engine.TensorDivide(
-            FeatureSelectionTensorOps.Filled(new[] { m }, ops.FromDouble(p - 1)),
+            PreprocessingTensorOps.Filled(new[] { m }, ops.FromDouble(p - 1)),
             engine.TensorMultiply(
                 BinomialCoefficients(p, size),
                 engine.TensorMultiply(size, engine.TensorAddScalar(engine.TensorNegate(size), ops.FromDouble(p)))));
@@ -291,7 +291,7 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             throw new InvalidOperationException("SHAPSelector has not been fitted.");
         }
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <summary>

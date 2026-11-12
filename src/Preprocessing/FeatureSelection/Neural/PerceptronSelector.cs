@@ -112,7 +112,7 @@ public class PerceptronSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         _weightImportance = importance.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importance, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importance, numToSelect);
 
         IsFitted = true;
     }
@@ -130,7 +130,7 @@ public class PerceptronSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("PerceptronSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -85,7 +85,7 @@ public class IndependentComponentSelector<T> : TransformerBase<T, Matrix<T>, Mat
         _independenceScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -102,7 +102,7 @@ public class IndependentComponentSelector<T> : TransformerBase<T, Matrix<T>, Mat
         if (_selectedIndices is null)
             throw new InvalidOperationException("IndependentComponentSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

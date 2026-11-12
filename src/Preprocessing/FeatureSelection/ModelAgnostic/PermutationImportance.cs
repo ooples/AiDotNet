@@ -105,7 +105,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         // Compute baseline score
-        var baselineScore = FeatureSelectionTensorOps.Filled(new[] { 1 }, scorer(data, target));
+        var baselineScore = PreprocessingTensorOps.Filled(new[] { 1 }, scorer(data, target));
 
         var importances = new Tensor<T>[p];
         var deviations = new Tensor<T>[p];
@@ -125,7 +125,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 var permuted = engine.TensorWhere(column, shuffled, x).ToMatrix();
 
                 // Importance = drop in score
-                var permScore = FeatureSelectionTensorOps.Filled(new[] { 1 }, scorer(permuted, target));
+                var permScore = PreprocessingTensorOps.Filled(new[] { 1 }, scorer(permuted, target));
                 drops[perm] = engine.TensorSubtract(baselineScore, permScore);
             }
 
@@ -144,7 +144,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Select top features by importance
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importanceScores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importanceScores, numToSelect);
 
         IsFitted = true;
     }
@@ -162,7 +162,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("PermutationImportance has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -152,7 +152,7 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _featureScores = bestSolution.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(bestSolution, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bestSolution, numToSelect);
 
         IsFitted = true;
     }
@@ -215,7 +215,7 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int m = score.Shape[0];
         var cost = engine.TensorNegate(score);
         var negativeCost = engine.TensorLessThan(cost, ops.Zero);
-        var ones = FeatureSelectionTensorOps.Filled(new[] { m }, ops.One);
+        var ones = PreprocessingTensorOps.Filled(new[] { m }, ops.One);
         var fit = engine.TensorWhere(
             negativeCost,
             engine.TensorAdd(ones, engine.TensorAbs(cost)),
@@ -248,7 +248,7 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("ArtificialBeeColony has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

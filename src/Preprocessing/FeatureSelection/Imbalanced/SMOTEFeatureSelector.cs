@@ -91,8 +91,8 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         // Split data by class
         var x = Tensor<T>.FromMatrix(data);
         var isClass0 = engine.TensorLessThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5));
-        var class0Indices = FeatureSelectionTensorOps.MaskPositions(isClass0);
-        var class1Indices = FeatureSelectionTensorOps.MaskPositions(FeatureSelectionTensorOps.OneMinus(isClass0));
+        var class0Indices = PreprocessingTensorOps.MaskPositions(isClass0);
+        var class1Indices = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.OneMinus(isClass0));
 
         // Determine minority class
         var (minorityIndices, majorityIndices) = class0Indices.Length < class1Indices.Length
@@ -132,7 +132,7 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -156,11 +156,11 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         // The row itself is pushed past every other row so it is never its own neighbour
         var eye = engine.TensorEye<T>(m);
         var distances = engine.TensorAdd(
-            engine.TensorMultiply(FeatureSelectionTensorOps.PairwiseDistances(minority), FeatureSelectionTensorOps.OneMinus(eye)),
+            engine.TensorMultiply(FeatureSelectionTensorOps.PairwiseDistances(minority), PreprocessingTensorOps.OneMinus(eye)),
             engine.TensorMultiplyScalar(eye, ops.MaxValue));
         var neighbors = new int[m][];
         for (int i = 0; i < m; i++)
-            neighbors[i] = FeatureSelectionTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
+            neighbors[i] = PreprocessingTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
                 .Take(count)
                 .ToArray();
         return neighbors;
@@ -195,7 +195,7 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var var1 = engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(class1, engine.TensorBroadcastTo(mean1, class1.Shape.ToArray()))), new[] { 0 }, false);
         var denom = engine.TensorAdd(var0, var1);
         var valid = engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
-        var safe = engine.TensorWhere(valid, denom, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var safe = engine.TensorWhere(valid, denom, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var gap = engine.TensorSquare(engine.Reshape(engine.TensorSubtract(mean0, mean1), new[] { p }));
         return engine.TensorWhere(valid, engine.TensorDivide(gap, safe), new Tensor<T>(new[] { p }));
     }
@@ -213,7 +213,7 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("SMOTEFeatureSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

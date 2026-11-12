@@ -130,7 +130,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             new[] { p });
         _featureImportances = importances.ToVector();
 
-        _selectedIndices = FeatureSelectionTensorOps.MaskPositions(bestSolution);
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(bestSolution);
 
         // Limit to max features
         if (_selectedIndices.Length > _maxFeatures)
@@ -196,7 +196,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             var front = fronts[frontIdx];
             var frontCrowding = AiDotNetEngine.Current.TensorIndexSelect(
                 crowding, new Tensor<int>((int[])front.Clone(), new[] { front.Length }), 0);
-            var order = FeatureSelectionTensorOps.StableOrder(frontCrowding, descending: true);
+            var order = PreprocessingTensorOps.StableOrder(frontCrowding, descending: true);
             for (int r = 0; r < size - selected.Count && r < order.Length; r++)
                 selected.Add(front[order[r]]);
         }
@@ -215,7 +215,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var zeros = new Tensor<T>(new[] { m });
         var maxAcc = engine.TensorBroadcastTo(ParetoOps.Max(accuracy), new[] { m });
         var minFeat = engine.TensorBroadcastTo(ParetoOps.Min(featureCount), new[] { m });
-        var ones = FeatureSelectionTensorOps.Filled(new[] { m }, NumOps.One);
+        var ones = PreprocessingTensorOps.Filled(new[] { m }, NumOps.One);
 
         var accPositive = engine.TensorGreaterThan(maxAcc, NumOps.Zero);
         var normAcc = engine.TensorWhere(accPositive, engine.TensorDivide(accuracy, engine.TensorWhere(accPositive, maxAcc, ones)), zeros);
@@ -224,8 +224,8 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var normFeat = engine.TensorWhere(featPositive, engine.TensorDivide(minFeat, safeCount), zeros);
 
         var dist = engine.TensorSqrt(engine.TensorAdd(
-            engine.TensorSquare(FeatureSelectionTensorOps.OneMinus(normAcc)),
-            engine.TensorSquare(FeatureSelectionTensorOps.OneMinus(normFeat))));
+            engine.TensorSquare(PreprocessingTensorOps.OneMinus(normAcc)),
+            engine.TensorSquare(PreprocessingTensorOps.OneMinus(normFeat))));
         return PopulationSearchOps.ArgMin(dist);
     }
 
@@ -242,7 +242,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("NSGAIISelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

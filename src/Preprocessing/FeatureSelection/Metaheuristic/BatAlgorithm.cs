@@ -129,7 +129,7 @@ public class BatAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _featureScores = swarm.Best.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(swarm.Best, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(swarm.Best, numToSelect);
 
         IsFitted = true;
     }
@@ -146,7 +146,7 @@ public class BatAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var t = engine.TensorArange<T>(1, iterations + 1, 1);
-        return FeatureSelectionTensorOps.OneMinus(engine.TensorExp(engine.TensorMultiplyScalar(t, ops.FromDouble(-gamma))));
+        return PreprocessingTensorOps.OneMinus(engine.TensorExp(engine.TensorMultiplyScalar(t, ops.FromDouble(-gamma))));
     }
 
     /// <summary>
@@ -248,7 +248,7 @@ public class BatAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("BatAlgorithm has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

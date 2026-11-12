@@ -64,8 +64,8 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
 
         // Normalize to [0, 1]
         var raw = Tensor<T>.FromMatrix(data);
-        var min = FeatureSelectionTensorOps.ColumnMin(raw);
-        var range = engine.TensorAddScalar(engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(raw), min), NumOps.FromDouble(1e-10));
+        var min = PreprocessingTensorOps.ColumnMin(raw);
+        var range = engine.TensorAddScalar(engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(raw), min), NumOps.FromDouble(1e-10));
         var x = engine.TensorDivide(
             engine.TensorSubtract(raw, engine.TensorBroadcastTo(engine.Reshape(min, new[] { 1, p }), new[] { n, p })),
             engine.TensorBroadcastTo(engine.Reshape(range, new[] { 1, p }), new[] { n, p }));
@@ -96,7 +96,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
         _featureImportances = importance.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importance, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importance, numToSelect);
 
         IsFitted = true;
     }
@@ -112,8 +112,8 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int z = uniforms.Shape[0];
-        var u1 = FeatureSelectionTensorOps.OneMinus(engine.Reshape(engine.TensorSlice(uniforms, new[] { 0, 0 }, new[] { z, 1 }), new[] { z }));
-        var u2 = FeatureSelectionTensorOps.OneMinus(engine.Reshape(engine.TensorSlice(uniforms, new[] { 0, 1 }, new[] { z, 1 }), new[] { z }));
+        var u1 = PreprocessingTensorOps.OneMinus(engine.Reshape(engine.TensorSlice(uniforms, new[] { 0, 0 }, new[] { z, 1 }), new[] { z }));
+        var u2 = PreprocessingTensorOps.OneMinus(engine.Reshape(engine.TensorSlice(uniforms, new[] { 0, 1 }, new[] { z, 1 }), new[] { z }));
         var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(engine.TensorLog(u1), ops.FromDouble(-2)));
         return engine.TensorMultiply(radius, engine.TensorSin(engine.TensorMultiplyScalar(u2, ops.FromDouble(2 * Math.PI))));
     }
@@ -162,7 +162,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
         if (_selectedIndices is null)
             throw new InvalidOperationException("VariationalAutoencoderSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

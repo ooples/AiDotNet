@@ -25,7 +25,7 @@ internal static class FastIcaOps
             engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(n));
         var vectors = FeatureSelectionTensorOps.TopEigenpairs(covariance, dimensions, out var values);
         var inverseRoot = engine.TensorDivide(
-            FeatureSelectionTensorOps.Filled(new[] { dimensions }, ops.One),
+            PreprocessingTensorOps.Filled(new[] { dimensions }, ops.One),
             engine.TensorSqrt(engine.TensorMax(values, ops.FromDouble(1e-10))));
         whitening = engine.TensorMultiply(
             vectors, engine.TensorBroadcastTo(engine.Reshape(inverseRoot, new[] { 1, dimensions }), new[] { p, dimensions }));
@@ -47,7 +47,7 @@ internal static class FastIcaOps
         int d = z.Shape[1];
         int k = initial.Shape[1];
         T invN = ops.FromDouble(1.0 / n);
-        var tol = FeatureSelectionTensorOps.Filled(new[] { 1 }, ops.FromDouble(tolerance));
+        var tol = PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(tolerance));
         var zt = engine.TensorTranspose(z);
 
         var components = new List<Tensor<T>>(k);
@@ -62,7 +62,7 @@ internal static class FastIcaOps
             {
                 var projection = engine.Reshape(engine.TensorMatMul(z, engine.Reshape(w, new[] { d, 1 })), new[] { n });
                 var g = engine.TensorTanh(projection);
-                var gPrime = FeatureSelectionTensorOps.OneMinus(engine.TensorSquare(g));
+                var gPrime = PreprocessingTensorOps.OneMinus(engine.TensorSquare(g));
                 var first = engine.TensorMultiplyScalar(
                     engine.Reshape(engine.TensorMatMul(zt, engine.Reshape(g, new[] { n, 1 })), new[] { d }), invN);
                 var meanSlope = engine.ReduceMean(gPrime, new[] { 0 }, true);
@@ -95,7 +95,7 @@ internal static class FastIcaOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, true));
-        return PopulationSearchOps.Greater(norm, FeatureSelectionTensorOps.Filled(new[] { 1 }, ops.FromDouble(1e-10)))
+        return PopulationSearchOps.Greater(norm, PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(1e-10)))
             ? engine.TensorDivide(v, engine.TensorBroadcastTo(norm, new[] { v.Length }))
             : v;
     }

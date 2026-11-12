@@ -100,7 +100,7 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
                 // Backward pass (with the decoder weights before their update)
                 var dOutput = engine.TensorSubtract(output, rows[i]);
                 var dHidden = engine.TensorMultiply(
-                    NeuralSelectorOps.MatVec(w2, dOutput), FeatureSelectionTensorOps.OneMinus(engine.TensorSquare(hidden)));
+                    NeuralSelectorOps.MatVec(w2, dOutput), PreprocessingTensorOps.OneMinus(engine.TensorSquare(hidden)));
 
                 // Update weights
                 w2 = NeuralSelectorOps.Step(w2, NeuralSelectorOps.Outer(hidden, dOutput), rate);
@@ -120,7 +120,7 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         // Features with higher reconstruction error are potentially more important
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importance, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importance, numToSelect);
 
         IsFitted = true;
     }
@@ -137,7 +137,7 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("AutoencoderSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -92,8 +92,8 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
         var absBeta = engine.TensorAbs(beta);
 
         // Get candidate set from Lasso: nonzero coefficients by decreasing magnitude, then the rest if too few
-        var order = FeatureSelectionTensorOps.StableOrder(absBeta, descending: true);
-        var nonzero = new HashSet<int>(FeatureSelectionTensorOps.MaskPositions(
+        var order = PreprocessingTensorOps.StableOrder(absBeta, descending: true);
+        var nonzero = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
             engine.TensorGreaterThan(absBeta, NumOps.FromDouble(1e-10))));
         var candidates = order.Where(j => nonzero.Contains(j)).ToList();
         if (candidates.Count < _nFeaturesToSelect)
@@ -170,7 +170,7 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
 
         var columnScale = engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorSquare(x), new[] { 0 }, false), invN);
         var safeScale = engine.TensorWhere(
-            engine.TensorGreaterThan(columnScale, zero), columnScale, FeatureSelectionTensorOps.Filled(new[] { p }, ops.One));
+            engine.TensorGreaterThan(columnScale, zero), columnScale, PreprocessingTensorOps.Filled(new[] { p }, ops.One));
         var beta = new Tensor<T>(new[] { p });
         var residual = y;
 
@@ -202,7 +202,7 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
     private static Tensor<T> EvaluateSubset(Tensor<T> x, Tensor<T> y, List<int> features)
     {
         if (features.Count == 0)
-            return FeatureSelectionTensorOps.Filled(new[] { 1 }, MathHelper.GetNumericOperations<T>().MinValue);
+            return PreprocessingTensorOps.Filled(new[] { 1 }, MathHelper.GetNumericOperations<T>().MinValue);
 
         var design = SubsetRegressionOps.Columns(x, features);
         var coefficients = SubsetRegressionOps.RidgeCoefficients(design, y, 1e-6);
@@ -223,7 +223,7 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
         if (_selectedIndices is null)
             throw new InvalidOperationException("EmbeddedWrapperHybridSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -163,7 +163,7 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
         var uniform = PopulationSearchOps.Uniform<T>(rand, utility.Length);
         var gumbel = engine.TensorNegate(engine.TensorLog(engine.TensorNegate(engine.TensorLog(uniform))));
         var noisy = engine.TensorAdd(utility, engine.TensorMultiplyScalar(gumbel, ops.FromDouble(scale)));
-        return FeatureSelectionTensorOps.TopKIndicesSorted(noisy, k);
+        return PreprocessingTensorOps.TopKIndicesSorted(noisy, k);
     }
 
     /// <inheritdoc />
@@ -179,7 +179,7 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("DifferentialPrivacySelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

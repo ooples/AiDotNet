@@ -23,7 +23,7 @@ internal static class SubsetRegressionOps
     {
         var engine = AiDotNetEngine.Current;
         int n = design.Shape[0];
-        var ones = FeatureSelectionTensorOps.Filled(new[] { n, 1 }, MathHelper.GetNumericOperations<T>().One);
+        var ones = PreprocessingTensorOps.Filled(new[] { n, 1 }, MathHelper.GetNumericOperations<T>().One);
         return engine.TensorConcatenate(new[] { ones, design }, 1);
     }
 
@@ -79,9 +79,9 @@ internal static class SubsetRegressionOps
         var ssRes = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(y, prediction)), new[] { 0 }, true);
         var ssTot = engine.ReduceSum(
             engine.TensorSquare(engine.TensorSubtract(y, engine.TensorBroadcastTo(center, new[] { n }))), new[] { 0 }, true);
-        valid = PopulationSearchOps.Greater(ssTot, FeatureSelectionTensorOps.Filled(new[] { 1 }, ops.FromDouble(1e-10)));
+        valid = PopulationSearchOps.Greater(ssTot, PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(1e-10)));
         return valid
-            ? FeatureSelectionTensorOps.OneMinus(engine.TensorDivide(ssRes, ssTot))
+            ? PreprocessingTensorOps.OneMinus(engine.TensorDivide(ssRes, ssTot))
             : new Tensor<T>(new[] { 1 });
     }
 }

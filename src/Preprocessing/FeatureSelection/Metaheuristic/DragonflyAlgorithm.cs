@@ -133,7 +133,7 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
                 : PopulationSearchOps.Row(positions, finalBest);
 
         // Extract selected features from the food position
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
             Engine.TensorMultiply(foodPosition, scores), _nFeaturesToSelect);
 
         IsFitted = true;
@@ -288,7 +288,7 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("DragonflyAlgorithm has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -84,13 +84,13 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
 
         // Select top features from filter
         int filterCount = Math.Min(_nFeaturesToSelect * _filterRatio, p);
-        var remaining = FeatureSelectionTensorOps.StableOrder(filterScores, descending: true).Take(filterCount).ToList();
+        var remaining = PreprocessingTensorOps.StableOrder(filterScores, descending: true).Take(filterCount).ToList();
 
         // Phase 2: Wrapper - forward selection on filtered features. One shuffle defines the cross-validation
         // folds of every candidate subset, so all candidates are compared on the same splits.
         var foldOrder = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).ToArray();
         var selected = new List<int>();
-        var bestOverallScore = FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.MinValue);
+        var bestOverallScore = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.MinValue);
 
         while (selected.Count < _nFeaturesToSelect && remaining.Count > 0)
         {
@@ -184,7 +184,7 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("FilterWrapperHybridSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

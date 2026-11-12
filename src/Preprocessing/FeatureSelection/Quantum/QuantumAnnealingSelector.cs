@@ -82,7 +82,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
         // Initialize current solution
         var current = PopulationSearchOps.IndexMask<T>(
-            FeatureSelectionTensorOps.TopKIndicesSorted(correlations, Math.Min(_nFeaturesToSelect, p)), p);
+            PreprocessingTensorOps.TopKIndicesSorted(correlations, Math.Min(_nFeaturesToSelect, p)), p);
 
         var currentEnergy = ComputeEnergy(correlations, current);
         var best = current;
@@ -102,7 +102,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
             // Propose a move (flip a random bit)
             var flip = FeatureSelectionTensorOps.OneHot<T>(rand.Next(p), p);
-            var proposal = engine.TensorWhere(flip, FeatureSelectionTensorOps.OneMinus(current), current);
+            var proposal = engine.TensorWhere(flip, PreprocessingTensorOps.OneMinus(current), current);
 
             // Ensure valid solution
             if (!PopulationSearchOps.Any(proposal))
@@ -139,7 +139,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _featureScores = featureScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(featureScores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(featureScores, numToSelect);
 
         IsFitted = true;
     }
@@ -171,7 +171,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("QuantumAnnealingSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -99,7 +99,7 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _featureImportances = importance.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importance, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importance, numToSelect);
 
         IsFitted = true;
     }
@@ -122,10 +122,10 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int h = meanActivation.Length;
         var eps = ops.FromDouble(1e-10);
         var first = engine.TensorDivide(
-            FeatureSelectionTensorOps.Filled(new[] { h }, ops.FromDouble(-target)), engine.TensorAddScalar(meanActivation, eps));
+            PreprocessingTensorOps.Filled(new[] { h }, ops.FromDouble(-target)), engine.TensorAddScalar(meanActivation, eps));
         var second = engine.TensorDivide(
-            FeatureSelectionTensorOps.Filled(new[] { h }, ops.FromDouble(1 - target)),
-            engine.TensorAddScalar(FeatureSelectionTensorOps.OneMinus(meanActivation), eps));
+            PreprocessingTensorOps.Filled(new[] { h }, ops.FromDouble(1 - target)),
+            engine.TensorAddScalar(PreprocessingTensorOps.OneMinus(meanActivation), eps));
         return engine.TensorMultiplyScalar(engine.TensorAdd(first, second), ops.FromDouble(weight));
     }
 
@@ -142,7 +142,7 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         var outputError = engine.TensorSubtract(NeuralSelectorOps.VecMat(hidden, w2), x);
         var hiddenDelta = engine.TensorMultiply(
             engine.TensorAdd(NeuralSelectorOps.MatVec(w2, outputError), sparsity),
-            engine.TensorMultiply(hidden, FeatureSelectionTensorOps.OneMinus(hidden)));
+            engine.TensorMultiply(hidden, PreprocessingTensorOps.OneMinus(hidden)));
         return (NeuralSelectorOps.Outer(x, hiddenDelta), NeuralSelectorOps.Outer(hidden, outputError));
     }
 
@@ -152,7 +152,7 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("SparseAutoencoderSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

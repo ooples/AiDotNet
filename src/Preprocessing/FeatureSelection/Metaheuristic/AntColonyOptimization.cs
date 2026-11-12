@@ -100,7 +100,7 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             : RandomHelper.CreateSecureRandom();
 
         // Initialize pheromone trails
-        var pheromones = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One);
+        var pheromones = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
 
         // Compute heuristic information (correlation-based)
         var heuristic = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.FromDouble(0.01));
@@ -172,14 +172,14 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = weights.Length;
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         var selected = new int[numToSelect];
-        var available = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One);
+        var available = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
         var zero = new Tensor<T>(new[] { 1 });
 
         for (int step = 0; step < numToSelect; step++)
         {
             var masked = engine.TensorMultiply(weights, available);
             var total = engine.ReduceSum(masked, new[] { 0 }, true);
-            var availablePositions = FeatureSelectionTensorOps.MaskPositions(available);
+            var availablePositions = PreprocessingTensorOps.MaskPositions(available);
 
             int chosen;
             if (PopulationSearchOps.Greater(total, zero))
@@ -217,7 +217,7 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("AntColonyOptimization has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

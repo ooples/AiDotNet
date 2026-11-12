@@ -157,7 +157,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var stds = engine.TensorSqrt(engine.ReduceMean(
             engine.TensorSquare(engine.TensorSubtract(x, engine.TensorBroadcastTo(means, new[] { n, p }))), new[] { 0 }, true));
         stds = engine.TensorWhere(
-            engine.TensorLessThan(stds, NumOps.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { 1, p }, NumOps.One), stds);
+            engine.TensorLessThan(stds, NumOps.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One), stds);
 
         // Sample instances to explain
         int nExplain = Math.Min(_nSamplesToExplain, n);
@@ -178,7 +178,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 
         // Select top features by importance
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importances, nToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, nToSelect);
 
         IsFitted = true;
     }
@@ -228,7 +228,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 
         // Exponential kernel on the fraction of replaced features
         var distance = engine.TensorDivideScalar(
-            engine.ReduceSum(FeatureSelectionTensorOps.OneMinus(mask), new[] { 1 }, false), NumOps.FromDouble(p));
+            engine.ReduceSum(PreprocessingTensorOps.OneMinus(mask), new[] { 1 }, false), NumOps.FromDouble(p));
         var weights = engine.TensorExp(engine.TensorMultiplyScalar(
             engine.TensorSquare(distance), NumOps.FromDouble(-1.0 / (_kernelWidth * _kernelWidth))));
 
@@ -275,7 +275,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             throw new InvalidOperationException("LIMESelector has not been fitted.");
         }
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <summary>

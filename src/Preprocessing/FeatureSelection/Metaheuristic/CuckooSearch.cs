@@ -150,7 +150,7 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             // Abandon the worst nests (discovery) and build new ones at random
             if (nAbandon > 0)
             {
-                var worstIndices = FeatureSelectionTensorOps.StableOrder(fitness, descending: false)
+                var worstIndices = PreprocessingTensorOps.StableOrder(fitness, descending: false)
                     .Take(nAbandon)
                     .ToArray();
                 var freshNests = PopulationSearchOps.Uniform<T>(random, nAbandon, p);
@@ -172,7 +172,7 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _featureScores = bestNest.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(bestNest, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bestNest, numToSelect);
 
         IsFitted = true;
     }
@@ -221,7 +221,7 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("CuckooSearch has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

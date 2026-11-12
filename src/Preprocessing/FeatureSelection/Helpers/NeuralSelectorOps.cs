@@ -23,7 +23,7 @@ internal static class NeuralSelectorOps
         var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.ReduceMean(x, new[] { 0 }, true), new[] { n, p }));
         var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
         std = engine.TensorWhere(
-            engine.TensorLessThan(std, ops.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { 1, p }, ops.One), std);
+            engine.TensorLessThan(std, ops.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { 1, p }, ops.One), std);
         return engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { n, p }));
     }
 

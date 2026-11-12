@@ -104,7 +104,7 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
                 current = engine.TensorAdd(
                     engine.TensorSubtract(current, FeatureSelectionTensorOps.OneHot<T>(toRemove, p)),
                     FeatureSelectionTensorOps.OneHot<T>(toAdd, p));
-                var until = FeatureSelectionTensorOps.Filled(new[] { 2 }, FeatureSelectionTensorOps.Count<T>(iter + _tabuTenure));
+                var until = PreprocessingTensorOps.Filled(new[] { 2 }, FeatureSelectionTensorOps.Count<T>(iter + _tabuTenure));
                 tabuUntil = PopulationSearchOps.ScatterAt(tabuUntil, new[] { toRemove, toAdd }, until);
                 currentScore = moveScore;
 
@@ -119,7 +119,7 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             importances = engine.TensorAdd(importances, PopulationSearchOps.Scale(current, currentScore));
         }
 
-        _selectedIndices = FeatureSelectionTensorOps.MaskPositions(best);
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(best);
 
         // Normalize feature importances
         var zero = new Tensor<T>(new[] { 1 });
@@ -159,8 +159,8 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             engine.TensorBroadcastTo(engine.Reshape(count, new[] { 1, 1 }), square));
 
         var outOf = engine.TensorBroadcastTo(engine.Reshape(current, new[] { p, 1 }), square);
-        var into = engine.TensorBroadcastTo(engine.Reshape(FeatureSelectionTensorOps.OneMinus(current), new[] { 1, p }), square);
-        var free = FeatureSelectionTensorOps.OneMinus(engine.TensorClamp(
+        var into = engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.OneMinus(current), new[] { 1, p }), square);
+        var free = PreprocessingTensorOps.OneMinus(engine.TensorClamp(
             engine.TensorAdd(
                 engine.TensorBroadcastTo(engine.Reshape(tabu, new[] { p, 1 }), square),
                 engine.TensorBroadcastTo(engine.Reshape(tabu, new[] { 1, p }), square)),
@@ -172,7 +172,7 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             return null;
 
         var candidates = engine.Reshape(
-            engine.TensorWhere(admissible, swapScore, FeatureSelectionTensorOps.Filled(square, ops.MinValue)), new[] { p * p });
+            engine.TensorWhere(admissible, swapScore, PreprocessingTensorOps.Filled(square, ops.MinValue)), new[] { p * p });
         int flat = PopulationSearchOps.ArgMax(candidates);
         moveScore = PopulationSearchOps.At(candidates, flat);
         return (flat / p, flat % p);
@@ -191,7 +191,7 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("TabuSearchSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -118,7 +118,7 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         }
 
         // Extract selected features from food position
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
             Engine.TensorMultiply(foodPosition, scores), _nFeaturesToSelect);
 
         IsFitted = true;
@@ -145,8 +145,8 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             var step = engine.TensorMultiplyScalar(c2, ops.FromDouble(c1));
             var sign = engine.TensorWhere(
                 engine.TensorLessThan(c3, ops.FromDouble(0.5)),
-                FeatureSelectionTensorOps.Filled(leaderShape, ops.One),
-                FeatureSelectionTensorOps.Filled(leaderShape, ops.FromDouble(-1)));
+                PreprocessingTensorOps.Filled(leaderShape, ops.One),
+                PreprocessingTensorOps.Filled(leaderShape, ops.FromDouble(-1)));
             var foodRows = engine.TensorBroadcastTo(engine.Reshape(food, new[] { 1, p }), leaderShape);
             var leaders = PopulationSearchOps.Clamp01(engine.TensorAdd(foodRows, engine.TensorMultiply(sign, step)));
             positions = nLeaders == m
@@ -184,7 +184,7 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         if (_selectedIndices is null)
             throw new InvalidOperationException("SalpSwarm has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

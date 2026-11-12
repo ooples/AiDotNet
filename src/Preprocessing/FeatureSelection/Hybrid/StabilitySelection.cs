@@ -126,16 +126,16 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         // Select features above threshold, falling back to the top ones by probability
         var stable = engine.TensorGreaterEqual(
-            probabilities, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.FromDouble(_threshold)));
+            probabilities, PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(_threshold)));
         _selectedIndices = FeatureSelectionTensorOps.TopKWhere(probabilities, stable, _nFeaturesToSelect);
         if (_selectedIndices.Length == 0)
-            _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(probabilities, Math.Min(_nFeaturesToSelect, p));
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(probabilities, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
 
     private int[] DefaultSelector(Matrix<T> data, Vector<T> target, int k) =>
-        FeatureSelectionTensorOps.TopKIndicesSorted(PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero), k);
+        PreprocessingTensorOps.TopKIndicesSorted(PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero), k);
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
@@ -150,7 +150,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("StabilitySelection has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

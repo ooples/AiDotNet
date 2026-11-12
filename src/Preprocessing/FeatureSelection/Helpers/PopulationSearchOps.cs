@@ -30,9 +30,9 @@ internal static class PopulationSearchOps
         T tiny = ops.FromDouble(1e-10);
         var defined = engine.TensorMultiply(engine.TensorGreaterThan(sxx, tiny), engine.TensorGreaterThan(syy, tiny));
         var safe = engine.TensorWhere(
-            defined, engine.TensorSqrt(engine.TensorMultiply(sxx, syy)), FeatureSelectionTensorOps.Filled(new[] { p }, ops.One));
+            defined, engine.TensorSqrt(engine.TensorMultiply(sxx, syy)), PreprocessingTensorOps.Filled(new[] { p }, ops.One));
         return engine.TensorWhere(
-            defined, engine.TensorAbs(engine.TensorDivide(sxy, safe)), FeatureSelectionTensorOps.Filled(new[] { p }, undefined));
+            defined, engine.TensorAbs(engine.TensorDivide(sxy, safe)), PreprocessingTensorOps.Filled(new[] { p }, undefined));
     }
 
     /// <summary>
@@ -49,10 +49,10 @@ internal static class PopulationSearchOps
         var total = engine.Reshape(engine.TensorMatMul(mask, engine.Reshape(scores, new[] { p, 1 })), new[] { m });
         var count = engine.ReduceSum(mask, new[] { 1 }, false);
         var any = engine.TensorGreaterThan(count, ops.Zero);
-        var safeCount = engine.TensorWhere(any, count, FeatureSelectionTensorOps.Filled(new[] { m }, ops.One));
+        var safeCount = engine.TensorWhere(any, count, PreprocessingTensorOps.Filled(new[] { m }, ops.One));
         var deviation = engine.TensorAbs(engine.TensorAddScalar(count, ops.FromDouble(-targetCount)));
         var fitness = engine.TensorSubtract(engine.TensorDivide(total, safeCount), engine.TensorMultiplyScalar(deviation, penalty));
-        return engine.TensorWhere(any, fitness, FeatureSelectionTensorOps.Filled(new[] { m }, emptyValue));
+        return engine.TensorWhere(any, fitness, PreprocessingTensorOps.Filled(new[] { m }, emptyValue));
     }
 
     /// <summary>
@@ -172,10 +172,10 @@ internal static class PopulationSearchOps
         AiDotNetEngine.Current.TensorMultiply(x, AiDotNetEngine.Current.TensorBroadcastTo(scalar, x.Shape.ToArray()));
 
     /// <summary>Index of the first maximum of a [m] tensor.</summary>
-    public static int ArgMax<T>(Tensor<T> v) => FeatureSelectionTensorOps.StableOrder(v, descending: true)[0];
+    public static int ArgMax<T>(Tensor<T> v) => PreprocessingTensorOps.StableOrder(v, descending: true)[0];
 
     /// <summary>Index of the first minimum of a [m] tensor.</summary>
-    public static int ArgMin<T>(Tensor<T> v) => FeatureSelectionTensorOps.StableOrder(v, descending: false)[0];
+    public static int ArgMin<T>(Tensor<T> v) => PreprocessingTensorOps.StableOrder(v, descending: false)[0];
 
     /// <summary>True when the 0/1 tensor <paramref name="mask"/> has any nonzero element.</summary>
     public static bool Any<T>(Tensor<T> mask) => AiDotNetEngine.Current.TensorCountNonzero(mask) > 0;

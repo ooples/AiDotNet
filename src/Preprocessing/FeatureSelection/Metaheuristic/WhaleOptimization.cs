@@ -139,7 +139,7 @@ public class WhaleOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         _featureScores = bestPos.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(bestPos, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bestPos, numToSelect);
 
         IsFitted = true;
     }
@@ -204,7 +204,7 @@ public class WhaleOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("WhaleOptimization has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

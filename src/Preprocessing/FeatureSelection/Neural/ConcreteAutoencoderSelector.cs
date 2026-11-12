@@ -108,7 +108,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         // Compute selection probabilities from final logits
         var probabilities = engine.ReduceSum(engine.TensorSoftmax(network.Logits, 1), new[] { 0 }, false);
         _selectionProbabilities = probabilities.ToVector();
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(probabilities, k);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(probabilities, k);
 
         IsFitted = true;
     }
@@ -156,8 +156,8 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
 
             var slope = engine.TensorWhere(
                 engine.TensorGreaterThan(hiddenPre, ops.Zero),
-                FeatureSelectionTensorOps.Filled(new[] { hidden.Length }, ops.One),
-                FeatureSelectionTensorOps.Filled(new[] { hidden.Length }, ops.FromDouble(0.2)));
+                PreprocessingTensorOps.Filled(new[] { hidden.Length }, ops.One),
+                PreprocessingTensorOps.Filled(new[] { hidden.Length }, ops.FromDouble(0.2)));
             var hiddenDelta = engine.TensorMultiply(NeuralSelectorOps.MatVec(OutputWeights, error), slope);
             var selectedDelta = NeuralSelectorOps.MatVec(HiddenWeights, hiddenDelta);
 
@@ -205,7 +205,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("ConcreteAutoencoderSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -96,7 +96,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
         var bestEnergy = currentEnergy;
 
         var importances = new Tensor<T>(new[] { p });
-        var temperature = FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(_initialTemperature));
+        var temperature = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(_initialTemperature));
         T cooling = NumOps.FromDouble(_coolingRate);
         var zero = new Tensor<T>(new[] { 1 });
 
@@ -104,7 +104,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
         {
             // Generate neighbor by swapping a feature
             var neighbor = current;
-            var selected = FeatureSelectionTensorOps.MaskPositions(current);
+            var selected = PreprocessingTensorOps.MaskPositions(current);
 
             if (rand.NextDouble() < 0.5 && selected.Length > 1)
             {
@@ -113,7 +113,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
                 neighbor = engine.TensorSubtract(neighbor, FeatureSelectionTensorOps.OneHot<T>(toRemove, p));
 
                 // Add a random unselected feature
-                var unselected = FeatureSelectionTensorOps.MaskPositions(FeatureSelectionTensorOps.OneMinus(neighbor));
+                var unselected = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.OneMinus(neighbor));
                 if (unselected.Length > 0)
                 {
                     int toAdd = unselected[rand.Next(unselected.Length)];
@@ -124,7 +124,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
             {
                 // Flip a random feature
                 var flip = FeatureSelectionTensorOps.OneHot<T>(rand.Next(p), p);
-                neighbor = engine.TensorWhere(flip, FeatureSelectionTensorOps.OneMinus(neighbor), neighbor);
+                neighbor = engine.TensorWhere(flip, PreprocessingTensorOps.OneMinus(neighbor), neighbor);
             }
 
             var neighborEnergy = Energy(neighbor, scores);
@@ -154,7 +154,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
             temperature = engine.TensorMultiplyScalar(temperature, cooling);
         }
 
-        _selectedIndices = FeatureSelectionTensorOps.MaskPositions(best);
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(best);
 
         // Normalize feature importances
         var maxImportance = ParetoOps.Max(importances);
@@ -183,7 +183,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("SimulatedAnnealingSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

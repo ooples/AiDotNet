@@ -74,7 +74,7 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var scorer = _scorer ?? DefaultScorer;
 
         // Compute baseline score with all features
-        var baselineScore = FeatureSelectionTensorOps.Filled(new[] { 1 }, scorer(data, target));
+        var baselineScore = PreprocessingTensorOps.Filled(new[] { 1 }, scorer(data, target));
 
         // For each feature, drop it, refit and measure performance
         var drops = new Tensor<T>[p];
@@ -82,11 +82,11 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         {
             int dropped = dropIdx;
             var kept = Enumerable.Range(0, p).Where(j => j != dropped).ToArray();
-            var reducedData = FeatureSelectionTensorOps.SelectColumns(data, kept);
+            var reducedData = PreprocessingTensorOps.SelectColumns(data, kept);
 
             // Importance = drop in score when feature is removed
             drops[dropIdx] = engine.TensorSubtract(
-                baselineScore, FeatureSelectionTensorOps.Filled(new[] { 1 }, scorer(reducedData, target)));
+                baselineScore, PreprocessingTensorOps.Filled(new[] { 1 }, scorer(reducedData, target)));
         }
 
         var importanceScores = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(drops, 0);
@@ -94,7 +94,7 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
         // Select top features by importance
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importanceScores, numToSelect);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importanceScores, numToSelect);
 
         IsFitted = true;
     }
@@ -126,7 +126,7 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("DropColumnImportance has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

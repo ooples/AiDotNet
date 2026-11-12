@@ -128,7 +128,7 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
                 var currentScalar = Tchebycheff(
                     engine.TensorIndexSelect(accuracy, index, 0), engine.TensorIndexSelect(featureCount, index, 0),
                     neighborWeights, zAcc, zFeat);
-                var improved = FeatureSelectionTensorOps.MaskPositions(engine.TensorLessThan(childScalar, currentScalar));
+                var improved = PreprocessingTensorOps.MaskPositions(engine.TensorLessThan(childScalar, currentScalar));
                 if (improved.Length == 0)
                     continue;
 
@@ -156,7 +156,7 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var middle = engine.TensorBroadcastTo(
             PopulationSearchOps.Rows(weights, new[] { _populationSize / 2 }), new[] { _populationSize, 2 });
         int bestIdx = PopulationSearchOps.ArgMin(Tchebycheff(accuracy, featureCount, middle, zAcc, zFeat));
-        _selectedIndices = FeatureSelectionTensorOps.MaskPositions(PopulationSearchOps.Row(population, bestIdx))
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(PopulationSearchOps.Row(population, bestIdx))
             .Take(_nFeaturesToSelect)
             .ToArray();
 
@@ -173,7 +173,7 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             new[]
             {
                 engine.Reshape(first, new[] { count, 1 }),
-                engine.Reshape(FeatureSelectionTensorOps.OneMinus(first), new[] { count, 1 }),
+                engine.Reshape(PreprocessingTensorOps.OneMinus(first), new[] { count, 1 }),
             },
             1);
     }
@@ -186,7 +186,7 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var neighborhoods = new int[count][];
         for (int i = 0; i < count; i++)
         {
-            neighborhoods[i] = FeatureSelectionTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
+            neighborhoods[i] = PreprocessingTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
                 .Take(size)
                 .ToArray();
         }
@@ -203,7 +203,7 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var engine = Engine;
         int m = masks.Shape[0];
         var count = engine.ReduceSum(masks, new[] { 1 }, false);
-        var emptyCount = FeatureSelectionTensorOps.Filled(new[] { m }, NumOps.FromDouble(masks.Shape[1]));
+        var emptyCount = PreprocessingTensorOps.Filled(new[] { m }, NumOps.FromDouble(masks.Shape[1]));
         return (PopulationSearchOps.SubsetFitness(masks, scores, 0, NumOps.Zero, NumOps.Zero),
                 engine.TensorWhere(engine.TensorGreaterThan(count, NumOps.Zero), count, emptyCount));
     }
@@ -238,7 +238,7 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("MOEADSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

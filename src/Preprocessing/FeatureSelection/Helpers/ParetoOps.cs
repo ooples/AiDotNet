@@ -40,7 +40,7 @@ internal static class ParetoOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int m = dominance.Shape[0];
-        var remaining = FeatureSelectionTensorOps.Filled(new[] { m }, ops.One);
+        var remaining = PreprocessingTensorOps.Filled(new[] { m }, ops.One);
         rank = new Tensor<T>(new[] { m });
         var fronts = new List<int[]>();
         while (PopulationSearchOps.Any(remaining))
@@ -49,7 +49,7 @@ internal static class ParetoOps
             var dominators = engine.Reshape(
                 engine.TensorMatMul(engine.Reshape(remaining, new[] { 1, m }), dominance), new[] { m });
             var front = engine.TensorMultiply(remaining, engine.TensorEquals(dominators, ops.Zero));
-            fronts.Add(FeatureSelectionTensorOps.MaskPositions(front));
+            fronts.Add(PreprocessingTensorOps.MaskPositions(front));
             remaining = engine.TensorSubtract(remaining, front);
             rank = engine.TensorAdd(rank, remaining);
         }
@@ -78,7 +78,7 @@ internal static class ParetoOps
             if (count <= 2)
             {
                 boundary = PopulationSearchOps.ScatterAt(
-                    boundary, front, FeatureSelectionTensorOps.Filled(new[] { count }, ops.One));
+                    boundary, front, PreprocessingTensorOps.Filled(new[] { count }, ops.One));
                 continue;
             }
 
@@ -86,7 +86,7 @@ internal static class ParetoOps
             foreach (var objective in objectives)
             {
                 var values = engine.TensorIndexSelect(objective, members, 0);
-                var order = FeatureSelectionTensorOps.StableOrder(values, descending: false);
+                var order = PreprocessingTensorOps.StableOrder(values, descending: false);
                 var sorted = engine.TensorIndexSelect(values, new Tensor<int>((int[])order.Clone(), new[] { count }), 0);
                 var sortedMembers = new int[count];
                 for (int r = 0; r < count; r++)
@@ -94,7 +94,7 @@ internal static class ParetoOps
 
                 boundary = PopulationSearchOps.ScatterAt(
                     boundary, new[] { sortedMembers[0], sortedMembers[count - 1] },
-                    FeatureSelectionTensorOps.Filled(new[] { 2 }, ops.One));
+                    PreprocessingTensorOps.Filled(new[] { 2 }, ops.One));
 
                 var range = engine.TensorSubtract(
                     engine.TensorSlice(sorted, new[] { count - 1 }, new[] { 1 }),
@@ -115,7 +115,7 @@ internal static class ParetoOps
 
         return engine.TensorWhere(
             engine.TensorGreaterThan(boundary, ops.Zero),
-            FeatureSelectionTensorOps.Filled(new[] { m }, ops.MaxValue),
+            PreprocessingTensorOps.Filled(new[] { m }, ops.MaxValue),
             distance);
     }
 
@@ -133,7 +133,7 @@ internal static class ParetoOps
             int count = random.Next(1, limit + 1);
             var keys = PopulationSearchOps.Uniform<T>(random, p);
             rows[i] = engine.Reshape(
-                PopulationSearchOps.IndexMask<T>(FeatureSelectionTensorOps.BottomKIndicesSorted(keys, count), p),
+                PopulationSearchOps.IndexMask<T>(PreprocessingTensorOps.BottomKIndicesSorted(keys, count), p),
                 new[] { 1, p });
         }
 
@@ -164,7 +164,7 @@ internal static class ParetoOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         return engine.TensorWhere(
-            engine.TensorLessThan(draws, ops.FromDouble(rate)), FeatureSelectionTensorOps.OneMinus(mask), mask);
+            engine.TensorLessThan(draws, ops.FromDouble(rate)), PreprocessingTensorOps.OneMinus(mask), mask);
     }
 
     /// <summary>Selects one uniformly drawn feature when <paramref name="mask"/> selects nothing.</summary>

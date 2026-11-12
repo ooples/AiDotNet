@@ -122,7 +122,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         }
 
         // Extract selected features from best position
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
             Engine.TensorMultiply(bestPosition, scores), _nFeaturesToSelect);
 
         IsFitted = true;
@@ -167,7 +167,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         if (_selectedIndices is null)
             throw new InvalidOperationException("SineCosine has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
