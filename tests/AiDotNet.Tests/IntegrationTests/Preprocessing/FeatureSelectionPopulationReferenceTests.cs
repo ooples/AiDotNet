@@ -272,4 +272,37 @@ public class FeatureSelectionPopulationReferenceTests
             Assert.Equal(System.Math.Max(0, System.Math.Min(1, expected)), moved[j], Tolerance);
         }
     }
+
+    // ---------------------------------------------------------------- Salp Swarm Algorithm (Mirjalili et al. 2017)
+
+    [Fact]
+    public void SalpSwarm_MoveChain_LeadersFollowFoodAndFollowersTakeMidpoints()
+    {
+        var positions = Tensor2D(new[,] { { 0.1, 0.9 }, { 0.5, 0.5 }, { 0.2, 0.4 }, { 0.8, 0.6 } });
+        var food = Tensor1D(0.4, 0.7);
+        double c1 = 0.5;
+
+        // Two leaders: (c2, c3) per dimension
+        double[] u = { 0.2, 0.3, 0.6, 0.7, 0.4, 0.1, 0.8, 0.9 };
+        var draws = new Tensor<double>((double[])u.Clone(), new[] { 2, 2, 2 });
+        var moved = ToArray(SalpSwarm<double>.MoveChain(positions, food, draws, c1));
+
+        var expected = new double[8];
+        double[] f = { 0.4, 0.7 };
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+            {
+                double c2 = u[(i * 2 + j) * 2], c3 = u[(i * 2 + j) * 2 + 1];
+                double x = c3 < 0.5 ? f[j] + c1 * c2 : f[j] - c1 * c2;
+                expected[i * 2 + j] = System.Math.Max(0, System.Math.Min(1, x));
+            }
+
+        double[] old = { 0.2, 0.4, 0.8, 0.6 };
+        for (int i = 2; i < 4; i++)
+            for (int j = 0; j < 2; j++)
+                expected[i * 2 + j] = (old[(i - 2) * 2 + j] + expected[(i - 1) * 2 + j]) / 2;
+
+        for (int k = 0; k < 8; k++)
+            Assert.Equal(expected[k], moved[k], Tolerance);
+    }
 }

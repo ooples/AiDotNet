@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -31,7 +32,7 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +40,7 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int NIterations => _nIterations;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -84,146 +85,90 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        _featureScores = ComputeFeatureScores(data, target);
+        var scores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
+        _featureScores = scores.ToVector();
 
         // Initialize salp positions
-        var positions = new double[_populationSize, p];
-        for (int i = 0; i < _populationSize; i++)
-        {
-            for (int j = 0; j < p; j++)
-                positions[i, j] = random.NextDouble();
-        }
+        var positions = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
+        var fitness = PopulationSearchOps.ThresholdFitness(positions, scores, _nFeaturesToSelect, 0.1);
 
-        // Evaluate fitness and find food source (best solution)
-        var fitness = new double[_populationSize];
-        var foodPosition = new double[p];
-        double foodFitness = double.MinValue;
+        // The food source is the best solution found so far
+        int bestIdx = PopulationSearchOps.ArgMax(fitness);
+        var foodFitness = PopulationSearchOps.At(fitness, bestIdx);
+        var foodPosition = PopulationSearchOps.Row(positions, bestIdx);
+        int nLeaders = _populationSize / 2;
 
-        for (int i = 0; i < _populationSize; i++)
-        {
-            fitness[i] = EvaluateFitness(positions, i, p);
-            if (fitness[i] > foodFitness)
-            {
-                foodFitness = fitness[i];
-                for (int j = 0; j < p; j++)
-                    foodPosition[j] = positions[i, j];
-            }
-        }
-
-        // Main loop
+        // Main loop (Mirjalili et al. 2017): the chain moves against the food found up to the previous iteration
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            // c1 decreases linearly from 2 to 0
             double c1 = 2 * Math.Exp(-Math.Pow(4.0 * iter / _nIterations, 2));
 
-            for (int i = 0; i < _populationSize; i++)
+            // Per leader and dimension: c2 then c3, in the order of the scalar draws
+            var draws = nLeaders > 0 ? PopulationSearchOps.Uniform<T>(random, nLeaders, p, 2) : null;
+            positions = MoveChain(positions, foodPosition, draws, c1);
+            fitness = PopulationSearchOps.ThresholdFitness(positions, scores, _nFeaturesToSelect, 0.1);
+
+            int iterBest = PopulationSearchOps.ArgMax(fitness);
+            var iterBestFitness = PopulationSearchOps.At(fitness, iterBest);
+            if (PopulationSearchOps.Greater(iterBestFitness, foodFitness))
             {
-                if (i < _populationSize / 2)
-                {
-                    // Leaders - follow the food
-                    for (int j = 0; j < p; j++)
-                    {
-                        double c2 = random.NextDouble();
-                        double c3 = random.NextDouble();
-
-                        if (c3 < 0.5)
-                        {
-                            positions[i, j] = foodPosition[j] + c1 * (1.0 - 0) * c2 + 0;
-                        }
-                        else
-                        {
-                            positions[i, j] = foodPosition[j] - c1 * (1.0 - 0) * c2 + 0;
-                        }
-
-                        // Clamp to [0, 1]
-                        positions[i, j] = Math.Max(0, Math.Min(1, positions[i, j]));
-                    }
-                }
-                else
-                {
-                    // Followers - follow the salp ahead
-                    for (int j = 0; j < p; j++)
-                    {
-                        positions[i, j] = (positions[i, j] + positions[i - 1, j]) / 2;
-                        positions[i, j] = Math.Max(0, Math.Min(1, positions[i, j]));
-                    }
-                }
-
-                // Evaluate fitness
-                fitness[i] = EvaluateFitness(positions, i, p);
-
-                // Update food source
-                if (fitness[i] > foodFitness)
-                {
-                    foodFitness = fitness[i];
-                    for (int j = 0; j < p; j++)
-                        foodPosition[j] = positions[i, j];
-                }
+                foodFitness = iterBestFitness;
+                foodPosition = PopulationSearchOps.Row(positions, iterBest);
             }
         }
 
         // Extract selected features from food position
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => foodPosition[j] * _featureScores[j])
-            .Take(_nFeaturesToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(
+            Engine.TensorMultiply(foodPosition, scores), _nFeaturesToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeFeatureScores(Matrix<T> data, Vector<T> target)
+    /// <summary>
+    /// One move of the salp chain. The first <c>draws.Shape[0]</c> salps lead: x_j = F_j + c1 c2 when c3 &lt; 0.5
+    /// and F_j - c1 c2 otherwise (bounds [0, 1]); every follower i moves to (x_i + x_{i-1}) / 2 using the salp ahead
+    /// as already moved. Positions are clamped to [0, 1]. <paramref name="draws"/> is [leaders, p, 2] (c2, c3).
+    /// </summary>
+    internal static Tensor<T> MoveChain(Tensor<T> positions, Tensor<T> food, Tensor<T>? draws, double c1)
     {
-        int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = positions.Shape[0];
+        int p = positions.Shape[1];
+        int nLeaders = draws?.Shape[0] ?? 0;
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
+        if (draws is not null && nLeaders > 0)
         {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+            var leaderShape = new[] { nLeaders, p };
+            var c2 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 0 }, new[] { nLeaders, p, 1 }), leaderShape);
+            var c3 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 1 }, new[] { nLeaders, p, 1 }), leaderShape);
+            var step = engine.TensorMultiplyScalar(c2, ops.FromDouble(c1));
+            var sign = engine.TensorWhere(
+                engine.TensorLessThan(c3, ops.FromDouble(0.5)),
+                FeatureSelectionTensorOps.Filled(leaderShape, ops.One),
+                FeatureSelectionTensorOps.Filled(leaderShape, ops.FromDouble(-1)));
+            var foodRows = engine.TensorBroadcastTo(engine.Reshape(food, new[] { 1, p }), leaderShape);
+            var leaders = PopulationSearchOps.Clamp01(engine.TensorAdd(foodRows, engine.TensorMultiply(sign, step)));
+            positions = nLeaders == m
+                ? leaders
+                : engine.TensorConcatenate(
+                    new[] { leaders, engine.TensorSlice(positions, new[] { nLeaders, 0 }, new[] { m - nLeaders, p }) }, 0);
         }
 
-        return scores;
-    }
-
-    private double EvaluateFitness(double[,] positions, int idx, int p)
-    {
-        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
-        double fitness = 0;
-        double selected = 0;
-
-        for (int j = 0; j < p; j++)
+        // Followers: Newton's law of motion with v0 = 0 reduces to the midpoint of each salp and the one ahead
+        T half = ops.FromDouble(0.5);
+        var ahead = nLeaders > 0 ? PopulationSearchOps.Row(positions, nLeaders - 1) : null;
+        var rows = new List<Tensor<T>>(m);
+        for (int i = 0; i < m; i++)
         {
-            if (positions[idx, j] > 0.5)
-            {
-                fitness += featureScores[j];
-                selected++;
-            }
+            var row = PopulationSearchOps.Row(positions, i);
+            if (i >= nLeaders && ahead is not null)
+                row = PopulationSearchOps.Clamp01(engine.TensorMultiplyScalar(engine.TensorAdd(row, ahead), half));
+            rows.Add(engine.Reshape(row, new[] { 1, p }));
+            ahead = row;
         }
 
-        double penalty = Math.Abs(selected - _nFeaturesToSelect) * 0.1;
-
-        return selected > 0 ? fitness / selected - penalty : 0;
+        return engine.TensorConcatenate(rows.ToArray(), 0);
     }
 
     /// <inheritdoc />
@@ -239,15 +184,7 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         if (_selectedIndices is null)
             throw new InvalidOperationException("SalpSwarm has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
