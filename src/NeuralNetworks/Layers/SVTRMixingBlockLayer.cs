@@ -37,7 +37,7 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
     private readonly LayerNormalizationLayer<T> _norm2;
     private readonly DenseLayer<T> _mlpUp;
     private readonly DenseLayer<T> _mlpDown;
-    private Tensor<bool>? _localMaskPlane;
+    private bool[]? _localMaskPlane;
     private readonly object _localMaskLock = new();
 
     private ILayer<T>[] ParameterLayers =>
@@ -141,7 +141,8 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
                 plane = _localMaskPlane;
                 if (plane is null)
                 {
-                    plane = new Tensor<bool>([sequence, sequence]);
+                    // Boolean geometry mask (not numeric data), row-major [query, key].
+                    plane = new bool[sequence * sequence];
                     int radiusY = _windowHeight / 2;
                     int radiusX = _windowWidth / 2;
                     for (int query = 0; query < sequence; query++)
@@ -152,7 +153,7 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
                         {
                             int ky = key / _width;
                             int kx = key % _width;
-                            plane[query, key] = Math.Abs(qy - ky) <= radiusY &&
+                            plane[query * sequence + key] = Math.Abs(qy - ky) <= radiusY &&
                                 Math.Abs(qx - kx) <= radiusX;
                         }
                     }
@@ -163,13 +164,11 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
 
         // The engine currently requires concrete batch/head mask axes. Replicate the cached
         // geometry plane without recomputing the spatial-neighborhood predicate.
-        var mask = new Tensor<bool>([batch, _numHeads, sequence, sequence]);
-        for (int b = 0; b < batch; b++)
-        for (int head = 0; head < _numHeads; head++)
-        for (int query = 0; query < sequence; query++)
-        for (int key = 0; key < sequence; key++)
-            mask[b, head, query, key] = plane[query, key];
-        return mask;
+        int planeLength = sequence * sequence;
+        var data = new bool[batch * _numHeads * planeLength];
+        for (int slice = 0; slice < batch * _numHeads; slice++)
+            Array.Copy(plane, 0, data, slice * planeLength, planeLength);
+        return new Tensor<bool>(data, [batch, _numHeads, sequence, sequence]);
     }
 
     private Tensor<T> DropPath(Tensor<T> branch, int batch)
@@ -180,16 +179,26 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
         var random = RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
             : RandomHelper.CreateSecureRandom();
-        var mask = new Tensor<T>(branch.Shape.ToArray());
+        // One draw per sample, in sample order: dropped samples get 0, kept ones 1 / keepProbability.
+        var droppedSamples = new List<int>();
         for (int b = 0; b < batch; b++)
         {
-            T value = random.NextDouble() < _dropPathRate
-                ? NumOps.Zero
-                : NumOps.FromDouble(1.0 / keepProbability);
-            int sampleSize = branch.Length / batch;
-            for (int i = 0; i < sampleSize; i++) mask[b * sampleSize + i] = value;
+            if (random.NextDouble() < _dropPathRate) droppedSamples.Add(b);
         }
-        return Engine.TensorMultiply(branch, mask);
+
+        var sampleScale = new Tensor<T>([batch, 1]);
+        sampleScale.Fill(NumOps.FromDouble(1.0 / keepProbability));
+        if (droppedSamples.Count > 0)
+        {
+            sampleScale = Engine.TensorIndexCopy(
+                sampleScale, 0,
+                new Tensor<int>(droppedSamples.ToArray(), [droppedSamples.Count]),
+                new Tensor<T>([droppedSamples.Count, 1]));
+        }
+
+        int sampleSize = branch.Length / batch;
+        var scaled = Engine.TensorMultiply(Engine.Reshape(branch, [batch, sampleSize]), sampleScale);
+        return Engine.Reshape(scaled, branch.Shape.ToArray());
     }
 
     private Vector<T> Concatenate(Func<ILayer<T>, Vector<T>> selector)

@@ -266,10 +266,7 @@ public partial class LogLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         _valueBias.Fill(NumOps.Zero);
 
         // Level mix weights: initialize uniformly so all levels contribute equally at start
-        T initMix = NumOps.FromDouble(1.0 / _numLevels);
-        for (int h = 0; h < _numHeads; h++)
-            for (int l = 0; l < _numLevels; l++)
-                _levelMixWeights[new[] { h, l }] = initMix;
+        _levelMixWeights.Fill(NumOps.FromDouble(1.0 / _numLevels));
 
         // Compression weights: initialize near identity
         for (int l = 0; l < _numLevels; l++)

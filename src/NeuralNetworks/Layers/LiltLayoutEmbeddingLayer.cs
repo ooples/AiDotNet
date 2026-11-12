@@ -126,35 +126,52 @@ public partial class LiltLayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         int rank = input.Shape.Length;
         var leading = new int[rank - 1];
         for (int i = 0; i < rank - 1; i++) leading[i] = input.Shape[i];
-        int tokens = leading.Aggregate(1, (a, b) => a * b);
         int sequence = leading[leading.Length - 1];
-        var span = input.ToArray();
 
-        Tensor<T> Column(Func<double[], double> select)
+        // Integer lookup indices, built off the gradient tape as the previous fresh tensors were:
+        // clamp(round(value), 0, maxPosition2D - 1) per box coordinate and extent, and the
+        // per-row token position clamp(s, 0, maxSequenceLength - 1).
+        Tensor<T> x0, y0, x1, y1, heights, widths, positions;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var column = new Tensor<T>(leading);
-            for (int t = 0; t < tokens; t++)
+            var sliceLength = new int[rank];
+            Array.Copy(leading, sliceLength, rank - 1);
+            sliceLength[rank - 1] = 1;
+            Tensor<T> Coordinate(int k)
             {
-                var box = new[] { NumOps.ToDouble(span[t * 4]), NumOps.ToDouble(span[(t * 4) + 1]), NumOps.ToDouble(span[(t * 4) + 2]), NumOps.ToDouble(span[(t * 4) + 3]) };
-                column.Data.Span[t] = NumOps.FromDouble(Math.Min(Math.Max(Math.Round(select(box)), 0), _maxPosition2D - 1));
+                var start = new int[rank];
+                start[rank - 1] = k;
+                return Engine.Reshape(Engine.TensorSlice(input, start, sliceLength), leading);
             }
-            return column;
+
+            T lastPosition = NumOps.FromDouble(_maxPosition2D - 1);
+            Tensor<T> Index(Tensor<T> value) => Engine.TensorClamp(Engine.TensorRound(value), NumOps.Zero, lastPosition);
+
+            var rawX0 = Coordinate(0);
+            var rawY0 = Coordinate(1);
+            var rawX1 = Coordinate(2);
+            var rawY1 = Coordinate(3);
+            x0 = Index(rawX0);
+            y0 = Index(rawY0);
+            x1 = Index(rawX1);
+            y1 = Index(rawY1);
+            heights = Index(Engine.TensorSubtract(rawY1, rawY0));
+            widths = Index(Engine.TensorSubtract(rawX1, rawX0));
+            positions = Engine.TensorBroadcastTo(
+                Engine.TensorClampMax(Engine.TensorArange<T>(0, sequence, 1), NumOps.FromDouble(_maxSequenceLength - 1)),
+                leading);
         }
 
         var parts = new[]
         {
-            _xEmbeddings.Forward(Column(b => b[0])),
-            _yEmbeddings.Forward(Column(b => b[1])),
-            _xEmbeddings.Forward(Column(b => b[2])),
-            _yEmbeddings.Forward(Column(b => b[3])),
-            _heightEmbeddings.Forward(Column(b => b[3] - b[1])),
-            _widthEmbeddings.Forward(Column(b => b[2] - b[0])),
+            _xEmbeddings.Forward(x0),
+            _yEmbeddings.Forward(y0),
+            _xEmbeddings.Forward(x1),
+            _yEmbeddings.Forward(y1),
+            _heightEmbeddings.Forward(heights),
+            _widthEmbeddings.Forward(widths),
         };
         var spatial = _boxLinear.Forward(Engine.TensorConcatenate(parts, parts[0].Shape.Length - 1));
-
-        var positions = new Tensor<T>(leading);
-        for (int t = 0; t < tokens; t++)
-            positions.Data.Span[t] = NumOps.FromDouble(Math.Min(t % sequence, _maxSequenceLength - 1));
         return _norm.Forward(Engine.TensorAdd(spatial, _boxPositionEmbeddings.Forward(positions)));
     }
 
