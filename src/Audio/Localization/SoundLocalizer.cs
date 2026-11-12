@@ -350,9 +350,8 @@ public class SoundLocalizer<T> : IDisposable
                 throw new ArgumentOutOfRangeException("flatIndex", "Every channel must have at least as many samples as the first.");
             channels[mic] = AudioEngineOps.FitLength(engine, audioChannels[mic], length);
         }
-        var input = _numMicrophones == 0
-            ? new Tensor<T>([1, 0, length])
-            : engine.Reshape(engine.TensorStack(channels, 0), [1, _numMicrophones, length]);
+        // The constructor guarantees at least two microphones.
+        var input = engine.Reshape(engine.TensorStack(channels, 0), [1, _numMicrophones, length]);
 
         var output = _model.Run(input);
 
@@ -425,8 +424,10 @@ public class SoundLocalizer<T> : IDisposable
         var phatRe = engine.TensorWhere(keep, engine.TensorDivide(crossRe, mag), zeros);
         var phatIm = engine.TensorWhere(keep, engine.TensorDivide(crossIm, mag), zeros);
 
-        // Inverse FFT (1/N normalised), real part
-        return engine.NativeComplexIFFTReal(engine.TensorComplex(phatRe, phatIm)).Cast<double>().ToArray();
+        // Inverse FFT (1/N normalised), real part. The IFFT puts zero lag at index 0 and negative lags
+        // at the end; rotate by fftSize / 2 so zero lag sits at the center index every consumer reads.
+        var correlation = engine.NativeComplexIFFTReal(engine.TensorComplex(phatRe, phatIm));
+        return engine.TensorRoll(correlation, [fftSize / 2], [0]).Cast<double>().ToArray();
     }
 
     private Complex[] ComputeFrameFft(Tensor<T> channel, int start, int size)

@@ -637,6 +637,32 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(LocalizationAlgorithm.MUSIC, options.Algorithm);
     }
 
+    /// <summary>
+    /// GCC-PHAT reference: when channel 2 is channel 1 delayed by d samples, the cross-correlation
+    /// sum_n x1[n + k] x2[n] peaks at lag k = -d, so the TDOA (t1 - t2) is -d / sampleRate. The
+    /// inverse FFT puts zero lag at index 0; it must be rotated to the center index before reading it.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SoundLocalizer_EstimateTdoa_RecoversKnownDelay()
+    {
+        await Task.Yield();
+        const int length = 1024;
+        const int delay = 5;
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
+        var first = new double[length];
+        for (int i = 0; i < length; i++)
+            first[i] = rng.NextDouble() * 2.0 - 1.0;
+        var second = new double[length];
+        Array.Copy(first, 0, second, delay, length - delay);
+
+        var localizer = new SoundLocalizer<double>(new double[,] { { 0, 0, 0 }, { 0.1, 0, 0 } });
+        double tdoa = localizer.EstimateTdoa(
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(first, [length]),
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(second, [length]));
+
+        Assert.Equal(-delay / 16000.0, tdoa, 12);
+    }
+
     #endregion
 
     #region ChordSegment
