@@ -28,16 +28,16 @@ public class DISR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _relevanceScores;
-    private double[]? _disrScores;
+    private Vector<T>? _relevanceScores;
+    private Vector<T>? _disrScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? RelevanceScores => _relevanceScores;
-    public double[]? DISRScores => _disrScores;
+    public Vector<T>? RelevanceScores => _relevanceScores;
+    public Vector<T>? DISRScores => _disrScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,255 +72,31 @@ public class DISR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        var discretized = DiscretizeData(data, n, p);
-        var discretizedTarget = DiscretizeTarget(target, n);
-
-        // Compute individual relevance scores
-        _relevanceScores = new double[p];
-        var entropies = new double[p];
-        double targetEntropy = ComputeEntropy(discretizedTarget, n, 2);
-
-        for (int j = 0; j < p; j++)
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+        var relevance = info.Relevance();
+        var symmetricUncertainty = FilterStatisticTensorOps.GuardedDivide(
+            Engine.TensorMultiplyScalar(relevance, NumOps.FromDouble(2)),
+            Engine.TensorAddScalar(info.FeatureEntropy(), info.TargetEntropy), 0, NumOps.Zero);
+        T one = NumOps.One;
+        var sum = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
+        var steps = sum;
+        var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
-            entropies[j] = ComputeFeatureEntropy(discretized, j, n);
-            double mi = ComputeMI(discretized, j, discretizedTarget, n);
-            // Symmetric uncertainty
-            _relevanceScores[j] = (entropies[j] + targetEntropy) > 0
-                ? 2 * mi / (entropies[j] + targetEntropy)
-                : 0;
-        }
+            if (chosen.Count == 0)
+                return symmetricUncertainty;
+            int last = chosen[chosen.Count - 1];
+            sum = Engine.TensorAdd(sum, FilterStatisticTensorOps.GuardedDivide(
+                info.JointRelevance(last), info.PairTargetEntropy(last), 0, NumOps.Zero));
+            steps = Engine.TensorAddScalar(steps, one);
+            return Engine.TensorDivide(sum, steps);
+        });
 
-        // Greedy selection using DISR criterion
-        var selected = new List<int>();
-        _disrScores = new double[p];
-
-        // Select first feature with highest relevance
-        int bestFirst = _relevanceScores
-            .Select((r, idx) => (Relevance: r, Index: idx))
-            .OrderByDescending(x => x.Relevance)
-            .First().Index;
-
-        selected.Add(bestFirst);
-        _disrScores[bestFirst] = _relevanceScores[bestFirst];
-
-        while (selected.Count < _nFeaturesToSelect && selected.Count < p)
-        {
-            int bestFeature = -1;
-            double bestScore = double.MinValue;
-
-            for (int j = 0; j < p; j++)
-            {
-                if (selected.Contains(j)) continue;
-
-                // DISR: sum of double input symmetric relevance
-                double disr = 0;
-                foreach (int s in selected)
-                {
-                    double jointMI = ComputeJointMI(discretized, j, s, discretizedTarget, n);
-                    double jointEntropy = ComputeJointFeatureEntropy(discretized, j, s, n);
-
-                    // Double input symmetric relevance
-                    double denom = jointEntropy + targetEntropy;
-                    disr += denom > 0 ? 2 * jointMI / denom : 0;
-                }
-
-                double score = disr / selected.Count;
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                selected.Add(bestFeature);
-                _disrScores[bestFeature] = bestScore;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _relevanceScores = symmetricUncertainty.ToVector();
+        _disrScores = scores;
+        _selectedIndices = selected;
         IsFitted = true;
-    }
-
-    private int[,] DiscretizeData(Matrix<T> data, int n, int p)
-    {
-        var discretized = new int[n, p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < minVal) minVal = val;
-                if (val > maxVal) maxVal = val;
-            }
-
-            double range = maxVal - minVal;
-            for (int i = 0; i < n; i++)
-            {
-                if (range < 1e-10)
-                {
-                    discretized[i, j] = 0;
-                }
-                else
-                {
-                    int bin = (int)((NumOps.ToDouble(data[i, j]) - minVal) / range * (_nBins - 1));
-                    discretized[i, j] = Math.Min(_nBins - 1, Math.Max(0, bin));
-                }
-            }
-        }
-
-        return discretized;
-    }
-
-    private int[] DiscretizeTarget(Vector<T> target, int n)
-    {
-        var discretized = new int[n];
-        for (int i = 0; i < n; i++)
-            discretized[i] = NumOps.GreaterThan(target[i], NumOps.FromDouble(0.5)) ? 1 : 0;
-        return discretized;
-    }
-
-    private double ComputeEntropy(int[] values, int n, int numClasses)
-    {
-        var counts = new int[numClasses];
-        for (int i = 0; i < n; i++)
-            counts[values[i]]++;
-
-        double entropy = 0;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (counts[c] > 0)
-            {
-                double p = (double)counts[c] / n;
-                entropy -= p * Math.Log(p);
-            }
-        }
-
-        return entropy;
-    }
-
-    private double ComputeFeatureEntropy(int[,] discretized, int featureIdx, int n)
-    {
-        var counts = new int[_nBins];
-        for (int i = 0; i < n; i++)
-            counts[discretized[i, featureIdx]]++;
-
-        double entropy = 0;
-        for (int b = 0; b < _nBins; b++)
-        {
-            if (counts[b] > 0)
-            {
-                double p = (double)counts[b] / n;
-                entropy -= p * Math.Log(p);
-            }
-        }
-
-        return entropy;
-    }
-
-    private double ComputeJointFeatureEntropy(int[,] discretized, int f1, int f2, int n)
-    {
-        var counts = new Dictionary<(int, int), int>();
-        for (int i = 0; i < n; i++)
-        {
-            var key = (discretized[i, f1], discretized[i, f2]);
-            counts[key] = counts.GetValueOrDefault(key, 0) + 1;
-        }
-
-        double entropy = 0;
-        foreach (var count in counts.Values)
-        {
-            if (count > 0)
-            {
-                double p = (double)count / n;
-                entropy -= p * Math.Log(p);
-            }
-        }
-
-        return entropy;
-    }
-
-    private double ComputeMI(int[,] discretized, int featureIdx, int[] target, int n)
-    {
-        var jointCounts = new int[_nBins, 2];
-        var featureCounts = new int[_nBins];
-        var targetCounts = new int[2];
-
-        for (int i = 0; i < n; i++)
-        {
-            int f = discretized[i, featureIdx];
-            int t = target[i];
-            jointCounts[f, t]++;
-            featureCounts[f]++;
-            targetCounts[t]++;
-        }
-
-        double mi = 0;
-        for (int f = 0; f < _nBins; f++)
-        {
-            for (int t = 0; t < 2; t++)
-            {
-                if (jointCounts[f, t] > 0)
-                {
-                    double pJoint = (double)jointCounts[f, t] / n;
-                    double pFeature = (double)featureCounts[f] / n;
-                    double pTarget = (double)targetCounts[t] / n;
-
-                    if (pFeature > 0 && pTarget > 0)
-                        mi += pJoint * Math.Log(pJoint / (pFeature * pTarget) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
-    }
-
-    private double ComputeJointMI(int[,] discretized, int f1, int f2, int[] target, int n)
-    {
-        var counts = new Dictionary<(int, int, int), int>();
-        var jointFeatureCounts = new Dictionary<(int, int), int>();
-        var targetCounts = new int[2];
-
-        for (int i = 0; i < n; i++)
-        {
-            int v1 = discretized[i, f1];
-            int v2 = discretized[i, f2];
-            int t = target[i];
-
-            var tripleKey = (v1, v2, t);
-            var pairKey = (v1, v2);
-
-            counts[tripleKey] = counts.GetValueOrDefault(tripleKey, 0) + 1;
-            jointFeatureCounts[pairKey] = jointFeatureCounts.GetValueOrDefault(pairKey, 0) + 1;
-            targetCounts[t]++;
-        }
-
-        double mi = 0;
-        foreach (var kvp in counts)
-        {
-            var (v1, v2, t) = kvp.Key;
-            int jointCount = kvp.Value;
-
-            double pJoint = (double)jointCount / n;
-            double pFeatures = (double)jointFeatureCounts[(v1, v2)] / n;
-            double pTarget = (double)targetCounts[t] / n;
-
-            if (pFeatures > 0 && pTarget > 0)
-                mi += pJoint * Math.Log(pJoint / (pFeatures * pTarget) + 1e-10);
-        }
-
-        return mi;
     }
 
     /// <inheritdoc />

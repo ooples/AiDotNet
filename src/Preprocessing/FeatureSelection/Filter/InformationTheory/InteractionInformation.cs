@@ -29,8 +29,8 @@ public class InteractionInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nBins;
     private readonly bool _preferSynergy;
 
-    private double[]? _miScores;
-    private double[]? _interactionScores;
+    private Vector<T>? _miScores;
+    private Vector<T>? _interactionScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -38,8 +38,8 @@ public class InteractionInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public bool PreferSynergy => _preferSynergy;
-    public double[]? MIScores => _miScores;
-    public double[]? InteractionScores => _interactionScores;
+    public Vector<T>? MIScores => _miScores;
+    public Vector<T>? InteractionScores => _interactionScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -76,195 +76,34 @@ public class InteractionInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        var discretized = DiscretizeData(data, n, p);
-        var discretizedTarget = DiscretizeTarget(target, n);
-
-        // Compute MI(X_i; Y) for all features
-        _miScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _miScores[j] = ComputeMI(discretized, j, discretizedTarget, n);
-
-        // Greedy selection considering interaction information
-        var selected = new List<int>();
-        _interactionScores = new double[p];
-
-        // Select first feature with highest MI
-        int bestFirst = _miScores
-            .Select((mi, idx) => (MI: mi, Index: idx))
-            .OrderByDescending(x => x.MI)
-            .First().Index;
-
-        selected.Add(bestFirst);
-        _interactionScores[bestFirst] = _miScores[bestFirst];
-
-        while (selected.Count < _nFeaturesToSelect && selected.Count < p)
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+        var relevance = info.Relevance();
+        T one = NumOps.One;
+        var sum = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
+        var steps = sum;
+        var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
-            int bestFeature = -1;
-            double bestScore = double.MinValue;
+            if (chosen.Count == 0)
+                return relevance;
+            int last = chosen[chosen.Count - 1];
 
-            for (int j = 0; j < p; j++)
-            {
-                if (selected.Contains(j)) continue;
+            // I(Xj; Xs; Y) = I(Xj; Y) + I(Xs; Y) - I(Xj, Xs; Y)
+            var interaction = Engine.TensorSubtract(
+                Engine.TensorAdd(relevance, Engine.TensorBroadcastTo(
+                    FeatureSelectionTensorOps.Entries(relevance, new[] { last }), new[] { p })),
+                info.JointRelevance(last));
+            sum = Engine.TensorAdd(sum, interaction);
+            steps = Engine.TensorAddScalar(steps, one);
+            var meanInteraction = Engine.TensorDivide(_preferSynergy ? sum : Engine.TensorAbs(sum), steps);
+            return Engine.TensorSubtract(relevance, meanInteraction);
+        });
 
-                // Compute interaction information with selected features
-                double score = _miScores[j];
-                double totalInteraction = 0;
-
-                foreach (int s in selected)
-                {
-                    // I(X_j; X_s; Y) = I(X_j; Y) + I(X_s; Y) - I(X_j, X_s; Y)
-                    double jointMI = ComputeJointMI(discretized, j, s, discretizedTarget, n);
-                    double interaction = _miScores[j] + _miScores[s] - jointMI;
-                    totalInteraction += interaction;
-                }
-
-                // Adjust score based on interaction
-                if (_preferSynergy)
-                {
-                    // Negative interaction means synergy, so subtract it to prefer synergy
-                    score -= totalInteraction / selected.Count;
-                }
-                else
-                {
-                    // Positive interaction means redundancy, so add it to penalize redundancy
-                    score -= Math.Abs(totalInteraction) / selected.Count;
-                }
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                selected.Add(bestFeature);
-                _interactionScores[bestFeature] = bestScore;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _miScores = relevance.ToVector();
+        _interactionScores = scores;
+        _selectedIndices = selected;
         IsFitted = true;
-    }
-
-    private int[,] DiscretizeData(Matrix<T> data, int n, int p)
-    {
-        var discretized = new int[n, p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < minVal) minVal = val;
-                if (val > maxVal) maxVal = val;
-            }
-
-            double range = maxVal - minVal;
-            for (int i = 0; i < n; i++)
-            {
-                if (range < 1e-10)
-                {
-                    discretized[i, j] = 0;
-                }
-                else
-                {
-                    int bin = (int)((NumOps.ToDouble(data[i, j]) - minVal) / range * (_nBins - 1));
-                    discretized[i, j] = Math.Min(_nBins - 1, Math.Max(0, bin));
-                }
-            }
-        }
-
-        return discretized;
-    }
-
-    private int[] DiscretizeTarget(Vector<T> target, int n)
-    {
-        var discretized = new int[n];
-        for (int i = 0; i < n; i++)
-            discretized[i] = NumOps.GreaterThan(target[i], NumOps.FromDouble(0.5)) ? 1 : 0;
-        return discretized;
-    }
-
-    private double ComputeMI(int[,] discretized, int featureIdx, int[] target, int n)
-    {
-        var jointCounts = new int[_nBins, 2];
-        var featureCounts = new int[_nBins];
-        var targetCounts = new int[2];
-
-        for (int i = 0; i < n; i++)
-        {
-            int f = discretized[i, featureIdx];
-            int t = target[i];
-            jointCounts[f, t]++;
-            featureCounts[f]++;
-            targetCounts[t]++;
-        }
-
-        double mi = 0;
-        for (int f = 0; f < _nBins; f++)
-        {
-            for (int t = 0; t < 2; t++)
-            {
-                if (jointCounts[f, t] > 0)
-                {
-                    double pJoint = (double)jointCounts[f, t] / n;
-                    double pFeature = (double)featureCounts[f] / n;
-                    double pTarget = (double)targetCounts[t] / n;
-
-                    if (pFeature > 0 && pTarget > 0)
-                        mi += pJoint * Math.Log(pJoint / (pFeature * pTarget) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
-    }
-
-    private double ComputeJointMI(int[,] discretized, int f1, int f2, int[] target, int n)
-    {
-        var counts = new Dictionary<(int, int, int), int>();
-        var jointFeatureCounts = new Dictionary<(int, int), int>();
-        var targetCounts = new int[2];
-
-        for (int i = 0; i < n; i++)
-        {
-            int v1 = discretized[i, f1];
-            int v2 = discretized[i, f2];
-            int t = target[i];
-
-            var tripleKey = (v1, v2, t);
-            var pairKey = (v1, v2);
-
-            counts[tripleKey] = counts.GetValueOrDefault(tripleKey, 0) + 1;
-            jointFeatureCounts[pairKey] = jointFeatureCounts.GetValueOrDefault(pairKey, 0) + 1;
-            targetCounts[t]++;
-        }
-
-        double mi = 0;
-        foreach (var kvp in counts)
-        {
-            var (v1, v2, t) = kvp.Key;
-            int jointCount = kvp.Value;
-
-            double pJoint = (double)jointCount / n;
-            double pFeatures = (double)jointFeatureCounts[(v1, v2)] / n;
-            double pTarget = (double)targetCounts[t] / n;
-
-            if (pFeatures > 0 && pTarget > 0)
-                mi += pJoint * Math.Log(pJoint / (pFeatures * pTarget) + 1e-10);
-        }
-
-        return mi;
     }
 
     /// <inheritdoc />

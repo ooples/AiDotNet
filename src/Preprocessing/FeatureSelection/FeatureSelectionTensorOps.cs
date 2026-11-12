@@ -419,6 +419,30 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>
+    /// Equal-width bin of every entry of an [n, p] tensor on <c>bins - 1</c> steps, per column:
+    /// <c>min(bins - 1, (int)((x - min) / (max - min) * (bins - 1)))</c>, or bin 0 for a column whose range is not
+    /// above 1e-10. Returned as an [n, p] int tensor.
+    /// </summary>
+    public static Tensor<int> RangeBins<T>(Tensor<T> x, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        return ToBinIndex(engine.TensorMultiplyScalar(RangeScaled(x), ops.FromDouble(bins - 1)), bins);
+    }
+
+    /// <summary>
+    /// Equal-width bin of every entry of an [n, p] tensor over the column range, per column:
+    /// <c>min(bins - 1, (int)((x - min) / (max - min) * bins))</c>, or bin 0 for a column whose range is below 1e-10.
+    /// Returned as an [n, p] int tensor.
+    /// </summary>
+    public static Tensor<int> ScaledBins<T>(Tensor<T> x, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        return ToBinIndex(engine.TensorMultiplyScalar(RangeScaled(x), ops.FromDouble(bins)), bins);
+    }
+
+    /// <summary>
     /// Truncates non-negative bin positions to integers (C# <c>(int)</c> casts truncate toward zero) and clamps
     /// them to <c>[0, bins - 1]</c>.
     /// </summary>
