@@ -32,7 +32,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly double _selectionThreshold;
     private readonly int? _randomState;
 
-    private double[]? _selectionFrequencies;
+    private Vector<T>? _selectionFrequencies;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -41,7 +41,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NIterations => _nIterations;
     public double SubsampleRatio => _subsampleRatio;
     public double SelectionThreshold => _selectionThreshold;
-    public double[]? SelectionFrequencies => _selectionFrequencies;
+    public Vector<T>? SelectionFrequencies => _selectionFrequencies;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -94,6 +94,8 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
         var selectionCounts = new int[p];
 
         for (int iter = 0; iter < _nIterations; iter++)
@@ -102,67 +104,26 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             var subsampleIndices = Enumerable.Range(0, n)
                 .OrderBy(_ => random.Next())
                 .Take(subsampleSize)
-                .ToList();
+                .ToArray();
 
-            // Compute correlation scores on subsample
-            var scores = new double[p];
-            double yMean = subsampleIndices.Average(i => NumOps.ToDouble(target[i]));
-
-            for (int j = 0; j < p; j++)
-            {
-                double xMean = subsampleIndices.Average(i => NumOps.ToDouble(data[i, j]));
-
-                double sxy = 0, sxx = 0, syy = 0;
-                foreach (int i in subsampleIndices)
-                {
-                    double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                    double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                    sxy += xDiff * yDiff;
-                    sxx += xDiff * xDiff;
-                    syy += yDiff * yDiff;
-                }
-
-                scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-            }
+            // Compute |Pearson r| scores on subsample (0 for a constant column or target)
+            var rows = new Tensor<int>(subsampleIndices, new[] { subsampleIndices.Length });
+            var scores = Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+                Engine.TensorIndexSelect(x, rows, 0), Engine.TensorIndexSelect(y, rows, 0)));
 
             // Select top features in this iteration
-            var topFeatures = Enumerable.Range(0, p)
-                .OrderByDescending(j => scores[j])
-                .Take(_nFeaturesToSelect)
-                .ToList();
-
-            foreach (int f in topFeatures)
+            foreach (int f in PreprocessingTensorOps.TopKIndicesSorted(scores, _nFeaturesToSelect))
                 selectionCounts[f]++;
         }
 
         // Compute selection frequencies
-        _selectionFrequencies = new double[p];
-        for (int j = 0; j < p; j++)
-            _selectionFrequencies[j] = (double)selectionCounts[j] / _nIterations;
+        var frequencies = Engine.TensorDivideScalar(
+            new Tensor<int>(selectionCounts, new[] { p }).Cast<T>(), NumOps.FromDouble(_nIterations));
+        _selectionFrequencies = frequencies.ToVector();
 
-        // Select features above threshold
-        var stableFeatures = Enumerable.Range(0, p)
-            .Where(j => _selectionFrequencies[j] >= _selectionThreshold)
-            .ToList();
-
-        // If not enough features meet threshold, take top by frequency
-        if (stableFeatures.Count < _nFeaturesToSelect)
-        {
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _selectionFrequencies[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = stableFeatures
-                .OrderByDescending(j => _selectionFrequencies[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-
+        // Features at or above the threshold by frequency; if not enough meet it, the top features by frequency.
+        // Either way these are the most frequently selected features.
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(frequencies, _nFeaturesToSelect);
         IsFitted = true;
     }
 
@@ -179,15 +140,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("StabilitySelection has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

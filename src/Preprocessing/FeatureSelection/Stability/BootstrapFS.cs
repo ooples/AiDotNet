@@ -31,8 +31,8 @@ public class BootstrapFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     private readonly double _confidenceLevel;
     private readonly int? _randomState;
 
-    private double[]? _selectionProbabilities;
-    private double[]? _confidenceIntervals;
+    private Vector<T>? _selectionProbabilities;
+    private Vector<T>? _confidenceIntervals;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -40,8 +40,8 @@ public class BootstrapFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBootstrapSamples => _nBootstrapSamples;
     public double ConfidenceLevel => _confidenceLevel;
-    public double[]? SelectionProbabilities => _selectionProbabilities;
-    public double[]? ConfidenceIntervals => _confidenceIntervals;
+    public Vector<T>? SelectionProbabilities => _selectionProbabilities;
+    public Vector<T>? ConfidenceIntervals => _confidenceIntervals;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -87,7 +87,9 @@ public class BootstrapFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var allScores = new List<double[]>();
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var allScores = new List<Tensor<T>>();
         var selectionCounts = new int[p];
 
         for (int b = 0; b < _nBootstrapSamples; b++)
@@ -98,74 +100,40 @@ public class BootstrapFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
                 sampleIndices[i] = random.Next(n);
 
             // Compute feature scores on bootstrap sample
-            var scores = ComputeScores(data, target, sampleIndices, p);
+            var scores = ComputeScores(x, y, sampleIndices);
             allScores.Add(scores);
 
             // Track which features would be selected
-            var topFeatures = scores
-                .Select((s, idx) => (Score: s, Index: idx))
-                .OrderByDescending(x => x.Score)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index);
-
-            foreach (int j in topFeatures)
+            foreach (int j in PreprocessingTensorOps.TopKIndicesSorted(scores, _nFeaturesToSelect))
                 selectionCounts[j]++;
         }
 
         // Compute selection probabilities
-        _selectionProbabilities = selectionCounts.Select(c => (double)c / _nBootstrapSamples).ToArray();
+        var probabilities = Engine.TensorDivideScalar(
+            new Tensor<int>(selectionCounts, new[] { p }).Cast<T>(), NumOps.FromDouble(_nBootstrapSamples));
+        _selectionProbabilities = probabilities.ToVector();
 
-        // Compute confidence intervals for feature importance
-        _confidenceIntervals = new double[p];
+        // Compute confidence intervals for feature importance (width of the bootstrap percentile interval)
         double alpha = 1 - _confidenceLevel;
         int lowerIdx = (int)(alpha / 2 * _nBootstrapSamples);
         int upperIdx = (int)((1 - alpha / 2) * _nBootstrapSamples);
-
-        for (int j = 0; j < p; j++)
-        {
-            var sortedScores = allScores.Select(s => s[j]).OrderBy(x => x).ToArray();
-            double lower = sortedScores[Math.Max(0, lowerIdx)];
-            double upper = sortedScores[Math.Min(sortedScores.Length - 1, upperIdx)];
-            _confidenceIntervals[j] = upper - lower;
-        }
+        var sortedScores = Engine.TensorSort(Engine.TensorStack(allScores.ToArray(), 0), 0, false).Item1;
+        var lower = Engine.TensorSliceAxis(sortedScores, 0, Math.Max(0, lowerIdx));
+        var upper = Engine.TensorSliceAxis(sortedScores, 0, Math.Min(_nBootstrapSamples - 1, upperIdx));
+        _confidenceIntervals = Engine.TensorSubtract(upper, lower).ToVector();
 
         // Select features by probability (most consistently selected)
-        _selectedIndices = _selectionProbabilities
-            .Select((prob, idx) => (Prob: prob, Index: idx))
-            .OrderByDescending(x => x.Prob)
-            .Take(_nFeaturesToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(probabilities, _nFeaturesToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeScores(Matrix<T> data, Vector<T> target, int[] sampleIndices, int p)
+    /// <summary>|Pearson r| of every column with the target over the bootstrap rows (0 for a constant column or target).</summary>
+    private Tensor<T> ComputeScores(Tensor<T> x, Tensor<T> y, int[] sampleIndices)
     {
-        int sampleSize = sampleIndices.Length;
-        var scores = new double[p];
-
-        double yMean = sampleIndices.Sum(i => NumOps.ToDouble(target[i])) / sampleSize;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = sampleIndices.Sum(i => NumOps.ToDouble(data[i, j])) / sampleSize;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            foreach (int i in sampleIndices)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
+        var rows = new Tensor<int>(sampleIndices, new[] { sampleIndices.Length });
+        return Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+            Engine.TensorIndexSelect(x, rows, 0), Engine.TensorIndexSelect(y, rows, 0)));
     }
 
     /// <inheritdoc />
@@ -181,15 +149,7 @@ public class BootstrapFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         if (_selectedIndices is null)
             throw new InvalidOperationException("BootstrapFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

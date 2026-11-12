@@ -25,15 +25,15 @@ public class JackknifeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     private readonly int _nFeaturesToSelect;
     private readonly int _maxJackknifeIterations;
 
-    private double[]? _meanImportance;
-    private double[]? _importanceVariance;
+    private Vector<T>? _meanImportance;
+    private Vector<T>? _importanceVariance;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MeanImportance => _meanImportance;
-    public double[]? ImportanceVariance => _importanceVariance;
+    public Vector<T>? MeanImportance => _meanImportance;
+    public Vector<T>? ImportanceVariance => _importanceVariance;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,101 +69,40 @@ public class JackknifeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
         int nIterations = Math.Min(n, _maxJackknifeIterations);
-        var allImportance = new double[nIterations, p];
+        var allImportance = new Tensor<T>[nIterations];
 
         // Jackknife: leave one out at a time
         for (int leave = 0; leave < nIterations; leave++)
         {
-            // Extract leave-one-out data
-            var subX = new double[n - 1, p];
-            var subY = new double[n - 1];
-            int idx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (i == leave) continue;
-                subY[idx] = y[i];
-                for (int j = 0; j < p; j++)
-                    subX[idx, j] = X[i, j];
-                idx++;
-            }
-
-            // Compute feature importance (correlation with target)
-            for (int j = 0; j < p; j++)
-            {
-                var col = new double[n - 1];
-                for (int i = 0; i < n - 1; i++)
-                    col[i] = subX[i, j];
-                allImportance[leave, j] = Math.Abs(ComputeCorrelation(col, subY));
-            }
+            // Compute feature importance (|correlation| with target) on the leave-one-out rows
+            int left = leave;
+            var kept = Enumerable.Range(0, n).Where(i => i != left).ToArray();
+            var rows = new Tensor<int>(kept, new[] { n - 1 });
+            allImportance[leave] = n - 1 < 2
+                ? PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero)
+                : Engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
+                    Engine.TensorIndexSelect(x, rows, 0), Engine.TensorIndexSelect(y, rows, 0)));
         }
 
-        // Compute mean and variance of importance across jackknife samples
-        _meanImportance = new double[p];
-        _importanceVariance = new double[p];
+        // Mean and jackknife variance (Efron and Stein, 1981: (m - 1) / m sum_i (theta_i - mean)^2) of the importance
+        var stacked = Engine.TensorStack(allImportance, 0);
+        var mean = Engine.ReduceMean(stacked, new[] { 0 }, false);
+        var variance = Engine.TensorMultiplyScalar(
+            SelectorTensorOps.ColumnSumOfSquares(SelectorTensorOps.CenterColumns(stacked)),
+            NumOps.FromDouble((nIterations - 1) / (double)nIterations));
+        _meanImportance = mean.ToVector();
+        _importanceVariance = variance.ToVector();
 
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int it = 0; it < nIterations; it++)
-                sum += allImportance[it, j];
-            _meanImportance[j] = sum / nIterations;
+        // Select features with high mean importance and low variance (stable): mean / (std + 1e-6)
+        var stabilityScores = Engine.TensorDivide(mean,
+            Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(1e-6)));
 
-            double varSum = 0;
-            for (int it = 0; it < nIterations; it++)
-            {
-                double diff = allImportance[it, j] - _meanImportance[j];
-                varSum += diff * diff;
-            }
-            _importanceVariance[j] = varSum / nIterations;
-        }
-
-        // Select features with high mean importance and low variance (stable)
-        var stabilityScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            // Higher mean and lower variance is better
-            double stabilityPenalty = Math.Sqrt(_importanceVariance[j]) + 1e-6;
-            stabilityScores[j] = _meanImportance[j] / stabilityPenalty;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => stabilityScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(stabilityScores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double ComputeCorrelation(double[] x, double[] y)
-    {
-        int n = x.Length;
-        if (n < 2) return 0;
-
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double numerator = 0, xSumSq = 0, ySumSq = 0;
-        for (int i = 0; i < n; i++)
-        {
-            numerator += (x[i] - xMean) * (y[i] - yMean);
-            xSumSq += (x[i] - xMean) * (x[i] - xMean);
-            ySumSq += (y[i] - yMean) * (y[i] - yMean);
-        }
-
-        double denominator = Math.Sqrt(xSumSq * ySumSq);
-        return denominator > 1e-10 ? numerator / denominator : 0;
     }
 
     /// <inheritdoc />
@@ -179,15 +118,7 @@ public class JackknifeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("JackknifeSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

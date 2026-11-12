@@ -31,8 +31,8 @@ public class BootstrapSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly double _confidenceLevel;
     private readonly int? _randomState;
 
-    private double[]? _meanImportances;
-    private double[]? _stdImportances;
+    private Vector<T>? _meanImportances;
+    private Vector<T>? _stdImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -40,8 +40,8 @@ public class BootstrapSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBootstraps => _nBootstraps;
     public double ConfidenceLevel => _confidenceLevel;
-    public double[]? MeanImportances => _meanImportances;
-    public double[]? StdImportances => _stdImportances;
+    public Vector<T>? MeanImportances => _meanImportances;
+    public Vector<T>? StdImportances => _stdImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -89,7 +89,9 @@ public class BootstrapSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var allImportances = new double[_nBootstraps, p];
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var allImportances = new Tensor<T>[_nBootstraps];
 
         for (int b = 0; b < _nBootstraps; b++)
         {
@@ -98,63 +100,25 @@ public class BootstrapSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             for (int i = 0; i < n; i++)
                 bootstrapIndices[i] = random.Next(n);
 
-            // Compute importance scores on bootstrap sample
-            double yMean = 0;
-            foreach (int i in bootstrapIndices)
-                yMean += NumOps.ToDouble(target[i]);
-            yMean /= n;
-
-            for (int j = 0; j < p; j++)
-            {
-                double xMean = 0;
-                foreach (int i in bootstrapIndices)
-                    xMean += NumOps.ToDouble(data[i, j]);
-                xMean /= n;
-
-                double sxy = 0, sxx = 0, syy = 0;
-                foreach (int i in bootstrapIndices)
-                {
-                    double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                    double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                    sxy += xDiff * yDiff;
-                    sxx += xDiff * xDiff;
-                    syy += yDiff * yDiff;
-                }
-
-                allImportances[b, j] = (sxx > 1e-10 && syy > 1e-10)
-                    ? Math.Abs(sxy / Math.Sqrt(sxx * syy))
-                    : 0;
-            }
+            // Importance scores on the bootstrap sample: |Pearson r| (0 for a constant column or target)
+            var rows = new Tensor<int>(bootstrapIndices, new[] { n });
+            allImportances[b] = Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+                Engine.TensorIndexSelect(x, rows, 0), Engine.TensorIndexSelect(y, rows, 0)));
         }
 
-        // Compute mean and std of importances
-        _meanImportances = new double[p];
-        _stdImportances = new double[p];
+        // Compute mean and (population) std of importances
+        var stacked = Engine.TensorStack(allImportances, 0);
+        var mean = Engine.ReduceMean(stacked, new[] { 0 }, false);
+        var std = Engine.TensorSqrt(SelectorTensorOps.ColumnVariance(stacked));
+        _meanImportances = mean.ToVector();
+        _stdImportances = std.ToVector();
 
-        for (int j = 0; j < p; j++)
-        {
-            var values = new double[_nBootstraps];
-            for (int b = 0; b < _nBootstraps; b++)
-                values[b] = allImportances[b, j];
-
-            _meanImportances[j] = values.Average();
-            double variance = values.Sum(v => Math.Pow(v - _meanImportances[j], 2)) / _nBootstraps;
-            _stdImportances[j] = Math.Sqrt(variance);
-        }
-
-        // Compute lower confidence bound (mean - z*std)
+        // Compute lower confidence bound (mean - z*std/sqrt(B))
         double zScore = NormalQuantile(_confidenceLevel);
-        var confidenceScores = new double[p];
-        for (int j = 0; j < p; j++)
-            confidenceScores[j] = _meanImportances[j] - zScore * _stdImportances[j] / Math.Sqrt(_nBootstraps);
+        var confidenceScores = Engine.TensorSubtract(mean,
+            Engine.TensorMultiplyScalar(std, NumOps.FromDouble(zScore / Math.Sqrt(_nBootstraps))));
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => confidenceScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(confidenceScores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -211,15 +175,7 @@ public class BootstrapSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("BootstrapSelection has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
