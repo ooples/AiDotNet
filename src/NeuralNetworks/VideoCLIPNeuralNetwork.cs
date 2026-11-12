@@ -1606,6 +1606,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
     private static void SerializeMatrix(BinaryWriter writer, Tensor<T>? matrix)
     {
+        var ops = MathHelper.GetNumericOperations<T>();
         if (matrix is null)
         {
             writer.Write(0);
@@ -1614,24 +1615,23 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         }
         writer.Write(matrix.Shape[0]);
         writer.Write(matrix.Shape[1]);
-
-        // Row-major [rows, cols] in the double wire format
-        var engine = AiDotNetEngine.Current;
-        var rowsByCols = engine.TensorNarrow(engine.TensorNarrow(matrix, 0, 0, matrix.Shape[0]), 1, 0, matrix.Shape[1]);
-        foreach (double value in rowsByCols.Contiguous().Cast<double>().ToArray())
-            writer.Write(value);
+        for (int r = 0; r < matrix.Shape[0]; r++)
+            for (int c = 0; c < matrix.Shape[1]; c++)
+                writer.Write(ops.ToDouble(matrix[r, c]));
     }
 
     private static Tensor<T>? DeserializeMatrix(BinaryReader reader)
     {
+        var ops = MathHelper.GetNumericOperations<T>();
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
         if (rows == 0 && cols == 0)
             return null;
-        var stored = new double[rows * cols];
-        for (int i = 0; i < stored.Length; i++)
-            stored[i] = reader.ReadDouble();
-        return new Tensor<double>(stored, new[] { rows, cols }).Cast<T>();
+        var matrix = new Tensor<T>([rows, cols]);
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                matrix[r, c] = ops.FromDouble(reader.ReadDouble());
+        return matrix;
     }
 
     /// <inheritdoc/>
@@ -1735,8 +1735,19 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             throw new ArgumentException($"Image must be square. Got {pixels} pixels which is not a perfect square.", nameof(imageData));
         }
 
-        // Channel-major [C, H, W], converted from the caller's doubles
-        return new Tensor<double>(imageData, new[] { channels, size, size }).Cast<T>();
+        var tensor = new Tensor<T>(new[] { channels, size, size });
+        int idx = 0;
+        for (int c = 0; c < channels; c++)
+        {
+            for (int h = 0; h < size; h++)
+            {
+                for (int w = 0; w < size; w++)
+                {
+                    tensor[c, h, w] = NumOps.FromDouble(imageData[idx++]);
+                }
+            }
+        }
+        return tensor;
     }
 
     #endregion
