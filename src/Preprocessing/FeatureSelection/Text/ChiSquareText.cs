@@ -26,13 +26,13 @@ public class ChiSquareText<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     private readonly int _nFeaturesToSelect;
     private readonly bool _binarize;
 
-    private double[]? _chiSquareScores;
+    private Vector<T>? _chiSquareScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? ChiSquareScores => _chiSquareScores;
+    public Vector<T>? ChiSquareScores => _chiSquareScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,72 +68,54 @@ public class ChiSquareText<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         int n = data.Rows;
         int p = data.Columns;
 
-        // Get unique classes
-        var classes = new HashSet<double>();
-        for (int i = 0; i < n; i++)
-            classes.Add(NumOps.ToDouble(target[i]));
-        var classList = classes.OrderBy(x => x).ToList();
-        int nClasses = classList.Count;
+        // Get unique classes and each document's class
+        var labels = Tensor<T>.FromVector(target);
+        var classList = PreprocessingTensorOps.SortedUnique(labels);
+        int nClasses = classList.Length;
+        var classIndex = PreprocessingTensorOps.LookupSorted(classList, labels, out _);
+        var membership = Engine.TensorOneHot<T>(classIndex, nClasses);
 
-        _chiSquareScores = new double[p];
+        // Term presence and the one-vs-rest 2x2 contingency counts of every (class, term):
+        // a = present & class, b = present & other, c = absent & class, d = absent & other
+        var present = Engine.TensorGreaterThan(Tensor<T>.FromMatrix(data), NumOps.FromDouble(_binarize ? 0 : 0.5));
+        var shape = new[] { nClasses, p };
+        T total = NumOps.FromDouble(n);
+        var a = Engine.TensorMatMul(Engine.TensorTranspose(membership), present);
+        var termCount = Engine.TensorBroadcastTo(Engine.ReduceSum(present, new[] { 0 }, true), shape);
+        var classCount = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.ReduceSum(membership, new[] { 0 }, false), new[] { nClasses, 1 }), shape);
+        var absentCount = Engine.TensorAddScalar(Engine.TensorNegate(termCount), total);
+        var otherCount = Engine.TensorAddScalar(Engine.TensorNegate(classCount), total);
+        var b = Engine.TensorSubtract(termCount, a);
+        var c = Engine.TensorSubtract(classCount, a);
+        var d = Engine.TensorSubtract(otherCount, b);
 
-        for (int j = 0; j < p; j++)
-        {
-            double chiSq = 0;
+        // chi2(t, c) = sum over the four cells of (observed - expected)^2 / expected (cells with expected > 0)
+        var chiSq = Engine.TensorAdd(
+            Engine.TensorAdd(CellTerm(a, termCount, classCount, total), CellTerm(b, termCount, otherCount, total)),
+            Engine.TensorAdd(CellTerm(c, absentCount, classCount, total), CellTerm(d, absentCount, otherCount, total)));
 
-            foreach (double c in classList)
-            {
-                // Contingency table:
-                // a = term present, class = c
-                // b = term present, class != c
-                // c = term absent, class = c
-                // d = term absent, class != c
+        // chi2_avg(t) = sum_c P(c) chi2(t, c) (Yang and Pedersen, 1997)
+        var prior = Engine.TensorDivideScalar(classCount, total);
+        var scores = Engine.ReduceSum(Engine.TensorMultiply(prior, chiSq), new[] { 0 }, false);
+        _chiSquareScores = scores.ToVector();
 
-                int a = 0, b = 0, tc = 0, d = 0;
-
-                for (int i = 0; i < n; i++)
-                {
-                    double value = NumOps.ToDouble(data[i, j]);
-                    bool termPresent = _binarize ? value > 0 : value > 0.5;
-                    bool isClass = NumOps.Compare(target[i], NumOps.FromDouble(c)) == 0;
-
-                    if (termPresent && isClass) a++;
-                    else if (termPresent && !isClass) b++;
-                    else if (!termPresent && isClass) tc++;
-                    else d++;
-                }
-
-                // Chi-square contribution for this class
-                int n1 = a + b;  // term present
-                int n0 = tc + d;  // term absent
-                int c1 = a + tc;  // class = c
-                int c0 = b + d;   // class != c
-
-                // Expected values
-                double eA = (double)n1 * c1 / n;
-                double eB = (double)n1 * c0 / n;
-                double eC = (double)n0 * c1 / n;
-                double eD = (double)n0 * c0 / n;
-
-                if (eA > 0) chiSq += Math.Pow(a - eA, 2) / eA;
-                if (eB > 0) chiSq += Math.Pow(b - eB, 2) / eB;
-                if (eC > 0) chiSq += Math.Pow(tc - eC, 2) / eC;
-                if (eD > 0) chiSq += Math.Pow(d - eD, 2) / eD;
-            }
-
-            _chiSquareScores[j] = chiSq / nClasses;  // Average across classes
-        }
-
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _chiSquareScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// <c>(observed - expected)^2 / expected</c> with <c>expected = rowTotal * columnTotal / n</c>, 0 where the
+    /// expected count is not positive.
+    /// </summary>
+    private Tensor<T> CellTerm(Tensor<T> observed, Tensor<T> rowTotal, Tensor<T> columnTotal, T n)
+    {
+        var expected = Engine.TensorDivideScalar(Engine.TensorMultiply(rowTotal, columnTotal), n);
+        var positive = Engine.TensorGreaterThan(expected, NumOps.Zero);
+        var safeExpected = Engine.TensorWhere(positive, expected, PreprocessingTensorOps.Filled(expected.Shape.ToArray(), NumOps.One));
+        var difference = Engine.TensorSubtract(observed, expected);
+        return SelectorTensorOps.ZeroUnless(positive, Engine.TensorDivide(Engine.TensorMultiply(difference, difference), safeExpected));
     }
 
     /// <inheritdoc />
@@ -149,15 +131,7 @@ public class ChiSquareText<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("ChiSquareText has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
