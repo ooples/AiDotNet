@@ -276,17 +276,21 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
         int frozenParamCount = (_columns.Count - 1) * _baseParameterCount;
 
         // Zero out gradients for frozen columns
-        for (int i = 0; i < Math.Min(frozenParamCount, adjustedGradients.Length); i++)
+        int frozenCount = Math.Min(frozenParamCount, adjustedGradients.Length);
+        if (frozenCount > 0)
         {
-            adjustedGradients[i] = NumOps.Zero;
+            adjustedGradients.AsWritableSpan().Slice(0, frozenCount).Fill(NumOps.Zero);
         }
 
         // Scale lateral gradients (if present in the gradient vector)
         // Lateral gradients come after all column parameters
-        int lateralStart = _columns.Count * _baseParameterCount;
-        for (int i = lateralStart; i < adjustedGradients.Length; i++)
+        int lateralStart = Math.Max(0, _columns.Count * _baseParameterCount);
+        int lateralCount = adjustedGradients.Length - lateralStart;
+        if (lateralCount > 0)
         {
-            adjustedGradients[i] = NumOps.Multiply(adjustedGradients[i], _lateralScaling);
+            var lateral = Tensor<T>.FromMemory(
+                adjustedGradients.AsWritableMemory().Slice(lateralStart, lateralCount), new[] { lateralCount });
+            Engine.TensorMultiplyScalarInPlace(lateral, _lateralScaling);
         }
 
         return adjustedGradients;
@@ -306,11 +310,9 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
 
         if (length > 0)
         {
-            currentColumn.Parameters = new Vector<T>(length);
-            for (int i = 0; i < length; i++)
-            {
-                currentColumn.Parameters[i] = allParams[startIdx + i];
-            }
+            var columnParameters = new Vector<T>(length);
+            allParams.AsSpan().Slice(startIdx, length).CopyTo(columnParameters.AsWritableSpan());
+            currentColumn.Parameters = columnParameters;
         }
 
         TaskCount++;
@@ -378,27 +380,25 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
 
         // Compute weighted sum of previous column outputs
         int outputSize = previousOutputs[0].Length;
-        var contribution = new Vector<T>(outputSize);
+        var contribution = Engine.Fill(outputSize, NumOps.Zero);
+        var lateralWeights = column.LateralWeights;
 
-        for (int i = 0; i < outputSize; i++)
-        {
-            contribution[i] = NumOps.Zero;
-        }
-
+        // Each previous column consumes the next min(outputSize, |h|) lateral weights while they last:
+        // contribution[i] += (h[i] * w[weightIdx + i]) * scaling
         int weightIdx = 0;
         for (int prevCol = 0; prevCol < columnIndex; prevCol++)
         {
             var prevOutput = previousOutputs[prevCol];
-            for (int i = 0; i < Math.Min(outputSize, prevOutput.Length); i++)
+            int count = Math.Min(Math.Min(outputSize, prevOutput.Length), lateralWeights.Length - weightIdx);
+            if (count <= 0)
             {
-                if (weightIdx < column.LateralWeights.Length)
-                {
-                    var weighted = NumOps.Multiply(prevOutput[i], column.LateralWeights[weightIdx]);
-                    var scaled = NumOps.Multiply(weighted, _lateralScaling);
-                    contribution[i] = NumOps.Add(contribution[i], scaled);
-                    weightIdx++;
-                }
+                continue;
             }
+
+            var weights = Tensor<T>.FromMemory(lateralWeights.AsWritableMemory().Slice(weightIdx, count), new[] { count });
+            var weighted = Engine.TensorMultiply(Head(prevOutput, count), weights);
+            Engine.TensorAddInPlace(Head(contribution, count), Engine.TensorMultiplyScalar(weighted, _lateralScaling));
+            weightIdx += count;
         }
 
         return contribution;
