@@ -65,6 +65,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
     public BeatTracker(BeatTrackerOptions? options = null)
     {
         _options = options ?? new BeatTrackerOptions();
+        ValidateOptions(_options);
 
         // Set base class properties
         SampleRate = _options.SampleRate;
@@ -162,13 +163,31 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         return Engine.TensorDivide(sum, new Tensor<int>(count, [numFrames]).Cast<T>());
     }
 
+    /// <summary>
+    /// Rejects option values that leave no valid lag range: the frame rate and tempo bounds must be
+    /// positive, the maximum tempo at least the minimum, and the lag at the minimum tempo must fit in
+    /// an <see cref="int"/>.
+    /// </summary>
+    private static void ValidateOptions(BeatTrackerOptions options)
+    {
+        if (options.SampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.SampleRate, "BeatTrackerOptions.SampleRate must be positive.");
+        if (options.HopLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.HopLength, "BeatTrackerOptions.HopLength must be positive.");
+        if (!(options.MinTempo > 0))
+            throw new ArgumentOutOfRangeException(nameof(options), options.MinTempo, "BeatTrackerOptions.MinTempo must be positive.");
+        if (!(options.MaxTempo >= options.MinTempo))
+            throw new ArgumentOutOfRangeException(nameof(options), options.MaxTempo, "BeatTrackerOptions.MaxTempo must be at least MinTempo.");
+        double maxLag = options.SampleRate / (double)options.HopLength * 60.0 / options.MinTempo;
+        if (maxLag > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(options), options.MinTempo, "BeatTrackerOptions.MinTempo is too small: the beat lag in frames does not fit in an int.");
+    }
+
     private double EstimateTempoFromEnvelope(Tensor<T> onsetEnvelope)
     {
         // Compute autocorrelation of onset envelope
         int maxLag = (int)(_options.SampleRate / (double)_options.HopLength * 60.0 / _options.MinTempo);
         int minLag = (int)(_options.SampleRate / (double)_options.HopLength * 60.0 / _options.MaxTempo);
-        if (maxLag < 0)
-            throw new OverflowException("Arithmetic operation resulted in an overflow.");
 
         // The best lag is the first whose correlation beats 0 and every earlier lag (NaN never wins)
         int bestLag = minLag;
@@ -176,8 +195,6 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         int lagEnd = Math.Min(maxLag, length);
         if (lagEnd > minLag)
         {
-            if (minLag < 0)
-                throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
             var correlations = new T[lagEnd - minLag];
             for (int lag = minLag; lag < lagEnd; lag++)
             {
@@ -302,8 +319,6 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         // Compute how well beats align with onset peaks: the mean of envelope[beat] / max(envelope)
         // (the maximum skips NaN, as Enumerable.Max does, and is NaN only when every value is)
         int length = onsetEnvelope.Length;
-        if (length == 0)
-            throw new InvalidOperationException("Sequence contains no elements");
         var isNaN = Engine.TensorIsNan(onsetEnvelope);
         var ranked = Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault([length], AudioEngineOps.NegativeInfinityOrMin<T>()), onsetEnvelope);
         int nanCount = Engine.TensorNonzero(Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault([length], NumOps.One), new Tensor<T>([length]))).Length;

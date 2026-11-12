@@ -1070,6 +1070,10 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var m = Engine.TensorSlice(magnitude, [0, 0], [numFrames, numBins]);
         var sum = Engine.TensorAddScalar(Engine.TensorAdd(harmonicEnhanced, percussiveEnhanced), NumOps.FromDouble(HpssMaskEpsilon));
+        // The epsilon can round to zero in a narrow T (Half): a zero denominator divides by one
+        // instead, so silent bins get zero-valued masks rather than 0 / 0.
+        sum = Engine.TensorWhere(
+            Engine.TensorEquals(sum, NumOps.Zero), Tensor<T>.CreateDefault([numFrames, numBins], NumOps.One), sum);
         var harmonicMag = Engine.TensorDivide(Engine.TensorMultiply(m, harmonicEnhanced), sum);
         var percussiveMag = Engine.TensorDivide(Engine.TensorMultiply(m, percussiveEnhanced), sum);
 
