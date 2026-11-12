@@ -231,13 +231,25 @@ internal static class MaximalInformationCoefficient
         T one = ops.One;
         T minusOne = ops.Negate(one);
 
-        // Cumulative histogram along the superclumps: cumhist[r, t] = #{points in row r and clumps 0 .. t}
-        var keys = new int[n];
+        // Cumulative histogram along the superclumps: cumhist[r, t] = #{points in row r and clumps 0 .. t}. The counts
+        // are summed as integers and converted once: a running sum in T stops growing past 2048 in Half.
+        var histogram = new int[q * p];
         for (int k = 0; k < n; k++)
-            keys[k] = qMap[k] * p + pMap[k];
-        var counts = engine.TensorBinCount(new Tensor<int>(keys, new[] { n }), q * p).Cast<T>();
-        var cumhist = engine.TensorCumSum(engine.Reshape(counts, new[] { q, p }), 1); // [q, p]
-        var cumulative = engine.ReduceSum(cumhist, new[] { 0 }, false); // c_1 .. c_p, [p]
+            histogram[qMap[k] * p + pMap[k]]++;
+        var cumulativeCounts = new int[p];
+        for (int r = 0; r < q; r++)
+        {
+            int running = 0;
+            for (int t = 0; t < p; t++)
+            {
+                running += histogram[r * p + t];
+                histogram[r * p + t] = running;
+                cumulativeCounts[t] += running;
+            }
+        }
+
+        var cumhist = new Tensor<int>(histogram, new[] { q, p }).Cast<T>(); // [q, p]
+        var cumulative = new Tensor<int>(cumulativeCounts, new[] { p }).Cast<T>(); // c_1 .. c_p, [p]
 
         // Pairs (s, t) are indexed [s - 1, t - 1]
         var cS = engine.TensorBroadcastTo(engine.Reshape(cumulative, new[] { p, 1 }), new[] { p, p });
