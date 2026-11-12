@@ -269,6 +269,28 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.True(components.Count > 0, "BN should produce components");
     }
 
+    [Theory]
+    [InlineData(new[] { 5.0 })]
+    [InlineData(new[] { 1.0, 4.0 })]
+    [InlineData(new[] { 1.0, 3.0, 5.0, 7.0, 9.0 })]
+    [InlineData(new[] { 2.0, 2.0, 2.0, 2.0 })]
+    public void BeveridgeNelson_ShortOrConstantDifferenceSeries_TrendIsSeriesWithoutNaN(double[] values)
+    {
+        // A series with at most one point has no differences, and constant differences give
+        // gamma_0 = 0; both have no transitory part, so trend = series and cycle = 0 (never NaN).
+        var ts = new Vector<double>(values);
+
+        var decomp = new BeveridgeNelsonDecomposition<double>(ts);
+        var trend = decomp.GetComponentAsVector(DecompositionComponentType.Trend);
+        var cycle = decomp.GetComponentAsVector(DecompositionComponentType.Cycle);
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            Assert.Equal(values[i], trend[i], 1e-12);
+            Assert.Equal(0.0, cycle[i], 1e-12);
+        }
+    }
+
     #endregion
 
     #region SEATSDecomposition Tests
