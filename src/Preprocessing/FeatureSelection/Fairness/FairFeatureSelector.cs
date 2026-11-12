@@ -170,56 +170,45 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     /// <summary>
     /// Computes the disparate impact ratio for a specific feature.
     /// </summary>
-    public double GetDisparateImpact(Matrix<T> data, int featureIndex)
+    public T GetDisparateImpact(Matrix<T> data, int featureIndex)
     {
         if (featureIndex >= data.Columns || featureIndex < 0)
             throw new ArgumentException("Invalid feature index.");
 
+        var engine = Engine;
         int n = data.Rows;
+        var X = Tensor<T>.FromMatrix(data);
+        var protectedVals = PreprocessingTensorOps.ColumnVector(X, _protectedAttributeIndex);
+        var featureVals = PreprocessingTensorOps.ColumnVector(X, featureIndex);
 
-        // Split by protected attribute (threshold at median)
-        var protectedVals = new double[n];
-        var featureVals = new double[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            protectedVals[i] = NumOps.ToDouble(data[i, _protectedAttributeIndex]);
-            featureVals[i] = NumOps.ToDouble(data[i, featureIndex]);
-        }
-
-        Array.Sort(protectedVals.ToArray());
-        double median = protectedVals[n / 2];
+        // Split by protected attribute (threshold at the median, the n/2-th smallest value)
+        T median = engine.TensorSum(PreprocessingTensorOps.ColumnOrderStatistic(
+            engine.Reshape(protectedVals, new[] { n, 1 }), n / 2));
+        var upper = engine.TensorGreaterThan(protectedVals, median);
+        var lower = PreprocessingTensorOps.Not(upper);
 
         // Compute mean feature value for each group
-        double sum0 = 0, count0 = 0;
-        double sum1 = 0, count1 = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            double prot = NumOps.ToDouble(data[i, _protectedAttributeIndex]);
-            double feat = NumOps.ToDouble(data[i, featureIndex]);
-
-            if (prot <= median)
-            {
-                sum0 += feat;
-                count0++;
-            }
-            else
-            {
-                sum1 += feat;
-                count1++;
-            }
-        }
-
-        double mean0 = count0 > 0 ? sum0 / count0 : 0;
-        double mean1 = count1 > 0 ? sum1 / count1 : 0;
+        T count0 = engine.TensorSum(lower);
+        T count1 = engine.TensorSum(upper);
+        T mean0 = NumOps.GreaterThan(count0, NumOps.Zero)
+            ? NumOps.Divide(engine.TensorSum(engine.TensorMultiply(featureVals, lower)), count0)
+            : NumOps.Zero;
+        T mean1 = NumOps.GreaterThan(count1, NumOps.Zero)
+            ? NumOps.Divide(engine.TensorSum(engine.TensorMultiply(featureVals, upper)), count1)
+            : NumOps.Zero;
 
         // Disparate impact ratio (closer to 1 is fairer)
-        if (Math.Abs(mean1) < 1e-10 && Math.Abs(mean0) < 1e-10)
-            return 1.0;
-        if (Math.Abs(mean1) < 1e-10)
-            return 0;
+        T floor = NumOps.FromDouble(1e-10);
+        bool zero0 = NumOps.LessThan(NumOps.Abs(mean0), floor);
+        bool zero1 = NumOps.LessThan(NumOps.Abs(mean1), floor);
+        if (zero1 && zero0)
+            return NumOps.One;
+        if (zero1)
+            return NumOps.Zero;
 
-        return Math.Min(mean0 / mean1, mean1 / mean0);
+        T ratio = NumOps.Divide(mean0, mean1);
+        T inverse = NumOps.Divide(mean1, mean0);
+        return NumOps.LessThan(inverse, ratio) ? inverse : ratio;
     }
+
 }
