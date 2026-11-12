@@ -207,40 +207,46 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         int hiddenDim = textHidden.Length;
 
         // Step 2: Extract conditioning from LLM output
-        var conditioning = new double[Math.Min(dim, 512)];
-        int condDim = conditioning.Length;
-        for (int d = 0; d < condDim; d++)
-        {
-            double val = NumOps.ToDouble(textHidden[d % hiddenDim]);
-            // Generation LoRA scaling
-            double loraScale = 0.15 * Math.Sin(d * 0.005);
-            conditioning[d] = val * (1.0 + loraScale);
-        }
+        var engine = Engine;
+        int condDim = Math.Min(dim, 512);
+        // conditioning[d] = hidden[d % hiddenDim] * (1 + 0.15 * sin(d * 0.005))  (generation LoRA scaling)
+        var loraScale = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, condDim, 1), NumOps.FromDouble(0.005))),
+                NumOps.FromDouble(0.15)),
+            NumOps.One);
+        var conditioning = engine.TensorMultiply(CyclicTake(textHidden, condDim), loraScale);
 
         // Step 3: Rectified flow - ODE integration from t=1 (noise) to t=0 (clean)
-        // Initialize at t=1 with standard Gaussian noise
-        var latent = new double[outPixels];
-        for (int i = 0; i < outPixels; i++)
-            latent[i] = Math.Sin(i * 0.37 + 0.5) * 0.7 + Math.Cos(i * 0.23 - 0.3) * 0.3;
+        // Initialize at t=1 with the deterministic pattern sin(0.37 i + 0.5) * 0.7 + cos(0.23 i - 0.3) * 0.3
+        var pixelIndex = engine.TensorArange<T>(0, outPixels, 1);
+        var latent = engine.TensorAdd(
+            engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorAddScalar(
+                    engine.TensorMultiplyScalar(pixelIndex, NumOps.FromDouble(0.37)), NumOps.FromDouble(0.5))),
+                NumOps.FromDouble(0.7)),
+            engine.TensorMultiplyScalar(
+                engine.TensorCos(engine.TensorSubtractScalar(
+                    engine.TensorMultiplyScalar(pixelIndex, NumOps.FromDouble(0.23)), NumOps.FromDouble(0.3))),
+                NumOps.FromDouble(0.3)));
 
         int numOdeSteps = 50;
         double cfgScale = 5.0;
+        var dimIndex = engine.TensorArange<T>(1, dim + 1, 1);
+        var scaledConditioning = dim > 0
+            ? engine.TensorMultiplyScalar(CyclicTake(conditioning, dim), NumOps.FromDouble(0.1))
+            : new Tensor<T>([0]);
 
         for (int step = 0; step < numOdeSteps; step++)
         {
             double t = 1.0 - (double)step / numOdeSteps;
             double dt = 1.0 / numOdeSteps;
 
-            // Predict velocity field v(x_t, t, cond)
-            var stepInput = new Tensor<T>([dim]);
-            for (int d = 0; d < dim; d++)
-            {
-                int latIdx = d % outPixels;
-                double xt = latent[latIdx];
-                double cond = conditioning[d % condDim];
-                double timeEmb = Math.Sin(t * (d + 1) * 0.03) * 0.1;
-                stepInput[d] = NumOps.FromDouble(xt + cond * 0.1 + timeEmb);
-            }
+            // Predict velocity field v(x_t, t, cond): input[d] = x_t[d % outPixels] + 0.1 * cond[d % condDim] + timeEmb[d]
+            var timeEmb = engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorMultiplyScalar(dimIndex, NumOps.FromDouble(t * 0.03))), NumOps.FromDouble(0.1));
+            var latentView = CyclicTake(latent, dim);
+            var stepInput = engine.TensorAdd(engine.TensorAdd(latentView, scaledConditioning), timeEmb);
 
             // Conditional velocity prediction
             var condVelocity = stepInput;
@@ -248,39 +254,24 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
                 condVelocity = Layers[i].Forward(condVelocity);
 
             // Unconditional velocity (no text conditioning)
-            var uncondInput = new Tensor<T>([dim]);
-            for (int d = 0; d < dim; d++)
-            {
-                int latIdx = d % outPixels;
-                uncondInput[d] = NumOps.FromDouble(
-                    latent[latIdx] + Math.Sin(t * (d + 1) * 0.03) * 0.1
-                );
-            }
+            var uncondInput = engine.TensorAdd(latentView, timeEmb);
             var uncondVelocity = uncondInput;
             for (int i = _encoderLayerEnd; i < Layers.Count; i++)
                 uncondVelocity = Layers[i].Forward(uncondVelocity);
 
-            // CFG-guided velocity
+            // CFG-guided velocity, read cyclically over the pixels
             int velDim = condVelocity.Length;
-            for (int i = 0; i < outPixels; i++)
-            {
-                int vIdx = i % velDim;
-                double vCond = NumOps.ToDouble(condVelocity[vIdx]);
-                double vUncond = NumOps.ToDouble(uncondVelocity[vIdx]);
-                double vGuided = vUncond + cfgScale * (vCond - vUncond);
+            var vCond = condVelocity.Reshape([velDim]);
+            var vUncond = engine.TensorSlice(uncondVelocity.Reshape([uncondVelocity.Length]), [0], [velDim]);
+            var vGuided = engine.TensorAdd(
+                vUncond, engine.TensorMultiplyScalar(engine.TensorSubtract(vCond, vUncond), NumOps.FromDouble(cfgScale)));
 
-                // Euler step: x_{t-dt} = x_t - dt * v(x_t, t)
-                latent[i] -= dt * vGuided;
-            }
+            // Euler step: x_{t-dt} = x_t - dt * v(x_t, t)
+            latent = engine.TensorSubtract(latent, engine.TensorMultiplyScalar(CyclicTake(vGuided, outPixels), NumOps.FromDouble(dt)));
         }
 
         // Step 4: Output
-        var result = new Tensor<T>([outPixels]);
-        for (int i = 0; i < outPixels; i++)
-        {
-            double v = 1.0 / (1.0 + Math.Exp(-latent[i]));
-            result[i] = NumOps.FromDouble(v);
-        }
+        var result = engine.TensorSigmoid(latent);
         return result;
     }
 
