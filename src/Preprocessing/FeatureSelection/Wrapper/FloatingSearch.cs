@@ -28,14 +28,14 @@ public class FloatingSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     private readonly int _nFeaturesToSelect;
     private readonly int _maxBacktrack;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MaxBacktrack => _maxBacktrack;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,25 +70,26 @@ public class FloatingSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        _featureScores = new double[p];
+        // |Pearson r| of every feature with the target
+        var featureScores = WrapperScoringOps.AbsTargetCorrelations(data, target, Enumerable.Range(0, p).ToArray());
         var selected = new List<int>();
         var available = new HashSet<int>(Enumerable.Range(0, p));
+        var everAdded = new SortedSet<int>();
 
         while (selected.Count < Math.Min(_nFeaturesToSelect, p))
         {
             // Forward step: add best feature
             int bestFeature = -1;
-            double bestScore = double.MinValue;
+            T bestScore = NumOps.MinValue;
 
             foreach (int candidate in available)
             {
                 var testSet = selected.Concat(new[] { candidate }).ToArray();
-                double score = EvaluateSubset(data, target, testSet, n);
+                T score = EvaluateSubset(data, featureScores, testSet);
 
-                if (score > bestScore)
+                if (WrapperScoringOps.IsAbove(score, bestScore))
                 {
                     bestScore = score;
                     bestFeature = candidate;
@@ -99,7 +100,7 @@ public class FloatingSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             {
                 selected.Add(bestFeature);
                 available.Remove(bestFeature);
-                _featureScores[bestFeature] = EvaluateFeature(data, target, bestFeature, n);
+                everAdded.Add(bestFeature);
             }
 
             // Conditional exclusion (backtrack)
@@ -107,14 +108,14 @@ public class FloatingSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             while (selected.Count > 2 && backtrackCount < _maxBacktrack)
             {
                 int worstFeature = -1;
-                double bestWithoutOne = EvaluateSubset(data, target, selected.ToArray(), n);
+                T bestWithoutOne = EvaluateSubset(data, featureScores, selected.ToArray());
 
                 foreach (int candidate in selected.Take(selected.Count - 1))
                 {
                     var testSet = selected.Where(f => f != candidate).ToArray();
-                    double score = EvaluateSubset(data, target, testSet, n);
+                    T score = EvaluateSubset(data, featureScores, testSet);
 
-                    if (score > bestWithoutOne)
+                    if (WrapperScoringOps.IsAbove(score, bestWithoutOne))
                     {
                         bestWithoutOne = score;
                         worstFeature = candidate;
@@ -134,24 +135,21 @@ public class FloatingSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             }
         }
 
+        // Each feature ever added keeps its own score (0 for the others)
+        var added = everAdded.ToArray();
+        _featureScores = WrapperScoringOps.ScoresVector(p, NumOps.Zero, added, WrapperScoringOps.Gather(featureScores, added));
         _selectedIndices = selected.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double EvaluateSubset(Matrix<T> data, Vector<T> target, int[] features, int n)
+    private T EvaluateSubset(Matrix<T> data, Tensor<T> featureScores, int[] features)
     {
-        if (features.Length == 0) return 0;
+        if (features.Length == 0) return NumOps.Zero;
 
         // Total |Pearson r| with the target, penalized by the mean |r| over the feature pairs (redundancy)
-        double totalScore = WrapperScoringOps.ToDouble(
-            Engine.TensorSum(WrapperScoringOps.AbsTargetCorrelations(data, target, features)));
-        return totalScore - 0.5 * WrapperScoringOps.MeanAbsPairCorrelation(data, features);
-    }
-
-    private double EvaluateFeature(Matrix<T> data, Vector<T> target, int j, int n)
-    {
-        // |Pearson r| with the target
-        return WrapperScoringOps.AbsTargetCorrelation(data, target, j);
+        T totalScore = Engine.TensorSum(WrapperScoringOps.Gather(featureScores, features));
+        return NumOps.Subtract(totalScore,
+            NumOps.Multiply(NumOps.FromDouble(0.5), WrapperScoringOps.MeanAbsPairCorrelation(data, features)));
     }
 
     /// <inheritdoc />

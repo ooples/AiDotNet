@@ -28,15 +28,15 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nFeaturesToSelect;
     private readonly double _alphaAdd;
     private readonly double _alphaRemove;
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scoringFunction;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _scoringFunction;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -46,7 +46,7 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int nFeaturesToSelect = 10,
         double alphaAdd = 0.05,
         double alphaRemove = 0.10,
-        Func<Matrix<T>, Vector<T>, int[], double>? scoringFunction = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? scoringFunction = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -73,16 +73,16 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var scorer = _scoringFunction ?? DefaultScorer;
 
         var selected = new HashSet<int>();
         var available = Enumerable.Range(0, p).ToHashSet();
-        _featureImportances = new double[p];
-
-        double currentScore = 0;
+        var importances = new Dictionary<int, T>();
+        T alphaAdd = NumOps.FromDouble(_alphaAdd);
+        T alphaRemove = NumOps.FromDouble(_alphaRemove);
+        T currentScore = NumOps.Zero;
 
         while (selected.Count < _nFeaturesToSelect && available.Count > 0)
         {
@@ -90,15 +90,15 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
 
             // Forward step: try to add best feature
             int bestToAdd = -1;
-            double bestAddScore = currentScore;
+            T bestAddScore = currentScore;
 
             foreach (int j in available)
             {
                 var candidate = selected.Append(j).ToArray();
-                double score = scorer(data, target, candidate);
-                double improvement = score - currentScore;
+                T score = scorer(data, target, candidate);
+                T improvement = WrapperScoringOps.Subtract(score, currentScore);
 
-                if (improvement > _alphaAdd && score > bestAddScore)
+                if (WrapperScoringOps.IsAbove(improvement, alphaAdd) && WrapperScoringOps.IsAbove(score, bestAddScore))
                 {
                     bestAddScore = score;
                     bestToAdd = j;
@@ -110,7 +110,7 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
                 selected.Add(bestToAdd);
                 available.Remove(bestToAdd);
                 currentScore = bestAddScore;
-                _featureImportances[bestToAdd] = bestAddScore;
+                importances[bestToAdd] = bestAddScore;
                 changed = true;
             }
 
@@ -118,22 +118,22 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             if (selected.Count > 1)
             {
                 int worstToRemove = -1;
-                double bestRemoveScore = double.NegativeInfinity;
+                T bestRemoveScore = NumOps.FromDouble(double.NegativeInfinity);
 
                 foreach (int j in selected)
                 {
                     var candidate = selected.Where(x => x != j).ToArray();
-                    double score = scorer(data, target, candidate);
-                    double degradation = currentScore - score;
+                    T score = scorer(data, target, candidate);
+                    T degradation = WrapperScoringOps.Subtract(currentScore, score);
 
-                    if (degradation < _alphaRemove && score > bestRemoveScore)
+                    if (WrapperScoringOps.IsBelow(degradation, alphaRemove) && WrapperScoringOps.IsAbove(score, bestRemoveScore))
                     {
                         bestRemoveScore = score;
                         worstToRemove = j;
                     }
                 }
 
-                if (worstToRemove >= 0 && bestRemoveScore > currentScore - _alphaRemove)
+                if (worstToRemove >= 0 && WrapperScoringOps.IsAbove(bestRemoveScore, WrapperScoringOps.Subtract(currentScore, alphaRemove)))
                 {
                     selected.Remove(worstToRemove);
                     available.Add(worstToRemove);
@@ -146,65 +146,37 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
                 break;
         }
 
+        _featureImportances = WrapperScoringOps.ScoresVector(p, NumOps.Zero, importances);
         _selectedIndices = selected.OrderBy(x => x).ToArray();
 
         if (_selectedIndices.Length == 0)
         {
             // Fall back to top by individual correlation
-            _selectedIndices = Enumerable.Range(0, p)
-                .Select(j => (Index: j, Score: ComputeCorrelation(data, target, j)))
-                .OrderByDescending(x => x.Score)
-                .Take(Math.Min(_nFeaturesToSelect, p))
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            var correlations = Engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
+                Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)));
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(correlations, Math.Min(_nFeaturesToSelect, p));
         }
 
         IsFitted = true;
     }
 
-    private double DefaultScorer(Matrix<T> data, Vector<T> target, int[] features)
+    private T DefaultScorer(Matrix<T> data, Vector<T> target, int[] features)
     {
-        if (features.Length == 0) return 0;
+        if (features.Length == 0) return NumOps.Zero;
 
         // Use sum of squared correlations as default score
-        double score = 0;
-        foreach (int j in features)
-        {
-            double corr = ComputeCorrelation(data, target, j);
-            score += corr * corr;
-        }
+        var correlations = PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
+            WrapperScoringOps.Columns(data, features), Tensor<T>.FromVector(target));
+        T score = Engine.TensorSumOfSquares(correlations);
 
-        // Penalize feature redundancy
+        // Penalize feature redundancy: score (1 - redundancy / 2) with the mean |r| over the feature pairs
         if (features.Length > 1)
         {
-            double redundancy = 0;
-            int pairs = 0;
-            for (int i = 0; i < features.Length; i++)
-            {
-                for (int k = i + 1; k < features.Length; k++)
-                {
-                    redundancy += Math.Abs(ComputeFeatureCorrelation(data, features[i], features[k]));
-                    pairs++;
-                }
-            }
-            if (pairs > 0)
-                redundancy /= pairs;
-
-            score -= redundancy * score * 0.5;
+            T redundancy = WrapperScoringOps.MeanAbsPairCorrelationWithDenominatorGuard(data, features);
+            score = NumOps.Subtract(score, NumOps.Multiply(NumOps.Multiply(redundancy, score), NumOps.FromDouble(0.5)));
         }
 
         return score;
-    }
-
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int featureIdx)
-    {
-        return WrapperScoringOps.AbsTargetCorrelationWithDenominatorGuard(data, target, featureIdx);
-    }
-
-    private double ComputeFeatureCorrelation(Matrix<T> data, int f1, int f2)
-    {
-        return WrapperScoringOps.ColumnCorrelationWithDenominatorGuard(data, f1, f2);
     }
 
     /// <inheritdoc />

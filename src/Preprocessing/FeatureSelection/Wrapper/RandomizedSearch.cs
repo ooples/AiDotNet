@@ -32,7 +32,7 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
     private Tensor<T>? _featureScoreTensor;
     private Vector<T>? _featureScores;
-    private double _bestScore;
+    private T _bestScore = MathHelper.GetNumericOperations<T>().MinValue;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -40,7 +40,7 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NIterations => _nIterations;
     public Vector<T>? FeatureScores => _featureScores;
-    public double BestScore => _bestScore;
+    public T BestScore => _bestScore;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -88,7 +88,7 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         _featureScoreTensor = featureScores;
         _featureScores = featureScores.ToVector();
 
-        _bestScore = double.MinValue;
+        _bestScore = NumOps.MinValue;
         _selectedIndices = null;
 
         // Track seen combinations to avoid duplicates
@@ -106,9 +106,9 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             seenCombinations.Add(key);
 
             // Evaluate subset
-            double score = EvaluateSubset(subset);
+            T score = EvaluateSubset(subset);
 
-            if (score > _bestScore)
+            if (WrapperScoringOps.IsAbove(score, _bestScore))
             {
                 _bestScore = score;
                 _selectedIndices = subset.OrderBy(x => x).ToArray();
@@ -139,11 +139,10 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         return subset;
     }
 
-    private double EvaluateSubset(int[] subset)
+    private T EvaluateSubset(int[] subset)
     {
         var featureScores = _featureScoreTensor ?? throw new InvalidOperationException("Feature scores have not been computed.");
-        var scores = Engine.TensorIndexSelect(featureScores, new Tensor<int>(subset, new[] { subset.Length }), 0);
-        return WrapperScoringOps.ToDouble(Engine.TensorMean(scores));
+        return Engine.TensorMean(WrapperScoringOps.Gather(featureScores, subset));
     }
 
     private Tensor<T> ComputeFeatureScores(Matrix<T> data, Vector<T> target, int n, int p)

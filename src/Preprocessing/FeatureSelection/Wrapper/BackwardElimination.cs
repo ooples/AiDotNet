@@ -25,15 +25,15 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 public class BackwardElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scoringFunction;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _scoringFunction;
 
-    private double[]? _removalScores;
+    private Vector<T>? _removalScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? RemovalScores => _removalScores;
+    public Vector<T>? RemovalScores => _removalScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -41,7 +41,7 @@ public class BackwardElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
     public BackwardElimination(
         int nFeaturesToSelect = 10,
-        Func<Matrix<T>, Vector<T>, int[], double>? scoringFunction = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? scoringFunction = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -70,23 +70,20 @@ public class BackwardElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
 
         var remaining = Enumerable.Range(0, p).ToList();
-        _removalScores = new double[p];
-
-        // Initialize removal scores
-        for (int j = 0; j < p; j++)
-            _removalScores[j] = double.MaxValue;
+        // Removal scores (the maximum value for the features never removed)
+        var scores = new Dictionary<int, T>();
 
         while (remaining.Count > nToSelect)
         {
             int worstFeature = -1;
-            double bestScoreAfterRemoval = double.MinValue;
+            T bestScoreAfterRemoval = NumOps.MinValue;
 
             foreach (int candidate in remaining)
             {
                 var testSet = remaining.Where(x => x != candidate).ToArray();
-                double score = EvaluateSubset(data, target, testSet);
+                T score = EvaluateSubset(data, target, testSet);
 
-                if (score > bestScoreAfterRemoval)
+                if (WrapperScoringOps.IsAbove(score, bestScoreAfterRemoval))
                 {
                     bestScoreAfterRemoval = score;
                     worstFeature = candidate;
@@ -95,7 +92,7 @@ public class BackwardElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
             if (worstFeature >= 0)
             {
-                _removalScores[worstFeature] = bestScoreAfterRemoval;
+                scores[worstFeature] = bestScoreAfterRemoval;
                 remaining.Remove(worstFeature);
             }
             else
@@ -104,14 +101,15 @@ public class BackwardElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             }
         }
 
+        _removalScores = WrapperScoringOps.ScoresVector(p, NumOps.MaxValue, scores);
         _selectedIndices = remaining.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double EvaluateSubset(Matrix<T> data, Vector<T> target, int[] features)
+    private T EvaluateSubset(Matrix<T> data, Vector<T> target, int[] features)
     {
         if (features.Length == 0)
-            return double.MinValue;
+            return NumOps.MinValue;
 
         if (_scoringFunction is not null)
             return _scoringFunction(data, target, features);
@@ -119,14 +117,14 @@ public class BackwardElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         return DefaultScoring(data, target, features);
     }
 
-    private double DefaultScoring(Matrix<T> data, Vector<T> target, int[] features)
+    private T DefaultScoring(Matrix<T> data, Vector<T> target, int[] features)
     {
         // R-squared of the least-squares fit (with intercept) of the target on the subset, as scikit-learn's
         // LinearRegression().fit(X, y).score(X, y); the sum of squared univariate correlations it replaces is only
         // the R-squared when the features are uncorrelated
         int n = data.Rows;
         if (features.Length == 0 || n <= features.Length)
-            return 0;
+            return NumOps.Zero;
 
         return WrapperScoringOps.LinearRegressionRSquared(data, target, features);
     }

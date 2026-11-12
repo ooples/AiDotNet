@@ -6,7 +6,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 
 /// <summary>
 /// Whole-tensor default scorers shared by the wrapper feature selectors, generic in <typeparamref name="T"/>.
-/// The selectors' scorer delegates return <see cref="double"/>, so each scorer converts its final value once.
+/// Scores are returned in <typeparamref name="T"/>; the scalar helpers below let the selectors' per-candidate search
+/// loops compare and combine scores without element-wise numeric-operation calls.
 /// </summary>
 internal static class WrapperScoringOps
 {
@@ -25,49 +26,49 @@ internal static class WrapperScoringOps
             PreprocessingTensorOps.TargetCorrelations(Columns(data, features), Tensor<T>.FromVector(target), Epsilon));
 
     /// <summary>|Pearson r| of column <paramref name="feature"/> with the target (see <see cref="AbsTargetCorrelations{T}"/>).</summary>
-    public static double AbsTargetCorrelation<T>(Matrix<T> data, Vector<T> target, int feature) =>
-        ToDouble(AbsTargetCorrelations(data, target, new[] { feature }).GetFlat(0));
+    public static T AbsTargetCorrelation<T>(Matrix<T> data, Vector<T> target, int feature) =>
+        AbsTargetCorrelations(data, target, new[] { feature }).GetFlat(0);
 
     /// <summary>
     /// |Pearson r| of column <paramref name="feature"/> with <paramref name="target"/>; 0 when
     /// <c>sqrt(sxx * syy)</c> is not above 1e-10.
     /// </summary>
-    public static double AbsTargetCorrelationWithDenominatorGuard<T>(Matrix<T> data, Vector<T> target, int feature) =>
-        Math.Abs(ToDouble(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
-            Columns(data, new[] { feature }), Tensor<T>.FromVector(target), Epsilon).GetFlat(0)));
+    public static T AbsTargetCorrelationWithDenominatorGuard<T>(Matrix<T> data, Vector<T> target, int feature) =>
+        AiDotNetEngine.Current.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
+            Columns(data, new[] { feature }), Tensor<T>.FromVector(target), Epsilon)).GetFlat(0);
 
     /// <summary>Mean of <see cref="AbsTargetCorrelations{T}"/> over the given (non-empty) columns.</summary>
-    public static double MeanAbsTargetCorrelation<T>(Matrix<T> data, Vector<T> target, int[] features) =>
-        ToDouble(AiDotNetEngine.Current.TensorMean(AbsTargetCorrelations(data, target, features)));
+    public static T MeanAbsTargetCorrelation<T>(Matrix<T> data, Vector<T> target, int[] features) =>
+        AiDotNetEngine.Current.TensorMean(AbsTargetCorrelations(data, target, features));
 
     /// <summary>
     /// Pearson r between columns <paramref name="first"/> and <paramref name="second"/>; 0 when either centred sum
     /// of squares is not above 1e-10.
     /// </summary>
-    public static double ColumnCorrelation<T>(Matrix<T> data, int first, int second) =>
-        ToDouble(PreprocessingTensorOps.TargetCorrelations(
-            Columns(data, new[] { first }), Tensor<T>.FromVector(data.GetColumn(second)), Epsilon).GetFlat(0));
+    public static T ColumnCorrelation<T>(Matrix<T> data, int first, int second) =>
+        PreprocessingTensorOps.TargetCorrelations(
+            Columns(data, new[] { first }), Tensor<T>.FromVector(data.GetColumn(second)), Epsilon).GetFlat(0);
 
     /// <summary>
     /// Pearson r between columns <paramref name="first"/> and <paramref name="second"/>; 0 when
     /// <c>sqrt(sxx * syy)</c> is not above 1e-10.
     /// </summary>
-    public static double ColumnCorrelationWithDenominatorGuard<T>(Matrix<T> data, int first, int second) =>
-        ToDouble(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
-            Columns(data, new[] { first }), Tensor<T>.FromVector(data.GetColumn(second)), Epsilon).GetFlat(0));
+    public static T ColumnCorrelationWithDenominatorGuard<T>(Matrix<T> data, int first, int second) =>
+        PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
+            Columns(data, new[] { first }), Tensor<T>.FromVector(data.GetColumn(second)), Epsilon).GetFlat(0);
 
     /// <summary>
     /// Mean |Pearson r| over the pairs (i &lt; j) of the given columns, a pair scoring 0 when either centred sum of
     /// squares is not above 1e-10; 0 when there are fewer than two columns.
     /// </summary>
-    public static double MeanAbsPairCorrelation<T>(Matrix<T> data, int[] features)
+    public static T MeanAbsPairCorrelation<T>(Matrix<T> data, int[] features)
     {
+        var ops = MathHelper.GetNumericOperations<T>();
         int k = features.Length;
         if (k < 2)
-            return 0;
+            return ops.Zero;
 
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         var centered = SelectorTensorOps.CenterColumns(Columns(data, features));
         var sumOfSquares = SelectorTensorOps.ColumnSumOfSquares(centered);
         var varying = engine.TensorGreaterThan(sumOfSquares, ops.FromDouble(Epsilon));
@@ -76,7 +77,7 @@ internal static class WrapperScoringOps
         var correlation = engine.TensorDivide(products, engine.TensorSqrt(engine.TensorOuter(safe, safe)));
         var counted = engine.TensorMultiply(engine.TensorOuter(varying, varying), SelectorTensorOps.StrictUpperMask<T>(k));
         T total = engine.TensorSum(engine.TensorMultiply(counted, engine.TensorAbs(correlation)));
-        return ToDouble(total) / (k * (k - 1) / 2);
+        return ops.Divide(total, ops.FromDouble(k * (k - 1) / 2));
     }
 
     /// <summary>
@@ -122,15 +123,15 @@ internal static class WrapperScoringOps
     /// Coefficient of determination <c>1 - SS_res / SS_tot</c> of <paramref name="predictions"/> for
     /// <paramref name="y"/> (both [m]); 0 when <c>SS_tot</c> is not above 1e-10.
     /// </summary>
-    public static double RSquared<T>(Tensor<T> y, Tensor<T> predictions)
+    public static T RSquared<T>(Tensor<T> y, Tensor<T> predictions)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, predictions));
         T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y)));
         return ops.GreaterThan(ssTot, ops.FromDouble(Epsilon))
-            ? ToDouble(ops.Subtract(ops.One, ops.Divide(ssRes, ssTot)))
-            : 0;
+            ? ops.Subtract(ops.One, ops.Divide(ssRes, ssTot))
+            : ops.Zero;
     }
 
     /// <summary>
@@ -158,7 +159,7 @@ internal static class WrapperScoringOps
     /// In-sample R^2 of the least-squares fit (with intercept) of <paramref name="target"/> on the given columns,
     /// scikit-learn's <c>LinearRegression().fit(X, y).score(X, y)</c>.
     /// </summary>
-    public static double LinearRegressionRSquared<T>(Matrix<T> data, Vector<T> target, int[] features)
+    public static T LinearRegressionRSquared<T>(Matrix<T> data, Vector<T> target, int[] features)
     {
         var x = Columns(data, features);
         var y = Tensor<T>.FromVector(target);
@@ -166,11 +167,89 @@ internal static class WrapperScoringOps
         return RSquared(y, Predict(x, slopes, xMean, yMean));
     }
 
-    /// <summary>
-    /// Converts per-feature values to the <see cref="double"/> array a selector's double-valued search heuristics use.
-    /// </summary>
-    public static double[] ToDoubleArray<T>(Tensor<T> values) => values.Cast<double>().ToArray();
+    /// <summary>A double constant as <typeparamref name="T"/>.</summary>
+    public static T Scalar<T>(double value) => MathHelper.GetNumericOperations<T>().FromDouble(value);
 
-    /// <summary>Converts a scorer result to the <see cref="double"/> the scorer delegates return.</summary>
-    public static double ToDouble<T>(T value) => MathHelper.GetNumericOperations<T>().ToDouble(value);
+    /// <summary><c>a + b</c>.</summary>
+    public static T Add<T>(T a, T b) => MathHelper.GetNumericOperations<T>().Add(a, b);
+
+    /// <summary><c>a - b</c>.</summary>
+    public static T Subtract<T>(T a, T b) => MathHelper.GetNumericOperations<T>().Subtract(a, b);
+
+    /// <summary><c>a * b</c>.</summary>
+    public static T Multiply<T>(T a, T b) => MathHelper.GetNumericOperations<T>().Multiply(a, b);
+
+    /// <summary><c>a / b</c>.</summary>
+    public static T Divide<T>(T a, T b) => MathHelper.GetNumericOperations<T>().Divide(a, b);
+
+    /// <summary>Whether <c>a &gt; b</c>.</summary>
+    public static bool IsAbove<T>(T a, T b) => MathHelper.GetNumericOperations<T>().GreaterThan(a, b);
+
+    /// <summary>Whether <c>a &lt; b</c>.</summary>
+    public static bool IsBelow<T>(T a, T b) => MathHelper.GetNumericOperations<T>().LessThan(a, b);
+
+    /// <summary>The larger of <paramref name="a"/> and <paramref name="b"/> (<paramref name="a"/> on ties).</summary>
+    public static T Max<T>(T a, T b) => IsAbove(b, a) ? b : a;
+
+    /// <summary>A 1-D tensor holding <paramref name="values"/>.</summary>
+    public static Tensor<T> FromList<T>(IReadOnlyList<T> values) =>
+        new Tensor<T>(values.ToArray(), new[] { values.Count });
+    /// <summary>
+    /// A [length] vector holding <paramref name="values"/> at their keys and <paramref name="fill"/> elsewhere.
+    /// </summary>
+    public static Vector<T> ScoresVector<T>(int length, T fill, IReadOnlyDictionary<int, T> values)
+    {
+        var result = PreprocessingTensorOps.Filled(new[] { length }, fill);
+        if (values.Count > 0)
+        {
+            var keys = values.Keys.ToArray();
+            var entries = new Tensor<T>(keys.Select(key => values[key]).ToArray(), new[] { keys.Length });
+            result = AiDotNetEngine.Current.TensorIndexCopy(result, 0, new Tensor<int>(keys, new[] { keys.Length }), entries);
+        }
+
+        return result.ToVector();
+    }
+
+    /// <summary>
+    /// A [length] vector holding <paramref name="values"/> ([keys.Length]) at <paramref name="keys"/> and
+    /// <paramref name="fill"/> elsewhere.
+    /// </summary>
+    public static Vector<T> ScoresVector<T>(int length, T fill, int[] keys, Tensor<T> values)
+    {
+        var result = PreprocessingTensorOps.Filled(new[] { length }, fill);
+        if (keys.Length > 0)
+        {
+            result = AiDotNetEngine.Current.TensorIndexCopy(result, 0,
+                new Tensor<int>((int[])keys.Clone(), new[] { keys.Length }), values);
+        }
+
+        return result.ToVector();
+    }
+
+    /// <summary>The entries of a 1-D tensor at <paramref name="positions"/>, as [positions.Length].</summary>
+    public static Tensor<T> Gather<T>(Tensor<T> values, int[] positions) =>
+        AiDotNetEngine.Current.TensorIndexSelect(values, new Tensor<int>((int[])positions.Clone(), new[] { positions.Length }), 0);
+
+    /// <summary>
+    /// Mean |Pearson r| over the pairs (i &lt; j) of the given columns, a pair scoring 0 when <c>sqrt(sxx * syy)</c> is
+    /// not above 1e-10; 0 when there are fewer than two columns.
+    /// </summary>
+    public static T MeanAbsPairCorrelationWithDenominatorGuard<T>(Matrix<T> data, int[] features)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int k = features.Length;
+        if (k < 2)
+            return ops.Zero;
+
+        var engine = AiDotNetEngine.Current;
+        var centered = SelectorTensorOps.CenterColumns(Columns(data, features));
+        var sumOfSquares = SelectorTensorOps.ColumnSumOfSquares(centered);
+        var denominator = engine.TensorSqrt(engine.TensorOuter(sumOfSquares, sumOfSquares));
+        var valid = engine.TensorGreaterThan(denominator, ops.FromDouble(Epsilon));
+        var safe = engine.TensorWhere(valid, denominator, PreprocessingTensorOps.Filled(new[] { k, k }, ops.One));
+        var correlation = engine.TensorDivide(engine.TensorMatMul(engine.TensorTranspose(centered), centered), safe);
+        var counted = engine.TensorMultiply(valid, SelectorTensorOps.StrictUpperMask<T>(k));
+        T total = engine.TensorSum(engine.TensorMultiply(counted, engine.TensorAbs(correlation)));
+        return ops.Divide(total, ops.FromDouble(k * (k - 1) / 2));
+    }
 }

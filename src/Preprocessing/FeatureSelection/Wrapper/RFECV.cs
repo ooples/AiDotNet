@@ -29,16 +29,16 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
     private readonly int _step;
     private readonly int _nFolds;
     private readonly int? _randomState;
-    private readonly Func<Matrix<T>, Vector<T>, double>? _scoringFunc;
-    private readonly Func<Matrix<T>, Vector<T>, double[]>? _importanceFunc;
+    private readonly Func<Matrix<T>, Vector<T>, T>? _scoringFunc;
+    private readonly Func<Matrix<T>, Vector<T>, Vector<T>>? _importanceFunc;
 
-    private double[]? _cvScores;
+    private Vector<T>? _cvScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
     private int _optimalFeatureCount;
 
     public int MinFeatures => _minFeatures;
-    public double[]? CVScores => _cvScores;
+    public Vector<T>? CVScores => _cvScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     public int OptimalFeatureCount => _optimalFeatureCount;
@@ -46,8 +46,8 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
     public override bool SupportsInverseTransform => false;
 
     public RFECV(
-        Func<Matrix<T>, Vector<T>, double>? scoringFunc = null,
-        Func<Matrix<T>, Vector<T>, double[]>? importanceFunc = null,
+        Func<Matrix<T>, Vector<T>, T>? scoringFunc = null,
+        Func<Matrix<T>, Vector<T>, Vector<T>>? importanceFunc = null,
         int minFeatures = 1,
         int step = 1,
         int nFolds = 5,
@@ -100,13 +100,14 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         // Track which features are still active
         var activeFeatures = Enumerable.Range(0, p).ToList();
         var featureRankings = new int[p];
-        var cvScoresList = new List<double>();
+        var cvScoresList = new List<T>();
+        T foldCount = NumOps.FromDouble(_nFolds);
         int currentRank = p;
 
         while (activeFeatures.Count >= _minFeatures)
         {
             // Cross-validation for current feature set
-            double totalScore = 0;
+            T totalScore = NumOps.Zero;
 
             for (int fold = 0; fold < _nFolds; fold++)
             {
@@ -126,11 +127,11 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
                 var valData = ExtractSubset(data, valIdx, activeFeatures);
                 var valTarget = ExtractVector(target, valIdx);
 
-                double score = EvaluateScore(trainData, trainTarget, valData, valTarget);
-                totalScore += score;
+                T score = EvaluateScore(trainData, trainTarget, valData, valTarget);
+                totalScore = WrapperScoringOps.Add(totalScore, score);
             }
 
-            cvScoresList.Add(totalScore / _nFolds);
+            cvScoresList.Add(WrapperScoringOps.Divide(totalScore, foldCount));
 
             if (activeFeatures.Count <= _minFeatures)
                 break;
@@ -139,11 +140,9 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
             var importances = GetImportances(data, target, activeFeatures, n);
             int nToRemove = Math.Min(_step, activeFeatures.Count - _minFeatures);
 
-            var toRemove = importances
-                .Select((imp, idx) => (Importance: imp, FeatureIdx: activeFeatures[idx]))
-                .OrderBy(x => x.Importance)
+            var toRemove = PreprocessingTensorOps.StableOrder(Tensor<T>.FromVector(importances), descending: false)
                 .Take(nToRemove)
-                .Select(x => x.FeatureIdx)
+                .Select(position => activeFeatures[position])
                 .ToList();
 
             foreach (int f in toRemove)
@@ -157,19 +156,11 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         foreach (int f in activeFeatures)
             featureRankings[f] = 1;
 
-        _cvScores = cvScoresList.ToArray();
+        var cvScores = WrapperScoringOps.FromList(cvScoresList);
+        _cvScores = cvScores.ToVector();
 
-        // Find optimal feature count
-        int bestIdx = 0;
-        double bestScore = _cvScores[0];
-        for (int i = 1; i < _cvScores.Length; i++)
-        {
-            if (_cvScores[i] > bestScore)
-            {
-                bestScore = _cvScores[i];
-                bestIdx = i;
-            }
-        }
+        // Find optimal feature count (the first best score)
+        int bestIdx = PreprocessingTensorOps.FirstArgMax(cvScores);
 
         _optimalFeatureCount = p - bestIdx * _step;
         if (_optimalFeatureCount < _minFeatures)
@@ -205,7 +196,7 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
             new Tensor<int>(indices.ToArray(), new[] { indices.Count }), 0).ToVector();
     }
 
-    private double EvaluateScore(Matrix<T> trainData, Vector<T> trainTarget,
+    private T EvaluateScore(Matrix<T> trainData, Vector<T> trainTarget,
         Matrix<T> valData, Vector<T> valTarget)
     {
         if (_scoringFunc is not null)
@@ -220,11 +211,11 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
     /// folds, as scikit-learn's RFECV scores a LinearRegression; 0 when either part has no rows. (The score used to
     /// be the mean |Pearson r| on the training folds, which ignored the validation fold.)
     /// </summary>
-    private double ComputeValidationRSquared(Matrix<T> trainData, Vector<T> trainTarget,
+    private T ComputeValidationRSquared(Matrix<T> trainData, Vector<T> trainTarget,
         Matrix<T> valData, Vector<T> valTarget)
     {
         if (trainData.Rows == 0 || valData.Rows == 0)
-            return 0;
+            return NumOps.Zero;
 
         var slopes = WrapperScoringOps.LeastSquaresSlopes(
             Tensor<T>.FromMatrix(trainData), Tensor<T>.FromVector(trainTarget), out var xMean, out T yMean);
@@ -232,7 +223,7 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         return WrapperScoringOps.RSquared(Tensor<T>.FromVector(valTarget), predictions);
     }
 
-    private double[] GetImportances(Matrix<T> data, Vector<T> target, List<int> activeFeatures, int n)
+    private Vector<T> GetImportances(Matrix<T> data, Vector<T> target, List<int> activeFeatures, int n)
     {
         if (_importanceFunc is not null)
         {
@@ -241,7 +232,7 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         }
 
         // Default: absolute correlation
-        return WrapperScoringOps.ToDoubleArray(WrapperScoringOps.AbsTargetCorrelations(data, target, activeFeatures.ToArray()));
+        return WrapperScoringOps.AbsTargetCorrelations(data, target, activeFeatures.ToArray()).ToVector();
     }
 
     /// <inheritdoc />

@@ -28,13 +28,13 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     private readonly int _nFeaturesToSelect;
     private readonly int _maxFeaturesForExhaustive;
 
-    private double _bestScore;
+    private T _bestScore = MathHelper.GetNumericOperations<T>().MinValue;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double BestScore => _bestScore;
+    public T BestScore => _bestScore;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,7 +69,6 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         if (p > _maxFeaturesForExhaustive)
@@ -78,7 +77,7 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
                 $"Current data has {p} features. Use a different selection method.");
 
         int k = Math.Min(_nFeaturesToSelect, p);
-        _bestScore = double.MinValue;
+        _bestScore = NumOps.MinValue;
         _selectedIndices = null;
 
         // Generate all combinations of k features from p
@@ -87,8 +86,8 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
         foreach (var combo in combinations)
         {
-            double score = EvaluateSubset(data, target, combo, n);
-            if (score > _bestScore)
+            T score = EvaluateSubset(data, target, combo);
+            if (WrapperScoringOps.IsAbove(score, _bestScore))
             {
                 _bestScore = score;
                 _selectedIndices = combo.ToArray();
@@ -125,14 +124,15 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         }
     }
 
-    private double EvaluateSubset(Matrix<T> data, Vector<T> target, int[] featureIndices, int n)
+    private T EvaluateSubset(Matrix<T> data, Vector<T> target, int[] featureIndices)
     {
         // Average absolute correlation with target, penalized by the average absolute pairwise correlation
-        // (redundancy) of the subset
-        double relevance = featureIndices.Length > 0
+        // (redundancy) of the subset (an empty subset averages 0 / 0)
+        T relevance = featureIndices.Length > 0
             ? WrapperScoringOps.MeanAbsTargetCorrelation(data, target, featureIndices)
-            : double.NaN;
-        return relevance - 0.5 * WrapperScoringOps.MeanAbsPairCorrelation(data, featureIndices);
+            : NumOps.FromDouble(double.NaN);
+        return NumOps.Subtract(relevance,
+            NumOps.Multiply(NumOps.FromDouble(0.5), WrapperScoringOps.MeanAbsPairCorrelation(data, featureIndices)));
     }
 
     /// <inheritdoc />
