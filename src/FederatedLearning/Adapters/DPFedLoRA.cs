@@ -4,21 +4,20 @@ using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Adapters;
 
 /// <summary>
-/// Implements DP-FedLoRA — Differentially Private Federated LoRA with per-layer noise calibration.
+/// Implements DP-FedLoRA — Differentially Private Federated LoRA aggregation.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> Standard DP-SGD adds the same amount of noise to all parameters,
-/// which wastes privacy budget because some layers are more sensitive than others. DP-FedLoRA
-/// calibrates the DP noise per-layer: layers with higher sensitivity get more noise, while
-/// less sensitive layers keep their updates cleaner. This gives better privacy-utility tradeoffs
-/// specifically designed for LoRA adapter aggregation in federated settings.</para>
+/// <para><b>For Beginners:</b> Each client's LoRA adapter update is clipped to a fixed L2 norm, the
+/// clipped updates are averaged, and Gaussian noise calibrated to that clip norm is added, so no single
+/// client's data can be inferred from the aggregate.</para>
 ///
-/// <para>Per-layer noise:</para>
+/// <para>Gaussian mechanism (DP-FedAvg, McMahan et al. 2018):</para>
 /// <code>
-/// sensitivity_l = max_k ||adapter_l_k|| / |D_k|     // per-layer sensitivity
-/// noise_l ~ N(0, (sigma * sensitivity_l)² * I)       // calibrated noise
-/// aggregated_l = weighted_avg(adapter_l_k) + noise_l
+/// clipped_k = adapter_k * min(1, C / ||adapter_k||)
+/// aggregated = weighted_avg(clipped_k) + N(0, (sigma * C / n)² * I)
 /// </code>
+/// <para>The noise scale is data independent. Deriving per-layer noise from the clients' own adapter
+/// norms would make the noise depend on private data and under-noise the release.</para>
 ///
 /// <para>Reference: DP-FedLoRA: Differentially Private Federated LoRA Fine-Tuning (2024).</para>
 /// </remarks>
@@ -130,16 +129,17 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
         int adapterCount = Math.Min(AdapterParameterCount, totalParams);
         int start = totalParams - adapterCount;
 
-        var adapterParams = new T[adapterCount];
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = fullModelParameters[start + i];
-        }
-
-        return new Vector<T>(adapterParams);
+        var adapterParams = new Vector<T>(adapterCount);
+        fullModelParameters.AsSpan().Slice(start, adapterCount).CopyTo(adapterParams.AsWritableSpan());
+        return adapterParams;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The stored LoRA factors are written back unscaled. LoRA (Hu et al. 2021) applies alpha / rank to the
+    /// product B*A in the forward pass (see <see cref="LoraScaling"/>); scaling both stored factors here
+    /// would apply it squared and compound it every round.
+    /// </remarks>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
         Guard.NotNull(fullModelParameters);
@@ -154,21 +154,15 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
 
         int start = totalParams - adapterCount;
 
-        var merged = new T[totalParams];
-        for (int i = 0; i < start; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-
-        double scale = _alpha / _rank;
-        var scaleT = NumOps.FromDouble(scale);
-        for (int i = 0; i < adapterCount; i++)
-        {
-            merged[start + i] = NumOps.Multiply(aggregatedAdapters[i], scaleT);
-        }
-
-        return new Vector<T>(merged);
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(start, adapterCount));
+        return merged;
     }
+
+    /// <summary>
+    /// Gets the LoRA output scaling alpha / rank that the forward pass applies to B*A.
+    /// </summary>
+    public double LoraScaling => _alpha / _rank;
 
     /// <inheritdoc/>
     public Vector<T> AggregateAdapters(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
@@ -189,44 +183,19 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
             }
         }
 
-        // Step 1: Clip each client's adapters to clipNorm.
-        var clipped = new Dictionary<int, Vector<T>>(clientAdapters.Count);
+        // Steps 1-2: clip each client's adapters to clipNorm, then take the weighted average.
+        var clipNormT = NumOps.FromDouble(_clipNorm);
+        var aggregated = new Vector<T>(adapterLen);
+        double totalWeight = 0;
         foreach (var (clientId, adapters) in clientAdapters)
         {
-            double norm = 0;
-            for (int i = 0; i < adapters.Length; i++)
-            {
-                double v = NumOps.ToDouble(adapters[i]);
-                norm += v * v;
-            }
+            var norm = Engine.Norm(adapters);
+            var clipScale = NumOps.GreaterThan(norm, clipNormT) ? NumOps.Divide(clipNormT, norm) : NumOps.One;
+            var clippedAdapter = Engine.Multiply(adapters, clipScale);
 
-            norm = Math.Sqrt(norm);
-            double clipScale = norm > _clipNorm ? _clipNorm / norm : 1.0;
-
-            var clippedAdapter = new T[adapterLen];
-            var csT = NumOps.FromDouble(clipScale);
-            for (int i = 0; i < adapterLen; i++)
-            {
-                clippedAdapter[i] = NumOps.Multiply(adapters[i], csT);
-            }
-
-            clipped[clientId] = new Vector<T>(clippedAdapter);
-        }
-
-        // Step 2: Weighted average of clipped adapters.
-        var aggregated = new T[adapterLen];
-        double totalWeight = 0;
-
-        foreach (var (clientId, adapters) in clipped)
-        {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
-
-            var wT = NumOps.FromDouble(w);
-            for (int i = 0; i < adapterLen; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
-            }
+            aggregated = Engine.Add(aggregated, Engine.Multiply(clippedAdapter, NumOps.FromDouble(w)));
         }
 
         if (totalWeight <= 0)
@@ -234,17 +203,12 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
             totalWeight = clientAdapters.Count;
         }
 
-        var invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < adapterLen; i++)
-        {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
-        }
+        aggregated = Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
 
-        // Step 3: Add per-layer calibrated Gaussian noise.
-        // Gaussian mechanism on the average of n clipped vectors:
-        //   sensitivity_l = clipBound_l / n  (L2 sensitivity of the average)
-        //   noise_std = sigma * sensitivity_l
-        // Per-layer clip bound is proportional to each layer's share of the total clip norm.
+        // Step 3: Gaussian mechanism on the average of n clipped vectors. Every client's whole adapter
+        // vector is clipped to clipNorm, so the L2 sensitivity of the average is clipNorm / n and every
+        // coordinate gets N(0, (sigma * clipNorm / n)^2). The noise scale must not depend on the data:
+        // a per-layer split of the clip budget taken from the clients' own norms under-noises the release.
         int n = clientAdapters.Count;
         if (_noiseMultiplier > 0 && n > 0)
         {
@@ -253,68 +217,22 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
             // replace with System.Security.Cryptography.RandomNumberGenerator.
             var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter);
             _roundCounter++;
-            int paramsPerLayer = adapterLen / Math.Max(_numAdaptedLayers, 1);
+            double noiseStd = _noiseMultiplier * _clipNorm / n;
 
-            // Compute per-layer norms to allocate the total clip budget proportionally.
-            var layerMaxNorms = new double[_numAdaptedLayers];
-            double totalLayerNormSum = 0;
-
-            for (int layer = 0; layer < _numAdaptedLayers; layer++)
+            for (int i = 0; i < adapterLen; i++)
             {
-                int layerStart = layer * paramsPerLayer;
-                int layerEnd = (layer == _numAdaptedLayers - 1) ? adapterLen : layerStart + paramsPerLayer;
-
-                double maxNorm = 0;
-                foreach (var (_, adapters) in clipped)
-                {
-                    double layerNorm2 = 0;
-                    for (int i = layerStart; i < layerEnd && i < adapters.Length; i++)
-                    {
-                        double v = NumOps.ToDouble(adapters[i]);
-                        layerNorm2 += v * v;
-                    }
-
-                    double layerNorm = Math.Sqrt(layerNorm2);
-                    if (layerNorm > maxNorm)
-                    {
-                        maxNorm = layerNorm;
-                    }
-                }
-
-                layerMaxNorms[layer] = maxNorm;
-                totalLayerNormSum += maxNorm;
-            }
-
-            // Add noise per layer with correctly calibrated sensitivity = clipBound_l / n.
-            for (int layer = 0; layer < _numAdaptedLayers; layer++)
-            {
-                int layerStart = layer * paramsPerLayer;
-                int layerEnd = (layer == _numAdaptedLayers - 1) ? adapterLen : layerStart + paramsPerLayer;
-
-                // Per-layer clip bound: proportional share of total clip norm.
-                double layerClipBound = totalLayerNormSum > 0
-                    ? _clipNorm * (layerMaxNorms[layer] / totalLayerNormSum)
-                    : _clipNorm / _numAdaptedLayers;
-
-                // L2 sensitivity of the average = clipBound / n.
-                double layerSensitivity = layerClipBound / n;
-                double layerNoiseStd = _noiseMultiplier * layerSensitivity;
-
-                for (int i = layerStart; i < layerEnd && i < adapterLen; i++)
-                {
-                    // Box-Muller transform for Gaussian noise.
-                    double u1 = 1.0 - rng.NextDouble();
-                    double u2 = 1.0 - rng.NextDouble();
-                    double noise = layerNoiseStd * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                    aggregated[i] = NumOps.Add(aggregated[i], NumOps.FromDouble(noise));
-                }
+                // Box-Muller transform for Gaussian noise.
+                double u1 = 1.0 - rng.NextDouble();
+                double u2 = 1.0 - rng.NextDouble();
+                double noise = noiseStd * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                aggregated[i] = NumOps.Add(aggregated[i], NumOps.FromDouble(noise));
             }
 
             // Track cumulative privacy cost via Renyi DP accounting.
             AccumulatePrivacyCost(n);
         }
 
-        return new Vector<T>(aggregated);
+        return aggregated;
     }
 
     /// <summary>
