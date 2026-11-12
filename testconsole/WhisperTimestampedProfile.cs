@@ -45,7 +45,7 @@ internal static class WhisperTimestampedProfile
             {
                 EncoderDim = 256, DecoderDim = 256, NumEncoderLayers = 4,
                 NumDecoderLayers = 4, NumAttentionHeads = 8, NumMels = 80,
-                VocabSize = 1000, DropoutRate = 0.0,
+                VocabSize = 1000,
             };
         }
 

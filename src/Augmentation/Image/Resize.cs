@@ -92,159 +92,163 @@ public class Resize<T> : ImageAugmenterBase<T>
         double scaleY = (double)data.Height / TargetHeight;
         double scaleX = (double)data.Width / TargetWidth;
 
-        for (int y = 0; y < TargetHeight; y++)
-        {
-            for (int x = 0; x < TargetWidth; x++)
-            {
-                // Map target pixel to source pixel centers for accurate interpolation
-                double srcY = (y + 0.5) * scaleY - 0.5;
-                double srcX = (x + 0.5) * scaleX - 0.5;
+        // Every interpolation mode is separable: build per-axis weight matrices and apply them
+        var engine = Engine;
+        double maxVal = data.IsNormalized ? 1.0 : 255.0;
+        var rowWeights = AxisWeights(engine, TargetHeight, data.Height, scaleY, Interpolation);
+        var colWeights = AxisWeights(engine, TargetWidth, data.Width, scaleX, Interpolation);
+        var resized = ImageTensor<T>.ResampleSeparable(data.ToPlanarTensor(), rowWeights, colWeights);
 
-                double maxVal = data.IsNormalized ? 1.0 : 255.0;
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double value = Interpolation switch
-                    {
-                        InterpolationMode.Nearest => SampleNearest(data, srcX, srcY, c),
-                        InterpolationMode.Bilinear => SampleBilinear(data, srcX, srcY, c),
-                        InterpolationMode.Bicubic => SampleBicubic(data, srcX, srcY, c),
-                        InterpolationMode.Area => SampleArea(data, x, y, scaleX, scaleY, c),
-                        InterpolationMode.Lanczos => SampleLanczos(data, srcX, srcY, c),
-                        _ => SampleBilinear(data, srcX, srcY, c)
-                    };
-
-                    // Clamp to valid range (bicubic and Lanczos can overshoot)
-                    value = Math.Max(0, Math.Min(maxVal, value));
-                    result.SetPixel(y, x, c, NumOps.FromDouble(value));
-                }
-            }
-        }
+        // Clamp to valid range (bicubic and Lanczos can overshoot)
+        result.SetFromPlanarTensor(engine.TensorClamp(resized, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }
 
-    private static double SampleNearest(ImageTensor<T> image, double x, double y, int channel)
+    /// <summary>
+    /// [target, source] interpolation weights along one axis for the given mode.
+    /// </summary>
+    private static Tensor<T> AxisWeights(IEngine engine, int target, int source, double scale, InterpolationMode mode)
     {
-        int ix = Math.Max(0, Math.Min((int)Math.Round(x), image.Width - 1));
-        int iy = Math.Max(0, Math.Min((int)Math.Round(y), image.Height - 1));
-        return NumOps.ToDouble(image.GetPixel(iy, ix, channel));
-    }
+        var dest = engine.TensorArange<T>(0, target, 1);
+        T last = NumOps.FromDouble(source - 1.0);
+        T half = NumOps.FromDouble(0.5);
 
-    private static double SampleBilinear(ImageTensor<T> image, double x, double y, int channel)
-    {
-        int x0 = Math.Max(0, Math.Min((int)Math.Floor(x), image.Width - 1));
-        int x1 = Math.Max(0, Math.Min(x0 + 1, image.Width - 1));
-        int y0 = Math.Max(0, Math.Min((int)Math.Floor(y), image.Height - 1));
-        int y1 = Math.Max(0, Math.Min(y0 + 1, image.Height - 1));
+        // Map target pixel to source pixel centers for accurate interpolation
+        var src = engine.TensorSubtractScalar(
+            engine.TensorMultiplyScalar(engine.TensorAddScalar(dest, half), NumOps.FromDouble(scale)), half);
+        var floor = engine.TensorFloor(src);
+        var srcColumn = engine.Reshape(src, [target, 1]);
+        var floorColumn = engine.Reshape(floor, [target, 1]);
 
-        double xFrac = x - Math.Floor(x);
-        double yFrac = y - Math.Floor(y);
-
-        double v00 = NumOps.ToDouble(image.GetPixel(y0, x0, channel));
-        double v01 = NumOps.ToDouble(image.GetPixel(y0, x1, channel));
-        double v10 = NumOps.ToDouble(image.GetPixel(y1, x0, channel));
-        double v11 = NumOps.ToDouble(image.GetPixel(y1, x1, channel));
-
-        double top = v00 * (1 - xFrac) + v01 * xFrac;
-        double bottom = v10 * (1 - xFrac) + v11 * xFrac;
-        return top * (1 - yFrac) + bottom * yFrac;
-    }
-
-    private static double SampleBicubic(ImageTensor<T> image, double x, double y, int channel)
-    {
-        int ix = (int)Math.Floor(x);
-        int iy = (int)Math.Floor(y);
-        double fx = x - ix;
-        double fy = y - iy;
-
-        double result = 0;
-        for (int dy = -1; dy <= 2; dy++)
+        switch (mode)
         {
-            double rowVal = 0;
-            for (int dx = -1; dx <= 2; dx++)
+            case InterpolationMode.Nearest:
+                return Tap(engine, engine.TensorClamp(engine.TensorRound(srcColumn), NumOps.Zero, last),
+                    ImageTensor<T>.Constant(srcColumn, 1.0), source);
+
+            case InterpolationMode.Bicubic:
             {
-                int px = Math.Max(0, Math.Min(ix + dx, image.Width - 1));
-                int py = Math.Max(0, Math.Min(iy + dy, image.Height - 1));
-                double val = NumOps.ToDouble(image.GetPixel(py, px, channel));
-                rowVal += val * CubicWeight(fx - dx);
+                // Taps at floor - 1 .. floor + 2 with Keys weights of (frac - d)
+                var offsets = TapOffsets(engine, target, -1, 2);
+                int[] shape = offsets._shape;
+                var index = engine.TensorClamp(engine.TensorAdd(engine.TensorBroadcastTo(floorColumn, shape), offsets), NumOps.Zero, last);
+                var frac = engine.TensorSubtract(srcColumn, floorColumn);
+                var weights = CubicWeights(engine, engine.TensorSubtract(engine.TensorBroadcastTo(frac, shape), offsets));
+                return Tap(engine, index, weights, source);
             }
-            result += rowVal * CubicWeight(fy - dy);
-        }
 
-        return result;
-    }
-
-    private static double CubicWeight(double t)
-    {
-        t = Math.Abs(t);
-        if (t <= 1.0)
-            return (1.5 * t * t * t) - (2.5 * t * t) + 1.0;
-        if (t <= 2.0)
-            return (-0.5 * t * t * t) + (2.5 * t * t) - (4.0 * t) + 2.0;
-        return 0.0;
-    }
-
-    private static double SampleArea(ImageTensor<T> image, int destX, int destY,
-        double scaleX, double scaleY, int channel)
-    {
-        double srcX0 = destX * scaleX;
-        double srcY0 = destY * scaleY;
-        double srcX1 = (destX + 1) * scaleX;
-        double srcY1 = (destY + 1) * scaleY;
-
-        int x0 = Math.Max(0, Math.Min((int)Math.Floor(srcX0), image.Width - 1));
-        int x1 = Math.Max(0, Math.Min((int)Math.Ceiling(srcX1) - 1, image.Width - 1));
-        int y0 = Math.Max(0, Math.Min((int)Math.Floor(srcY0), image.Height - 1));
-        int y1 = Math.Max(0, Math.Min((int)Math.Ceiling(srcY1) - 1, image.Height - 1));
-
-        double sum = 0;
-        int count = 0;
-        for (int sy = y0; sy <= y1; sy++)
-        {
-            for (int sx = x0; sx <= x1; sx++)
+            case InterpolationMode.Area:
             {
-                sum += NumOps.ToDouble(image.GetPixel(sy, sx, channel));
-                count++;
+                // Average over source pixels floor(d * scale) .. ceil((d + 1) * scale) - 1
+                T scaleT = NumOps.FromDouble(scale);
+                var lo = engine.TensorClamp(engine.TensorFloor(engine.TensorMultiplyScalar(dest, scaleT)), NumOps.Zero, last);
+                var hi = engine.TensorClamp(
+                    engine.TensorSubtractScalar(
+                        engine.TensorCeiling(engine.TensorMultiplyScalar(engine.TensorAddScalar(dest, NumOps.One), scaleT)), NumOps.One),
+                    NumOps.Zero, last);
+                int[] shape = [target, source];
+                var positions = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, source, 1), [1, source]), shape);
+                var loB = engine.TensorBroadcastTo(engine.Reshape(lo, [target, 1]), shape);
+                var hiB = engine.TensorBroadcastTo(engine.Reshape(hi, [target, 1]), shape);
+                var member = engine.TensorMultiply(
+                    engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(positions, loB)),
+                    engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(positions, hiB)));
+                var count = engine.Reshape(engine.TensorAddScalar(engine.TensorSubtract(hi, lo), NumOps.One), [target, 1]);
+                return engine.TensorDivide(member, engine.TensorBroadcastTo(count, shape));
+            }
+
+            case InterpolationMode.Lanczos:
+            {
+                // Lanczos-3 taps at floor - 2 .. floor + 3, normalized to sum to 1 (0 when they sum to 0)
+                const int a = 3;
+                var offsets = TapOffsets(engine, target, -(a - 1), a);
+                int[] shape = offsets._shape;
+                var offset = engine.TensorAdd(engine.TensorBroadcastTo(floorColumn, shape), offsets);
+                var index = engine.TensorClamp(offset, NumOps.Zero, last);
+                var raw = Tap(engine, index,
+                    LanczosWeights(engine, engine.TensorSubtract(engine.TensorBroadcastTo(srcColumn, shape), offset), a), source);
+                var rowSum = engine.ReduceSum(raw, [1], true);
+                var positive = engine.TensorBroadcastTo(engine.TensorGreaterThan(rowSum, NumOps.Zero), [target, source]);
+                return engine.TensorWhere(positive,
+                    engine.TensorDivide(raw, engine.TensorBroadcastTo(rowSum, [target, source])),
+                    new Tensor<T>([target, source]));
+            }
+
+            default:
+            {
+                // Bilinear
+                var i0 = engine.TensorClamp(floorColumn, NumOps.Zero, last);
+                var i1 = engine.TensorClamp(engine.TensorAddScalar(i0, NumOps.One), NumOps.Zero, last);
+                var frac = engine.TensorSubtract(srcColumn, floorColumn);
+                return Tap(engine,
+                    engine.TensorConcatenate([i0, i1], 1),
+                    engine.TensorConcatenate([engine.ScalarMinusTensor(NumOps.One, frac), frac], 1),
+                    source);
             }
         }
-
-        return count > 0 ? sum / count : 0;
     }
 
-    private static double SampleLanczos(ImageTensor<T> image, double x, double y, int channel)
+    /// <summary>
+    /// Tap offsets first .. last as a [target, taps] tensor (the same row for every target).
+    /// </summary>
+    private static Tensor<T> TapOffsets(IEngine engine, int target, int first, int last)
     {
-        const int a = 3; // Lanczos-3
-        int ix = (int)Math.Floor(x);
-        int iy = (int)Math.Floor(y);
-
-        double result = 0;
-        double weightSum = 0;
-
-        for (int dy = -(a - 1); dy <= a; dy++)
-        {
-            for (int dx = -(a - 1); dx <= a; dx++)
-            {
-                int px = Math.Max(0, Math.Min(ix + dx, image.Width - 1));
-                int py = Math.Max(0, Math.Min(iy + dy, image.Height - 1));
-
-                double wx = LanczosKernel(x - (ix + dx), a);
-                double wy = LanczosKernel(y - (iy + dy), a);
-                double weight = wx * wy;
-
-                result += NumOps.ToDouble(image.GetPixel(py, px, channel)) * weight;
-                weightSum += weight;
-            }
-        }
-
-        return weightSum > 0 ? result / weightSum : 0;
+        int taps = last - first + 1;
+        var row = engine.Reshape(engine.TensorArange<T>(first, last + 1, 1), [1, taps]);
+        return engine.TensorBroadcastTo(row, [target, taps]).Contiguous();
     }
 
-    private static double LanczosKernel(double x, int a)
+    /// <summary>
+    /// [target, source] matrix summing weight[t, k] at column index[t, k] over the taps k of every row t.
+    /// </summary>
+    private static Tensor<T> Tap(IEngine engine, Tensor<T> index, Tensor<T> weight, int source)
     {
-        if (Math.Abs(x) < 1e-8) return 1.0;
-        if (Math.Abs(x) >= a) return 0.0;
-        double pix = Math.PI * x;
-        return a * Math.Sin(pix) * Math.Sin(pix / a) / (pix * pix);
+        int target = index.Shape[0], taps = index.Shape[1];
+        int[] shape = [target, taps, source];
+        var positions = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, source, 1), [1, 1, source]), shape);
+        var hit = engine.TensorEquals(positions, engine.TensorBroadcastTo(engine.Reshape(index, [target, taps, 1]), shape));
+        var weighted = engine.TensorMultiply(hit, engine.TensorBroadcastTo(engine.Reshape(weight, [target, taps, 1]), shape));
+        return engine.ReduceSum(weighted, [1], false);
+    }
+
+    /// <summary>
+    /// Keys cubic kernel (a = -0.5): 1.5|t|^3 - 2.5|t|^2 + 1 for |t| &lt;= 1,
+    /// -0.5|t|^3 + 2.5|t|^2 - 4|t| + 2 for |t| &lt;= 2, else 0.
+    /// </summary>
+    private static Tensor<T> CubicWeights(IEngine engine, Tensor<T> t)
+    {
+        var a = engine.TensorAbs(t);
+        var a2 = engine.TensorMultiply(a, a);
+        var a3 = engine.TensorMultiply(a2, a);
+        T c15 = NumOps.FromDouble(1.5), c25 = NumOps.FromDouble(2.5);
+        var near = engine.TensorAddScalar(
+            engine.TensorSubtract(engine.TensorMultiplyScalar(a3, c15), engine.TensorMultiplyScalar(a2, c25)), NumOps.One);
+        var far = engine.TensorAddScalar(
+            engine.TensorSubtract(
+                engine.TensorAdd(engine.TensorMultiplyScalar(a3, NumOps.FromDouble(-0.5)), engine.TensorMultiplyScalar(a2, c25)),
+                engine.TensorMultiplyScalar(a, NumOps.FromDouble(4.0))),
+            NumOps.FromDouble(2.0));
+        var zero = ImageTensor<T>.Constant(a, 0.0);
+        return engine.TensorWhere(engine.TensorGreaterThan(a, NumOps.FromDouble(2.0)), zero,
+            engine.TensorWhere(engine.TensorGreaterThan(a, NumOps.One), far, near));
+    }
+
+    /// <summary>
+    /// Lanczos kernel: 1 for |x| &lt; 1e-8, 0 for |x| &gt;= a, else a sin(pi x) sin(pi x / a) / (pi x)^2.
+    /// </summary>
+    private static Tensor<T> LanczosWeights(IEngine engine, Tensor<T> x, int a)
+    {
+        T aT = NumOps.FromDouble(a);
+        var absX = engine.TensorAbs(x);
+        var pix = engine.TensorMultiplyScalar(x, NumOps.FromDouble(Math.PI));
+        var value = engine.TensorDivide(
+            engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSin(pix), engine.TensorSin(engine.TensorDivideScalar(pix, aT))), aT),
+            engine.TensorMultiply(pix, pix));
+        var outside = ImageTensor<T>.Constant(x, 0.0);
+        var center = ImageTensor<T>.Constant(x, 1.0);
+        return engine.TensorWhere(engine.TensorLessThan(absX, NumOps.FromDouble(1e-8)), center,
+            engine.TensorWhere(engine.TensorLessThan(absX, aT), value, outside));
     }
 
     /// <inheritdoc />

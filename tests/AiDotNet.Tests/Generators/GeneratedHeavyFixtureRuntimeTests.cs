@@ -59,9 +59,10 @@ public sealed class GeneratedHeavyFixtureRuntimeTests
 
         Assert.Equal(new[] { 1, 80, 1 }, fixture.DeclaredInputShape);
         Assert.Equal(new[] { 1, 1, 256 }, fixture.DeclaredOutputShape);
-        Assert.Equal(32, options.NgfBase);
-        Assert.Equal(512, defaults.NgfBase);
-        Assert.Equal(defaults.NumResStacks, options.NumResStacks);
+        Assert.Equal(4, options.Ngf);
+        Assert.Equal(32, defaults.Ngf);
+        Assert.Equal(defaults.ResidualLayers, options.ResidualLayers);
+        Assert.Equal(defaults.NumDiscriminators, options.NumDiscriminators);
         Assert.Equal(defaults.MelChannels, options.MelChannels);
         Assert.Equal(defaults.HopSize, options.HopSize);
         Assert.Equal(defaults.SampleRate, options.SampleRate);
