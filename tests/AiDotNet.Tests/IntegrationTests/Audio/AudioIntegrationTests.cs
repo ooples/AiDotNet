@@ -839,6 +839,9 @@ public class AudioIntegrationTests
         Assert.Equal(AudioGenModelSize.Medium, options.ModelSize);
         // AudioGen and its released compression model are 16 kHz (Kreuk et al. 2022).
         Assert.Equal(16000, options.SampleRate);
+        // AudioGen's EnCodec has 4 codebooks of 2048 entries.
+        Assert.Equal(4, options.NumCodebooks);
+        Assert.Equal(2048, options.CodebookSize);
         Assert.Equal(5.0, options.DurationSeconds, Tolerance);
         Assert.Equal(30.0, options.MaxDurationSeconds, Tolerance);
         Assert.Equal(1.0, options.Temperature, Tolerance);

@@ -409,7 +409,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         // Set model dimensions based on size
         (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(_options.ModelSize);
         _numCodebooks = 4;  // EnCodec standard
-        _codebookSize = 1024;  // EnCodec standard
+        _codebookSize = 2048;  // AudioGen's EnCodec: 4 codebooks of 2048 entries
         _maxTextLength = _options.MaxTextLength;
 
         // Set audio base class properties

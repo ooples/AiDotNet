@@ -42,7 +42,7 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
         NumLmLayers = 0;
         NumHeads = 0;
         NumCodebooks = 4;
-        CodebookSize = 1024;
+        CodebookSize = 2048;
         MaxTextLength = 256;
     }
 
@@ -160,8 +160,13 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public int NumCodebooks { get; set; }
 
     /// <summary>
-    /// Gets or sets the codebook size.
+    /// Gets or sets the number of entries in each EnCodec codebook.
     /// </summary>
+    /// <remarks>
+    /// Defaults to 2048, AudioGen's 4 codebooks of 2048 entries (Kreuk et al. 2022; the released
+    /// compression model's <c>quantizer.bins</c>). Earlier versions defaulted to 1024; set it
+    /// explicitly to keep that.
+    /// </remarks>
     public int CodebookSize { get; set; }
 
     /// <summary>
