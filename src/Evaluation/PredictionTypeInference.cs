@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Evaluation;
@@ -16,54 +17,49 @@ internal static class PredictionTypeInference
             return PredictionType.Regression;
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        return InferFromValues(Tensor<T>.FromVector(actual));
+    }
 
-        bool allNearIntegers = true;
-        var classes = new HashSet<int>();
+    private static PredictionType InferFromValues<T>(Tensor<T> actual)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
 
         const int maxTrackedClasses = 512;
         const double integerEpsilon = 1e-8;
 
-        for (int i = 0; i < actual.Length; i++)
-        {
-            double value = numOps.ToDouble(actual[i]);
-
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                return PredictionType.Regression;
-            }
-
-            double rounded = Math.Round(value);
-            if (Math.Abs(value - rounded) > integerEpsilon)
-            {
-                allNearIntegers = false;
-                break;
-            }
-
-            if (classes.Count < maxTrackedClasses)
-            {
-                if (rounded >= int.MinValue && rounded <= int.MaxValue)
-                {
-                    classes.Add((int)rounded);
-                }
-                else
-                {
-                    return PredictionType.Regression;
-                }
-            }
-        }
-
-        if (!allNearIntegers)
+        // Any NaN or infinite value (x - x is not 0), any value further than integerEpsilon from an integer, or any
+        // integer outside the int range makes the targets regression.
+        if (!AllFinite(actual))
         {
             return PredictionType.Regression;
         }
 
-        if (classes.Count <= 2 && classes.All(c => c == 0 || c == 1))
+        var rounded = engine.TensorRound(actual);
+        if (EvaluationTensorOps<T>.Count(engine.TensorGreaterThan(
+                engine.TensorAbs(engine.TensorSubtract(actual, rounded)), numOps.FromDouble(integerEpsilon))) > 0)
+        {
+            return PredictionType.Regression;
+        }
+
+        if (EvaluationTensorOps<T>.Count(engine.TensorLessThan(rounded, numOps.FromDouble(int.MinValue))) > 0 ||
+            EvaluationTensorOps<T>.Count(engine.TensorGreaterThan(rounded, numOps.FromDouble(int.MaxValue))) > 0)
+        {
+            return PredictionType.Regression;
+        }
+
+        var classes = engine.TensorUniqueWithInfo(rounded).Values;
+        int classCount = classes.Length;
+        int minClass = (int)numOps.ToDouble(engine.TensorMinValue(classes));
+        int maxClass = (int)numOps.ToDouble(engine.TensorMaxValue(classes));
+
+        if (classCount <= 2 && minClass >= 0 && maxClass <= 1)
         {
             return PredictionType.BinaryClassification;
         }
 
-        if (classes.Count == 0 || classes.Count >= maxTrackedClasses)
+        if (classCount >= maxTrackedClasses)
         {
             return PredictionType.Regression;
         }
@@ -73,17 +69,14 @@ internal static class PredictionTypeInference
         //
         // - If almost every sample is its own "class", it's usually regression.
         // - If labels are not a compact contiguous range and there are many distinct values, it's usually regression.
-        int minClass = classes.Min();
-        int maxClass = classes.Max();
-
         // Use long to avoid integer overflow when minClass is very negative and maxClass is very positive
         long range = (long)maxClass - (long)minClass;
 
         // If range overflows int or is larger than practical class count, treat as non-contiguous
-        bool isContiguous = range <= int.MaxValue && (range + 1) == classes.Count;
-        double uniqueRatio = classes.Count / (double)actual.Length;
+        bool isContiguous = range <= int.MaxValue && (range + 1) == classCount;
+        double uniqueRatio = classCount / (double)actual.Length;
 
-        if (uniqueRatio > 0.8 && classes.Count > 20)
+        if (uniqueRatio > 0.8 && classCount > 20)
         {
             return PredictionType.Regression;
         }
@@ -94,6 +87,18 @@ internal static class PredictionTypeInference
         }
 
         return PredictionType.MultiClass;
+    }
+
+    // 1 where value <= limit (the values are already known to be finite).
+    private static Tensor<T> AtMost<T>(Tensor<T> values, T limit)
+        => EvaluationTensorOps<T>.Not(AiDotNetEngine.Current.TensorGreaterThan(values, limit));
+
+    // x - x is 0 exactly when x is finite (NaN and infinities give NaN).
+    private static bool AllFinite<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var zero = MathHelper.GetNumericOperations<T>().Zero;
+        return EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.EqualMask(engine.TensorSubtract(values, values), zero)) == values.Length;
     }
 
     public static PredictionType InferFromTargets<T, TOutput>(TOutput targets)
@@ -158,15 +163,13 @@ internal static class PredictionTypeInference
             return PredictionType.Regression;
         }
 
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var targets = Tensor<T>.FromMatrix(matrix);
+
         if (matrix.Columns == 1)
         {
-            var values = new Vector<T>(matrix.Rows);
-            for (int row = 0; row < matrix.Rows; row++)
-            {
-                values[row] = matrix[row, 0];
-            }
-
-            return Infer(values);
+            return InferFromValues(engine.Reshape(targets, new[] { matrix.Rows }));
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -187,52 +190,31 @@ internal static class PredictionTypeInference
         const double sumNearOneEpsilon = 0.2;
         const double sumGreaterThanOneThreshold = 1.2;
 
-        for (int row = 0; row < sampleRows; row++)
+        var sample = engine.TensorSlice(targets, new[] { 0, 0 }, new[] { sampleRows, sampleCols });
+        if (!AllFinite(sample))
         {
-            double rowSum = 0.0;
-            int positives = 0;
-
-            for (int col = 0; col < sampleCols; col++)
-            {
-                double value = numOps.ToDouble(matrix[row, col]);
-                if (double.IsNaN(value) || double.IsInfinity(value))
-                {
-                    return PredictionType.Regression;
-                }
-
-                if (value < -probabilityEpsilon || value > 1.0 + probabilityEpsilon)
-                {
-                    return PredictionType.Regression;
-                }
-
-                rowSum += value;
-
-                if (value >= positiveThreshold)
-                {
-                    positives++;
-                }
-
-                if (Math.Abs(value) <= nearBinaryEpsilon || Math.Abs(value - 1.0) <= nearBinaryEpsilon)
-                {
-                    nearBinaryCount++;
-                }
-            }
-
-            if (positives > 1)
-            {
-                rowsWithMultiplePositives++;
-            }
-
-            if (rowSum > sumGreaterThanOneThreshold)
-            {
-                rowsWithSumGreaterThanOne++;
-            }
-
-            if (Math.Abs(rowSum - 1.0) <= sumNearOneEpsilon)
-            {
-                rowsWithSumNearOne++;
-            }
+            return PredictionType.Regression;
         }
+
+        if (EvaluationTensorOps<T>.Count(engine.TensorLessThan(sample, numOps.FromDouble(-probabilityEpsilon))) > 0 ||
+            EvaluationTensorOps<T>.Count(engine.TensorGreaterThan(sample, numOps.FromDouble(1.0 + probabilityEpsilon))) > 0)
+        {
+            return PredictionType.Regression;
+        }
+
+        var nearBinaryLimit = numOps.FromDouble(nearBinaryEpsilon);
+        var nearZero = AtMost(engine.TensorAbs(sample), nearBinaryLimit);
+        var nearOne = AtMost(engine.TensorAbs(engine.TensorSubtractScalar(sample, numOps.One)), nearBinaryLimit);
+        nearBinaryCount = EvaluationTensorOps<T>.Count(engine.TensorSubtract(engine.TensorAdd(nearZero, nearOne), engine.TensorMultiply(nearZero, nearOne)));
+
+        var positives = engine.ReduceSum(
+            EvaluationTensorOps<T>.GreaterOrEqualMask(sample, numOps.FromDouble(positiveThreshold)), new[] { 1 }, false);
+        var rowSums = engine.ReduceSum(sample, new[] { 1 }, false);
+        rowsWithMultiplePositives = EvaluationTensorOps<T>.Count(engine.TensorGreaterThan(positives, numOps.One));
+        rowsWithSumGreaterThanOne = EvaluationTensorOps<T>.Count(
+            engine.TensorGreaterThan(rowSums, numOps.FromDouble(sumGreaterThanOneThreshold)));
+        rowsWithSumNearOne = EvaluationTensorOps<T>.Count(AtMost(
+            engine.TensorAbs(engine.TensorSubtractScalar(rowSums, numOps.One)), numOps.FromDouble(sumNearOneEpsilon)));
 
         double nearBinaryRatio = totalSampleCount == 0 ? 0.0 : nearBinaryCount / (double)totalSampleCount;
         if (nearBinaryRatio < 0.6)
