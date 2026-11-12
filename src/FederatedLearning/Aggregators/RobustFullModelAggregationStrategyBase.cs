@@ -53,6 +53,34 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
         return parameters;
     }
 
+    /// <summary>
+    /// Stacks the clients' parameter vectors into an [n, P] tensor (rows in <paramref name="clientIds"/>
+    /// order) and sorts every coordinate column ascending, so row r holds each coordinate's r-th order statistic.
+    /// </summary>
+    private protected static Tensor<T> SortCoordinatesAcrossClients(
+        Dictionary<int, Vector<T>> clientParameters,
+        int[] clientIds)
+    {
+        var rows = clientIds.Select(id => clientParameters[id].AsTensor()).ToArray();
+        var stacked = Engine.TensorStack(rows, 0);
+        return Engine.TensorSort(stacked, 0, false).Values;
+    }
+
+    /// <summary>Returns row <paramref name="row"/> of an [n, P] tensor as a length-P vector.</summary>
+    private protected static Vector<T> OrderStatisticRow(Tensor<T> sorted, int row)
+    {
+        int p = sorted.Shape[1];
+        return Engine.TensorSlice(sorted, new[] { row, 0 }, new[] { 1, p }).ToVector();
+    }
+
+    /// <summary>Sums rows [<paramref name="start"/>, <paramref name="start"/> + <paramref name="count"/>) of an [n, P] tensor.</summary>
+    private protected static Vector<T> SumOrderStatisticRows(Tensor<T> sorted, int start, int count)
+    {
+        int p = sorted.Shape[1];
+        var block = Engine.TensorSlice(sorted, new[] { start, 0 }, new[] { count, p });
+        return Engine.ReduceSum(block, new[] { 0 }, false).ToVector();
+    }
+
     protected double ComputeSquaredL2Distance(Vector<T> a, Vector<T> b)
     {
         if (a.Length != b.Length)
@@ -60,14 +88,8 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
             throw new ArgumentException("Vector length mismatch when computing distance.");
         }
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.ToDouble(sum);
+        var diff = Engine.Subtract(a, b);
+        return NumOps.ToDouble(Engine.DotProduct(diff, diff));
     }
 
     protected Vector<T> WeightedAverageOrUnweightedAverage(
@@ -89,44 +111,28 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 
         int parameterCount = clientParameters[selectedClientIds[0]].Length;
         var aggregated = new Vector<T>(parameterCount);
-        for (int i = 0; i < aggregated.Length; i++)
-        {
-            aggregated[i] = NumOps.Zero;
-        }
 
         if (!useClientWeights)
         {
             var denom = NumOps.FromDouble(selectedClientIds.Count);
-            for (int i = 0; i < parameterCount; i++)
+            foreach (var clientId in selectedClientIds)
             {
-                double sum = 0.0;
-                for (int j = 0; j < selectedClientIds.Count; j++)
-                {
-                    sum += NumOps.ToDouble(clientParameters[selectedClientIds[j]][i]);
-                }
-
-                aggregated[i] = NumOps.Divide(NumOps.FromDouble(sum), denom);
+                aggregated = Engine.Add(aggregated, clientParameters[clientId]);
             }
 
-            return aggregated;
+            return Engine.Divide(aggregated, denom);
         }
 
         double totalWeight = GetTotalWeightOrThrow(clientWeights, selectedClientIds, nameof(clientWeights));
-        for (int i = 0; i < parameterCount; i++)
+        foreach (var clientId in selectedClientIds)
         {
-            T sum = NumOps.Zero;
-            foreach (var clientId in selectedClientIds)
+            if (!clientWeights.TryGetValue(clientId, out var weight))
             {
-                if (!clientWeights.TryGetValue(clientId, out var weight))
-                {
-                    throw new ArgumentException($"Missing weight for client {clientId}.", nameof(clientWeights));
-                }
-
-                var normalizedWeightT = NumOps.FromDouble(weight / totalWeight);
-                sum = NumOps.Add(sum, NumOps.Multiply(clientParameters[clientId][i], normalizedWeightT));
+                throw new ArgumentException($"Missing weight for client {clientId}.", nameof(clientWeights));
             }
 
-            aggregated[i] = sum;
+            var normalizedWeightT = NumOps.FromDouble(weight / totalWeight);
+            aggregated = Engine.Add(aggregated, Engine.Multiply(clientParameters[clientId], normalizedWeightT));
         }
 
         return aggregated;

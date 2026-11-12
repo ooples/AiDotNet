@@ -50,38 +50,22 @@ public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutpu
             throw new InvalidOperationException($"Winsorize fraction {_winsorizeFraction:0.###} is too large for {n} clients.");
         }
 
-        var aggregated = new Vector<T>(parameterCount);
-        var buffer = new double[n];
-
-        for (int i = 0; i < parameterCount; i++)
+        // After sorting each coordinate, every order statistic below lowerIndex clamps to row lowerIndex and every
+        // one above upperIndex clamps to row upperIndex, so the winsorized sum is the kept block plus those repeats.
+        var sorted = SortCoordinatesAcrossClients(clientParameters, clientIds);
+        var sum = SumOrderStatisticRows(sorted, lowerIndex, upperIndex - lowerIndex + 1);
+        if (lowerIndex > 0)
         {
-            for (int j = 0; j < n; j++)
-            {
-                buffer[j] = NumOps.ToDouble(clientParameters[clientIds[j]][i]);
-            }
-
-            Array.Sort(buffer);
-
-            double lower = buffer[lowerIndex];
-            double upper = buffer[upperIndex];
-            double sum = 0.0;
-            for (int j = 0; j < n; j++)
-            {
-                double v = buffer[j];
-                if (v < lower)
-                {
-                    v = lower;
-                }
-                else if (v > upper)
-                {
-                    v = upper;
-                }
-
-                sum += v;
-            }
-
-            aggregated[i] = NumOps.FromDouble(sum / n);
+            sum = Engine.Add(sum, Engine.Multiply(OrderStatisticRow(sorted, lowerIndex), NumOps.FromDouble(lowerIndex)));
         }
+
+        int upperRepeats = n - 1 - upperIndex;
+        if (upperRepeats > 0)
+        {
+            sum = Engine.Add(sum, Engine.Multiply(OrderStatisticRow(sorted, upperIndex), NumOps.FromDouble(upperRepeats)));
+        }
+
+        var aggregated = Engine.Divide(sum, NumOps.FromDouble(n));
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }

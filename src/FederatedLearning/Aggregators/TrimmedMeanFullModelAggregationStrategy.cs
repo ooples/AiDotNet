@@ -48,25 +48,8 @@ public sealed class TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput> 
             throw new InvalidOperationException($"Trim fraction {_trimFraction:0.###} is too large for {n} clients.");
         }
 
-        var aggregated = new Vector<T>(parameterCount);
-        var buffer = new double[n];
-
-        for (int i = 0; i < parameterCount; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                buffer[j] = NumOps.ToDouble(clientParameters[clientIds[j]][i]);
-            }
-
-            Array.Sort(buffer);
-            double sum = 0.0;
-            for (int j = trim; j < n - trim; j++)
-            {
-                sum += buffer[j];
-            }
-
-            aggregated[i] = NumOps.FromDouble(sum / kept);
-        }
+        var sorted = SortCoordinatesAcrossClients(clientParameters, clientIds);
+        var aggregated = Engine.Divide(SumOrderStatisticRows(sorted, trim, kept), NumOps.FromDouble(kept));
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }

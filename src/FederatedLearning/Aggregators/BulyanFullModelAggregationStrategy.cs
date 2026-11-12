@@ -6,12 +6,12 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.FederatedLearning.Aggregators;
 
 /// <summary>
-/// Bulyan aggregation for <see cref="IFullModel{T,TInput,TOutput}"/> (Multi-Krum selection + trimmed aggregation).
+/// Bulyan aggregation for <see cref="IFullModel{T,TInput,TOutput}"/> (Multi-Krum selection + closest-to-median averaging).
 /// </summary>
 /// <remarks>
 /// <b>For Beginners:</b> Bulyan is a stronger robust aggregation approach:
 /// 1) Use Multi-Krum to pick a set of "reasonable" client updates.
-/// 2) For each parameter, apply a trimmed aggregation over that set.
+/// 2) For each parameter, average the n - 4f selected values closest to that parameter's median.
 ///
 /// This can better tolerate malicious clients, at the cost of more computation.
 /// </remarks>
@@ -62,11 +62,11 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
 
         var selectedClientIds = SelectMultiKrumCandidates(clientParameters, clientIds, f, selectionSize);
 
-        // Trim within selected set by f on each side per coordinate (Bulyan-style).
+        // Bulyan (El Mhamdi et al., 2018), Alg. 1 step 2: for every coordinate, average the beta = theta - 2f
+        // selected values closest to that coordinate's median.
         int m = selectedClientIds.Count;
-        int trim = Math.Min(f, (m - 1) / 2);
-        int kept = m - (2 * trim);
-        if (kept <= 0)
+        int beta = m - (2 * f);
+        if (beta <= 0)
         {
             throw new InvalidOperationException($"Bulyan trimming invalid for m={m}, f={f}.");
         }
@@ -78,25 +78,17 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
             return InterfaceGuard.Parameterizable(reference).WithParameters(averagedParameters);
         }
 
-        var aggregated = new Vector<T>(parameterCount);
-        var buffer = new double[m];
-
-        for (int i = 0; i < parameterCount; i++)
-        {
-            for (int j = 0; j < m; j++)
-            {
-                buffer[j] = NumOps.ToDouble(clientParameters[selectedClientIds[j]][i]);
-            }
-
-            Array.Sort(buffer);
-            double sum = 0.0;
-            for (int j = trim; j < m - trim; j++)
-            {
-                sum += buffer[j];
-            }
-
-            aggregated[i] = NumOps.FromDouble(sum / kept);
-        }
+        var sorted = SortCoordinatesAcrossClients(clientParameters, selectedClientIds.ToArray());
+        var median = (m % 2 == 1)
+            ? OrderStatisticRow(sorted, m / 2)
+            : Engine.Multiply(SumOrderStatisticRows(sorted, (m / 2) - 1, 2), NumOps.FromDouble(0.5));
+        var medianRows = Engine.TensorBroadcastTo(median.AsTensor().Reshape(1, parameterCount), new[] { m, parameterCount });
+        var distanceToMedian = Engine.TensorAbs(Engine.TensorSubtract(sorted, medianRows));
+        Engine.TensorTopK(Engine.TensorNegate(distanceToMedian), beta, 0, out var closestRows);
+        var closest = Engine.TensorTakeAlongDim(sorted, closestRows, 0);
+        var aggregated = Engine.Divide(
+            Engine.ReduceSum(closest, new[] { 0 }, false).ToVector(),
+            NumOps.FromDouble(beta));
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }

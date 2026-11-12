@@ -48,10 +48,6 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
         var bnRanges = GetBatchNormParameterRanges(firstNet);
 
         var aggregated = new Vector<T>(firstParams.Length);
-        for (int i = 0; i < aggregated.Length; i++)
-        {
-            aggregated[i] = NumOps.Zero;
-        }
 
         foreach (var kvp in clientModels)
         {
@@ -69,24 +65,14 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
             }
 
             var normalizedWeightT = NumOps.FromDouble(weight / totalWeight);
-            for (int i = 0; i < aggregated.Length; i++)
-            {
-                if (IsInRanges(i, bnRanges))
-                {
-                    continue;
-                }
-
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(parameters[i], normalizedWeightT));
-            }
+            aggregated = Engine.Add(aggregated, Engine.Multiply(parameters, normalizedWeightT));
         }
 
         // For BN parameters, keep the first client's values (client-specific BN).
         foreach (var range in bnRanges)
         {
-            for (int i = 0; i < range.Length; i++)
-            {
-                aggregated[range.Start + i] = firstParams[range.Start + i];
-            }
+            firstParams.AsSpan().Slice(range.Start, range.Length)
+                .CopyTo(aggregated.AsWritableSpan().Slice(range.Start, range.Length));
         }
 
         return InterfaceGuard.Parameterizable(first).WithParameters(aggregated);
@@ -117,19 +103,5 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
         }
 
         return ranges;
-    }
-
-    private static bool IsInRanges(int index, List<(int Start, int Length)> ranges)
-    {
-        for (int i = 0; i < ranges.Count; i++)
-        {
-            var r = ranges[i];
-            if (index >= r.Start && index < r.Start + r.Length)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
