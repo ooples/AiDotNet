@@ -197,6 +197,30 @@ internal static class WrapperScoringOps
     /// <summary>The larger of <paramref name="a"/> and <paramref name="b"/> (<paramref name="a"/> on ties).</summary>
     public static T Max<T>(T a, T b) => IsAbove(b, a) ? b : a;
 
+    /// <summary>
+    /// The next <paramref name="count"/> values of <paramref name="random"/>.NextDouble(), in draw order. The
+    /// metaheuristic selectors draw their random numbers through this, in the order master's scalar loops drew
+    /// them, so a seeded run keeps reproducing the same search (a bulk engine draw seeded per vector would
+    /// consume the generator differently).
+    /// </summary>
+    public static double[] NextDoubles(Random random, int count)
+    {
+        var draws = new double[count];
+        for (int i = 0; i < count; i++)
+            draws[i] = random.NextDouble();
+        return draws;
+    }
+
+    /// <summary>A 1-D tensor of <paramref name="count"/> values <paramref name="value"/>(0 .. count - 1) in T.</summary>
+    public static Tensor<T> FromDoubles<T>(int count, Func<int, double> value)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var values = new T[count];
+        for (int i = 0; i < count; i++)
+            values[i] = ops.FromDouble(value(i));
+        return new Tensor<T>(values, new[] { count });
+    }
+
     /// <summary>A 1-D tensor holding <paramref name="values"/>.</summary>
     public static Tensor<T> FromList<T>(IReadOnlyList<T> values) =>
         new Tensor<T>(values.ToArray(), new[] { values.Count });

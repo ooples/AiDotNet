@@ -93,14 +93,15 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         var scorer = _scorer ?? DefaultScorer;
 
-        // Initialize population with random real-valued vectors in [0, 1), each drawn in bulk by the engine from
-        // one seed of the selector's generator
+        // Initialize population with random real-valued vectors in [0, 1), drawn from the selector's generator
+        // in master's order
         var population = new Tensor<T>[_populationSize];
         var fitness = new T[_populationSize];
 
         for (int i = 0; i < _populationSize; i++)
         {
-            population[i] = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+            var draws = WrapperScoringOps.NextDoubles(random, p);
+            population[i] = WrapperScoringOps.FromDoubles<T>(p, j => draws[j]);
             fitness[i] = EvaluateVector(data, target, population[i], p, scorer);
         }
 

@@ -97,8 +97,8 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         var scorer = _scorer ?? DefaultScorer;
 
-        // Initialize particles: positions uniform on [0, 1), velocities uniform on [-0.05, 0.05), each drawn in bulk
-        // by the engine from one seed of the selector's generator
+        // Initialize particles: positions uniform on [0, 1), velocities uniform on [-0.05, 0.05), drawn from the
+        // selector's generator in master's order
         var positions = new Tensor<T>[_nParticles];
         var velocities = new Tensor<T>[_nParticles];
         var pBest = new Tensor<T>[_nParticles]; // Personal best positions
@@ -115,8 +115,10 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         // Initialize
         for (int i = 0; i < _nParticles; i++)
         {
-            positions[i] = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
-            velocities[i] = Engine.TensorUniform<T>(new[] { p }, -0.05, 0.05, random.Next());
+            // Per dimension: the position draw, then the velocity draw (master's order)
+            var draws = WrapperScoringOps.NextDoubles(random, 2 * p);
+            positions[i] = WrapperScoringOps.FromDoubles<T>(p, j => draws[2 * j]);
+            velocities[i] = WrapperScoringOps.FromDoubles<T>(p, j => (draws[2 * j + 1] - 0.5) * 0.1);
             pBest[i] = positions[i];
 
             pBestFitness[i] = EvaluatePosition(data, target, positions[i], scorer);
@@ -134,8 +136,10 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             for (int i = 0; i < _nParticles; i++)
             {
                 // Update velocity: w v + c1 r1 (pBest - x) + c2 r2 (gBest - x), clamped to [-1, 1]
-                var r1 = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
-                var r2 = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+                // Per dimension: r1, then r2 (master's order)
+                var draws = WrapperScoringOps.NextDoubles(random, 2 * p);
+                var r1 = WrapperScoringOps.FromDoubles<T>(p, j => draws[2 * j]);
+                var r2 = WrapperScoringOps.FromDoubles<T>(p, j => draws[2 * j + 1]);
                 var velocity = Engine.TensorAdd(Engine.TensorMultiplyScalar(velocities[i], inertia), Engine.TensorAdd(
                     Engine.TensorMultiplyScalar(Engine.TensorMultiply(r1, Engine.TensorSubtract(pBest[i], positions[i])), cognitive),
                     Engine.TensorMultiplyScalar(Engine.TensorMultiply(r2, Engine.TensorSubtract(gBest, positions[i])), social)));

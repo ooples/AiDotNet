@@ -85,12 +85,13 @@ public class GreyWolfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize wolves (population): positions uniform on [0, 1), each drawn in bulk by the engine from one seed
-        // of the selector's generator
+        // Initialize wolves (population): positions uniform on [0, 1), drawn from the selector's generator in
+        // master's order
         var wolves = new List<(Tensor<T> Position, T Fitness)>();
         for (int i = 0; i < _populationSize; i++)
         {
-            var position = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+            var draws = WrapperScoringOps.NextDoubles(random, p);
+            var position = WrapperScoringOps.FromDoubles<T>(p, j => draws[j]);
             var solution = PositionToSolution(position);
             T fitness = EvaluateFitness(data, target, solution);
             wolves.Add((position, fitness));
@@ -118,10 +119,12 @@ public class GreyWolfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
                 var wolf = wolves[i];
 
                 // Each leader L pulls the wolf to L - A |C L - x| with A = 2 a r1 - a and C = 2 r2 (r1, r2 uniform on
-                // [0, 1)); the new position is the mean of the three pulls, clamped to [0, 1]
-                var x1 = LeaderPull(alpha.Position, wolf.Position, a, p, random);
-                var x2 = LeaderPull(beta.Position, wolf.Position, a, p, random);
-                var x3 = LeaderPull(delta.Position, wolf.Position, a, p, random);
+                // [0, 1)); the new position is the mean of the three pulls, clamped to [0, 1]. The draws keep master's
+                // order: per dimension, (r1, r2) for alpha, beta, then delta
+                var draws = WrapperScoringOps.NextDoubles(random, 6 * p);
+                var x1 = LeaderPull(alpha.Position, wolf.Position, a, p, draws, 0);
+                var x2 = LeaderPull(beta.Position, wolf.Position, a, p, draws, 1);
+                var x3 = LeaderPull(delta.Position, wolf.Position, a, p, draws, 2);
                 var newPosition = Engine.TensorClamp(
                     Engine.TensorMultiplyScalar(Engine.TensorAdd(Engine.TensorAdd(x1, x2), x3), third), zero, one);
 
@@ -177,10 +180,10 @@ public class GreyWolfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         return order.Select(i => wolves[i]).ToList();
     }
 
-    private Tensor<T> LeaderPull(Tensor<T> leader, Tensor<T> position, double a, int p, Random random)
+    private Tensor<T> LeaderPull(Tensor<T> leader, Tensor<T> position, double a, int p, double[] draws, int leaderIndex)
     {
-        var coefficientA = Engine.TensorUniform<T>(new[] { p }, -a, a, random.Next());
-        var coefficientC = Engine.TensorUniform<T>(new[] { p }, 0, 2, random.Next());
+        var coefficientA = WrapperScoringOps.FromDoubles<T>(p, j => 2 * a * draws[6 * j + 2 * leaderIndex] - a);
+        var coefficientC = WrapperScoringOps.FromDoubles<T>(p, j => 2 * draws[6 * j + 2 * leaderIndex + 1]);
         var distance = Engine.TensorAbs(Engine.TensorSubtract(Engine.TensorMultiply(coefficientC, leader), position));
         return Engine.TensorSubtract(leader, Engine.TensorMultiply(coefficientA, distance));
     }

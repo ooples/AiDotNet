@@ -96,8 +96,8 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize bats: positions uniform on [0, 1), each drawn in bulk by the engine from one seed of the
-        // selector's generator; zero velocities
+        // Initialize bats: positions uniform on [0, 1), drawn from the selector's generator in master's order;
+        // zero velocities
         var positions = new Tensor<T>[_populationSize];
         var velocities = new Tensor<T>[_populationSize];
         var fitness = new T[_populationSize];
@@ -108,7 +108,8 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
         for (int i = 0; i < _populationSize; i++)
         {
-            positions[i] = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+            var draws = WrapperScoringOps.NextDoubles(random, p);
+            positions[i] = WrapperScoringOps.FromDoubles<T>(p, j => draws[j]);
             velocities[i] = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
             fitness[i] = EvaluateSolution(positions[i], data, target);
             loudness[i] = initialLoudness;
@@ -140,17 +141,22 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
                 // Local search around the best bat in the dimensions whose draw exceeds the pulse rate:
                 // best + 0.01 u loudness with u uniform on [-1, 1)
+                // (master's draw order: per dimension the pulse draw, then the walk draw only when it fires)
                 var local = new List<int>();
+                var walkDraws = new double[p];
                 for (int j = 0; j < p; j++)
                 {
                     if (WrapperScoringOps.IsAbove(WrapperScoringOps.Scalar<T>(random.NextDouble()), pulseRate[i]))
+                    {
                         local.Add(j);
+                        walkDraws[j] = 2 * random.NextDouble() - 1;
+                    }
                 }
 
                 if (local.Count > 0)
                 {
                     var walk = Engine.TensorAdd(bestPosition, Engine.TensorMultiplyScalar(
-                        Engine.TensorUniform<T>(new[] { p }, -1, 1, random.Next()), WrapperScoringOps.Multiply(step, loudness[i])));
+                        WrapperScoringOps.FromDoubles<T>(p, j => walkDraws[j]), WrapperScoringOps.Multiply(step, loudness[i])));
                     moved = Engine.TensorWhere(WrapperScoringOps.Membership<T>(local.ToArray(), p), walk, moved);
                 }
 

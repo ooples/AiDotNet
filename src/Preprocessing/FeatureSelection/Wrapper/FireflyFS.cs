@@ -96,14 +96,15 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize fireflies: positions uniform on [0, 1), each drawn in bulk by the engine from one seed of the
-        // selector's generator
+        // Initialize fireflies: positions uniform on [0, 1), drawn from the selector's generator in master's
+        // order
         var fireflies = new Tensor<T>[_populationSize];
         var brightness = new T[_populationSize];
 
         for (int i = 0; i < _populationSize; i++)
         {
-            fireflies[i] = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+            var draws = WrapperScoringOps.NextDoubles(random, p);
+            fireflies[i] = WrapperScoringOps.FromDoubles<T>(p, k => draws[k]);
             brightness[i] = EvaluateSolution(fireflies[i], data, target);
         }
 
@@ -128,7 +129,8 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
                             WrapperScoringOps.Exp(WrapperScoringOps.Multiply(negativeGamma, squaredDistance)));
 
                         // Move firefly i toward j, plus a random step alpha u with u uniform on [-0.5, 0.5)
-                        var noise = Engine.TensorUniform<T>(new[] { p }, -0.5 * _alpha, 0.5 * _alpha, random.Next());
+                        var draws = WrapperScoringOps.NextDoubles(random, p);
+                        var noise = WrapperScoringOps.FromDoubles<T>(p, k => _alpha * (draws[k] - 0.5));
                         fireflies[i] = Engine.TensorClamp(Engine.TensorAdd(fireflies[i],
                             Engine.TensorAdd(Engine.TensorMultiplyScalar(difference, beta), noise)), zero, one);
 
