@@ -198,7 +198,7 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
         int n = gradients.Length;
         var diff = Engine.TensorSubtract(Head(currentParams2, n), Head(_previousParameters, n));
         var siGrad = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Head(_omega, n), diff), lambdaT);
-        Engine.TensorAddInPlace(gradients.AsTensor(), siGrad);
+        Engine.TensorAdd(gradients.AsTensor(), siGrad).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }
@@ -223,7 +223,7 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
         int n = _pathIntegral.Length;
         var paramChange = Engine.TensorSubtract(Head(currentParams, n), Head(_previousParameters, n));
         var contribution = Engine.TensorMultiply(Engine.TensorNegate(Head(gradients, n)), paramChange);
-        Engine.TensorAddInPlace(_pathIntegral.AsTensor(), contribution);
+        Engine.TensorAdd(_pathIntegral.AsTensor(), contribution).AsSpan().CopyTo(_pathIntegral.AsWritableSpan());
     }
 
     /// <summary>

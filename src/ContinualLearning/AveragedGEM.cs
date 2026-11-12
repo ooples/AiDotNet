@@ -147,7 +147,7 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
             {
                 var scale = _numOps.Divide(dotProduct, refNormSq);
                 // In place, like master: g <- g - scale * g_ref.
-                Engine.TensorSubtractInPlace(gradients.AsTensor(), Engine.TensorMultiplyScalar(refGradient.AsTensor(), scale));
+                Engine.TensorSubtract(gradients.AsTensor(), Engine.TensorMultiplyScalar(refGradient.AsTensor(), scale)).AsSpan().CopyTo(gradients.AsWritableSpan());
             }
         }
 

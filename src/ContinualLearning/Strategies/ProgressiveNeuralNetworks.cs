@@ -290,7 +290,7 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
         {
             var lateral = Tensor<T>.FromMemory(
                 adjustedGradients.AsWritableMemory().Slice(lateralStart, lateralCount), new[] { lateralCount });
-            Engine.TensorMultiplyScalarInPlace(lateral, _lateralScaling);
+            Engine.TensorMultiplyScalar(lateral, _lateralScaling).AsSpan().CopyTo(lateral.AsWritableSpan());
         }
 
         return adjustedGradients;
@@ -397,7 +397,7 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
 
             var weights = Tensor<T>.FromMemory(lateralWeights.AsWritableMemory().Slice(weightIdx, count), new[] { count });
             var weighted = Engine.TensorMultiply(Head(prevOutput, count), weights);
-            Engine.TensorAddInPlace(Head(contribution, count), Engine.TensorMultiplyScalar(weighted, _lateralScaling));
+            Engine.TensorAdd(Head(contribution, count), Engine.TensorMultiplyScalar(weighted, _lateralScaling)).AsSpan().CopyTo(Head(contribution, count).AsWritableSpan());
             weightIdx += count;
         }
 

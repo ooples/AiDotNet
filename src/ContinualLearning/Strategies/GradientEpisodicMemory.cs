@@ -490,7 +490,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
 
         foreach (var taskGrad in _taskGradients)
         {
-            Engine.TensorAddInPlace(sum, Head(taskGrad, length));
+            Engine.TensorAdd(sum, Head(taskGrad, length)).AsSpan().CopyTo(sum.AsWritableSpan());
         }
 
         T invCount = NumOps.FromDouble(1.0 / _taskGradients.Count);

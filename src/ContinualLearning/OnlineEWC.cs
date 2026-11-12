@@ -183,7 +183,7 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
         // Add Online EWC gradient: λ * F̃_i * (θ_i - θ̃*_i), in place like master
         var diff = Engine.TensorSubtract(Head(currentParams, n), Head(_optimalParameters, n));
         var ewcGrad = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Head(_fisherDiagonal, n), diff), lambdaT);
-        Engine.TensorAddInPlace(gradients.AsTensor(), ewcGrad);
+        Engine.TensorAdd(gradients.AsTensor(), ewcGrad).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }
