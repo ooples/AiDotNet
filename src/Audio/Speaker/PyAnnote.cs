@@ -197,10 +197,14 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
             string bestMatch = allowUnknownSpeakers ? $"Unknown_{unknownCount++}" : "Unknown";
             double bestSim = _options.ClusteringThreshold;
 
-            foreach (var profile in knownSpeakers)
+            // Cosine similarity to every known profile, compared as doubles
+            var sims = new T[knownSpeakers.Count];
+            for (int k = 0; k < sims.Length; k++)
+                sims[k] = ComputeCosineSimilarity(kvp.Value, knownSpeakers[k].Embedding);
+            double[] simValues = sims.Length == 0 ? new double[0] : new Tensor<T>(sims, [sims.Length]).Cast<double>().ToArray();
+            for (int k = 0; k < simValues.Length; k++)
             {
-                double sim = NumOps.ToDouble(ComputeCosineSimilarity(kvp.Value, profile.Embedding));
-                if (sim > bestSim) { bestSim = sim; bestMatch = profile.SpeakerId; }
+                if (simValues[k] > bestSim) { bestSim = simValues[k]; bestMatch = knownSpeakers[k].SpeakerId; }
             }
             labelMap[kvp.Key] = bestMatch;
         }
@@ -237,8 +241,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
                 int end = Math.Min((int)(seg.EndTime * _options.SampleRate), audio.Length);
                 int len = end - start;
                 if (len < _options.SampleRate * 0.5) continue;
-                var segAudio = new Tensor<T>([len]);
-                for (int i = 0; i < len; i++) segAudio[i] = audio[start + i];
+                var segAudio = AudioSpan(audio, start, len);
                 var features = PreprocessAudio(segAudio);
                 Tensor<T> emb = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
                 embeddings.Add(emb);
@@ -387,8 +390,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
 
         for (int start = 0; start + chunkSamples <= audio.Length; start += stepSamples)
         {
-            var chunk = new Tensor<T>([chunkSamples]);
-            for (int i = 0; i < chunkSamples; i++) chunk[i] = audio[start + i];
+            var chunk = AudioSpan(audio, start, chunkSamples);
             chunks.Add(new AudioChunk<T> { Audio = chunk, StartSample = start, StartTime = start / (double)_options.SampleRate, EndTime = (start + chunkSamples) / (double)_options.SampleRate });
         }
 
@@ -397,12 +399,25 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         {
             int start = Math.Max(0, audio.Length - chunkSamples);
             int len = Math.Min(chunkSamples, audio.Length - start);
-            var chunk = new Tensor<T>([len]);
-            for (int i = 0; i < len; i++) chunk[i] = audio[start + i];
+            var chunk = AudioSpan(audio, start, len);
             chunks.Add(new AudioChunk<T> { Audio = chunk, StartSample = start, StartTime = start / (double)_options.SampleRate, EndTime = audio.Length / (double)_options.SampleRate });
         }
 
         return chunks;
+    }
+
+    /// <summary>
+    /// A fresh copy of the <paramref name="length"/> samples (row-major) from <paramref name="start"/>;
+    /// a read outside the audio throws as the indexer does.
+    /// </summary>
+    private Tensor<T> AudioSpan(Tensor<T> audio, int start, int length)
+    {
+        if (length <= 0)
+            return new Tensor<T>([length]);
+        if (start < 0 || start + length > audio.Length)
+            throw new ArgumentOutOfRangeException("flatIndex", "Flat index is out of range.");
+        using var noGrad = new NoGradScope<T>();
+        return Engine.TensorSlice(AudioEngineOps.Flatten(Engine, audio), [start], [length]);
     }
 
     private List<SpeakerSegment<T>> AggregateChunkActivations(List<AudioChunk<T>> chunks, List<Tensor<T>> activations, int totalSamples, int maxSpeakers)
@@ -413,7 +428,9 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         int maxSpk = Math.Min(maxSpeakers, _options.MaxSpeakersPerChunk);
 
         // Create per-frame speaker scores
-        var frameScores = new double[numFrames, maxSpk];
+        if (numFrames < 0 || maxSpk < 0)
+            throw new OverflowException("Arithmetic operation resulted in an overflow.");
+        var frameScores = new Tensor<T>([numFrames, maxSpk]);
         var frameCounts = new int[numFrames];
 
         // Real per-frame aggregation across overlapping sliding-window chunks
@@ -455,46 +472,53 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
             double chunkDuration = chunks[ci].EndTime - chunks[ci].StartTime;
             double chunkFrameStep = chunkDuration / Math.Max(1, chunkFrames);
 
+            // Global frame of each local chunk frame
+            var globalFrames = new int[Math.Max(0, chunkFrames)];
             for (int f = 0; f < chunkFrames; f++)
             {
                 double globalTime = chunks[ci].StartTime + f * chunkFrameStep;
                 int globalFrameIdx = (int)(globalTime / frameStep);
                 if (globalFrameIdx < 0) globalFrameIdx = 0;
                 if (globalFrameIdx >= numFrames) globalFrameIdx = numFrames - 1;
-
-                for (int s = 0; s < maxSpk && s < chunkSpk; s++)
-                {
-                    int flatIdx = rank switch
-                    {
-                        // [batch=1, chunkFrames, numSpeakers]
-                        3 => f * chunkSpk + s,
-                        // [chunkFrames, numSpeakers]
-                        2 => f * chunkSpk + s,
-                        // [numSpeakers] (chunk-level fallback)
-                        _ => s
-                    };
-                    frameScores[globalFrameIdx, s] += NumOps.ToDouble(act.Data.Span[flatIdx]);
-                }
+                globalFrames[f] = globalFrameIdx;
                 frameCounts[globalFrameIdx]++;
+            }
+
+            // Add the chunk's [chunkFrames, speakers] scores (the first maxSpk speakers) to their global frames
+            int usedSpk = Math.Min(maxSpk, chunkSpk);
+            if (chunkFrames > 0 && usedSpk > 0)
+            {
+                var scores = Engine.Reshape(
+                    AudioEngineOps.FitLength(Engine, act, chunkFrames * chunkSpk), [chunkFrames, chunkSpk]);
+                if (usedSpk < chunkSpk)
+                    scores = Engine.TensorSlice(scores, [0, 0], [chunkFrames, usedSpk]);
+                if (usedSpk < maxSpk)
+                    scores = Engine.Concat(new[] { scores, new Tensor<T>([chunkFrames, maxSpk - usedSpk]) }, 1);
+                frameScores = Engine.TensorAdd(
+                    frameScores, Engine.ScatterAdd(scores, new Tensor<int>(globalFrames, [chunkFrames]), 0, numFrames));
             }
         }
 
-        // Normalize and find dominant speaker per frame
+        // Normalize and find dominant speaker per frame (the first speaker with the largest mean score)
+        int[] dominant = new int[numFrames];
+        if (numFrames > 0 && maxSpk > 0)
+        {
+            var counts = new int[numFrames];
+            for (int f = 0; f < numFrames; f++) counts[f] = Math.Max(1, frameCounts[f]);
+            var meanScores = Engine.TensorDivide(
+                frameScores,
+                Engine.TensorBroadcastTo(Engine.Reshape(new Tensor<int>(counts, [numFrames]).Cast<T>(), [numFrames, 1]), [numFrames, maxSpk]));
+            dominant = AudioEngineOps.RowFirstArgMax(Engine, meanScores);
+        }
+
         var segments = new List<SpeakerSegment<T>>();
         int currentSpeaker = -1;
         double segStart = 0;
+        T confidence = NumOps.FromDouble(1.0);
 
         for (int f = 0; f < numFrames; f++)
         {
-            int bestSpk = 0;
-            double bestScore = double.NegativeInfinity;
-            double count = Math.Max(1, frameCounts[f]);
-
-            for (int s = 0; s < maxSpk; s++)
-            {
-                double score = frameScores[f, s] / count;
-                if (score > bestScore) { bestScore = score; bestSpk = s; }
-            }
+            int bestSpk = dominant[f];
 
             if (bestSpk != currentSpeaker)
             {
@@ -507,7 +531,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
                         {
                             Speaker = $"Speaker_{currentSpeaker}",
                             StartTime = segStart, EndTime = segEnd,
-                            Confidence = NumOps.FromDouble(1.0)
+                            Confidence = confidence
                         });
                     }
                 }
@@ -523,7 +547,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
             {
                 Speaker = $"Speaker_{currentSpeaker}",
                 StartTime = segStart, EndTime = totalDuration,
-                Confidence = NumOps.FromDouble(1.0)
+                Confidence = confidence
             });
         }
 
