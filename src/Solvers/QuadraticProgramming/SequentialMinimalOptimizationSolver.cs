@@ -178,6 +178,7 @@ public sealed class SequentialMinimalOptimizationSolver<T>
         var tolerance = NumOps.FromDouble(_options.Tolerance);
         var epsilon = NumOps.FromDouble(_options.StepEpsilon);
         int iterations = 0;
+        T negativeLabel = NumOps.Negate(NumOps.One);
 
         while (iterations < _options.MaxIterations)
         {
@@ -193,7 +194,7 @@ public sealed class SequentialMinimalOptimizationSolver<T>
                     alphas, labels, gradient, upperBounds, n, restrictToLabel: true, NumOps.One);
                 var negative = SelectViolatingPair(
                     alphas, labels, gradient, upperBounds, n, restrictToLabel: true,
-                    NumOps.Negate(NumOps.One));
+                    negativeLabel);
 
                 if (!positive.Found && !negative.Found) break;
 
