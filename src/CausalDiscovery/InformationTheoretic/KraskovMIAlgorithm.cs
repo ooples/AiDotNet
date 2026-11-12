@@ -48,6 +48,12 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
 {
     private const double CoincidenceTolerance = 1e-15;
 
+    /// <summary>
+    /// Maximum number of entries in one block of the pairwise distance matrix (rows per block times n),
+    /// which bounds the working memory of the neighbour search.
+    /// </summary>
+    private const int MaxDistanceBlockElements = 1 << 21;
+
     /// <inheritdoc/>
     public override string Name => "KraskovMI";
 
@@ -119,7 +125,7 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
         // For each point, find k-th nearest neighbor distance in joint space (Chebyshev/max norm)
         // Then count marginal neighbors within that distance. Points are processed in row blocks so
         // the [len x n] distance matrices stay bounded.
-        int block = Math.Max(1, Math.Min(n, (1 << 21) / Math.Max(1, n)));
+        int block = Math.Max(1, Math.Min(n, MaxDistanceBlockElements / Math.Max(1, n)));
         var psiX = new List<Tensor<T>>();
         var psiY = new List<Tensor<T>>();
         for (int start = 0; start < n; start += block)
