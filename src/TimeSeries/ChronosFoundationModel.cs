@@ -786,8 +786,8 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         writer.Write(tensor.Shape.Length);
         foreach (var dim in tensor._shape)
             writer.Write(dim);
-        for (int i = 0; i < tensor.Length; i++)
-            writer.Write(Convert.ToDouble(tensor[i]));
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), v => Convert.ToDouble(v)))
+            writer.Write(value);
     }
 
 
@@ -806,8 +806,8 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             shape[i] = reader.ReadInt32();
 
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
+        Array.ConvertAll(storedValues, _numOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
         return tensor;
     }
 
@@ -1015,21 +1015,18 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     private Tensor<T> InitTensorOnes(int size)
     {
         var tensor = new Tensor<T>(new[] { size });
-        for (int i = 0; i < size; i++)
-        {
-            tensor[i] = NumOps.One;
-        }
+        Engine.TensorFill(tensor, NumOps.One);
         return tensor;
     }
 
@@ -1262,8 +1259,8 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
         writer.Write(tensor.Shape.Length);
         foreach (var dim in tensor._shape)
             writer.Write(dim);
-        for (int i = 0; i < tensor.Length; i++)
-            writer.Write(Convert.ToDouble(tensor[i]));
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), v => Convert.ToDouble(v)))
+            writer.Write(value);
     }
 
     private Tensor<T> DeserializeTensor(BinaryReader reader)
@@ -1274,8 +1271,8 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
             shape[i] = reader.ReadInt32();
 
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
+        Array.ConvertAll(storedValues, NumOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
         return tensor;
     }
 }

@@ -226,12 +226,12 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), _numOps.FromDouble(2.0)),
+                _numOps.One),
+            _numOps.FromDouble(stddev));
     }
 
     private Tensor<T> CreateSinusoidalPositionalEncoding(int maxLen, int embeddingDim)
@@ -797,8 +797,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
 
         // Write training series for Clone support
         writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(Convert.ToDouble(_trainingSeries[i]));
+        foreach (double value in Array.ConvertAll(_trainingSeries.ToArray(), v => Convert.ToDouble(v)))
+            writer.Write(value);
 
         // Normalization statistics (appended; older files without them fall back to 0/1).
         writer.Write(Convert.ToDouble(_normMean));
@@ -914,8 +914,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
-        for (int i = 0; i < tensor.Length; i++)
-            writer.Write(_numOps.ToDouble(tensor[i]));
+        foreach (double value in Array.ConvertAll(tensor.ToArray(), _numOps.ToDouble))
+            writer.Write(value);
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -1042,21 +1042,18 @@ internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.Lay
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     private Tensor<T> InitTensorOnes(int size)
     {
         var tensor = new Tensor<T>(new[] { size });
-        for (int i = 0; i < size; i++)
-        {
-            tensor[i] = NumOps.One;
-        }
+        Engine.TensorFill(tensor, NumOps.One);
         return tensor;
     }
 
@@ -1122,10 +1119,8 @@ internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     /// </remarks>
     private void CopyTensorData(Tensor<T> source, Tensor<T> dest)
     {
-        for (int i = 0; i < Math.Min(source.Length, dest.Length); i++)
-        {
-            dest[i] = source[i];
-        }
+        int count = Math.Min(source.Length, dest.Length);
+        source.Data.Span.Slice(0, count).CopyTo(dest.Data.Span);
     }
 
 }
@@ -1274,10 +1269,8 @@ internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase
     /// </remarks>
     private void CopyTensorData(Tensor<T> source, Tensor<T> dest)
     {
-        for (int i = 0; i < Math.Min(source.Length, dest.Length); i++)
-        {
-            dest[i] = source[i];
-        }
+        int count = Math.Min(source.Length, dest.Length);
+        source.Data.Span.Slice(0, count).CopyTo(dest.Data.Span);
     }
 }
 
@@ -1451,21 +1444,18 @@ internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.Lay
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     private Tensor<T> InitTensorOnes(int size)
     {
         var tensor = new Tensor<T>(new[] { size });
-        for (int i = 0; i < size; i++)
-        {
-            tensor[i] = NumOps.One;
-        }
+        Engine.TensorFill(tensor, NumOps.One);
         return tensor;
     }
 
@@ -1560,10 +1550,8 @@ internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     /// </remarks>
     private void CopyTensorData(Tensor<T> source, Tensor<T> dest)
     {
-        for (int i = 0; i < Math.Min(source.Length, dest.Length); i++)
-        {
-            dest[i] = source[i];
-        }
+        int count = Math.Min(source.Length, dest.Length);
+        source.Data.Span.Slice(0, count).CopyTo(dest.Data.Span);
     }
 
 }
