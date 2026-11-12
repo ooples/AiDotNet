@@ -209,56 +209,60 @@ public partial class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         int m = particles.Length;
         if (m <= 1) return 1.0;
 
-        // All pairwise squared distances [m, m] from the broadcast difference of the stacked particles.
-        var stacked = StackRows(particles);
-        var shape = new[] { m, m, _paramDim };
-        var diff = Engine.TensorSubtract(
-            Engine.TensorBroadcastTo(Engine.Reshape(stacked, new[] { 1, m, _paramDim }), shape),
-            Engine.TensorBroadcastTo(Engine.Reshape(stacked, new[] { m, 1, _paramDim }), shape));
-        var distances = Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 2 }, false), new[] { m * m });
-
-        // The strict upper triangle (i < j), in row order, then the median as the sorted list's middle entry.
-        var upper = new List<int>(m * (m - 1) / 2);
+        // Retain only the strict upper triangle; parameter differences use bounded blocks.
+        var pairwise = new double[checked((int)((long)m * (m - 1) / 2))];
+        int pair = 0;
         for (int i = 0; i < m; i++)
             for (int j = i + 1; j < m; j++)
-                upper.Add(i * m + j);
-
-        var pairwise = Engine.TensorIndexSelect(distances, new Tensor<int>(upper.ToArray(), new[] { upper.Count }), 0);
-        var sorted = Engine.TensorSort(pairwise, 0, false).Values;
-
-        // The bandwidth is a scalar kernel setting, so the median leaves T once here.
-        double median = NumOps.ToDouble(sorted[upper.Count / 2]);
-        double h2 = median / Math.Max(Math.Log(m), 1.0);
+                pairwise[pair++] = SquaredParticleDistance(particles[i], particles[j]);
+        Array.Sort(pairwise);
+        double h2 = pairwise[pairwise.Length / 2] / Math.Max(Math.Log(m), 1.0);
         return Math.Max(h2, 1e-10);
     }
 
-    /// <summary>Stacks equal-length vectors as the rows of an [n, length] tensor.</summary>
-    private Tensor<T> StackRows(Vector<T>[] rows)
+    private const int ParameterBlockSize = 16384;
+
+    private Tensor<double> ParticleBlock(Vector<T> particle, int start, int count)
+        => Tensor<T>.FromVector(particle.GetSubVector(start, count)).Cast<double>();
+
+    private double SquaredParticleDistance(Vector<T> left, Vector<T> right)
     {
-        return Engine.TensorStack(rows.Select(row => Tensor<T>.FromVector(row)).ToArray(), 0);
+        double distance = 0;
+        for (int start = 0; start < _paramDim;)
+        {
+            int count = Math.Min(ParameterBlockSize, _paramDim - start);
+            var difference = Engine.TensorSubtract(ParticleBlock(left, start, count), ParticleBlock(right, start, count));
+            distance += Engine.TensorSum(Engine.TensorSquare(difference));
+            start += count;
+        }
+        return distance;
     }
 
-    /// <summary>
-    /// Computes the SVGD update direction for particle i:
-    /// φ(θ_i) = (1/M) Σ_j [k(θ_j, θ_i) * ∇ log p(D|θ_j) + α * ∇_{θ_j} k(θ_j, θ_i)]
-    /// </summary>
+    /// <summary>Computes attractive and repulsive SVGD terms without stacking particle parameters.</summary>
     private Vector<T> ComputeSVGDUpdate(Vector<T>[] particles, Vector<T>[] taskGrads, int i, double bandwidth)
     {
         int m = particles.Length;
-        var shape = new[] { m, _paramDim };
+        var kernels = new double[m];
+        for (int j = 0; j < m; j++)
+            kernels[j] = Math.Exp(-SquaredParticleDistance(particles[j], particles[i]) / (2.0 * bandwidth));
 
-        // diff_j = theta_j - theta_i; RBF kernel k_j = exp(-||diff_j||^2 / (2h^2))
-        var stacked = StackRows(particles);
-        var diff = Engine.TensorSubtract(stacked,
-            Engine.TensorBroadcastTo(Engine.Reshape(Tensor<T>.FromVector(particles[i]), new[] { 1, _paramDim }), shape));
-        var dist2 = Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 1 }, true);
-        var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(dist2, NumOps.FromDouble(-1.0 / (2.0 * bandwidth))));
-
-        // phi = (1/m) sum_j k_j [-grad_j + w (theta_i - theta_j) / h^2] = -(1/m) k^T (G + (w / h^2) diff):
-        // the attractive term follows -grad L (= grad log p), the repulsive term is grad_{theta_j} k(theta_j, theta_i).
-        var terms = Engine.TensorAdd(StackRows(taskGrads),
-            Engine.TensorMultiplyScalar(diff, NumOps.FromDouble(_algoOptions.SVGDRepulsiveWeight / bandwidth)));
-        var weighted = Engine.TensorMatMul(Engine.TensorTranspose(kernel), terms);
-        return Engine.TensorMultiplyScalar(weighted, NumOps.FromDouble(-1.0 / m)).ToVector();
+        var update = new Vector<T>(_paramDim);
+        for (int start = 0; start < _paramDim;)
+        {
+            int count = Math.Min(ParameterBlockSize, _paramDim - start);
+            var target = ParticleBlock(particles[i], start, count);
+            var sum = new Tensor<double>([count]);
+            for (int j = 0; j < m; j++)
+            {
+                var difference = Engine.TensorSubtract(ParticleBlock(particles[j], start, count), target);
+                var terms = Engine.TensorAdd(ParticleBlock(taskGrads[j], start, count),
+                    Engine.TensorMultiplyScalar(difference, _algoOptions.SVGDRepulsiveWeight / bandwidth));
+                sum = Engine.TensorAdd(sum, Engine.TensorMultiplyScalar(terms, kernels[j]));
+            }
+            Engine.TensorMultiplyScalar(sum, -1.0 / m).Cast<T>()
+                .CopyTo(update.AsWritableSpan().Slice(start, count));
+            start += count;
+        }
+        return update;
     }
 }

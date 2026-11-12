@@ -22,6 +22,37 @@ public class AWGIMTests
     private const int Width = 3;
     private const int Classes = 2;
 
+    [Fact]
+    public void OptimizerBuffers_RoundTripWithoutJoiningFlatModelParameters()
+    {
+        var learner = CreateLearner(0);
+        int parameterCount = learner.GetParameters().Length;
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var type = learner.GetType();
+        foreach (string name in new[] { "_weightMoment1", "_weightMoment2", "_bodyMoment1", "_bodyMoment2" })
+        {
+            var field = type.GetField(name, flags) ?? throw new InvalidOperationException(name);
+            if (field.GetValue(learner) is not Vector<double> values)
+            {
+                values = new Vector<double>(3);
+                field.SetValue(learner, values);
+            }
+            values[0] = 1e-12;
+        }
+        Assert.Equal(parameterCount, learner.GetParameters().Length);
+        using var persistence = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
+        byte[] checkpoint = learner.Serialize();
+        var restored = CreateLearner(0);
+        restored.Deserialize(checkpoint);
+        foreach (string name in new[] { "_weightMoment1", "_weightMoment2", "_bodyMoment1", "_bodyMoment2" })
+        {
+            var field = type.GetField(name, flags) ?? throw new InvalidOperationException(name);
+            var values = Assert.IsType<Vector<double>>(field.GetValue(restored));
+            Assert.Equal(1e-12, values[0]);
+        }
+        Assert.Equal(parameterCount, restored.GetParameters().Length);
+    }
+
     private static MetaLearningTask<double, Matrix<double>, Tensor<double>> CreateTask(int seed)
     {
         var rng = RandomHelper.CreateSeededRandom(seed);

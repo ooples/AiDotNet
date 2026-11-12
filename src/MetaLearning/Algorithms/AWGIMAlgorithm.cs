@@ -83,11 +83,15 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     [TrainableParameter]
     private Vector<T> _weights;
 
-    // AdamW state for the generator weights and the feature encoder.
-    private readonly Vector<T> _weightMoment1;
-    private readonly Vector<T> _weightMoment2;
-    private Vector<T>? _bodyMoment1;
-    private Vector<T>? _bodyMoment2;
+    // AdamW moments are persistent optimizer state, never model parameters.
+    [Buffer(Role = PersistentTensorRole.OptimizerState)]
+    private Vector<double> _weightMoment1;
+    [Buffer(Role = PersistentTensorRole.OptimizerState)]
+    private Vector<double> _weightMoment2;
+    [Buffer(Role = PersistentTensorRole.OptimizerState)]
+    private Vector<double>? _bodyMoment1;
+    [Buffer(Role = PersistentTensorRole.OptimizerState)]
+    private Vector<double>? _bodyMoment2;
     private int _updates;
 
     /// <summary>Creates AWGIM over the feature encoder in <paramref name="options"/>.</summary>
@@ -109,8 +113,8 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         _network = new AwgimNetwork<T>(options.EmbeddingDimension, options.LatentDimension, options.NumHeads, options.DecoderLayers);
         _kernelMask = _network.KernelMask();
         _weights = _network.Initialize(RandomGenerator);
-        _weightMoment1 = new Vector<T>(_weights.Length);
-        _weightMoment2 = new Vector<T>(_weights.Length);
+        _weightMoment1 = new Vector<double>(_weights.Length);
+        _weightMoment2 = new Vector<double>(_weights.Length);
     }
 
     /// <inheritdoc/>
@@ -156,8 +160,8 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         _updates++;
         double rate = LearningRate();
-        _bodyMoment1 ??= new Vector<T>(body.Length);
-        _bodyMoment2 ??= new Vector<T>(body.Length);
+        _bodyMoment1 ??= new Vector<double>(body.Length);
+        _bodyMoment2 ??= new Vector<double>(body.Length);
         ParamModel.SetParameters(AdamW(body, bodyGrad, _bodyMoment1, _bodyMoment2, rate));
         _weights = AdamW(_weights, weightGrad, _weightMoment1, _weightMoment2, rate);
 
@@ -267,26 +271,23 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     }
 
     /// <summary>AdamW: decoupled weight decay (applied as w·decay, as TensorFlow's AdamW does), then Adam.</summary>
-    private Vector<T> AdamW(Vector<T> parameters, Vector<T> gradient, Vector<T> moment1, Vector<T> moment2, double rate)
+    private Vector<T> AdamW(Vector<T> parameters, Vector<T> gradient, Vector<double> moment1, Vector<double> moment2, double rate)
     {
         double correction1 = 1 - Math.Pow(AdamBeta1, _updates);
         double correction2 = 1 - Math.Pow(AdamBeta2, _updates);
-        int n = parameters.Length;
+        var wideGradient = Tensor<T>.FromVector(gradient).Cast<double>();
+        var m = Engine.TensorAdd(Engine.TensorMultiplyScalar(Tensor<double>.FromVector(moment1), AdamBeta1),
+            Engine.TensorMultiplyScalar(wideGradient, 1 - AdamBeta1));
+        var v = Engine.TensorAdd(Engine.TensorMultiplyScalar(Tensor<double>.FromVector(moment2), AdamBeta2),
+            Engine.TensorMultiplyScalar(Engine.TensorSquare(wideGradient), 1 - AdamBeta2));
+        m.CopyTo(moment1.AsWritableSpan());
+        v.CopyTo(moment2.AsWritableSpan());
 
-        // m = b1 m + (1 - b1) g, v = b2 v + (1 - b2) g^2, both kept in the caller's moment buffers.
-        var m = Engine.Add(Engine.Multiply(moment1, NumOps.FromDouble(AdamBeta1)),
-            Engine.Multiply(gradient, NumOps.FromDouble(1 - AdamBeta1)));
-        var v = Engine.Add(Engine.Multiply(moment2, NumOps.FromDouble(AdamBeta2)),
-            Engine.Multiply(Engine.Multiply(gradient, gradient), NumOps.FromDouble(1 - AdamBeta2)));
-        m.AsSpan().CopyTo(moment1.AsWritableSpan());
-        v.AsSpan().CopyTo(moment2.AsWritableSpan());
-
-        // w <- w - decay w, then w <- w - rate (m / c1) / (sqrt(v / c2) + eps)
-        var decayed = Engine.Multiply(parameters, NumOps.FromDouble(1 - _awgimOptions.WeightDecay));
-        var denominator = Engine.Add(
-            Engine.Sqrt(Engine.Divide(v, NumOps.FromDouble(correction2))), Engine.Fill(n, NumOps.FromDouble(AdamEpsilon)));
-        var step = Engine.Divide(Engine.Multiply(m, NumOps.FromDouble(rate / correction1)), denominator);
-        return Engine.Subtract(decayed, step);
+        var decayed = Engine.TensorMultiplyScalar(Tensor<T>.FromVector(parameters).Cast<double>(), 1 - _awgimOptions.WeightDecay);
+        var denominator = Engine.TensorAddScalar(
+            Engine.TensorSqrt(Engine.TensorDivideScalar(v, correction2)), AdamEpsilon);
+        var step = Engine.TensorDivide(Engine.TensorMultiplyScalar(m, rate / correction1), denominator);
+        return Engine.TensorSubtract(decayed, step).Cast<T>().ToVector();
     }
 
     /// <summary>Clip by value, then each tensor's gradient by its own norm, as the reference does.</summary>
