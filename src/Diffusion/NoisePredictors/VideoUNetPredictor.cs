@@ -1503,8 +1503,8 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
             engine.Reshape(engine.TensorNarrow(engine.Reshape(imageCond, new[] { imageCond.Length }), 0, 0, batch * frameSize),
                 new[] { batch, 1, frameSize }), frameShape);
         var frameScale = Vector<T>.Concatenate(
-            Vector<T>.Default(Math.Min(1, numFrames), NumOps.One),
-            Vector<T>.Default(Math.Max(0, numFrames - 1), NumOps.FromDouble(0.1)));
+            DiffusionVectorOps.Full(Math.Min(1, numFrames), NumOps.One),
+            DiffusionVectorOps.Full(Math.Max(0, numFrames - 1), NumOps.FromDouble(0.1)));
         var scale = engine.TensorBroadcastTo(engine.Reshape(frameScale.AsTensor(), new[] { 1, numFrames, 1 }), frameShape);
         var video = engine.Reshape(videoFeatures, frameShape);
         return engine.Reshape(engine.TensorAdd(video, engine.TensorMultiply(image, scale)), videoFeatures._shape);

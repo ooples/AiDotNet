@@ -19,6 +19,21 @@ internal static class DiffusionVectorOps
     }
 
     /// <summary>
+    /// Vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
+    /// </summary>
+    internal static Vector<T> Full<T>(int length, T value)
+    {
+        var result = new Vector<T>(length);
+        result.Fill(value);
+        return result;
+    }
+
+    /// <summary>
+    /// Vector of <paramref name="length"/> ones.
+    /// </summary>
+    internal static Vector<T> Ones<T>(int length) => Full(length, MathHelper.GetNumericOperations<T>().One);
+
+    /// <summary>
     /// The per-sample reduction axes of a batched tensor: every axis but the first (all axes for a rank-1 tensor).
     /// </summary>
     internal static int[] SampleAxes(int rank)
@@ -60,7 +75,7 @@ internal static class DiffusionVectorOps
         var ops = MathHelper.GetNumericOperations<T>();
         int length = Math.Min(a.Length, b.Length);
         var diff = engine.Subtract(Fit(a, length), Fit(b, length));
-        var root = engine.Sqrt(engine.Add(engine.Multiply(diff, diff), Vector<T>.Default(length, ops.Multiply(c, c))));
+        var root = engine.Sqrt(engine.Add(engine.Multiply(diff, diff), Full(length, ops.Multiply(c, c))));
         return ops.Subtract(engine.Sum(root), ops.Multiply(c, ops.FromDouble(length)));
     }
 

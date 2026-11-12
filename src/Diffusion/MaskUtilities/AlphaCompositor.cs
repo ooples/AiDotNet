@@ -65,7 +65,7 @@ public class AlphaCompositor<T>
         var bgA = MaskVectorOps.Fit(backgroundAlpha, len, NumOps.One);
 
         // out_alpha = fg_alpha + bg_alpha * (1 - fg_alpha)
-        var oneMinusFgA = engine.Subtract(Vector<T>.Ones(len), fgA);
+        var oneMinusFgA = engine.Subtract(DiffusionVectorOps.Ones<T>(len), fgA);
         var outAlpha = engine.Add(fgA, engine.Multiply(bgA, oneMinusFgA));
 
         // out_color = (fg * fg_alpha + bg * bg_alpha * (1 - fg_alpha)) / out_alpha, and 0 where out_alpha < 1e-10

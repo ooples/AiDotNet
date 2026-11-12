@@ -602,7 +602,7 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         var engine = AiDotNetEngine.Current;
         var schedule = new Tensor<T>(new[] { _sigmas.Length }, new Vector<T>(_sigmas));
         var sigmaT = NumOps.FromDouble(sigma);
-        int atOrBelow = NumOps.ToInt(engine.TensorSum(engine.TensorLessEqual(schedule, Tensor<T>.CreateDefault(schedule._shape, sigmaT))));
+        int atOrBelow = NumOps.ToInt32(engine.TensorSum(engine.TensorLessEqual(schedule, Tensor<T>.CreateDefault(schedule._shape, sigmaT))));
 
         if (atOrBelow == 0)
             return 0;

@@ -123,7 +123,7 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
         var alphaCumprod = Engine.TensorIndexSelect(AlphasCumulativeProduct.AsTensor(), index, 0).ToVector();
 
         _alphaTs = Engine.Sqrt(alphaCumprod);
-        _sigmaTs = Engine.Sqrt(Engine.Subtract(Vector<T>.Ones(timesteps.Length), alphaCumprod));
+        _sigmaTs = Engine.Sqrt(Engine.Subtract(DiffusionVectorOps.Ones<T>(timesteps.Length), alphaCumprod));
         _lambdas = Engine.Subtract(Engine.Log(_alphaTs), Engine.Log(_sigmaTs));
     }
 

@@ -275,12 +275,12 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
     /// <c>((1 - alphas_cumprod) / alphas_cumprod) ** 0.5</c> schedule with a trailing 0).
     /// </summary>
     /// <returns>A vector of length <c>Timesteps.Length + 1</c>.</returns>
-    protected Vector<T> ComputeTimestepSigmas()
+    private protected Vector<T> ComputeTimestepSigmas()
     {
         var timesteps = Timesteps;
         var index = new Tensor<int>(new[] { timesteps.Length }, new Vector<int>(timesteps));
         var alphaCumprod = Engine.TensorIndexSelect(AlphasCumulativeProduct.AsTensor(), index, 0).ToVector();
-        var oneMinusAlpha = Engine.Subtract(Vector<T>.Ones(timesteps.Length), alphaCumprod);
+        var oneMinusAlpha = Engine.Subtract(DiffusionVectorOps.Ones<T>(timesteps.Length), alphaCumprod);
         var sigmas = Engine.Sqrt(Engine.Divide(oneMinusAlpha, alphaCumprod));
         return Vector<T>.Concatenate(sigmas, new Vector<T>(1));
     }

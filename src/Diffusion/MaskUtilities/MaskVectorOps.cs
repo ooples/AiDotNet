@@ -15,7 +15,7 @@ internal static class MaskVectorOps
             return values;
         if (values.Length > length)
             return values.GetSubVector(0, length);
-        return Vector<T>.Concatenate(values, Vector<T>.Default(length - values.Length, fill));
+        return Vector<T>.Concatenate(values, DiffusionVectorOps.Full(length - values.Length, fill));
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ internal static class MaskVectorOps
     {
         int from = Math.Max(0, Math.Min(start, length));
         int to = Math.Max(from, Math.Min(end, length));
-        var ones = Vector<T>.Default(to - from, MathHelper.GetNumericOperations<T>().One);
+        var ones = DiffusionVectorOps.Ones<T>(to - from);
         return Vector<T>.Concatenate(new Vector<T>(from), ones, new Vector<T>(length - to)).AsTensor();
     }
 
@@ -92,7 +92,7 @@ internal static class MaskVectorOps
     internal static Vector<T> Lerp<T>(Vector<T> a, Vector<T> b, Vector<T> weight)
     {
         var engine = AiDotNetEngine.Current;
-        var oneMinusWeight = engine.Subtract(Vector<T>.Ones(weight.Length), weight);
+        var oneMinusWeight = engine.Subtract(DiffusionVectorOps.Ones<T>(weight.Length), weight);
         return engine.Add(engine.Multiply(oneMinusWeight, a), engine.Multiply(weight, b));
     }
 }

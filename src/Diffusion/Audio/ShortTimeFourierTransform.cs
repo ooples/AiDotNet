@@ -211,6 +211,11 @@ public partial class ShortTimeFourierTransform<T>
     }
 
     /// <summary>
+    /// The window as a tensor; rebuilt from the window array when the cached tensor is unset.
+    /// </summary>
+    private Tensor<T> WindowTensorOrDefault() => _windowTensor ?? new Tensor<T>(_window, new[] { _window.Length });
+
+    /// <summary>
     /// Computes STFT for a single signal.
     /// </summary>
     private Tensor<Complex<T>> ForwardSingle(T[] signal)
@@ -257,7 +262,7 @@ public partial class ShortTimeFourierTransform<T>
             engine.TensorIndexSelect(new Tensor<T>(paddedSignal, new[] { paddedSignal.Length }), new Tensor<int>(new[] { positions.Length }, new Vector<int>(positions)), 0),
             frameShape);
         var windowed = engine.TensorMultiply(
-            samples, engine.TensorBroadcastTo(engine.Reshape(_windowTensor, new[] { 1, _nFft }), frameShape)).ToVector();
+            samples, engine.TensorBroadcastTo(engine.Reshape(WindowTensorOrDefault(), new[] { 1, _nFft }), frameShape)).ToVector();
 
         for (int frame = 0; frame < numFrames; frame++)
         {
@@ -388,7 +393,7 @@ public partial class ShortTimeFourierTransform<T>
 
         var engine = Engine;
         var frameShape = new[] { numFrames, _nFft };
-        var window = engine.TensorBroadcastTo(engine.Reshape(_windowTensor, new[] { 1, _nFft }), frameShape);
+        var window = engine.TensorBroadcastTo(engine.Reshape(WindowTensorOrDefault(), new[] { 1, _nFft }), frameShape);
         var windowedFrames = engine.Reshape(
             engine.TensorMultiply(new Tensor<T>(timeFrames, frameShape), window), new[] { numFrames * _nFft });
         var squaredWindow = engine.Reshape(engine.TensorSquare(window), new[] { numFrames * _nFft });
