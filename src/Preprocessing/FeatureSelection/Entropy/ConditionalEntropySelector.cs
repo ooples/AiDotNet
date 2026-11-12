@@ -25,14 +25,14 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _entropyReductions;
+    private Vector<T>? _entropyReductions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? EntropyReductions => _entropyReductions;
+    public Vector<T>? EntropyReductions => _entropyReductions;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,88 +68,37 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        T count = NumOps.FromDouble(n);
 
-        // Discretize target
-        double yMin = y.Min();
-        double yMax = y.Max();
-        double yRange = yMax - yMin;
-        var yBins = new int[n];
-        for (int i = 0; i < n; i++)
-            yBins[i] = yRange > 1e-10
-                ? Math.Min(_nBins - 1, (int)((y[i] - yMin) / yRange * _nBins))
-                : 0;
+        // Discretize target and features: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when constant
+        var yBins = FeatureSelectionTensorOps.RangeBinOneHot(
+            engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins, _nBins);
+        var xBins = FeatureSelectionTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
 
         // Compute H(Y)
-        var yProbs = new double[_nBins];
-        for (int i = 0; i < n; i++)
-            yProbs[yBins[i]]++;
-        for (int b = 0; b < _nBins; b++)
-            yProbs[b] /= n;
+        T hY = engine.TensorSum(FeatureSelectionTensorOps.EntropyBits(
+            FeatureSelectionTensorOps.BinCounts(yBins, _nBins), n));
 
-        double hY = 0;
-        for (int b = 0; b < _nBins; b++)
-            if (yProbs[b] > 1e-10)
-                hY -= yProbs[b] * Math.Log(yProbs[b]) / Math.Log(2);
+        // Compute H(Y|X) = -sum p(x, y) log2 p(y | x) over the non-empty joint cells
+        var joint = FeatureSelectionTensorOps.JointBinCounts(xBins, yBins, _nBins);
+        var cellShape = new[] { p, _nBins, _nBins };
+        var xCounts = engine.TensorBroadcastTo(engine.Reshape(
+            FeatureSelectionTensorOps.BinCounts(xBins, _nBins), new[] { p, _nBins, 1 }), cellShape);
+        var occupied = engine.TensorGreaterThan(joint, NumOps.Zero);
+        var safeXCounts = engine.TensorWhere(occupied, xCounts, PreprocessingTensorOps.Filled(cellShape, NumOps.One));
+        var conditional = engine.TensorDivide(joint, safeXCounts);
+        var safeConditional = engine.TensorWhere(occupied, conditional, PreprocessingTensorOps.Filled(cellShape, NumOps.One));
+        var terms = engine.TensorMultiply(engine.TensorDivideScalar(joint, count), engine.TensorLog(safeConditional));
+        var hYGivenX = engine.TensorDivideScalar(engine.TensorNegate(engine.ReduceSum(terms, new[] { 1, 2 }, false)),
+            NumOps.FromDouble(Math.Log(2)));
 
-        _entropyReductions = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Discretize feature
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double xMin = col.Min();
-            double xMax = col.Max();
-            double xRange = xMax - xMin;
-            var xBins = new int[n];
-            for (int i = 0; i < n; i++)
-                xBins[i] = xRange > 1e-10
-                    ? Math.Min(_nBins - 1, (int)((col[i] - xMin) / xRange * _nBins))
-                    : 0;
-
-            // Compute H(Y|X)
-            var jointCounts = new int[_nBins, _nBins];
-            var xCounts = new int[_nBins];
-            for (int i = 0; i < n; i++)
-            {
-                jointCounts[xBins[i], yBins[i]]++;
-                xCounts[xBins[i]]++;
-            }
-
-            double hYGivenX = 0;
-            for (int xb = 0; xb < _nBins; xb++)
-            {
-                if (xCounts[xb] == 0) continue;
-                double pX = (double)xCounts[xb] / n;
-
-                for (int yb = 0; yb < _nBins; yb++)
-                {
-                    if (jointCounts[xb, yb] == 0) continue;
-                    double pYGivenX = (double)jointCounts[xb, yb] / xCounts[xb];
-                    hYGivenX -= pX * pYGivenX * Math.Log(pYGivenX) / Math.Log(2);
-                }
-            }
-
-            // Information gain: I(Y;X) = H(Y) - H(Y|X)
-            _entropyReductions[j] = hY - hYGivenX;
-        }
+        // Information gain: I(Y;X) = H(Y) - H(Y|X)
+        var entropyReductions = engine.TensorAddScalar(engine.TensorNegate(hYGivenX), hY);
+        _entropyReductions = entropyReductions.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _entropyReductions[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(entropyReductions, numToSelect);
 
         IsFitted = true;
     }

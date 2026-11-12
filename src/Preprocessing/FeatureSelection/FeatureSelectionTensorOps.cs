@@ -746,6 +746,44 @@ internal static class FeatureSelectionTensorOps
         xVariances = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(variances, 0);
         return p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(covariances, 0);
     }
+
+    /// <summary>
+    /// Range bins of every column of <paramref name="x"/> ([n, p]):
+    /// <c>bin = min(trunc((x - min) / (max - min) * scale), bins - 1)</c>, 0 for a column whose range is not above
+    /// 1e-10. Returns the bins one-hot as [n, p * bins].
+    /// </summary>
+    public static Tensor<T> RangeBinOneHot<T>(Tensor<T> x, int bins, double scale)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var shape = new[] { n, p };
+        var min = PreprocessingTensorOps.ColumnMin(x);
+        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min);
+        var varying = engine.TensorGreaterThan(range, ops.FromDouble(1e-10));
+        var safeRange = engine.TensorWhere(varying, range, PreprocessingTensorOps.Filled(new[] { p }, ops.One));
+        var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(
+            engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.Reshape(min, new[] { 1, p }), shape)),
+            engine.TensorBroadcastTo(engine.Reshape(safeRange, new[] { 1, p }), shape)), ops.FromDouble(scale));
+        var binIndex = engine.TensorMin(engine.TensorTrunc(scaled), ops.FromDouble(bins - 1));
+        binIndex = engine.TensorWhere(engine.TensorBroadcastTo(engine.Reshape(varying, new[] { 1, p }), shape),
+            binIndex, new Tensor<T>(shape));
+        return PreprocessingTensorOps.OneHotBins(binIndex, bins);
+    }
+
+    /// <summary>
+    /// Joint bin counts of every feature (one-hot [n, p * bins]) with a target (one-hot [n, targetBins]):
+    /// [p, bins, targetBins].
+    /// </summary>
+    public static Tensor<T> JointBinCounts<T>(Tensor<T> featureOneHot, Tensor<T> targetOneHot, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = featureOneHot.Shape[1] / bins;
+        int targetBins = targetOneHot.Shape[1];
+        return engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(featureOneHot), targetOneHot),
+            new[] { p, bins, targetBins });
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>
