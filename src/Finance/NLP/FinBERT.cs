@@ -501,20 +501,20 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
             var probs = AnalyzeSentiment(tensor);
 
             var probVector = probs.ToVector();
-            int maxIdx = 0;
-            T maxProb = probVector[0];
+            int classCount = Math.Min(_numSentimentClasses, probVector.Length);
+            var probValues = probVector.AsSpan();
+
+            // First maximum among the leading class probabilities (strict >, starting from index 0).
+            int maxIdx = classCount > 0
+                ? Engine.TensorArgMax(Engine.TensorNarrow(Tensor<T>.FromVector(probVector), 0, 0, classCount), 0).AsSpan()[0]
+                : 0;
+            T maxProb = probValues[maxIdx];
             var classProbabilities = new Dictionary<string, T>();
 
-            for (int j = 0; j < _numSentimentClasses && j < probVector.Length; j++)
+            for (int j = 0; j < classCount; j++)
             {
                 string className = j < _sentimentClasses.Length ? _sentimentClasses[j] : $"class_{j}";
-                classProbabilities[className] = probVector[j];
-
-                if (NumOps.GreaterThan(probVector[j], maxProb))
-                {
-                    maxProb = probVector[j];
-                    maxIdx = j;
-                }
+                classProbabilities[className] = probValues[j];
             }
 
             results[i] = new SentimentResult<T>
@@ -732,11 +732,8 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
         if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session not initialized.");
 
-        var inputData = new long[input.Data.Length];
-        for (int i = 0; i < input.Data.Length; i++)
-        {
-            inputData[i] = (long)NumOps.ToDouble(input.Data.Span[i]);
-        }
+        // Token ids are integral; convert the whole buffer to the int64 the model expects.
+        var inputData = new Tensor<T>(new[] { input.Data.Length }, input.Data).Cast<long>().ToArray();
 
         var tensorShape = new[] { 1, _maxSequenceLength };
         var inputTensor = new OnnxTensors.DenseTensor<long>(
@@ -804,12 +801,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     private Tensor<T> TokenIdsToTensor(int[] tokenIds)
     {
-        var data = new T[tokenIds.Length];
-        for (int i = 0; i < tokenIds.Length; i++)
-        {
-            data[i] = NumOps.FromDouble(tokenIds[i]);
-        }
-        return new Tensor<T>(new[] { 1, tokenIds.Length }, new Vector<T>(data));
+        return new Tensor<int>(new[] { 1, tokenIds.Length }, new Vector<int>(tokenIds)).Cast<T>();
     }
 
     /// <summary>
