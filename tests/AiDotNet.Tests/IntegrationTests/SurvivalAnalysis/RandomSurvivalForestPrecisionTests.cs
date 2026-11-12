@@ -113,6 +113,25 @@ public class RandomSurvivalForestPrecisionTests
     }
 
     [Fact]
+    public void EnsembleMortality_WithOneEventTimePerSplitBlock_MatchesScikitSurvival()
+    {
+        // The split search sums the log-rank terms over blocks of event times to bound memory; with one event
+        // time per block the forest must be the same as with all event times at once.
+        var (x, times, events, query, _) = ScikitSurvivalToySet();
+        var forest = new RandomSurvivalForest<double>(
+            numTrees: 3, maxDepth: 50, minSamplesLeaf: 3, maxFeatures: 2, seed: 0, bootstrap: false)
+        {
+            SplitBlockElements = 1,
+        };
+        forest.FitSurvival(x, times, events);
+        var risk = forest.PredictHazardRatio(query);
+
+        double[] expected = { 17.666666666666668, 8.833333333333332, 2.0, 11.0 };
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], risk[i], 12);
+    }
+
+    [Fact]
     public void EnsembleCumulativeHazard_MatchesScikitSurvival()
     {
         var (_, _, _, query, queryTimes) = ScikitSurvivalToySet();

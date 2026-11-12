@@ -279,14 +279,24 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
     }
 
     /// <summary>
+    /// Upper bound on the elements of one [samples x event times] block in <see cref="FindBestSplit"/>; the
+    /// event-time axis is processed in blocks of at most this many elements so a split search needs memory
+    /// proportional to the node size, not to the node size times its number of event times.
+    /// </summary>
+    internal int SplitBlockElements { get; set; } = 1 << 20;
+
+    /// <summary>
     /// Finds the split with the largest log-rank statistic over the candidate features.
     /// </summary>
     /// <returns>The feature and threshold, or null when no split is admissible.</returns>
     /// <remarks>
-    /// For every feature the node is sorted by the feature value, and the risk-set and death counts of
+    /// For every feature the node is sorted once by the feature value, and the risk-set and death counts of
     /// each candidate left child come from cumulative sums over the sorted samples, so all thresholds
-    /// (midpoints between distinct values) are scored at once. Candidates are compared in feature order
-    /// and then threshold order, and the first maximum wins.
+    /// (midpoints between distinct values) are scored at once. The log-rank numerator and variance are sums over
+    /// the node's event times, so the event times are taken in blocks of at most
+    /// <see cref="SplitBlockElements"/> / n and each block's [n x block] cumulative sums are added to the
+    /// per-candidate totals: memory stays O(n) per block instead of O(n k). Candidates are compared in feature
+    /// order and then threshold order, and the first maximum wins.
     /// </remarks>
     private (int Feature, T Threshold)? FindBestSplit(
         IEngine engine, Tensor<T> x, Tensor<T> times, Tensor<T> events, int[] featureIndices)
@@ -297,14 +307,15 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
         // Event times of this node; other times contribute nothing to the statistic.
         var nodeEventTimes = UniqueEventTimes(engine, times, events);
         int k = nodeEventTimes.Length;
-        int[] grid = { n, k };
-        var eventGrid = engine.TensorBroadcastTo(engine.Reshape(nodeEventTimes, new[] { 1, k }), grid);
+        int blockWidth = Math.Max(1, Math.Min(k, SplitBlockElements / Math.Max(1, n)));
 
         // Left-child sizes 1..n-1 that keep both children at MinSamplesLeaf or more.
         var leftSizes = engine.TensorArange<T>(1, n, 1);
         var sizeAllowed = engine.TensorMultiply(
             engine.TensorGreaterThan(leftSizes, NumOps.FromDouble(MinSamplesLeaf - 0.5)),
             engine.TensorLessThan(leftSizes, NumOps.FromDouble(n - MinSamplesLeaf + 0.5)));
+        var inadmissible = Tensor<T>.CreateDefault(new[] { candidates }, NumOps.FromDouble(-1.0));
+        T zero = NumOps.Zero;
 
         var scores = new List<Tensor<T>>();
         var sortedColumns = new List<Tensor<T>>();
@@ -312,30 +323,41 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
         {
             var (sortedValues, order) = engine.TensorSort(engine.TensorSelect(x, 1, feature), 0, false);
             sortedColumns.Add(sortedValues);
+            var sortedTimes = engine.Reshape(engine.TensorIndexSelect(times, order, 0), new[] { n, 1 });
+            var sortedEvents = engine.Reshape(engine.TensorIndexSelect(events, order, 0), new[] { n, 1 });
 
-            var sortedTimes = engine.TensorBroadcastTo(
-                engine.Reshape(engine.TensorIndexSelect(times, order, 0), new[] { n, 1 }), grid);
-            var sortedEvents = engine.TensorBroadcastTo(
-                engine.Reshape(engine.TensorIndexSelect(events, order, 0), new[] { n, 1 }), grid);
+            var numerator = new Tensor<T>(new[] { candidates });
+            var variance = new Tensor<T>(new[] { candidates });
+            for (int start = 0; start < k; start += blockWidth)
+            {
+                int width = Math.Min(blockWidth, k - start);
+                int[] grid = { n, width };
+                var eventGrid = engine.TensorBroadcastTo(
+                    engine.Reshape(engine.TensorNarrow(nodeEventTimes, 0, start, width), new[] { 1, width }), grid);
+                var timeGrid = engine.TensorBroadcastTo(sortedTimes, grid);
 
-            // Risk set and deaths of the first i + 1 sorted samples at every node event time.
-            var cumulativeRisk = engine.TensorCumSum(engine.TensorGreaterEqual(sortedTimes, eventGrid), 0);
-            var cumulativeDeaths = engine.TensorCumSum(
-                engine.TensorMultiply(engine.TensorEquals(sortedTimes, eventGrid), sortedEvents), 0);
+                // Risk set and deaths of the first i + 1 sorted samples at this block's event times.
+                var cumulativeRisk = engine.TensorCumSum(engine.TensorGreaterEqual(timeGrid, eventGrid), 0);
+                var cumulativeDeaths = engine.TensorCumSum(
+                    engine.TensorMultiply(engine.TensorEquals(timeGrid, eventGrid), engine.TensorBroadcastTo(sortedEvents, grid)), 0);
 
-            int[] candidateGrid = { candidates, k };
-            var atRisk = engine.TensorBroadcastTo(engine.TensorNarrow(cumulativeRisk, 0, n - 1, 1), candidateGrid);
-            var deaths = engine.TensorBroadcastTo(engine.TensorNarrow(cumulativeDeaths, 0, n - 1, 1), candidateGrid);
-            var leftAtRisk = engine.TensorNarrow(cumulativeRisk, 0, 0, candidates);
-            var leftDeaths = engine.TensorNarrow(cumulativeDeaths, 0, 0, candidates);
+                int[] candidateGrid = { candidates, width };
+                var atRisk = engine.TensorBroadcastTo(engine.TensorNarrow(cumulativeRisk, 0, n - 1, 1), candidateGrid);
+                var deaths = engine.TensorBroadcastTo(engine.TensorNarrow(cumulativeDeaths, 0, n - 1, 1), candidateGrid);
+                var leftAtRisk = engine.TensorNarrow(cumulativeRisk, 0, 0, candidates);
+                var leftDeaths = engine.TensorNarrow(cumulativeDeaths, 0, 0, candidates);
+
+                var (blockNumerator, blockVariance) = LogRankTerms(engine, leftAtRisk, leftDeaths, atRisk, deaths);
+                numerator = engine.TensorAdd(numerator, blockNumerator);
+                variance = engine.TensorAdd(variance, blockVariance);
+            }
 
             // |Z| where the variance is positive, the threshold separates distinct values and both
             // children are large enough; -1 marks an inadmissible candidate.
-            var (statistic, hasVariance) = LogRankStatistic(engine, leftAtRisk, leftDeaths, atRisk, deaths);
-            var distinct = engine.TensorGreaterThan(engine.TensorDiff(sortedValues, 1, 0), NumOps.Zero);
+            var (statistic, hasVariance) = LogRankFromTerms(engine, numerator, variance);
+            var distinct = engine.TensorGreaterThan(engine.TensorDiff(sortedValues, 1, 0), zero);
             var admissible = engine.TensorMultiply(engine.TensorMultiply(hasVariance, distinct), sizeAllowed);
-            scores.Add(engine.TensorWhere(
-                admissible, statistic, Tensor<T>.CreateDefault(new[] { candidates }, NumOps.FromDouble(-1.0))));
+            scores.Add(engine.TensorWhere(admissible, statistic, inadmissible));
         }
 
         var allScores = engine.Concat(scores, 0);
@@ -365,6 +387,17 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
     private (Tensor<T> Statistic, Tensor<T> HasVariance) LogRankStatistic(
         IEngine engine, Tensor<T> leftAtRisk, Tensor<T> leftDeaths, Tensor<T> atRisk, Tensor<T> deaths)
     {
+        var (numerator, variance) = LogRankTerms(engine, leftAtRisk, leftDeaths, atRisk, deaths);
+        return LogRankFromTerms(engine, numerator, variance);
+    }
+
+    /// <summary>
+    /// The log-rank numerator sum(d_L - d Y_L / Y) and variance sum(Y_L/Y (1 - Y_L/Y) (Y - d)/(Y - 1) d) per
+    /// candidate, summed over the event times (columns) given; both are additive over event times.
+    /// </summary>
+    private (Tensor<T> Numerator, Tensor<T> Variance) LogRankTerms(
+        IEngine engine, Tensor<T> leftAtRisk, Tensor<T> leftDeaths, Tensor<T> atRisk, Tensor<T> deaths)
+    {
         T one = NumOps.One;
         int candidates = atRisk.Shape[0];
         int[] candidateGrid = { candidates, atRisk.Shape[1] };
@@ -380,7 +413,18 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
         var spread = engine.TensorMultiply(
             ratio, engine.TensorSubtract(Tensor<T>.CreateDefault(candidateGrid, one), ratio));
         var variance = engine.ReduceSum(engine.TensorMultiply(spread, tieFactor), new[] { 1 }, keepDims: false);
+        return (numerator, variance);
+    }
 
+    /// <summary>
+    /// |Z| = |numerator| / sqrt(variance) per candidate (0 where the variance is zero), and 1 where the variance
+    /// is positive.
+    /// </summary>
+    private (Tensor<T> Statistic, Tensor<T> HasVariance) LogRankFromTerms(
+        IEngine engine, Tensor<T> numerator, Tensor<T> variance)
+    {
+        T one = NumOps.One;
+        int candidates = numerator.Length;
         var hasVariance = engine.TensorGreaterThan(variance, NumOps.Zero);
         var safeVariance = engine.TensorAdd(
             engine.TensorMultiply(variance, hasVariance),
