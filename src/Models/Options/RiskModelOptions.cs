@@ -8,6 +8,21 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class RiskModelOptions<T> : FinancialNeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance with the default settings.</summary>
+    public RiskModelOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by copying every setting of another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    protected RiskModelOptions(RiskModelOptions<T> other) : base(other)
+    {
+        NumFeatures = other.NumFeatures;
+        ConfidenceLevel = other.ConfidenceLevel;
+        TimeHorizon = other.TimeHorizon;
+        LossFunction = other.LossFunction;
+    }
+
     /// <summary>
     /// Number of input features used for risk calculation.
     /// </summary>
