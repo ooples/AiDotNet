@@ -242,7 +242,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             using (new NoGradScope<T>())
             {
-                var rnd = new Random(0);
+                var rnd = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
                 var x = Encode(new[] { 1, 2 }, 0, new Tensor<T>(new[] { 1, o.StyleBert.Hidden }), new Tensor<T>(new[] { 1, o.StyleBert.Hidden }), false, rnd);
                 _duration!.Forward(x, false, rnd);
                 _pitch!.Forward(x, false, rnd);

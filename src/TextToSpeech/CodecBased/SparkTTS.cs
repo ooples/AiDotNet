@@ -144,7 +144,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
             prompt.AddRange(TokenIds(encoded.Semantic, _options.SemanticTokenOffset, _options.CodebookSize));
         }
         else if (_options.ConstrainedSpeechDecoding) prompt.Add(Special(_options.StartSemanticToken));
-        var semantic = _languageModel!.GenerateSemantic(prompt, new Random(_options.GenerationSeed));
+        var semantic = _languageModel!.GenerateSemantic(prompt, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed));
         return PostprocessAudio(_biCodec.Decode(TensorOf(semantic), encoded.Global));
     }
 
@@ -167,7 +167,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
             Special(_options.PitchLabelOffset + (int)pitch), Special(_options.SpeedLabelOffset + (int)speed),
             Special(_options.EndStyleLabelToken),
         });
-        var random = new Random(_options.GenerationSeed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed);
         if (!_options.ConstrainedSpeechDecoding)
         {
             int[] generated = _languageModel!.GenerateAll(prompt, random);
@@ -302,7 +302,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
             Layers.AddRange(Architecture.Layers);
             return;
         }
-        var random = new Random(_options.Seed ?? _options.GenerationSeed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? _options.GenerationSeed);
         _languageModel = new SparkTokenLanguageModel<T>(Engine, _languageLayers, _options);
         ComponentLayers.AddRange(_languageLayers);
         _biCodec = new SparkBiCodec<T>(Engine, ComponentLayers, _options, random);

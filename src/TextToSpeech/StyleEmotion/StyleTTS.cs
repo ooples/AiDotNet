@@ -249,7 +249,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         try
         {
             using var _ = new NoGradScope<T>();
-            var random = new Random(0);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
             int frames = 80, tokens = 2;
             var mel = new Tensor<T>(new[] { o.MelChannels, frames });
             var ids = new[] { 0, 0 };

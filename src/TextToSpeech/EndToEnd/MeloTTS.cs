@@ -212,7 +212,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             foreach (var piece in MeloTextPipeline.SplitSentence(text, o.Language))
             {
                 string sentence = o.Language is MeloLanguage.English or MeloLanguage.ChineseMixEnglish
-                    ? Regex.Replace(piece, "([a-z])([A-Z])", "$1 $2")
+                    ? Regex.Replace(piece, "([a-z])([A-Z])", "$1 $2", RegexOptions.None, TimeSpan.FromSeconds(1))
                     : piece;
                 var utterance = Prepare(sentence);
                 var (waveform, _) = _synthesizer!.Infer(utterance.Text.Symbols, utterance.Text.Tones, utterance.Text.Languages,

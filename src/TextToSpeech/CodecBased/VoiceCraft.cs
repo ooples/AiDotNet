@@ -58,7 +58,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         _options = options ?? new VoiceCraftOptions();
         ValidateOptions(_options);
         Options = _options;
-        _trainingRandom = new Random(_options.SamplingSeed);
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBaseProperties();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
@@ -77,7 +77,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         ValidateOptions(_options);
         Options = _options;
         _useNativeMode = true;
-        _trainingRandom = new Random(_options.SamplingSeed);
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         if (optimizer is not null) _optimizer = optimizer;
         else if (_options.UseScaledAdam)
         {
@@ -456,7 +456,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         {
             var generated = _network!.Generate(phones, prefix, masks,
                 endOfUtterance ? Math.Min(_options.MinimumGeneratedFrames, maximum) : 0, maximum,
-                new Random(_options.SamplingSeed + candidate), endOfUtterance);
+                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + candidate), endOfUtterance);
             if (shortest is null || generated.GetLength(1) < shortest.GetLength(1)) shortest = generated;
         }
         return shortest!;

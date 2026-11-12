@@ -167,7 +167,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         RequirePipeline();
         using var _ = new NoGradScope<T>();
         var mel80 = _tokenizer!.Decode(TortoiseOps<T>.IdsOf(tokens));
-        return _univNet!.Generate(ToVocoderMel(mel80), new Random(_options.SamplingSeed));
+        return _univNet!.Generate(ToVocoderMel(mel80), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
     }
 
     /// <summary>Returns CLVP's scalar compatibility score for a candidate speech-code sequence.</summary>
@@ -190,7 +190,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         var speech = samples.Select(s => (IReadOnlyList<int>)TortoiseOps<T>.IdsOf(s.CodecTokens is { } storedCodecTokens ? storedCodecTokens
             : EncodeToTokens(s.Audio ?? throw new ArgumentException("Every CLVP example requires CodecTokens or Audio.")))).ToArray();
         return TrainWithCustomObjective(samples[0].Tokens, samples[0].Tokens,
-            (_, _) => _clvp!.ContrastiveBatchLoss(texts, speech, new Random(_options.SamplingSeed + 17)), _optimizer);
+            (_, _) => _clvp!.ContrastiveBatchLoss(texts, speech, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17)), _optimizer);
     }
 
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
@@ -260,7 +260,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         Tensor<T>? savedGeneration = null;
         var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
         {
-            var generated = _univNet!.Generate(mel, new Random(_options.SamplingSeed + (int)(_vocoderTrainingSteps % int.MaxValue)));
+            var generated = _univNet!.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + (int)(_vocoderTrainingSteps % int.MaxValue)));
             savedGeneration = new Tensor<T>(generated.Shape.ToArray(), new Vector<T>(generated.ToArray()));
             return _vocoderTraining!.Generator(audio, generated, adversarial);
         }, _optimizer!);
@@ -319,7 +319,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> SynthesizeIds(int[] text, Tensor<T> referenceAt24Khz)
     {
-        var random = new Random(_options.SamplingSeed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         var reference22 = Resample(referenceAt24Khz, _options.SampleRate, _options.TokenizerSampleRate);
         var arReference = PrefixOrPad(reference22, _options.ConditioningSamples);
         var condition = _autoregressive!.Conditioning(AutoregressiveMel(arReference), false, random);
@@ -352,7 +352,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (_options.TrainingComponent == TortoiseTrainingComponent.UnivNet)
         {
             EnsureVocoderTraining();
-            var generated = _univNet!.Generate(DiffusionMel(audio), new Random(_options.SamplingSeed + 17));
+            var generated = _univNet!.Generate(DiffusionMel(audio), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
             return _vocoderTraining!.Generator(audio, generated, _vocoderTrainingSteps >= _options.VocoderTraining.PretrainingSteps);
         }
         int[] text = TextIds(sample.Tokens);
@@ -360,7 +360,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
             ? TortoiseOps<T>.IdsOf(sample.CodecTokens)
             : TortoiseOps<T>.IdsOf(EncodeToTokens(audio));
         var reference = sample.SpeakerReference ?? audio;
-        var random = new Random(_options.SamplingSeed + 17);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17);
 
         if (_options.TrainingComponent == TortoiseTrainingComponent.Clvp)
             return _clvp!.ContrastiveLoss(text, speech, random);
@@ -416,12 +416,12 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private Tensor<T> ToVocoderMel(Tensor<T> mel80)
     {
         if (mel80.Shape[1] == _options.MelChannels) return mel80;
-        var result = new Tensor<T>(new[] { mel80.Shape[0], _options.MelChannels });
-        for (int frame = 0; frame < result.Shape[0]; frame++)
-            for (int bin = 0; bin < result.Shape[1]; bin++)
-                result[frame, bin] = bin < mel80.Shape[1] ? mel80[frame, bin]
-                    : TortoiseOps<T>.NumOps.FromDouble(Math.Log(1e-5));
-        return result;
+        int frames = mel80.Shape[0], bins = mel80.Shape[1], channels = _options.MelChannels;
+        var kept = Engine.TensorSlice(mel80, new[] { 0, 0 }, new[] { frames, Math.Min(bins, channels) });
+        if (bins >= channels) return kept.Clone();
+        // Bins past the front end's are log(1e-5), the floor of an empty mel bin.
+        var floor = Tensor<T>.CreateDefault(new[] { frames, channels - bins }, TortoiseOps<T>.NumOps.FromDouble(Math.Log(1e-5)));
+        return Engine.TensorConcatenate(new[] { kept, floor }, 1);
     }
 
     private Tensor<T> Resample(Tensor<T> audio, int from, int to)

@@ -146,7 +146,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
 
         using var _ = new NoGradScope<T>();
-        var generated = _tokenLanguageModel!.Generate(combinedText, promptSpeech, new Random(_options.GenerationSeed));
+        var generated = _tokenLanguageModel!.Generate(combinedText, promptSpeech, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed));
         var tokenTensor = Tokens(generated);
         var acoustic = _tokenDiffusion!.Refine(tokenTensor, timbre);
         return PostprocessAudio(_acousticVocoder!.Decode(acoustic));
@@ -390,7 +390,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
             if (sample.SpeakerReference is not null) timbre = TrainingTimbreEmbedding(sample.SpeakerReference);
         }
         return _tokenDiffusion!.DenoisingLoss(AlignTokens(tokenSource, target.Shape[0]), target, timbre,
-            training ? null : new Random(_options.GenerationSeed + 17));
+            training ? null : AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed + 17));
     }
 
     private Tensor<T> TrainingTimbreEmbedding(Tensor<T> reference)

@@ -716,7 +716,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (textIds is null) throw new ArgumentNullException(nameof(textIds));
         using var _ = new NoGradScope<T>();
         var o = _options;
-        var memory = Reading.Encode(textIds, training: false, new Random(0));
+        var memory = Reading.Encode(textIds, training: false, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0));
         int offset = SemanticOffset;
         // S1 emits semantic tokens and </s>, and </s> only after the first token.
         return Reading.BeamSearch(memory, null, Array.Empty<int>(), o.BeamSize, o.MaxSemanticTokens,
@@ -737,7 +737,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ArgumentOutOfRangeException(nameof(semanticTokens), $"Semantic tokens lie in [0, {_options.SemanticCodes}).");
         using var _ = new NoGradScope<T>();
         var input = Ids(WithEnd(AudioLmCore<T>.Deduplicate(semanticTokens).Select(code => SemanticOffset + code)));
-        var memory = BacktranslationModel.Encode(input, training: false, new Random(0));
+        var memory = BacktranslationModel.Encode(input, training: false, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0));
         int offset = SemanticOffset;
         var ids = BacktranslationModel.BeamSearch(memory, null, Array.Empty<int>(), _options.BeamSize, _options.MaxTextLength,
             (token, step) => (token >= PhonemeOffset && token < offset) || (token == EndToken && step > 0));
