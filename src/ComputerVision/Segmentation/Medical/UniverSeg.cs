@@ -159,8 +159,9 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// <remarks>
     /// <para>
     /// UniverSeg segments a query by comparing it with labelled examples of the task (Butoi et al. 2023).
-    /// Supports are resampled to the query's size when the two differ. Until a support set is given, the
-    /// network sees one all-zero support pair.
+    /// Supports are resampled to the query's size when the two differ. The support set is part of the model's
+    /// state: it is saved and restored with the model. The paper defines the network only for a support set of at
+    /// least one labelled pair, so predicting before a support set is given throws.
     /// </para>
     /// </remarks>
     public void SetSupportSet(Tensor<T> images, Tensor<T> labels)
@@ -170,7 +171,7 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
         _supportLabels = supportLabels;
     }
 
-    /// <summary>Removes the support set (predictions then see one all-zero support pair).</summary>
+    /// <summary>Removes the support set; predictions then throw until a new one is set.</summary>
     public void ClearSupportSet()
     {
         _supportImages = null;
@@ -222,12 +223,20 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
 
     /// <summary>
     /// The support pairs for a query of size <paramref name="height"/> x <paramref name="width"/>: the current
-    /// support set resampled to that size, or one all-zero pair when none is set.
+    /// support set resampled to that size.
     /// </summary>
+    /// <exception cref="InvalidOperationException">No support set has been given.</exception>
+    /// <remarks>
+    /// UniverSeg is <c>f(x_t, S)</c> with <c>S = {(x_i, y_i)}, i = 1..N</c> and the CrossBlock interaction averaged
+    /// over the <c>N</c> pairs (Butoi et al. 2023, Sec. 3); an empty support set is not defined, so it is rejected
+    /// rather than replaced by an invented pair.
+    /// </remarks>
     private (Tensor<T> Images, Tensor<T> Labels) SupportFor(int channels, int height, int width)
     {
         if (_supportImages is null || _supportLabels is null)
-            return (new Tensor<T>(new[] { 1, channels, height, width }), new Tensor<T>(new[] { 1, 1, height, width }));
+            throw new InvalidOperationException(
+                "UniverSeg segments a query by comparing it with a labelled support set, and the paper defines it only for " +
+                "at least one support pair. Call SetSupportSet (or SegmentFewShot) before predicting or training.");
         if (_supportImages.Shape[1] != channels)
             throw new InvalidOperationException(
                 $"The support images have {_supportImages.Shape[1]} channels but the query has {channels}.");
@@ -275,8 +284,16 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
             if (!hasBatch) sequential = RemoveBatchDimension(sequential); return sequential;
         }
 
-        int b = input.Shape[0], c = input.Shape[1], h = input.Shape[2], w = input.Shape[3];
-        var (images, labels) = SupportFor(c, h, w);
+        var (images, labels) = SupportFor(input.Shape[1], input.Shape[2], input.Shape[3]);
+        var output = CrossBlockNetwork(input, images, labels);
+        if (!hasBatch) output = RemoveBatchDimension(output); return output;
+    }
+
+    /// <summary>The CrossBlock U-Net on a batched query and its support pairs (images <c>[S, C, H, W]</c>, labels
+    /// <c>[S, 1, H, W]</c>).</summary>
+    private Tensor<T> CrossBlockNetwork(Tensor<T> input, Tensor<T> images, Tensor<T> labels)
+    {
+        int b = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
         int s = images.Shape[0];
         var pairs = Engine.TensorConcatenate(new[] { images, labels }, 1);                                     // [S, C+1, H, W]
         int cs = pairs.Shape[1];
@@ -309,8 +326,7 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
             layer += LayersPerCrossBlock;
         }
 
-        var output = Layers[layer].Forward(target);
-        if (!hasBatch) output = RemoveBatchDimension(output); return output;
+        return Layers[layer].Forward(target);
     }
 
     /// <summary>
@@ -327,9 +343,12 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
             return;
         }
 
+        // A shape probe, not a prediction: one zero support pair sizes the cross convolutions, whose input channels
+        // do not depend on the support values or count.
         using (InferenceMode.Enter())
         {
-            Forward(new Tensor<T>(new[] { 1, _channels, _height, _width }));
+            CrossBlockNetwork(new Tensor<T>(new[] { 1, _channels, _height, _width }),
+                new Tensor<T>(new[] { 1, _channels, _height, _width }), new Tensor<T>(new[] { 1, 1, _height, _width }));
         }
 
         _lazyShapesResolved = true;
