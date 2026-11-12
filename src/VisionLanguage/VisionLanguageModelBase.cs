@@ -383,6 +383,28 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// Reads a source cyclically: result[d] = source[d % source.Length] for d &lt; <paramref name="count"/>.
+    /// </summary>
+    /// <param name="source">Values to read (flattened).</param>
+    /// <param name="count">Number of values to produce.</param>
+    /// <returns>A [count] tensor.</returns>
+    /// <exception cref="DivideByZeroException">The source is empty and <paramref name="count"/> is positive.</exception>
+    protected Tensor<T> CyclicTake(Tensor<T> source, int count)
+    {
+        if (count <= 0)
+            return new Tensor<T>([count]);
+        int n = source.Length;
+        if (n == 0)
+            throw new DivideByZeroException();
+        var flat = source.Reshape([n]);
+        if (count == n)
+            return flat;
+        int repeats = (count + n - 1) / n;
+        var tiled = repeats == 1 ? flat : Engine.TensorTile(flat, [repeats]);
+        return Engine.TensorSlice(tiled, [0], [count]);
+    }
+
+    /// <summary>
     /// Shifts a flat sequence: result[t] = values[t + offset] when 0 &lt;= t + offset &lt; n, otherwise 0.
     /// </summary>
     /// <param name="values">Values to shift (read flattened).</param>

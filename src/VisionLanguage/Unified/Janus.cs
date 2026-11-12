@@ -227,25 +227,8 @@ public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
 
         // Step 2: Generation adaptor - project LLM hidden states to VQ space
         int numGenTokens = 576; // 24x24 generation grid
-        var engine = Engine;
         // genAdaptorOut[g] = sum_h hidden[h] * cos((g + 1) * (h + 1) * 0.008) / sqrt(64), h < min(hiddenDim, 64).
-        int adaptorTaps = Math.Min(hiddenDim, 64);
-        Tensor<T> genAdaptorOut;
-        if (adaptorTaps > 0)
-        {
-            var basis = engine.TensorCos(engine.TensorMultiplyScalar(
-                engine.TensorOuter(
-                    engine.TensorArange<T>(1, numGenTokens + 1, 1),
-                    engine.TensorArange<T>(1, adaptorTaps + 1, 1)),
-                NumOps.FromDouble(0.008)));
-            var hiddenTaps = engine.TensorSlice(textHidden.Reshape([hiddenDim]), [0], [adaptorTaps]).Reshape([adaptorTaps, 1]);
-            genAdaptorOut = engine.TensorMultiplyScalar(
-                engine.TensorMatMul(basis, hiddenTaps).Reshape([numGenTokens]), NumOps.FromDouble(1.0 / Math.Sqrt(64)));
-        }
-        else
-        {
-            genAdaptorOut = new Tensor<T>([numGenTokens]);
-        }
+        var genAdaptorOut = WaveProjection(textHidden, numGenTokens, Math.Min(hiddenDim, 64), 0.008, useCosine: true, divisor: Math.Sqrt(64));
 
         // Step 3: Autoregressive VQ token prediction with classifier-free guidance
         var visualTokenIds = new int[numGenTokens];
