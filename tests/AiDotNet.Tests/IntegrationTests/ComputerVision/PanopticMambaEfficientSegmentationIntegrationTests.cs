@@ -7,6 +7,7 @@ using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
 using System.Threading.Tasks;
+using AiDotNet.Tests.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -63,7 +64,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ODISE_Construction_Succeeds()
     {
-        var model = new ODISE<double>(Arch(), options: new ODISEOptions { ModelSize = ODISEModelSize.Base });
+        var model = new ODISE<double>(Arch(), new DeterministicTextEncoder<double>(), options: new ODISEOptions { ModelSize = ODISEModelSize.Base });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -71,7 +72,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ODISE_Predict_ReturnsOutput()
     {
-        var model = new ODISE<double>(Arch(), options: new ODISEOptions { ModelSize = ODISEModelSize.Base });
+        var model = new ODISE<double>(Arch(), new DeterministicTextEncoder<double>(), options: new ODISEOptions { ModelSize = ODISEModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -80,7 +81,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ODISE_Dispose_DoesNotThrow()
     {
-        var model = new ODISE<double>(Arch());
+        var model = new ODISE<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 

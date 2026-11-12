@@ -19,6 +19,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 using System;
 using System.Threading.Tasks;
+using AiDotNet.Tests.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -1189,7 +1190,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ODISE_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new ODISE<float>(Arch(), options: new ODISEOptions { NumClasses = 5, ModelSize = ODISEModelSize.Base });
+        using var model = new ODISE<float>(Arch(), new DeterministicTextEncoder<float>(), options: new ODISEOptions { NumClasses = 5, ModelSize = ODISEModelSize.Base });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
