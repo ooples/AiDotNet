@@ -930,16 +930,22 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Computes the Singular Value Decomposition using the power iteration method.
+    /// Computes the thin Singular Value Decomposition for the <see cref="SvdAlgorithmType.PowerIteration"/> option.
     /// </summary>
     /// <param name="matrix">The input matrix to decompose</param>
     /// <returns>A tuple containing the U matrix, singular values S, and VT matrix</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Power iteration is like repeatedly applying a transformation to find the 
-    /// dominant patterns in your data. Imagine shaking a box of mixed items - after enough shaking, 
-    /// the heaviest items (dominant patterns) will settle to the bottom. This method finds singular 
-    /// values one by one, from largest to smallest.
+    /// No power iteration runs: the result is the thin SVD (U m x k, S k, V^T k x n, k = min(m, n)) from
+    /// one engine call (<c>Linalg.Svd</c>), with the singular values in descending order, which is the
+    /// order power iteration with deflation delivers them. The engine SVD is Gram-based (it works with
+    /// A^T A), so it squares the condition number: small singular values of an ill-conditioned matrix
+    /// lose relative accuracy compared with the Golub-Kahan and Jacobi options. Use those options when
+    /// the small singular values matter.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This option returns the same kind of result as power iteration (the most
+    /// important patterns first), but computes all of them at once with the tensor engine.
     /// </para>
     /// </remarks>
     private (Matrix<T> U, Vector<T> S, Matrix<T> VT) ComputeSvdPowerIteration(Matrix<T> matrix)
