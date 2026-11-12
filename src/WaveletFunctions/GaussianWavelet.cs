@@ -51,6 +51,9 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private readonly T _sigma;
 
+    // A subclass that overrides the scalar Calculate must shape every filter, as the element loops did.
+    private readonly bool _overridesScalarCalculate;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GaussianWavelet{T}"/> class with the specified sigma.
     /// </summary>
@@ -76,6 +79,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     public GaussianWavelet(double sigma = 1.0)
     {
         _sigma = NumOps.FromDouble(sigma);
+        _overridesScalarCalculate = OverridesScalarCalculateBelow(typeof(GaussianWavelet<T>));
     }
 
     /// <summary>
@@ -140,7 +144,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
 
         var engine = AiDotNetEngine.Current;
         var x = WaveletEngineOps<T>.CenteredGrid(size);
-        var waveletValue = CalculateValues(x);
+        var waveletValue = Calculate(x);
         var derivativeValue = CalculateDerivativeValues(x, waveletValue);
         var signal = Tensor<T>.FromVector(input);
         var approximation = engine.TensorMultiply(waveletValue, signal).ToVector();
@@ -172,7 +176,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int size = 101; // Odd number to have a center point
-        return CalculateValues(WaveletEngineOps<T>.CenteredGrid(size)).ToVector();
+        return Calculate(WaveletEngineOps<T>.CenteredGrid(size)).ToVector();
     }
 
     /// <summary>
@@ -201,7 +205,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     {
         int size = 101; // Odd number to have a center point
         var x = WaveletEngineOps<T>.CenteredGrid(size);
-        return CalculateDerivativeValues(x, CalculateValues(x)).ToVector();
+        return CalculateDerivativeValues(x, Calculate(x)).ToVector();
     }
 
     /// <summary>
@@ -265,7 +269,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
 
         var engine = AiDotNetEngine.Current;
         var x = WaveletEngineOps<T>.CenteredGrid(size);
-        var waveletValue = CalculateValues(x);
+        var waveletValue = Calculate(x);
         var derivativeValue = CalculateDerivativeValues(x, waveletValue);
         var a = Tensor<T>.FromVector(approximation);
         var d = WaveletEngineOps<T>.Prefix(detail, size);
@@ -281,7 +285,17 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     /// <summary>
     /// Evaluates <see cref="Calculate(T)"/> at every entry of <paramref name="x"/>.
     /// </summary>
-    private Tensor<T> CalculateValues(Tensor<T> x)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Evaluated as whole-tensor engine operations, identical to <see cref="Calculate(T)"/> element by element;
+    /// when a subclass overrides the scalar <see cref="Calculate(T)"/>, its override is used for every element.
+    /// </remarks>
+    public override Tensor<T> Calculate(Tensor<T> x)
+    {
+        return _overridesScalarCalculate ? base.Calculate(x) : EvaluateCalculate(x);
+    }
+
+    private Tensor<T> EvaluateCalculate(Tensor<T> x)
     {
         var engine = AiDotNetEngine.Current;
         T denominator = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(_sigma, _sigma));
