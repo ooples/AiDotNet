@@ -935,8 +935,8 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
             var grid = Engine.Reshape(
                 Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { input.Length }), 0, 0, batchSize * seqLen * features).Contiguous(),
                 new[] { batchSize, seqLen, features });
-            var window = Engine.TensorNarrow(grid, 1, startIdx, actualWindow).Contiguous();
-            return Engine.TensorDivideScalar(Engine.ReduceSum(window, new[] { 1 }, false), NumOps.FromDouble(actualWindow));
+            var recentWindow = Engine.TensorNarrow(grid, 1, startIdx, actualWindow).Contiguous();
+            return Engine.TensorDivideScalar(Engine.ReduceSum(recentWindow, new[] { 1 }, false), NumOps.FromDouble(actualWindow));
         }
 
         var recent = new Tensor<T>(new[] { batchSize, features });

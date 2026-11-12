@@ -829,11 +829,10 @@ public partial class Hippo<T> : ForecastingModelBase<T>
             var grid = Engine.TensorStack(rows, 0);
             if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) == 0)
             {
-                // A sum that overflows T while every sample is finite (e.g. float samples near 1e38) falls back
-                // to the reference path, which accumulates in double and so keeps the finite mean.
+                // Any infinite mean (a T sum that overflowed, e.g. float samples near 1e38) takes the reference
+                // path, which accumulates in double: it keeps a finite mean finite and an infinite one infinite.
                 var meanForecast = Engine.TensorDivideScalar(Engine.ReduceSum(grid, new[] { 0 }, false), NumOps.FromDouble(samples.Count));
-                if (Engine.TensorCountNonzero(Engine.TensorIsInf(meanForecast)) == 0
-                    || Engine.TensorCountNonzero(Engine.TensorIsInf(grid)) > 0)
+                if (Engine.TensorCountNonzero(Engine.TensorIsInf(meanForecast)) == 0)
                 {
                     var sorted = Engine.TensorSort(grid, 0, false).Values;
                     return (

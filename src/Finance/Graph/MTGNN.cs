@@ -285,7 +285,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         _useSubgraphSampling = _options.UseSubgraphSampling;
         _subgraphSize = _options.SubgraphSize;
 
-        RequireNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
+        RequireAdjacencyNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
         _predefinedAdjacency = predefinedAdjacency;
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
@@ -337,7 +337,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         _useSubgraphSampling = _options.UseSubgraphSampling;
         _subgraphSize = _options.SubgraphSize;
 
-        RequireNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
+        RequireAdjacencyNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
         _predefinedAdjacency = predefinedAdjacency;
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
@@ -377,21 +377,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         UpdateAdaptiveAdjacency();
     }
 
-    /// <summary>Requires a numNodes x numNodes adjacency matrix when one is given.</summary>
-    private static void RequireNodeCount(Tensor<T>? adjacency, int numNodes, string paramName)
-    {
-        if (adjacency is null) return;
-        int rows = adjacency.Rank > 0 ? adjacency.Shape[0] : 0;
-        int columns = adjacency.Rank > 1 ? adjacency.Shape[1] : 0;
-        if (adjacency.Rank != 2 || rows != numNodes || columns != numNodes)
-        {
-            throw new ArgumentException(
-                $"The adjacency matrix is {rows} x {columns}, but the model has {numNodes} " +
-                $"nodes (NumNodes). Pass a {numNodes} x {numNodes} matrix, or set NumNodes to the node count of the graph.",
-                paramName);
-        }
-    }
-
     /// <summary>
     /// Updates the adaptive adjacency matrix from current node embeddings.
     /// </summary>
@@ -408,16 +393,20 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         if (_nodeEmbedding1 is null || _nodeEmbedding2 is null)
             return;
 
+        // The inference copy is a detached constant; training recomputes it on the tape.
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        _adaptiveAdjacency = ComputeAdaptiveAdjacency(_nodeEmbedding1, _nodeEmbedding2);
+    }
 
-        // ReLU(E1 E2^T - E2 E1^T), then a max-subtracted row softmax.
-        var forward = Engine.TensorMatMul(_nodeEmbedding1, Engine.TensorTranspose(_nodeEmbedding2));
-        var backward = Engine.TensorMatMul(_nodeEmbedding2, Engine.TensorTranspose(_nodeEmbedding1));
-        var rawScores = Engine.TensorMax(Engine.TensorSubtract(forward, backward), NumOps.Zero);
-        var square = new[] { _numNodes, _numNodes };
-        var rowMax = Engine.TensorBroadcastTo(Engine.ReduceMax(rawScores, new[] { 1 }, true), square);
-        var exps = Engine.TensorExp(Engine.TensorSubtract(rawScores, rowMax));
-        var adjacency = Engine.TensorDivide(exps, Engine.TensorBroadcastTo(Engine.ReduceSum(exps, new[] { 1 }, true), square));
+    /// <summary>
+    /// softmax(ReLU(E1 E2^T - E2 E1^T)) over each row, averaged with the predefined graph when one is used.
+    /// Built from engine ops only, so under the gradient tape the embeddings receive gradients.
+    /// </summary>
+    private Tensor<T> ComputeAdaptiveAdjacency(Tensor<T> embedding1, Tensor<T> embedding2)
+    {
+        var forward = Engine.TensorMatMul(embedding1, Engine.TensorTranspose(embedding2));
+        var backward = Engine.TensorMatMul(embedding2, Engine.TensorTranspose(embedding1));
+        var adjacency = Engine.TensorSoftmax(Engine.TensorReLU(Engine.TensorSubtract(forward, backward)), 1);
 
         // Combine with predefined adjacency if available
         if (_usePredefinedGraph && _predefinedAdjacency is not null)
@@ -425,10 +414,22 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
             var half = NumOps.FromDouble(0.5);
             adjacency = Engine.TensorAdd(
                 Engine.TensorMultiplyScalar(adjacency, half),
-                Engine.TensorMultiplyScalar(Engine.Reshape(_predefinedAdjacency.Contiguous(), square), half));
+                Engine.TensorMultiplyScalar(Engine.Reshape(_predefinedAdjacency.Contiguous(), new[] { _numNodes, _numNodes }), half));
         }
 
-        _adaptiveAdjacency = adjacency;
+        return adjacency;
+    }
+
+    /// <summary>
+    /// The node embeddings E1 and E2 are trainable: the optimizer updates them from the gradients that
+    /// reach them through the adaptive adjacency in <see cref="ForwardNativeForTraining"/>.
+    /// </summary>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+    {
+        if (_nodeEmbedding1 is not null)
+            yield return _nodeEmbedding1;
+        if (_nodeEmbedding2 is not null)
+            yield return _nodeEmbedding2;
     }
 
     /// <summary>
@@ -534,29 +535,27 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     }
 
     /// <inheritdoc/>
-    /// <remarks>After a step, the learned graph is refreshed from the node embeddings.</remarks>
+    /// <remarks>
+    /// After a step the optimizer has updated the node embeddings, so the inference copy of the learned
+    /// graph is rebuilt from them.
+    /// </remarks>
     protected override void OnTrainingStepEnded(bool succeeded)
     {
         if (!succeeded) return;
-        var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
-        UpdateNodeEmbeddingsFromGradient(lossVec);
         UpdateAdaptiveAdjacency();
     }
     /// <summary>
-    /// Training-mode forward: mirrors <see cref="Forward"/> but swaps
-    /// <see cref="ApplyMixHopPropagation"/> for
-    /// <see cref="ApplyMixHopPropagationTape"/>, which uses
-    /// <c>Engine.TensorMatMul</c> instead of the tape-breaking
-    /// ToVector/manual-loop accumulator. Gradients now reach the
-    /// dense layers below the mix-hop step.
+    /// Training-mode forward: mirrors <see cref="Forward"/>, but rebuilds the adaptive adjacency from the
+    /// node embeddings on the tape and propagates through <see cref="ApplyMixHopPropagationTape"/>, so
+    /// gradients reach both the dense layers below the mix-hop step and the embeddings E1 and E2.
     /// </summary>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
         var current = ReshapeToNodes(input);
         foreach (var layer in Layers)
             current = layer.Forward(current);
-        if (_adaptiveAdjacency is not null && _useNativeMode)
-            current = ApplyMixHopPropagationTape(current);
+        if (_useNativeMode && _nodeEmbedding1 is not null && _nodeEmbedding2 is not null)
+            current = ApplyMixHopPropagationTape(current, ComputeAdaptiveAdjacency(_nodeEmbedding1, _nodeEmbedding2));
         return current;
     }
 
@@ -578,25 +577,17 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// Tape-aware MixHop propagation: accumulates weighted powers of
     /// the adaptive adjacency matrix times the node-feature matrix
     /// (<c>H + sum_k w_k * A^k * H</c>) via
-    /// <see cref="IEngine.TensorMatMul"/>. Produces the same math as
-    /// <see cref="ApplyMixHopPropagation"/> but preserves the gradient
-    /// tape so backward can propagate through the whole expression.
+    /// <see cref="IEngine.TensorMatMul"/>, preserving the gradient tape so backward can
+    /// propagate through the whole expression. Both the inference and training forwards use it.
     /// </summary>
-    private Tensor<T> ApplyMixHopPropagationTape(Tensor<T> nodeFeatures)
+    private Tensor<T> ApplyMixHopPropagationTape(Tensor<T> nodeFeatures, Tensor<T> adjacency)
     {
-        if (_adaptiveAdjacency is null)
-            return nodeFeatures;
-
         int totalSize = nodeFeatures.Length;
         int featuresPerNode = totalSize / _numNodes;
         if (featuresPerNode * _numNodes != totalSize)
             return nodeFeatures;
 
-        // Materialize the learned adjacency as a Tensor<T>. This is a
-        // non-trainable constant at the tape level — node-embedding
-        // updates rebuild _adaptiveAdjacency outside the tape each
-        // Train() call.
-        var adj = _adaptiveAdjacency;
+        var adj = adjacency;
 
         var hMat = Engine.Reshape(nodeFeatures, new[] { _numNodes, featuresPerNode });
         var acc = hMat; // k=0 term (identity)
@@ -611,35 +602,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         return Engine.Reshape(acc, nodeFeatures._shape);
     }
 
-    /// <summary>
-    /// Updates node embeddings based on loss gradient.
-    /// </summary>
-    /// <param name="gradient">Loss gradient.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Adjusts the node embedding matrices E1 and E2
-    /// to improve the learned graph structure. This is a simplified update;
-    /// full MTGNN would backprop through the adjacency computation.
-    /// </para>
-    /// </remarks>
-    private void UpdateNodeEmbeddingsFromGradient(Vector<T> gradient)
-    {
-        if (_nodeEmbedding1 is null || _nodeEmbedding2 is null)
-            return;
-
-        double lr = 0.001;
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        T sumSquares = gradient.Length > 0 ? Engine.TensorSumOfSquares(Tensor<T>.FromVector(gradient)) : NumOps.Zero;
-        T gradNorm = NumOps.Sqrt(NumOps.Add(sumSquares, NumOps.FromDouble(1e-8)));
-
-        // Simplified update: perturb both embeddings by the same (u - 0.5) * lr / |g| per entry.
-        var draws = Enumerable.Range(0, _numNodes * _nodeEmbeddingDim)
-            .Select(_ => NumOps.FromDouble(_random.NextDouble() - 0.5))
-            .ToArray();
-        var noise = Engine.TensorDivideScalar(
-            Engine.TensorMultiplyScalar(new Tensor<T>(_nodeEmbedding1._shape, new Vector<T>(draws)), NumOps.FromDouble(lr)), gradNorm);
-        _nodeEmbedding1 = Engine.TensorAdd(_nodeEmbedding1, noise);
-        _nodeEmbedding2 = Engine.TensorAdd(_nodeEmbedding2, noise);
-    }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
@@ -874,7 +836,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         // so inference matches the training forward (determinism / Clone parity).
         if (_adaptiveAdjacency is not null && _useNativeMode)
         {
-            current = ApplyMixHopPropagationTape(current);
+            current = ApplyMixHopPropagationTape(current, _adaptiveAdjacency);
         }
 
         return current;
@@ -902,44 +864,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
-    }
-
-    /// <summary>
-    /// Applies mix-hop propagation using the adaptive adjacency matrix.
-    /// </summary>
-    /// <param name="nodeFeatures">Node feature tensor.</param>
-    /// <returns>Features after multi-hop aggregation.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Mix-hop propagation aggregates information from
-    /// multiple hop distances simultaneously:
-    /// H_out = concat(H, A*H, A^2*H, ..., A^K*H) * W
-    ///
-    /// This captures both local (1-hop) and more distant (K-hop) spatial dependencies.
-    /// The learned adjacency matrix determines how strongly each neighbor contributes.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyMixHopPropagation(Tensor<T> nodeFeatures)
-    {
-        if (_adaptiveAdjacency is null)
-            return nodeFeatures;
-
-        int totalSize = nodeFeatures.Length;
-        int featuresPerNode = totalSize / _numNodes;
-
-        if (featuresPerNode * _numNodes != totalSize)
-            return nodeFeatures;
-
-        // H + sum_k A^k H / (k + 1) for k = 1..mixHopDepth, detached as before.
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var current = Engine.Reshape(nodeFeatures.Contiguous(), new[] { _numNodes, featuresPerNode });
-        var accumulated = current;
-        for (int hop = 0; hop < _mixHopDepth; hop++)
-        {
-            current = Engine.TensorMatMul(_adaptiveAdjacency, current);
-            accumulated = Engine.TensorAdd(accumulated, Engine.TensorMultiplyScalar(current, NumOps.FromDouble(1.0 / (hop + 2))));
-        }
-
-        return Engine.Reshape(accumulated, nodeFeatures._shape);
     }
 
     #endregion
