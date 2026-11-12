@@ -38,6 +38,10 @@ internal static class SafetyTensorOps<T>
     internal static Tensor<T> Where(Tensor<T> mask, double whenTrue, Tensor<T> whenFalse)
         => Engine.TensorWhere(mask, FullLike(whenFalse, whenTrue), whenFalse);
 
+    /// <summary>Element-wise select between two scalars.</summary>
+    internal static Tensor<T> Where(Tensor<T> mask, double whenTrue, double whenFalse)
+        => Engine.TensorWhere(mask, FullLike(mask, whenTrue), FullLike(mask, whenFalse));
+
     /// <summary>1 where <c>x &gt; v</c> (NaN gives 0).</summary>
     internal static Tensor<T> Gt(Tensor<T> x, double v) => Engine.TensorGreaterThan(x, C(v));
 
@@ -111,7 +115,7 @@ internal static class SafetyTensorOps<T>
     /// </summary>
     internal static Tensor<T> FftMagnitude(Tensor<T> frames)
     {
-        Engine.FFT(frames, Tensor<T>.CreateZeros(frames.Shape.ToArray()), out var re, out var im);
+        Dft(frames, out var re, out var im);
         return Engine.TensorSqrt(Engine.TensorAdd(Engine.TensorSquare(re), Engine.TensorSquare(im)));
     }
 
@@ -242,6 +246,89 @@ internal static class SafetyTensorOps<T>
 
     /// <summary><c>Math.Min(1, Math.Max(0, x))</c> for a scalar (NaN passes through).</summary>
     internal static T ClampUnit(T x) => MinOne(MaxZero(x));
+
+    /// <summary>
+    /// The integer finalizer hash the protectors use, <c>x = ((x &gt;&gt; 16) ^ x) * 0x45d9f3b</c> twice,
+    /// <c>x = (x &gt;&gt; 16) ^ x</c>, then <c>x &amp; 0x7FFFFFFF</c> (wrapping arithmetic), per element.
+    /// </summary>
+    internal static Tensor<int> HashInt(Tensor<int> x)
+    {
+        var engine = Engine;
+        var shape = x.Shape.ToArray();
+        var sixteen = Tensor<int>.CreateDefault(shape, 16);
+        x = engine.TensorMultiplyScalar(engine.TensorBitwiseXor(engine.TensorBitwiseRightShift(x, sixteen), x), 0x45d9f3b);
+        x = engine.TensorMultiplyScalar(engine.TensorBitwiseXor(engine.TensorBitwiseRightShift(x, sixteen), x), 0x45d9f3b);
+        x = engine.TensorBitwiseXor(engine.TensorBitwiseRightShift(x, sixteen), x);
+        return engine.TensorBitwiseAnd(x, Tensor<int>.CreateDefault(shape, 0x7FFFFFFF));
+    }
+
+    /// <summary>Hash keys <c>row * rowStride + colStart + col</c> as a <c>[rows, cols]</c> grid.</summary>
+    internal static Tensor<int> HashKeys(int rows, int rowStride, int colStart, int cols)
+    {
+        var engine = Engine;
+        var grid = new[] { rows, cols };
+        var rowPart = engine.Reshape(engine.TensorMultiplyScalar(engine.TensorArange<int>(0, rows, 1), rowStride),
+            new[] { rows, 1 });
+        var colPart = engine.Reshape(engine.TensorArange<int>(colStart, colStart + cols, 1), new[] { 1, cols });
+        return engine.TensorAdd(engine.TensorBroadcastTo(rowPart, grid), engine.TensorBroadcastTo(colPart, grid));
+    }
+
+    /// <summary><c>value % modulus</c> of non-negative integers, as <typeparamref name="T"/>.</summary>
+    internal static Tensor<T> ModuloAsT(Tensor<int> values, int modulus)
+    {
+        var remainder = Engine.TensorRemainder(values, Tensor<int>.CreateDefault(values.Shape.ToArray(), modulus));
+        return Engine.TensorTake(Range(modulus), remainder);
+    }
+
+    /// <summary>
+    /// Overlap-add placement of half-overlapping frames (<c>[F, N]</c>, hop <c>N / 2</c>) onto a
+    /// signal of <paramref name="length"/> samples: <c>Current</c> holds each frame's first half at
+    /// its own position, <c>Previous</c> each frame's second half (which lands on the next frame's
+    /// first half). Positions no frame covers are zero.
+    /// </summary>
+    internal static (Tensor<T> Current, Tensor<T> Previous) HalfOverlapParts(Tensor<T> frames, int length)
+    {
+        var engine = Engine;
+        int count = frames.Shape[0];
+        int half = frames.Shape[1] / 2;
+        var zeroRow = Tensor<T>.CreateZeros(1, half);
+        var first = engine.TensorNarrow(frames, 1, 0, half);
+        var second = engine.TensorNarrow(frames, 1, half, half);
+        int covered = (count + 1) * half;
+        var current = engine.Reshape(engine.TensorConcatenate(new[] { first, zeroRow }, 0), new[] { covered });
+        var previous = engine.Reshape(engine.TensorConcatenate(new[] { zeroRow, second }, 0), new[] { covered });
+        if (length > covered)
+        {
+            var tail = Tensor<T>.CreateZeros(length - covered);
+            current = engine.TensorConcatenate(new[] { current, tail }, 0);
+            previous = engine.TensorConcatenate(new[] { previous, tail }, 0);
+        }
+
+        return (current, previous);
+    }
+
+    /// <summary>
+    /// Full complex DFT of each row (last axis): the radix-2 FFT for power-of-two lengths and the
+    /// exact DFT (twiddle matrix) otherwise, so non-power-of-two frames are not zero-padded.
+    /// </summary>
+    internal static void Dft(Tensor<T> rows, out Tensor<T> real, out Tensor<T> imag)
+    {
+        var engine = Engine;
+        int n = rows.Shape[rows.Rank - 1];
+        if (n > 0 && (n & (n - 1)) == 0)
+        {
+            engine.FFT(rows, Tensor<T>.CreateZeros(rows.Shape.ToArray()), out real, out imag);
+            return;
+        }
+
+        // angle[j, k] = -2 pi ((j * k) mod n) / n, reduced before scaling to keep the argument small.
+        var index = Range(n);
+        var product = engine.TensorOuter(index, index);
+        var reduced = engine.TensorRemainder(product, Full(new[] { n, n }, C(n)));
+        var angle = engine.TensorMultiplyScalar(reduced, C(-2.0 * Math.PI / n));
+        real = engine.TensorMatMul(rows, engine.TensorCos(angle));
+        imag = engine.TensorMatMul(rows, engine.TensorSin(angle));
+    }
 
     /// <summary>Population mean and variance (two-pass, like the scalar code) of a rank-1 tensor.</summary>
     internal static (T Mean, T Variance) MeanVariance(Tensor<T> x)
