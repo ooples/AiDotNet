@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Guidance;
 
 /// <summary>
 /// Adaptive projected guidance and rescaled CFG reproduce diffusers 0.35
-/// (<c>tools/reference-data/diffusers_guidance_reference.py</c>) on a batch of two samples.
+/// (<c>tools/reference-data/diffusers_diffusion_reference.py</c>) on a batch of two samples.
 /// </summary>
 /// <remarks>
 /// Before this, APG scaled the orthogonal component and kept the parallel one (the paper keeps the orthogonal

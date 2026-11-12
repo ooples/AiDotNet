@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Schedulers;
 
 /// <summary>
 /// The Euler, Euler ancestral and DPM-Solver++ multistep schedulers reproduce diffusers 0.35
-/// (<c>tools/reference-data/diffusers_scheduler_reference.py</c>): ten trailing-spaced steps over Stable Diffusion's
+/// (<c>tools/reference-data/diffusers_diffusion_reference.py</c>): ten trailing-spaced steps over Stable Diffusion's
 /// scaled-linear betas with the toy model output m(x, t) = 0.5 x + c (1 + t / 1000) end at the reference samples.
 /// </summary>
 /// <remarks>

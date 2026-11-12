@@ -1,13 +1,24 @@
-"""Reference trajectories for the Euler and DPM-Solver++ multistep schedulers (diffusers 0.35).
+"""Reference outputs from diffusers 0.35 for the diffusion scheduler and guidance tests.
+
+Schedulers (Euler and DPM-Solver++ multistep):
 
 Runs each scheduler for 10 trailing-spaced steps (timesteps 999, 899, ..., 99, which is the spacing
 NoiseSchedulerBase.SetTimesteps uses) over Stable Diffusion's scaled-linear betas in float64, with a fixed toy
 model output m(x, t) = 0.5 * x + c * (1 + t / 1000) (epsilon or v), and prints the final samples used by
 tests/AiDotNet.Tests/UnitTests/Diffusion/Schedulers/DiffusersSchedulerReferenceTests.cs.
+
+Guidance: APG is diffusers' normalized_guidance with eta = 1 - projectionStrength (0.5) and scale 7.5;
+RescaledCFG is rescale_noise_cfg (guidance_rescale 0.7) applied to standard CFG at scale 7.5. Both are per
+sample. Used by tests/AiDotNet.Tests/UnitTests/Diffusion/Guidance/DiffusersGuidanceReferenceTests.cs.
 """
+import os
+import re
+
+import diffusers
 import torch
 import diffusers.schedulers.scheduling_euler_ancestral_discrete as euler_ancestral
 from diffusers import DPMSolverMultistepScheduler, EulerAncestralDiscreteScheduler, EulerDiscreteScheduler
+from diffusers.guiders.adaptive_projected_guidance import normalized_guidance
 
 torch.set_default_dtype(torch.float64)
 X0 = torch.tensor([1.0, -0.5, 0.25, 2.0])
@@ -79,3 +90,20 @@ for name, sched in [
 ]:
     ts, x = run(to_float64(sched))
     print(name, ts, "{ " + ", ".join(f"{v:.15g}" for v in x.tolist()) + " }")
+
+# Guidance (batch of two samples)
+_src = open(os.path.join(os.path.dirname(diffusers.__file__), "pipelines", "stable_diffusion",
+                         "pipeline_stable_diffusion.py"), encoding="utf-8").read()
+exec(re.search(r"def rescale_noise_cfg\(.*?\n    return noise_cfg\n", _src, re.S).group(0))
+
+u = torch.tensor([[0.1, -0.4, 0.7, 0.2, -0.3, 0.5], [1.2, -0.8, 0.3, 0.0, 0.6, -1.1]]).reshape(2, 1, 2, 3)
+c = torch.tensor([[0.3, -0.1, 0.9, -0.2, 0.1, 0.4], [0.7, -0.2, 0.8, 0.5, 0.1, -0.9]]).reshape(2, 1, 2, 3)
+
+
+def fmt(x):
+    return "{ " + ", ".join(f"{v:.15g}" for v in x.flatten().tolist()) + " }"
+
+
+print("APG", fmt(normalized_guidance(c, u, 7.5, eta=1 - 0.5)))
+g = u + 7.5 * (c - u)
+print("RESCALE", fmt(rescale_noise_cfg(g, c, guidance_rescale=0.7)))
