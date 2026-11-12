@@ -71,14 +71,18 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
         _inputDim = inputDim;
         _embeddingDim = embeddingDim;
         _learningRate = learningRate;
-        _parameters = new Vector<double>(embeddingDim * inputDim + embeddingDim);
-
         // Distinct values, so every embedding coordinate responds differently to the input from the start.
-        for (int i = 0; i < _parameters.Length; i++)
-        {
-            _parameters[i] = 0.01 * (i + 1);
-        }
+        _parameters = AiDotNetEngine.Current.TensorMultiplyScalar(
+            AiDotNetEngine.Current.TensorArange<double>(1, embeddingDim * inputDim + embeddingDim + 1, 1), 0.01).ToVector();
     }
+
+    /// <summary>W as an [embeddingDim, inputDim] tensor (row e holds embedding coordinate e's weights).</summary>
+    private Tensor<double> Weights()
+        => Tensor<double>.FromVector(_parameters.GetSubVector(0, _embeddingDim * _inputDim)).Reshape(_embeddingDim, _inputDim);
+
+    /// <summary>The model's <c>_inputDim</c> feature columns of <paramref name="input"/>.</summary>
+    private Tensor<double> Features(Matrix<double> input)
+        => AiDotNetEngine.Current.TensorNarrow(Tensor<double>.FromMatrix(input), 1, 0, _inputDim);
 
     /// <summary>Gets the width of each example's embedding.</summary>
     public int EmbeddingDimension => _embeddingDim;
@@ -91,24 +95,14 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
             throw new ArgumentException(
                 $"Input has {input.Columns} columns but model expects at least {_inputDim}.", nameof(input));
 
-        int biasOffset = _embeddingDim * _inputDim;
-        var output = new Tensor<double>(new[] { input.Rows, _embeddingDim });
-        for (int r = 0; r < input.Rows; r++)
-        {
-            for (int e = 0; e < _embeddingDim; e++)
-            {
-                double sum = _parameters[biasOffset + e];
-                int row = e * _inputDim;
-                for (int c = 0; c < _inputDim; c++)
-                {
-                    sum += input[r, c] * _parameters[row + c];
-                }
+        if (input.Rows == 0) return new Tensor<double>(new[] { 0, _embeddingDim });
 
-                output[r * _embeddingDim + e] = sum;
-            }
-        }
-
-        return output;
+        // Y = X W^T + b
+        var engine = AiDotNetEngine.Current;
+        var bias = Tensor<double>.FromVector(_parameters.GetSubVector(_embeddingDim * _inputDim, _embeddingDim))
+            .Reshape(1, _embeddingDim);
+        var linear = engine.TensorMatMul(Features(input), engine.TensorTranspose(Weights()));
+        return engine.TensorAdd(linear, engine.TensorBroadcastTo(bias, new[] { input.Rows, _embeddingDim }));
     }
 
     /// <inheritdoc/>
@@ -161,23 +155,16 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
         var loss = lossFunction ?? DefaultLossFunction;
         var outputGradient = loss.ComputeGradient(predictions, target);
 
-        int biasOffset = _embeddingDim * _inputDim;
-        for (int r = 0; r < input.Rows; r++)
+        // dL/dW = G^T X and dL/db = the column sums of G
+        var engine = AiDotNetEngine.Current;
+        var g = outputGradient.Reshape(input.Rows, _embeddingDim);
+        var weightGradient = engine.TensorMatMul(engine.TensorTranspose(g), Features(input));
+        var biasGradient = engine.ReduceSum(g, new[] { 0 }, false);
+        return engine.Concat(new[]
         {
-            for (int e = 0; e < _embeddingDim; e++)
-            {
-                double g = outputGradient[r * _embeddingDim + e];
-                int row = e * _inputDim;
-                for (int c = 0; c < _inputDim; c++)
-                {
-                    gradients[row + c] += g * input[r, c];
-                }
-
-                gradients[biasOffset + e] += g;
-            }
-        }
-
-        return gradients;
+            weightGradient.Reshape(_embeddingDim * _inputDim),
+            biasGradient.Reshape(_embeddingDim),
+        }, 0).ToVector();
     }
 
     /// <inheritdoc/>
@@ -191,10 +178,9 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
         if (learningRate <= 0)
             throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
 
-        for (int i = 0; i < _parameters.Length; i++)
-        {
-            _parameters[i] -= learningRate * gradients[i];
-        }
+        // In place, so a caller holding the parameter vector sees the step.
+        AiDotNetEngine.Current.Subtract(_parameters, AiDotNetEngine.Current.Multiply(gradients, learningRate))
+            .AsSpan().CopyTo(_parameters.AsWritableSpan());
     }
 
     /// <inheritdoc/>
@@ -258,16 +244,13 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
     {
         // A feature's importance is the size of its column of W: how strongly it moves the embedding.
         var importance = new Dictionary<string, double>();
-        for (int c = 0; c < _inputDim; c++)
+        var engine = AiDotNetEngine.Current;
+        var weights = Weights();
+        var columnNorms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(weights, weights), new[] { 0 }, false))
+            .ToVector().ToArray();
+        for (int c = 0; c < columnNorms.Length; c++)
         {
-            double norm = 0;
-            for (int e = 0; e < _embeddingDim; e++)
-            {
-                double w = _parameters[e * _inputDim + c];
-                norm += w * w;
-            }
-
-            importance[$"feature_{c}"] = Math.Sqrt(norm);
+            importance[$"feature_{c}"] = columnNorms[c];
         }
 
         return importance;
@@ -294,12 +277,6 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
                 $"Parameter count mismatch: expected {expectedCount}, got {parts.Length}");
         }
 
-        var vector = new Vector<double>(parts.Length);
-        for (int i = 0; i < parts.Length; i++)
-        {
-            vector[i] = double.Parse(parts[i], CultureInfo.InvariantCulture);
-        }
-
-        _parameters = vector;
+        _parameters = new Vector<double>(parts.Select(part => double.Parse(part, CultureInfo.InvariantCulture)));
     }
 }
