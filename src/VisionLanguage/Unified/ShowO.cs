@@ -211,7 +211,6 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
             return OnnxModel.Run(tokens);
 
         int outSize = _options.OutputImageSize;
-        int outPixels = outSize * outSize * 3;
         int numVisTokens = _options.NumVisualTokens;
         int dim = _options.DecoderDim;
         int textLen = tokens.Length;
@@ -227,13 +226,18 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
         int gridSize = (int)Math.Sqrt(numGenTokens);
         if (numGenTokens <= 0 || gridSize * gridSize != numGenTokens)
             throw new InvalidOperationException("ImageTokenCount must be a positive perfect square.");
-        var visualTokenIds = new int[numGenTokens];
-        var isMasked = new bool[numGenTokens];
-        for (int i = 0; i < numGenTokens; i++)
-        {
-            visualTokenIds[i] = -1; // MASK token
-            isMasked[i] = true;
-        }
+        var engine = Engine;
+        var positions = engine.TensorArange<T>(0, numGenTokens, 1);
+        // 1 where the token is still MASK; visual token ids are only read where unmasked.
+        var isMasked = Tensor<T>.CreateDefault([numGenTokens], NumOps.One);
+        var visualTokenIds = new Tensor<T>([numGenTokens]);
+
+        // Text conditioning does not depend on the step:
+        // textCond[t] = sum_{h < min(8, hiddenDim)} hidden[h] * sin((t + 1) * (h + 1) * 0.02) / 8.
+        var textCond = WaveProjection(textHidden, numGenTokens, Math.Min(8, hiddenDim), 0.02, useCosine: false, divisor: 8.0);
+        T invVisTokens = NumOps.FromDouble(1.0 / numVisTokens);
+        // 4-connected neighbours in flat order (t - grid, t + grid, t - 1, t + 1), range-checked only.
+        int[] neighborOffsets = [-gridSize, gridSize, -1, 1];
 
         // Step 3: Discrete diffusion - iterative mask-predict
         int numDiffusionSteps = _options.DiffusionSteps;
@@ -244,130 +248,60 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
         for (int step = 0; step < numDiffusionSteps; step++)
         {
             // Count remaining masked tokens
-            int maskedCount = 0;
-            for (int i = 0; i < numGenTokens; i++)
-                if (isMasked[i])
-                    maskedCount++;
+            int maskedCount = NumOps.ToInt(engine.TensorSum(isMasked));
             if (maskedCount == 0)
                 break;
 
-            // Predict token distributions for all masked positions
-            var confidences = new double[numGenTokens];
-            var predictedIds = new int[numGenTokens];
-
-            for (int t = 0; t < numGenTokens; t++)
+            // Bidirectional context from unmasked neighbours: mean of their id / numVisTokens.
+            var unmasked = engine.ScalarMinusTensor(NumOps.One, isMasked);
+            var knownValues = engine.TensorMultiply(engine.TensorMultiplyScalar(visualTokenIds, invVisTokens), unmasked);
+            var contextSum = new Tensor<T>([numGenTokens]);
+            var neighborCount = new Tensor<T>([numGenTokens]);
+            foreach (int offset in neighborOffsets)
             {
-                if (!isMasked[t])
-                    continue;
-
-                // Bidirectional context from unmasked neighbors + text
-                double contextVal = 0;
-                int neighborCount = 0;
-                // Check 4-connected spatial neighbors
-                int row = t / gridSize,
-                    col = t % gridSize;
-                int[] neighbors =
-                {
-                    (row - 1) * gridSize + col,
-                    (row + 1) * gridSize + col,
-                    row * gridSize + col - 1,
-                    row * gridSize + col + 1,
-                };
-                foreach (int n in neighbors)
-                {
-                    if (n >= 0 && n < numGenTokens && !isMasked[n])
-                    {
-                        contextVal += (double)visualTokenIds[n] / numVisTokens;
-                        neighborCount++;
-                    }
-                }
-                if (neighborCount > 0)
-                    contextVal /= neighborCount;
-
-                // Text conditioning
-                double textCond = 0;
-                for (int h = 0; h < Math.Min(8, hiddenDim); h++)
-                    textCond +=
-                        NumOps.ToDouble(textHidden[h % hiddenDim])
-                        * Math.Sin((t + 1.0) * (h + 1) * 0.02);
-                textCond /= 8.0;
-
-                // Combined prediction
-                double logit = contextVal * 0.6 + textCond * 0.4 + Math.Sin((double)t * step * 0.01) * 0.1;
-                int tokenId = (int)(((Math.Tanh(logit) + 1.0) / 2.0) * (numVisTokens - 1));
-                tokenId = Math.Max(0, Math.Min(numVisTokens - 1, tokenId));
-                predictedIds[t] = tokenId;
-                confidences[t] = Math.Abs(logit) + neighborCount * 0.2; // More context = more confident
+                contextSum = engine.TensorAdd(contextSum, ShiftFlat(knownValues, offset));
+                neighborCount = engine.TensorAdd(neighborCount, ShiftFlat(unmasked, offset));
             }
+            var contextVal = engine.TensorDivide(contextSum, engine.TensorMax(neighborCount, NumOps.One));
+
+            // Combined prediction
+            var stepBias = engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorMultiplyScalar(positions, NumOps.FromDouble(step * 0.01))),
+                NumOps.FromDouble(0.1));
+            var logit = engine.TensorAdd(
+                engine.TensorAdd(
+                    engine.TensorMultiplyScalar(contextVal, NumOps.FromDouble(0.6)),
+                    engine.TensorMultiplyScalar(textCond, NumOps.FromDouble(0.4))),
+                stepBias);
+            var predictedIds = QuantizeTanhTokens(logit, numVisTokens);
+            // More context = more confident
+            var confidences = engine.TensorAdd(
+                engine.TensorAbs(logit), engine.TensorMultiplyScalar(neighborCount, NumOps.FromDouble(0.2)));
 
             // Unmask the most confident positions
             int toUnmask = Math.Min(tokensPerStep, maskedCount);
-            for (int u = 0; u < toUnmask; u++)
-            {
-                int bestIdx = -1;
-                double bestConf = double.MinValue;
-                for (int t = 0; t < numGenTokens; t++)
-                {
-                    if (isMasked[t] && confidences[t] > bestConf)
-                    {
-                        bestConf = confidences[t];
-                        bestIdx = t;
-                    }
-                }
-                if (bestIdx < 0)
-                    break;
-                visualTokenIds[bestIdx] = predictedIds[bestIdx];
-                isMasked[bestIdx] = false;
-                confidences[bestIdx] = double.MinValue;
-            }
+            var unmaskNow = SelectTopKFirstIndex(confidences, isMasked, toUnmask);
+            visualTokenIds = engine.TensorWhere(unmaskNow, predictedIds, visualTokenIds);
+            isMasked = engine.TensorSubtract(isMasked, unmaskNow);
         }
 
-        // Fill any remaining masked tokens
-        for (int t = 0; t < numGenTokens; t++)
-            if (isMasked[t])
-                visualTokenIds[t] = t % numVisTokens;
+        // Fill any remaining masked tokens with t % numVisTokens
+        if (NumOps.GreaterThan(engine.TensorSum(isMasked), NumOps.Zero))
+        {
+            if (numVisTokens == 0)
+                throw new DivideByZeroException();
+            var fallbackIds = engine.TensorRemainder(
+                positions, Tensor<T>.CreateDefault([numGenTokens], NumOps.FromDouble(numVisTokens)));
+            visualTokenIds = engine.TensorWhere(isMasked, fallbackIds, visualTokenIds);
+        }
 
         // Step 4: Decode tokens to pixels
         int patchSize = outSize / gridSize;
         if (patchSize < 1)
             patchSize = 1;
 
-        var result = new Tensor<T>([outPixels]);
-        for (int gy = 0; gy < gridSize; gy++)
-        {
-            for (int gx = 0; gx < gridSize; gx++)
-            {
-                int tokenIdx = gy * gridSize + gx;
-                if (tokenIdx >= numGenTokens)
-                    break;
-                int tokenId = visualTokenIds[tokenIdx];
-                double r = ((tokenId * 7 + 13) % 256) / 255.0;
-                double g = ((tokenId * 11 + 37) % 256) / 255.0;
-                double b = ((tokenId * 17 + 61) % 256) / 255.0;
-
-                for (int py = 0; py < patchSize; py++)
-                {
-                    for (int px = 0; px < patchSize; px++)
-                    {
-                        int imgY = gy * patchSize + py;
-                        int imgX = gx * patchSize + px;
-                        if (imgY >= outSize || imgX >= outSize)
-                            continue;
-                        int pixelIdx = (imgY * outSize + imgX) * 3;
-                        if (pixelIdx + 2 >= outPixels)
-                            continue;
-                        double smooth =
-                            0.9
-                            + 0.1
-                                * Math.Sin((double)px / patchSize * Math.PI)
-                                * Math.Sin((double)py / patchSize * Math.PI);
-                        result[pixelIdx] = NumOps.FromDouble(r * smooth);
-                        result[pixelIdx + 1] = NumOps.FromDouble(g * smooth);
-                        result[pixelIdx + 2] = NumOps.FromDouble(b * smooth);
-                    }
-                }
-            }
-        }
+        var colors = HashTokenColors(visualTokenIds).Reshape([gridSize, gridSize, 3]);
+        var result = PaintPatchGrid(colors, SinePatchWeights(patchSize), outSize);
         return result;
     }
 
