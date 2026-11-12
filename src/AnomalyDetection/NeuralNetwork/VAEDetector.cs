@@ -169,44 +169,14 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-
-        var means = new Vector<T>(d);
-        var stds = new Vector<T>(d);
-
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
-            T eps = NumOps.FromDouble(1e-10);
-            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
-            stds[j] = stdVal;
-        }
-
-        var normalized = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                normalized[i, j] = NumOps.Divide(diff, stds[j]);
-            }
-        }
-
-        return (normalized, means, stds);
+        // Per-feature mean and population std (std below 1e-10 replaced by 1), then (x - mean) / std
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var (std, mean) = engine.TensorStdMean(values, new[] { 0 }, 0, false);
+        var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var stds = engine.TensorWhere(tiny, Tensor<T>.CreateOnes(new[] { data.Columns }), std);
+        var normalized = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(values, mean), stds);
+        return (normalized.ToMatrix(), mean.ToVector(), stds.ToVector());
     }
 
     private void InitializeWeights()
@@ -219,17 +189,17 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
 
         // Encoder
         _encoderW1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
-        _encoderB1 = InitializeVector(_hiddenDim);
+        _encoderB1 = new Vector<T>(_hiddenDim);
         _encoderWMean = InitializeMatrix(_hiddenDim, _latentDim, scale2);
-        _encoderBMean = InitializeVector(_latentDim);
+        _encoderBMean = new Vector<T>(_latentDim);
         _encoderWLogVar = InitializeMatrix(_hiddenDim, _latentDim, scale2);
-        _encoderBLogVar = InitializeVector(_latentDim);
+        _encoderBLogVar = new Vector<T>(_latentDim);
 
         // Decoder
         _decoderW1 = InitializeMatrix(_latentDim, _hiddenDim, scale3);
-        _decoderB1 = InitializeVector(_hiddenDim);
+        _decoderB1 = new Vector<T>(_hiddenDim);
         _decoderW2 = InitializeMatrix(_hiddenDim, _inputDim, scale4);
-        _decoderB2 = InitializeVector(_inputDim);
+        _decoderB2 = new Vector<T>(_inputDim);
     }
 
     private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
@@ -249,20 +219,15 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
         return matrix;
     }
 
-    private Vector<T> InitializeVector(int size)
-    {
-        var vector = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            vector[i] = NumOps.Zero;
-        }
-        return vector;
-    }
-
     private void TrainVAE(Matrix<T> data)
     {
         int n = data.Rows;
         int batchSize = Math.Min(32, n);
+        var values = AnomalyTensorOps.ToTensor(data);
+        // Step learningRate / batch size: every batch is full except possibly the last one
+        int lastBatchSize = batchSize > 0 && n % batchSize != 0 ? n % batchSize : batchSize;
+        T fullBatchStep = batchSize > 0 ? NumOps.FromDouble(_learningRate / batchSize) : NumOps.Zero;
+        T lastBatchStep = lastBatchSize > 0 ? NumOps.FromDouble(_learningRate / lastBatchSize) : NumOps.Zero;
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -272,34 +237,44 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
             for (int batch = 0; batch < n; batch += batchSize)
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
+                var batchRows = new int[actualBatchSize];
+                Array.Copy(indices, batch, batchRows, 0, actualBatchSize);
+                var x = AnomalyTensorOps.SelectRows(values, batchRows);
 
-                // Accumulate gradients
-                var gradients = InitializeGradients();
+                // Reparameterization noise epsilon ~ N(0, 1): one seeded engine draw per batch, seed taken from
+                // the detector's Random
+                var epsilon = Tensor<T>.CreateZeros(new[] { actualBatchSize, _latentDim });
+                Engine.TensorNormalInPlace(epsilon, 0.0, 1.0, _random.Next());
 
-                for (int b = 0; b < actualBatchSize; b++)
-                {
-                    int idx = indices[batch + b];
-                    var x = data.GetRow(idx);
-
-                    // Forward pass
-                    var (hidden, mean, logVar, z, reconstruction) = Forward(x, sampleLatent: true);
-
-                    // Compute loss gradients and backpropagate
-                    AccumulateGradients(gradients, x, hidden, mean, logVar, z, reconstruction);
-                }
-
-                // Update weights
-                UpdateWeights(gradients, actualBatchSize);
+                // Forward pass, then gradients summed over the batch and a step of learningRate / batch size
+                var forward = Forward(x, epsilon);
+                Backward(x, forward, actualBatchSize == batchSize ? fullBatchStep : lastBatchStep);
             }
         }
     }
 
-    /// <param name="sampleLatent">
-    /// When true, draws z with the reparameterization trick z = mean + exp(0.5*logVar)*epsilon —
-    /// the stochastic estimator TRAINING needs for the gradient (Kingma and Welling 2013, eq. 10).
-    /// When false, uses z = mean, which is the deterministic latent code inference should use.
-    /// </param>
-    private (Vector<T> hidden, Vector<T> mean, Vector<T> logVar, Vector<T> z, Vector<T> reconstruction) Forward(Vector<T> x, bool sampleLatent)
+    // Activations of a batched forward pass.
+    private sealed class ForwardResult
+    {
+        public required Tensor<T> Hidden { get; init; }
+        public required Tensor<T> Mean { get; init; }
+        public required Tensor<T> LogVar { get; init; }
+        public required Tensor<T> Std { get; init; }
+        public required Tensor<T> Epsilon { get; init; }
+        public required Tensor<T> Z { get; init; }
+        public required Tensor<T> Hidden2 { get; init; }
+        public required Tensor<T> Reconstruction { get; init; }
+    }
+
+    // Batched forward pass. Encoder: hidden = ReLU(x W1 + b1), mean = hidden WMean + bMean,
+    // logVar = hidden WLogVar + bLogVar. Reparameterization z = mean + exp(0.5 * logVar) * epsilon.
+    // Sampling belongs to TRAINING only. Scoring drew a fresh epsilon on every call, so the
+    // reconstruction — and therefore the anomaly score — changed between identical Predict
+    // calls and Predict_ShouldBeDeterministic failed. Per Kingma and Welling 2013 the
+    // reparameterization trick exists to make the training objective differentiable; at
+    // inference (epsilon null) the latent code is the distribution's mean, which is also what VAE-based
+    // anomaly detection scores against. Decoder: hidden2 = ReLU(z D1 + c1), reconstruction = hidden2 D2 + c2.
+    private ForwardResult Forward(Tensor<T> x, Tensor<T>? epsilon)
     {
         var encoderW1 = _encoderW1;
         var encoderB1 = _encoderB1;
@@ -319,184 +294,73 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Encoder: hidden = ReLU(x @ W1 + b1)  (SIMD)
-        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var hiddenPre = Engine.TensorAdd(
-            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(encoderW1)),
-            Tensor<T>.FromVector(encoderB1).Reshape(1, _hiddenDim));
-        var hidden = Engine.ReLU(hiddenPre.Reshape(_hiddenDim).ToVector());
+        var engine = Engine;
+        int rows = x.Shape[0];
+        var hidden = engine.TensorMax(Affine(x, encoderW1, encoderB1), NumOps.Zero);
+        var mean = Affine(hidden, encoderWMean, encoderBMean);
+        var logVar = Affine(hidden, encoderWLogVar, encoderBLogVar);
+        var std = engine.TensorExp(engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
+        var noise = epsilon ?? Tensor<T>.CreateZeros(new[] { rows, _latentDim });
+        var z = epsilon == null ? mean : engine.TensorAdd(mean, engine.TensorMultiply(std, noise));
+        var hidden2 = engine.TensorMax(Affine(z, decoderW1, decoderB1), NumOps.Zero);
+        var reconstruction = Affine(hidden2, decoderW2, decoderB2);
 
-        // Encoder: mean = hidden @ WMean + bMean, logVar = hidden @ WLogVar + bLogVar  (SIMD)
-        var hT = Tensor<T>.FromVector(hidden).Reshape(1, _hiddenDim);
-        var mean = Engine.TensorAdd(
-            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encoderWMean)),
-            Tensor<T>.FromVector(encoderBMean).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
-        var logVar = Engine.TensorAdd(
-            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encoderWLogVar)),
-            Tensor<T>.FromVector(encoderBLogVar).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
-
-        // Reparameterization: z = mean + exp(0.5 * logVar) * epsilon
-        // Sampling belongs to TRAINING only. Scoring drew a fresh epsilon on every call, so the
-        // reconstruction — and therefore the anomaly score — changed between identical Predict
-        // calls and Predict_ShouldBeDeterministic failed. Per Kingma and Welling 2013 the
-        // reparameterization trick exists to make the training objective differentiable; at
-        // inference the latent code is the distribution's mean, which is also what VAE-based
-        // anomaly detection scores against.
-        var z = new Vector<T>(_latentDim);
-        T half = NumOps.FromDouble(0.5);
-        for (int j = 0; j < _latentDim; j++)
+        return new ForwardResult
         {
-            if (sampleLatent)
-            {
-                T epsilon = NumOps.FromDouble(GaussianRandom());
-                T std = NumOps.Exp(NumOps.Multiply(half, logVar[j]));
-                z[j] = NumOps.Add(mean[j], NumOps.Multiply(std, epsilon));
-            }
-            else
-            {
-                z[j] = mean[j];
-            }
-        }
-
-        // Decoder: hidden2 = ReLU(z @ W1 + b1)  (SIMD)
-        var zT = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
-        var h2Pre = Engine.TensorAdd(
-            Engine.TensorMatMul(zT, Tensor<T>.FromMatrix(decoderW1)),
-            Tensor<T>.FromVector(decoderB1).Reshape(1, _hiddenDim));
-        var hidden2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
-
-        // Decoder: reconstruction = hidden2 @ W2 + b2  (SIMD, linear)
-        var h2T = Tensor<T>.FromVector(hidden2).Reshape(1, _hiddenDim);
-        var reconstruction = Engine.TensorAdd(
-            Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(decoderW2)),
-            Tensor<T>.FromVector(decoderB2).Reshape(1, _inputDim)).Reshape(_inputDim).ToVector();
-
-        return (hidden, mean, logVar, z, reconstruction);
-    }
-
-    private class GradientAccumulators
-    {
-        public required double[,] encoderW1 { get; init; }
-        public required double[] encoderB1 { get; init; }
-        public required double[,] encoderWMean { get; init; }
-        public required double[] encoderBMean { get; init; }
-        public required double[,] encoderWLogVar { get; init; }
-        public required double[] encoderBLogVar { get; init; }
-        public required double[,] decoderW1 { get; init; }
-        public required double[] decoderB1 { get; init; }
-        public required double[,] decoderW2 { get; init; }
-        public required double[] decoderB2 { get; init; }
-    }
-
-    private GradientAccumulators InitializeGradients()
-    {
-        return new GradientAccumulators
-        {
-            encoderW1 = new double[_inputDim, _hiddenDim],
-            encoderB1 = new double[_hiddenDim],
-            encoderWMean = new double[_hiddenDim, _latentDim],
-            encoderBMean = new double[_latentDim],
-            encoderWLogVar = new double[_hiddenDim, _latentDim],
-            encoderBLogVar = new double[_latentDim],
-            decoderW1 = new double[_latentDim, _hiddenDim],
-            decoderB1 = new double[_hiddenDim],
-            decoderW2 = new double[_hiddenDim, _inputDim],
-            decoderB2 = new double[_inputDim]
+            Hidden = hidden,
+            Mean = mean,
+            LogVar = logVar,
+            Std = std,
+            Epsilon = noise,
+            Z = z,
+            Hidden2 = hidden2,
+            Reconstruction = reconstruction
         };
     }
 
-    private void AccumulateGradients(GradientAccumulators gradients, Vector<T> x,
-        Vector<T> hidden, Vector<T> mean, Vector<T> logVar, Vector<T> z, Vector<T> reconstruction)
+    // input W + b (bias broadcast over the rows)
+    private Tensor<T> Affine(Tensor<T> input, Matrix<T> weights, Vector<T> bias)
+        => Engine.TensorAdd(Engine.TensorMatMul(input, Tensor<T>.FromMatrix(weights)),
+            AnomalyTensorOps.BroadcastRow(bias.AsTensor(), input.Shape[0]));
+
+    // Back-propagates the loss sum over the batch of ||reconstruction - x||^2 + KL(N(mean, exp(logVar)) || N(0, 1))
+    // and applies w = w - lr * g to every weight.
+    private void Backward(Tensor<T> x, ForwardResult forward, T lr)
     {
-        var decoderW2 = _decoderW2;
-        var decoderW1 = _decoderW1;
-        var encoderWMean = _encoderWMean;
-        var encoderWLogVar = _encoderWLogVar;
         var encoderW1 = _encoderW1;
+        var encoderB1 = _encoderB1;
+        var encoderWMean = _encoderWMean;
+        var encoderBMean = _encoderBMean;
+        var encoderWLogVar = _encoderWLogVar;
+        var encoderBLogVar = _encoderBLogVar;
+        var decoderW1 = _decoderW1;
+        var decoderB1 = _decoderB1;
+        var decoderW2 = _decoderW2;
+        var decoderB2 = _decoderB2;
 
-        if (decoderW2 == null || decoderW1 == null || encoderWMean == null ||
-            encoderWLogVar == null || encoderW1 == null)
+        if (encoderW1 == null || encoderB1 == null || encoderWMean == null || encoderBMean == null ||
+            encoderWLogVar == null || encoderBLogVar == null || decoderW1 == null || decoderB1 == null ||
+            decoderW2 == null || decoderB2 == null)
         {
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Compute reconstruction loss gradient: d/dRecon MSE = 2 * (recon - x)
-        var dReconstruction = new double[_inputDim];
-        for (int j = 0; j < _inputDim; j++)
-        {
-            dReconstruction[j] = 2 * (NumOps.ToDouble(reconstruction[j]) - NumOps.ToDouble(x[j]));
-        }
+        var engine = Engine;
+        T half = NumOps.FromDouble(0.5);
+        var axis0 = new[] { 0 };
 
-        // Recompute hidden2 for backprop
-        var decoderB1Local = _decoderB1;
-        if (decoderB1Local == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        var hidden2Pre = new double[_hiddenDim];
-        var hidden2 = new double[_hiddenDim];
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            hidden2Pre[j] = NumOps.ToDouble(decoderB1Local[j]);
-            for (int i = 0; i < _latentDim; i++)
-            {
-                hidden2Pre[j] += NumOps.ToDouble(z[i]) * NumOps.ToDouble(decoderW1[i, j]);
-            }
-            hidden2[j] = ReLU(hidden2Pre[j]);
-        }
-
-        // Backprop through decoder output layer
-        var dHidden2 = new double[_hiddenDim];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                gradients.decoderW2[i, j] += hidden2[i] * dReconstruction[j];
-                dHidden2[i] += NumOps.ToDouble(decoderW2[i, j]) * dReconstruction[j];
-            }
-        }
-        for (int j = 0; j < _inputDim; j++)
-        {
-            gradients.decoderB2[j] += dReconstruction[j];
-        }
-
-        // ReLU derivative for hidden2
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (hidden2Pre[i] <= 0) dHidden2[i] = 0;
-        }
-
-        // Backprop through decoder layer 1
-        var dZ = new double[_latentDim];
-        for (int i = 0; i < _latentDim; i++)
-        {
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                gradients.decoderW1[i, j] += NumOps.ToDouble(z[i]) * dHidden2[j];
-                dZ[i] += NumOps.ToDouble(decoderW1[i, j]) * dHidden2[j];
-            }
-        }
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            gradients.decoderB1[j] += dHidden2[j];
-        }
-
-        // Gradients through reparameterization: z = mean + exp(0.5*logVar) * epsilon
-        // dL/dMean = dL/dZ
-        // dL/dLogVar = dL/dZ * epsilon * 0.5 * exp(0.5*logVar)
-        // For simplicity, we'll use the standard VAE gradient formulas
-
-        // KL divergence gradient
-        var dMean_KL = new double[_latentDim];
-        var dLogVar_KL = new double[_latentDim];
-        for (int j = 0; j < _latentDim; j++)
-        {
-            double meanVal = NumOps.ToDouble(mean[j]);
-            double logVarVal = NumOps.ToDouble(logVar[j]);
-            dMean_KL[j] = meanVal;
-            dLogVar_KL[j] = 0.5 * (Math.Exp(logVarVal) - 1);
-        }
+        // Reconstruction loss gradient: d/dRecon MSE = 2 * (recon - x), back through the decoder output layer
+        // and the hidden2 ReLU
+        var dReconstruction = engine.TensorMultiplyScalar(engine.TensorSubtract(forward.Reconstruction, x), NumOps.FromDouble(2));
+        var decoderW2Tensor = Tensor<T>.FromMatrix(decoderW2);
+        var decoderW1Tensor = Tensor<T>.FromMatrix(decoderW1);
+        var gDecoderW2 = engine.TensorMatMul(engine.TensorTranspose(forward.Hidden2), dReconstruction);
+        var gDecoderB2 = engine.ReduceSum(dReconstruction, axis0, false);
+        var dHidden2 = engine.TensorMultiply(engine.TensorMatMul(dReconstruction, engine.TensorTranspose(decoderW2Tensor)),
+            engine.TensorGreaterThan(forward.Hidden2, NumOps.Zero));
+        var gDecoderW1 = engine.TensorMatMul(engine.TensorTranspose(forward.Z), dHidden2);
+        var gDecoderB1 = engine.ReduceSum(dHidden2, axis0, false);
+        var dZ = engine.TensorMatMul(dHidden2, engine.TensorTranspose(decoderW1Tensor));
 
         // Reconstruction gradient through the reparameterization trick
         // (Kingma & Welling 2014 "Auto-Encoding Variational Bayes" §2.4):
@@ -504,153 +368,48 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
         // Exact gradients:
         //   ∂z/∂μ      = 1
         //   ∂z/∂logVar = ε · 0.5 · σ
-        // ε was sampled during the forward pass but not cached separately;
-        // we recover it exactly from the saved (z, μ, logVar) via
-        //   ε = (z − μ) / σ
-        // so the backward pass uses the SAME ε as the forward — no
-        // "averages out" approximation that previously substituted 0 for ε
-        // and silently zeroed the recon-side σ gradient component.
-        var dMean_recon = new double[_latentDim];
-        var dLogVar_recon = new double[_latentDim];
-        for (int j = 0; j < _latentDim; j++)
-        {
-            dMean_recon[j] = dZ[j];
-            double logVarVal = NumOps.ToDouble(logVar[j]);
-            double std = Math.Exp(0.5 * logVarVal);
-            double epsilon = std > 1e-12
-                ? (NumOps.ToDouble(z[j]) - NumOps.ToDouble(mean[j])) / std
-                : 0.0;
-            dLogVar_recon[j] = dZ[j] * 0.5 * std * epsilon;
-        }
+        // using the SAME ε as the forward pass (taken as 0 where σ <= 1e-12). KL divergence gradient:
+        // d/dMean = mean, d/dLogVar = 0.5 * (exp(logVar) - 1).
+        var epsilon = engine.TensorWhere(engine.TensorGreaterThan(forward.Std, NumOps.FromDouble(1e-12)),
+            forward.Epsilon, Tensor<T>.CreateZeros(new[] { x.Shape[0], _latentDim }));
+        var dMean = engine.TensorAdd(dZ, forward.Mean);
+        var dLogVar = engine.TensorAdd(
+            engine.TensorMultiplyScalar(engine.TensorMultiply(dZ, engine.TensorMultiply(forward.Std, epsilon)), half),
+            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorExp(forward.LogVar), NumOps.One), half));
 
-        // Total gradient
-        var dMean = new double[_latentDim];
-        var dLogVar = new double[_latentDim];
-        for (int j = 0; j < _latentDim; j++)
-        {
-            dMean[j] = dMean_recon[j] + dMean_KL[j];
-            dLogVar[j] = dLogVar_recon[j] + dLogVar_KL[j];
-        }
-
-        // Backprop through encoder mean/logvar layers
-        var dHidden = new double[_hiddenDim];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            for (int j = 0; j < _latentDim; j++)
-            {
-                gradients.encoderWMean[i, j] += NumOps.ToDouble(hidden[i]) * dMean[j];
-                gradients.encoderWLogVar[i, j] += NumOps.ToDouble(hidden[i]) * dLogVar[j];
-                dHidden[i] += NumOps.ToDouble(encoderWMean[i, j]) * dMean[j];
-                dHidden[i] += NumOps.ToDouble(encoderWLogVar[i, j]) * dLogVar[j];
-            }
-        }
-        for (int j = 0; j < _latentDim; j++)
-        {
-            gradients.encoderBMean[j] += dMean[j];
-            gradients.encoderBLogVar[j] += dLogVar[j];
-        }
-
-        // Recompute hidden layer pre-activation
-        var encoderB1Local = _encoderB1;
-        if (encoderB1Local == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        var hiddenPre = new double[_hiddenDim];
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            hiddenPre[j] = NumOps.ToDouble(encoderB1Local[j]);
-            for (int i = 0; i < _inputDim; i++)
-            {
-                hiddenPre[j] += NumOps.ToDouble(x[i]) * NumOps.ToDouble(encoderW1[i, j]);
-            }
-        }
-
-        // ReLU derivative for hidden
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (hiddenPre[i] <= 0) dHidden[i] = 0;
-        }
-
-        // Backprop through encoder layer 1
-        for (int i = 0; i < _inputDim; i++)
-        {
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                gradients.encoderW1[i, j] += NumOps.ToDouble(x[i]) * dHidden[j];
-            }
-        }
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            gradients.encoderB1[j] += dHidden[j];
-        }
-    }
-
-    private void UpdateWeights(GradientAccumulators gradients, int batchSize)
-    {
-        double lr = _learningRate / batchSize;
-
-        var encoderW1 = _encoderW1;
-        var encoderB1 = _encoderB1;
-        var encoderWMean = _encoderWMean;
-        var encoderBMean = _encoderBMean;
-        var encoderWLogVar = _encoderWLogVar;
-        var encoderBLogVar = _encoderBLogVar;
-        var decoderW1 = _decoderW1;
-        var decoderB1 = _decoderB1;
-        var decoderW2 = _decoderW2;
-        var decoderB2 = _decoderB2;
-
-        if (encoderW1 == null || encoderB1 == null || encoderWMean == null || encoderBMean == null ||
-            encoderWLogVar == null || encoderBLogVar == null || decoderW1 == null || decoderB1 == null ||
-            decoderW2 == null || decoderB2 == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
+        // Backprop through encoder mean/logvar layers, the hidden ReLU and encoder layer 1
+        var encoderWMeanTensor = Tensor<T>.FromMatrix(encoderWMean);
+        var encoderWLogVarTensor = Tensor<T>.FromMatrix(encoderWLogVar);
+        var hiddenT = engine.TensorTranspose(forward.Hidden);
+        var gEncoderWMean = engine.TensorMatMul(hiddenT, dMean);
+        var gEncoderWLogVar = engine.TensorMatMul(hiddenT, dLogVar);
+        var gEncoderBMean = engine.ReduceSum(dMean, axis0, false);
+        var gEncoderBLogVar = engine.ReduceSum(dLogVar, axis0, false);
+        var dHidden = engine.TensorMultiply(engine.TensorAdd(
+                engine.TensorMatMul(dMean, engine.TensorTranspose(encoderWMeanTensor)),
+                engine.TensorMatMul(dLogVar, engine.TensorTranspose(encoderWLogVarTensor))),
+            engine.TensorGreaterThan(forward.Hidden, NumOps.Zero));
+        var gEncoderW1 = engine.TensorMatMul(engine.TensorTranspose(x), dHidden);
+        var gEncoderB1 = engine.ReduceSum(dHidden, axis0, false);
 
         // Update encoder
-        UpdateMatrixWeights(encoderW1, gradients.encoderW1, lr);
-        UpdateVectorWeights(encoderB1, gradients.encoderB1, lr);
-        UpdateMatrixWeights(encoderWMean, gradients.encoderWMean, lr);
-        UpdateVectorWeights(encoderBMean, gradients.encoderBMean, lr);
-        UpdateMatrixWeights(encoderWLogVar, gradients.encoderWLogVar, lr);
-        UpdateVectorWeights(encoderBLogVar, gradients.encoderBLogVar, lr);
+        _encoderW1 = Step(Tensor<T>.FromMatrix(encoderW1), gEncoderW1, lr).ToMatrix();
+        _encoderB1 = Step(encoderB1.AsTensor(), gEncoderB1, lr).ToVector();
+        _encoderWMean = Step(encoderWMeanTensor, gEncoderWMean, lr).ToMatrix();
+        _encoderBMean = Step(encoderBMean.AsTensor(), gEncoderBMean, lr).ToVector();
+        _encoderWLogVar = Step(encoderWLogVarTensor, gEncoderWLogVar, lr).ToMatrix();
+        _encoderBLogVar = Step(encoderBLogVar.AsTensor(), gEncoderBLogVar, lr).ToVector();
 
         // Update decoder
-        UpdateMatrixWeights(decoderW1, gradients.decoderW1, lr);
-        UpdateVectorWeights(decoderB1, gradients.decoderB1, lr);
-        UpdateMatrixWeights(decoderW2, gradients.decoderW2, lr);
-        UpdateVectorWeights(decoderB2, gradients.decoderB2, lr);
+        _decoderW1 = Step(decoderW1Tensor, gDecoderW1, lr).ToMatrix();
+        _decoderB1 = Step(decoderB1.AsTensor(), gDecoderB1, lr).ToVector();
+        _decoderW2 = Step(decoderW2Tensor, gDecoderW2, lr).ToMatrix();
+        _decoderB2 = Step(decoderB2.AsTensor(), gDecoderB2, lr).ToVector();
     }
 
-    private void UpdateMatrixWeights(Matrix<T> weights, double[,] grads, double lr)
-    {
-        for (int i = 0; i < weights.Rows; i++)
-        {
-            for (int j = 0; j < weights.Columns; j++)
-            {
-                weights[i, j] = NumOps.Subtract(weights[i, j], NumOps.FromDouble(lr * grads[i, j]));
-            }
-        }
-    }
-
-    private void UpdateVectorWeights(Vector<T> weights, double[] grads, double lr)
-    {
-        for (int i = 0; i < weights.Length; i++)
-        {
-            weights[i] = NumOps.Subtract(weights[i], NumOps.FromDouble(lr * grads[i]));
-        }
-    }
-
-    private static double ReLU(double x) => Math.Max(0, x);
-
-    private double GaussianRandom()
-    {
-        double u1 = 1.0 - _random.NextDouble();
-        double u2 = 1.0 - _random.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-    }
+    // weights - lr * gradients
+    private Tensor<T> Step(Tensor<T> weights, Tensor<T> gradients, T lr)
+        => Engine.TensorSubtract(weights, Engine.TensorMultiplyScalar(gradients, lr));
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
@@ -670,45 +429,18 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
         }
 
-        int n = X.Rows;
-        var scores = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            // Normalize input using stored parameters
-            var x = new Vector<T>(_inputDim);
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
-                x[j] = NumOps.Divide(diff, dataStds[j]);
-            }
-
-            var (_, mean, logVar, _, reconstruction) = Forward(x, sampleLatent: false);
-
-            // Reconstruction error
-            T reconError = NumOps.Zero;
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(x[j], reconstruction[j]);
-                reconError = NumOps.Add(reconError, NumOps.Multiply(diff, diff));
-            }
-            double reconErrorVal = NumOps.ToDouble(reconError) / _inputDim;
-
-            // KL divergence
-            double klDiv = 0;
-            for (int j = 0; j < _latentDim; j++)
-            {
-                double meanVal = NumOps.ToDouble(mean[j]);
-                double logVarVal = NumOps.ToDouble(logVar[j]);
-                klDiv += -0.5 * (1 + logVarVal - meanVal * meanVal - Math.Exp(logVarVal));
-            }
-            klDiv /= _latentDim;
-
-            // Combined score
-            double score = reconErrorVal + 0.1 * klDiv;
-            scores[i] = NumOps.FromDouble(score);
-        }
-
-        return scores;
+        // Score = mean squared reconstruction error + 0.1 * mean KL divergence -0.5 * (1 + logVar - mean^2 - exp(logVar))
+        // of the normalized rows, with the latent code at its mean
+        var engine = Engine;
+        var normalized = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
+        var forward = Forward(normalized, null);
+        var axis1 = new[] { 1 };
+        var reconError = engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(normalized, forward.Reconstruction)), axis1, false);
+        var klTerms = engine.TensorSubtract(
+            engine.TensorSubtract(engine.TensorAddScalar(forward.LogVar, NumOps.One), engine.TensorSquare(forward.Mean)),
+            engine.TensorExp(forward.LogVar));
+        var klDiv = engine.TensorMultiplyScalar(engine.ReduceMean(klTerms, axis1, false), NumOps.FromDouble(-0.5));
+        return engine.TensorAdd(reconError, engine.TensorMultiplyScalar(klDiv, NumOps.FromDouble(0.1))).ToVector();
     }
 }

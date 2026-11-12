@@ -2,6 +2,7 @@ name: Test attribution canary
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'tools/TestImpact/fixtures/TestAttribution/**'
       - 'tools/TestImpact/Attribution.Protocol/**'
@@ -30,6 +31,7 @@ concurrency:
 
 jobs:
   collector-proof:
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

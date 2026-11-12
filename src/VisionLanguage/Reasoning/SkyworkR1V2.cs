@@ -231,103 +231,101 @@ public partial class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<
         int qLen = questionTokens.Length;
 
         // Step 3: Iterative GRPO+MPO reasoning
-        var reasoningState = new double[dim];
+        var engine = Engine;
+        var reasoningState = new Tensor<T>([dim]);
+        int numTokens = Math.Min(visDim, 256);
+        int rewardDims = Math.Min(dim, 32);
+        var tokenValues = numTokens > 0 ? CyclicTake(visualFeatures, numTokens) : new Tensor<T>([0]);
+        T invVocab = NumOps.FromDouble(1.0 / _options.VocabSize);
+        var qEmb = engine.TensorMultiplyScalar(CyclicTake(questionTokens, dim), invVocab);
+        // Question term 0.3 q[(t + 3 g) % qLen] / vocab of each trajectory (the same every step).
+        var questionTerm = numTokens > 0
+            ? engine.TensorMultiplyScalar(AffineModGather(questionTokens, [numGroups, numTokens], [3, 1], 0), NumOps.FromDouble(0.3 / _options.VocabSize))
+            : new Tensor<T>([numGroups, 0]);
+        var groupTokenPhase = engine.TensorOuter(engine.TensorArange<T>(1, numGroups + 1, 1), engine.TensorArange<T>(1, numTokens + 1, 1));
+        var stepNumber = engine.TensorArange<T>(1, numReasoningSteps + 1, 1);
+        var trajectoryFrequency = engine.TensorMultiplyScalar(stepNumber, NumOps.FromDouble(0.005));
+        var stepDecay = engine.TensorDivide(Tensor<T>.CreateDefault([numReasoningSteps], NumOps.One), stepNumber);
+        var stateKeep = engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(stepDecay, NumOps.FromDouble(0.35)));
+        var tokenGrid = engine.TensorBroadcastTo(tokenValues.Reshape([1, numTokens]), [numGroups, numTokens]);
+        // Visual references vis[d % visDim] for the reward dimensions.
+        var visualReference = rewardDims > 0 ? CyclicTake(visualFeatures, rewardDims) : new Tensor<T>([0]);
+        var questionContribution = engine.TensorBroadcastTo(
+            engine.TensorMultiplyScalar(qEmb, NumOps.FromDouble(0.15)).Reshape([1, dim]), [numGroups, dim]);
+        T trajectoryAmplitude = NumOps.FromDouble(0.25);
+        T temperature = NumOps.FromDouble(0.3);
+        T previousWeight = NumOps.FromDouble(0.3);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T coherenceSlope = NumOps.FromDouble(3.0);
+        T groundingSlope = NumOps.FromDouble(1.5);
+        T invRewardDims = NumOps.FromDouble(1.0 / rewardDims);
+        var negInf = Tensor<T>.CreateDefault([numGroups], NumOps.FromDouble(double.NegativeInfinity));
+        var posInf = Tensor<T>.CreateDefault([numGroups], NumOps.FromDouble(double.PositiveInfinity));
+        T minusOne = NumOps.FromDouble(-1.0);
+        T rankScale = NumOps.FromDouble(2.0);
+        T correctnessWeight = NumOps.FromDouble(0.5);
+        T coherenceWeight = NumOps.FromDouble(0.3);
+        T groundingWeight = NumOps.FromDouble(0.2);
 
         for (int step = 0; step < numReasoningSteps; step++)
         {
-            // Phase A: GRPO exploration - multiple reasoning trajectories
-            var trajectoryOutputs = new double[numGroups][];
-            var trajectoryRewards = new double[numGroups];
+            // Phase A: GRPO exploration - multiple reasoning trajectories.
+            // w[g, t] = exp((vis_t + 0.3 q[(t + 3 g) % qLen] / vocab + 0.25 sin((g + 1)(step + 1)(t + 1) 0.005)) * 0.3)
+            var trajBias = engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorMultiply(groupTokenPhase, Pick(trajectoryFrequency, step))), trajectoryAmplitude);
+            var attention = engine.TensorExp(engine.TensorMultiplyScalar(
+                engine.TensorAdd(engine.TensorAdd(tokenGrid, questionTerm), trajBias), temperature));
+            var visAttn = WeightedAverage(attention, tokenValues);
 
-            for (int g = 0; g < numGroups; g++)
-            {
-                trajectoryOutputs[g] = new double[dim];
-                for (int d = 0; d < dim; d++)
-                {
-                    // Visual re-attention with trajectory-specific focus
-                    double visAttn = 0;
-                    double attnSum = 0;
-                    int numTokens = Math.Min(visDim, 256);
-                    for (int t = 0; t < numTokens; t++)
-                    {
-                        double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                        double qVal =
-                            NumOps.ToDouble(questionTokens[(t + g * 3) % qLen])
-                            / _options.VocabSize;
-                        // Trajectory-specific + step-specific attention
-                        double trajBias = Math.Sin((g + 1.0) * (step + 1) * (t + 1) * 0.005) * 0.25;
-                        double w = Math.Exp((visVal + qVal * 0.3 + trajBias) * 0.3);
-                        visAttn += w * visVal;
-                        attnSum += w;
-                    }
-                    visAttn /= Math.Max(attnSum, 1e-8);
+            // trajectory[g, d] = visAttn[g] + 0.15 qEmb[d] + 0.3 state[d]
+            var trajectoryOutputs = engine.TensorAdd(
+                engine.TensorAdd(engine.TensorBroadcastTo(visAttn.Reshape([numGroups, 1]), [numGroups, dim]), questionContribution),
+                engine.TensorBroadcastTo(engine.TensorMultiplyScalar(reasoningState, previousWeight).Reshape([1, dim]), [numGroups, dim]));
 
-                    double qEmb = NumOps.ToDouble(questionTokens[d % qLen]) / _options.VocabSize;
-                    // Condition on previous reasoning state
-                    double prevContrib = reasoningState[d] * 0.3;
-                    trajectoryOutputs[g][d] = visAttn + qEmb * 0.15 + prevContrib;
-                }
+            // Compute multi-reward over the first rewardDims dims: correctness proxy + coherence + grounding
+            var head = engine.TensorSlice(trajectoryOutputs, [0, 0], [numGroups, rewardDims]);
+            var correctness = engine.ReduceSum(engine.ScalarMinusTensor(NumOps.One, engine.TensorMin(
+                engine.TensorAbs(engine.TensorSubtract(head, engine.TensorBroadcastTo(visualReference.Reshape([1, rewardDims]), [numGroups, rewardDims]))),
+                NumOps.One)), [1], false);
+            var coherence = rewardDims > 1
+                ? engine.ReduceSum(engine.ScalarMinusTensor(NumOps.One, engine.TensorMin(
+                    engine.TensorMultiplyScalar(engine.TensorAbs(engine.TensorSubtract(
+                        engine.TensorSlice(head, [0, 1], [numGroups, rewardDims - 1]),
+                        engine.TensorSlice(head, [0, 0], [numGroups, rewardDims - 1]))), coherenceSlope),
+                    NumOps.One)), [1], false)
+                : new Tensor<T>([numGroups]);
+            var grounding = engine.ReduceSum(engine.ScalarMinusTensor(NumOps.One, engine.TensorMin(
+                engine.TensorMultiplyScalar(engine.TensorAbs(head), groundingSlope), NumOps.One)), [1], false);
+            var trajectoryRewards = engine.TensorMultiplyScalar(
+                engine.TensorAdd(
+                    engine.TensorAdd(engine.TensorMultiplyScalar(correctness, correctnessWeight), engine.TensorMultiplyScalar(coherence, coherenceWeight)),
+                    engine.TensorMultiplyScalar(grounding, groundingWeight)),
+                invRewardDims);
 
-                // Compute multi-reward: correctness proxy + coherence + grounding
-                double correctnessReward = 0;
-                double coherenceReward = 0;
-                double groundingReward = 0;
-                for (int d = 0; d < Math.Min(dim, 32); d++)
-                {
-                    double val = trajectoryOutputs[g][d];
-                    // Correctness: consistent with visual features
-                    int vIdx = d % visDim;
-                    double visRef = NumOps.ToDouble(visualFeatures[vIdx]);
-                    correctnessReward += 1.0 - Math.Min(1.0, Math.Abs(val - visRef));
-                    // Coherence: smooth across dimensions
-                    if (d > 0)
-                        coherenceReward +=
-                            1.0 - Math.Min(1.0, Math.Abs(val - trajectoryOutputs[g][d - 1]) * 3.0);
-                    // Grounding: not hallucinating
-                    groundingReward += 1.0 - Math.Min(1.0, Math.Abs(val) * 1.5);
-                }
-                int rewardDims = Math.Min(dim, 32);
-                trajectoryRewards[g] =
-                    (correctnessReward * 0.5 + coherenceReward * 0.3 + groundingReward * 0.2)
-                    / rewardDims;
-            }
-
-            // Phase B: GRPO ranking + MPO refinement
-            double maxR = double.MinValue,
-                minR = double.MaxValue;
-            for (int g = 0; g < numGroups; g++)
-            {
-                if (trajectoryRewards[g] > maxR)
-                    maxR = trajectoryRewards[g];
-                if (trajectoryRewards[g] < minR)
-                    minR = trajectoryRewards[g];
-            }
-            double rRange = maxR - minR + 1e-8;
-            var trajWeights = new double[numGroups];
-            double wTotal = 0;
-            for (int g = 0; g < numGroups; g++)
-            {
-                trajWeights[g] = Math.Exp((trajectoryRewards[g] - minR) / rRange * 2.0);
-                wTotal += trajWeights[g];
-            }
+            // Phase B: GRPO ranking + MPO refinement: exp((r - min) / (max - min + 1e-8) * 2), NaN-skipping min/max.
+            var nanRewards = engine.TensorIsNan(trajectoryRewards);
+            var maxR = engine.ReduceMax(engine.TensorWhere(nanRewards, negInf, trajectoryRewards), [0], true);
+            var minR = engine.TensorMultiplyScalar(
+                engine.ReduceMax(engine.TensorMultiplyScalar(engine.TensorWhere(nanRewards, posInf, trajectoryRewards), minusOne), [0], true),
+                minusOne);
+            var rRange = engine.TensorAddScalar(engine.TensorSubtract(maxR, minR), epsilon);
+            var trajWeights = engine.TensorExp(engine.TensorMultiplyScalar(
+                engine.TensorDivide(
+                    engine.TensorSubtract(trajectoryRewards, engine.TensorBroadcastTo(minR, [numGroups])),
+                    engine.TensorBroadcastTo(rRange, [numGroups])),
+                rankScale));
+            var wTotal = engine.TensorMax(engine.ReduceSum(trajWeights, [0], true), epsilon);
 
             // MPO: preference-weighted combination into reasoning state
-            double stepDecay = 1.0 / (step + 1);
-            for (int d = 0; d < dim; d++)
-            {
-                double refined = 0;
-                for (int g = 0; g < numGroups; g++)
-                    refined += trajectoryOutputs[g][d] * (trajWeights[g] / Math.Max(wTotal, 1e-8));
-
-                reasoningState[d] =
-                    reasoningState[d] * (1.0 - stepDecay * 0.35) + refined * stepDecay;
-            }
+            var preference = engine.TensorDivide(trajWeights, engine.TensorBroadcastTo(wTotal, [numGroups]));
+            var refined = engine.TensorMatMul(preference.Reshape([1, numGroups]), trajectoryOutputs).Reshape([dim]);
+            reasoningState = engine.TensorAdd(
+                engine.TensorMultiply(reasoningState, Pick(stateKeep, step)),
+                engine.TensorMultiply(refined, Pick(stepDecay, step)));
         }
 
         // Step 4: Final answer
-        var chainInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-            chainInput[d] = NumOps.FromDouble(reasoningState[d]);
+        var chainInput = reasoningState;
 
         var output = chainInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
@@ -374,10 +372,7 @@ public partial class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

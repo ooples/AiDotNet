@@ -219,6 +219,87 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
+    private static AiDotNet.Tensors.LinearAlgebra.Tensor<double> GanTensor(int[] shape, params double[] values)
+        => new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(values, shape);
+
+    [Fact(Timeout = 120000)]
+    public async Task GAnomaly_LossesMatchAkcayEquationFourByHand()
+    {
+        // Encoder, decoder and re-encoder weights zero except the encoder output bias (1, 0), so z = (1, 0),
+        // x' = 0 and z' = 0 for every row. Discriminator W1 = I, W2 = (1, 0)^T, biases 0. For x = [[1, -2],
+        // [3, 0]]: f(x) = LeakyReLU(x) = [[1, -.4], [3, 0]], f(x') = 0, so L_adv = (1 + .16 + 9 + 0) / 4 = 2.54,
+        // L_con = mean|x| = 1.5, L_enc = (1 + 0 + 1 + 0) / 4 = .5 and L_G = 1 * 2.54 + 50 * 1.5 + 1 * .5 = 78.04.
+        // D logits: real (1, 3), fake 0, so L_D = (mean(ln(1 + e^-1), ln(1 + e^-3)) + ln 2) / 2.
+        var detector = new GANomalyDetector<double>(latentDim: 2, hiddenDim: 2, epochs: 1);
+        detector.Fit(new Matrix<double>(new double[,] { { 0, 1 }, { 1, 0 }, { 2, 3 }, { 3, 2 } }));
+
+        var square = new[] { 2, 2 };
+        var pair = new[] { 2 };
+        var zeros = GanTensor(square, 0, 0, 0, 0);
+        var noBias = GanTensor(pair, 0, 0);
+        detector.SetTrainingParameters(new[]
+        {
+            zeros, noBias, zeros, GanTensor(pair, 1, 0),
+            zeros, noBias, zeros, noBias,
+            zeros, noBias, zeros, noBias,
+            GanTensor(square, 1, 0, 0, 1), noBias, GanTensor(new[] { 2, 1 }, 1, 0), GanTensor(new[] { 1 }, 0)
+        });
+
+        var x = GanTensor(square, 1, -2, 3, 0);
+        Assert.Equal(78.04, detector.GeneratorLoss(x), 1e-12);
+        double expectedD = ((Math.Log(1 + Math.Exp(-1)) + Math.Log(1 + Math.Exp(-3))) / 2 + Math.Log(2)) / 2;
+        Assert.Equal(expectedD, detector.DiscriminatorLoss(x), 1e-12);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GAnomaly_GradientsMatchFiniteDifferencesOfTheLosses()
+    {
+        // The generator gradients (including the adversarial feature-matching term through the discriminator)
+        // and the discriminator gradients agree with central differences of GeneratorLoss / DiscriminatorLoss.
+        var detector = new GANomalyDetector<double>(latentDim: 2, hiddenDim: 3, epochs: 2);
+        var data = new Matrix<double>(6, 2);
+        for (int i = 0; i < 6; i++)
+        {
+            data[i, 0] = Math.Sin(i + 1);
+            data[i, 1] = Math.Cos(2 * i + 0.5);
+        }
+
+        detector.Fit(data);
+        var x = AiDotNet.Tensors.LinearAlgebra.Tensor<double>.FromMatrix(data);
+        var parameters = detector.TrainingParameters();
+        var gradients = detector.TrainingGradients(x);
+        const double h = 1e-6;
+        for (int index = 0; index < parameters.Length; index++)
+        {
+            Func<AiDotNet.Tensors.LinearAlgebra.Tensor<double>, double> loss = index < 12
+                ? detector.GeneratorLoss
+                : detector.DiscriminatorLoss;
+            var values = parameters[index].ToArray();
+            var analytic = gradients[index].ToArray();
+            for (int element = 0; element < values.Length; element++)
+            {
+                double up = LossWith(detector, parameters, index, element, h, loss, x);
+                double down = LossWith(detector, parameters, index, element, -h, loss, x);
+                Assert.Equal((up - down) / (2 * h), analytic[element], 1e-5);
+            }
+        }
+    }
+
+    private static double LossWith(GANomalyDetector<double> detector,
+        AiDotNet.Tensors.LinearAlgebra.Tensor<double>[] parameters, int index, int element, double delta,
+        Func<AiDotNet.Tensors.LinearAlgebra.Tensor<double>, double> loss,
+        AiDotNet.Tensors.LinearAlgebra.Tensor<double> x)
+    {
+        var values = (double[])parameters[index].ToArray().Clone();
+        values[element] += delta;
+        var perturbed = (AiDotNet.Tensors.LinearAlgebra.Tensor<double>[])parameters.Clone();
+        perturbed[index] = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(values, parameters[index].Shape.ToArray());
+        detector.SetTrainingParameters(perturbed);
+        double result = loss(x);
+        detector.SetTrainingParameters(parameters);
+        return result;
+    }
+
     #endregion
 
     #region AnoGANDetector Tests

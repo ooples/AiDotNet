@@ -100,63 +100,18 @@ public partial class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         _nFeatures = X.Columns;
-        _medians = new Vector<T>(_nFeatures);
-        _mads = new Vector<T>(_nFeatures);
 
-        // Calculate median and MAD for each feature
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            var column = X.GetColumn(j);
-
-            // Calculate median
-            _medians[j] = CalculateMedian(column);
-
-            // Calculate MAD = median(|x - median|)
-            _mads[j] = CalculateMAD(column, _medians[j]);
-        }
+        // Calculate median and MAD = median(|x - median|) for each feature
+        var data = AnomalyTensorOps.ToTensor(X);
+        var medians = AnomalyTensorOps.ColumnMedians(data);
+        _medians = medians.ToVector();
+        _mads = AnomalyTensorOps.ColumnMads(data, medians).ToVector();
 
         // Calculate anomaly scores for training data and set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
-    }
-
-    private T CalculateMedian(Vector<T> values)
-    {
-        var sorted = values.ToArray();
-        Array.Sort(sorted, (a, b) => NumOps.LessThan(a, b) ? -1 : (NumOps.GreaterThan(a, b) ? 1 : 0));
-
-        int n = sorted.Length;
-        if (n == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        if (n % 2 == 0)
-        {
-            // Average of two middle values
-            return NumOps.Divide(
-                NumOps.Add(sorted[n / 2 - 1], sorted[n / 2]),
-                NumOps.FromDouble(2));
-        }
-        else
-        {
-            return sorted[n / 2];
-        }
-    }
-
-    private T CalculateMAD(Vector<T> values, T median)
-    {
-        // Calculate |x - median| for each value
-        var absoluteDeviations = new Vector<T>(values.Length);
-        for (int i = 0; i < values.Length; i++)
-        {
-            absoluteDeviations[i] = NumOps.Abs(NumOps.Subtract(values[i], median));
-        }
-
-        // MAD is the median of absolute deviations
-        return CalculateMedian(absoluteDeviations);
     }
 
     /// <inheritdoc/>
@@ -180,41 +135,9 @@ public partial class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
         var mads = _mads ?? throw new InvalidOperationException("_mads has not been initialized.");
         var medians = _medians ?? throw new InvalidOperationException("_medians has not been initialized.");
 
-        var scores = new Vector<T>(X.Rows);
-        T scaleFactor = NumOps.FromDouble(MAD_SCALE_FACTOR);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Maximum absolute Modified Z-Score across all features
-            T maxAbsModifiedZ = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                // Skip features with zero MAD (constant features)
-                if (NumOps.Equals(mads[j], NumOps.Zero))
-                {
-                    continue;
-                }
-
-                // Modified Z = k * (x - median) / MAD
-                // where k = 0.6745 (scaling factor)
-                T deviation = NumOps.Subtract(X[i, j], medians[j]);
-                T modifiedZ = NumOps.Divide(
-                    NumOps.Multiply(scaleFactor, deviation),
-                    mads[j]);
-
-                T absModifiedZ = NumOps.Abs(modifiedZ);
-
-                if (NumOps.GreaterThan(absModifiedZ, maxAbsModifiedZ))
-                {
-                    maxAbsModifiedZ = absModifiedZ;
-                }
-            }
-
-            scores[i] = maxAbsModifiedZ;
-        }
-
-        return scores;
+        // Maximum absolute Modified Z-Score |k * (x - median) / MAD| (k = 0.6745) across features,
+        // skipping constant (zero-MAD) features
+        return AnomalyTensorOps.MaxScaledDeviation(X, medians, mads, true, NumOps.FromDouble(MAD_SCALE_FACTOR));
     }
 
     /// <inheritdoc/>
@@ -223,17 +146,7 @@ public partial class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
         EnsureFitted();
 
         var scores = ScoreAnomalies(X);
-        var predictions = new Vector<T>(scores.Length);
-        T thresholdT = NumOps.FromDouble(_modifiedZThreshold);
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            // Points with max |Modified Z| > threshold are anomalies (-1), otherwise inliers (1)
-            predictions[i] = NumOps.GreaterThan(scores[i], thresholdT)
-                ? NumOps.FromDouble(-1)
-                : NumOps.FromDouble(1);
-        }
-
-        return predictions;
+        // Points with max |Modified Z| > threshold are anomalies (-1), otherwise inliers (1)
+        return AnomalyTensorOps.LabelsFromThreshold(scores, NumOps.FromDouble(_modifiedZThreshold));
     }
 }

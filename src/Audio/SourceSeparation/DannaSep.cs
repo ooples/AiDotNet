@@ -173,8 +173,7 @@ public partial class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         foreach (var kvp in result.Sources)
         {
             if (!string.Equals(kvp.Key, source, StringComparison.OrdinalIgnoreCase))
-                for (int i = 0; i < Math.Min(output.Length, kvp.Value.Length); i++)
-                    output[i] = NumOps.Add(output[i], kvp.Value[i]);
+                output = AudioEngineOps.AddPrefix(Engine, output, kvp.Value);
         }
         return output;
     }
@@ -189,14 +188,8 @@ public partial class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         int idx = Array.IndexOf(_options.SourceNames, source);
         if (idx < 0) throw new ArgumentException($"Unknown source: {source}");
         int frameCount = stft.Shape[0];
-        var mask = new Tensor<T>([frameCount, _options.NumFreqBins]);
-        for (int f = 0; f < frameCount; f++)
-            for (int b = 0; b < _options.NumFreqBins; b++)
-            {
-                int maskIdx = f * _options.NumFreqBins * _options.NumSources + idx * _options.NumFreqBins + b;
-                mask[f, b] = maskIdx < masks.Length ? masks[maskIdx] : NumOps.Zero;
-            }
-        return mask;
+        return AudioEngineOps.GatherFrameBins(Engine, masks, frameCount, _options.NumFreqBins,
+            _options.NumFreqBins * _options.NumSources, idx * _options.NumFreqBins);
     }
 
     /// <inheritdoc />
@@ -292,14 +285,7 @@ public partial class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         int numBins = magnitude.Shape[1];
         for (int s = 0; s < _options.NumSources; s++)
         {
-            var maskedMag = new Tensor<T>(magnitude._shape);
-            for (int f = 0; f < numFrames; f++)
-                for (int b = 0; b < numBins; b++)
-                {
-                    int maskIdx = f * numBins * _options.NumSources + s * numBins + b;
-                    T maskVal = maskIdx < masks.Length ? masks[maskIdx] : NumOps.Zero;
-                    maskedMag[f, b] = NumOps.Multiply(magnitude[f, b], maskVal);
-                }
+            var maskedMag = AudioEngineOps.MaskedMagnitude(Engine, magnitude, masks, _options.NumSources, s, clamp: false);
             string name = s < _options.SourceNames.Length ? _options.SourceNames[s] : $"source_{s}";
             if (_lastPhase is not null)
                 sources[name] = _stft.InverseFromMagnitudeAndPhase(maskedMag, _lastPhase, audio.Length);

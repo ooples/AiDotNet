@@ -165,22 +165,13 @@ public partial class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
             var newSampledPoints = new Matrix<T>(newSize, _sampledPoints.Columns);
             var newSampledValues = new Vector<T>(newSize);
 
-            // Copy existing data
-            for (int i = 0; i < _sampledPoints.Rows; i++)
-            {
-                for (int j = 0; j < _sampledPoints.Columns; j++)
-                {
-                    newSampledPoints[i, j] = _sampledPoints[i, j];
-                }
-                newSampledValues[i] = _sampledValues[i];
-            }
-
-            // Add new point and value
-            for (int j = 0; j < nextPoint.Length; j++)
-            {
-                newSampledPoints[newSize - 1, j] = nextPoint[j];
-            }
-            newSampledValues[newSize - 1] = currentStepData.FitnessScore;
+            // Copy existing data (row-major, same column count), then append the new point and value.
+            var pointSpan = newSampledPoints.AsWritableSpan();
+            _sampledPoints.AsSpan().CopyTo(pointSpan);
+            nextPoint.AsSpan().CopyTo(pointSpan.Slice((newSize - 1) * newSampledPoints.Columns));
+            var valueSpan = newSampledValues.AsWritableSpan();
+            _sampledValues.AsSpan().Slice(0, _sampledPoints.Rows).CopyTo(valueSpan);
+            valueSpan[newSize - 1] = currentStepData.FitnessScore;
 
             // Replace old data with new data
             _sampledPoints = newSampledPoints;
@@ -219,7 +210,7 @@ public partial class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
             var candidatePoint = GenerateRandomPoint(dimensions);
             var acquisitionValue = CalculateAcquisitionFunction(candidatePoint);
 
-            if (NumOps.GreaterThan(acquisitionValue, bestValue))
+            if (IsHigherAcquisition(acquisitionValue, bestValue))
             {
                 bestPoint = candidatePoint;
                 bestValue = acquisitionValue;
@@ -239,6 +230,9 @@ public partial class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// the solution space, especially at the beginning when we don't have much information.
     /// </para>
     /// </remarks>
+    /// <summary>True when the candidate's acquisition value beats the best so far.</summary>
+    private bool IsHigherAcquisition(T candidate, T best) => NumOps.GreaterThan(candidate, best);
+
     private Vector<T> GenerateRandomPoint(int dimensions)
     {
         var point = new T[dimensions];

@@ -88,29 +88,26 @@ public class TimeShift<T> : AudioAugmenterBase<T>
         }
 
         var result = new Tensor<T>(waveform._shape);
-        T zero = NumOps.Zero;
+        var engine = Engine;
 
-        for (int i = 0; i < samples; i++)
+        // result[i] = waveform[i - shift]: a circular roll of the first `samples` elements
+        var signal = engine.TensorSlice(engine.Reshape(waveform, [waveform.Length]), [0], [samples]);
+        int roll = ((shiftSamples % samples) + samples) % samples;
+        var shifted = engine.TensorRoll(signal, [roll], [0]).Contiguous();
+        var target = result.AsWritableSpan().Slice(0, samples);
+        shifted.CopyTo(target);
+
+        if (!WrapAround)
         {
-            int srcIndex = i - shiftSamples;
-
-            if (WrapAround)
+            // Fill with zeros: positions whose source index falls outside the clip are silent
+            if (shiftSamples > 0)
             {
-                // Wrap around: samples that go off one end appear at the other
-                srcIndex = ((srcIndex % samples) + samples) % samples;
-                result[i] = waveform[srcIndex];
+                target.Slice(0, Math.Min(shiftSamples, samples)).Clear();
             }
             else
             {
-                // Fill with zeros: out-of-bounds areas are silent
-                if (srcIndex >= 0 && srcIndex < samples)
-                {
-                    result[i] = waveform[srcIndex];
-                }
-                else
-                {
-                    result[i] = zero;
-                }
+                int silent = Math.Min(-shiftSamples, samples);
+                target.Slice(samples - silent, silent).Clear();
             }
         }
 

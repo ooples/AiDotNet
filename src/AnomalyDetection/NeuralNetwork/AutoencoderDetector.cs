@@ -199,19 +199,12 @@ public partial class AutoencoderDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var input = X.GetRow(i);
-            var reconstruction = Reconstruct(input);
-            T error = ComputeReconstructionError(input, reconstruction);
-
-            // Higher reconstruction error = more anomalous
-            scores[i] = error;
-        }
-
-        return scores;
+        // Mean squared reconstruction error per row: higher reconstruction error = more anomalous
+        var engine = Engine;
+        var input = AnomalyTensorOps.ToTensor(X);
+        var (_, _, reconstruction) = ForwardPass(input);
+        return engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(input, reconstruction)),
+            new[] { 1 }, false), NumOps.FromDouble(X.Columns)).ToVector();
     }
 
     private void InitializeWeights(int inputDim, int encodingDim)
@@ -225,10 +218,9 @@ public partial class AutoencoderDetector<T> : AnomalyDetectorBase<T>
         _decoderWeights = new Matrix<T>(encodingDim, inputDim);
         _decoderBias = new Vector<T>(inputDim);
 
+        // Biases start at zero
         InitializeWeightMatrix(_encoderWeights, encoderStd);
-        InitializeBiasVector(_encoderBias);
         InitializeWeightMatrix(_decoderWeights, decoderStd);
-        InitializeBiasVector(_decoderBias);
     }
 
     private void InitializeWeightMatrix(Matrix<T> weights, double stdDev)
@@ -239,14 +231,6 @@ public partial class AutoencoderDetector<T> : AnomalyDetectorBase<T>
             {
                 weights[i, j] = NumOps.FromDouble(SampleGaussian(0, stdDev));
             }
-        }
-    }
-
-    private void InitializeBiasVector(Vector<T> bias)
-    {
-        for (int i = 0; i < bias.Length; i++)
-        {
-            bias[i] = NumOps.Zero;
         }
     }
 
@@ -261,22 +245,19 @@ public partial class AutoencoderDetector<T> : AnomalyDetectorBase<T>
 
     private void Train(Matrix<T> X)
     {
+        var engine = Engine;
         int n = X.Rows;
-
-        // Capture nullable fields
-        var encoderWeights = _encoderWeights;
-        var encoderBias = _encoderBias;
-        var decoderWeights = _decoderWeights;
-        var decoderBias = _decoderBias;
-
-        if (encoderWeights == null || encoderBias == null || decoderWeights == null || decoderBias == null)
+        if (_encoderWeights == null || _encoderBias == null || _decoderWeights == null || _decoderBias == null)
         {
             throw new InvalidOperationException("Weights not initialized.");
         }
 
+        var data = AnomalyTensorOps.ToTensor(X);
+        T lr = NumOps.FromDouble(_learningRate);
+
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
-            // Shuffle indices
+            // Shuffle indices (Fisher-Yates)
             var indices = Enumerable.Range(0, n).ToArray();
             for (int i = n - 1; i > 0; i--)
             {
@@ -284,200 +265,71 @@ public partial class AutoencoderDetector<T> : AnomalyDetectorBase<T>
                 (indices[i], indices[j]) = (indices[j], indices[i]);
             }
 
-            // Process mini-batches
+            // Mini-batch gradient descent on the MSE (gradients summed over the batch, then averaged)
             for (int batchStart = 0; batchStart < n; batchStart += _batchSize)
             {
-                int batchEnd = Math.Min(batchStart + _batchSize, n);
-                int currentBatchSize = batchEnd - batchStart;
+                int currentBatchSize = Math.Min(batchStart + _batchSize, n) - batchStart;
+                var batchRows = new int[currentBatchSize];
+                Array.Copy(indices, batchStart, batchRows, 0, currentBatchSize);
+                var input = AnomalyTensorOps.SelectRows(data, batchRows);
+                var (encoded, activated, reconstruction) = ForwardPass(input);
+                var (encoderWeightsGrad, encoderBiasGrad, decoderWeightsGrad, decoderBiasGrad) =
+                    ComputeGradients(input, encoded, activated, reconstruction);
 
-                // Accumulate gradients
-                var encoderWeightsGrad = new Matrix<T>(encoderWeights.Rows, encoderWeights.Columns);
-                var encoderBiasGrad = new Vector<T>(encoderBias.Length);
-                var decoderWeightsGrad = new Matrix<T>(decoderWeights.Rows, decoderWeights.Columns);
-                var decoderBiasGrad = new Vector<T>(decoderBias.Length);
-
-                for (int b = batchStart; b < batchEnd; b++)
-                {
-                    int idx = indices[b];
-                    var input = X.GetRow(idx);
-
-                    // Forward pass
-                    var (encoded, activated, reconstruction) = ForwardPass(input);
-
-                    // Backward pass
-                    ComputeGradients(input, encoded, activated, reconstruction,
-                        encoderWeightsGrad, encoderBiasGrad, decoderWeightsGrad, decoderBiasGrad);
-                }
-
-                // Update weights (average gradients over batch)
                 T batchSizeT = NumOps.FromDouble(currentBatchSize);
-                T lr = NumOps.FromDouble(_learningRate);
-
-                UpdateWeights(encoderWeights, encoderWeightsGrad, lr, batchSizeT);
-                UpdateBias(encoderBias, encoderBiasGrad, lr, batchSizeT);
-                UpdateWeights(decoderWeights, decoderWeightsGrad, lr, batchSizeT);
-                UpdateBias(decoderBias, decoderBiasGrad, lr, batchSizeT);
+                _encoderWeights = Update(AnomalyTensorOps.ToTensor(_encoderWeights), encoderWeightsGrad, lr, batchSizeT).ToMatrix();
+                _encoderBias = Update(_encoderBias.AsTensor(), encoderBiasGrad, lr, batchSizeT).ToVector();
+                _decoderWeights = Update(AnomalyTensorOps.ToTensor(_decoderWeights), decoderWeightsGrad, lr, batchSizeT).ToMatrix();
+                _decoderBias = Update(_decoderBias.AsTensor(), decoderBiasGrad, lr, batchSizeT).ToVector();
             }
         }
     }
 
-    private (Vector<T> encoded, Vector<T> activated, Vector<T> reconstruction) ForwardPass(Vector<T> input)
+    // Encoder pre-activation, ReLU code and linear reconstruction for a batch of rows.
+    private (Tensor<T> encoded, Tensor<T> activated, Tensor<T> reconstruction) ForwardPass(Tensor<T> input)
     {
-        // Capture nullable fields
         var encoderWeights = _encoderWeights;
         var encoderBias = _encoderBias;
         var decoderWeights = _decoderWeights;
         var decoderBias = _decoderBias;
-
         if (encoderWeights == null || encoderBias == null || decoderWeights == null || decoderBias == null)
         {
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Encoder: encoded = ReLU(input * W_enc + b_enc)
-        var encoded = new Vector<T>(encoderWeights.Columns);
-
-        // Pre-allocate encoder column vector outside loop to avoid per-iteration allocation
-        var encCol = new Vector<T>(encoderWeights.Rows);
-        for (int j = 0; j < encoderWeights.Columns; j++)
-        {
-            for (int i = 0; i < encoderWeights.Rows; i++)
-            {
-                encCol[i] = encoderWeights[i, j];
-            }
-            encoded[j] = NumOps.Add(encoderBias[j], Engine.DotProduct(input, encCol));
-        }
-
-        // Apply ReLU activation
-        var activated = new Vector<T>(encoded.Length);
-        for (int i = 0; i < encoded.Length; i++)
-        {
-            activated[i] = NumOps.GreaterThan(encoded[i], NumOps.Zero) ? encoded[i] : NumOps.Zero;
-        }
-
-        // Decoder: reconstruction = activated * W_dec + b_dec (no activation for output)
-        // Reuse encCol for decoder column (same or smaller size) to avoid allocation
-        var reconstruction = new Vector<T>(decoderWeights.Columns);
-        var decCol = new Vector<T>(decoderWeights.Rows);
-
-        for (int j = 0; j < decoderWeights.Columns; j++)
-        {
-            for (int i = 0; i < decoderWeights.Rows; i++)
-            {
-                decCol[i] = decoderWeights[i, j];
-            }
-            reconstruction[j] = NumOps.Add(decoderBias[j], Engine.DotProduct(activated, decCol));
-        }
-
+        var engine = Engine;
+        int rows = input.Shape[0];
+        var encoded = engine.TensorAdd(engine.TensorMatMul(input, AnomalyTensorOps.ToTensor(encoderWeights)),
+            AnomalyTensorOps.BroadcastRow(encoderBias.AsTensor(), rows));
+        var activated = engine.TensorMax(encoded, NumOps.Zero);
+        var reconstruction = engine.TensorAdd(engine.TensorMatMul(activated, AnomalyTensorOps.ToTensor(decoderWeights)),
+            AnomalyTensorOps.BroadcastRow(decoderBias.AsTensor(), rows));
         return (encoded, activated, reconstruction);
     }
 
-    private void ComputeGradients(
-        Vector<T> input,
-        Vector<T> encoded,
-        Vector<T> activated,
-        Vector<T> reconstruction,
-        Matrix<T> encoderWeightsGrad,
-        Vector<T> encoderBiasGrad,
-        Matrix<T> decoderWeightsGrad,
-        Vector<T> decoderBiasGrad)
+    // Gradients of the summed squared error over a batch: output error d_output = reconstruction - input
+    // (MSE derivative), back-propagated through the decoder and the encoder ReLU.
+    private (Tensor<T> encoderWeightsGrad, Tensor<T> encoderBiasGrad, Tensor<T> decoderWeightsGrad, Tensor<T> decoderBiasGrad)
+        ComputeGradients(Tensor<T> input, Tensor<T> encoded, Tensor<T> activated, Tensor<T> reconstruction)
     {
-        // Capture nullable fields
-        var encoderWeights = _encoderWeights;
-        var encoderBias = _encoderBias;
-        var decoderWeights = _decoderWeights;
-        var decoderBias = _decoderBias;
-
-        if (encoderWeights == null || encoderBias == null || decoderWeights == null || decoderBias == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        // Output error: d_output = reconstruction - input (MSE derivative)
-        var outputError = Engine.Subtract(reconstruction, input);
-
-        // Decoder gradients
-        for (int i = 0; i < decoderWeights.Rows; i++)
-        {
-            for (int j = 0; j < decoderWeights.Columns; j++)
-            {
-                T grad = NumOps.Multiply(activated[i], outputError[j]);
-                decoderWeightsGrad[i, j] = NumOps.Add(decoderWeightsGrad[i, j], grad);
-            }
-        }
-
-        for (int j = 0; j < decoderBias.Length; j++)
-        {
-            decoderBiasGrad[j] = NumOps.Add(decoderBiasGrad[j], outputError[j]);
-        }
-
-        // Backpropagate to encoder
-        var hiddenError = new Vector<T>(decoderWeights.Rows);
-
-        for (int i = 0; i < decoderWeights.Rows; i++)
-        {
-            // Extract decoder weight row for Engine.DotProduct
-            var decRow = new Vector<T>(decoderWeights.Columns);
-            for (int j = 0; j < decoderWeights.Columns; j++)
-            {
-                decRow[j] = decoderWeights[i, j];
-            }
-            T sum = Engine.DotProduct(outputError, decRow);
-
-            // Apply ReLU derivative
-            hiddenError[i] = NumOps.GreaterThan(encoded[i], NumOps.Zero) ? sum : NumOps.Zero;
-        }
-
-        // Encoder gradients
-        for (int i = 0; i < encoderWeights.Rows; i++)
-        {
-            for (int j = 0; j < encoderWeights.Columns; j++)
-            {
-                T grad = NumOps.Multiply(input[i], hiddenError[j]);
-                encoderWeightsGrad[i, j] = NumOps.Add(encoderWeightsGrad[i, j], grad);
-            }
-        }
-
-        for (int j = 0; j < encoderBias.Length; j++)
-        {
-            encoderBiasGrad[j] = NumOps.Add(encoderBiasGrad[j], hiddenError[j]);
-        }
+        var decoderWeights = _decoderWeights ?? throw new InvalidOperationException("Weights not initialized.");
+        var engine = Engine;
+        var outputError = engine.TensorSubtract(reconstruction, input);
+        var decoderWeightsGrad = engine.TensorMatMul(engine.TensorTranspose(activated), outputError);
+        var decoderBiasGrad = engine.ReduceSum(outputError, new[] { 0 }, false);
+        var hiddenError = engine.TensorMultiply(
+            engine.TensorMatMul(outputError, engine.TensorTranspose(AnomalyTensorOps.ToTensor(decoderWeights))),
+            engine.TensorGreaterThan(encoded, NumOps.Zero));
+        var encoderWeightsGrad = engine.TensorMatMul(engine.TensorTranspose(input), hiddenError);
+        var encoderBiasGrad = engine.ReduceSum(hiddenError, new[] { 0 }, false);
+        return (encoderWeightsGrad, encoderBiasGrad, decoderWeightsGrad, decoderBiasGrad);
     }
 
-    private void UpdateWeights(Matrix<T> weights, Matrix<T> grad, T lr, T batchSize)
+    // weights - lr * (grad / batchSize)
+    private Tensor<T> Update(Tensor<T> weights, Tensor<T> grad, T lr, T batchSize)
     {
-        for (int i = 0; i < weights.Rows; i++)
-        {
-            for (int j = 0; j < weights.Columns; j++)
-            {
-                T avgGrad = NumOps.Divide(grad[i, j], batchSize);
-                T update = NumOps.Multiply(lr, avgGrad);
-                weights[i, j] = NumOps.Subtract(weights[i, j], update);
-            }
-        }
-    }
-
-    private void UpdateBias(Vector<T> bias, Vector<T> grad, T lr, T batchSize)
-    {
-        for (int i = 0; i < bias.Length; i++)
-        {
-            T avgGrad = NumOps.Divide(grad[i], batchSize);
-            T update = NumOps.Multiply(lr, avgGrad);
-            bias[i] = NumOps.Subtract(bias[i], update);
-        }
-    }
-
-    private Vector<T> Reconstruct(Vector<T> input)
-    {
-        var (_, _, reconstruction) = ForwardPass(input);
-        return reconstruction;
-    }
-
-    private T ComputeReconstructionError(Vector<T> original, Vector<T> reconstruction)
-    {
-        // Mean Squared Error using Engine.Subtract + Engine.DotProduct
-        var diff = Engine.Subtract(original, reconstruction);
-        return NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(original.Length));
+        var engine = Engine;
+        return engine.TensorSubtract(weights, engine.TensorMultiplyScalar(engine.TensorDivideScalar(grad, batchSize), lr));
     }
 
     /// <summary>
@@ -503,16 +355,7 @@ public partial class AutoencoderDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        int encodingDim = encoderWeights.Columns;
-        var encoded = new Matrix<T>(X.Rows, encodingDim);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var input = X.GetRow(i);
-            var (_, activated, _) = ForwardPass(input);
-            encoded.SetRow(i, activated);
-        }
-
-        return encoded;
+        var (_, activated, _) = ForwardPass(AnomalyTensorOps.ToTensor(X));
+        return activated.ToMatrix();
     }
 }
