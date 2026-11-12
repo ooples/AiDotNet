@@ -8,10 +8,11 @@ using static AiDotNet.Tests.UnitTests.Finance.FinancialAgentTestKit;
 namespace AiDotNet.Tests.UnitTests.Finance;
 
 /// <summary>
-/// <see cref="FinancialSACAgent{T}"/> supports two policy heads. The default keeps the actor's output width
-/// at <c>ActionSize</c> and learns one spread shared by every state; the opt-in
-/// <see cref="SacActorHead.StateConditionedGaussian"/> is the head from the SAC paper, where the network
-/// predicts the spread FROM the state and the actor is widened to <c>2 * ActionSize</c>.
+/// <see cref="FinancialSACAgent{T}"/> supports two policy heads. The default,
+/// <see cref="SacActorHead.StateConditionedGaussian"/>, is the head from the SAC papers: the network predicts the
+/// spread FROM the state, so the actor is <c>2 * ActionSize</c> wide. The opt-in
+/// <see cref="SacActorHead.StateIndependentLogStd"/> keeps the actor at <c>ActionSize</c> and learns one spread
+/// shared by every state.
 /// </summary>
 /// <remarks>
 /// Both heads are exercised here, not just the default: the paper's head has to actually learn a
@@ -46,12 +47,14 @@ public sealed class FinancialSacActorHeadTests
 
     [Fact]
     [Trait("category", "unit")]
-    public void The_default_head_is_state_independent_and_keeps_the_historical_actor_width()
+    public void The_default_head_is_the_papers_and_the_state_independent_one_keeps_the_ActionSize_width()
     {
-        var options = (FinancialSACAgentOptions<double>)Options(Sac, StateSize, ActionSize, seed: 81);
-        Assert.Equal(SacActorHead.StateIndependentLogStd, options.ActorHead);
+        Assert.Equal(SacActorHead.StateConditionedGaussian,
+            ((FinancialSACAgentOptions<double>)Options(Sac, StateSize, ActionSize, seed: 81)).ActorHead);
 
-        // An ActionSize-wide actor architecture — what every existing caller builds — still works.
+        // The state-independent head takes an ActionSize-wide actor and one spread for every state.
+        var options = (FinancialSACAgentOptions<double>)Options(Sac, StateSize, ActionSize, seed: 81);
+        options.ActorHead = SacActorHead.StateIndependentLogStd;
         using var agent = (FinancialSACAgent<double>)Create(Sac, options, Arch(StateSize, ActionSize));
         Assert.Equal(SacActorHead.StateIndependentLogStd, agent.ActorHead);
 
@@ -70,8 +73,8 @@ public sealed class FinancialSacActorHeadTests
         var error = Assert.Throws<ArgumentException>(
             () => Create(Sac, options, Arch(StateSize, ActionSize)));
 
-        Assert.Contains("StateConditionedGaussian", error.Message);
         Assert.Contains("2 * ActionSize", error.Message);
+        Assert.Contains("StateIndependentLogStd", error.Message);
     }
 
     [Theory]

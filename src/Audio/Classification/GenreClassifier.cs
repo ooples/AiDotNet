@@ -1,5 +1,4 @@
 using AiDotNet.Attributes;
-using AiDotNet.Audio.Features;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -10,13 +9,17 @@ using AiDotNet.Optimizers;
 namespace AiDotNet.Audio.Classification;
 
 /// <summary>
-/// Music genre classification model.
+/// Music genre classification after Tzanetakis and Cook 2002: a 30-dimensional "musical surface" feature vector per
+/// recording, classified by one diagonal-covariance Gaussian mixture per genre.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Classifies audio into music genres using spectral features and neural network models.
-/// Supports common genres: rock, pop, hip-hop, jazz, classical, electronic, country, R&amp;B, metal, folk.
+/// The features (section III) are 19 timbral texture features (means and variances over 1 s texture windows of the
+/// spectral centroid, rolloff, flux and zero crossings of 23 ms analysis windows, the low-energy fraction, and the first
+/// five MFCCs), 6 rhythmic content features from a wavelet beat histogram, and 5 pitch content features from multipitch
+/// histograms. Each genre is a Gaussian mixture (three components by default, the paper's GMM(3)) fitted with EM from a
+/// K-means start (section IV). The genres are the paper's ten.
 /// </para>
 /// <para>
 /// This class supports both:
@@ -46,7 +49,7 @@ namespace AiDotNet.Audio.Classification;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.Classifier)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
@@ -57,8 +60,8 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
 
     private readonly GenreClassifierOptions _options;
 
-    private readonly MfccExtractor<T> _mfccExtractor;
-    private readonly SpectralFeatureExtractor<T> _spectralExtractor;
+    private readonly MusicalSurfaceFeatures _features;
+    // Null for the paper's EM fit; an optimizer trains the mixtures discriminatively instead.
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -140,9 +143,7 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         // Set class labels
         ClassLabels = _options.CustomGenres ?? StandardGenres;
 
-        // Create feature extractors
-        _mfccExtractor = CreateMfccExtractor();
-        _spectralExtractor = CreateSpectralExtractor();
+        _features = CreateFeatureExtractor();
 
         _options.ModelPath = modelPath;
 
@@ -154,26 +155,26 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
     /// </summary>
     /// <param name="architecture">Neural network architecture configuration.</param>
     /// <param name="options">Classification options.</param>
-    /// <param name="optimizer">Optional custom optimizer (defaults to AdamW).</param>
+    /// <param name="optimizer">Optional optimizer. Without one (the default), <c>Train</c> fits each genre's mixture to
+    /// its samples with EM, as the paper does; with one, <c>Train</c> takes gradient steps on the cross-entropy of the
+    /// genre posteriors instead.</param>
     public GenreClassifier(
         NeuralNetworkArchitecture<T> architecture,
         GenreClassifierOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GenreClassifierOptions();
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer;
 
         base.SampleRate = _options.SampleRate;
 
         // Set class labels
         ClassLabels = _options.CustomGenres ?? StandardGenres;
 
-        // Create feature extractors
-        _mfccExtractor = CreateMfccExtractor();
-        _spectralExtractor = CreateSpectralExtractor();
+        _features = CreateFeatureExtractor();
 
         InitializeLayers();
     }
@@ -185,7 +186,7 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
     public GenreClassifier(GenreClassifierOptions? options = null)
         : this(
             new NeuralNetworkArchitecture<T>(
-                inputFeatures: (options ?? new GenreClassifierOptions()).NumMfccs * 2 + 5,
+                inputFeatures: MusicalSurfaceFeatures.Length,
                 outputSize: (options?.CustomGenres ?? StandardGenres).Length),
             options)
     {
@@ -216,7 +217,7 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         }
 
         var architecture = new NeuralNetworkArchitecture<T>(
-            inputFeatures: options.NumMfccs * 2 + 5,
+            inputFeatures: MusicalSurfaceFeatures.Length,
             outputSize: (options.CustomGenres ?? StandardGenres).Length);
 
         return new GenreClassifier<T>(architecture, options.ModelPath, options);
@@ -226,27 +227,8 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
 
     #region Initialization
 
-    private MfccExtractor<T> CreateMfccExtractor()
-    {
-        return new MfccExtractor<T>(new MfccOptions
-        {
-            SampleRate = _options.SampleRate,
-            NumCoefficients = _options.NumMfccs,
-            FftSize = _options.FftSize,
-            HopLength = _options.HopLength
-        });
-    }
-
-    private SpectralFeatureExtractor<T> CreateSpectralExtractor()
-    {
-        return new SpectralFeatureExtractor<T>(new SpectralFeatureOptions
-        {
-            SampleRate = _options.SampleRate,
-            FftSize = _options.FftSize,
-            HopLength = _options.HopLength,
-            FeatureTypes = SpectralFeatureType.Centroid | SpectralFeatureType.Rolloff
-        });
-    }
+    private MusicalSurfaceFeatures CreateFeatureExtractor() => new(_options.SampleRate, _options.FftSize,
+        _options.HopLength, _options.TextureWindowFrames, _options.BeatWindow, _options.BeatHop);
 
     /// <summary>
     /// Initializes the neural network layers.
@@ -261,12 +243,13 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGenreClassifierLayers(
-                numMels: 128,
-                hiddenDim: 256,
-                numClasses: ClassLabels.Count,
-                maxFrames: 1000,
-                dropoutRate: 0.1));
+            // Section IV: one Gaussian mixture with diagonal covariance per genre over the 30 features.
+            var mixtures = new AiDotNet.NeuralNetworks.Layers.GaussianMixtureClassifierLayer<T>(
+                ClassLabels.Count, _options.MixtureComponents, MusicalSurfaceFeatures.Length);
+            mixtures.InitializeMeans(_options.Seed is int seed
+                ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed)
+                : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom());
+            Layers.Add(mixtures);
         }
     }
 
@@ -544,9 +527,9 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
     }
 
     /// <summary>
-    /// Native forward pass through the layers to per-genre LOGITS (the linear/identity classification
-    /// head emits logits, un-normalized). Callers that need probabilities apply ApplySoftmax exactly
-    /// once; the tape-based training path (ForwardForTraining) also consumes these raw logits.
+    /// Native forward pass through the layers to per-genre LOGITS: each genre's log-likelihood under its mixture, so a
+    /// softmax gives the posterior under equal priors. Callers that need probabilities apply ApplySoftmax exactly once;
+    /// the tape-based training path (ForwardForTraining) also consumes these raw logits.
     /// </summary>
     private Tensor<T> ForwardToLogits(Tensor<T> input)
     {
@@ -563,6 +546,53 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+
+    /// <inheritdoc />
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <inheritdoc />
+    /// <exception cref="NotSupportedException">The paper's EM fit (no optimizer) computes no gradients.</exception>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_useNativeMode && _optimizer is null)
+            throw new NotSupportedException("GenreClassifier fits its mixtures with EM, which computes no gradients; " +
+                "construct it with an optimizer for gradient training.");
+        return base.GetParameterGradients();
+    }
+
+    /// <summary>
+    /// The paper's training: every genre's mixture is fitted by EM to the feature vectors labelled with it (section IV).
+    /// Pass the whole training set, <c>[samples, 30]</c> feature vectors (see <c>ExtractFeatures</c>) with one-hot genre
+    /// targets <c>[samples, genres]</c>; each call refits the mixtures to the samples given. With an optimizer the
+    /// standard gradient step runs instead.
+    /// </summary>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+        var layer = Layers.Count == 1 ? Layers[0] as AiDotNet.NeuralNetworks.Layers.GaussianMixtureClassifierLayer<T> : null;
+        if (_optimizer is not null || layer is null) return false;
+
+        int features = MusicalSurfaceFeatures.Length, genres = ClassLabels.Count;
+        int samples = input.Length / features;
+        if (samples * features != input.Length || target.Length != samples * genres)
+            throw new ArgumentException($"Expected [samples, {features}] features and [samples, {genres}] one-hot targets, got " +
+                $"[{string.Join(", ", input.Shape)}] and [{string.Join(", ", target.Shape)}].");
+        var vectors = new List<double[]>(samples);
+        var labels = new List<int>(samples);
+        for (int i = 0; i < samples; i++)
+        {
+            var vector = new double[features];
+            for (int j = 0; j < features; j++) vector[j] = NumOps.ToDouble(input.Data.Span[i * features + j]);
+            int label = 0;
+            for (int g = 1; g < genres; g++)
+                if (NumOps.ToDouble(target.Data.Span[i * genres + g]) > NumOps.ToDouble(target.Data.Span[i * genres + label])) label = g;
+            vectors.Add(vector);
+            labels.Add(label);
+        }
+        layer.Fit(vectors, labels, _options.EmIterations, _options.Seed ?? 0);
+        return true;
+    }
     #endregion
 
     #region AudioNeuralNetworkBase Implementation
@@ -597,8 +627,8 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         var metadata = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "GenreClassifier-Native" : "GenreClassifier-ONNX",
-            Description = "Music genre classification model",
-            FeatureCount = _options.NumMfccs * 2 + 5,
+            Description = "Music genre classification (Tzanetakis and Cook 2002): musical surface features, a GMM per genre",
+            FeatureCount = MusicalSurfaceFeatures.Length,
             Complexity = 1
         };
         metadata.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();
@@ -620,186 +650,23 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
 
     private (Tensor<T> Tensor, GenreFeatures<T> Features) ExtractFeaturesWithMeta(Tensor<T> audio)
     {
-        // Extract MFCCs
-        var mfccs = _mfccExtractor.Extract(audio);
+        var samples = new double[audio.Length];
+        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio.Data.Span[i]);
+        var vector = _features.Extract(samples);
 
-        // Compute MFCC statistics (mean, std)
-        int numFrames = mfccs.Shape[0];
-        int numCoeffs = mfccs.Shape[1];
+        var features = new Tensor<T>([1, MusicalSurfaceFeatures.Length]);
+        for (int i = 0; i < vector.Length; i++) features[0, i] = NumOps.FromDouble(vector[i]);
 
-        var mfccMean = new double[numCoeffs];
-        var mfccStd = new double[numCoeffs];
-
-        for (int c = 0; c < numCoeffs; c++)
-        {
-            double sum = 0;
-            for (int t = 0; t < numFrames; t++)
-            {
-                sum += NumOps.ToDouble(mfccs[t, c]);
-            }
-            mfccMean[c] = numFrames > 0 ? sum / numFrames : 0.0;
-
-            double sumSq = 0;
-            for (int t = 0; t < numFrames; t++)
-            {
-                double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
-                sumSq += diff * diff;
-            }
-            mfccStd[c] = numFrames > 0 ? Math.Sqrt(sumSq / numFrames) : 0.0;
-        }
-
-        // Extract spectral features
-        var spectralResult = _spectralExtractor.Extract(audio);
-        int spectralFrames = spectralResult.Shape[0];
-
-        var spectralCentroid = new Tensor<T>([spectralFrames]);
-        var spectralRolloff = new Tensor<T>([spectralFrames]);
-        for (int t = 0; t < spectralFrames; t++)
-        {
-            spectralCentroid[t] = spectralResult[t, 0];
-            spectralRolloff[t] = spectralResult.Shape[1] > 1 ? spectralResult[t, 1] : NumOps.Zero;
-        }
-
-        // Compute temporal features
-        double zeroCrossingRate = ComputeZeroCrossingRate(audio);
-        double rmsEnergy = ComputeRmsEnergy(audio);
-        double tempo = EstimateTempo(audio);
-
-        // Flatten features to tensor
-        int numFeatures = numCoeffs * 2 + 5;
-        var features = new Tensor<T>([1, numFeatures]);
-
-        int idx = 0;
-        foreach (var val in mfccMean)
-            features[0, idx++] = NumOps.FromDouble(val);
-        foreach (var val in mfccStd)
-            features[0, idx++] = NumOps.FromDouble(val);
-        features[0, idx++] = NumOps.FromDouble(ComputeMean(spectralCentroid));
-        features[0, idx++] = NumOps.FromDouble(ComputeStd(spectralCentroid));
-        features[0, idx++] = NumOps.FromDouble(zeroCrossingRate);
-        features[0, idx++] = NumOps.FromDouble(rmsEnergy);
-        features[0, idx] = NumOps.FromDouble(tempo / 200.0);
-
-        // Create genre features metadata
+        // Vector layout (MusicalSurfaceFeatures.Names): MFCC 1-5 means at 9-13, their variances at 14-18, and the beat
+        // histogram's strongest periodicity P1, in beats per minute, at 22.
         var genreFeatures = new GenreFeatures<T>
         {
-            MfccMean = mfccMean.Select(v => NumOps.FromDouble(v)).ToArray(),
-            MfccStd = mfccStd.Select(v => NumOps.FromDouble(v)).ToArray(),
-            Tempo = NumOps.FromDouble(tempo)
+            MfccMean = Enumerable.Range(9, 5).Select(i => NumOps.FromDouble(vector[i])).ToArray(),
+            MfccStd = Enumerable.Range(14, 5).Select(i => NumOps.FromDouble(Math.Sqrt(Math.Max(0, vector[i])))).ToArray(),
+            Tempo = NumOps.FromDouble(vector[22])
         };
 
         return (features, genreFeatures);
-    }
-
-    private double ComputeMean(Tensor<T> tensor)
-    {
-        // Guard against division by zero for empty tensors
-        if (tensor.Length == 0) return 0.0;
-
-        double sum = 0;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            sum += NumOps.ToDouble(tensor[i]);
-        }
-        return sum / tensor.Length;
-    }
-
-    private double ComputeStd(Tensor<T> tensor)
-    {
-        // Guard against division by zero for empty tensors
-        if (tensor.Length == 0) return 0.0;
-
-        double mean = ComputeMean(tensor);
-        double sumSq = 0;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double diff = NumOps.ToDouble(tensor[i]) - mean;
-            sumSq += diff * diff;
-        }
-        return Math.Sqrt(sumSq / tensor.Length);
-    }
-
-    private double ComputeZeroCrossingRate(Tensor<T> audio)
-    {
-        int crossings = 0;
-        for (int i = 1; i < audio.Length; i++)
-        {
-            double prev = NumOps.ToDouble(audio[i - 1]);
-            double curr = NumOps.ToDouble(audio[i]);
-            if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0))
-            {
-                crossings++;
-            }
-        }
-        return (double)crossings / audio.Length;
-    }
-
-    private double ComputeRmsEnergy(Tensor<T> audio)
-    {
-        double sumSq = 0;
-        for (int i = 0; i < audio.Length; i++)
-        {
-            double val = NumOps.ToDouble(audio[i]);
-            sumSq += val * val;
-        }
-        return Math.Sqrt(sumSq / audio.Length);
-    }
-
-    private double EstimateTempo(Tensor<T> audio)
-    {
-        // Simple onset-based tempo estimation
-        int frameSize = _options.HopLength;
-        int numFrames = audio.Length / frameSize;
-        if (numFrames < 2) return 120.0;
-
-        var energies = new double[numFrames];
-        for (int f = 0; f < numFrames; f++)
-        {
-            double sum = 0;
-            for (int i = 0; i < frameSize && f * frameSize + i < audio.Length; i++)
-            {
-                double val = NumOps.ToDouble(audio[f * frameSize + i]);
-                sum += val * val;
-            }
-            energies[f] = sum;
-        }
-
-        // Compute onset strength
-        var onsets = new double[numFrames - 1];
-        for (int f = 1; f < numFrames; f++)
-        {
-            onsets[f - 1] = Math.Max(0, energies[f] - energies[f - 1]);
-        }
-
-        // Find dominant periodicity using autocorrelation
-        int minLag = (int)(0.5 * _options.SampleRate / frameSize);
-        int maxLag = (int)(2.0 * _options.SampleRate / frameSize);
-        maxLag = Math.Min(maxLag, onsets.Length - 1);
-
-        double bestCorr = 0;
-        int bestLag = minLag;
-
-        for (int lag = minLag; lag <= maxLag; lag++)
-        {
-            double corr = 0;
-            int count = 0;
-            for (int i = 0; i < onsets.Length - lag; i++)
-            {
-                corr += onsets[i] * onsets[i + lag];
-                count++;
-            }
-            corr /= count > 0 ? count : 1;
-
-            if (corr > bestCorr)
-            {
-                bestCorr = corr;
-                bestLag = lag;
-            }
-        }
-
-        // Convert lag to BPM
-        double lagSeconds = (double)bestLag * frameSize / _options.SampleRate;
-        return 60.0 / lagSeconds;
     }
 
     #endregion

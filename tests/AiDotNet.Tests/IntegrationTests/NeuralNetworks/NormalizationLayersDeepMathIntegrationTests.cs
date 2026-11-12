@@ -330,9 +330,9 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_Training_RunningVarianceUpdates_ExponentialMovingAverage()
     {
         // After one training forward pass:
-        // runningVar_new = momentum * runningVar_old + (1 - momentum) * batchVar
-        // With defaults: momentum=0.9, runningVar_old=1
-        // runningVar_new = 0.9 * 1 + 0.1 * batchVar
+        // runningVar_new = momentum * runningVar_old + (1 - momentum) * m/(m-1) * batchVar
+        // (the unbiased estimate, Ioffe & Szegedy 2015 Algorithm 2). With defaults: momentum=0.9, runningVar_old=1
+        // runningVar_new = 0.9 * 1 + 0.1 * 2 * batchVar  (m = 2)
         var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(true);
 
@@ -343,9 +343,9 @@ public class NormalizationLayersDeepMathIntegrationTests
         bn.Forward(input);
 
         var runningVar = bn.GetRunningVariance();
-        // runningVar_new = 0.9 * 1 + 0.1 * 4 = 0.9 + 0.4 = 1.3
-        Assert.Equal(1.3, runningVar[0], Tol);
-        Assert.Equal(1.3, runningVar[1], Tol);
+        // runningVar_new = 0.9 * 1 + 0.1 * 8 = 0.9 + 0.8 = 1.7
+        Assert.Equal(1.7, runningVar[0], Tol);
+        Assert.Equal(1.7, runningVar[1], Tol);
     }
 
     [Fact(Timeout = 120000)]
@@ -402,13 +402,42 @@ public class NormalizationLayersDeepMathIntegrationTests
         for (int i = 0; i < expected.Length; i++)
             Assert.Equal(expected[i], actual[i], Tol);
 
-        // And the running statistics move toward the batch: 0.9 * init + 0.1 * batch.
+        // And the running statistics move toward the batch: 0.9 * init + 0.1 * batch, the variance as its unbiased
+        // estimate over the 4 values per channel (4/3 of the biased one).
         var runningMean = bn.GetRunningMean();
         var runningVar = bn.GetRunningVariance();
         Assert.Equal(0.25, runningMean[0], Tol);
         Assert.Equal(2.5, runningMean[1], Tol);
-        Assert.Equal(0.9 + 0.1 * 1.25, runningVar[0], Tol);
-        Assert.Equal(0.9 + 0.1 * 125.0, runningVar[1], Tol);
+        Assert.Equal(0.9 + 0.1 * 1.25 * 4 / 3, runningVar[0], Tol);
+        Assert.Equal(0.9 + 0.1 * 125.0 * 4 / 3, runningVar[1], Tol);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BatchNorm_Training_DeclaredSequence_NormalizesOverBatchAndTime()
+    {
+        await Task.Yield();
+        // A declared channels-first sequence [B, C, T] normalizes each channel over batch and time, as
+        // nn.BatchNorm1d does. It used to reach Engine.BatchNorm as rank 3, which reduced the wrong axes in training.
+        var bn = new BatchNormalizationLayer<double>() { Layout = BatchNormDataLayout.ChannelsFirst };
+        bn.SetTrainingMode(true);
+
+        // Channel 0: {1, 2, 3} and {4, 5, 6} -> mean 3.5, variance 35/12. Channel 1: {0, 0, 6} and {0, 6, 0} -> mean 2,
+        // variance 8.
+        var input = new Tensor<double>(new[] { 2, 2, 3 },
+            new Vector<double>(new double[] { 1, 2, 3, 0, 0, 6, 4, 5, 6, 0, 6, 0 }));
+        var actual = bn.Forward(input);
+
+        Assert.Equal(new[] { 2, 2, 3 }, actual.Shape.ToArray());
+        double s0 = Math.Sqrt(35.0 / 12 + Eps), s1 = Math.Sqrt(8 + Eps);
+        double[] expected =
+        {
+            (1 - 3.5) / s0, (2 - 3.5) / s0, (3 - 3.5) / s0, -2 / s1, -2 / s1, 4 / s1,
+            (4 - 3.5) / s0, (5 - 3.5) / s0, (6 - 3.5) / s0, -2 / s1, 4 / s1, -2 / s1,
+        };
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], Tol);
+        Assert.Equal(0.35, bn.GetRunningMean()[0], Tol);
+        Assert.Equal(0.9 + 0.1 * 8.0 * 6 / 5, bn.GetRunningVariance()[1], Tol);
     }
 
     [Fact(Timeout = 120000)]

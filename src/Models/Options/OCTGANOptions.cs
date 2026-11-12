@@ -1,85 +1,112 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for OCT-GAN (One-Class Tabular GAN), designed for generating
-/// synthetic data with a focus on minority/imbalanced classes.
+/// Configuration options for OCT-GAN (Kim et al. 2021, "OCT-GAN: Neural ODE-based Conditional Tabular GANs"), a
+/// conditional tabular GAN whose generator maps <c>z ⊕ c</c> through a neural ODE and whose discriminator classifies
+/// the trajectory of a neural ODE at learnable time points.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
 /// <para>
-/// OCT-GAN addresses class imbalance by using a one-class discriminator that focuses
-/// on the minority class characteristics, making it ideal for oversampling.
+/// Defaults follow section 4.1.4 of the paper: 256-wide hidden layers in both networks, m = 3 trajectory segments,
+/// one shared learning rate λ = λ_G = λ_D = λ_t = 2e-4 from the paper's grid (the time points share the critic's
+/// optimizer, as in the authors' code), a decay factor ψ = 0.97
+/// every ξ = 2 epochs, 300 epochs, a mini-batch of 500 and 10 VGM modes.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> OCT-GAN is designed for imbalanced datasets (e.g., fraud detection
-/// where 99% of transactions are normal and only 1% are fraud).
-///
-/// Instead of generating all data equally, it focuses on the minority class:
-/// 1. The discriminator learns what minority samples look like
-/// 2. The generator tries to create realistic minority samples
-/// 3. This produces better synthetic oversampling than random duplication
+/// <b>For Beginners:</b> OCT-GAN learns to produce new table rows that look like the real ones. You can ask it for
+/// rows with a given category in a discrete column (the "condition"), and it learns to honour that request.
 ///
 /// Example:
 /// <code>
-/// var options = new OCTGANOptions&lt;double&gt;
-/// {
-///     MinorityClassValue = 1,     // Which class is the minority
-///     LabelColumnIndex = 4,       // Which column contains the label
-///     Epochs = 300
-/// };
-/// var octgan = new OCTGANGenerator&lt;double&gt;(options);
+/// var options = new OCTGANOptions&lt;double&gt; { Epochs = 300, TimePoints = 3 };
+/// var octgan = new OCTGANGenerator&lt;double&gt;(architecture, options);
+/// octgan.Fit(data, columns);
+/// var synthetic = octgan.Generate(1000);
 /// </code>
 /// </para>
 /// </remarks>
 public class OCTGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
-    /// Gets or sets the index of the label column.
+    /// Gets or sets the dimension of the noise vector <c>z</c>.
     /// </summary>
-    /// <value>Label column index, defaulting to -1 (auto-detect last column).</value>
-    public int LabelColumnIndex { get; set; } = -1;
-
-    /// <summary>
-    /// Gets or sets the minority class value to focus on.
-    /// </summary>
-    /// <value>Minority class value, defaulting to 1.</value>
-    public int MinorityClassValue { get; set; } = 1;
-
-    /// <summary>
-    /// Gets or sets the dimension of the noise vector.
-    /// </summary>
-    /// <value>Embedding dimension, defaulting to 128.</value>
+    /// <value>Defaults to 128, the width of the CTGAN code the paper builds on.</value>
     public int EmbeddingDimension { get; set; } = 128;
 
     /// <summary>
-    /// Gets or sets the hidden layer sizes for the generator.
+    /// Gets or sets the output widths of the generator's two residual blocks (FC1 and FC2, Eqs. 12-13).
     /// </summary>
-    /// <value>Array of layer dimensions. Defaults to [256, 256].</value>
+    /// <value>Defaults to [256, 256] (section 4.1.4).</value>
     public int[] GeneratorDimensions { get; set; } = [256, 256];
 
     /// <summary>
-    /// Gets or sets the hidden layer sizes for the discriminator.
+    /// Gets or sets the output widths of the discriminator's layers before its ODE (FC1 and FC2, Eq. 2). The last
+    /// one is the width of the ODE state <c>h(t)</c>.
     /// </summary>
-    /// <value>Array of layer dimensions. Defaults to [256, 256].</value>
+    /// <value>Defaults to [256, 256] (section 4.1.4).</value>
     public int[] DiscriminatorDimensions { get; set; } = [256, 256];
+
+    /// <summary>
+    /// Gets or sets the number m of segments the discriminator's ODE trajectory on [0, 1] is read at: t_0 = 0 and
+    /// t_m = 1 are fixed and the m − 1 interior points t_1..t_{m-1} are learned.
+    /// </summary>
+    /// <remarks>
+    /// <para>The paper searches m ∈ {3, 5, 7}. The interior points start evenly spaced, t_i = i/m (OCT-GAN(fixed)),
+    /// and are trained with the critic.</para>
+    /// <para><b>For Beginners:</b> The discriminator watches a hidden vector evolve over time and looks at it at m
+    /// moments; it learns which moments best tell real rows from fake ones.</para>
+    /// </remarks>
+    /// <value>Defaults to 3.</value>
+    public int TimePoints { get; set; } = 3;
+
+    /// <summary>
+    /// Gets or sets the number of fourth-order Runge-Kutta steps used for each ODE integral (the generator's [0, 1]
+    /// and each of the discriminator's [t_{i-1}, t_i]).
+    /// </summary>
+    /// <remarks>
+    /// The authors integrate with the adaptive Dormand-Prince solver; a fixed-step RK4 keeps the cost of every
+    /// training step predictable and gives the same time-point gradients (Proposition 3.1) by differentiating through
+    /// the solver.
+    /// </remarks>
+    /// <value>Defaults to 4.</value>
+    public int OdeSolverSteps { get; set; } = 4;
+
+    /// <summary>
+    /// Gets or sets the Gumbel-softmax temperature of the generator's mode and discrete-column heads (Eqs. 15-16).
+    /// </summary>
+    /// <value>Defaults to 0.2, the temperature of the CTGAN code the paper builds on.</value>
+    public double GumbelTemperature { get; set; } = 0.2;
 
     /// <summary>
     /// Gets or sets the training batch size.
     /// </summary>
-    /// <value>The batch size, defaulting to 128.</value>
-    public int BatchSize { get; set; } = 128;
+    /// <value>Defaults to 500, the smallest of the paper's {500, 1000, 1500}.</value>
+    public int BatchSize { get; set; } = 500;
 
     /// <summary>
     /// Gets or sets the number of training epochs.
     /// </summary>
-    /// <value>Number of epochs, defaulting to 300.</value>
+    /// <value>Defaults to 300 (section 4.1.4).</value>
     public int Epochs { get; set; } = 300;
 
     /// <summary>
-    /// Gets or sets the learning rate.
+    /// Gets or sets the generator and discriminator learning rate λ_G = λ_D.
     /// </summary>
-    /// <value>The learning rate, defaulting to 2e-4.</value>
+    /// <value>Defaults to 2e-4, from the paper's grid {2e-3, 2e-4, 2e-5, 2e-6}.</value>
     public double LearningRate { get; set; } = 2e-4;
+
+    /// <summary>
+    /// Gets or sets the decay factor ψ applied to λ_G and λ_D (and so to the time points) every <see cref="LearningRateDecayPeriod"/> epochs.
+    /// </summary>
+    /// <value>Defaults to 0.97 (section 4.1.4).</value>
+    public double LearningRateDecay { get; set; } = 0.97;
+
+    /// <summary>
+    /// Gets or sets the decay period ξ in epochs.
+    /// </summary>
+    /// <value>Defaults to 2 (section 4.1.4).</value>
+    public int LearningRateDecayPeriod { get; set; } = 2;
 
     /// <summary>
     /// Gets or sets the number of VGM modes for continuous column encoding.
@@ -89,62 +116,24 @@ public class OCTGANOptions<T> : SyntheticDataGeneratorOptions<T>
     /// into a mixture of bell curves, which helps the GAN learn multi-modal distributions
     /// (columns with multiple peaks, like age distributions with clusters at 25 and 55).</para>
     /// </remarks>
-    /// <value>Number of modes, defaulting to 10.</value>
+    /// <value>Defaults to 10, the smallest of the paper's {10, 20, 30}.</value>
     public int VGMModes { get; set; } = 10;
 
     /// <summary>
-    /// Gets or sets the dropout rate for discriminator hidden layers.
+    /// Gets or sets the dropout rate of the discriminator's first two layers (Eq. 2).
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Dropout randomly deactivates a fraction of neurons during training,
-    /// which prevents the discriminator from memorizing specific examples and forces it to learn
-    /// generalizable features of the minority class boundary.</para>
-    /// </remarks>
-    /// <value>Dropout probability, defaulting to 0.25.</value>
-    public double DiscriminatorDropout { get; set; } = 0.25;
+    /// <value>Defaults to 0.5, the rate of the CTGAN code the paper builds on.</value>
+    public double DiscriminatorDropout { get; set; } = 0.5;
 
     /// <summary>
-    /// Gets or sets the weight for the WGAN-GP gradient penalty term.
+    /// Gets or sets the gradient-penalty weight λ of the WGAN-GP loss (Eq. 1).
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The gradient penalty keeps the discriminator's gradients close to 1,
-    /// which prevents training instability. A value of 10 is standard from the WGAN-GP paper.
-    /// Higher values enforce smoother discriminator outputs but may slow convergence.</para>
-    /// </remarks>
-    /// <value>Gradient penalty weight, defaulting to 10.0.</value>
+    /// <value>Defaults to 10 (Gulrajani et al. 2017).</value>
     public double GradientPenaltyWeight { get; set; } = 10.0;
 
     /// <summary>
-    /// Gets or sets the number of discriminator training steps per generator step.
+    /// Gets or sets the number of discriminator updates per generator update.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The discriminator trains multiple times for each generator step.
-    /// This helps the discriminator stay ahead, providing better gradient signals to the generator.
-    /// Too many steps waste computation; too few lead to poor generator updates.</para>
-    /// </remarks>
-    /// <value>Discriminator steps per generator step, defaulting to 5.</value>
-    public int DiscriminatorSteps { get; set; } = 5;
-
-    /// <summary>
-    /// Gets or sets the dimension of the discriminator's embedding space for the SVDD objective.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The discriminator maps each data sample into a compact embedding space.
-    /// The SVDD (Support Vector Data Description) objective then measures how close each embedding is
-    /// to a learned center point. Real minority data should cluster near the center, while fake data
-    /// should be pushed away. This dimension controls the size of that embedding space.</para>
-    /// </remarks>
-    /// <value>SVDD embedding dimension, defaulting to 64.</value>
-    public int SVDDEmbeddingDimension { get; set; } = 64;
-
-    /// <summary>
-    /// Gets or sets the momentum for exponential moving average updates of the SVDD center.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The center of the hypersphere is updated slowly during training
-    /// using an exponential moving average. A small value (0.01) means the center moves slowly and is
-    /// more stable; a larger value makes it adapt faster to new data but can be less stable.</para>
-    /// </remarks>
-    /// <value>Center update momentum, defaulting to 0.01.</value>
-    public double CenterUpdateMomentum { get; set; } = 0.01;
+    /// <value>Defaults to 1: Algorithm 1 trains the discriminator once per mini-batch.</value>
+    public int DiscriminatorSteps { get; set; } = 1;
 }
