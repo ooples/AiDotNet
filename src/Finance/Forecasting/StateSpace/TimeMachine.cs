@@ -660,11 +660,8 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
 
             var channelMean = new Tensor<T>(new[] { rows, 1 });
             var channelStd = new Tensor<T>(new[] { rows, 1 });
-            for (int row = 0; row < rows; row++)
-            {
-                channelMean.Data.Span[row] = _revinMean[row];
-                channelStd.Data.Span[row] = _revinStd[row];
-            }
+            _revinMean.AsSpan().Slice(0, rows).CopyTo(channelMean.Data.Span);
+            _revinStd.AsSpan().Slice(0, rows).CopyTo(channelStd.Data.Span);
 
             var channelMajor = Engine.TensorPermute(forecast, new[] { 0, 2, 1 });
             var flat = Engine.Reshape(channelMajor, new[] { rows, horizon });
@@ -1069,10 +1066,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         }
 
         var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize; i++)
-        {
-            flattened.Data.Span[i] = input.Data.Span[i];
-        }
+        input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
     }

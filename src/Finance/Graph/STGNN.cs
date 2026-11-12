@@ -727,10 +727,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         }
 
         var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize; i++)
-        {
-            flattened.Data.Span[i] = input.Data.Span[i];
-        }
+        input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
     }

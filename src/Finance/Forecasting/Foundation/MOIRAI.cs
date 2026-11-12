@@ -1158,10 +1158,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         _maskStepCounter++;
 
         // Copy input data
-        for (int i = 0; i < input.Length; i++)
-        {
-            masked.Data.Span[i] = input.Data.Span[i];
-        }
+        input.Data.Span.Slice(0, input.Length).CopyTo(masked.Data.Span);
 
         // Apply masking based on mask ratio
         int numPatches = _totalPatches;

@@ -614,8 +614,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         var fullForecast = Forecast(input, null);
         if (steps >= fullForecast.Length) return fullForecast;
         var result = new Tensor<T>(new[] { steps });
-        for (int i = 0; i < steps; i++)
-            result.Data.Span[i] = fullForecast[i];
+        fullForecast.AsSpan().Slice(0, steps).CopyTo(result.Data.Span);
         return result;
     }
 

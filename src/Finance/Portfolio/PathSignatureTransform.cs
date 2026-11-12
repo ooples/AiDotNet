@@ -145,8 +145,7 @@ public class PathSignatureTransform<T>
                 total[i] += di;
             }
 
-            for (int i = 0; i < dim; i++)
-                running[i] = total[i];
+            total.AsSpan().Slice(0, dim).CopyTo(running.AsSpan());
         }
 
         for (int i = 0; i < dim; i++) result[i] = NumOps.FromDouble(total[i]);

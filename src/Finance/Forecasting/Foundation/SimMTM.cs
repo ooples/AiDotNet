@@ -327,16 +327,10 @@ public partial class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         var normalized = NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out var mean, out var std);
 
         _lastInstanceMean = new T[mean.Length];
-        for (int i = 0; i < mean.Length; i++)
-        {
-            _lastInstanceMean[i] = mean[i];
-        }
+        mean.AsSpan().Slice(0, mean.Length).CopyTo(_lastInstanceMean.AsSpan());
 
         _lastInstanceStd = new T[std.Length];
-        for (int i = 0; i < std.Length; i++)
-        {
-            _lastInstanceStd[i] = std[i];
-        }
+        std.AsSpan().Slice(0, std.Length).CopyTo(_lastInstanceStd.AsSpan());
 
         return normalized;
     }
