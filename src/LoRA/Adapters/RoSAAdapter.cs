@@ -231,8 +231,6 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
             _sparseWeights.Shape.ToArray(), NumOps.Zero, NumOps.FromDouble(0.01));
         init.AsSpan().CopyTo(_sparseWeights.AsWritableSpan());
     }
-        }
-    }
 
     /// <summary>
     /// Prunes sparse weights based on magnitude to maintain target sparsity.

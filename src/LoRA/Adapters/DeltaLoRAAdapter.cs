@@ -179,8 +179,6 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Both start at zero (fresh tensors and matrices are zero-filled).
         _velocity = new Matrix<T>(inputSize, outputSize);
     }
-        }
-    }
 
     /// <summary>
     /// Performs the forward pass: output = base_layer(input) + LoRA(input) + delta_weights @ input * delta_scaling.

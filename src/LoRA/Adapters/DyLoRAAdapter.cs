@@ -360,8 +360,6 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> intermediate = Engine.TensorMatMul(Engine.Reshape(input, [batchSize, inputSize]), subA);
         return Engine.TensorMultiplyScalar(Engine.TensorMatMul(intermediate, subB), scaling);
     }
-        return new Tensor<T>(new[] { batchSize, outputSize }, outputData);
-    }
 
     /// <summary>
     /// Performs backward pass through LoRA layer using only the first 'rank' components.
@@ -420,8 +418,6 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> combinedWeight = Engine.TensorMultiplyScalar(
             Engine.TensorTranspose(Engine.TensorMatMul(subA, subB)), _loraLayer.Scaling);
         return Engine.TensorMatMul(gradMatrix, combinedWeight);
-    }
-        return new Tensor<T>(new[] { batchSize, inputSize }, inputGradVector);
     }
 
     /// <summary>

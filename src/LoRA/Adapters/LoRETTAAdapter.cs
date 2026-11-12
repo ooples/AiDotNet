@@ -365,7 +365,6 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         );
 
         return Engine.TensorMultiplyScalar(outputData, scaling);
-        return new Tensor<T>(new[] { batchSize, outputSize }, outputData);
     }
 
     /// <summary>
@@ -429,8 +428,6 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         return kept < columns
             ? Engine.TensorConcatenate([taken, new Tensor<T>([rows, columns - kept])], 1)
             : taken;
-    }
-        return new Tensor<T>(new[] { matrix.Rows, matrix.Columns }, data);
     }
 
     /// <summary>
