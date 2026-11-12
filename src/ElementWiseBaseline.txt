@@ -16742,7 +16742,6 @@
 3	ADNELEM002|AiDotNet.MetaLearning.Algorithms.ContextMetaRLAlgorithm<T, TInput, TOutput>.ContextMetaRLAlgorithm(AiDotNet.MetaLearning.Options.ContextMetaRLOptions<T, TInput, TOutput>)
 2	ADNELEM002|AiDotNet.MetaLearning.Algorithms.ContextMetaRLAlgorithm<T, TInput, TOutput>.EncodeGradient(AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 6	ADNELEM002|AiDotNet.MetaLearning.Algorithms.ContextMetaRLAlgorithm<T, TInput, TOutput>.MetaTrain(AiDotNet.Data.Structures.TaskBatch<T, TInput, TOutput>)
-2	ADNELEM002|AiDotNet.MetaLearning.Algorithms.DeepEMDAlgorithm<T, TInput, TOutput>.MetaTrain(AiDotNet.Data.Structures.TaskBatch<T, TInput, TOutput>)
 5	ADNELEM002|AiDotNet.MetaLearning.Algorithms.DiscoRLAlgorithm<T, TInput, TOutput>.Adapt(AiDotNet.Interfaces.IMetaLearningTask<T, TInput, TOutput>)
 4	ADNELEM002|AiDotNet.MetaLearning.Algorithms.DiscoRLAlgorithm<T, TInput, TOutput>.ComposeSkillDelta(double[], AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 7	ADNELEM002|AiDotNet.MetaLearning.Algorithms.DiscoRLAlgorithm<T, TInput, TOutput>.ComputeDiscoRLLoss(AiDotNet.Data.Structures.TaskBatch<T, TInput, TOutput>)
