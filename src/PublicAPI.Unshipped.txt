@@ -22565,3 +22565,5 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.NeuralNetworks.SpiralNet<T>.Train(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! meshFeatures, System.Collections.Generic.List<int[,]!>! spiralIndices, System.Collections.Generic.List<int>! labels, int epochs, T learningRate) -> System.Collections.Generic.List<double>!
+AiDotNet.NeuralNetworks.SpiralNet<T>.Train(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! meshFeatures, System.Collections.Generic.List<int[,]!>! spiralIndices, System.Collections.Generic.List<int>! labels, int epochs, T learningRate) -> System.Collections.Generic.List<T>!
