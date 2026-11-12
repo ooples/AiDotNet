@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic;
 
@@ -45,7 +46,7 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly Func<Matrix<T>, Vector<T>>? _predictFunc;
 
     // Fitted parameters
-    private double[]? _shapValues;
+    private Vector<T>? _shapValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -57,7 +58,7 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     /// <summary>
     /// Gets the computed SHAP values (mean absolute).
     /// </summary>
-    public double[]? ShapValues => _shapValues;
+    public Vector<T>? ShapValues => _shapValues;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -133,207 +134,142 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Convert to double arrays
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
 
         // Compute baseline values (mean of background samples)
         int nBackground = Math.Min(_nSamples, n);
         var backgroundIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(nBackground).ToArray();
-        var baseline = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < nBackground; i++)
-            {
-                baseline[j] += X[backgroundIndices[i], j];
-            }
-            baseline[j] /= nBackground;
-        }
+        var baseline = engine.ReduceMean(
+            engine.TensorIndexSelect(x, new Tensor<int>(backgroundIndices, new[] { nBackground }), 0), new[] { 0 }, false);
 
         // Sample instances to explain
         int nExplain = Math.Min(_nSamples, n);
         var explainIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(nExplain).ToArray();
 
-        // Accumulate SHAP values
-        var shapAccum = new double[p];
-
+        // Accumulate |SHAP values|
+        var shapAccum = new Tensor<T>(new[] { p });
         foreach (int explainIdx in explainIndices)
         {
-            var instanceShap = ComputeInstanceShap(X, explainIdx, baseline, p, random);
-            for (int j = 0; j < p; j++)
-            {
-                shapAccum[j] += Math.Abs(instanceShap[j]);
-            }
+            // Coalitions: one uniform draw per feature, a feature joins when its draw exceeds 1/2
+            var draws = PopulationSearchOps.Uniform<T>(random, _nCoalitions, p);
+            var instanceShap = KernelShap(PopulationSearchOps.Row(x, explainIdx), baseline, draws, Predict);
+            shapAccum = engine.TensorAdd(shapAccum, engine.TensorAbs(instanceShap));
         }
 
         // Average SHAP values
-        _shapValues = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            _shapValues[j] = shapAccum[j] / nExplain;
-        }
+        var shapValues = engine.TensorDivideScalar(shapAccum, NumOps.FromDouble(nExplain));
+        _shapValues = shapValues.ToVector();
 
         // Select top features by SHAP importance
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _shapValues
-            .Select((shap, idx) => (Shap: shap, Index: idx))
-            .OrderByDescending(x => x.Shap)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(shapValues, nToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeInstanceShap(double[,] X, int instanceIdx, double[] baseline, int p, Random random)
+    /// <summary>
+    /// Kernel SHAP (Lundberg and Lee 2017) for one instance [p] against a baseline [p]. Coalition z (row of the
+    /// draws [c, p] above 1/2; empty and full ones are skipped) is evaluated on the instance where z_j = 1 and the
+    /// baseline elsewhere, and weighted by the Shapley kernel (p - 1) / (C(p, |z|) |z| (p - |z|)). The SHAP
+    /// values minimize sum_z w(z) (f(z) - phi_0 - z . phi)^2 subject to phi_0 = f(empty) and
+    /// sum phi = f(x) - f(empty), solved by eliminating the last value as in the reference implementation.
+    /// </summary>
+    internal static Tensor<T> KernelShap(
+        Tensor<T> instance, Tensor<T> baseline, Tensor<T> draws, Func<Tensor<T>, Tensor<T>> predict)
     {
-        // Kernel SHAP approximation
-        var shapValues = new double[p];
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = instance.Length;
+        int c = draws.Shape[0];
 
-        // Generate coalitions and compute SHAP via weighted least squares
-        var coalitions = new List<bool[]>();
-        var weights = new List<double>();
-        var predictions = new List<double>();
+        var ends = engine.TensorConcatenate(
+            new[] { engine.Reshape(baseline, new[] { 1, p }), engine.Reshape(instance, new[] { 1, p }) }, 0);
+        var endPredictions = predict(ends);
+        var emptyPrediction = engine.TensorSlice(endPredictions, new[] { 0 }, new[] { 1 });
+        var gap = engine.TensorSubtract(engine.TensorSlice(endPredictions, new[] { 1 }, new[] { 1 }), emptyPrediction);
+        if (p == 1)
+            return gap;
 
-        // Always include empty and full coalitions
-        var emptyCoalition = new bool[p];
-        coalitions.Add(emptyCoalition);
-        weights.Add(double.MaxValue / 2); // Very high weight for empty
-        predictions.Add(GetPrediction(X, instanceIdx, baseline, emptyCoalition));
+        // Keep the coalitions that are neither empty nor full
+        var joined = engine.TensorGreaterThan(draws, ops.FromDouble(0.5));
+        var sizes = engine.ReduceSum(joined, new[] { 1 }, false);
+        var proper = FeatureSelectionTensorOps.MaskPositions(engine.TensorMultiply(
+            engine.TensorGreaterThan(sizes, ops.Zero), engine.TensorLessThan(sizes, ops.FromDouble(p))));
+        if (proper.Length == 0)
+            return engine.TensorDivideScalar(engine.TensorBroadcastTo(gap, new[] { p }), ops.FromDouble(p));
 
-        var fullCoalition = Enumerable.Repeat(true, p).ToArray();
-        coalitions.Add(fullCoalition);
-        weights.Add(double.MaxValue / 2); // Very high weight for full
-        predictions.Add(GetPrediction(X, instanceIdx, baseline, fullCoalition));
+        int m = proper.Length;
+        var properIndex = new Tensor<int>(proper, new[] { m });
+        var z = engine.TensorIndexSelect(joined, properIndex, 0);
+        var size = engine.TensorIndexSelect(sizes, properIndex, 0);
+        var shape = new[] { m, p };
 
-        // Sample random coalitions
-        for (int c = 0; c < _nCoalitions; c++)
-        {
-            var coalition = new bool[p];
-            int coalitionSize = 0;
+        var masked = engine.TensorWhere(
+            z,
+            engine.TensorBroadcastTo(engine.Reshape(instance, new[] { 1, p }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(baseline, new[] { 1, p }), shape));
+        var f = engine.TensorSubtract(predict(masked), engine.TensorBroadcastTo(emptyPrediction, new[] { m }));
 
-            for (int j = 0; j < p; j++)
-            {
-                coalition[j] = random.NextDouble() > 0.5;
-                if (coalition[j]) coalitionSize++;
-            }
+        var weights = engine.TensorDivide(
+            FeatureSelectionTensorOps.Filled(new[] { m }, ops.FromDouble(p - 1)),
+            engine.TensorMultiply(
+                BinomialCoefficients(p, size),
+                engine.TensorMultiply(size, engine.TensorAddScalar(engine.TensorNegate(size), ops.FromDouble(p)))));
 
-            // Skip empty or full (already added)
-            if (coalitionSize == 0 || coalitionSize == p) continue;
-
-            // SHAP kernel weight
-            double weight = SHAPKernelWeight(p, coalitionSize);
-
-            coalitions.Add(coalition);
-            weights.Add(weight);
-            predictions.Add(GetPrediction(X, instanceIdx, baseline, coalition));
-        }
-
-        // Solve weighted least squares: min_phi sum_S w(S) * (f(S) - phi_0 - sum_j in S phi_j)^2
-        // Simplified: use correlation-based approximation for computational efficiency
-        double baselinePred = predictions[0]; // Empty coalition prediction
-        double fullPred = predictions[1]; // Full coalition prediction
-
-        for (int j = 0; j < p; j++)
-        {
-            // Approximate Shapley value by marginal contribution weighted average
-            double contribution = 0;
-            double weightSum = 0;
-
-            for (int c = 2; c < coalitions.Count; c++) // Skip empty and full
-            {
-                var withJ = (bool[])coalitions[c].Clone();
-                var withoutJ = (bool[])coalitions[c].Clone();
-
-                if (coalitions[c][j])
-                {
-                    withoutJ[j] = false;
-                    double predWithJ = predictions[c];
-                    double predWithoutJ = GetPrediction(X, instanceIdx, baseline, withoutJ);
-                    contribution += weights[c] * (predWithJ - predWithoutJ);
-                    weightSum += weights[c];
-                }
-                else
-                {
-                    withJ[j] = true;
-                    double predWithoutJ = predictions[c];
-                    double predWithJ = GetPrediction(X, instanceIdx, baseline, withJ);
-                    contribution += weights[c] * (predWithJ - predWithoutJ);
-                    weightSum += weights[c];
-                }
-            }
-
-            shapValues[j] = weightSum > 0 ? contribution / weightSum : 0;
-        }
-
-        return shapValues;
+        // Eliminate phi_p = gap - sum_{j < p} phi_j: regress f - z_p gap on z_j - z_p (j < p)
+        var last = engine.Reshape(engine.TensorSlice(z, new[] { 0, p - 1 }, new[] { m, 1 }), new[] { m });
+        var response = engine.TensorSubtract(f, engine.TensorMultiply(last, engine.TensorBroadcastTo(gap, new[] { m })));
+        var design = engine.TensorSubtract(
+            engine.TensorSlice(z, new[] { 0, 0 }, new[] { m, p - 1 }),
+            engine.TensorBroadcastTo(engine.Reshape(last, new[] { m, 1 }), new[] { m, p - 1 }));
+        var weighted = PopulationSearchOps.ScaleRows(design, weights);
+        var transposed = engine.TensorTranspose(weighted);
+        var gram = engine.TensorAdd(
+            engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<T>(p - 1), ops.FromDouble(1e-10)));
+        var rhs = engine.TensorMatMul(transposed, engine.Reshape(response, new[] { m, 1 }));
+        var head = engine.Reshape(LinalgDispatch<T>.Solve(gram, rhs), new[] { p - 1 });
+        var tail = engine.TensorSubtract(gap, engine.ReduceSum(head, new[] { 0 }, true));
+        return engine.TensorConcatenate(new[] { head, tail }, 0);
     }
 
-    private double SHAPKernelWeight(int p, int coalitionSize)
+    /// <summary>C(p, s) for every coalition size s [m], from the product of the ratios (p - i) / (i + 1).</summary>
+    private static Tensor<T> BinomialCoefficients(int p, Tensor<T> sizes)
     {
-        // SHAP kernel: (p-1) / (C(p, s) * s * (p-s))
-        if (coalitionSize == 0 || coalitionSize == p) return 1e10;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
 
-        double binomial = BinomialCoefficient(p, coalitionSize);
-        double denominator = binomial * coalitionSize * (p - coalitionSize);
+        // binom[s] for s = 0..p from the recurrence binom[s + 1] = binom[s] (p - s) / (s + 1), as a cumulative product
+        var steps = engine.TensorArange<T>(0, p, 1);
+        var ratios = engine.TensorDivide(
+            engine.TensorAddScalar(engine.TensorNegate(steps), ops.FromDouble(p)), engine.TensorAddScalar(steps, ops.One));
+        var table = engine.TensorExp(engine.TensorConcatenate(
+            new[] { new Tensor<T>(new[] { 1 }), engine.TensorCumSum(engine.TensorLog(ratios), 0) }, 0));
 
-        return (p - 1.0) / Math.Max(denominator, 1e-10);
+        // Pick table[s] for every size with a one-hot product
+        var oneHot = engine.TensorEquals(
+            engine.TensorBroadcastTo(engine.Reshape(sizes, new[] { sizes.Length, 1 }), new[] { sizes.Length, p + 1 }),
+            engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, p + 1, 1), new[] { 1, p + 1 }), new[] { sizes.Length, p + 1 }));
+        return engine.ReduceSum(
+            engine.TensorMultiply(oneHot, engine.TensorBroadcastTo(engine.Reshape(table, new[] { 1, p + 1 }), new[] { sizes.Length, p + 1 })),
+            new[] { 1 }, false);
     }
 
-    private double BinomialCoefficient(int n, int k)
+    /// <summary>
+    /// Predictions [m] for the rows of <paramref name="rows"/> [m, p]: the user's model, or by default the mean
+    /// of the features as a simple proxy.
+    /// </summary>
+    private Tensor<T> Predict(Tensor<T> rows)
     {
-        if (k > n - k) k = n - k;
-
-        double result = 1;
-        for (int i = 0; i < k; i++)
-        {
-            result *= (n - i);
-            result /= (i + 1);
-        }
-
-        return result;
-    }
-
-    private double GetPrediction(double[,] X, int instanceIdx, double[] baseline, bool[] coalition)
-    {
-        int p = baseline.Length;
-
         if (_predictFunc is not null)
-        {
-            // Create masked instance
-            var masked = new T[1, p];
-            for (int j = 0; j < p; j++)
-            {
-                double val = coalition[j] ? X[instanceIdx, j] : baseline[j];
-                masked[0, j] = NumOps.FromDouble(val);
-            }
+            return Tensor<T>.FromVector(_predictFunc(rows.ToMatrix()));
 
-            var maskedMatrix = new Matrix<T>(masked);
-            var pred = _predictFunc(maskedMatrix);
-            return NumOps.ToDouble(pred[0]);
-        }
-
-        // Default: use feature sum as simple prediction proxy
-        double sum = 0;
-        for (int j = 0; j < p; j++)
-        {
-            double val = coalition[j] ? X[instanceIdx, j] : baseline[j];
-            sum += val;
-        }
-
-        return sum / p;
+        return Engine.ReduceMean(rows, new[] { 1 }, false);
     }
 
     /// <summary>
@@ -355,19 +291,7 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             throw new InvalidOperationException("SHAPSelector has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numCols; j++)
-            {
-                result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <summary>

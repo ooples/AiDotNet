@@ -1216,4 +1216,219 @@ public class FeatureSelectionPopulationReferenceTests
         for (int i = 0; i < m.Rows; i++) for (int j = 0; j < m.Columns; j++) grid[i, j] = m[i, j];
         return grid;
     }
+
+    // ---------------------------------------------------------------- Model-agnostic importance
+
+    private static double[] SolveDense(double[,] a, double[] b)
+    {
+        int k = b.Length;
+        var m = new double[k, k + 1];
+        for (int r = 0; r < k; r++)
+        {
+            for (int c = 0; c < k; c++) m[r, c] = a[r, c];
+            m[r, k] = b[r];
+        }
+
+        for (int c = 0; c < k; c++)
+        {
+            int pivot = c;
+            for (int r = c + 1; r < k; r++) if (System.Math.Abs(m[r, c]) > System.Math.Abs(m[pivot, c])) pivot = r;
+            for (int q = 0; q <= k; q++) (m[c, q], m[pivot, q]) = (m[pivot, q], m[c, q]);
+            for (int r = c + 1; r < k; r++)
+            {
+                double f = m[r, c] / m[c, c];
+                for (int q = c; q <= k; q++) m[r, q] -= f * m[c, q];
+            }
+        }
+
+        var x = new double[k];
+        for (int r = k - 1; r >= 0; r--)
+        {
+            x[r] = m[r, k];
+            for (int q = r + 1; q < k; q++) x[r] -= m[r, q] * x[q];
+            x[r] /= m[r, r];
+        }
+
+        return x;
+    }
+
+    [Fact]
+    public void PermutationImportance_ScoresTheModelFittedOnceOnPermutedCopies()
+    {
+        var (x, _) = Problem(19, 40, 3);
+        var y = new Vector<double>(40);
+        for (int i = 0; i < 40; i++) y[i] = 2 * x[i, 0] - x[i, 1];
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic.PermutationImportance<double>(
+            2, 5, null, 8);
+        selector.Fit(x, y);
+        var importance = selector.ImportanceScores?.ToArray() ?? System.Array.Empty<double>();
+
+        // The exact linear model has R^2 = 1 and ignores feature 2, so permuting feature 2 costs nothing
+        Assert.True(System.Math.Abs(importance[2]) < 1e-6, $"importance of the unused feature: {importance[2]}");
+        Assert.True(importance[0] > importance[1] && importance[1] > 0.1);
+
+        // With a user scorer, importance is the mean drop over the seeded column shuffles
+        var rng = new System.Random(8);
+        var custom = new AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic.PermutationImportance<double>(
+            1, 3, (m, v) => m[0, 0] + 10 * m[1, 1] + 100 * m[2, 2], 8);
+        custom.Fit(x, y);
+        double baseline = x[0, 0] + 10 * x[1, 1] + 100 * x[2, 2];
+        var expected = new double[3];
+        var expectedStd = new double[3];
+        for (int j = 0; j < 3; j++)
+        {
+            var drops = new double[3];
+            for (int perm = 0; perm < 3; perm++)
+            {
+                var order = Enumerable.Range(0, 40).OrderBy(_ => rng.Next()).ToArray();
+                double score = (j == 0 ? x[order[0], 0] : x[0, 0]) + 10 * (j == 1 ? x[order[1], 1] : x[1, 1])
+                    + 100 * (j == 2 ? x[order[2], 2] : x[2, 2]);
+                drops[perm] = baseline - score;
+            }
+
+            expected[j] = drops.Average();
+            expectedStd[j] = System.Math.Sqrt(drops.Average(d => (d - expected[j]) * (d - expected[j])));
+        }
+
+        var scores = custom.ImportanceScores?.ToArray() ?? System.Array.Empty<double>();
+        var std = custom.ImportanceStd?.ToArray() ?? System.Array.Empty<double>();
+        for (int j = 0; j < 3; j++)
+        {
+            Assert.Equal(expected[j], scores[j], 10);
+            Assert.Equal(expectedStd[j], std[j], 10);
+        }
+    }
+
+    [Fact]
+    public void DropColumnImportance_DefaultScorerRefitsLeastSquares()
+    {
+        var (x, _) = Problem(20, 40, 3);
+        var y = new Vector<double>(40);
+        for (int i = 0; i < 40; i++) y[i] = 3 * x[i, 0] + x[i, 1];
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic.DropColumnImportance<double>(2);
+        selector.Fit(x, y);
+        var importance = selector.ImportanceScores?.ToArray() ?? System.Array.Empty<double>();
+
+        // Reference: R^2 of the least-squares refit without feature 0 (intercept, features 1 and 2)
+        var a = new double[3, 3];
+        var b = new double[3];
+        for (int i = 0; i < 40; i++)
+        {
+            var row = new[] { 1, x[i, 1], x[i, 2] };
+            for (int r = 0; r < 3; r++)
+            {
+                for (int c = 0; c < 3; c++) a[r, c] += row[r] * row[c];
+                b[r] += row[r] * y[i];
+            }
+        }
+
+        var coef = SolveDense(a, b);
+        double mean = Enumerable.Range(0, 40).Average(i => y[i]), res = 0, tot = 0;
+        for (int i = 0; i < 40; i++)
+        {
+            double pred = coef[0] + coef[1] * x[i, 1] + coef[2] * x[i, 2];
+            res += (y[i] - pred) * (y[i] - pred);
+            tot += (y[i] - mean) * (y[i] - mean);
+        }
+
+        Assert.Equal(res / tot, importance[0], 5);
+        Assert.True(System.Math.Abs(importance[2]) < 1e-6);
+        Assert.Equal(new[] { 0, 1 }, selector.SelectedIndices);
+    }
+
+    [Fact]
+    public void KernelShap_RecoversExactShapleyValuesOfALinearModel()
+    {
+        double[] w = { 1.5, -2, 0.5, 3 };
+        var instance = Tensor1D(1, 2, -1, 0.5);
+        var baseline = Tensor1D(0.2, -0.4, 0.3, 1);
+        System.Func<Tensor<double>, Tensor<double>> predict = rows =>
+        {
+            var values = ToArray(rows);
+            var output = new double[rows.Shape[0]];
+            for (int i = 0; i < rows.Shape[0]; i++)
+                for (int j = 0; j < 4; j++) output[i] += w[j] * values[i * 4 + j];
+            return Tensor1D(output);
+        };
+
+        var draws = new double[40, 4];
+        var rng = new System.Random(3);
+        for (int c = 0; c < 40; c++) for (int j = 0; j < 4; j++) draws[c, j] = rng.NextDouble();
+        var phi = ToArray(AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic.SHAPSelector<double>.KernelShap(
+            instance, baseline, Tensor2D(draws), predict));
+
+        // For f(x) = w . x with a single reference point, phi_j = w_j (x_j - b_j)
+        double[] x = { 1, 2, -1, 0.5 }, b = { 0.2, -0.4, 0.3, 1 };
+        for (int j = 0; j < 4; j++)
+            Assert.Equal(w[j] * (x[j] - b[j]), phi[j], 6);
+    }
+
+    [Fact]
+    public void LIME_MatchesWeightedSurrogateWithSameSeed()
+    {
+        var (x, y) = Problem(21, 12, 3);
+        int seed = 6, perturbations = 30;
+        double width = 0.75;
+        System.Func<Matrix<double>, Vector<double>> model = m =>
+        {
+            var v = new Vector<double>(m.Rows);
+            for (int i = 0; i < m.Rows; i++) v[i] = m[i, 0] * m[i, 0] + 0.5 * m[i, 2];
+            return v;
+        };
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic.LIMESelector<double>(
+            model, 2, 2, perturbations, width, seed);
+        selector.Fit(x, y);
+
+        int n = x.Rows, p = x.Columns;
+        var means = Enumerable.Range(0, p).Select(j => Enumerable.Range(0, n).Average(i => x[i, j])).ToArray();
+        var stds = Enumerable.Range(0, p).Select(j => System.Math.Sqrt(Enumerable.Range(0, n).Average(i => (x[i, j] - means[j]) * (x[i, j] - means[j])))).ToArray();
+        var rng = new System.Random(seed);
+        var explain = Enumerable.Range(0, n).OrderBy(_ => rng.Next()).Take(2).ToArray();
+        var accum = new double[p];
+        foreach (int e in explain)
+        {
+            var a = new double[p + 1, p + 1];
+            var b = new double[p + 1];
+            for (int s = 0; s < perturbations; s++)
+            {
+                var keep = new double[p];
+                var z = new double[p];
+                for (int j = 0; j < p; j++)
+                {
+                    if (rng.NextDouble() > 0.5)
+                    {
+                        keep[j] = 1;
+                        z[j] = x[e, j];
+                    }
+                    else
+                    {
+                        z[j] = means[j] + stds[j] * (rng.NextDouble() * 2 - 1);
+                    }
+                }
+
+                double d = (p - keep.Sum()) / p;
+                double weight = System.Math.Exp(-d * d / (width * width));
+                double f = z[0] * z[0] + 0.5 * z[2];
+                var row = new double[p + 1];
+                row[0] = 1;
+                for (int j = 0; j < p; j++) row[j + 1] = keep[j];
+                for (int r = 0; r <= p; r++)
+                {
+                    for (int c = 0; c <= p; c++) a[r, c] += row[r] * weight * row[c];
+                    b[r] += row[r] * weight * f;
+                }
+            }
+
+            for (int r = 0; r <= p; r++) a[r, r] += 1e-6;
+            var coef = SolveDense(a, b);
+            for (int j = 0; j < p; j++) accum[j] += System.Math.Abs(coef[j + 1]);
+        }
+
+        var importances = selector.Importances?.ToArray() ?? System.Array.Empty<double>();
+        for (int j = 0; j < p; j++)
+            Assert.Equal(accum[j] / 2, importances[j], 6);
+    }
 }

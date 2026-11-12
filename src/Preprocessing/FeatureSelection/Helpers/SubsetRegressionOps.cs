@@ -51,6 +51,23 @@ internal static class SubsetRegressionOps
     }
 
     /// <summary>
+    /// The intercept-first coefficients [p + 1] of a least-squares fit (ridge 1e-6) of y [n] on all columns of
+    /// <paramref name="x"/> [n, p].
+    /// </summary>
+    public static Tensor<T> FitLinear<T>(Tensor<T> x, Tensor<T> y) => RidgeCoefficients(WithIntercept(x), y, 1e-6);
+
+    /// <summary>
+    /// The training R^2 (about the mean of y) of the linear model with intercept-first
+    /// <paramref name="coefficients"/> on <paramref name="x"/> [n, p]; 0 for a constant target. Returns [1].
+    /// </summary>
+    public static Tensor<T> LinearRSquared<T>(Tensor<T> x, Tensor<T> y, Tensor<T> coefficients)
+    {
+        var engine = AiDotNetEngine.Current;
+        var prediction = Predict(WithIntercept(x), coefficients);
+        return RSquared(y, prediction, engine.ReduceMean(y, new[] { 0 }, true), out _);
+    }
+
+    /// <summary>
     /// 1 - SS_res / SS_tot as [1], with SS_tot = sum (y - <paramref name="center"/>)^2 for a [1] center, or 0 when
     /// SS_tot is at most 1e-10. <paramref name="valid"/> receives whether SS_tot exceeded 1e-10.
     /// </summary>

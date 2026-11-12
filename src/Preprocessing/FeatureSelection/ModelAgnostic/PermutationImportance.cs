@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic;
 
@@ -28,19 +29,19 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nPermutations;
-    private readonly Func<Matrix<T>, Vector<T>, double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, T>? _scorer;
     private readonly int? _randomState;
 
-    private double[]? _importanceScores;
-    private double[]? _importanceStd;
+    private Vector<T>? _importanceScores;
+    private Vector<T>? _importanceStd;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NPermutations => _nPermutations;
-    public double[]? ImportanceScores => _importanceScores;
-    public double[]? ImportanceStd => _importanceStd;
+    public Vector<T>? ImportanceScores => _importanceScores;
+    public Vector<T>? ImportanceStd => _importanceStd;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -49,7 +50,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public PermutationImportance(
         int nFeaturesToSelect = 10,
         int nPermutations = 10,
-        Func<Matrix<T>, Vector<T>, double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, T>? scorer = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -81,108 +82,71 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var scorer = _scorer ?? DefaultScorer;
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+
+        // The default model is fitted once on the original data and then scored on every permuted copy
+        Func<Matrix<T>, Vector<T>, T> scorer;
+        if (_scorer is not null)
+        {
+            scorer = _scorer;
+        }
+        else
+        {
+            var coefficients = SubsetRegressionOps.FitLinear(x, y);
+            scorer = (m, v) => PopulationSearchOps.Value(
+                SubsetRegressionOps.LinearRSquared(Tensor<T>.FromMatrix(m), Tensor<T>.FromVector(v), coefficients));
+        }
 
         // Compute baseline score
-        double baselineScore = scorer(data, target);
+        var baselineScore = FeatureSelectionTensorOps.Filled(new[] { 1 }, scorer(data, target));
 
-        _importanceScores = new double[p];
-        _importanceStd = new double[p];
+        var importances = new Tensor<T>[p];
+        var deviations = new Tensor<T>[p];
 
-        // For each feature, permute and measure performance drop
+        // For each feature, permute and measure performance drop (Breiman 2001)
         for (int j = 0; j < p; j++)
         {
-            var permScores = new double[_nPermutations];
+            var column = engine.TensorBroadcastTo(
+                engine.Reshape(FeatureSelectionTensorOps.OneHot<T>(j, p), new[] { 1, p }), new[] { n, p });
+            var drops = new Tensor<T>[_nPermutations];
 
             for (int perm = 0; perm < _nPermutations; perm++)
             {
-                // Create permuted data
-                var permutedData = new T[n, p];
-                for (int i = 0; i < n; i++)
-                    for (int f = 0; f < p; f++)
-                        permutedData[i, f] = data[i, f];
-
                 // Shuffle column j
                 var shuffledIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
-                for (int i = 0; i < n; i++)
-                    permutedData[i, j] = data[shuffledIndices[i], j];
+                var shuffled = engine.TensorIndexSelect(x, new Tensor<int>(shuffledIndices, new[] { n }), 0);
+                var permuted = engine.TensorWhere(column, shuffled, x).ToMatrix();
 
-                // Score with permuted feature
-                double permScore = scorer(new Matrix<T>(permutedData), target);
-                permScores[perm] = baselineScore - permScore; // Importance = drop in score
+                // Importance = drop in score
+                var permScore = FeatureSelectionTensorOps.Filled(new[] { 1 }, scorer(permuted, target));
+                drops[perm] = engine.TensorSubtract(baselineScore, permScore);
             }
 
-            // Mean importance
-            _importanceScores[j] = permScores.Average();
-
-            // Standard deviation
-            double mean = _importanceScores[j];
-            double sumSq = 0;
-            foreach (double s in permScores)
-                sumSq += (s - mean) * (s - mean);
-            _importanceStd[j] = Math.Sqrt(sumSq / _nPermutations);
+            // Mean importance and (population) standard deviation over the permutations
+            var all = engine.TensorConcatenate(drops, 0);
+            var mean = engine.ReduceMean(all, new[] { 0 }, true);
+            importances[j] = mean;
+            deviations[j] = engine.TensorSqrt(engine.ReduceMean(
+                engine.TensorSquare(engine.TensorSubtract(all, engine.TensorBroadcastTo(mean, new[] { _nPermutations }))),
+                new[] { 0 }, true));
         }
+
+        var importanceScores = engine.TensorConcatenate(importances, 0);
+        _importanceScores = importanceScores.ToVector();
+        _importanceStd = engine.TensorConcatenate(deviations, 0).ToVector();
 
         // Select top features by importance
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _importanceScores
-            .Select((imp, idx) => (Importance: imp, Index: idx))
-            .OrderByDescending(x => x.Importance)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importanceScores, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double DefaultScorer(Matrix<T> data, Vector<T> target)
-    {
-        // Use R-squared as default score
-        int n = data.Rows;
-        int p = data.Columns;
-
-        // Simple linear regression prediction using all features
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        // Compute feature means
-        var xMeans = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                xMeans[j] += NumOps.ToDouble(data[i, j]);
-            xMeans[j] /= n;
-        }
-
-        // Simple prediction using correlation-weighted sum
-        double ssTotal = 0;
-        double ssResidual = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            double yTrue = NumOps.ToDouble(target[i]);
-            double yPred = yMean;
-
-            // Weighted prediction
-            for (int j = 0; j < p; j++)
-            {
-                double xVal = NumOps.ToDouble(data[i, j]);
-                yPred += 0.1 * (xVal - xMeans[j]); // Simple linear approximation
-            }
-
-            ssTotal += (yTrue - yMean) * (yTrue - yMean);
-            ssResidual += (yTrue - yPred) * (yTrue - yPred);
-        }
-
-        return ssTotal > 0 ? 1 - (ssResidual / ssTotal) : 0;
     }
 
     /// <inheritdoc />
@@ -198,15 +162,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("PermutationImportance has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
