@@ -819,7 +819,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         // A value clip needs no norm; it runs first, so the guard and the update see clamped gradients. This step
         // used to clip only by norm and to ignore ByValue.
-        if (GradientOptions.EnableGradientClipping
+        // Gradients clipped ahead of the step (regularization after the clip) are not clipped again.
+        if (GradientOptions.EnableGradientClipping && !GradientsClippedAhead
             && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByValue)
             ApplyTapeValueGradientClipping(context, GradientOptions.MaxGradientValue);
 
@@ -856,7 +857,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // Data, as before, forced every GPU-resident gradient to download separately, and on CPU cost a
         // virtual ToDouble per element; together they were most of a small model's step (#1804).
         bool guardActive = ShouldRunAnomalyGuard();
-        bool clipActive = GradientOptions.EnableGradientClipping
+        bool clipActive = GradientOptions.EnableGradientClipping && !GradientsClippedAhead
             && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm
             && GradientOptions.MaxGradientNorm > 0.0;
         double globalNormSq = guardActive || clipActive ? GlobalGradientSquaredNorm(context) : 0.0;

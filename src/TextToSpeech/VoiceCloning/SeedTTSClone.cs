@@ -1,38 +1,24 @@
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 
-/// <summary>Seed-TTS: diffusion-based zero-shot voice cloning with speaker factorization for high-fidelity synthesis.</summary>
+/// <summary>Voice-cloning facade over Seed-TTS's audio/text in-context continuation pipeline.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Seed-TTS: A Family of High-Quality Versatile Speech Generation Models" (Anastassiou et al., 2024)</item></list></para><para><b>For Beginners:</b> Seed-TTS: diffusion-based zero-shot voice cloning with speaker factorization for high-fidelity synthesis.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a Seed-TTS model for diffusion-based zero-shot voice cloning
-/// // with speaker factorization for high-fidelity synthesis
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new SeedTTSClone&lt;double&gt;(architecture, "seed_tts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new SeedTTSClone&lt;double&gt;(architecture, new SeedTTSCloneOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// Seed-TTS voice cloning is not a second neural architecture. This class deliberately inherits the same speech
+/// tokenizer, causal token LM, token diffusion model, timbre conditioner, and acoustic vocoder. It only adapts the
+/// general Seed-TTS prompt API to <see cref="IVoiceCloner{T}"/>.
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "Seed-TTS: A Family of High-Quality Versatile Speech Generation Models",
@@ -40,290 +26,74 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
     Year = 2024,
     Authors = "Anastassiou et al."
 )]
-public partial class SeedTTSClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
+public partial class SeedTTSClone<T> : SeedTTS<T>, IVoiceCloner<T>
 {
-    private readonly SeedTTSCloneOptions _options;
+    private readonly SeedTTSCloneOptions _cloneOptions;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
+    /// <summary>Creates the facade in ONNX mode.</summary>
     public SeedTTSClone(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        SeedTTSCloneOptions? options = null
-    )
-        : base(architecture)
+        SeedTTSCloneOptions? options = null)
+        : base(architecture, modelPath, options ?? new SeedTTSCloneOptions())
     {
-        _options = options ?? new SeedTTSCloneOptions();
-        Options = _options;
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
+        _cloneOptions = options ?? new SeedTTSCloneOptions();
     }
 
+    /// <summary>Creates the facade over the native Seed-TTS pipeline.</summary>
     public SeedTTSClone(
         NeuralNetworkArchitecture<T> architecture,
         SeedTTSCloneOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new SeedTTSCloneOptions(), optimizer)
     {
-        _options = options ?? new SeedTTSCloneOptions();
-        Options = _options;
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        InitializeLayers();
+        _cloneOptions = options ?? new SeedTTSCloneOptions();
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
     /// <inheritdoc />
-    public int MaxTextLength => _options.MaxTextLength;
-    /// <inheritdoc />
-    public int NumCodebooks => _options.NumCodebooks;
-    /// <inheritdoc />
-    public int CodebookSize => _options.CodebookSize;
+    public double MinReferenceDuration => _cloneOptions.MinReferenceDurationSec;
 
     /// <inheritdoc />
-    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
-    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
-    /// <inheritdoc />
-    public int CodecFrameRate => _options.CodecFrameRate;
-    /// <inheritdoc />
-    public double MinReferenceDuration => _options.MinReferenceDurationSec;
-    /// <inheritdoc />
-    public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
-
-    /// <inheritdoc />
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // SeedTTS Clone: Speaker-conditioned diffusion (ByteDance 2024)
-        // Speaker-conditioned text encoding
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int codecFrames = textLen * 3;
-        double[] textEnc = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++)
-        {
-            int ci = Math.Min(f * textLen / codecFrames, textLen - 1);
-            textEnc[f] = Math.Tanh((text[ci] % 128) / 64.0 - 1.0);
-        }
-        // Diffusion with speaker conditioning
-        double[] latent = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++)
-            latent[f] = Math.Sin(f * 0.25) * 0.6;
-        for (int step = 0; step < 10; step++)
-        {
-            for (int f = 0; f < codecFrames; f++)
-            {
-                double pred = latent[f] - textEnc[f];
-                latent[f] -= pred * 0.1;
-                latent[f] = Math.Tanh(latent[f]);
-            }
-        }
-        int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1);
-            waveform[i] = NumOps.FromDouble(
-                latent[fr] * Math.Sin(i * 2.0 * Math.PI * 196 / SampleRate) * 0.74
-            );
-        }
-        return waveform;
-    }
+    public int SpeakerEmbeddingDim => _cloneOptions.SpeakerEmbeddingDim;
 
     /// <inheritdoc />
     public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
+        => SynthesizeWithVoice(text, _cloneOptions.ReferenceText, referenceAudio);
+
+    /// <summary>Runs the report's full text-and-audio in-context continuation path.</summary>
+    public Tensor<T> SynthesizeWithVoice(string text, string referenceText, Tensor<T> referenceAudio)
     {
-        var embedding = ExtractSpeakerEmbedding(referenceAudio);
-        var baseAudio = Synthesize(text);
-        int embDim = embedding.Length;
-        for (int i = 0; i < baseAudio.Length; i++)
-        {
-            double s = NumOps.ToDouble(baseAudio[i]);
-            int d = i % embDim;
-            double spk = NumOps.ToDouble(embedding[d]);
-            double gain = 1.0 + spk * 0.3;
-            double pitch = spk * 0.1;
-            baseAudio[i] = NumOps.FromDouble(
-                Math.Tanh(s * gain + Math.Sin(i * 0.001 + pitch) * 0.05)
-            );
-        }
-        return baseAudio;
+        ValidateReferenceAudio(referenceAudio);
+        return SynthesizeWithPrompt(text, referenceText, referenceAudio);
     }
 
     /// <inheritdoc />
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
     {
-        int embDim = _options.SpeakerEmbeddingDim;
-        var emb = new Tensor<T>([embDim]);
-        int hopLen = Math.Max(1, _options.HopSize);
-        int numFrames = Math.Max(1, referenceAudio.Length / hopLen);
-        for (int d = 0; d < embDim; d++)
-        {
-            double acc = 0;
-            for (int f = 0; f < numFrames; f++)
-            {
-                int idx = Math.Min(f * hopLen + d % hopLen, referenceAudio.Length - 1);
-                double val = NumOps.ToDouble(referenceAudio[idx]);
-                acc += Math.Tanh(val * Math.Sin((d + 1.0) * (f + 1.0) * 0.001) * 0.5);
-            }
-            emb[d] = NumOps.FromDouble(acc / numFrames);
-        }
-        double norm = 0;
-        for (int d = 0; d < embDim; d++)
-        {
-            double v = NumOps.ToDouble(emb[d]);
-            norm += v * v;
-        }
-        norm = Math.Sqrt(norm);
-        if (norm > 1e-8)
-            for (int d = 0; d < embDim; d++)
-                emb[d] = NumOps.FromDouble(NumOps.ToDouble(emb[d]) / norm);
-        return emb;
+        ValidateReferenceAudio(referenceAudio);
+        return ExtractTimbreEmbedding(referenceAudio);
     }
 
-    /// <inheritdoc />
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int frames = Math.Max(1, audio.Length / samplesPerFrame);
-        var tokens = new Tensor<T>([frames]);
-        for (int f = 0; f < frames; f++)
-        {
-            double sum = 0;
-            int start = f * samplesPerFrame;
-            int count = Math.Min(samplesPerFrame, audio.Length - start);
-            for (int s = 0; s < count; s++)
-                sum += NumOps.ToDouble(audio[start + s]);
-            double avg = sum / Math.Max(1, count);
-            int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1));
-            bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin));
-            tokens[f] = NumOps.FromDouble(bin);
-        }
-        return tokens;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int waveLen = tokens.Length * samplesPerFrame;
-        var wave = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int f = Math.Min(i / samplesPerFrame, tokens.Length - 1);
-            double tokenVal = NumOps.ToDouble(tokens[f]);
-            double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0;
-            double phase = i * 2.0 * Math.PI * 200.0 / SampleRate;
-            wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
-        }
-        return wave;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "SeedTTS-Clone-Native" : "SeedTTS-Clone-ONNX",
-            Description = "Seed-TTS: Zero-Shot Voice Cloning (Anastassiou et al., 2024)",
-            FeatureCount = _options.LLMDim,
-        };
-        m.AdditionalInfo["Architecture"] = "SeedTTSClone";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
+        var metadata = base.GetModelMetadata();
+        metadata.Name = metadata.Name.Replace("Seed-TTS", "Seed-TTS-Clone");
+        metadata.Description = "Seed-TTS voice-cloning facade over the native in-context continuation architecture";
+        metadata.AdditionalInfo["Architecture"] = "Seed-TTS";
+        metadata.AdditionalInfo["TaskFacade"] = "VoiceCloning";
+        metadata.AdditionalInfo["ReferenceDurationRange"] = "3-20 seconds in the paper evaluation";
+        return metadata;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
+    private void ValidateReferenceAudio(Tensor<T> referenceAudio)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(SeedTTSClone<T>));
-    }
-
-    /// <inheritdoc />
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        if (referenceAudio is null) throw new ArgumentNullException(nameof(referenceAudio));
+        int minimumSamples = checked((int)Math.Ceiling(MinReferenceDuration * _cloneOptions.SampleRate));
+        if (referenceAudio.Length < minimumSamples)
+            throw new ArgumentException(
+                $"Seed-TTS evaluation uses at least {MinReferenceDuration:0.###} seconds of reference audio "
+                + $"({minimumSamples} samples at {_cloneOptions.SampleRate} Hz).",
+                nameof(referenceAudio));
     }
 }

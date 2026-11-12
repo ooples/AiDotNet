@@ -90,8 +90,9 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
         if (totalSteps < warmupSteps && _decayMode != DecayMode.Constant)
             throw new ArgumentException("Total steps must be >= warmup steps for decay modes.", nameof(totalSteps));
 
-        // Start at warmup initial learning rate
-        _currentLearningRate = warmupInitLr;
+        // Start at the warmup's initial rate, or, without a warmup, at the schedule's first rate: starting at
+        // warmupInitLr there made the first step a no-op (rate 0 by default) before the schedule ever ran.
+        _currentLearningRate = warmupSteps > 0 ? warmupInitLr : Math.Max(_minLearningRate, ComputeLearningRate(0));
     }
 
     /// <summary>

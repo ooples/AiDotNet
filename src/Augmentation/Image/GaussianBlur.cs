@@ -99,88 +99,22 @@ public class GaussianBlur<T> : AugmentationBase<T, ImageTensor<T>>
         }
 
         // Generate Gaussian kernel
-        double[,] kernel = GenerateGaussianKernel(kSize, sigma);
+        var kernel = ImageTensor<T>.GaussianKernel(kSize, sigma);
 
         // Apply convolution
         return ApplyConvolution(data, kernel);
     }
 
     /// <summary>
-    /// Generates a 2D Gaussian kernel.
-    /// </summary>
-    private static double[,] GenerateGaussianKernel(int size, double sigma)
-    {
-        double[,] kernel = new double[size, size];
-        int center = size / 2;
-        double sum = 0;
-
-        double sigma2 = 2 * sigma * sigma;
-
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                int dx = x - center;
-                int dy = y - center;
-                double value = Math.Exp(-(dx * dx + dy * dy) / sigma2);
-                kernel[y, x] = value;
-                sum += value;
-            }
-        }
-
-        // Normalize
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                kernel[y, x] /= sum;
-            }
-        }
-
-        return kernel;
-    }
-
-    /// <summary>
     /// Applies a convolution with the given kernel.
     /// </summary>
-    private static ImageTensor<T> ApplyConvolution(ImageTensor<T> image, double[,] kernel)
+    private static ImageTensor<T> ApplyConvolution(ImageTensor<T> image, Tensor<T> kernel)
     {
-        int height = image.Height;
-        int width = image.Width;
-        int channels = image.Channels;
-        int kSize = kernel.GetLength(0);
-        int kRadius = kSize / 2;
-
         var result = image.Clone();
 
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    double sum = 0;
-
-                    for (int ky = 0; ky < kSize; ky++)
-                    {
-                        for (int kx = 0; kx < kSize; kx++)
-                        {
-                            int srcY = y + ky - kRadius;
-                            int srcX = x + kx - kRadius;
-
-                            // Reflect at boundaries
-                            srcY = ReflectIndex(srcY, height);
-                            srcX = ReflectIndex(srcX, width);
-
-                            double pixelValue = NumOps.ToDouble(image.GetPixel(srcY, srcX, c));
-                            sum += pixelValue * kernel[ky, kx];
-                        }
-                    }
-
-                    result.SetPixel(y, x, c, NumOps.FromDouble(sum));
-                }
-            }
-        }
+        // Reflect at boundaries
+        var blurred = ImageTensor<T>.Correlate(image.ToPlanarTensor(), kernel, mirror: true);
+        result.SetFromPlanarTensor(blurred);
 
         return result;
     }
