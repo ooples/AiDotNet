@@ -117,10 +117,12 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
                 NumOps.Add(NumOps.Multiply(residualVariance, NumOps.FromDouble(_spikeVariance / _slabVariance)), eps)));
         var logBF = engine.TensorSubtract(logBFSlab, logBFSpike);
 
-        double priorOdds = _priorInclusionProbability / (1 - _priorInclusionProbability);
-        var posteriorOdds = engine.TensorMultiplyScalar(
-            engine.TensorExp(engine.TensorMin(logBF, NumOps.FromDouble(50.0))), NumOps.FromDouble(priorOdds));
-        var gamma = engine.TensorDivide(posteriorOdds, engine.TensorAddScalar(posteriorOdds, NumOps.One));
+        // Posterior inclusion odds / (1 + odds) with odds = prior odds * exp(min(logBF, 50)), evaluated as
+        // sigmoid(min(logBF, 50) + log prior odds): the ratio form overflows to inf / inf = NaN once the odds pass the
+        // largest finite T (e^11.1 in Half), while the sigmoid saturates at 1.
+        T logPriorOdds = NumOps.FromDouble(Math.Log(_priorInclusionProbability / (1 - _priorInclusionProbability)));
+        var gamma = engine.TensorSigmoid(
+            engine.TensorAddScalar(engine.TensorMin(logBF, NumOps.FromDouble(50.0)), logPriorOdds));
 
         // Degenerate columns (xjNorm < 1e-10) and non-finite Bayes factors keep the prior inclusion probability.
         gamma = engine.TensorWhere(engine.TensorIsFinite(logBF), gamma, prior);

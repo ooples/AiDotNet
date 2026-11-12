@@ -123,12 +123,11 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             // t-statistic to likelihood ratio approximation
             var logLikelihoodRatio = engine.TensorMin(
                 engine.TensorDivideScalar(engine.TensorSquare(tStatistic), NumOps.FromDouble(2.0)), NumOps.FromDouble(50.0));
-            var likelihoodRatio = engine.TensorExp(logLikelihoodRatio);
-
-            // Posterior using Bayes' rule
-            var posteriorOdds = engine.TensorMultiplyScalar(
-                likelihoodRatio, NumOps.FromDouble(_priorProbability / (1 - _priorProbability)));
-            _posteriorProbabilities = engine.TensorDivide(posteriorOdds, engine.TensorAddScalar(posteriorOdds, NumOps.One)).ToVector();
+            // Posterior using Bayes' rule: odds / (1 + odds) with odds = prior odds * exp(log LR), evaluated as
+            // sigmoid(log LR + log prior odds). The ratio form overflows to inf / inf = NaN once exp(log LR) passes the
+            // largest finite T (e^11.1 in Half), while the sigmoid saturates at 1.
+            T logPriorOdds = NumOps.FromDouble(Math.Log(_priorProbability / (1 - _priorProbability)));
+            _posteriorProbabilities = engine.TensorSigmoid(engine.TensorAddScalar(logLikelihoodRatio, logPriorOdds)).ToVector();
         }
 
         // Select features that exceed threshold, up to nFeaturesToSelect
