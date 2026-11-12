@@ -1310,6 +1310,19 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     }
 
     /// <summary>
+    /// Whether a live model other than <paramref name="model"/> has claimed this architecture's layer objects.
+    /// </summary>
+    internal bool IsClaimedByAnotherModel(object model)
+    {
+        lock (_ownerSync)
+        {
+            return _owner is not null
+                && _owner.TryGetTarget(out var existing)
+                && !ReferenceEquals(existing, model);
+        }
+    }
+
+    /// <summary>
     /// Releases a provisional layer-graph claim after the claiming model rejects the graph.
     /// </summary>
     /// <param name="model">The model whose claim should be released.</param>
@@ -1435,5 +1448,184 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
         copy.IsValidatedCloneSnapshot = true;
 
         return copy;
+    }
+
+    // ── Persistence of the descriptor ────────────────────────────────────────────────────────────────────
+    //
+    // A network's saved payload carries its layers and weights, and until format v9 it carried nothing of
+    // the architecture that described them. Restoring into an instance built with some OTHER architecture --
+    // which is exactly what AiModelResult.Deserialize does, because the model it restores into is a skeleton
+    // the JSON layer constructed with that type's defaults (FeedForwardNeuralNetwork's parameterless
+    // constructor declares a 128-wide input) -- left the restored layers paired with the skeleton's
+    // descriptor, and every shape decision made from Architecture (input validation, batch-dimension
+    // detection, lazy-layer resolution) then rejected the very inputs the model was trained on.
+    //
+    // The descriptor is every scalar instance field of the runtime architecture type, keyed by declaring
+    // type and field name, so a subtype's own configuration (TransformerArchitecture's heads and widths,
+    // CodeSynthesisArchitecture's language) travels without each subtype hand-writing a serializer, and a
+    // field added next year travels too. Layer lists are not descriptor state -- the network payload owns
+    // the layer objects -- and neither are the ownership claim nor the clone-snapshot marker, which describe
+    // this instance's runtime history rather than the model.
+
+    private const string DescriptorMagic = "NNARCH1";
+
+    private static readonly HashSet<string> NonDescriptorFields = new(StringComparer.Ordinal)
+    {
+        nameof(_owner),
+        nameof(_ownerSync),
+        "<" + nameof(IsValidatedCloneSnapshot) + ">k__BackingField",
+    };
+
+    private static IEnumerable<System.Reflection.FieldInfo> DescriptorFields(Type runtimeType)
+    {
+        const System.Reflection.BindingFlags Flags = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public
+            | System.Reflection.BindingFlags.NonPublic
+            | System.Reflection.BindingFlags.DeclaredOnly;
+        for (Type? type = runtimeType; type is not null && type != typeof(object); type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(Flags).OrderBy(f => f.Name, StringComparer.Ordinal))
+            {
+                if (NonDescriptorFields.Contains(field.Name)) continue;
+                if (!IsDescriptorScalar(field.FieldType)) continue;
+                yield return field;
+            }
+        }
+    }
+
+    private static bool IsDescriptorScalar(Type type)
+    {
+        var underlying = Nullable.GetUnderlyingType(type) ?? type;
+        return underlying.IsEnum
+            || underlying == typeof(bool) || underlying == typeof(int) || underlying == typeof(long)
+            || underlying == typeof(float) || underlying == typeof(double) || underlying == typeof(string);
+    }
+
+    private static string DescriptorKey(System.Reflection.FieldInfo field)
+    {
+        var declaring = field.DeclaringType!;
+        var definition = declaring.IsGenericType ? declaring.GetGenericTypeDefinition() : declaring;
+        return (definition.FullName ?? definition.Name) + "::" + field.Name;
+    }
+
+    /// <summary>
+    /// Writes this architecture's descriptor: its runtime type and every scalar configuration value.
+    /// </summary>
+    internal void WriteDescriptor(BinaryWriter writer)
+    {
+        writer.Write(DescriptorMagic);
+        var runtimeType = GetType();
+        var definition = runtimeType.IsGenericType ? runtimeType.GetGenericTypeDefinition() : runtimeType;
+        writer.Write(definition.FullName ?? definition.Name);
+
+        var fields = DescriptorFields(runtimeType).ToList();
+        writer.Write(fields.Count);
+        foreach (var field in fields)
+        {
+            writer.Write(DescriptorKey(field));
+            WriteDescriptorValue(writer, field.GetValue(this));
+        }
+    }
+
+    /// <summary>
+    /// Reads a descriptor written by <see cref="WriteDescriptor"/> and restores it into this instance.
+    /// </summary>
+    /// <remarks>
+    /// Restores IN PLACE rather than replacing the object, because a network's subclass may alias its
+    /// architecture in a field of its own and those views must keep describing the same model. Values whose
+    /// field this runtime type does not have (a payload written by a different architecture subtype, or by a
+    /// later version that added a field) are skipped; every field this type shares with the writer is
+    /// restored, which always includes the whole base descriptor.
+    /// </remarks>
+    internal void ReadAndRestoreDescriptor(BinaryReader reader)
+    {
+        string magic = reader.ReadString();
+        if (!string.Equals(magic, DescriptorMagic, StringComparison.Ordinal))
+            throw new InvalidDataException($"Serialized network carries an unrecognized architecture descriptor '{magic}'.");
+        _ = reader.ReadString(); // writer's runtime architecture type, informational
+
+        var fieldsByKey = DescriptorFields(GetType()).ToDictionary(DescriptorKey, StringComparer.Ordinal);
+        int count = reader.ReadInt32();
+        if (count < 0)
+            throw new InvalidDataException($"Serialized network declares a negative architecture field count ({count}).");
+        for (int i = 0; i < count; i++)
+        {
+            string key = reader.ReadString();
+            object? value = ReadDescriptorValue(reader);
+            if (!fieldsByKey.TryGetValue(key, out var field)) continue;
+
+            var targetType = Nullable.GetUnderlyingType(field.FieldType) ?? field.FieldType;
+            if (value is null)
+            {
+                if ((!field.FieldType.IsValueType || Nullable.GetUnderlyingType(field.FieldType) is not null)
+                    && field.GetValue(this) is not null)
+                    field.SetValue(this, null);
+                continue;
+            }
+
+            object converted = targetType.IsEnum
+                ? Enum.ToObject(targetType, value)
+                : Convert.ChangeType(value, targetType, System.Globalization.CultureInfo.InvariantCulture);
+            // Write only what differs: a clone restores into an architecture that already matches, and
+            // must not touch an instance another model may be reading.
+            if (!Equals(field.GetValue(this), converted)) field.SetValue(this, converted);
+        }
+    }
+
+    private enum DescriptorValueKind : byte
+    {
+        Null = 0,
+        Boolean = 1,
+        Int64 = 2,
+        Double = 3,
+        String = 4,
+    }
+
+    private static void WriteDescriptorValue(BinaryWriter writer, object? value)
+    {
+        switch (value)
+        {
+            case null:
+                writer.Write((byte)DescriptorValueKind.Null);
+                break;
+            case bool b:
+                writer.Write((byte)DescriptorValueKind.Boolean);
+                writer.Write(b);
+                break;
+            case string s:
+                writer.Write((byte)DescriptorValueKind.String);
+                writer.Write(s);
+                break;
+            case float f:
+                writer.Write((byte)DescriptorValueKind.Double);
+                writer.Write((double)f);
+                break;
+            case double d:
+                writer.Write((byte)DescriptorValueKind.Double);
+                writer.Write(d);
+                break;
+            case Enum e:
+                writer.Write((byte)DescriptorValueKind.Int64);
+                writer.Write(Convert.ToInt64(e, System.Globalization.CultureInfo.InvariantCulture));
+                break;
+            default:
+                writer.Write((byte)DescriptorValueKind.Int64);
+                writer.Write(Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture));
+                break;
+        }
+    }
+
+    private static object? ReadDescriptorValue(BinaryReader reader)
+    {
+        var kind = (DescriptorValueKind)reader.ReadByte();
+        return kind switch
+        {
+            DescriptorValueKind.Null => null,
+            DescriptorValueKind.Boolean => reader.ReadBoolean(),
+            DescriptorValueKind.Int64 => reader.ReadInt64(),
+            DescriptorValueKind.Double => reader.ReadDouble(),
+            DescriptorValueKind.String => reader.ReadString(),
+            _ => throw new InvalidDataException($"Serialized architecture descriptor has unknown value kind {(byte)kind}."),
+        };
     }
 }

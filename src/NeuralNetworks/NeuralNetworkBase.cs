@@ -16214,7 +16214,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // parameters, and Serialize, which builds one byte array, overflowed it for any float model above
     // ~268M parameters (UnifiedMultimodalNetwork's GetModelMetadata did, #2087). A float model now
     // stores 4-byte floats, exactly; every other T keeps 8-byte doubles.
-    private const int SerializationVersion = 8;
+    // v9 records the architecture descriptor right after the encoding, followed by how many of the
+    // network's leading layers the architecture's own layer list held. Until v9 a payload restored into an
+    // instance built with any other architecture -- AiModelResult.Deserialize's JSON skeleton, which a
+    // parameterless constructor gives a default 128-wide input -- came back with the saved layers and the
+    // skeleton's descriptor, and the loaded model rejected the inputs it was trained on.
+    private const int SerializationVersion = 9;
 
     /// <summary>How the parameter values of a serialized network are stored (format v8 and later).</summary>
     private enum SerializedParameterEncoding : byte
@@ -16329,6 +16334,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         writer.Write(SerializationMagic);
         writer.Write(SerializationVersion);
         writer.Write((byte)encoding);
+
+        // v9: the architecture that describes these layers, so a restore reproduces the model's input and
+        // output contract instead of keeping whatever the target instance was constructed with.
+        Architecture.WriteDescriptor(writer);
+        writer.Write(CountArchitectureLayersMirroringNetwork());
 
         // Write the number of layers
         writer.Write(Layers.Count);
@@ -16468,6 +16478,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         int layerCount;
 
         var encoding = SerializedParameterEncoding.Float64;
+        int architectureLayerMirrorCount = -1;
         if (first == SerializationMagic)
         {
             version = reader.ReadInt32();
@@ -16476,6 +16487,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 encoding = (SerializedParameterEncoding)reader.ReadByte();
                 if (encoding != SerializedParameterEncoding.Float64 && encoding != SerializedParameterEncoding.Float32)
                     throw new InvalidDataException($"Serialized network declares unknown parameter encoding {(byte)encoding}.");
+            }
+            if (version >= 9)
+            {
+                // Restore the descriptor BEFORE the layers are rebuilt: lazy-layer resolution below reads
+                // Architecture.GetInputShape() when a saved shape is still symbolic.
+                Architecture.ReadAndRestoreDescriptor(reader);
+                architectureLayerMirrorCount = reader.ReadInt32();
             }
             layerCount = reader.ReadInt32();
         }
@@ -16659,6 +16677,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Independent layer members are left alone because rebinding is reference-identity based.
         RebindLayerAliases(previousLayers, _layers);
         BindLayerGraphReferences();
+        RestoreArchitectureLayerMirror(architectureLayerMirrorCount);
 
         if (version >= 6) RestoreGeneratedAdditionalLayerState(reader, version);
 
@@ -16674,6 +16693,52 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // observed while the destination graph was materialized. Derived CPU weight packs and
         // resident GPU buffers must never survive a bulk restore.
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+    }
+
+    /// <summary>
+    /// How many of this network's leading layers the architecture's own layer list holds by reference, or
+    /// -1 when the architecture's layers are not such a prefix (and so cannot be rebuilt from the network's).
+    /// </summary>
+    /// <remarks>
+    /// A network built from an architecture that carries layers takes those objects by reference, so for a
+    /// freshly constructed model this is the architecture's layer count; an architecture that carries none
+    /// (the network built its own defaults) records zero.
+    /// </remarks>
+    private int CountArchitectureLayersMirroringNetwork()
+    {
+        var architectureLayers = Architecture.Layers;
+        if (architectureLayers.Count > _layers.Count) return -1;
+        for (int i = 0; i < architectureLayers.Count; i++)
+        {
+            if (!ReferenceEquals(architectureLayers[i], _layers[i])) return -1;
+        }
+        return architectureLayers.Count;
+    }
+
+    /// <summary>
+    /// Points the architecture's layer list at the restored layers, as it pointed at the saved model's.
+    /// </summary>
+    /// <param name="mirrorCount">The count written by <see cref="CountArchitectureLayersMirroringNetwork"/>,
+    /// or -1 when the payload predates v9 or the saved architecture's layers were not a prefix of the network's.</param>
+    private void RestoreArchitectureLayerMirror(int mirrorCount)
+    {
+        if (mirrorCount < 0 || mirrorCount > _layers.Count) return;
+        // A clone whose CreateNewInstance reused the source's architecture must not repoint the source's
+        // layer list at the clone's layers: that architecture still describes the source.
+        if (Architecture.IsClaimedByAnotherModel(this)) return;
+        var architectureLayers = Architecture.Layers;
+        bool alreadyMirrors = architectureLayers.Count == mirrorCount;
+        for (int i = 0; alreadyMirrors && i < mirrorCount; i++)
+        {
+            alreadyMirrors = ReferenceEquals(architectureLayers[i], _layers[i]);
+        }
+        if (alreadyMirrors) return;
+
+        architectureLayers.Clear();
+        for (int i = 0; i < mirrorCount; i++) architectureLayers.Add(_layers[i]);
+        // The architecture now holds this model's layer objects; record the ownership a constructor
+        // taking them would have recorded, so a second model cannot silently share them.
+        if (mirrorCount > 0) Architecture.ClaimForModel(this);
     }
 
     /// <summary>
