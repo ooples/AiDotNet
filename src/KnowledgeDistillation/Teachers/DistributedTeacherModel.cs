@@ -81,16 +81,14 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         switch (_aggregation)
         {
             case AggregationMode.Average:
-                for (int j = 0; j < n; j++)
+                // Mean of the workers' first n logits (each worker is queried once, in order)
+                var sum = new Vector<T>(n);
+                foreach (var worker in _workers)
                 {
-                    T sum = NumOps.Zero;
-                    for (int i = 0; i < _workers.Length; i++)
-                    {
-                        var logits = _workers[i].GetLogits(input);
-                        sum = NumOps.Add(sum, logits[j]);
-                    }
-                    aggregated[j] = NumOps.Divide(sum, NumOps.FromDouble(_workers.Length));
+                    var logits = worker.GetLogits(input);
+                    sum = Engine.Add(sum, logits.Length == n ? logits : logits.GetSubVector(0, n));
                 }
+                aggregated = Engine.Divide(sum, NumOps.FromDouble(_workers.Length));
                 break;
 
             case AggregationMode.Voting:
@@ -100,4 +98,6 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
 
         return aggregated;
     }
+
+    private static IEngine Engine => AiDotNetEngine.Current;
 }
