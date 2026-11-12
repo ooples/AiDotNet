@@ -182,7 +182,7 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
     /// (r_ij − r_ik r_kj) / sqrt((1 − r_ik²)(1 − r_kj²)) with |value| ≤ threshold. Here r_ij and r_kj are the
     /// lagged correlations at this lag and r_ik the lag-0 correlation, so the test is X_i(t) -> X_j(t+lag)
     /// conditioned on X_k(t) (all three aligned; correlating at the same positive lag would condition on
-    /// X_k(t+lag) and let common-cause paths such as X1 <- X0 -> X3 survive).
+    /// X_k(t+lag) and let common-cause paths such as X1 &lt;- X0 -&gt; X3 survive).
     /// A partial correlation is INCONCLUSIVE when (1 − r_ik²)(1 − r_kj²) &lt; 1e-10 (k collinear with both
     /// endpoints, as on deterministic fixtures) or NaN; it is skipped rather than treated as "no
     /// association", because FCI's conditional-independence rule requires a VALID test, not a vacuous one
