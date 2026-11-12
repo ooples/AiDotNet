@@ -209,13 +209,14 @@ internal static class FeatureSelectionTensorOps
             total = engine.TensorSubtract(total, WeightedRowSum(found, NeighbourDifference(sampledRows, scaled, index)));
 
         // nearest misses of every other class, weighted by P(C) / (1 - P(class of the instance))
+        T zero = ops.Zero;
         for (int c = 0; c < classCount; c++)
         {
             var inClass = Column(oneHot, c);
             var otherClass = FilterStatisticTensorOps.OneMinus(Column(sampleOneHot, c));
             var classPrior = engine.TensorBroadcastTo(Entries(priors, new[] { c }), new[] { m });
             var factor = engine.TensorMultiply(
-                FilterStatisticTensorOps.GuardedDivide(classPrior, otherMass, 0.0, ops.Zero), otherClass);
+                FilterStatisticTensorOps.GuardedDivide(classPrior, otherMass, 0.0, zero), otherClass);
             var missKeep = FilterStatisticTensorOps.RowBroadcast(inClass, m);
             foreach (var (index, found) in NearestPerRow(KeepOrFill(distance, missKeep, infinity), k))
                 total = engine.TensorAdd(total, WeightedRowSum(
@@ -342,6 +343,7 @@ internal static class FeatureSelectionTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         int n = matrix.Shape[0];
         T tolerance = ops.FromDouble(1e-10);
+        T one = ops.One;
         var found = new List<Tensor<T>>();
         foreach (var start in starts)
         {
@@ -358,7 +360,7 @@ internal static class FeatureSelectionTensorOps
                 var norm = engine.TensorBroadcastTo(
                     engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(product), new[] { 0 }, true)), new[] { n, 1 });
                 var moved = engine.TensorGreaterThan(norm, tolerance);
-                var safeNorm = engine.TensorWhere(moved, norm, FilterStatisticTensorOps.FilledLike(norm, ops.One));
+                var safeNorm = engine.TensorWhere(moved, norm, FilterStatisticTensorOps.FilledLike(norm, one));
                 v = engine.TensorWhere(moved, engine.TensorDivide(product, safeNorm), keepPreviousOnZeroNorm ? v : product);
             }
 

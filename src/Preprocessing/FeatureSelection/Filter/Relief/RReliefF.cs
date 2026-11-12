@@ -115,9 +115,10 @@ public class RReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
         var nD = new Tensor<T>(new[] { 1 });
         var nDa = new Tensor<T>(new[] { p });
         var nDcDa = new Tensor<T>(new[] { p });
+        T zero = NumOps.Zero;
         foreach (var (index, found) in neighbours)
         {
-            var influence = FilterStatisticTensorOps.GuardedDivide(found, neighbourCount, 0.0, NumOps.Zero);
+            var influence = FilterStatisticTensorOps.GuardedDivide(found, neighbourCount, 0.0, zero);
             var yDiff = engine.TensorAbs(engine.TensorSubtract(sampledY, FeatureSelectionTensorOps.Entries(y, index)));
             var featureDiff = FeatureSelectionTensorOps.NeighbourDifference(sampledRows, scaled, index);
             nD = engine.TensorAdd(nD, engine.ReduceSum(engine.TensorMultiply(influence, yDiff), new[] { 0 }, true));

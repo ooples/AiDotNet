@@ -106,6 +106,7 @@ public class SPEC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
 
         var start = FilterStatisticTensorOps.Filled(new[] { n, 1 }, NumOps.FromDouble(1.0 / Math.Sqrt(n)));
         var tolerance = NumOps.FromDouble(1e-10);
+        T one = NumOps.One;
         for (int ev = 0; ev < k; ev++)
         {
             var v = start;
@@ -121,7 +122,7 @@ public class SPEC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
                 var norm = engine.TensorBroadcastTo(
                     engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(Lv), new[] { 0 }, true)), new[] { n, 1 });
                 var moved = engine.TensorGreaterThan(norm, tolerance);
-                var safeNorm = engine.TensorWhere(moved, norm, FilterStatisticTensorOps.FilledLike(norm, NumOps.One));
+                var safeNorm = engine.TensorWhere(moved, norm, FilterStatisticTensorOps.FilledLike(norm, one));
                 v = engine.TensorWhere(moved, engine.TensorDivide(Lv, safeNorm), v);
             }
 
