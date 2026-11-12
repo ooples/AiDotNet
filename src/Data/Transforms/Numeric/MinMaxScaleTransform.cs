@@ -80,13 +80,23 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
     }
 
     /// <summary>
+    /// Creates a min-max scaler from pre-computed statistics that maps to the range [0, 1].
+    /// </summary>
+    /// <param name="min">The minimum for each feature.</param>
+    /// <param name="max">The maximum for each feature.</param>
+    public MinMaxScaleTransform(T[] min, T[] max)
+        : this(min, max, 0.0, 1.0)
+    {
+    }
+
+    /// <summary>
     /// Creates a min-max scaler from pre-computed statistics.
     /// </summary>
     /// <param name="min">The minimum for each feature.</param>
     /// <param name="max">The maximum for each feature.</param>
-    /// <param name="targetMin">The minimum value of the target range. Default is 0.</param>
-    /// <param name="targetMax">The maximum value of the target range. Default is 1.</param>
-    public MinMaxScaleTransform(T[] min, T[] max, double targetMin = 0.0, double targetMax = 1.0)
+    /// <param name="targetMin">The minimum value of the target range.</param>
+    /// <param name="targetMax">The maximum value of the target range.</param>
+    public MinMaxScaleTransform(T[] min, T[] max, double targetMin, double targetMax)
     {
         if (min is null)
         {
