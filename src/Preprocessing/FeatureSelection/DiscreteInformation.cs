@@ -114,6 +114,28 @@ internal sealed class DiscreteInformation<T>
     public Tensor<T> Relevance() =>
         _engine.TensorAddScalar(_engine.TensorSubtract(FeatureEntropy(), FeatureTargetEntropy()), TargetEntropy);
 
+    /// <summary>
+    /// Symmetric uncertainty with the target, <c>2 I(X_j; Y) / (H(X_j) + H(Y))</c>, for every feature ([p]); 0 where
+    /// the entropy sum is not above 1e-10.
+    /// </summary>
+    public Tensor<T> SymmetricUncertainty() =>
+        FilterStatisticTensorOps.GuardedDivide(
+            _engine.TensorMultiplyScalar(Relevance(), _ops.FromDouble(2)),
+            _engine.TensorAddScalar(FeatureEntropy(), TargetEntropy), 1e-10, _ops.Zero);
+
+    /// <summary>
+    /// Symmetric uncertainty between features, <c>2 I(X_j; X_s) / (H(X_j) + H(X_s))</c>, for every feature j ([p]);
+    /// 0 where the entropy sum is not above 1e-10.
+    /// </summary>
+    public Tensor<T> FeatureSymmetricUncertainty(int s)
+    {
+        var hj = FeatureEntropy();
+        var hs = Broadcast(FeatureSelectionTensorOps.Entries(hj, new[] { s }));
+        return FilterStatisticTensorOps.GuardedDivide(
+            _engine.TensorMultiplyScalar(FeatureMutualInformation(s), _ops.FromDouble(2)),
+            _engine.TensorAdd(hj, hs), 1e-10, _ops.Zero);
+    }
+
     /// <summary>H(X_j | Y) = H(X_j, Y) - H(Y) for every feature ([p]).</summary>
     public Tensor<T> FeatureGivenTarget() =>
         _engine.TensorSubtractScalar(FeatureTargetEntropy(), TargetEntropy);

@@ -28,18 +28,18 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _gainRatios;
-    private double[]? _informationGains;
-    private double[]? _intrinsicValues;
+    private Vector<T>? _gainRatios;
+    private Vector<T>? _informationGains;
+    private Vector<T>? _intrinsicValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? GainRatios => _gainRatios;
-    public double[]? InformationGains => _informationGains;
-    public double[]? IntrinsicValues => _intrinsicValues;
+    public Vector<T>? GainRatios => _gainRatios;
+    public Vector<T>? InformationGains => _informationGains;
+    public Vector<T>? IntrinsicValues => _intrinsicValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -74,110 +74,16 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Compute class probabilities and base entropy H(Y)
-        var classCount = new Dictionary<int, int>();
-        for (int i = 0; i < n; i++)
-        {
-            int c = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classCount.ContainsKey(c))
-                classCount[c] = 0;
-            classCount[c]++;
-        }
-
-        double baseEntropy = 0;
-        foreach (var count in classCount.Values)
-        {
-            double p_c = (double)count / n;
-            if (p_c > 0)
-                baseEntropy -= p_c * Math.Log(p_c);
-        }
-
-        _informationGains = new double[p];
-        _intrinsicValues = new double[p];
-        _gainRatios = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Get feature values and discretize into bins
-            var values = new double[n];
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                values[i] = NumOps.ToDouble(data[i, j]);
-                min = Math.Min(min, values[i]);
-                max = Math.Max(max, values[i]);
-            }
-
-            double binWidth = (max - min) / _nBins;
-            if (binWidth < 1e-10) binWidth = 1;
-
-            // Count joint frequencies
-            var binClassCount = new Dictionary<int, Dictionary<int, int>>();
-            var binCount = new Dictionary<int, int>();
-
-            for (int i = 0; i < n; i++)
-            {
-                int bin = Math.Min((int)((values[i] - min) / binWidth), _nBins - 1);
-                int c = (int)Math.Round(NumOps.ToDouble(target[i]));
-
-                if (!binClassCount.ContainsKey(bin))
-                    binClassCount[bin] = new Dictionary<int, int>();
-                if (!binClassCount[bin].ContainsKey(c))
-                    binClassCount[bin][c] = 0;
-                binClassCount[bin][c]++;
-
-                if (!binCount.ContainsKey(bin))
-                    binCount[bin] = 0;
-                binCount[bin]++;
-            }
-
-            // Compute conditional entropy H(Y|X)
-            double conditionalEntropy = 0;
-            foreach (var bin in binClassCount.Keys)
-            {
-                double binProb = (double)binCount[bin] / n;
-                double binEntropy = 0;
-
-                foreach (var count in binClassCount[bin].Values)
-                {
-                    double p_c_bin = (double)count / binCount[bin];
-                    if (p_c_bin > 0)
-                        binEntropy -= p_c_bin * Math.Log(p_c_bin);
-                }
-
-                conditionalEntropy += binProb * binEntropy;
-            }
-
-            // Information Gain = H(Y) - H(Y|X)
-            _informationGains[j] = baseEntropy - conditionalEntropy;
-
-            // Intrinsic Value (Split Information) = H(X)
-            double intrinsicValue = 0;
-            foreach (var count in binCount.Values)
-            {
-                double p_bin = (double)count / n;
-                if (p_bin > 0)
-                    intrinsicValue -= p_bin * Math.Log(p_bin);
-            }
-            _intrinsicValues[j] = intrinsicValue;
-
-            // Gain Ratio = Information Gain / Intrinsic Value
-            _gainRatios[j] = intrinsicValue > 1e-10 ? _informationGains[j] / intrinsicValue : 0;
-        }
-
-        // Select top features
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _gainRatios
-            .Select((gr, idx) => (GR: gr, Index: idx))
-            .OrderByDescending(x => x.GR)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureSelectionTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+        var gains = info.Relevance();
+        var intrinsic = info.FeatureEntropy();
+        var ratios = FilterStatisticTensorOps.GuardedDivide(gains, intrinsic, 1e-10, NumOps.Zero);
+        _informationGains = gains.ToVector();
+        _intrinsicValues = intrinsic.ToVector();
+        _gainRatios = ratios.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(ratios, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 

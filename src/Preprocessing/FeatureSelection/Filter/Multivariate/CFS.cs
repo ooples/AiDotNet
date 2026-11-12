@@ -27,14 +27,13 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _featureClassCorrelations;
-    private double[,]? _featureInterCorrelations;
+    private Vector<T>? _featureClassCorrelations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureClassCorrelations => _featureClassCorrelations;
+    public Vector<T>? FeatureClassCorrelations => _featureClassCorrelations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,135 +64,50 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, FilterStatisticTensorOps.AsTensor(target));
+        var norms = Engine.TensorSqrt(sxx);
+        var classCorrelation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
+            sxy, Engine.TensorSqrt(Engine.TensorMultiplyScalar(sxx, syy)), 1e-10, NumOps.Zero));
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
+        var interCorrelation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
+            Engine.TensorMatMul(Engine.TensorTranspose(centered), centered), Engine.TensorOuter(norms, norms),
+            1e-10, NumOps.Zero));
+        _featureClassCorrelations = classCorrelation.ToVector();
 
-        // Compute feature-class correlations
-        _featureClassCorrelations = new double[p];
-        var targetArray = new double[n];
-        for (int i = 0; i < n; i++)
-            targetArray[i] = NumOps.ToDouble(target[i]);
-
-        for (int j = 0; j < p; j++)
+        // greedy forward selection; accumulators are broadcast over the [p] candidates
+        T one = NumOps.One;
+        T two = NumOps.FromDouble(2);
+        var zero = FilterStatisticTensorOps.FilledLike(classCorrelation, NumOps.Zero);
+        var count = FilterStatisticTensorOps.FilledLike(classCorrelation, one);
+        var selectedClass = zero;
+        var selectedPairs = zero;
+        var withSelected = zero;
+        var (selected, _) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
-            var featureArray = new double[n];
-            for (int i = 0; i < n; i++)
-                featureArray[i] = NumOps.ToDouble(data[i, j]);
-
-            _featureClassCorrelations[j] = Math.Abs(ComputeCorrelation(featureArray, targetArray));
-        }
-
-        // Compute feature-feature correlations
-        _featureInterCorrelations = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            var feature1 = new double[n];
-            for (int i = 0; i < n; i++)
-                feature1[i] = NumOps.ToDouble(data[i, j1]);
-
-            for (int j2 = j1; j2 < p; j2++)
+            if (chosen.Count > 0)
             {
-                if (j1 == j2)
-                {
-                    _featureInterCorrelations[j1, j2] = 1.0;
-                }
-                else
-                {
-                    var feature2 = new double[n];
-                    for (int i = 0; i < n; i++)
-                        feature2[i] = NumOps.ToDouble(data[i, j2]);
-
-                    double corr = Math.Abs(ComputeCorrelation(feature1, feature2));
-                    _featureInterCorrelations[j1, j2] = corr;
-                    _featureInterCorrelations[j2, j1] = corr;
-                }
-            }
-        }
-
-        // Greedy forward selection using CFS merit
-        var selected = new List<int>();
-        var available = Enumerable.Range(0, p).ToHashSet();
-
-        while (selected.Count < _nFeaturesToSelect && available.Count > 0)
-        {
-            int bestFeature = -1;
-            double bestMerit = double.NegativeInfinity;
-
-            foreach (int j in available)
-            {
-                var candidate = new List<int>(selected) { j };
-                double merit = ComputeCFSMerit(candidate);
-
-                if (merit > bestMerit)
-                {
-                    bestMerit = merit;
-                    bestFeature = j;
-                }
+                int last = chosen[chosen.Count - 1];
+                selectedClass = Engine.TensorAdd(selectedClass, Broadcast(classCorrelation, last, p));
+                selectedPairs = Engine.TensorAdd(selectedPairs, Broadcast(withSelected, last, p));
+                withSelected = Engine.TensorAdd(withSelected, FeatureSelectionTensorOps.Column(interCorrelation, last));
+                count = Engine.TensorAddScalar(count, one);
             }
 
-            if (bestFeature >= 0)
-            {
-                selected.Add(bestFeature);
-                available.Remove(bestFeature);
-            }
-            else
-            {
-                break;
-            }
-        }
+            var pairSum = Engine.TensorMultiplyScalar(Engine.TensorAdd(selectedPairs, withSelected), two);
+            return FilterStatisticTensorOps.GuardedDivide(
+                Engine.TensorAdd(selectedClass, classCorrelation),
+                Engine.TensorSqrt(Engine.TensorAdd(count, pairSum)), 1e-10, NumOps.Zero);
+        });
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _selectedIndices = selected;
         IsFitted = true;
     }
 
-    private double ComputeCorrelation(double[] x, double[] y)
-    {
-        int n = x.Length;
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double covariance = 0, xVar = 0, yVar = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = x[i] - xMean;
-            double yDiff = y[i] - yMean;
-            covariance += xDiff * yDiff;
-            xVar += xDiff * xDiff;
-            yVar += yDiff * yDiff;
-        }
-
-        double denom = Math.Sqrt(xVar * yVar);
-        return denom > 1e-10 ? covariance / denom : 0;
-    }
-
-    private double ComputeCFSMerit(List<int> subset)
-    {
-        if (subset.Count == 0) return 0;
-
-        var featureClassCorrelations = _featureClassCorrelations ?? throw new InvalidOperationException("Feature-class correlations have not been computed.");
-        var featureInterCorrelations = _featureInterCorrelations ?? throw new InvalidOperationException("Feature inter-correlations have not been computed.");
-        int k = subset.Count;
-
-        // Average feature-class correlation
-        double avgFCCorr = subset.Sum(j => featureClassCorrelations[j]) / k;
-
-        // Average feature-feature correlation
-        double avgFFCorr = 0;
-        int pairs = 0;
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = i + 1; j < k; j++)
-            {
-                avgFFCorr += featureInterCorrelations[subset[i], subset[j]];
-                pairs++;
-            }
-        }
-        if (pairs > 0) avgFFCorr /= pairs;
-
-        // CFS merit function: k * avgFCCorr / sqrt(k + k*(k-1)*avgFFCorr)
-        double denom = Math.Sqrt(k + (double)k * (k - 1) * avgFFCorr);
-        return denom > 1e-10 ? k * avgFCCorr / denom : 0;
-    }
+    // entry `index` of a [p] tensor repeated p times
+    private Tensor<T> Broadcast(Tensor<T> values, int index, int p) =>
+        Engine.TensorBroadcastTo(FeatureSelectionTensorOps.Entries(values, new[] { index }), new[] { p });
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

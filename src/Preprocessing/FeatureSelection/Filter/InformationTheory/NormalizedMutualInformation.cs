@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -29,13 +30,13 @@ public class NormalizedMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
 
     public enum NormalizationMethod { Arithmetic, Geometric, Min, Max }
 
-    private double[]? _nmiScores;
+    private Vector<T>? _nmiScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? NMIScores => _nmiScores;
+    public Vector<T>? NMIScores => _nmiScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,120 +73,25 @@ public class NormalizedMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Discretize target
-        var yDiscrete = DiscretizeTarget(target, n);
-        double hY = ComputeEntropy(yDiscrete, n);
-
-        _nmiScores = new double[p];
-
-        for (int j = 0; j < p; j++)
+        // the target's distinct values are its classes
+        var info = new DiscreteInformation<T>(
+            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            StatisticalTestHelper.ClassOneHot(target, out _));
+        var hX = info.FeatureEntropy();
+        T hY = info.TargetEntropy;
+        var norm = _normalization switch
         {
-            var xDiscrete = DiscretizeFeature(data, j, n);
-            double hX = ComputeEntropy(xDiscrete, n);
-            double hXY = ComputeJointEntropy(xDiscrete, yDiscrete, n);
-            double mi = hX + hY - hXY;
-
-            // Apply normalization
-            double norm = _normalization switch
-            {
-                NormalizationMethod.Arithmetic => (hX + hY) / 2,
-                NormalizationMethod.Geometric => Math.Sqrt(hX * hY),
-                NormalizationMethod.Min => Math.Min(hX, hY),
-                NormalizationMethod.Max => Math.Max(hX, hY),
-                _ => (hX + hY) / 2
-            };
-
-            _nmiScores[j] = norm > 1e-10 ? mi / norm : 0;
-        }
-
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _nmiScores
-            .Select((nmi, idx) => (NMI: nmi, Index: idx))
-            .OrderByDescending(x => x.NMI)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+            NormalizationMethod.Geometric => Engine.TensorSqrt(Engine.TensorMultiplyScalar(hX, hY)),
+            NormalizationMethod.Min => Engine.TensorMin(hX, hY),
+            NormalizationMethod.Max => Engine.TensorMax(hX, hY),
+            _ => Engine.TensorMultiplyScalar(Engine.TensorAddScalar(hX, hY), NumOps.FromDouble(0.5))
+        };
+        var scores = FilterStatisticTensorOps.GuardedDivide(info.Relevance(), norm, 1e-10, NumOps.Zero);
+        _nmiScores = scores.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private int[] DiscretizeTarget(Vector<T> target, int n)
-    {
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-            values[i] = NumOps.ToDouble(target[i]);
-
-        var unique = values.Distinct().OrderBy(x => x).ToList();
-        var result = new int[n];
-
-        for (int i = 0; i < n; i++)
-            result[i] = unique.IndexOf(values[i]);
-
-        return result;
-    }
-
-    private int[] DiscretizeFeature(Matrix<T> data, int j, int n)
-    {
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-            values[i] = NumOps.ToDouble(data[i, j]);
-
-        double min = values.Min();
-        double max = values.Max();
-        double range = max - min;
-        if (range < 1e-10) range = 1;
-
-        var result = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            int bin = (int)((values[i] - min) / range * (_nBins - 1));
-            result[i] = Math.Max(0, Math.Min(bin, _nBins - 1));
-        }
-
-        return result;
-    }
-
-    private double ComputeEntropy(int[] x, int n)
-    {
-        var counts = new Dictionary<int, int>();
-        foreach (int v in x)
-        {
-            if (!counts.ContainsKey(v)) counts[v] = 0;
-            counts[v]++;
-        }
-
-        double entropy = 0;
-        foreach (var count in counts.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0) entropy -= p * Math.Log(p);
-        }
-
-        return entropy;
-    }
-
-    private double ComputeJointEntropy(int[] x, int[] y, int n)
-    {
-        var counts = new Dictionary<(int, int), int>();
-        for (int i = 0; i < n; i++)
-        {
-            var key = (x[i], y[i]);
-            if (!counts.ContainsKey(key)) counts[key] = 0;
-            counts[key]++;
-        }
-
-        double entropy = 0;
-        foreach (var count in counts.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0) entropy -= p * Math.Log(p);
-        }
-
-        return entropy;
     }
 
     /// <inheritdoc />
