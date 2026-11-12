@@ -309,7 +309,6 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         return Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { 1, (r - available) * mel }) }, 1);
     }
 
-
     /// <inheritdoc />
     /// <remarks>Synthesis (§2.2): encode, decode autoregressively until the stop token fires, add the post-net residual;
     /// <c>[1, frames, mel]</c>. The pre-net dropout is drawn from the sampling seed, so a model synthesizes the same

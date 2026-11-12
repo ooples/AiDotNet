@@ -369,7 +369,6 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
             NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI)));
 
         var target = LogDurationTarget(durations, 1e-8);
-
         var durationError = Engine.TensorSubtract(LogDurations(hidden), target);
         var durationLoss = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(durationError, durationError), new[] { 0 }, keepDims: false),

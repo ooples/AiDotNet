@@ -544,7 +544,6 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
                 codes[q, frame] = MathPolyfill.Clamp(value, 0, _options.CodebookSize - 1);
             }
         return codes;
-
     }
 
     private static int[,] SliceCodes(int[,] codes, int start, int end)

@@ -402,7 +402,6 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) throw NotNative();
         if (tokens.Rank == 2 && tokens.Shape[1] != 1) throw new ArgumentException("Semantic tokens are [frames, 1].", nameof(tokens));
         var ids = RoundedIds(tokens);
-
         var prompt = Prompt(RequireVoice());
         using var _ = new NoGradScope<T>();
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);

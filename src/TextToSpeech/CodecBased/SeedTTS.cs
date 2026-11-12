@@ -447,7 +447,6 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private Tensor<T> Tokens(IReadOnlyList<int> ids)
     {
         return IdTensor(ids);
-
     }
 
     private static Tensor<T> Detached(Tensor<T> tensor) => new(tensor._shape, tensor.ToVector());

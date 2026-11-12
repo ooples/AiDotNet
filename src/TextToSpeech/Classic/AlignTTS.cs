@@ -338,7 +338,6 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
                 using (new NoGradScope<T>())
                     durations = ViterbiDurations(GaussianLogLikelihood(characterHidden, melFrames));
                 var target = Engine.TensorLog1p(IdTensor(durations));
-
                 return MeanSquaredError(RunDurationPredictor(tokens), target);
             }
         }

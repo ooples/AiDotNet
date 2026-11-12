@@ -347,7 +347,6 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
             NumOps.FromDouble(_options.EnergyStd));
         var energy = Engine.TensorWhere(Engine.TensorEquals(phonemeEnergy, NumOps.Zero), zeros, normalizedEnergy);
         return (pitch, energy);
-
     }
 
     private Tensor<T> MeanAbsolute(Tensor<T> prediction, Tensor<T> target)

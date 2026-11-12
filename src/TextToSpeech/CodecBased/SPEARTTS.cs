@@ -843,7 +843,6 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (tokens.Rank != 2)
             throw new ArgumentException("Expected codec tokens [frames, levels].", nameof(tokens));
         var audio = Codec.Decode(LevelMajorCodes(tokens));
-
         return audio.Reshape(new[] { audio.Length });
     }
 

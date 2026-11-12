@@ -392,7 +392,6 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         for (int b = 0; b < batch; b++)
             outputs.Add(SynthesizeOne(BatchRow(input, b)));
         return PadAndStack(outputs, _options.MelChannels);
-
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
@@ -521,7 +520,6 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new ArgumentException($"PortaSpeech needs at least {frames} frames (its generator stride); got {full}.", nameof(sample));
         var mel = Engine.TensorSlice(targets.Mel, new[] { 0, 0 }, new[] { frames, _options.MelChannels });
         var target = Engine.TensorLog(Engine.TensorAddScalar(IdTensor(wordFrames), NumOps.One));
-
         var noise = Gaussian(new[] { 1, _options.ProsodyDim, frames / _options.GeneratorStride }, random, 1.0);
         var phase = CurrentPhase;
         bool klActive = GeneratorUpdates >= _options.KlStartUpdates;

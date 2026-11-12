@@ -381,7 +381,6 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         int[] durations = MonotonicAlignment.MaximumPath(scores);
 
         var target = LogDurationTarget(durations, 1e-8);
-
         var durationError = Engine.TensorSubtract(LogDurations(hidden), target);
         var durationLoss = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(durationError, durationError), new[] { 0 }, keepDims: false),

@@ -373,7 +373,6 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         var pathNoise = Gaussian(new[] { padded, channels }, random);
         var logTargets = LogDurationTarget(durations, 1e-8);
 
-
         Tensor<T> Objective(Tensor<T> tokens, Tensor<T> mel)
         {
             var (hidden, means) = Encode(tokens);

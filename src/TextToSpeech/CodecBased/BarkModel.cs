@@ -923,7 +923,6 @@ public partial class BarkModel<T> : TtsModelBase<T>
         for (int token = 0; token < vocabulary; token++) keep[token] = token < allowedVocabulary ? 1 : 0;
         var row = Engine.Reshape(Engine.TensorSlice(logits, new[] { 0, position, 0 }, new[] { 1, 1, vocabulary }), new[] { vocabulary });
         return KeepOrFill(row, keep, suppressed).ToVector();
-
     }
 
     private static int Sample(Vector<T> logits, SamplingOptions options, Random random)

@@ -372,7 +372,6 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         for (int i = 0; i < length; i++)
             frames[i] = Math.Max(1, frames[i]);
         frames[length - 1] += _options.FinalPhonemeExtraFrames;
-
         return frames;
     }
 

@@ -264,7 +264,6 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
         var output = produced.Count == 0 ? new Tensor<T>(new[] { 0, channels })
             : produced.Count == 1 ? produced[0] : Engine.TensorConcatenate(produced.ToArray(), 0);
         return Refine(output);
-
     }
 
     /// <inheritdoc />

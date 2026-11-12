@@ -366,7 +366,6 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
             if (o.Diffusion == NaturalSpeech2Diffusion.ScoreSde && o.Solver == NaturalSpeech2Solver.Midpoint)
             {
                 var middle = Engine.TensorMultiplyScalar(Engine.TensorAdd(Engine.TensorSubtract(xt, dxt), xt), half);
-
                 dxt = Drift(middle, condition, query, t + 0.5 * h, h);
             }
             xt = Engine.TensorSubtract(xt, dxt);

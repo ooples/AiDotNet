@@ -435,7 +435,6 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         if (x.Shape[0] == frames) return x;
         return Engine.TensorConcatenate(new[] { x, new Tensor<T>(new[] { frames - x.Shape[0], x.Shape[1] }) }, 0);
-
     }
 
     private Tensor<T> MeanAbsolute(Tensor<T> prediction, Tensor<T> target)

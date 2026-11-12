@@ -312,8 +312,7 @@ public partial class MARS5TTS<T> : TtsModelBase<T>
         var tokens = new List<int>();
         foreach (int id in RoundedIds(input))
         {
-            if (id < 0
- || id >= vocabulary) throw new ArgumentOutOfRangeException(nameof(input), $"Text tokens lie in [0, {vocabulary}).");
+            if (id < 0 || id >= vocabulary) throw new ArgumentOutOfRangeException(nameof(input), $"Text tokens lie in [0, {vocabulary}).");
             tokens.Add(id);
         }
         if (tokens.Count == 0) throw new ArgumentException("There are no text tokens.", nameof(input));

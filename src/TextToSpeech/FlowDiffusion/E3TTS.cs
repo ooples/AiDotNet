@@ -310,7 +310,6 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
                 if (loud[b] != 0) last = b * block + counts[b];
         }
         return Engine.TensorSlice(waveform, new[] { 0 }, new[] { MathPolyfill.Clamp(last, 1, length) });
-
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)

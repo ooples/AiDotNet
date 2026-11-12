@@ -253,7 +253,6 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     internal int[] Ids(Tensor<T> tokens, string name)
     {
         var ids = RoundedIds(tokens);
-
         if (ids.Length == 0) throw new ArgumentException("There are no phonemes.", name);
         if (ids.Any(i => i < 0 || i >= _vocabulary.Length))
             throw new ArgumentOutOfRangeException(name, $"Phone ids lie in [0, {_vocabulary.Length}).");

@@ -529,7 +529,6 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         var mask = RowMask(maskValues, 1);
         int count = maskValues.Count(set => set);
         return Engine.TensorMultiplyScalar(
-
             Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorAbs(difference), mask), new[] { 0, 1 }, false),
             NumOps.FromDouble(1.0 / Math.Max(1, count)));
     }

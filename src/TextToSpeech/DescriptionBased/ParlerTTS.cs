@@ -506,7 +506,6 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         var codes = FramesFirst(Codec.Encode(audio ?? throw new ArgumentNullException(nameof(audio))));
         return IntMatrixTensor(codes);
-
     }
 
     /// <inheritdoc />

@@ -334,7 +334,6 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     {
         var audio = voice.ReferenceAudio ?? throw new InvalidOperationException($"{GetType().Name} continues a recording; set ReferenceAudio on the voice.");
         int[]? semantic = voice.ReferenceCodecTokens is { } codes ? RoundedIds(codes) : null;
-
         if (_prompts.TryGetValue(voice, out var info) && semantic is not null) return (info.Samples16k, semantic);
         var audio16k = SoxrResampler.LibrosaResample(Doubles(audio), _options.SampleRate, _options.SemanticSampleRate);
         return (audio16k.Length, semantic ?? SemanticTokens(audio16k));

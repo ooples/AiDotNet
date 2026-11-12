@@ -324,7 +324,6 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         if (input.Length == 0) throw new ArgumentException("There is no text.", nameof(input));
         if (NumOps.LessThan(Engine.TensorMinValue(input), NumOps.Zero)
             || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(input), NumOps.FromDouble(_options.VocabSize)))
-
             throw new ArgumentOutOfRangeException(nameof(input), $"Token ids lie in [0, {_options.VocabSize}).");
         return Synthesize(TextOf(input));
     }

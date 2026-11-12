@@ -260,8 +260,7 @@ public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
         for (int i = 0; i < bytes.Length; i++)
         {
             int b = ids[i];
-            if (b < 0
- || b > 255) throw new ArgumentOutOfRangeException(nameof(input), "Text ids are UTF-8 bytes in [0, 256).");
+            if (b < 0 || b > 255) throw new ArgumentOutOfRangeException(nameof(input), "Text ids are UTF-8 bytes in [0, 256).");
             bytes[i] = (byte)b;
         }
         if (bytes.Length > MaxTextLength) throw new ArgumentException($"The text is longer than {MaxTextLength} bytes.", nameof(input));

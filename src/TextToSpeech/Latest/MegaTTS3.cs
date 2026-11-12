@@ -439,7 +439,6 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
         var latent = Engine.TensorConcatenate(new[] { promptRow, new Tensor<T>(new[] { 2, target, channels }) }, 0);
         var mask = FollowedByZeros(Tensor<T>.CreateDefault(new[] { 3, promptFrames, 1 }, NumOps.One), 3, 1);
         return (phRows, toneRows, mapRows, latent, mask);
-
     }
 
     /// <summary>The DiT's latent for a chunk, the prompt latent written over its start, decoded; the prompt's audio cut;

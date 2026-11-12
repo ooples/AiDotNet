@@ -367,7 +367,6 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         var durations = PredictorModule.Durations(encoded, false, random);
         var frames = RoundedIds(Engine.TensorSlice(Engine.Reshape(durations, new[] { durations.Length }), new[] { 0 }, new[] { ids.Length }));
         for (int i = 0; i < frames.Length; i++) frames[i] = Math.Max(1, frames[i]);
-
         var alignment = AlignmentOf(frames);                                                                 // [L, F]
         int width = _options.HiddenDim + _options.StyleDim, total = frames.Sum();
         var aligned = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(encoded), alignment), new[] { 1, width, total });

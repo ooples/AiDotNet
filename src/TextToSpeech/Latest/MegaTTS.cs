@@ -314,7 +314,6 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         var frames = RoundedIds(Network.PredictDurations(content, prosody, phones));
         for (int i = 0; i < frames.Length; i++)
             if (phones[i] == 0) frames[i] = 0;
-
         var map = MegaTts3Aligner<T>.LengthRegulate(frames);
         if (map.Length == 0) return new Tensor<T>(new[] { 0, _options.MelChannels });
         return Network.DecodeMel(content, prosody, timbre, map);

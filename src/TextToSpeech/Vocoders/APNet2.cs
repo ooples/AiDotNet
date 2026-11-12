@@ -161,7 +161,6 @@ public partial class APNet2<T> : AmplitudePhaseVocoderBase<T>
         T periodWeight = NumOps.One, resolutionWeight = NumOps.FromDouble(o.ResolutionFeatureMatchingWeight);
         var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k =>
             Engine.TensorMultiplyScalar(FeatureMatching(realOut[k].Features, fake[k].Features), k < periods ? periodWeight : resolutionWeight)));
-
         return Engine.TensorAdd(adversarial, Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(o.FeatureMatchingWeight)));
     }
 

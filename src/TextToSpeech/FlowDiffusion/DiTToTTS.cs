@@ -280,7 +280,6 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         var total = Engine.TensorAdd(weighted, sinePower);
         return (Engine.TensorSqrt(Engine.TensorDivide(weighted, total)).ToArray(),
             Engine.TensorSqrt(Engine.TensorDivide(sinePower, total)).ToArray());
-
     }
 
     private Tensor<T> RestorePrompt(Tensor<T> latent, Tensor<T> prompt)

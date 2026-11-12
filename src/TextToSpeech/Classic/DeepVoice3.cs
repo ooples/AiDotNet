@@ -520,8 +520,6 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
             var weights = engine.TensorSoftmax(scores, axis: 1);
             // The first position with the highest weight at the newest query.
             LastAttended = _owner.FirstArgMax(engine.TensorSlice(weights, new[] { queries - 1, 0 }, new[] { 1, inputs }));
-
-
             var context = engine.TensorMultiplyScalar(engine.TensorMatMul(_owner.Dropout(weights), v),
                 numOps.FromDouble(Math.Sqrt(inputs)));
             var output = _owner.Apply(_out, context);

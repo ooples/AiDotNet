@@ -664,7 +664,6 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         var flat = Engine.Reshape(values, new[] { n });
         var isMax = Engine.TensorEquals(flat, Engine.TensorMaxValue(flat));
         var reverseIndex = Engine.ScalarMinusTensor(NumOps.FromDouble(n), Engine.TensorArange<T>(0, n));
-
         return Engine.TensorArgMax(Engine.TensorMultiply(isMax, reverseIndex), 0).ToArray()[0];
     }
 
@@ -744,11 +743,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         return values;
     }
 
-    /// <summary>Row <paramref name="index"/> of a <c>[batch, n]</c> tensor
-
-
-
-, as a <c>[n]</c> tensor.</summary>
+    /// <summary>Row <paramref name="index"/> of a <c>[batch, n]</c> tensor, as a <c>[n]</c> tensor.</summary>
     protected Tensor<T> BatchRow(Tensor<T> batch, int index)
     {
         Guard.NotNull(batch);
@@ -776,8 +771,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         return Engine.TensorStack(padded, 0);
     }
 
-    /// <summary>A <c>[flags.Count, columns]</c> tensor
- that is 1 on the rows whose flag is set and 0 elsewhere.</summary>
+    /// <summary>A <c>[flags.Count, columns]</c> tensor that is 1 on the rows whose flag is set and 0 elsewhere.</summary>
     protected Tensor<T> RowMask(IReadOnlyList<bool> flags, int columns)
     {
         Guard.NotNull(flags);
@@ -787,9 +781,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
-    /// The hard monotonic alignment
-
- <c>[durations.Length, sum(durations)]</c> that expands phoneme i over its
+    /// The hard monotonic alignment <c>[durations.Length, sum(durations)]</c> that expands phoneme i over its
     /// durations[i] frames: row i is 1 on those frames and 0 elsewhere.
     /// </summary>
     protected Tensor<T> DurationAlignment(int[] durations)

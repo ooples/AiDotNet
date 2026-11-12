@@ -269,7 +269,6 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
         var codes = LevelMajorCodes(tokens);
         foreach (int c in codes)
             if (c < 0 || c >= _options.CodebookSize) throw new ArgumentException($"Codes lie in [0, {_options.CodebookSize}).", nameof(tokens));
-
         using var _ = Inference();
         return Core.Audio(codes);
     }

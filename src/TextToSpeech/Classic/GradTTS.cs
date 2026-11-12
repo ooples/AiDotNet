@@ -390,7 +390,6 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         int[] durations = MonotonicAlignment.MaximumPath(scores);
 
         var target = LogDurationTarget(durations, 1e-8);
-
         var durationError = Engine.TensorSubtract(LogDurations(hidden), target);
         var durationLoss = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(durationError, durationError), new[] { 0 }, keepDims: false),

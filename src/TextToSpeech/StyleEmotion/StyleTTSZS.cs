@@ -417,7 +417,6 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
             h = Engine.TensorAdd(Engine.TensorMultiplyScalar(x0, alphas[n - 1]), Engine.TensorMultiplyScalar(eps, sigmas[n - 1]));
         }
         return h;
-
     }
 
     /// <summary>The distilled student's one-step map H(ξ; ω, x′, t) (its level input is the guidance scale).</summary>

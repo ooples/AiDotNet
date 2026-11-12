@@ -577,7 +577,6 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         var durationTarget = Engine.TensorWhere(Engine.TensorEquals(durationCounts, NumOps.Zero),
             Tensor<T>.CreateDefault(new[] { tokenCount }, NumOps.FromDouble(Math.Log(1e-8))),
             Engine.TensorLog(Engine.TensorAddScalar(durationCounts, NumOps.FromDouble(1e-8))));
-
         var durationError = Engine.TensorSubtract(LogDurations(hidden), durationTarget);
         var durationLoss = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(durationError, durationError), new[] { 0 }, keepDims: false),

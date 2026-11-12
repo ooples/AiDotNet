@@ -273,7 +273,6 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
         return new Tensor<T>(draws, shape);
     }
 
-
     // ---------------------------------------------------------------- training
 
     private sealed record TrainingDraw(int Step, Random Noise);

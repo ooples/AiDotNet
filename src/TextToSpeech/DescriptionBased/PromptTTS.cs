@@ -427,7 +427,6 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
         using var _ = new NoGradScope<T>();
         var logits = FactorLogits(StyleIds(stylePrompt, nameof(stylePrompt)), false, _trainingRandom);
         return logits.Select(row => FirstArgMax(Engine.TensorSlice(row, new[] { 0, 0 }, new[] { 1, row.Shape[1] }))).ToArray();
-
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> StyleOptimizer()

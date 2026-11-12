@@ -766,7 +766,6 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         {
             using var _ = new NoGradScope<T>();
             var ids = RoundedIds(input).ToList();
-
             if (ids.Any(id => id < 0 || id >= TextVocabulary))
                 throw new ArgumentOutOfRangeException(nameof(input), $"Text ids lie in [0, {TextVocabulary}).");
             int stts = TokenId("[Stts]"), ptts = TokenId("[Ptts]");

@@ -348,7 +348,6 @@ public partial class SpeechT5<T> : TtsModelBase<T>
         var shift = Engine.TensorTile(new Tensor<T>(meanRow, new[] { 1, m }), new[] { frames, 1 });
         var scale = Engine.TensorTile(Engine.TensorReciprocal(new Tensor<T>(scaleRow, new[] { 1, m })), new[] { frames, 1 });
         var normalized = Engine.TensorMultiply(Engine.TensorSubtract(mel, shift), scale);
-
         var wave = Vocoder.Forward(Engine.Reshape(Engine.TensorTranspose(normalized), new[] { 1, m, frames }));
         return Engine.Reshape(wave, new[] { wave.Length });
     }

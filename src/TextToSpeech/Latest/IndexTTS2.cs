@@ -609,7 +609,6 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
         var draws = new T[total * o.MelChannels];
         for (int i = 0; i < draws.Length; i++) draws[i] = Ops.FromDouble(IndexTtsOps.Gaussian(random));
         var noise = new Tensor<T>(draws, new[] { total, o.MelChannels });
-
         var mel = SemanticToMel.Solve(condition, prompt.Mel, prompt.Style, noise, o.DiffusionSteps, o.Guidance);
         var wave = Vocoder.Forward(Engine.Reshape(Engine.TensorTranspose(mel), new[] { 1, o.MelChannels, mel.Shape[0] }));
         return Doubles(wave);

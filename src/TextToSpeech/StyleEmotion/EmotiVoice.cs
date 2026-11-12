@@ -411,7 +411,6 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
         for (int i = 0; i < ids.Length; i++)
         {
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
-
                 throw new ArgumentOutOfRangeException(name, $"{GetType().Name}'s phoneme ids lie in [0, {_options.VocabSize}).");
         }
         return ids;

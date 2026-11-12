@@ -535,7 +535,6 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
         if (!HasPaperLayers) return base.PreprocessText(text);
         var (phones, _, _) = Text.PhonesAndBert(GptSoVitsText.EndSentence(text, _options.TextLanguage), _options.TextLanguage);
         return IdTensor(phones);
-
     }
 
     /// <inheritdoc />
