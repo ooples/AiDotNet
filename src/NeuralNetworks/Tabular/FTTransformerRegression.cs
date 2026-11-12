@@ -328,14 +328,16 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         var keep = Engine.TensorGreaterThan(targetAbs, epsilon);
         var percentageError = Engine.TensorDivide(Engine.TensorAbs(Engine.TensorSubtract(yHat, y)), targetAbs);
         var totalAPE = Engine.TensorSum(Engine.TensorWhere(keep, percentageError, new Tensor<T>(new[] { n })));
-        var count = Engine.TensorSum(keep);
 
-        if (NumOps.Compare(count, NumOps.Zero) == 0)
+        // Counted as an integer: a T sum of the 0/1 mask stops at 2048 under Half.
+        int count = Engine.TensorCountNonzero(keep);
+
+        if (count == 0)
         {
             return NumOps.Zero;  // All targets were zero
         }
 
-        return NumOps.Divide(totalAPE, count);
+        return NumOps.Divide(totalAPE, NumOps.FromDouble(count));
     }
 
     /// <summary>

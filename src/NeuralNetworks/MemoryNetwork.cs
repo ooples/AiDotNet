@@ -584,10 +584,12 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
         }
 
         // 2D [batch, features] and 3D [batch, sequence, features] tensors are averaged over every
-        // element; any other rank has no elements counted (0 / 0, as before).
+        // element; any other rank is rejected rather than returning 0 / 0.
         if (predictions.Shape.Length != 2 && predictions.Shape.Length != 3)
         {
-            return NumOps.Divide(NumOps.Zero, NumOps.FromDouble(0));
+            throw new ArgumentException(
+                $"Mean squared error needs 2D [batch, features] or 3D [batch, sequence, features] tensors; got rank {predictions.Shape.Length}.",
+                nameof(predictions));
         }
 
         var diff = Engine.TensorSubtract(predictions, expected);
