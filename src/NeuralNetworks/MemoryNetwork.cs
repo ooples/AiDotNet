@@ -219,9 +219,9 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
         // Xavier-scale so downstream layers see a reasonable magnitude.
         var memRand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         double memScale = Math.Sqrt(2.0 / (_memorySize + _embeddingSize));
-        for (int r = 0; r < _memorySize; r++)
-            for (int c = 0; c < _embeddingSize; c++)
-                _memory[r, c] = NumOps.FromDouble((memRand.NextDouble() * 2 - 1) * memScale);
+        _memory = Engine.TensorRandomUniformRange<T>(
+            new[] { _memorySize, _embeddingSize }, NumOps.FromDouble(-memScale), NumOps.FromDouble(memScale), memRand.Next())
+            .ToMatrix();
 
         InitializeLayers();
     }
@@ -423,37 +423,11 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
     /// <returns>The weighted sum of memory content.</returns>
     private Tensor<T> ReadFromMemory(Tensor<T> attentionWeights)
     {
-        // Get shape information
-        int[] shape = attentionWeights._shape;
-        int batchSize = shape[0];
+        int batchSize = attentionWeights._shape[0];
 
-        // Create result tensor with shape [batchSize, embeddingSize]
-        Tensor<T> readout = new Tensor<T>(new int[] { batchSize, _embeddingSize });
-
-        // For each batch, compute weighted sum of memory
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Initialize readout with zeros
-            for (int e = 0; e < _embeddingSize; e++)
-            {
-                readout[b, e] = NumOps.Zero;
-            }
-
-            // Compute weighted sum of memory slots
-            for (int m = 0; m < _memorySize; m++)
-            {
-                T weight = attentionWeights[b, m];
-
-                for (int e = 0; e < _embeddingSize; e++)
-                {
-                    // Add weighted contribution from this memory slot
-                    T weightedValue = NumOps.Multiply(weight, _memory[m, e]);
-                    readout[b, e] = NumOps.Add(readout[b, e], weightedValue);
-                }
-            }
-        }
-
-        return readout;
+        // readout[b, :] = sum_m attention[b, m] * memory[m, :]  ->  attention @ memory
+        var weights = Engine.TensorSlice(attentionWeights, new[] { 0, 0 }, new[] { batchSize, _memorySize });
+        return Engine.TensorMatMul(weights, Tensor<T>.FromMatrix(_memory));
     }
 
     /// <summary>
@@ -464,32 +438,15 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
     /// <returns>The combined representation.</returns>
     private Tensor<T> CombineInputAndMemory(Tensor<T> encoded, Tensor<T> memoryReadout)
     {
-        // Get shape information
-        int[] encodedShape = encoded._shape;
-        int[] readoutShape = memoryReadout._shape;
-        int batchSize = encodedShape[0];
-        int encodedSize = encodedShape[1];
+        int batchSize = encoded._shape[0];
+        int encodedSize = encoded._shape[1];
 
-        // Create result tensor with shape [batchSize, encodedSize + embeddingSize]
-        Tensor<T> combined = new Tensor<T>(new int[] { batchSize, encodedSize + _embeddingSize });
-
-        // Concatenate encoded input and memory readout
-        for (int b = 0; b < batchSize; b++)
+        // [batchSize, encodedSize + embeddingSize]: the encoded input followed by the memory readout.
+        return Engine.TensorConcatenate(new[]
         {
-            // Copy encoded input
-            for (int i = 0; i < encodedSize; i++)
-            {
-                combined[b, i] = encoded[b, i];
-            }
-
-            // Copy memory readout
-            for (int i = 0; i < _embeddingSize; i++)
-            {
-                combined[b, encodedSize + i] = memoryReadout[b, i];
-            }
-        }
-
-        return combined;
+            Engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { batchSize, encodedSize }),
+            Engine.TensorSlice(memoryReadout, new[] { 0, 0 }, new[] { batchSize, _embeddingSize }),
+        }, 1);
     }
 
     /// <summary>
@@ -545,40 +502,37 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
         // - erase vector (how much to erase from existing memory)
         // - write vector (what to write to memory)
         // For simplicity, we'll just use the layer output directly as write vector
-
-        // Get shape information
         int[] shape = current._shape;
-        int batchSize = shape[0];
 
-        // Use first batch's attention and write values
-        // In a full implementation, each batch would have its own memory state
+        // Use first batch's attention and write values; the most attended slot (first on ties).
+        var firstAttention = Engine.Reshape(
+            Engine.TensorSlice(attentionWeights, new[] { 0, 0 }, new[] { 1, _memorySize }), new[] { _memorySize });
+        int maxIndex = Engine.TensorArgMax(firstAttention, 0).ToArray()[0];
 
-        // Find most attended memory slot
-        int maxIndex = 0;
-        T maxAttention = attentionWeights[0, 0];
-
-        for (int m = 1; m < _memorySize; m++)
-        {
-            if (NumOps.GreaterThan(attentionWeights[0, m], maxAttention))
-            {
-                maxAttention = attentionWeights[0, m];
-                maxIndex = m;
-            }
-        }
-
-        // Update this memory slot with write values
+        // Weighted update of that slot: memory = (1-strength) * memory + strength * write_value
         T writeStrength = NumOps.FromDouble(0.1); // How strongly to write (small value for stability)
-        for (int e = 0; e < _embeddingSize && e < shape[1]; e++)
-        {
-            // Weighted update: memory = (1-strength) * memory + strength * write_value
-            T oldValue = _memory[maxIndex, e];
-            T newValue = current[0, e];
+        WriteMemoryRow(maxIndex, current, NumOps.Subtract(NumOps.One, writeStrength), writeStrength, Math.Min(_embeddingSize, shape[1]));
+    }
 
-            _memory[maxIndex, e] = NumOps.Add(
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, writeStrength), oldValue),
-                NumOps.Multiply(writeStrength, newValue)
-            );
-        }
+    /// <summary>
+    /// Sets memory[row, :count] = keep * memory[row, :count] + write * source[0, :count]; the rest of the row is kept.
+    /// </summary>
+    private void WriteMemoryRow(int row, Tensor<T> source, T keep, T write, int count)
+    {
+        if (count <= 0) return;
+
+        var oldRow = Tensor<T>.FromVector(_memory.GetRow(row));
+        var written = Engine.TensorMultiplyScalar(
+            Engine.Reshape(Engine.TensorSlice(source, new[] { 0, 0 }, new[] { 1, count }), new[] { count }), write);
+        // A true overwrite must not read the previous value (0 * NaN/Infinity is not zero).
+        var head = NumOps.Equals(keep, NumOps.Zero)
+            ? written
+            : Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(Engine.TensorSlice(oldRow, new[] { 0 }, new[] { count }), keep), written);
+        var newRow = count == _embeddingSize
+            ? head
+            : Engine.TensorConcatenate(new[] { head, Engine.TensorSlice(oldRow, new[] { count }, new[] { _embeddingSize - count }) }, 0);
+        _memory.SetRow(row, newRow.ToVector());
     }
 
     /// <summary>
@@ -629,50 +583,18 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
             throw new ArgumentException("Prediction and expected output shapes must be compatible");
         }
 
-        // Calculate squared differences
-        T sumSquaredDiff = NumOps.Zero;
-        int totalElements = 0;
-
-        // Handle different tensor shapes
-        if (predictions.Shape.Length == 2)
+        // 2D [batch, features] and 3D [batch, sequence, features] tensors are averaged over every
+        // element; any other rank has no elements counted (0 / 0, as before).
+        if (predictions.Shape.Length != 2 && predictions.Shape.Length != 3)
         {
-            // 2D tensors [batch, features]
-            int batchSize = predictions.Shape[0];
-            int features = predictions.Shape[1];
-            totalElements = batchSize * features;
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    T diff = NumOps.Subtract(predictions[b, f], expected[b, f]);
-                    sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-                }
-            }
+            return NumOps.Divide(NumOps.Zero, NumOps.FromDouble(0));
         }
-        else if (predictions.Shape.Length == 3)
-        {
-            // 3D tensors [batch, sequence, features]
-            int batchSize = predictions.Shape[0];
-            int seqLength = predictions.Shape[1];
-            int features = predictions.Shape[2];
-            totalElements = batchSize * seqLength * features;
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLength; s++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        T diff = NumOps.Subtract(predictions[b, s, f], expected[b, s, f]);
-                        sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-                    }
-                }
-            }
-        }
+        var diff = Engine.TensorSubtract(predictions, expected);
+        T sumSquaredDiff = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
 
         // Calculate mean
-        return NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(totalElements));
+        return NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(predictions.Length));
     }
 
     /// <summary>
@@ -714,46 +636,14 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
         }
 
         // For MSE loss, gradient is 2 * (predictions - expected) / N
-        // We can simplify to (predictions - expected) and adjust learning rate
-
-        // Create gradient tensor with same shape as predictions
-        Tensor<T> gradients = new Tensor<T>(predictions._shape);
-
-        // Calculate gradients
-        if (predictions.Shape.Length == 2)
+        // We can simplify to (predictions - expected) and adjust learning rate.
+        // Only 2D and 3D tensors get a gradient; other ranks stay zero, as before.
+        if (predictions.Shape.Length != 2 && predictions.Shape.Length != 3)
         {
-            // 2D tensors [batch, features]
-            int batchSize = predictions.Shape[0];
-            int features = predictions.Shape[1];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    gradients[b, f] = NumOps.Subtract(predictions[b, f], expected[b, f]);
-                }
-            }
-        }
-        else if (predictions.Shape.Length == 3)
-        {
-            // 3D tensors [batch, sequence, features]
-            int batchSize = predictions.Shape[0];
-            int seqLength = predictions.Shape[1];
-            int features = predictions.Shape[2];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLength; s++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        gradients[b, s, f] = NumOps.Subtract(predictions[b, s, f], expected[b, s, f]);
-                    }
-                }
-            }
+            return new Tensor<T>(predictions._shape);
         }
 
-        return gradients;
+        return Engine.TensorSubtract(predictions, expected);
     }
 
     /// <summary>
@@ -803,22 +693,10 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
     public override ModelMetadata<T> GetModelMetadata()
     {
         // Calculate memory statistics
-        double avgMemValue = 0.0;
-        double minMemValue = double.MaxValue;
-        double maxMemValue = double.MinValue;
-
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _embeddingSize; j++)
-            {
-                double value = Convert.ToDouble(_memory[i, j]);
-                avgMemValue += value;
-                minMemValue = Math.Min(minMemValue, value);
-                maxMemValue = Math.Max(maxMemValue, value);
-            }
-        }
-
-        avgMemValue /= (double)_memorySize * _embeddingSize;
+        var memoryValues = Tensor<T>.FromMatrix(_memory).Cast<double>();
+        double avgMemValue = Engine.TensorSum(memoryValues) / ((double)_memorySize * _embeddingSize);
+        double minMemValue = Engine.TensorMinValue(memoryValues);
+        double maxMemValue = Engine.TensorMaxValue(memoryValues);
 
         return new ModelMetadata<T>
         {
@@ -914,42 +792,13 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
         // Encode the fact
         Tensor<T> encoded = EncodeInput(fact);
 
-        // Find a memory slot to store the fact
-        // Here we use a simple strategy of writing to the next available slot
-        // In a real implementation, we might use more sophisticated strategies
+        // Write it to the least used slot: usage is each memory row's squared L2 norm (first on ties).
+        var memory = Tensor<T>.FromMatrix(_memory);
+        var usage = Engine.ReduceSum(Engine.TensorMultiply(memory, memory), new[] { 1 }, false);
+        int leastUsedSlot = Engine.TensorArgMin(usage, 0).ToArray()[0];
 
-        // Calculate usage based on L2 norm of each memory row
-        var usage = new Dictionary<int, T>();
-        for (int m = 0; m < _memorySize; m++)
-        {
-            T sumSquared = NumOps.Zero;
-            for (int e = 0; e < _embeddingSize; e++)
-            {
-                T val = _memory[m, e];
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
-            }
-
-            usage[m] = sumSquared;
-        }
-
-        // Find least used memory slot
-        int leastUsedSlot = 0;
-        T minUsage = usage[0];
-
-        for (int m = 1; m < _memorySize; m++)
-        {
-            if (NumOps.LessThan(usage[m], minUsage))
-            {
-                minUsage = usage[m];
-                leastUsedSlot = m;
-            }
-        }
-
-        // Store the encoded fact
-        for (int e = 0; e < _embeddingSize && e < encoded.Shape[1]; e++)
-        {
-            _memory[leastUsedSlot, e] = encoded[0, e];
-        }
+        // Store the encoded fact (overwrite)
+        WriteMemoryRow(leastUsedSlot, encoded, NumOps.Zero, NumOps.One, Math.Min(_embeddingSize, encoded.Shape[1]));
     }
 
     /// <summary>
