@@ -1294,3 +1294,12 @@ AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.DetectAll(AiDotNet.Tensors.LinearAlg
 AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.GetTopKTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int k = 10) -> System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!
 AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5) -> System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!
 AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTagsAsync(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.AverageBeatInterval.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.BeatTimes.get -> System.Collections.Generic.List<double>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.BeatTimes.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.BeatTrackingResult() -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.ConfidenceScore.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.ConfidenceScore.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.Tempo.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.Tempo.set -> void
