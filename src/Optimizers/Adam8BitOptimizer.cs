@@ -1863,33 +1863,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (vector is null) return;
 
         writer.Write(vector.Length);
-        WriteDoubles(writer, vector);
-    }
-
-    /// <summary>
-    /// Writes the vector's doubles as one little-endian block, byte-identical to writing each with
-    /// <see cref="BinaryWriter.Write(double)"/> (BinaryWriter is little-endian; so is every supported runtime).
-    /// </summary>
-    private static void WriteDoubles(BinaryWriter writer, Vector<double> vector)
-    {
-        writer.Write(System.Runtime.InteropServices.MemoryMarshal.AsBytes(vector.AsSpan()).ToArray());
-    }
-
-    /// <summary>
-    /// Reads <paramref name="destination"/>.Length little-endian doubles as one block, the inverse of
-    /// <see cref="WriteDoubles"/>; throws <see cref="EndOfStreamException"/> on a short read like
-    /// <see cref="BinaryReader.ReadDouble"/>.
-    /// </summary>
-    private static void ReadDoublesInto(BinaryReader reader, Vector<double> destination)
-    {
-        int byteCount = checked(destination.Length * sizeof(double));
-        var bytes = reader.ReadBytes(byteCount);
-        if (bytes.Length != byteCount)
+        for (int i = 0; i < vector.Length; i++)
         {
-            throw new EndOfStreamException("Adam8BitOptimizer: double block truncated.");
+            writer.Write(vector[i]);
         }
-
-        System.Runtime.InteropServices.MemoryMarshal.Cast<byte, double>(bytes).CopyTo(destination.AsWritableSpan());
     }
 
     private static Vector<double>? ReadDoubleVector(BinaryReader reader)
@@ -1900,7 +1877,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         ValidateDeclaredCount(reader, length, sizeof(double), "double-vector");
 
         var vector = new Vector<double>(length);
-        ReadDoublesInto(reader, vector);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = reader.ReadDouble();
+        }
+
         return vector;
     }
 
@@ -2335,9 +2316,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                         throw new InvalidOperationException(
                             $"Adam8BitOptimizer: m-quantized truncated (expected {mLength} " +
                             $"bytes, got {mBytes.Length}). Checkpoint is corrupted.");
-                    mQuantized = Vector<byte>.Wrap(mBytes);
+                    mQuantized = new Vector<byte>(mLength);
+                    for (int i = 0; i < mLength; i++) mQuantized[i] = mBytes[i];
                     mScales = new Vector<double>(numBlocks);
-                    ReadDoublesInto(reader, mScales);
+                    for (int i = 0; i < numBlocks; i++)
+                    {
+                        mScales[i] = reader.ReadDouble();
+                    }
                     // Clear stale full-precision m on mode switch — see
                     // OzYc: deserializing a CompressBothMoments=true payload
                     // into an instance that previously held mFullPrecision
@@ -2391,9 +2376,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     throw new InvalidOperationException(
                         $"Adam8BitOptimizer: v-quantized truncated (expected {vLength} " +
                         $"bytes, got {vBytes.Length}). Checkpoint is corrupted.");
-                vQuantized = Vector<byte>.Wrap(vBytes);
+                vQuantized = new Vector<byte>(vLength);
+                for (int i = 0; i < vLength; i++) vQuantized[i] = vBytes[i];
                 vScales = new Vector<double>(numBlocks);
-                ReadDoublesInto(reader, vScales);
+                for (int i = 0; i < numBlocks; i++)
+                {
+                    vScales[i] = reader.ReadDouble();
+                }
             }
             else
             {
