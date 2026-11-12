@@ -30,15 +30,24 @@ public static class ConcertoCrossModalObjective<T>
     /// <summary>Lower bound on each vector norm in the cosine similarity (torch.nn.functional.cosine_similarity's eps).</summary>
     private const double CosineEpsilon = 1e-8;
 
+    /// <summary>Half's smallest positive normal value, the floor for an epsilon Half would flush to zero.</summary>
+    private const double SmallestHalfNormal = 6.103515625e-05;
+
     /// <summary>
-    /// Point-to-patch matches for one view: the patch every point projects into, and a 0/1 mask of
-    /// the points that project in front of the camera, inside the image and pass the depth check.
+    /// The patch every point is pooled into for one view: the patch it projects into when it is
+    /// visible (in front of the camera, inside the image and passing the depth check), or
+    /// <c>patchCount</c> -- a discard bin past the last patch -- when it is not.
     /// </summary>
     /// <remarks>
-    /// Shared by <see cref="ComputeLoss"/> and <see cref="ComputeTapeLoss"/> so the loss a user
-    /// monitors and the loss that trains cannot disagree about which points are visible where.
+    /// <para>Shared by <see cref="ComputeLoss"/> and <see cref="ComputeTapeLoss"/> so the loss a user
+    /// monitors and the loss that trains cannot disagree about which points are visible where.</para>
+    /// <para>The projection and the depth test run in double, as they always did: they produce pixel
+    /// indices, and a narrow <typeparamref name="T"/> would move points across pixel boundaries (in
+    /// Half, u = 600.8 rounds to 601 and lands one pixel to the right).</para>
+    /// <para>Invisible points are routed to the discard bin instead of being multiplied by a zero
+    /// mask, so a NaN or infinite feature on a point behind the camera never reaches a patch.</para>
     /// </remarks>
-    private static (Tensor<int> PatchIndex, Tensor<T> Visible) MatchPointsToPatches(
+    private static Tensor<int> AssignPointsToPatches(
         Tensor<T> pointCoordinates,
         ConcertoPairedView<T> view,
         double depthToleranceMeters,
@@ -46,31 +55,32 @@ public static class ConcertoCrossModalObjective<T>
     {
         var engine = Engine;
         int grid = view.PatchGridSize;
+        int patchCount = grid * grid;
         int depthHeight = view.DepthMap.Shape[0];
         int depthWidth = view.DepthMap.Shape[1];
 
         // World -> camera via the top three rows of the 4x4 extrinsic, on homogeneous coordinates.
-        var xyz = engine.TensorSlice(pointCoordinates, new[] { 0, 0 }, new[] { numPoints, 3 });
-        var ones = engine.TensorFullLike(engine.TensorSlice(pointCoordinates, new[] { 0, 0 }, new[] { numPoints, 1 }), NumOps.One);
+        var xyz = engine.TensorSlice(pointCoordinates, new[] { 0, 0 }, new[] { numPoints, 3 }).Cast<double>();
+        var ones = engine.TensorFullLike(engine.TensorSlice(xyz, new[] { 0, 0 }, new[] { numPoints, 1 }), 1.0);
         var homogeneous = engine.TensorConcatenate(new[] { xyz, ones }, 1);
-        var extrinsic = engine.TensorSlice(view.Extrinsics, new[] { 0, 0 }, new[] { 3, 4 });
+        var extrinsic = engine.TensorSlice(view.Extrinsics, new[] { 0, 0 }, new[] { 3, 4 }).Cast<double>();
         var camera = engine.TensorMatMul(homogeneous, engine.TensorTranspose(extrinsic));
         var cz = Column(camera, 2, numPoints);
 
         // Camera -> pixel via the 3x3 intrinsic.
-        var pixel = engine.TensorMatMul(camera, engine.TensorTranspose(view.Intrinsics));
+        var pixel = engine.TensorMatMul(camera, engine.TensorTranspose(view.Intrinsics.Cast<double>()));
         var u = engine.TensorDivide(Column(pixel, 0, numPoints), cz);
         var v = engine.TensorDivide(Column(pixel, 1, numPoints), cz);
 
         // In front of the camera, and floor(u), floor(v) inside the depth map (NaN fails every test).
-        var inFront = engine.TensorGreaterThan(cz, NumOps.Zero);
+        var inFront = engine.TensorGreaterThan(cz, 0.0);
         var insideU = engine.TensorMultiply(
-            engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(u, NumOps.Zero)),
-            engine.TensorLessThan(u, NumOps.FromDouble(depthWidth)));
+            engine.ScalarMinusTensor(1.0, engine.TensorLessThan(u, 0.0)),
+            engine.TensorLessThan(u, (double)depthWidth));
         var insideV = engine.TensorMultiply(
-            engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(v, NumOps.Zero)),
-            engine.TensorLessThan(v, NumOps.FromDouble(depthHeight)));
-        var zeros = engine.TensorFullLike(u, NumOps.Zero);
+            engine.ScalarMinusTensor(1.0, engine.TensorLessThan(v, 0.0)),
+            engine.TensorLessThan(v, (double)depthHeight));
+        var zeros = engine.TensorFullLike(u, 0.0);
         var px = engine.TensorFloor(engine.TensorWhere(insideU, u, zeros)).Cast<int>();
         var py = engine.TensorFloor(engine.TensorWhere(insideV, v, zeros)).Cast<int>();
 
@@ -78,13 +88,14 @@ public static class ConcertoCrossModalObjective<T>
         // dropped only when |d_camera - d_depthMap| >= tolerance.
         var pixelIndex = engine.TensorAdd(engine.TensorMultiplyScalar(py, depthWidth), px);
         var observedDepth = engine.TensorIndexSelect(
-            engine.Reshape(view.DepthMap, new[] { depthHeight * depthWidth }), pixelIndex, 0);
+            engine.Reshape(view.DepthMap, new[] { depthHeight * depthWidth }), pixelIndex, 0).Cast<double>();
         var depthError = engine.TensorAbs(engine.TensorSubtract(cz, observedDepth));
-        var depthAgrees = engine.ScalarMinusTensor(NumOps.One,
-            engine.TensorGreaterEqual(depthError, engine.TensorFullLike(depthError, NumOps.FromDouble(depthToleranceMeters))));
+        var depthAgrees = engine.ScalarMinusTensor(1.0,
+            engine.TensorGreaterEqual(depthError, engine.TensorFullLike(depthError, depthToleranceMeters)));
 
+        // Every factor is a 0/1 comparison result, so the product is an exact 0/1 visibility flag.
         var visible = engine.TensorMultiply(engine.TensorMultiply(inFront, insideU),
-            engine.TensorMultiply(insideV, depthAgrees));
+            engine.TensorMultiply(insideV, depthAgrees)).Cast<int>();
 
         var patchX = engine.TensorClamp(
             engine.TensorDivideScalar(engine.TensorMultiplyScalar(px, grid), Math.Max(1, depthWidth)), 0, grid - 1);
@@ -92,7 +103,9 @@ public static class ConcertoCrossModalObjective<T>
             engine.TensorDivideScalar(engine.TensorMultiplyScalar(py, grid), Math.Max(1, depthHeight)), 0, grid - 1);
         var patchIndex = engine.TensorAdd(engine.TensorMultiplyScalar(patchY, grid), patchX);
 
-        return (patchIndex, visible);
+        // visible ? patchIndex : patchCount, in exact int arithmetic.
+        return engine.TensorAddScalar(
+            engine.TensorMultiply(visible, engine.TensorAddScalar(patchIndex, -patchCount)), patchCount);
     }
 
     /// <summary>
@@ -101,6 +114,11 @@ public static class ConcertoCrossModalObjective<T>
     /// frozen image feature by cosine similarity; the loss is one minus the mean over every
     /// occupied patch of every view, or zero when no patch received a visible point.
     /// </summary>
+    /// <remarks>
+    /// Only occupied patches are gathered (as the training loss always did), so an unoccupied patch's
+    /// image feature never enters the loss. Point counts are integers, and the final mean scales each
+    /// similarity by 1 / M before summing, so no Half count or sum rounds or overflows.
+    /// </remarks>
     private static Tensor<T> CrossModalLoss(
         Tensor<T> pointFeatures,
         Tensor<T> pointCoordinates,
@@ -111,48 +129,90 @@ public static class ConcertoCrossModalObjective<T>
         int numPoints = pointCoordinates.Shape[0];
         int featureDim = pointFeatures.Shape[^1];
         var similarities = new List<Tensor<T>>();
-        var occupancies = new List<Tensor<T>>();
-        T epsilonSquared = NumOps.FromDouble(CosineEpsilon * CosineEpsilon);
-        T one = NumOps.One, zero = NumOps.Zero;
+        T epsilonSquared = RepresentableEpsilon(CosineEpsilon * CosineEpsilon);
 
         foreach (var view in views)
         {
             if (numPoints == 0) break;
             int patchCount = view.PatchGridSize * view.PatchGridSize;
-            var (patchIndex, visible) = MatchPointsToPatches(pointCoordinates, view, depthToleranceMeters, numPoints);
+            var patchOfPoint = AssignPointsToPatches(pointCoordinates, view, depthToleranceMeters, numPoints);
 
-            // Mean-pool each patch's visible points (scatter-add of the masked features over the count).
-            var counts = engine.TensorScatterAdd(new Tensor<T>(new[] { patchCount }), patchIndex, visible, 0);
-            var maskedFeatures = engine.TensorMultiply(pointFeatures,
-                engine.TensorBroadcastTo(engine.Reshape(visible, new[] { numPoints, 1 }), new[] { numPoints, featureDim }));
-            var sums = engine.TensorScatterAdd(new Tensor<T>(new[] { patchCount, featureDim }), patchIndex, maskedFeatures, 0);
-            var pooled = engine.TensorDivide(sums, engine.TensorBroadcastTo(
-                engine.Reshape(engine.TensorClampMin(counts, one), new[] { patchCount, 1 }), new[] { patchCount, featureDim }));
+            // Visible points per patch, counted in int; the extra last bin holds the invisible points.
+            var counts = engine.TensorBinCount(patchOfPoint, patchCount + 1);
+            int[] countValues = counts.ToArray();
+            int[] occupied = Enumerable.Range(0, patchCount).Where(p => countValues[p] > 0).ToArray();
+            if (occupied.Length == 0) continue;
 
-            // Cosine similarity to the frozen image feature; each norm is clamped below at eps (on the
-            // squared norm, so an empty patch's zero vector keeps a finite gradient).
-            var targets = engine.StopGradient(view.ImagePatchFeatures);
-            var dot = engine.ReduceSum(engine.TensorMultiply(pooled, targets), new[] { 1 }, false);
-            var pooledNorm = engine.TensorSqrt(engine.TensorClampMin(
-                engine.ReduceSum(engine.TensorMultiply(pooled, pooled), new[] { 1 }, false), epsilonSquared));
-            var targetNorm = engine.TensorSqrt(engine.TensorClampMin(
-                engine.ReduceSum(engine.TensorMultiply(targets, targets), new[] { 1 }, false), epsilonSquared));
-            var occupied = engine.TensorGreaterThan(counts, zero);
-            similarities.Add(engine.TensorMultiply(
-                engine.TensorDivide(dot, engine.TensorMultiply(pooledNorm, targetNorm)), occupied));
-            occupancies.Add(occupied);
+            // Mean-pool: each point carries 1 / (its patch's point count) and a scatter-add sums every
+            // patch's share, which is exactly the per-patch mean and stays on the gradient tape.
+            var weights = engine.TensorReciprocal(engine.TensorIndexSelect(counts, patchOfPoint, 0).Cast<T>());
+            var weighted = engine.TensorMultiply(pointFeatures, engine.TensorBroadcastTo(
+                engine.Reshape(weights, new[] { numPoints, 1 }), new[] { numPoints, featureDim }));
+            var pooledAll = engine.TensorScatterAdd(
+                new Tensor<T>(new[] { patchCount + 1, featureDim }), patchOfPoint, weighted, 0);
+
+            var occupiedIndex = new Tensor<int>(new[] { occupied.Length }, new Vector<int>(occupied));
+            var pooled = engine.TensorIndexSelect(pooledAll, occupiedIndex, 0);
+            var targets = engine.StopGradient(engine.TensorIndexSelect(view.ImagePatchFeatures, occupiedIndex, 0));
+            similarities.Add(CosineSimilarityRows(pooled, targets, epsilonSquared));
         }
 
-        T matchedPatches = similarities.Count == 0
-            ? NumOps.Zero
-            : engine.TensorSum(engine.TensorConcatenate(occupancies.ToArray(), 0));
-        if (!NumOps.GreaterThan(matchedPatches, NumOps.Zero))
+        if (similarities.Count == 0)
         {
             return new Tensor<T>(Array.Empty<int>(), new Vector<T>(new[] { NumOps.Zero }));
         }
 
-        var similaritySum = engine.ReduceSum(engine.TensorConcatenate(similarities.ToArray(), 0), new[] { 0 }, false);
-        return engine.ScalarMinusTensor(NumOps.One, engine.TensorDivideScalar(similaritySum, matchedPatches));
+        var allSimilarities = similarities.Count == 1
+            ? similarities[0]
+            : engine.TensorConcatenate(similarities.ToArray(), 0);
+        T inverseMatched = NumOps.FromDouble(1.0 / allSimilarities.Shape[0]);
+        var meanSimilarity = engine.ReduceSum(
+            engine.TensorMultiplyScalar(allSimilarities, inverseMatched), new[] { 0 }, false);
+        return engine.ScalarMinusTensor(NumOps.One, meanSimilarity);
+    }
+
+    /// <summary>
+    /// Row-wise cosine similarity of two <c>[M, D]</c> tensors, each row normalized by its norm clamped
+    /// below at eps (torch.nn.functional.cosine_similarity), so an all-zero row scores zero.
+    /// </summary>
+    private static Tensor<T> CosineSimilarityRows(Tensor<T> a, Tensor<T> b, T epsilonSquared)
+    {
+        var engine = Engine;
+        return engine.ReduceSum(
+            engine.TensorMultiply(NormalizeRows(a, epsilonSquared), NormalizeRows(b, epsilonSquared)),
+            new[] { 1 }, false);
+    }
+
+    /// <summary>
+    /// Divides each row by its L2 norm, clamped below on the squared norm so an all-zero row keeps a
+    /// finite gradient.
+    /// </summary>
+    /// <remarks>
+    /// The row is first divided by its largest |entry| when that exceeds one -- the cosine is
+    /// scale-invariant -- so the sum of squares cannot overflow a narrow <typeparamref name="T"/>
+    /// (Half overflows once an entry passes 256). The scale carries no gradient: the result does not
+    /// depend on it.
+    /// </remarks>
+    private static Tensor<T> NormalizeRows(Tensor<T> rows, T epsilonSquared)
+    {
+        var engine = Engine;
+        int[] shape = rows.Shape.ToArray();
+        var scale = engine.StopGradient(engine.TensorClampMin(
+            engine.ReduceMax(engine.TensorAbs(rows), new[] { 1 }, true), NumOps.One));
+        var scaled = engine.TensorDivide(rows, engine.TensorBroadcastTo(scale, shape));
+        var norm = engine.TensorSqrt(engine.TensorClampMin(
+            engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, true), epsilonSquared));
+        return engine.TensorDivide(scaled, engine.TensorBroadcastTo(norm, shape));
+    }
+
+    /// <summary>
+    /// <paramref name="epsilon"/> as a <typeparamref name="T"/>, raised to Half's smallest normal value
+    /// when <typeparamref name="T"/> flushes it to zero (Half cannot hold 1e-16).
+    /// </summary>
+    private static T RepresentableEpsilon(double epsilon)
+    {
+        T value = NumOps.FromDouble(epsilon);
+        return NumOps.GreaterThan(value, NumOps.Zero) ? value : NumOps.FromDouble(SmallestHalfNormal);
     }
 
     /// <summary>
@@ -214,6 +274,6 @@ public static class ConcertoCrossModalObjective<T>
         return Engine.TensorSum(CrossModalLoss(pointFeatures, pointCoordinates, views, depthToleranceMeters));
     }
 
-    private static Tensor<T> Column(Tensor<T> matrix, int column, int rows)
+    private static Tensor<TValue> Column<TValue>(Tensor<TValue> matrix, int column, int rows)
         => Engine.Reshape(Engine.TensorSlice(matrix, new[] { 0, column }, new[] { rows, 1 }), new[] { rows });
 }

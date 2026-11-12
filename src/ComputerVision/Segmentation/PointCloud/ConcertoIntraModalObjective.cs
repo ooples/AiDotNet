@@ -133,7 +133,14 @@ public static class ConcertoIntraModalObjective<T>
             engine.TensorGreaterThan(teacherProbabilities, NumOps.Zero),
             engine.TensorMultiply(teacherProbabilities, logStudent),
             engine.TensorFullLike(teacherProbabilities, NumOps.Zero));
-        return NumOps.Negate(NumOps.Divide(engine.TensorSum(terms), NumOps.FromDouble(numPoints)));
+
+        // Mean over points of the per-point cross-entropy. Each point's value is scaled by 1 / sqrt(numPoints)
+        // before the full sum (accumulated in float for Half) and once more after it, so the running total stays
+        // near sqrt(numPoints) * H: summing the raw totals first overflows Half once numPoints * H passes 65504
+        // (about 6600 points at H = 10).
+        var perPoint = engine.ReduceSum(terms, new[] { terms.Shape.Length - 1 }, false);
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(numPoints));
+        return NumOps.Negate(NumOps.Multiply(engine.TensorSum(engine.TensorMultiplyScalar(perPoint, scale)), scale));
     }
 
     /// <summary>

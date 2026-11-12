@@ -135,4 +135,91 @@ public class ConcertoObjectiveReferenceTests
 
         Assert.Equal(0.0, ConcertoCrossModalObjective<double>.ComputeLoss(features, coordinates, views, 0.5), Tolerance);
     }
+
+    [Fact]
+    public void CrossModalLoss_NonFiniteFeatureOnAnInvisiblePoint_DoesNotReachAnyPatch()
+    {
+        // The point behind the camera carries NaN and the occluded one +inf: neither is visible, so neither may
+        // touch a patch (a 0/1 mask multiply turned them into NaN inside patch 0 / patch 2).
+        var features = T(new[] { 5, 2 }, 1, 0, 0, 1, 1, 2, double.NaN, double.NaN, double.PositiveInfinity, 7);
+        var views = new List<ConcertoPairedView<double>> { UnitCameraView() };
+        double expected = 1.0 - ((1.0 / Math.Sqrt(2.0)) + 1.0) / 2.0;
+
+        Assert.Equal(expected, ConcertoCrossModalObjective<double>.ComputeLoss(features, Coordinates(), views, 0.5), Tolerance);
+        var tape = ConcertoCrossModalObjective<double>.ComputeTapeLoss(features, Coordinates(), views, 0.5);
+        Assert.Equal(expected, tape.ToArray()[0], Tolerance);
+    }
+
+    [Fact]
+    public void CrossModalLoss_UnoccupiedPatchWithNonFiniteImageFeature_IsIgnored()
+    {
+        // Patches 2 and 3 receive no visible point; their image features never enter the loss.
+        var unit = UnitCameraView();
+        var view = new ConcertoPairedView<double>
+        {
+            Extrinsics = unit.Extrinsics,
+            Intrinsics = unit.Intrinsics,
+            DepthMap = unit.DepthMap,
+            PatchGridSize = unit.PatchGridSize,
+            ImagePatchFeatures = T(new[] { 4, 2 }, 1, 0, 0, 1, double.NaN, double.NaN, double.PositiveInfinity, 1),
+        };
+        var features = T(new[] { 5, 2 }, 1, 0, 0, 1, 1, 2, 5, 5, 7, 7);
+        var views = new List<ConcertoPairedView<double>> { view };
+        double expected = 1.0 - ((1.0 / Math.Sqrt(2.0)) + 1.0) / 2.0;
+
+        Assert.Equal(expected, ConcertoCrossModalObjective<double>.ComputeLoss(features, Coordinates(), views, 0.5), Tolerance);
+        var tape = ConcertoCrossModalObjective<double>.ComputeTapeLoss(features, Coordinates(), views, 0.5);
+        Assert.Equal(expected, tape.ToArray()[0], Tolerance);
+    }
+
+    [Fact]
+    public void CrossModalLoss_Half_ProjectsInDoubleSoAPointStaysInItsPixel()
+    {
+        // u = 1 * 300.25 + 300.5 = 600.75 lies in pixel 600, which a 1202-wide map with a 2x2 grid puts in patch 0.
+        // Projected in Half, 600.75 rounds to 601 -- pixel 601, patch 1 -- and the point matched the wrong patch.
+        static Tensor<Half> H(int[] shape, params double[] values)
+            => new(shape, new Vector<Half>(Array.ConvertAll(values, v => (Half)(float)v)));
+
+        var depth = new double[1202];
+        for (int i = 0; i < depth.Length; i++) depth[i] = 1.0;
+        var view = new ConcertoPairedView<Half>
+        {
+            Extrinsics = H(new[] { 4, 4 }, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1),
+            Intrinsics = H(new[] { 3, 3 }, 1, 0, 300.5, 0, 1, 0, 0, 0, 1),
+            DepthMap = H(new[] { 1, 1202 }, depth),
+            PatchGridSize = 2,
+            ImagePatchFeatures = H(new[] { 4, 2 }, 1, 0, 0, 1, 1, 1, 1, 1),
+        };
+        var coordinates = H(new[] { 1, 3 }, 300.25, 0.5, 1.0);
+        var features = H(new[] { 1, 2 }, 1, 0);
+
+        Half loss = ConcertoCrossModalObjective<Half>.ComputeLoss(
+            features, coordinates, new List<ConcertoPairedView<Half>> { view }, 0.5);
+
+        Assert.Equal(0.0, (double)(float)loss, 1e-3);
+    }
+
+    [Fact]
+    public void IntraModalLoss_Half_ManyPointsDoesNotOverflow()
+    {
+        // 10000 points whose teacher picks prototype 0 while the student prefers prototype 1 by 10 nats:
+        // H = 10 per point, so the raw total (100000) overflows Half; the mean is still 10.
+        const int points = 10000;
+        var studentValues = new Half[points * 2];
+        var teacherValues = new Half[points * 2];
+        for (int p = 0; p < points; p++)
+        {
+            studentValues[2 * p] = (Half)0f;
+            studentValues[2 * p + 1] = (Half)1f;
+            teacherValues[2 * p] = (Half)1f;
+            teacherValues[2 * p + 1] = (Half)0f;
+        }
+
+        Half loss = ConcertoIntraModalObjective<Half>.ComputeLoss(
+            new Tensor<Half>(new[] { points, 2 }, new Vector<Half>(studentValues)),
+            new Tensor<Half>(new[] { points, 2 }, new Vector<Half>(teacherValues)));
+
+        double expected = 10.0 + Math.Log(1.0 + Math.Exp(-10.0));
+        Assert.Equal(expected, (double)(float)loss, 0.05);
+    }
 }
