@@ -127,6 +127,7 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
         // Compute current selection weights via softmax
         var selectionWeights = ComputeSelectionWeights();
+        T rankRegularization = NumOps.FromDouble(_algoOptions.RankRegularization);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -151,8 +152,8 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Add rank regularization: penalize active rank (encourages sparsity)
-            double rankReg = ComputeRankRegularization(selectionWeights);
-            var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(_algoOptions.RankRegularization * rankReg));
+            T rankReg = ComputeRankRegularization(selectionWeights);
+            var totalLoss = NumOps.Add(queryLoss, NumOps.Multiply(rankRegularization, rankReg));
             losses.Add(totalLoss);
 
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -200,132 +201,79 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
     /// <summary>
     /// Computes softmax selection weights for each (group, rank) pair.
-    /// Returns array[group][rank].
+    /// Returns a [group, rank] tensor.
     /// </summary>
-    private double[][] ComputeSelectionWeights()
-    {
-        var weights = new double[_numGroups][];
-        for (int g = 0; g < _numGroups; g++)
-        {
-            weights[g] = new double[_maxRank];
-            double maxLogit = double.NegativeInfinity;
-            for (int j = 0; j < _maxRank; j++)
-            {
-                double logit = NumOps.ToDouble(_selectionLogits[g * _maxRank + j]);
-                if (logit > maxLogit) maxLogit = logit;
-                weights[g][j] = logit;
-            }
+    private Tensor<T> ComputeSelectionWeights()
+        => Engine.Softmax(Engine.Reshape(Tensor<T>.FromVector(_selectionLogits), new[] { _numGroups, _maxRank }), 1);
 
-            double sumExp = 0;
-            for (int j = 0; j < _maxRank; j++)
-            {
-                weights[g][j] = Math.Exp(weights[g][j] - maxLogit);
-                sumExp += weights[g][j];
-            }
-            for (int j = 0; j < _maxRank; j++)
-                weights[g][j] /= sumExp;
-        }
-        return weights;
+    /// <summary>
+    /// The selection weights with every weight below 1e-10 set to zero: those components are skipped.
+    /// </summary>
+    private Tensor<T> ActiveWeights(Tensor<T> selectionWeights)
+        => Engine.TensorMultiply(selectionWeights, Engine.TensorSubtract(
+            Engine.TensorOnesLike(selectionWeights), Engine.TensorLessThan(selectionWeights, NumOps.FromDouble(1e-10))));
+
+    /// <summary>The rank components as a [group, rank, paramsPerGroup] tensor.</summary>
+    private Tensor<T> ComponentTensor()
+        => Engine.Reshape(Tensor<T>.FromVector(_rankComponents), new[] { _numGroups, _maxRank, _paramsPerGroup });
+
+    /// <summary>A parameter-space vector zero-padded to numGroups * paramsPerGroup and shaped [group, 1, paramsPerGroup].</summary>
+    private Tensor<T> GroupedParameters(Vector<T> values)
+    {
+        int padded = _numGroups * _paramsPerGroup;
+        var full = values.Length == padded ? values : Vector<T>.Concatenate(values, new Vector<T>(padded - values.Length));
+        return Engine.Reshape(Tensor<T>.FromVector(full), new[] { _numGroups, 1, _paramsPerGroup });
     }
 
     /// <summary>
     /// Composes adapted parameters by adding weighted rank-1 components to base params.
     /// </summary>
-    private Vector<T> ComposeAdaptedParams(Vector<T> baseParams, double[][] selectionWeights)
+    private Vector<T> ComposeAdaptedParams(Vector<T> baseParams, Tensor<T> selectionWeights)
     {
-        var adapted = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-            adapted[d] = baseParams[d];
-
-        for (int g = 0; g < _numGroups; g++)
-        {
-            int groupStart = g * _paramsPerGroup;
-            int groupEnd = Math.Min(groupStart + _paramsPerGroup, _paramDim);
-
-            for (int j = 0; j < _maxRank; j++)
-            {
-                double w = selectionWeights[g][j];
-                if (w < 1e-10) continue;
-
-                int compOffset = (g * _maxRank + j) * _paramsPerGroup;
-                T wT = NumOps.FromDouble(w);
-
-                for (int d = groupStart; d < groupEnd; d++)
-                {
-                    int compIdx = compOffset + (d - groupStart);
-                    if (compIdx < _rankComponents.Length)
-                        adapted[d] = NumOps.Add(adapted[d], NumOps.Multiply(_rankComponents[compIdx], wT));
-                }
-            }
-        }
-
-        return adapted;
+        // delta[g, p] = sum_j w[g, j] C[g, j, p]; group g covers parameters [g P, g P + P), so the flattened
+        // delta lines up with the parameter vector and its padded tail is dropped.
+        var shape = new[] { _numGroups, _maxRank, _paramsPerGroup };
+        var weights = Engine.TensorBroadcastTo(
+            Engine.Reshape(ActiveWeights(selectionWeights), new[] { _numGroups, _maxRank, 1 }), shape);
+        var delta = Engine.ReduceSum(Engine.TensorMultiply(weights, ComponentTensor()), new[] { 1 }, false).ToVector();
+        return Engine.Add(baseParams.GetSubVector(0, _paramDim), delta.GetSubVector(0, _paramDim));
     }
 
     /// <summary>
     /// Updates rank-1 components using projected gradients from the full parameter gradient.
     /// </summary>
-    private void UpdateRankComponents(Vector<T> fullGrad, Vector<T> baseParams, double[][] selectionWeights)
+    private void UpdateRankComponents(Vector<T> fullGrad, Vector<T> baseParams, Tensor<T> selectionWeights)
     {
-        for (int g = 0; g < _numGroups; g++)
-        {
-            int groupStart = g * _paramsPerGroup;
-            int groupEnd = Math.Min(groupStart + _paramsPerGroup, _paramDim);
-
-            for (int j = 0; j < _maxRank; j++)
-            {
-                double w = selectionWeights[g][j];
-                if (w < 1e-10) continue;
-
-                int compOffset = (g * _maxRank + j) * _paramsPerGroup;
-                double lr = _algoOptions.InnerLearningRate * w;
-
-                for (int d = groupStart; d < groupEnd; d++)
-                {
-                    int compIdx = compOffset + (d - groupStart);
-                    if (compIdx < _rankComponents.Length)
-                    {
-                        double gradVal = NumOps.ToDouble(fullGrad[d]);
-                        _rankComponents[compIdx] = NumOps.Subtract(_rankComponents[compIdx],
-                            NumOps.FromDouble(lr * gradVal));
-                    }
-                }
-            }
-        }
+        // C[g, j, p] -= lr * w[g, j] * grad[g P + p]; the zero-padded tail of the gradient leaves its slots unchanged.
+        var shape = new[] { _numGroups, _maxRank, _paramsPerGroup };
+        var weights = Engine.TensorBroadcastTo(
+            Engine.Reshape(ActiveWeights(selectionWeights), new[] { _numGroups, _maxRank, 1 }), shape);
+        var gradient = Engine.TensorBroadcastTo(GroupedParameters(fullGrad.GetSubVector(0, _paramDim)), shape);
+        var step = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(weights, gradient), NumOps.FromDouble(_algoOptions.InnerLearningRate));
+        _rankComponents = Engine.TensorSubtract(ComponentTensor(), step).ToVector();
     }
 
     /// <summary>
     /// Applies threshold to selection weights, zeroing out components below threshold.
     /// </summary>
-    private double[][] ApplyThreshold(double[][] selectionWeights)
+    private Tensor<T> ApplyThreshold(Tensor<T> selectionWeights)
     {
-        var thresholded = new double[_numGroups][];
-        for (int g = 0; g < _numGroups; g++)
-        {
-            thresholded[g] = new double[_maxRank];
-            double sum = 0;
-            for (int j = 0; j < _maxRank; j++)
-            {
-                thresholded[g][j] = selectionWeights[g][j] >= _algoOptions.RankThreshold ? selectionWeights[g][j] : 0;
-                sum += thresholded[g][j];
-            }
-            // Re-normalize
-            if (sum > 1e-10)
-                for (int j = 0; j < _maxRank; j++) thresholded[g][j] /= sum;
-            else
-                for (int j = 0; j < _maxRank; j++) thresholded[g][j] = 1.0 / _maxRank;
-        }
-        return thresholded;
+        var shape = new[] { _numGroups, _maxRank };
+        var kept = Engine.TensorSubtract(Engine.TensorOnesLike(selectionWeights),
+            Engine.TensorLessThan(selectionWeights, NumOps.FromDouble(_algoOptions.RankThreshold)));
+        var thresholded = Engine.TensorMultiply(selectionWeights, kept);
+
+        // Re-normalize each group; a group with nothing left falls back to uniform weights.
+        var sums = Engine.TensorBroadcastTo(Engine.ReduceSum(thresholded, new[] { 1 }, true), shape);
+        var valid = Engine.TensorGreaterThan(sums, NumOps.FromDouble(1e-10));
+        var normalized = Engine.TensorDivide(thresholded, Engine.TensorWhere(valid, sums, Engine.TensorOnesLike(sums)));
+        var uniform = Engine.TensorFullLike(selectionWeights, NumOps.FromDouble(1.0 / _maxRank));
+        return Engine.TensorWhere(valid, normalized, uniform);
     }
 
-    private double ComputeRankRegularization(double[][] selectionWeights)
-    {
-        double total = 0;
-        for (int g = 0; g < _numGroups; g++)
-            for (int j = 0; j < _maxRank; j++)
-                total += selectionWeights[g][j]; // L1 on selection weights
-        return total;
-    }
+    // L1 on selection weights
+    private T ComputeRankRegularization(Tensor<T> selectionWeights) => Engine.TensorSum(selectionWeights);
 
     private double ComputeAutoLoRALoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
@@ -340,7 +288,7 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        totalLoss += _algoOptions.RankRegularization * ComputeRankRegularization(selectionWeights);
+        totalLoss += _algoOptions.RankRegularization * NumOps.ToDouble(ComputeRankRegularization(selectionWeights));
         ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
