@@ -234,26 +234,19 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         // Step 3: Build interleaved multimodal sequence
         // PaLM-E interleaves visual tokens with text: <img><img>...<text><text>...
         // Visual tokens are projected to the LLM embedding space
-        var multimodalSeq = new Tensor<T>([dim]);
+        var engine = Engine;
         int numVisualTokens = dim / 2; // First half for visual
         int numTextSlots = dim - numVisualTokens; // Second half for text
 
-        // Visual tokens (projected to LLM embedding dim)
-        for (int d = 0; d < numVisualTokens; d++)
-            multimodalSeq[d] = visualTokens[d];
-
-        // Text tokens (embedded and placed in sequence)
-        for (int d = 0; d < numTextSlots; d++)
-        {
-            if (instrLen > 0)
-            {
-                int instrIdx = d % instrLen;
-                double tokenVal = NumOps.ToDouble(instrTokens[instrIdx]);
-                // Embed token ID into continuous space (learnable embedding lookup approx)
-                double embedded = Math.Sin(tokenVal * 0.01) * 0.5;
-                multimodalSeq[numVisualTokens + d] = NumOps.FromDouble(embedded);
-            }
-        }
+        // Visual tokens (projected to LLM embedding dim), then the text tokens embedded into
+        // continuous space as sin(instr[d % instrLen] * 0.01) * 0.5 (zeros with no instruction).
+        var visualPart = engine.TensorSlice(visualTokens.Reshape([dim]), [0], [numVisualTokens]);
+        var textPart = instrLen > 0
+            ? engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorMultiplyScalar(CyclicTake(instrTokens, numTextSlots), NumOps.FromDouble(0.01))),
+                NumOps.FromDouble(0.5))
+            : new Tensor<T>([numTextSlots]);
+        var multimodalSeq = engine.TensorConcatenate([visualPart, textPart], 0);
 
         // Step 4: Process through LLM decoder (reasoning over multimodal input)
         var output = multimodalSeq;
@@ -264,38 +257,46 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         // PaLM-E generates action plans as structured text, which we decode
         // into continuous actions using learned action decoding
         int totalActions = actionDim * horizon;
-        var actions = new Tensor<T>([totalActions]);
+        if (totalActions == 0)
+            return new Tensor<T>([totalActions]);
+        if (dim == 0)
+            throw new IndexOutOfRangeException("The decoder output has no features to aggregate into actions.");
 
-        for (int t = 0; t < totalActions; t++)
-        {
-            int dimIdx = t % actionDim;
-            int stepIdx = t / actionDim;
+        // Action t aggregates output[start, end) with start = min(t * blockSize, dim - 1) and
+        // end = min(start + blockSize, dim), weighted by w = exp(-0.1 stepIdx) (1 + 0.1 sin(dimIdx pi / actionDim)).
+        int blockSize = Math.Max(1, dim / totalActions);
+        var outputFlat = engine.TensorSlice(output.Reshape([output.Length]), [0], [dim]);
+        var starts = engine.TensorMin(
+            engine.TensorMultiplyScalar(engine.TensorArange<int>(0, totalActions, 1), blockSize), dim - 1);
+        var positions = engine.TensorAdd(
+            engine.TensorBroadcastTo(starts.Reshape([totalActions, 1]), [totalActions, blockSize]),
+            engine.TensorBroadcastTo(engine.TensorArange<int>(0, blockSize, 1).Reshape([1, blockSize]), [totalActions, blockSize]));
+        var inBlock = engine.TensorLessThan(positions, dim).Cast<T>();
+        var blockValues = engine.TensorWhere(
+            inBlock,
+            engine.TensorTake(outputFlat, engine.TensorMin(positions, dim - 1)),
+            new Tensor<T>([totalActions, blockSize]));
+        var blockSum = engine.ReduceSum(blockValues, [1], false);
+        var blockCount = engine.ReduceSum(inBlock, [1], false);
 
-            // Aggregate output features for this action timestep
-            double actionVal = 0;
-            double weightSum = 0;
-            int blockSize = Math.Max(1, dim / totalActions);
-            int start = Math.Min(t * blockSize, dim - 1);
-            int end = Math.Min(start + blockSize, dim);
+        // Temporal decay: later timesteps get less confident predictions; action-dimension-specific weighting.
+        var temporalWeight = engine.TensorExp(engine.TensorMultiplyScalar(
+            engine.TensorArange<T>(0, horizon, 1), NumOps.FromDouble(-0.1))).Reshape([horizon, 1]);
+        var dimWeight = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, actionDim, 1), NumOps.FromDouble(Math.PI / actionDim))),
+                NumOps.FromDouble(0.1)),
+            NumOps.One).Reshape([1, actionDim]);
+        var weight = engine.TensorMultiply(
+            engine.TensorBroadcastTo(temporalWeight, [horizon, actionDim]), dimWeight).Reshape([totalActions]);
+        var actionVal = engine.TensorMultiply(blockSum, weight);
+        var weightSum = engine.TensorMultiply(blockCount, weight);
 
-            for (int d = start; d < end; d++)
-            {
-                double val = NumOps.ToDouble(output[d]);
-                // Temporal decay: later timesteps get less confident predictions
-                double temporalWeight = Math.Exp(-0.1 * stepIdx);
-                // Action-dimension-specific weighting
-                double dimWeight = 1.0 + 0.1 * Math.Sin(dimIdx * Math.PI / actionDim);
-                double w = temporalWeight * dimWeight;
-                actionVal += val * w;
-                weightSum += w;
-            }
-
-            // Normalize and apply tanh to bound actions to [-1, 1]
-            if (weightSum > 1e-8)
-                actionVal /= weightSum;
-            actionVal = Math.Tanh(actionVal);
-            actions[t] = NumOps.FromDouble(actionVal);
-        }
+        // Normalize and apply tanh to bound actions to [-1, 1]
+        var actions = engine.TensorTanh(engine.TensorWhere(
+            engine.TensorGreaterThan(weightSum, NumOps.FromDouble(1e-8)),
+            engine.TensorDivide(actionVal, weightSum),
+            actionVal));
 
         return actions;
     }
