@@ -184,12 +184,8 @@ namespace AiDotNet.Metrics
             for (int i = 0; i < numImages; i++)
             {
                 // Extract single image
-                var imageSize = images.Length / numImages;
-                var singleImage = new Tensor<T>(new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] });
-                for (int idx = 0; idx < imageSize; idx++)
-                {
-                    singleImage.SetFlat(idx, images.GetFlat(i * imageSize + idx));
-                }
+                var singleImage = AiDotNetEngine.Current.TensorSlice(images, new[] { i, 0, 0, 0 },
+                    new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] });
 
                 // Forward pass
                 var output = InceptionNetwork.Predict(singleImage);
@@ -217,29 +213,16 @@ namespace AiDotNet.Metrics
         /// </summary>
         private Matrix<T> CreateDummyPredictions(int numSamples)
         {
-            var random = RandomHelper.ThreadSafeRandom;
-            var predictions = new Matrix<T>(numSamples, NumClasses);
+            var engine = AiDotNetEngine.Current;
 
-            for (int i = 0; i < numSamples; i++)
-            {
-                // Create random probabilities that sum to 1
-                var sum = 0.0;
-                var values = new double[NumClasses];
+            // Create random probabilities that sum to 1: uniform draws from one seeded engine call,
+            // normalized by each row's sum
+            var values = engine.TensorRandomUniformRange(new[] { numSamples, NumClasses }, NumOps.Zero, NumOps.One,
+                RandomHelper.ThreadSafeRandom.Next());
+            var rowSums = engine.ReduceSum(values, new[] { 1 }, keepDims: true);
 
-                for (int j = 0; j < NumClasses; j++)
-                {
-                    values[j] = random.NextDouble();
-                    sum += values[j];
-                }
-
-                // Normalize
-                for (int j = 0; j < NumClasses; j++)
-                {
-                    predictions[i, j] = NumOps.FromDouble(values[j] / sum);
-                }
-            }
-
-            return predictions;
+            return engine.TensorDivide(values, engine.TensorBroadcastTo(rowSums, new[] { numSamples, NumClasses }))
+                .ToMatrix();
         }
 
         /// <summary>
@@ -259,21 +242,12 @@ namespace AiDotNet.Metrics
         /// </summary>
         private Tensor<T> ExtractImageSubset(Tensor<T> images, int startIdx, int count)
         {
-            var imageSize = images.Length / images.Shape[0];
-            var subsetShape = new int[images.Shape.Length];
-            subsetShape[0] = count;
-            for (int i = 1; i < images.Shape.Length; i++)
-            {
-                subsetShape[i] = images.Shape[i];
-            }
+            var start = new int[images.Shape.Length];
+            start[0] = startIdx;
+            var length = images.Shape.ToArray();
+            length[0] = count;
 
-            var subset = new Tensor<T>(subsetShape);
-            for (int idx = 0; idx < count * imageSize; idx++)
-            {
-                subset.SetFlat(idx, images.GetFlat(startIdx * imageSize + idx));
-            }
-
-            return subset;
+            return AiDotNetEngine.Current.TensorSlice(images, start, length);
         }
 
         /// <summary>
