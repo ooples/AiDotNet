@@ -286,13 +286,11 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         int p = _iaOptions.AROrder;
         int q = _iaOptions.MAOrder;
 
-        _arParameters = new Vector<T>(p);
-        _maParameters = new Vector<T>(q);
-
-        // Initialize with small random values
+        // Initialize with small random values in [0, 0.1): AR draws first, then MA
         var rand = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < p; i++) _arParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
-        for (int i = 0; i < q; i++) _maParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
+        T scale = NumOps.FromDouble(0.1);
+        _arParameters = Engine.Multiply(Vector<T>.CreateRandom(rand, p), scale);
+        _maParameters = Engine.Multiply(Vector<T>.CreateRandom(rand, q), scale);
 
         // Initialize intervention effects
         foreach (var intervention in _iaOptions.Interventions)
@@ -393,21 +391,18 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         int paramIndex = 0;
 
         // Update AR parameters
-        for (int i = 0; i < _arParameters.Length; i++)
-        {
-            _arParameters[i] = optimizedParameters[paramIndex++];
-        }
+        optimizedParameters.GetSubVector(paramIndex, _arParameters.Length).CopyTo(_arParameters.AsWritableSpan());
+        paramIndex += _arParameters.Length;
 
         // Update MA parameters
-        for (int i = 0; i < _maParameters.Length; i++)
-        {
-            _maParameters[i] = optimizedParameters[paramIndex++];
-        }
+        optimizedParameters.GetSubVector(paramIndex, _maParameters.Length).CopyTo(_maParameters.AsWritableSpan());
+        paramIndex += _maParameters.Length;
 
         // Update intervention effects
-        for (int i = 0; i < _interventionEffects.Count; i++)
+        var effects = optimizedParameters.GetSubVector(paramIndex, _interventionEffects.Count);
+        foreach (var (effect, value) in _interventionEffects.Zip(effects, (effect, value) => (effect, value)))
         {
-            _interventionEffects[i].Effect = Convert.ToDouble(optimizedParameters[paramIndex++]);
+            effect.Effect = Convert.ToDouble(value);
         }
     }
 
@@ -520,31 +515,35 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     {
         T prediction = NumOps.Zero;
 
-        // Add AR terms
-        for (int i = 0; i < _arParameters.Length; i++)
+        // Add AR terms: φ_i · predictions[index - i - 1] for the lags inside the series
+        int arTerms = Math.Max(0, Math.Min(_arParameters.Length, index));
+        if (arTerms > 0)
         {
-            if (index - i - 1 >= 0)
+            prediction = NumOps.Add(prediction, Engine.DotProduct(
+                _arParameters.GetSubVector(0, arTerms),
+                TimeSeriesEngineOps<T>.NewestFirst(predictions.GetSubVector(0, index), arTerms)));
+        }
+
+        // Add MA terms: θ_i · residuals[index - i - 1] for the lags inside the residuals
+        if (_residuals != null)
+        {
+            int firstMa = Math.Max(0, index - _residuals.Length);
+            int lastMa = Math.Min(_maParameters.Length, index); // exclusive
+            if (lastMa > firstMa)
             {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_arParameters[i], predictions[index - i - 1]));
+                var lagged = TimeSeriesEngineOps<T>.Gather(_residuals, Enumerable.Range(firstMa, lastMa - firstMa).Select(i => index - i - 1));
+                prediction = NumOps.Add(prediction, Engine.DotProduct(_maParameters.GetSubVector(firstMa, lastMa - firstMa), lagged));
             }
         }
 
-        // Add MA terms
-        for (int i = 0; i < _maParameters.Length; i++)
+        // Add intervention effects of the interventions active at this index
+        double[] active = _interventionEffects
+            .Where(effect => index >= effect.StartIndex && (effect.Duration == 0 || index < effect.StartIndex + effect.Duration))
+            .Select(effect => effect.Effect)
+            .ToArray();
+        if (active.Length > 0)
         {
-            if (index - i - 1 >= 0 && _residuals != null && _residuals.Length > index - i - 1)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_maParameters[i], _residuals[index - i - 1]));
-            }
-        }
-
-        // Add intervention effects
-        foreach (var effect in _interventionEffects)
-        {
-            if (index >= effect.StartIndex && (effect.Duration == 0 || index < effect.StartIndex + effect.Duration))
-            {
-                prediction = NumOps.Add(prediction, NumOps.FromDouble(effect.Effect));
-            }
+            prediction = NumOps.Add(prediction, Engine.Sum(new Vector<T>(Array.ConvertAll(active, NumOps.FromDouble))));
         }
 
         return prediction;
@@ -838,11 +837,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         ComputeResiduals(x, y);
 
         // Populate ModelParameters for GetParameters()
-        int arLen = _arParameters.Length;
-        int maLen = _maParameters.Length;
-        ModelParameters = new Vector<T>(arLen + maLen);
-        for (int i = 0; i < arLen; i++) ModelParameters[i] = _arParameters[i];
-        for (int i = 0; i < maLen; i++) ModelParameters[arLen + i] = _maParameters[i];
+        ModelParameters = Vector<T>.Concatenate(_arParameters, _maParameters);
     }
 
     /// <summary>
@@ -871,11 +866,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     public override T PredictSingle(Vector<T> input)
     {
         // Create a matrix with a single row for the prediction
-        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputMatrix[0, i] = input[i];
-        }
+        Matrix<T> inputMatrix = Matrix<T>.CreateFromVector(input);
 
         // Get the prediction vector (which will have only one element)
         Vector<T> predictions = Predict(inputMatrix);
