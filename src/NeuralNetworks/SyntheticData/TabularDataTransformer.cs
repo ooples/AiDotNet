@@ -413,22 +413,28 @@ public class TabularDataTransformer<T> : IModelSerializer
         // stds are scaled back at the end. Squaring raw values overflows narrow types (float data
         // at ±1e20 squares to +inf, which turned the variance into inf and every responsibility
         // into NaN); in scaled units every value is within [-1, 1], so its square cannot overflow.
-        // The Normal-Gamma posterior is scale-equivariant (b0 is the data variance), so this only
-        // changes units, not the fitted modes.
+        // The Normal-Gamma posterior is scale-equivariant (b0 is the data variance), and every floor
+        // below stays in ORIGINAL data units (a length floor is divided by scale, a variance floor by
+        // scale twice; the dimensionless mass and weight floors are unchanged), so the fitted modes
+        // match an unscaled fit exactly up to rounding.
         T scale = MathHelper.Max(
             NumOps.Abs(engine.TensorMinValue(x)), NumOps.Abs(engine.TensorMaxValue(x)));
         if (!NumOps.GreaterThan(scale, NumOps.Zero)) scale = NumOps.One;
         x = engine.TensorDivideScalar(x, scale);
 
+        // Divided by scale twice rather than by scale squared, which itself overflows float at 1e20.
+        T VarianceInScaledUnits(double floor) => NumOps.Divide(NumOps.Divide(NumOps.FromDouble(floor), scale), scale);
+
         T valMin = engine.TensorMinValue(x);
         T valMax = engine.TensorMaxValue(x);
         T range = NumOps.Subtract(valMax, valMin);
-        if (NumOps.LessThan(range, NumOps.FromDouble(1e-10))) range = NumOps.One;
+        if (NumOps.LessThan(range, NumOps.Divide(NumOps.FromDouble(1e-10), scale)))
+            range = NumOps.Divide(NumOps.One, scale);
 
         T dataMean = engine.TensorMean(x);
         var centered = engine.TensorSubtractScalar(x, dataMean);
         T dataVar = MathHelper.Max(
-            engine.TensorMean(engine.TensorMultiply(centered, centered)), NumOps.FromDouble(1e-6));
+            engine.TensorMean(engine.TensorMultiply(centered, centered)), VarianceInScaledUnits(1e-6));
 
         // Prior hyperparameters. A small Dirichlet concentration (alpha0 << 1) gives
         // the sparse, automatic-pruning behaviour of a Dirichlet-process mixture —
@@ -443,7 +449,7 @@ public class TabularDataTransformer<T> : IModelSerializer
         T negHalf = NumOps.FromDouble(-0.5);
         T halfLogTwoPi = NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI));
         T massFloor = NumOps.FromDouble(1e-12);
-        T rateFloor = NumOps.FromDouble(1e-10);
+        T rateFloor = VarianceInScaledUnits(1e-10);   // floors b_k and b_k/a_k, both variances
         T perMode = NumOps.FromDouble((double)n / k);
 
         // Posterior parameters, initialized by spreading component means across the
