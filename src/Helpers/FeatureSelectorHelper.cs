@@ -56,30 +56,28 @@ public static class FeatureSelectorHelper<T, TInput>
         }
         else if (input is Tensor<T> tensor)
         {
-            for (int i = 0; i < numSamples; i++)
+            if (numSamples == 0)
             {
-                if (tensor.Rank == 2)
-                {
-                    featureVector[i] = tensor[i, featureIndex];
-                }
-                else if (tensor.Rank > 2)
-                {
-                    // Handle higher-dimension tensors with configurable feature extraction strategy
-                    featureVector[i] = higherDimensionStrategy switch
-                    {
-                        FeatureExtractionStrategy.Mean => CalculateMeanFeature(tensor, i, featureIndex),
-                        FeatureExtractionStrategy.Max => CalculateMaxFeature(tensor, i, featureIndex),
-                        FeatureExtractionStrategy.Flatten => GetFirstElement(tensor, i, featureIndex),
-                        FeatureExtractionStrategy.WeightedSum => CalculateWeightedSum(tensor, i, featureIndex, dimensionWeights),
-                        _ => throw new InvalidOperationException($"Unsupported feature extraction strategy: {higherDimensionStrategy}"),
-                    };
-                }
-                else
-                {
-                    throw new ArgumentException("Tensor must have at least 2 dimensions to extract features");
-                }
+                return featureVector;
             }
-            return featureVector;
+
+            if (tensor.Rank < 2)
+            {
+                throw new ArgumentException("Tensor must have at least 2 dimensions to extract features");
+            }
+
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var engine = AiDotNetEngine.Current;
+
+            // [numSamples, d2, d3, ...]: this feature's values for the first numSamples samples
+            var slab = engine.TensorNarrow(tensor.GetSliceAlongDimension(featureIndex, 1), 0, 0, numSamples);
+            if (tensor.Rank == 2)
+            {
+                return slab.ToVector();
+            }
+
+            // Handle higher-dimension tensors with configurable feature extraction strategy
+            return ReduceFeatureSlab(engine, slab, higherDimensionStrategy, dimensionWeights).ToVector();
         }
         else
         {
@@ -88,174 +86,77 @@ public static class FeatureSelectorHelper<T, TInput>
     }
 
     /// <summary>
-    /// Recursively traverses tensor dimensions to find the maximum value.
+    /// Collapses each sample's trailing dimensions of a [samples, d2, d3, ...] feature slab to one value
+    /// with the configured strategy: mean, max, the first element, or a weighted sum whose weight at each
+    /// position is the product of the per-dimension weights for its indices (1 where no weight is given).
     /// </summary>
-    /// <param name="tensor">The tensor to traverse.</param>
-    /// <param name="indices">The current indices being processed.</param>
-    /// <param name="dimension">The dimension currently being processed.</param>
-    /// <param name="max">Running maximum value (passed by reference).</param>
-    /// <param name="found">Flag indicating if at least one value has been found (passed by reference).</param>
-    private static void CalculateMaxRecursive(Tensor<T> tensor, int[] indices, int dimension, ref T max, ref bool found)
+    private static Tensor<T> ReduceFeatureSlab(
+        IEngine engine,
+        Tensor<T> slab,
+        FeatureExtractionStrategy strategy,
+        Dictionary<int, T> weights)
     {
-        if (dimension >= tensor.Rank)
-        {
-            // Base case: we've filled in all indices, so we can get the actual value
-            T value = tensor[indices];
-            if (!found || _numOps.GreaterThan(value, max))
-            {
-                max = value;
-            }
-            found = true;
-            return;
-        }
+        int samples = slab.Shape[0];
+        int trailingRank = slab.Rank - 1;
+        var axes = Enumerable.Range(1, trailingRank).ToArray();
+        int trailingCount = slab.Length / Math.Max(samples, 1);
+        bool hasTrailing = Enumerable.Range(1, trailingRank).All(d => slab.Shape[d] > 0);
 
-        // Recursive case: iterate through all values in the current dimension
-        for (int i = 0; i < tensor.Shape[dimension]; i++)
+        switch (strategy)
         {
-            indices[dimension] = i;
-            CalculateMaxRecursive(tensor, indices, dimension + 1, ref max, ref found);
-        }
-    }
-
-    /// <summary>
-    /// Gets the first element for a specific feature and sample.
-    /// </summary>
-    /// <param name="tensor">The tensor containing the data.</param>
-    /// <param name="sampleIndex">The index of the sample.</param>
-    /// <param name="featureIndex">The index of the feature.</param>
-    /// <returns>The first element representing the feature for the specified sample.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method uses the first value to represent a complex feature.
-    /// 
-    /// When a feature has multiple values (like different pixels in an image),
-    /// sometimes using the first value is sufficient. This is a simpler approach
-    /// that works well when the values are similar or when the first value is particularly important.
-    /// </para>
-    /// </remarks>
-    private static T GetFirstElement(Tensor<T> tensor, int sampleIndex, int featureIndex)
-    {
-        if (tensor.Rank == 3)
-        {
-            return tensor[sampleIndex, featureIndex, 0];
-        }
-        else if (tensor.Rank == 4)
-        {
-            return tensor[sampleIndex, featureIndex, 0, 0];
-        }
-        else if (tensor.Rank > 4)
-        {
-            // For even higher dimensions, use array indexing with all remaining indices set to 0
-            int[] indices = new int[tensor.Rank];
-            indices[0] = sampleIndex;
-            indices[1] = featureIndex;
-            // All other indices remain 0
-            return tensor[indices];
-        }
-        else
-        {
-            throw new InvalidOperationException($"Invalid tensor rank: {tensor.Rank}");
-        }
-    }
-
-    /// <summary>
-    /// Calculates a weighted sum of values across all dimensions for a specific feature and sample.
-    /// </summary>
-    /// <param name="tensor">The tensor containing the data.</param>
-    /// <param name="sampleIndex">The index of the sample.</param>
-    /// <param name="featureIndex">The index of the feature.</param>
-    /// <param name="weights">The weights to apply to each dimension.</param>
-    /// <returns>The weighted sum representing the feature for the specified sample.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method combines values with different levels of importance.
-    /// 
-    /// In complex data, some values might be more important than others. This method
-    /// allows you to specify weights (importance levels) for different parts of your data.
-    /// For example, in an image, central pixels might be given higher weight than edge pixels.
-    /// </para>
-    /// </remarks>
-    private static T CalculateWeightedSum(Tensor<T> tensor, int sampleIndex, int featureIndex, Dictionary<int, T> weights)
-    {
-        if (weights == null || weights.Count == 0)
-        {
-            throw new InvalidOperationException("Weights must be provided for weighted sum feature extraction");
-        }
-
-        T sum = _numOps.Zero;
-        int[] indices = new int[tensor.Rank];
-        indices[0] = sampleIndex;
-        indices[1] = featureIndex;
-
-        CalculateWeightedSumRecursive(tensor, indices, 2, weights, ref sum);
-
-        return sum;
-    }
-
-    /// <summary>
-    /// Recursively traverses tensor dimensions to calculate a weighted sum of elements.
-    /// </summary>
-    /// <param name="tensor">The tensor to traverse.</param>
-    /// <param name="indices">The current indices being processed.</param>
-    /// <param name="dimension">The dimension currently being processed.</param>
-    /// <param name="weights">The weights to apply to each dimension.</param>
-    /// <param name="sum">Running sum of weighted elements (passed by reference).</param>
-    private static void CalculateWeightedSumRecursive(Tensor<T> tensor, int[] indices, int dimension, Dictionary<int, T> weights, ref T sum)
-    {
-        if (dimension >= tensor.Rank)
-        {
-            // Base case: we've filled in all indices, so we can get the actual value
-            // Calculate a weight based on position in each dimension
-            T weight = _numOps.One;
-            for (int i = 2; i < indices.Length; i++)
-            {
-                int indexInDimension = indices[i];
-                if (weights.TryGetValue(indexInDimension, out T? dimensionWeight))
+            case FeatureExtractionStrategy.Mean:
+                if (!hasTrailing)
                 {
-                    weight = _numOps.Multiply(weight, dimensionWeight);
+                    throw new InvalidOperationException("No elements found when calculating mean feature");
                 }
+
+                return engine.ReduceMean(slab, axes, false);
+
+            case FeatureExtractionStrategy.Max:
+                if (!hasTrailing)
+                {
+                    throw new InvalidOperationException("No elements found when calculating max feature");
+                }
+
+                return engine.ReduceMax(slab, axes, false);
+
+            case FeatureExtractionStrategy.Flatten:
+                return slab.Reshape(new[] { samples, trailingCount }).GetSliceAlongDimension(0, 1);
+
+            case FeatureExtractionStrategy.WeightedSum:
+            {
+                if (weights == null || weights.Count == 0)
+                {
+                    throw new InvalidOperationException("Weights must be provided for weighted sum feature extraction");
+                }
+
+                T one = _numOps.One;
+                Tensor<T>? positionWeights = null;
+                for (int d = 1; d <= trailingRank; d++)
+                {
+                    var dimensionWeights = Tensor<T>.FromVector(new Vector<T>(Enumerable.Range(0, slab.Shape[d])
+                        .Select(i => weights.TryGetValue(i, out var w) && w is not null ? w : one)));
+                    positionWeights = positionWeights is null
+                        ? dimensionWeights
+                        : engine.TensorOuter(positionWeights, dimensionWeights).Reshape(new[] { positionWeights.Length * dimensionWeights.Length });
+                }
+
+                var trailingShape = new int[slab.Rank];
+                trailingShape[0] = 1;
+                for (int d = 1; d < slab.Rank; d++)
+                {
+                    trailingShape[d] = slab.Shape[d];
+                }
+
+                var fullWeights = positionWeights is null
+                    ? new Tensor<T>(trailingShape)
+                    : engine.TensorBroadcastTo(positionWeights.Reshape(trailingShape), slab._shape);
+                return engine.ReduceSum(engine.TensorMultiply(slab, fullWeights), axes, false);
             }
 
-            sum = _numOps.Add(sum, _numOps.Multiply(tensor[indices], weight));
-            return;
+            default:
+                throw new InvalidOperationException($"Unsupported feature extraction strategy: {strategy}");
         }
-
-        // Recursive case: iterate through all values in the current dimension
-        for (int i = 0; i < tensor.Shape[dimension]; i++)
-        {
-            indices[dimension] = i;
-            CalculateWeightedSumRecursive(tensor, indices, dimension + 1, weights, ref sum);
-        }
-    }
-
-    /// <summary>
-    /// Finds the maximum value across all dimensions for a specific feature and sample.
-    /// </summary>
-    /// <param name="tensor">The tensor containing the data.</param>
-    /// <param name="sampleIndex">The index of the sample.</param>
-    /// <param name="featureIndex">The index of the feature.</param>
-    /// <returns>The maximum value representing the feature for the specified sample.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method finds the highest value across complex data.
-    /// 
-    /// For complex data like images, this finds the strongest signal or highest intensity.
-    /// For example, in an image, it might find the brightest pixel in a certain color channel.
-    /// </para>
-    /// </remarks>
-    private static T CalculateMaxFeature(Tensor<T> tensor, int sampleIndex, int featureIndex)
-    {
-        T max = _numOps.MinValue;
-        bool found = false;
-        int[] indices = new int[tensor.Rank];
-        indices[0] = sampleIndex;
-        indices[1] = featureIndex;
-
-        CalculateMaxRecursive(tensor, indices, 2, ref max, ref found);
-
-        if (!found)
-        {
-            throw new InvalidOperationException("No elements found when calculating max feature");
-        }
-
-        return max;
     }
 
     /// <summary>
@@ -405,87 +306,36 @@ public static class FeatureSelectorHelper<T, TInput>
         {
             destination[sampleIndex, destFeatureIndex] = source[sampleIndex, sourceFeatureIndex];
         }
-        else if (source.Rank == 3)
+        else if (source.Rank == 3 || source.Rank == 4)
         {
-            for (int k = 0; k < source.Shape[2]; k++)
+            // Copy the whole [1, 1, d2(, d3)] block of this sample's feature in one slice.
+            int rank = source.Rank;
+            var start = new int[rank];
+            var length = new int[rank];
+            start[0] = sampleIndex;
+            start[1] = sourceFeatureIndex;
+            length[0] = 1;
+            length[1] = 1;
+            for (int d = 2; d < rank; d++)
             {
-                destination[sampleIndex, destFeatureIndex, k] = source[sampleIndex, sourceFeatureIndex, k];
+                length[d] = source.Shape[d];
             }
-        }
-        else if (source.Rank == 4)
-        {
-            for (int k = 0; k < source.Shape[2]; k++)
+
+            Tensor<T> block;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                for (int l = 0; l < source.Shape[3]; l++)
-                {
-                    destination[sampleIndex, destFeatureIndex, k, l] = source[sampleIndex, sourceFeatureIndex, k, l];
-                }
+                block = AiDotNetEngine.Current.TensorSlice(source, start, length);
             }
+
+            var destStart = new int[rank];
+            destStart[0] = sampleIndex;
+            destStart[1] = destFeatureIndex;
+            destination.SetSubTensor(destStart, block);
         }
         else
         {
             throw new NotSupportedException($"Feature copying for tensors with rank {source.Rank} is not currently supported");
         }
-    }
-
-    /// <summary>
-    /// Recursively traverses tensor dimensions to calculate the sum and count of elements.
-    /// </summary>
-    /// <param name="tensor">The tensor to traverse.</param>
-    /// <param name="indices">The current indices being processed.</param>
-    /// <param name="dimension">The dimension currently being processed.</param>
-    /// <param name="sum">Running sum of elements (passed by reference).</param>
-    /// <param name="count">Running count of elements (passed by reference).</param>
-    private static void CalculateMeanRecursive(Tensor<T> tensor, int[] indices, int dimension, ref T sum, ref int count)
-    {
-        if (dimension >= tensor.Rank)
-        {
-            // Base case: we've filled in all indices, so we can get the actual value
-            sum = _numOps.Add(sum, tensor[indices]);
-            count++;
-            return;
-        }
-
-        // Recursive case: iterate through all values in the current dimension
-        for (int i = 0; i < tensor.Shape[dimension]; i++)
-        {
-            indices[dimension] = i;
-            CalculateMeanRecursive(tensor, indices, dimension + 1, ref sum, ref count);
-        }
-    }
-
-    /// <summary>
-    /// Calculates the mean value across all dimensions for a specific feature and sample.
-    /// </summary>
-    /// <param name="tensor">The tensor containing the data.</param>
-    /// <param name="sampleIndex">The index of the sample.</param>
-    /// <param name="featureIndex">The index of the feature.</param>
-    /// <returns>The mean value representing the feature for the specified sample.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method finds the average value across complex data.
-    /// 
-    /// For complex data like images or time series, this calculates an average value
-    /// that represents the feature. For example, in an image, it might calculate the
-    /// average intensity of a certain color channel across all pixels.
-    /// </para>
-    /// </remarks>
-    private static T CalculateMeanFeature(Tensor<T> tensor, int sampleIndex, int featureIndex)
-    {
-        // Use recursive traversal to handle any tensor rank
-        T sum = _numOps.Zero;
-        int count = 0;
-        int[] indices = new int[tensor.Rank];
-        indices[0] = sampleIndex;
-        indices[1] = featureIndex;
-
-        CalculateMeanRecursive(tensor, indices, 2, ref sum, ref count);
-
-        if (count == 0)
-        {
-            throw new InvalidOperationException("No elements found when calculating mean feature");
-        }
-
-        return _numOps.Divide(sum, _numOps.FromDouble(count));
     }
 
     // The remaining methods from CorrelationFeatureSelector would be moved here:
