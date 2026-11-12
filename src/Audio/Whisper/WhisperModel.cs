@@ -724,7 +724,14 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     public string DetectLanguage(Tensor<T> audio)
     {
         var probabilities = DetectLanguageProbabilities(audio);
-        return probabilities.OrderByDescending(p => NumOps.ToDouble(p.Value)).First().Key;
+        if (probabilities.Count == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
+
+        // First language with the highest probability (a stable descending sort's head); NaN ranks last.
+        var languages = probabilities.Keys.ToArray();
+        var scores = new Tensor<T>(probabilities.Values.ToArray(), [1, languages.Length]);
+        var cleaned = Engine.TensorNanToNum(scores, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        return languages[Engine.TensorArgMax(cleaned, 1).ToArray()[0]];
     }
 
     /// <summary>
@@ -765,14 +772,28 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             logits = output.Values.First();
         }
 
-        // Extract language token probabilities
-        var languageProbs = new Dictionary<string, T>();
+        // Extract language token logits from the first decoder position with one gather
+        int vocabSize = logits.Shape[^1];
+        var languages = new List<string>();
+        var languageTokens = new List<int>();
         foreach (var lang in SupportedLanguages)
         {
             var langToken = _tokenizer.GetLanguageToken(lang);
-            if (langToken >= 0 && langToken < logits.Shape[^1])
+            if (langToken >= 0 && langToken < vocabSize)
             {
-                languageProbs[lang] = logits[0, 0, (int)langToken];
+                languages.Add(lang);
+                languageTokens.Add((int)langToken);
+            }
+        }
+
+        var languageProbs = new Dictionary<string, T>();
+        if (languages.Count > 0)
+        {
+            var firstPosition = Engine.TensorSlice(logits, [0, 0, 0], [1, 1, vocabSize]).Reshape([vocabSize]);
+            var languageLogits = Engine.TensorIndexSelect(firstPosition, new Tensor<int>(languageTokens.ToArray(), [languageTokens.Count]), 0).ToArray();
+            for (int i = 0; i < languages.Count; i++)
+            {
+                languageProbs[languages[i]] = languageLogits[i];
             }
         }
 
@@ -852,8 +873,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         var encoderOutput = EncodeAudio(input);
         int batchSize = encoderOutput.Rank >= 3 ? encoderOutput.Shape[0] : 1;
         var initialTokens = new Tensor<T>([batchSize, 1]);
-        for (int batch = 0; batch < batchSize; batch++)
-            initialTokens[batch, 0] = NumOps.FromDouble(_tokenizer.StartOfTranscript);
+        initialTokens.Fill(NumOps.FromDouble(_tokenizer.StartOfTranscript));
 
         return ForwardDecoder(initialTokens, encoderOutput);
     }
@@ -1017,25 +1037,31 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             return audio;
         }
 
-        if (audio.Rank == 1)
+        // Zero pad or truncate the last axis (a fresh tensor, off the tape like the copy it replaces).
+        return ResizeAxis(audio, audio.Rank - 1, targetLength);
+    }
+
+    /// <summary>
+    /// A new tensor equal to <paramref name="source"/> truncated or zero padded to <paramref name="length"/>
+    /// along <paramref name="axis"/>. It is not recorded on the gradient tape.
+    /// </summary>
+    private Tensor<T> ResizeAxis(Tensor<T> source, int axis, int length)
+    {
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int current = source.Shape[axis];
+        int keep = Math.Min(current, length);
+        var start = new int[source.Rank];
+        var kept = source.Shape.ToArray();
+        kept[axis] = keep;
+        var head = new Tensor<T>(Engine.TensorSlice(source, start, kept).ToArray(), kept);
+        if (keep == length)
         {
-            var result = new Tensor<T>([targetLength]);
-            int copyLength = Math.Min(currentLength, targetLength);
-            for (int i = 0; i < copyLength; i++)
-                result[i] = audio[i];
-            return result;
+            return head;
         }
 
-        int batchSize = audio.Shape[0];
-        var batchedResult = new Tensor<T>([batchSize, targetLength]);
-        int batchedCopyLength = Math.Min(currentLength, targetLength);
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int i = 0; i < batchedCopyLength; i++)
-                batchedResult[batch, i] = audio[batch, i];
-        }
-
-        return batchedResult;
+        var padShape = source.Shape.ToArray();
+        padShape[axis] = length - keep;
+        return Engine.TensorConcatenate(new[] { head, new Tensor<T>(padShape) }, axis);
     }
 
     /// <summary>
@@ -1055,26 +1081,12 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     {
         if (melSpec.Rank == 2)
         {
-            int mels = melSpec.Shape[1];
-            int copyFrames = Math.Min(frameCount, melSpec.Shape[0]);
-            var trimmed = new Tensor<T>([frameCount, mels]);
-            for (int frame = 0; frame < copyFrames; frame++)
-                for (int mel = 0; mel < mels; mel++)
-                    trimmed[frame, mel] = melSpec[frame, mel];
-            return trimmed;
+            return ResizeAxis(melSpec, 0, frameCount);
         }
 
         if (melSpec.Rank == 3)
         {
-            int batchSize = melSpec.Shape[0];
-            int mels = melSpec.Shape[2];
-            int copyFrames = Math.Min(frameCount, melSpec.Shape[1]);
-            var trimmed = new Tensor<T>([batchSize, frameCount, mels]);
-            for (int batch = 0; batch < batchSize; batch++)
-                for (int frame = 0; frame < copyFrames; frame++)
-                    for (int mel = 0; mel < mels; mel++)
-                        trimmed[batch, frame, mel] = melSpec[batch, frame, mel];
-            return trimmed;
+            return ResizeAxis(melSpec, 1, frameCount);
         }
 
         throw new InvalidOperationException(
@@ -1089,59 +1101,47 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         int sequenceLength = softTargets
             ? target.Shape[^2]
             : target.Shape[^1];
-        var tokens = CreateStartTokens(batchSize, sequenceLength);
-
-        // Hoisted once rather than re-fetched per element inside the scan below.
-        var targetValues = target.Data.Span;
-
-        for (int batch = 0; batch < batchSize; batch++)
+        if (sequenceLength <= 1)
         {
-            for (int position = 1; position < sequenceLength; position++)
-            {
-                int previousToken;
-                if (softTargets)
-                {
-                    // ARGMAX OVER THE FLAT BUFFER, COMPARED IN T. This scans the whole vocabulary for
-                    // every position of every batch item -- at the default 448 tokens that is roughly 23
-                    // million element reads before the forward pass even starts, on the training hot
-                    // path. Two costs were avoidable without changing the result: the tensor indexer
-                    // recomputed offsets and bounds-checked per element, and NumOps.ToDouble paid an
-                    // interface dispatch per element to produce a value used only for a comparison.
-                    // Comparing in T against the hoisted span keeps the scan exact and drops both.
-                    int distributionOffset = ((batch * sequenceLength) + position - 1) * vocabSize;
-                    previousToken = 0;
-                    T bestValue = targetValues[distributionOffset];
-                    for (int token = 1; token < vocabSize; token++)
-                    {
-                        T value = targetValues[distributionOffset + token];
-                        if (NumOps.GreaterThan(value, bestValue))
-                        {
-                            bestValue = value;
-                            previousToken = token;
-                        }
-                    }
-                }
-                else
-                {
-                    int flatIndex = batch * sequenceLength + position - 1;
-                    previousToken = (int)Math.Round(NumOps.ToDouble(target[flatIndex]));
-                    previousToken = Math.Max(0, Math.Min(previousToken, vocabSize - 1));
-                }
-
-                tokens[batch, position] = NumOps.FromDouble(previousToken);
-            }
+            return CreateStartTokens(batchSize, sequenceLength);
         }
 
-        return tokens;
+        // Token ids per (batch, position): the arg-max of each soft distribution (first maximum wins),
+        // or the rounded hard label clamped into the vocabulary (NaN -> 0).
+        Tensor<T> ids;
+        using (new Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            if (softTargets)
+            {
+                var distributions = Engine.Reshape(target, [batchSize * sequenceLength, vocabSize]);
+                ids = Engine.TensorArgMax(distributions, 1).Cast<T>().Reshape([batchSize, sequenceLength]);
+            }
+            else
+            {
+                var labels = Engine.Reshape(target, [batchSize, sequenceLength]);
+                var rounded = Engine.TensorRound(Engine.TensorNanToNum(labels, 0.0, double.PositiveInfinity, double.NegativeInfinity));
+                ids = Engine.TensorClamp(rounded, NumOps.Zero, NumOps.FromDouble(vocabSize - 1));
+            }
+
+            // Shift right: position p reads the token at p - 1, position 0 is start-of-transcript.
+            var start = new Tensor<T>([batchSize, 1]);
+            start.Fill(NumOps.FromDouble(_tokenizer.StartOfTranscript));
+            var previous = new Tensor<T>(Engine.TensorSlice(ids, [0, 0], [batchSize, sequenceLength - 1]).ToArray(), [batchSize, sequenceLength - 1]);
+            return Engine.TensorConcatenate(new[] { start, previous }, 1);
+        }
     }
 
     private Tensor<T> CreateStartTokens(int batchSize, int sequenceLength)
     {
-        var tokens = new Tensor<T>([batchSize, sequenceLength]);
-        T startToken = NumOps.FromDouble(_tokenizer.StartOfTranscript);
-        for (int batch = 0; batch < batchSize; batch++)
-            tokens[batch, 0] = startToken;
-        return tokens;
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "A token sequence needs at least the start token.");
+
+        // Start-of-transcript in column 0, zeros after it.
+        var start = new Tensor<T>([batchSize, 1]);
+        start.Fill(NumOps.FromDouble(_tokenizer.StartOfTranscript));
+        if (sequenceLength == 1)
+            return start;
+        return Engine.TensorConcatenate(new[] { start, new Tensor<T>([batchSize, sequenceLength - 1]) }, 1);
     }
 
     private Tensor<T> EncodeAudio(Tensor<T> melFeatures)
@@ -1154,15 +1154,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             // Add batch dimension if needed
             if (melFeatures.Rank == 2)
             {
-                var batched = new Tensor<T>([1, melFeatures.Shape[0], melFeatures.Shape[1]]);
-                for (int f = 0; f < melFeatures.Shape[0]; f++)
-                {
-                    for (int m = 0; m < melFeatures.Shape[1]; m++)
-                    {
-                        batched[0, f, m] = melFeatures[f, m];
-                    }
-                }
-                melFeatures = batched;
+                melFeatures = new Tensor<T>(melFeatures.ToArray(), [1, melFeatures.Shape[0], melFeatures.Shape[1]]);
             }
 
             return OnnxEncoder.Run(melFeatures);
@@ -1175,11 +1167,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             var current = melFeatures;
             if (current.Rank == 2)
             {
-                var batched = new Tensor<T>([1, current.Shape[0], current.Shape[1]]);
-                for (int frame = 0; frame < current.Shape[0]; frame++)
-                    for (int mel = 0; mel < current.Shape[1]; mel++)
-                        batched[0, frame, mel] = current[frame, mel];
-                current = batched;
+                current = new Tensor<T>(current.ToArray(), [1, current.Shape[0], current.Shape[1]]);
             }
 
             for (int i = 0; i < _decoderStartIndex && i < Layers.Count; i++)
@@ -1299,87 +1287,40 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
 
     private (int token, double probability) GetNextTokenWithProbability(Tensor<T> logits, int position)
     {
-        // Get logits for the last position
+        // Logits of the requested position: arg-max token (first maximum, NaN never wins) and its softmax probability
         int vocabSize = logits.Shape[^1];
-
-        // Find max logit for numerical stability in softmax
-        double maxLogit = double.NegativeInfinity;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double value = NumOps.ToDouble(logits[0, position, v]);
-            if (value > maxLogit)
-            {
-                maxLogit = value;
-            }
-        }
-
-        // Compute softmax and find best token
-        double sumExp = 0;
-        int maxIdx = 0;
-        double maxValue = double.NegativeInfinity;
-
-        var expValues = new double[vocabSize];
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double value = NumOps.ToDouble(logits[0, position, v]);
-            expValues[v] = Math.Exp(value - maxLogit);
-            sumExp += expValues[v];
-
-            if (value > maxValue)
-            {
-                maxValue = value;
-                maxIdx = v;
-            }
-        }
-
-        // Probability of selected token
-        double probability = expValues[maxIdx] / sumExp;
+        var row = Engine.TensorSlice(logits, [0, position, 0], [1, 1, vocabSize]).Reshape([1, vocabSize]);
+        var cleaned = Engine.TensorNanToNum(row, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        int maxIdx = Engine.TensorArgMax(cleaned, 1).ToArray()[0];
+        var probabilities = Engine.TensorSoftmax(row, 1);
+        double probability = NumOps.ToDouble(probabilities.GetFlat(maxIdx));
 
         return (maxIdx, probability);
     }
 
     private Tensor<T> CreateTokenTensor(List<long> tokens)
     {
-        var tensor = new Tensor<T>([1, tokens.Count]);
-
-        for (int i = 0; i < tokens.Count; i++)
-        {
-            tensor[0, i] = NumOps.FromDouble(tokens[i]);
-        }
-
-        return tensor;
+        // Whisper token ids fit in int; one bulk conversion to T.
+        var ids = tokens.Select(token => checked((int)token)).ToArray();
+        return new Tensor<int>(ids, [1, tokens.Count]).Cast<T>();
     }
 
 
     private IReadOnlyDictionary<string, T> ApplySoftmax(Dictionary<string, T> logits)
     {
-        // Find max for numerical stability
-        T maxLogit = NumOps.Zero;
-        bool first = true;
-        foreach (var logit in logits.Values)
-        {
-            if (first || NumOps.GreaterThan(logit, maxLogit))
-            {
-                maxLogit = logit;
-                first = false;
-            }
-        }
-
-        // Compute exp(logit - max) and sum
-        var expValues = new Dictionary<string, T>();
-        T expSum = NumOps.Zero;
-        foreach (var (key, logit) in logits)
-        {
-            var exp = NumOps.Exp(NumOps.Subtract(logit, maxLogit));
-            expValues[key] = exp;
-            expSum = NumOps.Add(expSum, exp);
-        }
-
-        // Normalize
         var result = new Dictionary<string, T>();
-        foreach (var (key, exp) in expValues)
+        if (logits.Count == 0)
         {
-            result[key] = NumOps.Divide(exp, expSum);
+            return result;
+        }
+
+        // One engine softmax over the language logits (max-shifted inside the op)
+        var keys = logits.Keys.ToArray();
+        var values = new Tensor<T>(logits.Values.ToArray(), [1, keys.Length]);
+        var probabilities = Engine.TensorSoftmax(values, 1).ToArray();
+        for (int i = 0; i < keys.Length; i++)
+        {
+            result[keys[i]] = probabilities[i];
         }
 
         return result;
@@ -1437,7 +1378,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
                             Text = segText,
                             StartTime = segStart.Value,
                             EndTime = time,
-                            Confidence = NumOps.FromDouble(1.0)
+                            Confidence = NumOps.One
                         });
                     }
                     // The closing timestamp may also open the next segment.
@@ -1466,7 +1407,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
                     Text = tailText,
                     StartTime = segStart.Value,
                     EndTime = _maxAudioLengthSeconds,
-                    Confidence = NumOps.FromDouble(1.0)
+                    Confidence = NumOps.One
                 });
             }
         }
@@ -1481,7 +1422,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
                 Text = text,
                 StartTime = 0.0,
                 EndTime = _maxAudioLengthSeconds,
-                Confidence = NumOps.FromDouble(1.0)
+                Confidence = NumOps.One
             });
         }
 
