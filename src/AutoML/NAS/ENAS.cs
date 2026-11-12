@@ -72,6 +72,12 @@ namespace AiDotNet.AutoML.NAS
         // Decisions of the most recently sampled architecture: per node, the previous node then the operation
         private readonly List<int> _lastDecisions;
 
+        // Samples drawn but not yet rewarded, oldest first: their log-probability (as returned to the caller) and
+        // their decisions. UpdateController finds its sample here by logProb, so a batch can be sampled, evaluated
+        // and then rewarded one by one.
+        private readonly List<(T LogProb, List<int> Decisions)> _pendingSamples;
+        private const int MaxPendingSamples = 1024;
+
         // Shared weights for all child models
         private readonly Dictionary<string, Vector<T>> _sharedWeights;
         private readonly Dictionary<string, Vector<T>> _sharedGradients;
@@ -84,23 +90,11 @@ namespace AiDotNet.AutoML.NAS
         private readonly int _controllerHiddenSize;
         private readonly T _entropyWeight;
 
-        // ENAS defaults (Pham et al. 2018, Sec. 3 and the reference implementation): uniform(-0.1, 0.1)
-        // initialisation, logits squashed as 2.5 * tanh(logits / 5), controller Adam at 0.00035; shared weights
-        // trained with SGD (momentum 0.9), learning rate cosine-annealed from 0.05, l2 1e-4, gradient clipping.
-        private const double ControllerInitRange = 0.1;
-        private const double ControllerTanhConstant = 2.5;
-        private const double ControllerTemperature = 5.0;
-        private const double ControllerLearningRate = 3.5e-4;
-        private const double ControllerBeta1 = 0.9;
-        private const double ControllerBeta2 = 0.999;
-        private const double ControllerEpsilon = 1e-8;
-        private const double SharedMaxLearningRate = 0.05;
-        private const double SharedMinLearningRate = 0.001;
-        private const double SharedMomentum = 0.9;
-        private const double SharedWeightDecay = 1e-4;
-        private const double SharedGradientClipNorm = 5.0;
-        private const int SearchSteps = 50;
-        private const int DeriveSamples = 10;
+        // Search hyperparameters. The defaults (Pham et al. 2018, Sec. 3 and the reference implementation) are
+        // uniform(-0.1, 0.1) initialisation, logits squashed as 2.5 * tanh(logits / 5), controller Adam at
+        // 0.00035; shared weights trained with SGD (momentum 0.9), learning rate cosine-annealed from 0.05, l2
+        // 1e-4, gradient clipping at 5; 50 search steps and 10 derive samples.
+        private readonly ENASOptions _options;
 
         /// <inheritdoc />
         protected override INumericOperations<T> NumOps => _ops;
@@ -111,31 +105,77 @@ namespace AiDotNet.AutoML.NAS
 
         public ENAS(SearchSpaceBase<T> searchSpace, int numNodes = 4,
             int controllerHiddenSize = 100, double baselineDecay = 0.95, double entropyWeight = 0.01)
+            : this(searchSpace, new ENASOptions
+            {
+                NumNodes = numNodes,
+                ControllerHiddenSize = controllerHiddenSize,
+                BaselineDecay = baselineDecay,
+                EntropyWeight = entropyWeight,
+            })
         {
-            _ops = MathHelper.GetNumericOperations<T>();
-            _nasSearchSpace = searchSpace;
-            _numNodes = numNodes;
-            _numOperations = searchSpace.Operations?.Count ?? 5;
-            _random = RandomHelper.CreateSeededRandom(42);
+        }
 
-            _controllerHiddenSize = controllerHiddenSize;
-            _baselineDecay = _ops.FromDouble(baselineDecay);
-            _entropyWeight = _ops.FromDouble(entropyWeight);
+        /// <summary>
+        /// Creates an ENAS search with every hyperparameter taken from <paramref name="options"/>.
+        /// </summary>
+        /// <param name="searchSpace">The operations to search over.</param>
+        /// <param name="options">The search hyperparameters; the defaults are the paper's.</param>
+        public ENAS(SearchSpaceBase<T> searchSpace, ENASOptions options)
+        {
+            if (searchSpace is null) throw new ArgumentNullException(nameof(searchSpace));
+            if (options is null) throw new ArgumentNullException(nameof(options));
+            ValidateOptions(options);
+
+            _ops = MathHelper.GetNumericOperations<T>();
+            _options = options;
+            _nasSearchSpace = searchSpace;
+            _numNodes = options.NumNodes;
+            _numOperations = searchSpace.Operations?.Count ?? 5;
+            _random = RandomHelper.CreateSeededRandom(options.Seed);
+
+            _controllerHiddenSize = options.ControllerHiddenSize;
+            _baselineDecay = _ops.FromDouble(options.BaselineDecay);
+            _entropyWeight = _ops.FromDouble(options.EntropyWeight);
             _baseline = _ops.Zero;
 
-            // Every controller parameter starts uniform in [-0.1, 0.1].
+            // Every controller parameter starts uniform in [-range, range] (0.1 in the paper).
+            double initRange = options.ControllerInitRange;
             _controllerWeights = ControllerShapes()
                 .Select(shape => new Vector<T>(Enumerable.Range(0, shape[0] * shape[1])
-                    .Select(_ => _ops.FromDouble((_random.NextDouble() * 2.0 - 1.0) * ControllerInitRange))))
+                    .Select(_ => _ops.FromDouble((_random.NextDouble() * 2.0 - 1.0) * initRange))))
                 .ToList();
             _controllerGradients = _controllerWeights.Select(w => new Vector<T>(w.Length)).ToList();
             _controllerMomentum = _controllerWeights.Select(w => new Vector<T>(w.Length)).ToList();
             _controllerVelocity = _controllerWeights.Select(w => new Vector<T>(w.Length)).ToList();
             _lastDecisions = new List<int>();
+            _pendingSamples = new List<(T LogProb, List<int> Decisions)>();
 
             // Initialize shared weights
             _sharedWeights = new Dictionary<string, Vector<T>>();
             _sharedGradients = new Dictionary<string, Vector<T>>();
+        }
+
+        /// <summary>The search hyperparameters.</summary>
+        public ENASOptions Options => _options;
+
+        private static void ValidateOptions(ENASOptions options)
+        {
+            if (options.NumNodes < 1)
+                throw new ArgumentOutOfRangeException(nameof(options), "NumNodes must be at least 1.");
+            if (options.ControllerHiddenSize < 1)
+                throw new ArgumentOutOfRangeException(nameof(options), "ControllerHiddenSize must be at least 1.");
+            if (options.BaselineDecay < 0.0 || options.BaselineDecay > 1.0)
+                throw new ArgumentOutOfRangeException(nameof(options), "BaselineDecay must be in [0, 1].");
+            if (options.ControllerTemperature <= 0.0)
+                throw new ArgumentOutOfRangeException(nameof(options), "ControllerTemperature must be positive.");
+            if (options.ControllerLearningRate <= 0.0)
+                throw new ArgumentOutOfRangeException(nameof(options), "ControllerLearningRate must be positive.");
+            if (options.SharedMinLearningRate < 0.0 || options.SharedMaxLearningRate < options.SharedMinLearningRate)
+                throw new ArgumentOutOfRangeException(nameof(options), "Shared learning rates must satisfy 0 <= min <= max.");
+            if (options.SearchSteps < 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "SearchSteps must be non-negative.");
+            if (options.DeriveSamples < 1)
+                throw new ArgumentOutOfRangeException(nameof(options), "DeriveSamples must be at least 1.");
         }
 
         /// <summary>Shapes of the controller parameters, in <see cref="GetControllerParameters"/> order.</summary>
@@ -163,6 +203,13 @@ namespace AiDotNet.AutoML.NAS
             var (decisions, logProb, entropy) = RunController(ControllerViews(), replay: null);
             _lastDecisions.Clear();
             _lastDecisions.AddRange(decisions);
+            T sampleLogProb = logProb.GetFlat(0);
+            if (_pendingSamples.Count == MaxPendingSamples)
+            {
+                _pendingSamples.RemoveAt(0);
+            }
+
+            _pendingSamples.Add((sampleLogProb, decisions));
 
             var architecture = new Architecture<T>();
             foreach (int nodeIdx in Enumerable.Range(1, _numNodes))
@@ -170,7 +217,7 @@ namespace AiDotNet.AutoML.NAS
                 AddOperationToArchitecture(architecture, nodeIdx, decisions[2 * (nodeIdx - 1)], decisions[2 * (nodeIdx - 1) + 1]);
             }
 
-            return (architecture, logProb.GetFlat(0), entropy.GetFlat(0));
+            return (architecture, sampleLogProb, entropy.GetFlat(0));
         }
 
         /// <summary>Decisions of the most recent <see cref="SampleArchitecture"/> call (previous node, operation per node).</summary>
@@ -208,8 +255,8 @@ namespace AiDotNet.AutoML.NAS
             var wAttn1 = parameters[5];
             var wAttn2 = parameters[6];
             var vAttn = parameters[7];
-            T inverseTemperature = _ops.FromDouble(1.0 / ControllerTemperature);
-            T tanhConstant = _ops.FromDouble(ControllerTanhConstant);
+            T inverseTemperature = _ops.FromDouble(1.0 / _options.ControllerTemperature);
+            T tanhConstant = _ops.FromDouble(_options.ControllerTanhConstant);
 
             var decisions = new List<int>();
             var logProb = new Tensor<T>(new[] { 1, 1 });
@@ -341,13 +388,40 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Updates controller using REINFORCE policy gradient
+        /// Updates the controller with REINFORCE (Williams 1992) as in ENAS (Pham et al. 2018, Sec. 2.2): the
+        /// gradient is -(R - b) * d/dtheta sum_t log pi(a_t) over the decisions a_t of the sample whose
+        /// <paramref name="logProb"/> is given, where R is the reward plus the entropy bonus and b is an
+        /// exponential moving average of R (updated with R first, as in the reference implementation). The
+        /// controller then takes an Adam step.
         /// </summary>
+        /// <param name="reward">The reward of the sampled architecture (for example its validation accuracy).</param>
+        /// <param name="logProb">The log-probability <see cref="SampleArchitecture"/> returned for that architecture.</param>
+        /// <param name="entropy">The entropy <see cref="SampleArchitecture"/> returned for that architecture.</param>
+        /// <remarks>
+        /// Several architectures can be sampled before they are rewarded: each call is matched to its own sample
+        /// through <paramref name="logProb"/>, so a reward never reinforces a different architecture.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">
+        /// <paramref name="logProb"/> is not that of a sample drawn by <see cref="SampleArchitecture"/> and not yet
+        /// rewarded.
+        /// </exception>
         public void UpdateController(T reward, T logProb, T entropy)
         {
-            // ENAS (Pham et al. 2018) adds the entropy bonus to the reward, moves the baseline toward it, and
-            // minimises -(R - b) log pi(a) for the last sampled architecture with Adam.
-            _ = logProb;
+            int pending = _pendingSamples.FindLastIndex(sample => _ops.Equals(sample.LogProb, logProb));
+            if (pending < 0)
+            {
+                throw new InvalidOperationException(
+                    "UpdateController must be given the logProb of an architecture drawn by SampleArchitecture that has not been rewarded yet.");
+            }
+
+            var decisions = _pendingSamples[pending].Decisions;
+            _pendingSamples.RemoveAt(pending);
+            ReinforceStep(reward, decisions, entropy);
+        }
+
+        /// <summary>The REINFORCE step of <see cref="UpdateController"/> for the given sampled decisions.</summary>
+        private void ReinforceStep(T reward, IReadOnlyList<int> decisions, T entropy)
+        {
             T shapedReward = _ops.Add(reward, _ops.Multiply(_entropyWeight, entropy));
 
             // Update baseline using exponential moving average
@@ -356,13 +430,13 @@ namespace AiDotNet.AutoML.NAS
                 _ops.Multiply(_ops.Subtract(_ops.One, _baselineDecay), shapedReward)
             );
 
-            if (_lastDecisions.Count == 0)
+            if (decisions.Count == 0)
             {
                 return;
             }
 
             T scale = _ops.Negate(_ops.Subtract(shapedReward, _baseline));
-            var scoreFunction = LogProbabilityGradient(_lastDecisions);
+            var scoreFunction = LogProbabilityGradient(decisions);
             var engine = AiDotNetEngine.Current;
             for (int i = 0; i < _controllerGradients.Count; i++)
             {
@@ -370,10 +444,10 @@ namespace AiDotNet.AutoML.NAS
             }
 
             _controllerStep++;
-            T learningRate = _ops.FromDouble(ControllerLearningRate);
-            T beta1 = _ops.FromDouble(ControllerBeta1);
-            T beta2 = _ops.FromDouble(ControllerBeta2);
-            T epsilon = _ops.FromDouble(ControllerEpsilon);
+            T learningRate = _ops.FromDouble(_options.ControllerLearningRate);
+            T beta1 = _ops.FromDouble(_options.ControllerBeta1);
+            T beta2 = _ops.FromDouble(_options.ControllerBeta2);
+            T epsilon = _ops.FromDouble(_options.ControllerEpsilon);
             T noWeightDecay = _ops.Zero;
             for (int i = 0; i < _controllerWeights.Count; i++)
             {
@@ -457,14 +531,15 @@ namespace AiDotNet.AutoML.NAS
                 : inputs;
             supernet.Predict(warmupSample);
 
-            T[] learningRates = NeuralArchitectureSearch<T>.CosineAnnealedLearningRates(SearchSteps,
-                _ops.FromDouble(SharedMaxLearningRate), _ops.FromDouble(SharedMinLearningRate));
-            T momentum = _ops.FromDouble(SharedMomentum);
-            T weightDecay = _ops.FromDouble(SharedWeightDecay);
-            T clipNorm = _ops.FromDouble(SharedGradientClipNorm);
+            int searchSteps = _options.SearchSteps;
+            T[] learningRates = NeuralArchitectureSearch<T>.CosineAnnealedLearningRates(searchSteps,
+                _ops.FromDouble(_options.SharedMaxLearningRate), _ops.FromDouble(_options.SharedMinLearningRate));
+            T momentum = _ops.FromDouble(_options.SharedMomentum);
+            T weightDecay = _ops.FromDouble(_options.SharedWeightDecay);
+            T clipNorm = _ops.FromDouble(_options.SharedGradientClipNorm);
             var momentumBuffers = new Dictionary<string, Vector<T>>();
 
-            foreach (int step in Enumerable.Range(0, SearchSteps))
+            foreach (int step in Enumerable.Range(0, searchSteps))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (DateTime.UtcNow >= deadlineUtc)
@@ -495,7 +570,7 @@ namespace AiDotNet.AutoML.NAS
                 UpdateController(ValidationReward(supernet, architecture, validationInputs, validationTargets), logProb, entropy);
             }
 
-            var candidates = Enumerable.Range(0, DeriveSamples).Select(_ => SampleArchitecture().architecture).ToList();
+            var candidates = Enumerable.Range(0, _options.DeriveSamples).Select(_ => SampleArchitecture().architecture).ToList();
             var rewards = new Vector<T>(candidates
                 .Select(candidate => ValidationReward(supernet, candidate, validationInputs, validationTargets))
                 .ToArray());

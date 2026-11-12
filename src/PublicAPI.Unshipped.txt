@@ -22614,3 +22614,45 @@ override AiDotNet.SurvivalAnalysis.RandomSurvivalForest<T>.PredictCumulativeHaza
 AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>
 AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>.ApproximatePerceptualSpeechQuality(int sampleRate = 16000) -> void
 AiDotNet.Metrics.ApproximatePerceptualSpeechQuality<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! degraded, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reference) -> T
+AiDotNet.AutoML.NAS.ENASOptions
+AiDotNet.AutoML.NAS.ENASOptions.ENASOptions() -> void
+AiDotNet.AutoML.NAS.ENASOptions.NumNodes.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.NumNodes.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerHiddenSize.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.ControllerHiddenSize.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.BaselineDecay.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.BaselineDecay.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.EntropyWeight.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.EntropyWeight.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerInitRange.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerInitRange.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerTanhConstant.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerTanhConstant.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerTemperature.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerTemperature.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerLearningRate.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerLearningRate.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerBeta1.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerBeta1.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerBeta2.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerBeta2.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.ControllerEpsilon.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.ControllerEpsilon.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedMaxLearningRate.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedMaxLearningRate.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedMinLearningRate.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedMinLearningRate.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedMomentum.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedMomentum.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedWeightDecay.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedWeightDecay.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SharedGradientClipNorm.get -> double
+AiDotNet.AutoML.NAS.ENASOptions.SharedGradientClipNorm.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.SearchSteps.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.SearchSteps.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.DeriveSamples.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.DeriveSamples.set -> void
+AiDotNet.AutoML.NAS.ENASOptions.Seed.get -> int
+AiDotNet.AutoML.NAS.ENASOptions.Seed.set -> void
+AiDotNet.AutoML.NAS.ENAS<T>.ENAS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.ENASOptions! options) -> void
+AiDotNet.AutoML.NAS.ENAS<T>.Options.get -> AiDotNet.AutoML.NAS.ENASOptions!
