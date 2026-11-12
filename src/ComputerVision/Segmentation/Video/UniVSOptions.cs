@@ -63,8 +63,9 @@ public class UniVSOptions : SegmentationModelOptions
     public int NumPromptPoints { get; set; } = 32;
 
     /// <summary>
-    /// Gets or sets how many visual prompts (the first one plus the most recent predictions) each object's prompt
-    /// memory pool keeps. The paper does not state a pool size; the default, 5, is its stage-3 clip length.
+    /// Gets or sets how many of the most recent visual prompts each object's prompt memory pool keeps. Default: 5,
+    /// the authors' configuration (<c>MODEL.UniVS.TEST.NUM_PREV_FRAMES_MEMORY = 5</c> in the official UniVS code,
+    /// which slices the memory to its last five entries).
     /// </summary>
     public int PromptMemoryLength { get; set; } = 5;
 

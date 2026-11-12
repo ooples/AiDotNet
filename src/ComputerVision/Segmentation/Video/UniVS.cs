@@ -398,9 +398,21 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
             _promptMemory[objectId] = pool;
         }
 
+        AppendToMemory(pool, tokens, _options.PromptMemoryLength);
+    }
+
+    /// <summary>
+    /// Appends a visual prompt to an object's memory pool and keeps only the <paramref name="length"/> most recent
+    /// prompts, as the official UniVS code does (<c>prompt_memory[:, -num_prev_frames_memory:]</c> with
+    /// <c>NUM_PREV_FRAMES_MEMORY = 5</c>); no earlier prompt is pinned.
+    /// </summary>
+    internal static void AppendToMemory(List<Tensor<T>> pool, Tensor<T> tokens, int length)
+    {
+        if (pool is null) throw new ArgumentNullException(nameof(pool));
+        if (tokens is null) throw new ArgumentNullException(nameof(tokens));
+        if (length < 1) throw new ArgumentOutOfRangeException(nameof(length), "The prompt memory keeps at least one prompt.");
         pool.Add(tokens);
-        // Keep the first prompt and the most recent ones.
-        if (pool.Count > _options.PromptMemoryLength && pool.Count > 1) pool.RemoveAt(1);
+        if (pool.Count > length) pool.RemoveRange(0, pool.Count - length);
     }
 
     /// <summary>Feeds the masks <c>[O, H, W]</c> back to the prompt memory as visual prompts.</summary>
