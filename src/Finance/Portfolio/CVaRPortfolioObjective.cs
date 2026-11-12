@@ -253,6 +253,9 @@ public class CVaRPortfolioObjective<T>
     /// count each trade twice.
     /// </remarks>
     public T Turnover(Vector<T> previousWeights, Vector<T> newWeights)
+        => NumOps.FromDouble(WideTurnover(previousWeights, newWeights));
+
+    private static double WideTurnover(Vector<T> previousWeights, Vector<T> newWeights)
     {
         if (previousWeights == null) throw new ArgumentNullException(nameof(previousWeights));
         if (newWeights == null) throw new ArgumentNullException(nameof(newWeights));
@@ -261,10 +264,10 @@ public class CVaRPortfolioObjective<T>
                 $"Allocations must align; got {previousWeights.Length} and {newWeights.Length}.",
                 nameof(newWeights));
 
-        if (newWeights.Length == 0) return NumOps.Zero;
+        if (newWeights.Length == 0) return 0.0;
         double sum = Engine.TensorSum(Engine.TensorAbs(
             Engine.TensorSubtract(Tensor<T>.FromVector(newWeights).Cast<double>(), Tensor<T>.FromVector(previousWeights).Cast<double>())));
-        return NumOps.FromDouble(0.5 * sum);
+        return 0.5 * sum;
     }
 
     /// <summary>
@@ -281,6 +284,6 @@ public class CVaRPortfolioObjective<T>
             throw new ArgumentOutOfRangeException(nameof(basisPoints), basisPoints,
                 "basisPoints must be a finite, non-negative value.");
 
-        return NumOps.FromDouble(NumOps.ToDouble(Turnover(previousWeights, newWeights)) * (basisPoints / 10000.0));
+        return NumOps.FromDouble(WideTurnover(previousWeights, newWeights) * (basisPoints / 10000.0));
     }
 }

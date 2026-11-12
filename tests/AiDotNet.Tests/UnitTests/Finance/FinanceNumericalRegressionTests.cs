@@ -41,6 +41,9 @@ public class FinanceNumericalRegressionTests
         var next = new Vector<Half>(new[] { (Half)60000 });
         Assert.Equal((Half)60000, objective.Turnover(previous, next));
         Assert.Equal((Half)0.0006, objective.TransactionCost(previous, next, 0.0001));
+        Assert.Equal((Half)0.0012, objective.TransactionCost(
+            new Vector<Half>(new[] { (Half)(-60000), (Half)(-60000) }),
+            new Vector<Half>(new[] { (Half)60000, (Half)60000 }), 0.0001));
     }
 
     [Fact]
