@@ -108,9 +108,11 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             var totalLossLow = fbnetLow.ComputeTotalLoss(taskLoss);
             var totalLossHigh = fbnetHigh.ComputeTotalLoss(taskLoss);
 
-            // Assert - Higher latency weight should produce different total loss
-            Assert.True(totalLossLow >= taskLoss, "Total loss should be at least task loss");
-            Assert.True(totalLossHigh >= taskLoss, "Total loss should be at least task loss");
+            // Assert - FBNet (Wu et al. 2019), Eq. 6: L = CE * alpha * log(LAT)^beta is linear in alpha, and both
+            // instances share seed 42 (same Gumbel draws, same LAT). The old ">= task loss" assertions encoded an
+            // additive CE + alpha * log(LAT), which is not the paper's loss.
+            Assert.True(totalLossLow > 0.0, "Latency factor should be positive");
+            Assert.Equal(9.0 * totalLossLow, totalLossHigh, 1e-9);
         }
 
         [Theory]
