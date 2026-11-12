@@ -926,4 +926,85 @@ public class FeatureSelectionPopulationReferenceTests
         Assert.Equal(0, rotated[4], 12);
         Assert.Equal(System.Math.PI / 2, rotated[5], 12);
     }
+
+    // ---------------------------------------------------------------- Differential privacy (exponential mechanism)
+
+    [Fact]
+    public void DifferentialPrivacy_NoiseScaleIsTwoKSensitivityOverEpsilon()
+    {
+        // Delta = 6 B_x B_y / n = 6 * 2 * 0.5 / 100 = 0.06; scale = 2 k Delta / epsilon = 2 * 3 * 0.06 / 0.5
+        Assert.Equal(0.72, AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<double>.NoiseScaleFor(
+            0.5, 3, 100, 2.0, 0.5), 12);
+
+        var (x, y) = Problem(15, 40, 5);
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<double>(
+            2, 1.0, 3, null, 1.0, 1.0);
+        selector.Fit(x, y);
+        Assert.Equal(2 * 2 * 6.0 / 40 / 1.0, selector.NoiseScale, 12);
+        Assert.Equal(2, selector.SelectedIndices?.Length);
+    }
+
+    [Fact]
+    public void DifferentialPrivacy_UtilitySensitivityIsBoundedBySixOverN()
+    {
+        var rng = new System.Random(31);
+        int n = 20, p = 4;
+        double bound = 6.0 / n, worst = 0;
+        for (int trial = 0; trial < 300; trial++)
+        {
+            var x = new Matrix<double>(n, p);
+            var y = new Vector<double>(n);
+            for (int i = 0; i < n; i++)
+            {
+                y[i] = rng.NextDouble() < 0.5 ? -1 : 1;
+                for (int j = 0; j < p; j++) x[i, j] = rng.NextDouble() < 0.5 ? -1.5 : 1.5;
+            }
+
+            var before = ToArray(AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<double>.Utilities(x, y, 1, 1));
+
+            // Neighbouring dataset: one row replaced by extreme values
+            int row = rng.Next(n);
+            y[row] = -y[row];
+            for (int j = 0; j < p; j++) x[row, j] = rng.NextDouble() < 0.5 ? -3 : 3;
+            var after = ToArray(AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<double>.Utilities(x, y, 1, 1));
+
+            for (int j = 0; j < p; j++) worst = System.Math.Max(worst, System.Math.Abs(after[j] - before[j]));
+        }
+
+        Assert.True(worst <= bound + 1e-12, $"utility changed by {worst} > {bound}");
+    }
+
+    [Fact]
+    public void DifferentialPrivacy_SelectionFollowsTheExponentialMechanism()
+    {
+        // k = 1: P(j) = exp(u_j / scale) / sum; k = 2: sequential sampling without replacement (peeling)
+        double[] u = { 0, 0.1, 0.3 };
+        double scale = 0.1;
+        var w = u.Select(v => System.Math.Exp(v / scale)).ToArray();
+        double total = w.Sum();
+        var rng = new System.Random(41);
+        int trials = 20000;
+        var single = new int[3];
+        var pairs = new int[3]; // pair without feature i
+        var utility = Tensor1D(u);
+        for (int t = 0; t < trials; t++)
+        {
+            single[AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<double>.ExponentialMechanismTopK(
+                utility, 1, scale, rng)[0]]++;
+            var two = AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<double>.ExponentialMechanismTopK(
+                utility, 2, scale, rng);
+            pairs[3 - two[0] - two[1]]++;
+        }
+
+        for (int j = 0; j < 3; j++)
+            Assert.True(System.Math.Abs(w[j] / total - (double)single[j] / trials) < 0.015, $"feature {j}");
+
+        for (int missing = 0; missing < 3; missing++)
+        {
+            int a = (missing + 1) % 3, b = (missing + 2) % 3;
+            double expected = w[a] / total * w[b] / (total - w[a]) + w[b] / total * w[a] / (total - w[b]);
+            Assert.True(System.Math.Abs(expected - (double)pairs[missing] / trials) < 0.015,
+                $"pair without {missing}: expected {expected}, observed {(double)pairs[missing] / trials}");
+        }
+    }
 }

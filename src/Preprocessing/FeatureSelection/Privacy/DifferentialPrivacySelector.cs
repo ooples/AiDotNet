@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Privacy;
 
@@ -11,14 +12,25 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Privacy;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Selects features using differential privacy mechanisms to protect individual
-/// data points while still identifying important features.
+/// Selects features with the exponential mechanism (McSherry and Talwar 2007) so that the selected set is
+/// epsilon-differentially private with respect to replacing one row of the data. The utility of feature j is the
+/// absolute covariance |cov(x_j, y)| of the feature and target after clipping them to
+/// [-featureBound, featureBound] and [-targetBound, targetBound]. With values in those ranges, replacing one of the
+/// n rows changes the mean of x_j y by at most 2 B_x B_y / n and the product of the means by at most 4 B_x B_y / n,
+/// so the utility has sensitivity Delta = 6 B_x B_y / n.
 /// </para>
-/// <para><b>For Beginners:</b> Differential privacy adds calibrated noise to feature
-/// scores to protect individual privacy. Even if an attacker sees the selected
-/// features, they can't determine if any specific individual was in the dataset.
-/// This uses the exponential mechanism to select features with probability
-/// proportional to their importance while maintaining privacy guarantees.
+/// <para>
+/// The k features are chosen by k rounds of the exponential mechanism, each with budget epsilon / k over the
+/// features not chosen yet, selecting feature j with probability proportional to
+/// exp((epsilon / k) u_j / (2 Delta)); by sequential composition the whole selection is epsilon-DP. The rounds
+/// are sampled in one shot with the Gumbel-max trick: adding Gumbel noise of scale 2 k Delta / epsilon to every
+/// utility and taking the k largest has the same distribution (Durfee and Rogers 2019). Only the selected indices
+/// are released; the noisy utilities are not.
+/// </para>
+/// <para><b>For Beginners:</b> Differential privacy adds calibrated randomness to the feature choice so that
+/// whether any single individual is in the dataset barely changes which features get selected. Scale the
+/// features and target to known bounds (for example from their documented domains, not from the data itself)
+/// and pass those bounds; values outside them are clipped so the privacy guarantee always holds.
 /// </para>
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
@@ -28,17 +40,31 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
     private readonly int _nFeaturesToSelect;
     private readonly double _epsilon;
     private readonly int? _randomState;
+    private readonly double _featureBound;
+    private readonly double _targetBound;
 
-    private double[]? _noisyScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
+    private double _noiseScale;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
+
+    /// <summary>The total privacy budget of the selection.</summary>
     public double Epsilon => _epsilon;
-    public double[]? NoisyScores => _noisyScores;
+
+    /// <summary>Features are clipped to [-FeatureBound, FeatureBound] before the utilities are computed.</summary>
+    public double FeatureBound => _featureBound;
+
+    /// <summary>The target is clipped to [-TargetBound, TargetBound] before the utilities are computed.</summary>
+    public double TargetBound => _targetBound;
+
+    /// <summary>The Gumbel noise scale 2 k Delta / epsilon used by the last fit (0 before fitting).</summary>
+    public double NoiseScale => _noiseScale;
+
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
@@ -46,17 +72,25 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
         int nFeaturesToSelect = 10,
         double epsilon = 1.0,
         int? randomState = null,
-        int[]? columnIndices = null)
+        int[]? columnIndices = null,
+        double featureBound = 1.0,
+        double targetBound = 1.0)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
         if (epsilon <= 0)
             throw new ArgumentException("Epsilon must be positive.", nameof(epsilon));
+        if (featureBound <= 0)
+            throw new ArgumentException("Feature bound must be positive.", nameof(featureBound));
+        if (targetBound <= 0)
+            throw new ArgumentException("Target bound must be positive.", nameof(targetBound));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _epsilon = epsilon;
         _randomState = randomState;
+        _featureBound = featureBound;
+        _targetBound = targetBound;
     }
 
     /// <inheritdoc />
@@ -80,62 +114,56 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        // Compute base scores using correlation (sensitivity-bounded)
-        var baseScores = new double[p];
-        double targetMean = y.Average();
-        double targetVar = y.Sum(v => (v - targetMean) * (v - targetMean));
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double mean = col.Average();
-            double cov = 0, varX = 0;
-            for (int i = 0; i < n; i++)
-            {
-                cov += (col[i] - mean) * (y[i] - targetMean);
-                varX += (col[i] - mean) * (col[i] - mean);
-            }
-
-            double denom = Math.Sqrt(varX * targetVar);
-            // Correlation is bounded in [-1, 1], so sensitivity is 2/n
-            baseScores[j] = denom > 1e-10 ? Math.Abs(cov / denom) : 0;
-        }
-
-        // Add Laplace noise for differential privacy
-        // Sensitivity of correlation is approximately 2/n
-        double sensitivity = 2.0 / n;
-        double scale = sensitivity / _epsilon;
-
-        _noisyScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            // Laplace noise: sample from Laplace(0, scale)
-            double u = rand.NextDouble() - 0.5;
-            double laplace = -scale * Math.Sign(u) * Math.Log(1 - 2 * Math.Abs(u));
-            _noisyScores[j] = baseScores[j] + laplace;
-        }
-
-        // Select top features by noisy scores
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _noisyScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        var utility = Utilities(data, target, _featureBound, _targetBound);
+        _noiseScale = NoiseScaleFor(_epsilon, numToSelect, n, _featureBound, _targetBound);
+        _selectedIndices = ExponentialMechanismTopK(utility, numToSelect, _noiseScale, rand);
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The utilities |cov(clip(x_j), clip(y))| of every feature, with features clipped to
+    /// [-<paramref name="featureBound"/>, <paramref name="featureBound"/>] and the target to
+    /// [-<paramref name="targetBound"/>, <paramref name="targetBound"/>]. Returns [p].
+    /// </summary>
+    internal static Tensor<T> Utilities(Matrix<T> data, Vector<T> target, double featureBound, double targetBound)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = data.Rows;
+        int p = data.Columns;
+        var x = engine.TensorClamp(Tensor<T>.FromMatrix(data), ops.FromDouble(-featureBound), ops.FromDouble(featureBound));
+        var y = engine.TensorClamp(Tensor<T>.FromVector(target), ops.FromDouble(-targetBound), ops.FromDouble(targetBound));
+        var yColumn = engine.TensorBroadcastTo(engine.Reshape(y, new[] { n, 1 }), new[] { n, p });
+        var meanProduct = engine.ReduceMean(engine.TensorMultiply(x, yColumn), new[] { 0 }, false);
+        var meanX = engine.ReduceMean(x, new[] { 0 }, false);
+        var meanY = engine.TensorBroadcastTo(engine.ReduceMean(y, new[] { 0 }, true), new[] { p });
+        return engine.TensorAbs(engine.TensorSubtract(meanProduct, engine.TensorMultiply(meanX, meanY)));
+    }
+
+    /// <summary>
+    /// The Gumbel noise scale 2 k Delta / epsilon of k exponential-mechanism rounds with budget epsilon / k each,
+    /// for the utility sensitivity Delta = 6 B_x B_y / n.
+    /// </summary>
+    internal static double NoiseScaleFor(double epsilon, int k, int n, double featureBound, double targetBound)
+    {
+        double sensitivity = 6.0 * featureBound * targetBound / n;
+        return 2.0 * k * sensitivity / epsilon;
+    }
+
+    /// <summary>
+    /// The k features of the peeling exponential mechanism, sampled in one shot: the indices (ascending) of the
+    /// k largest u_j + scale * G_j with G_j = -log(-log U_j) standard Gumbel, U_j uniform.
+    /// </summary>
+    internal static int[] ExponentialMechanismTopK(Tensor<T> utility, int k, double scale, Random rand)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var uniform = PopulationSearchOps.Uniform<T>(rand, utility.Length);
+        var gumbel = engine.TensorNegate(engine.TensorLog(engine.TensorNegate(engine.TensorLog(uniform))));
+        var noisy = engine.TensorAdd(utility, engine.TensorMultiplyScalar(gumbel, ops.FromDouble(scale)));
+        return FeatureSelectionTensorOps.TopKIndicesSorted(noisy, k);
     }
 
     /// <inheritdoc />
@@ -151,15 +179,7 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("DifferentialPrivacySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
