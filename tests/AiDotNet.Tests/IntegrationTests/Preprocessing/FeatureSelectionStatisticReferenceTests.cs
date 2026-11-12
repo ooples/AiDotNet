@@ -1,10 +1,10 @@
-using AiDotNet.Preprocessing.FeatureSelection;
 using AiDotNet.Preprocessing.FeatureSelection.Filter;
 using AiDotNet.Preprocessing.FeatureSelection.Filter.Statistical;
 using AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using UnivariateSelector = AiDotNet.Preprocessing.FeatureSelection.GenericUnivariateSelect<double>;
 using RegressionFRegression = AiDotNet.Preprocessing.FeatureSelection.Filter.Regression.FRegression<double>;
 using StatisticalWelchTTest = AiDotNet.Preprocessing.FeatureSelection.Filter.Statistical.WelchTTest<double>;
 using UnivariateFRegression = AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate.FRegression<double>;
@@ -289,8 +289,8 @@ public class FeatureSelectionStatisticReferenceTests
     [Fact(Timeout = 120000)]
     public async Task GenericUnivariateSelect_FClassif_MatchesSklearn()
     {
-        var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.KBest, param: 1, defaultScoreFunc: "f_classif");
+        var selector = new UnivariateSelector(
+            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1, defaultScoreFunc: "f_classif");
         selector.Fit(M(ThreeClassData), V(ThreeClassTarget));
 
         Assert.NotNull(selector.Scores);
@@ -360,8 +360,8 @@ public class FeatureSelectionStatisticReferenceTests
     [Fact(Timeout = 120000)]
     public async Task GenericUnivariateSelect_FRegression_MatchesSklearn()
     {
-        var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.KBest, param: 1, defaultScoreFunc: "f_regression");
+        var selector = new UnivariateSelector(
+            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1, defaultScoreFunc: "f_regression");
         selector.Fit(M(RegressionData), V(RegressionTarget));
 
         Assert.NotNull(selector.Scores);
@@ -454,8 +454,8 @@ public class FeatureSelectionStatisticReferenceTests
         var pValues = new Vector<double>(new[] { 0.02, 0.06, 0.07, 0.5 });
         var scores = new Vector<double>(new[] { 4.0, 3.0, 2.0, 1.0 });
 
-        var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.FDR, param: 0.1, scoreFunc: (m, t) => (scores, pValues));
+        var selector = new UnivariateSelector(
+            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FDR, param: 0.1, scoreFunc: (m, t) => (scores, pValues));
         selector.Fit(data, target);
 
         Assert.NotNull(selector.SelectedIndices);
