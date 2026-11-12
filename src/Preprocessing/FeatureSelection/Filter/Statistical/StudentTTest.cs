@@ -29,8 +29,8 @@ public class StudentTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly double _alpha;
     private readonly bool _equalVariances;
 
-    private double[]? _tStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _tStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -38,8 +38,8 @@ public class StudentTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
     public bool EqualVariances => _equalVariances;
-    public double[]? TStatistics => _tStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? TStatistics => _tStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -76,92 +76,67 @@ public class StudentTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        // Split samples by class (binary classification)
-        var group0 = new List<int>();
-        var group1 = new List<int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.Compare(target[i], NumOps.One) == 0)
-                group1.Add(i);
-            else
-                group0.Add(i);
-        }
-
-        int n0 = group0.Count;
-        int n1 = group1.Count;
+        // Split samples by class (binary classification): target == 1 is group 1, everything else group 0
+        var group1 = engine.TensorEquals(FeatureSelectionTensorOps.AsTensor(target), NumOps.One);
+        var group0 = FeatureSelectionTensorOps.OneMinus(group1);
+        int n1 = engine.TensorCountNonzero(group1);
+        int n0 = n - n1;
 
         if (n0 < 2 || n1 < 2)
         {
-            _tStatistics = new double[p];
-            _pValues = Enumerable.Repeat(1.0, p).ToArray();
+            _tStatistics = new Vector<T>(p);
+            _pValues = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One).ToVector();
             _selectedIndices = Enumerable.Range(0, Math.Min(_nFeaturesToSelect, p)).ToArray();
             IsFitted = true;
             return;
         }
 
-        _tStatistics = new double[p];
-        _pValues = new double[p];
+        // Means and sums of squared deviations of every feature within each group
+        var x = FeatureSelectionTensorOps.AsTensor(data);
+        var (mean0, ss0) = FeatureSelectionTensorOps.MaskedColumnMoments(x, group0, n0);
+        var (mean1, ss1) = FeatureSelectionTensorOps.MaskedColumnMoments(x, group1, n1);
+        var var0 = engine.TensorDivideScalar(ss0, NumOps.FromDouble(n0 - 1));
+        var var1 = engine.TensorDivideScalar(ss1, NumOps.FromDouble(n1 - 1));
+        var meanDifference = engine.TensorSubtract(mean0, mean1);
 
-        for (int j = 0; j < p; j++)
+        Tensor<T> tStatistics;
+        Tensor<T> degreesOfFreedom;
+        if (_equalVariances)
         {
-            // Compute means
-            double mean0 = group0.Sum(i => NumOps.ToDouble(data[i, j])) / n0;
-            double mean1 = group1.Sum(i => NumOps.ToDouble(data[i, j])) / n1;
+            // Pooled variance (Student's t-test)
+            var sp2 = engine.TensorDivideScalar(engine.TensorAdd(ss0, ss1), NumOps.FromDouble(n0 + n1 - 2));
+            var se = engine.TensorSqrt(engine.TensorMultiplyScalar(sp2, NumOps.FromDouble(1.0 / n0 + 1.0 / n1)));
+            tStatistics = FeatureSelectionTensorOps.SignedSeparationAwareRatio(meanDifference, se, 1e-10);
+            degreesOfFreedom = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.FromDouble(n0 + n1 - 2));
+        }
+        else
+        {
+            // Welch's t-test (unequal variances)
+            var s20 = engine.TensorDivideScalar(var0, NumOps.FromDouble(n0));
+            var s21 = engine.TensorDivideScalar(var1, NumOps.FromDouble(n1));
+            var sum = engine.TensorAdd(s20, s21);
+            tStatistics = FeatureSelectionTensorOps.SignedSeparationAwareRatio(meanDifference, engine.TensorSqrt(sum), 1e-10);
 
-            // Compute variances
-            double var0 = group0.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean0, 2)) / (n0 - 1);
-            double var1 = group1.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean1, 2)) / (n1 - 1);
-
-            double t, df;
-
-            if (_equalVariances)
-            {
-                // Pooled variance (Student's t-test)
-                double sp2 = ((n0 - 1) * var0 + (n1 - 1) * var1) / (n0 + n1 - 2);
-                double se = Math.Sqrt(sp2 * (1.0 / n0 + 1.0 / n1));
-
-                t = se > 1e-10 ? (mean0 - mean1) / se : 0;
-                df = n0 + n1 - 2;
-            }
-            else
-            {
-                // Welch's t-test (unequal variances)
-                double se = Math.Sqrt(var0 / n0 + var1 / n1);
-                t = se > 1e-10 ? (mean0 - mean1) / se : 0;
-
-                // Welch-Satterthwaite degrees of freedom
-                double num = Math.Pow(var0 / n0 + var1 / n1, 2);
-                double den = Math.Pow(var0 / n0, 2) / (n0 - 1) + Math.Pow(var1 / n1, 2) / (n1 - 1);
-                df = den > 0 ? num / den : n0 + n1 - 2;
-            }
-
-            _tStatistics[j] = t;
-
-            // Approximate p-value using normal distribution for large df
-            _pValues[j] = 2 * (1 - NormalCDF(Math.Abs(t)));
+            // Welch-Satterthwaite degrees of freedom
+            var den = engine.TensorAdd(
+                engine.TensorDivideScalar(engine.TensorSquare(s20), NumOps.FromDouble(n0 - 1)),
+                engine.TensorDivideScalar(engine.TensorSquare(s21), NumOps.FromDouble(n1 - 1)));
+            degreesOfFreedom = FeatureSelectionTensorOps.GuardedDivide(
+                engine.TensorSquare(sum), den, 0.0, NumOps.FromDouble(n0 + n1 - 2));
         }
 
+        _tStatistics = tStatistics.ToVector();
+
+        // Two-tailed p-value from the t-distribution (scipy.stats.ttest_ind)
+        var pValues = FeatureSelectionTensorOps.StudentTTwoSided(tStatistics, degreesOfFreedom);
+        _pValues = pValues.ToVector();
+
         // Select features with smallest p-values
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _pValues
-            .Select((pval, idx) => (PValue: pval, Index: idx))
-            .OrderBy(x => x.PValue)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double NormalCDF(double x)
-    {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return x > 0 ? 1 - p : p;
     }
 
     /// <inheritdoc />
@@ -177,15 +152,7 @@ public class StudentTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("StudentTTest has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

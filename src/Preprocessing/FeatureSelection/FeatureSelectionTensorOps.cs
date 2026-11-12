@@ -155,6 +155,22 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>
+    /// The "candidates first" rule: when at least <paramref name="k"/> scores are at or above
+    /// <paramref name="minimum"/>, the <paramref name="k"/> best of those candidates; otherwise the
+    /// <paramref name="k"/> best scores overall (ties to the lower index). Returned in ascending index order.
+    /// </summary>
+    public static int[] CandidatesOrTopK<T>(Tensor<T> scores, T minimum, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        var candidates = OneMinus(engine.TensorLessThan(NaNAsLowest(scores), minimum));
+        if (engine.TensorCountNonzero(candidates) >= k)
+            return TopKIndicesSorted(
+                engine.TensorWhere(candidates, scores, FilledLike(scores, MathHelper.GetNumericOperations<T>().MinValue)), k);
+
+        return TopKIndicesSorted(scores, k);
+    }
+
+    /// <summary>
     /// Integer class labels of a target, each value rounded to the nearest integer like <c>(int)Math.Round(value)</c>:
     /// returns, per row, the position of its class among the sorted distinct labels.
     /// </summary>
@@ -445,6 +461,30 @@ internal static class FeatureSelectionTensorOps
             FilledLike(numerator, ops.Zero));
         return engine.TensorWhere(
             engine.TensorGreaterThan(denominator, eps), GuardedDivide(numerator, denominator, epsilon, ops.Zero), separated);
+    }
+
+    /// <summary>
+    /// <see cref="SeparationAwareRatio{T}"/> of a signed numerator: <c>numerator / denominator</c>, or
+    /// <c>sign(numerator) * infinity</c> when the denominator vanishes but the numerator does not (a t statistic
+    /// of two groups that do not overlap at all), or 0 when both vanish.
+    /// </summary>
+    public static Tensor<T> SignedSeparationAwareRatio<T>(Tensor<T> numerator, Tensor<T> denominator, double epsilon)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorMultiply(
+            engine.TensorSign(numerator), SeparationAwareRatio(engine.TensorAbs(numerator), denominator, epsilon));
+    }
+
+    /// <summary>
+    /// The rows of a target below <paramref name="threshold"/> as a 0/1 [n] mask (the "class 0" rows of a binary
+    /// target), with its row count in <paramref name="count"/>.
+    /// </summary>
+    public static Tensor<T> BelowMask<T>(Vector<T> target, double threshold, out int count)
+    {
+        var engine = AiDotNetEngine.Current;
+        var mask = engine.TensorLessThan(AsTensor(target), MathHelper.GetNumericOperations<T>().FromDouble(threshold));
+        count = engine.TensorCountNonzero(mask);
+        return mask;
     }
 
     /// <summary>
