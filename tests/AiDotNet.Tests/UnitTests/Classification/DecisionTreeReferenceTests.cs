@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Classification.Trees;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -65,5 +66,61 @@ public class DecisionTreeReferenceTests
         });
         full.Train(x, y);
         Assert.Equal(4, full.LeafCount);
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Float_and_half_trees_match_the_scikit_learn_references()
+    {
+        // The same references in narrower T: the split search runs in T, counts stay integers.
+        var xorX = new Matrix<float>(new[,] { { 0f, 0f }, { 0f, 1f }, { 1f, 0f }, { 1f, 1f } });
+        var xorTree = new DecisionTreeClassifier<float>();
+        xorTree.Train(xorX, new Vector<float>(new[] { 0f, 1, 1, 0 }));
+        Assert.Equal(4, xorTree.LeafCount);
+
+        var x = new Matrix<Half>(10, 1);
+        for (int i = 0; i < 10; i++) x[i, 0] = (Half)i;
+        var y = new Vector<Half>(new[] { (Half)0, (Half)0, (Half)0, (Half)0, (Half)0, (Half)1, (Half)1, (Half)1, (Half)0, (Half)1 });
+        var tree = new DecisionTreeClassifier<Half>(new DecisionTreeClassifierOptions<Half>
+        {
+            Criterion = ClassificationSplitCriterion.Entropy,
+            MinImpurityDecrease = 0.2
+        });
+        tree.Train(x, y);
+
+        Assert.Equal(2, tree.LeafCount);
+        var probabilities = tree.PredictProbabilities(x);
+        for (int i = 0; i < 10; i++)
+        {
+            Assert.Equal(i < 5 ? 0.0 : 0.8, (double)probabilities[i, 1], 1e-3);
+        }
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Half_tree_on_more_rows_than_half_can_count_does_not_saturate()
+    {
+        // 70,000 rows (> Half's 65,504): one split at 499.5 separates the classes; every leaf is pure.
+        const int rows = 70000;
+        var x = new Matrix<Half>(rows, 1);
+        var y = new Vector<Half>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            int v = i % 1000;
+            x[i, 0] = (Half)v;
+            y[i] = v < 500 ? (Half)0 : (Half)1;
+        }
+
+        var tree = new DecisionTreeClassifier<Half>();
+        tree.Train(x, y);
+
+        Assert.Equal(2, tree.LeafCount);
+        var probabilities = tree.PredictProbabilities(x);
+        for (int i = 0; i < rows; i += 997)
+        {
+            double expected = i % 1000 < 500 ? 0.0 : 1.0;
+            Assert.Equal(expected, (double)probabilities[i, 1], 1e-6);
+            Assert.Equal(1.0 - expected, (double)probabilities[i, 0], 1e-6);
+        }
     }
 }

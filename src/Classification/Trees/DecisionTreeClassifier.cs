@@ -117,13 +117,13 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
     /// ranks its data once and trains every tree on its bootstrap rows this way, without copying them out.
     /// </summary>
     /// <param name="y">Labels indexed by data row.</param>
-    internal void TrainOnRows(DenseTreeData data, Vector<T> y, int[] rows)
+    internal void TrainOnRows(DenseTreeData<T> data, Vector<T> y, int[] rows)
     {
         var sampleLabels = AiDotNetEngine.Current.TensorTake(y.AsTensor(), new Tensor<int>(rows, new[] { rows.Length })).ToVector();
         TrainDense(data, y, rows, sampleLabels);
     }
 
-    private void TrainDense(DenseTreeData data, Vector<T> y, int[] rows, Vector<T> sampleLabels)
+    private void TrainDense(DenseTreeData<T> data, Vector<T> y, int[] rows, Vector<T> sampleLabels)
     {
         NumFeatures = data.Features;
         ClassLabels = ExtractClassLabels(sampleLabels);
@@ -146,12 +146,13 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <summary>
-    /// Updates feature importances based on the gain from a split.
+    /// Adds a split's impurity decrease weighted by its share of the samples (scikit-learn's
+    /// N_t / N * impurity decrease; the normalization makes the scale irrelevant).
     /// </summary>
-    private void UpdateFeatureImportances(int feature, T gain, int numSamples)
+    private void UpdateFeatureImportances(int feature, T weightedGain)
     {
-        T weightedGain = NumOps.Multiply(gain, NumOps.FromDouble(numSamples));
-        (FeatureImportances ?? throw new InvalidOperationException("FeatureImportances has not been initialized."))[feature] = NumOps.Add(FeatureImportances[feature], weightedGain);
+        var importances = FeatureImportances ?? throw new InvalidOperationException("FeatureImportances has not been initialized.");
+        importances[feature] = NumOps.Add(importances[feature], weightedGain);
     }
 
     /// <summary>
