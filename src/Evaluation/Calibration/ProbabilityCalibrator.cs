@@ -551,7 +551,6 @@ public class ProbabilityCalibrator<T>
         // If scores are already probabilities, convert to logits first
         // Internal computation in double for numerical stability (exp, log)
 
-        var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         var logits = TemperatureLogits(scores);
         var labelTensor = new Tensor<T>(labels, new[] { labels.Length });
@@ -612,7 +611,6 @@ public class ProbabilityCalibrator<T>
         // Internal computation in double for numerical stability (exp, log)
 
         int n = scores.Length;
-        var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         var (logit, logScore) = BetaFeatures(scores);
         var labelTensor = new Tensor<T>(labels, new[] { labels.Length });
