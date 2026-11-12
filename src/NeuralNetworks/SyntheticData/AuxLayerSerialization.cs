@@ -212,7 +212,7 @@ internal static class AuxLayerSerialization
     /// vector's span (<c>MemoryMarshal</c> byte view), so values round-trip bit-for-bit in
     /// <typeparamref name="T"/> without a per-element conversion.
     /// </summary>
-    private static void WriteElements<T>(BinaryWriter writer, Vector<T> values)
+    internal static void WriteElements<T>(BinaryWriter writer, Vector<T> values)
     {
         int elementSize = GetElementSize<T>();
         writer.Write(values.Length);
@@ -241,7 +241,7 @@ internal static class AuxLayerSerialization
     /// <exception cref="InvalidDataException">
     /// The stream was written for an element type of a different size, or is truncated.
     /// </exception>
-    private static Vector<T> ReadElements<T>(BinaryReader reader)
+    internal static Vector<T> ReadElements<T>(BinaryReader reader)
     {
         int elementSize = GetElementSize<T>();
         int count = reader.ReadInt32();
