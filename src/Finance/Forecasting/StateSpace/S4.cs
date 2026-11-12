@@ -959,11 +959,18 @@ public partial class S4<T> : ForecastingModelBase<T>
             var grid = Engine.TensorStack(rows, 0);
             if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) == 0)
             {
-                var sorted = Engine.TensorSort(grid, 0, false).Values;
-                return (
-                    Engine.TensorDivideScalar(Engine.ReduceSum(grid, new[] { 0 }, false), NumOps.FromDouble(samples.Count)),
-                    Engine.Reshape(Engine.TensorNarrow(sorted, 0, lowerIdx, 1).Contiguous(), new[] { horizonLength }),
-                    Engine.Reshape(Engine.TensorNarrow(sorted, 0, upperIdx, 1).Contiguous(), new[] { horizonLength }));
+                // A sum that overflows T while every sample is finite (e.g. float samples near 1e38) falls back
+                // to the reference path, which accumulates in double and so keeps the finite mean.
+                var meanForecast = Engine.TensorDivideScalar(Engine.ReduceSum(grid, new[] { 0 }, false), NumOps.FromDouble(samples.Count));
+                if (Engine.TensorCountNonzero(Engine.TensorIsInf(meanForecast)) == 0
+                    || Engine.TensorCountNonzero(Engine.TensorIsInf(grid)) > 0)
+                {
+                    var sorted = Engine.TensorSort(grid, 0, false).Values;
+                    return (
+                        meanForecast,
+                        Engine.Reshape(Engine.TensorNarrow(sorted, 0, lowerIdx, 1).Contiguous(), new[] { horizonLength }),
+                        Engine.Reshape(Engine.TensorNarrow(sorted, 0, upperIdx, 1).Contiguous(), new[] { horizonLength }));
+                }
             }
         }
 

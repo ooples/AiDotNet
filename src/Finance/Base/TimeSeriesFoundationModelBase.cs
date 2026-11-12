@@ -372,7 +372,7 @@ public abstract class TimeSeriesFoundationModelBase<T> : ForecastingModelBase<T>
         var clean = new Tensor<T>(new[] { 1, outputLength });
         int cleanCount = Math.Min(outputLength, target.Length);
         if (cleanCount > 0)
-            target.AsSpan().Slice(0, cleanCount).CopyTo(clean.Data.Span);
+            target.Contiguous().AsSpan().Slice(0, cleanCount).CopyTo(clean.Data.Span);
 
         var noisy = Engine.TensorAdd(
             Engine.TensorMultiply(rowAlpha, clean),

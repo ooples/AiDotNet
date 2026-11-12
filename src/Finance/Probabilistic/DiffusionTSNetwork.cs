@@ -138,9 +138,7 @@ internal sealed class DiffusionTSNetwork<T>
             var rows = new Tensor<T>[TrendPolynomialOrder];
             for (int p = 0; p < TrendPolynomialOrder; p++)
                 rows[p] = engine.TensorPower(position, _numOps.FromDouble(p + 1));
-            _trendBasis = TrendPolynomialOrder > 0
-                ? engine.TensorStack(rows, 0)
-                : new Tensor<T>(new[] { TrendPolynomialOrder, window });
+            _trendBasis = engine.TensorStack(rows, 0);
         }
 
         Build();
@@ -334,12 +332,10 @@ internal sealed class DiffusionTSNetwork<T>
     private Tensor<T> StepEmbedding(IEngine engine, Tensor<T> steps, int batch)
     {
         int half = _modelDim / 2;
-        var frequencies = new Tensor<T>(new[] { 1, half });
         double scale = half > 1 ? Math.Log(10000.0) / (half - 1) : 0.0;
-        if (half > 0)
-            frequencies = engine.Reshape(
-                engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, half, 1), _numOps.FromDouble(-scale))),
-                new[] { 1, half });
+        var frequencies = engine.Reshape(
+            engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, half, 1), _numOps.FromDouble(-scale))),
+            new[] { 1, half });
         var shape = new[] { batch, half };
         var phase = engine.TensorMultiply(
             engine.TensorBroadcastTo(engine.Reshape(steps, new[] { batch, 1 }), shape),

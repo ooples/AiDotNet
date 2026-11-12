@@ -160,7 +160,7 @@ public class QuantileForecastResult<T>
             {
                 int idx = (int)Math.Floor(q * (numSamples - 1));
                 idx = Math.Max(0, Math.Min(idx, numSamples - 1));
-                qForecasts[q] = engine.Reshape(engine.TensorNarrow(sorted, 0, idx, 1).Contiguous(), new[] { horizon });
+                qForecasts[q] = engine.Reshape(engine.TensorNarrow(sorted, 0, idx, 1), new[] { horizon }).Clone();
             }
         }
 
