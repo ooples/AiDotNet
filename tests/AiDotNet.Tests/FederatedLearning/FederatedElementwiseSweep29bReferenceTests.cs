@@ -193,4 +193,38 @@ public class FederatedElementwiseSweep29bReferenceTests
             }
         }
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task HierarchicalFedLoRA_CloudAggregatesFullUpdatesInGlobalRankSpace()
+    {
+        await Task.Yield();
+
+        // Edge 0: B = [1, 0]^T, A = [2, 0] -> diag(2, 0); edge 1: B = [0, 1]^T, A = [0, 1] -> diag(0, 1).
+        // Equal weights: dW = diag(1, 0.5), which has rank 2. At global rank 2 the cloud keeps it exactly;
+        // averaging zero-padded factors would give avg(B) avg(A) = [0.5, 0.5]^T [1, 0.5] instead.
+        var lora = new HierarchicalFedLoRA<double>(modelDim: 100, localRank: 1, globalRank: 2, numAdaptedLayers: 1, layerDim: 2);
+        var edges = new Dictionary<int, Vector<double>>
+        {
+            [0] = new Vector<double>(new[] { 1.0, 0.0, 2.0, 0.0 }),
+            [1] = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 }),
+        };
+
+        var global = lora.AggregateCloud(edges, null, demoteResult: false);
+        var expected = new[,] { { 1.0, 0.0 }, { 0.0, 0.5 } };
+        for (int i = 0; i < 2; i++)
+        {
+            for (int j = 0; j < 2; j++)
+            {
+                double product = global[i * 2] * global[4 + j] + global[i * 2 + 1] * global[4 + 2 + j];
+                Assert.Equal(expected[i, j], product, Precision);
+            }
+        }
+
+        // Demotion keeps the leading singular direction: diag(1, 0).
+        var local = lora.AggregateCloud(edges, null);
+        Assert.Equal(1.0, local[0] * local[2], Precision);
+        Assert.Equal(0.0, local[0] * local[3], Precision);
+        Assert.Equal(0.0, local[1] * local[2], Precision);
+        Assert.Equal(0.0, local[1] * local[3], Precision);
+    }
 }

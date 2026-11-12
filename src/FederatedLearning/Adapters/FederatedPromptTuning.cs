@@ -60,34 +60,20 @@ public class FederatedPromptTuning<T> : Infrastructure.FederatedLearningComponen
         int promptSize = AdapterParameterCount;
         int actualSize = Math.Min(promptSize, fullModelParameters.Length);
 
-        var promptParams = new T[actualSize];
-        for (int i = 0; i < actualSize; i++)
-        {
-            promptParams[i] = fullModelParameters[i];
-        }
-
-        return new Vector<T>(promptParams);
+        var promptParams = new Vector<T>(actualSize);
+        fullModelParameters.AsSpan().Slice(0, actualSize).CopyTo(promptParams.AsWritableSpan());
+        return promptParams;
     }
 
     /// <inheritdoc/>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
-        int totalParams = fullModelParameters.Length;
         int promptSize = aggregatedAdapters.Length;
 
-        var merged = new T[totalParams];
-        // Replace prompt parameters at the start
-        for (int i = 0; i < promptSize; i++)
-        {
-            merged[i] = aggregatedAdapters[i];
-        }
-        // Keep base model parameters unchanged
-        for (int i = promptSize; i < totalParams; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-
-        return new Vector<T>(merged);
+        // Replace prompt parameters at the start; keep base model parameters unchanged.
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(0, promptSize));
+        return merged;
     }
 
     /// <inheritdoc/>
@@ -97,7 +83,7 @@ public class FederatedPromptTuning<T> : Infrastructure.FederatedLearningComponen
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
 
         int promptSize = clientAdapters.Values.First().Length;
-        var aggregated = new T[promptSize];
+        var aggregated = new Vector<T>(promptSize);
         double totalWeight = 0;
 
         foreach (var (clientId, prompts) in clientAdapters)
@@ -105,19 +91,11 @@ public class FederatedPromptTuning<T> : Infrastructure.FederatedLearningComponen
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
 
-            T weight = NumOps.FromDouble(w);
-            for (int i = 0; i < promptSize; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(prompts[i], weight));
-            }
+            // Only the first promptSize entries of a longer prompt vector take part.
+            var clientPrompt = prompts.Length == promptSize ? prompts : prompts.GetSubVector(0, promptSize);
+            aggregated = Engine.Add(aggregated, Engine.Multiply(clientPrompt, NumOps.FromDouble(w)));
         }
 
-        T invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < promptSize; i++)
-        {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
-        }
-
-        return new Vector<T>(aggregated);
+        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
     }
 }
