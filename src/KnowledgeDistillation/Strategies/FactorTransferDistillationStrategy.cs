@@ -322,7 +322,22 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
             vector = VectorHelper.Normalize(newVector);
         }
 
-        return vector;
+        return CanonicalizeSign(vector);
+    }
+
+    /// <summary>
+    /// Flips an eigenvector so its largest-magnitude component (first one on ties) is non-negative.
+    /// </summary>
+    /// <remarks>
+    /// Eigenvectors are only defined up to sign, and power iteration from a random start returns either
+    /// sign. Fixing the sign makes repeated runs, and student/teacher factors of the same subspace, agree.
+    /// </remarks>
+    private Vector<T> CanonicalizeSign(Vector<T> vector)
+    {
+        int largest = DistillationHelper<T>.ArgMax(Engine.Abs(vector));
+        return NumOps.LessThan(vector[largest], NumOps.Zero)
+            ? Engine.Multiply(vector, NumOps.FromDouble(-1.0))
+            : vector;
     }
 
     /// <summary>
