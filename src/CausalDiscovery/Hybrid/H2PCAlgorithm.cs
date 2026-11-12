@@ -123,17 +123,16 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         }
 
         // Build weighted adjacency matrix
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, double>();
         for (int child = 0; child < d; child++)
         {
             foreach (int parent in parentSets[child])
             {
-                double weight = ComputeOLSWeight(data, parent, child, n);
-                W[parent, child] = NumOps.FromDouble(weight);
+                weights[parent * d + child] = ComputeOLSWeight(data, parent, child, n);
             }
         }
 
-        return W;
+        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
 
     /// <summary>
@@ -209,136 +208,48 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         if (condSet.Count == 0)
             return ComputeCorrelation(data, i, j);
 
-        // Residualize i and j on condSet via OLS
-        var residI = new double[n];
-        var residJ = new double[n];
-
-        double meanI = 0, meanJ = 0;
-        for (int k = 0; k < n; k++)
-        {
-            meanI += NumOps.ToDouble(data[k, i]);
-            meanJ += NumOps.ToDouble(data[k, j]);
-        }
-        meanI /= n; meanJ /= n;
+        // Residualize i and j on condSet via OLS on centered columns
+        var x = Tensor<T>.FromMatrix(data);
+        var conditioning = CenterColumns(SelectColumns(x, condSet.ToArray()));
+        var yi = CenterColumns(SelectColumns(x, new[] { i }));
+        var yj = CenterColumns(SelectColumns(x, new[] { j }));
+        Tensor<T> residI, residJ;
 
         if (condSet.Count == 1)
         {
-            int c = condSet[0];
-            double meanC = 0;
-            for (int k = 0; k < n; k++) meanC += NumOps.ToDouble(data[k, c]);
-            meanC /= n;
-
-            double covIC = 0, covJC = 0, varC = 0;
-            for (int k = 0; k < n; k++)
-            {
-                double dc = NumOps.ToDouble(data[k, c]) - meanC;
-                covIC += (NumOps.ToDouble(data[k, i]) - meanI) * dc;
-                covJC += (NumOps.ToDouble(data[k, j]) - meanJ) * dc;
-                varC += dc * dc;
-            }
-
-            double betaI = varC > 1e-10 ? covIC / varC : 0;
-            double betaJ = varC > 1e-10 ? covJC / varC : 0;
-
-            for (int k = 0; k < n; k++)
-            {
-                double dc = NumOps.ToDouble(data[k, c]) - meanC;
-                residI[k] = NumOps.ToDouble(data[k, i]) - meanI - betaI * dc;
-                residJ[k] = NumOps.ToDouble(data[k, j]) - meanJ - betaJ * dc;
-            }
+            // Simple regression on the one conditioning variable; slope 0 unless its variance is above 1e-10.
+            T varC = Engine.TensorSum(Engine.TensorSquare(conditioning));
+            bool usable = NumOps.GreaterThan(varC, NumOps.FromDouble(1e-10));
+            T betaI = usable ? NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(conditioning, yi)), varC) : NumOps.Zero;
+            T betaJ = usable ? NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(conditioning, yj)), varC) : NumOps.Zero;
+            residI = Engine.TensorSubtract(yi, Engine.TensorMultiplyScalar(conditioning, betaI));
+            residJ = Engine.TensorSubtract(yj, Engine.TensorMultiplyScalar(conditioning, betaJ));
         }
         else
         {
             // Multi-variable conditioning: use multivariate OLS to partial out all conditioning vars
             int p = condSet.Count;
-            var condMeans = new double[p];
-            for (int ci = 0; ci < p; ci++)
-            {
-                for (int k = 0; k < n; k++)
-                    condMeans[ci] += NumOps.ToDouble(data[k, condSet[ci]]);
-                condMeans[ci] /= n;
-            }
+            var conditioningT = Engine.TensorTranspose(conditioning);
+            var gram = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(conditioningT, conditioning));
 
-            // Build normal equations X'X and X'y for both i and j
-            var XtX = new double[p, p];
-            var XtI = new double[p];
-            var XtJ = new double[p];
-            var dx = new double[p];
-            for (int k = 0; k < n; k++)
-            {
-                for (int ci = 0; ci < p; ci++)
-                    dx[ci] = NumOps.ToDouble(data[k, condSet[ci]]) - condMeans[ci];
-                double di = NumOps.ToDouble(data[k, i]) - meanI;
-                double dj = NumOps.ToDouble(data[k, j]) - meanJ;
-                for (int a = 0; a < p; a++)
-                {
-                    XtI[a] += dx[a] * di;
-                    XtJ[a] += dx[a] * dj;
-                    for (int b = a; b < p; b++)
-                        XtX[a, b] += dx[a] * dx[b];
-                }
-            }
             // Scale-aware ridge: proportional to average diagonal magnitude
-            double avgDiag = 0;
-            for (int a = 0; a < p; a++)
-                avgDiag += Math.Abs(XtX[a, a]);
-            double ridge = Math.Max(1e-10, avgDiag / p * 1e-8);
-            for (int a = 0; a < p; a++)
-            {
-                XtX[a, a] += ridge;
-                for (int b = a + 1; b < p; b++)
-                    XtX[b, a] = XtX[a, b];
-            }
+            T ridge = NumOps.Multiply(Engine.TensorMean(Engine.TensorAbs(Engine.TensorDiagonal(gram))), NumOps.FromDouble(1e-8));
+            T minRidge = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(ridge, minRidge)) ridge = minRidge;
+            gram = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), ridge));
 
-            var betaI = SolveSmallSystem(XtX, XtI, p);
-            var betaJ = SolveSmallSystem(XtX, XtJ, p);
-
-            for (int k = 0; k < n; k++)
-            {
-                residI[k] = NumOps.ToDouble(data[k, i]) - meanI;
-                residJ[k] = NumOps.ToDouble(data[k, j]) - meanJ;
-                for (int ci = 0; ci < p; ci++)
-                {
-                    double dc = NumOps.ToDouble(data[k, condSet[ci]]) - condMeans[ci];
-                    residI[k] -= betaI[ci] * dc;
-                    residJ[k] -= betaJ[ci] * dc;
-                }
-            }
+            var betaI = SolveSmallSystem(gram, Engine.TensorMatMul(conditioningT, yi).Reshape(new[] { p }));
+            var betaJ = SolveSmallSystem(gram, Engine.TensorMatMul(conditioningT, yj).Reshape(new[] { p }));
+            residI = Engine.TensorSubtract(yi, Engine.TensorMatMul(conditioning, betaI.Reshape(new[] { p, 1 })));
+            residJ = Engine.TensorSubtract(yj, Engine.TensorMatMul(conditioning, betaJ.Reshape(new[] { p, 1 })));
         }
 
-        double mrI = residI.Average(), mrJ = residJ.Average();
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int k = 0; k < n; k++)
-        {
-            double di = residI[k] - mrI;
-            double dj = residJ[k] - mrJ;
-            sxy += di * dj;
-            sxx += di * di;
-            syy += dj * dj;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return NumOps.ToDouble(CausalTensorHelpers.PearsonCorrelation(residI, residJ));
     }
 
     private double ComputeOLSWeight(Matrix<T> data, int parent, int child, int n)
     {
-        double meanP = 0, meanC = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanP += NumOps.ToDouble(data[i, parent]);
-            meanC += NumOps.ToDouble(data[i, child]);
-        }
-        meanP /= n; meanC /= n;
-
-        double cov = 0, varP = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dp = NumOps.ToDouble(data[i, parent]) - meanP;
-            cov += dp * (NumOps.ToDouble(data[i, child]) - meanC);
-            varP += dp * dp;
-        }
-
-        return varP > 1e-10 ? cov / varP : 0;
+        return NumOps.ToDouble(CausalTensorHelpers.RegressionSlope(data, parent, child));
     }
 
     private static bool WouldCreateCycle(HashSet<int>[] parents, int from, int to, int d)
