@@ -373,11 +373,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         // In practice, the trainer should call StoreTaskGradient with actual gradients
         if (_taskGradients.Count <= TaskCount)
         {
-            var zeroGradient = new Vector<T>((int)InterfaceGuard.Parameterizable(model).ParameterCount);
-            for (int i = 0; i < zeroGradient.Length; i++)
-            {
-                zeroGradient[i] = NumOps.Zero;
-            }
+            var zeroGradient = Engine.Fill((int)InterfaceGuard.Parameterizable(model).ParameterCount, NumOps.Zero);
             _taskGradients.Add(zeroGradient);
         }
 
@@ -409,57 +405,43 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
     /// </remarks>
     private Vector<T> ProjectGradientGEM(Vector<T> gradient)
     {
-        // Find violated constraints
-        var violations = new List<int>();
-        for (int k = 0; k < _taskGradients.Count; k++)
-        {
-            T dotProduct = ComputeDotProduct(gradient, _taskGradients[k]);
-            if (Convert.ToDouble(dotProduct) < Convert.ToDouble(_margin))
-            {
-                violations.Add(k);
-            }
-        }
-
-        if (violations.Count == 0)
+        // Find violated constraints: dots[k] = g · g_k < margin, for every stored task at once
+        if (_taskGradients.Count == 0)
             return gradient;
 
-        // Build the gradient matrix G for violated constraints: G[i,j] = g_i · g_j
-        int numViolations = violations.Count;
-        var G = new double[numViolations, numViolations];
-        var a = new double[numViolations];
-
-        for (int i = 0; i < numViolations; i++)
+        foreach (var taskGradient in _taskGradients)
         {
-            int ki = violations[i];
-            a[i] = Convert.ToDouble(_margin) - Convert.ToDouble(ComputeDotProduct(gradient, _taskGradients[ki]));
-
-            for (int j = 0; j < numViolations; j++)
-            {
-                int kj = violations[j];
-                G[i, j] = Convert.ToDouble(ComputeDotProduct(_taskGradients[ki], _taskGradients[kj]));
-            }
+            if (taskGradient.Length != gradient.Length)
+                throw new ArgumentException("Vectors must have the same length");
         }
 
-        // Solve QP using projected gradient descent on dual
+        var g = gradient.AsTensor();
+        var taskRows = Engine.TensorStack(_taskGradients.Select(t => t.AsTensor()).ToArray(), 0);
+        var dots = Engine.TensorMatMul(taskRows, g.Reshape(g.Length, 1)).Reshape(_taskGradients.Count);
+        var violations = Engine.TensorNonzero(Engine.TensorLessThan(dots, _margin)).ToArray();
+
+        if (violations.Length == 0)
+            return gradient;
+
+        // Build the gradient matrix G for violated constraints: G[i,j] = g_i · g_j, and a[i] = margin - g · g_i
+        int numViolations = violations.Length;
+        var violatedIndices = new Tensor<int>(violations, new[] { numViolations });
+        var violatedRows = Engine.TensorIndexSelect(taskRows, violatedIndices, 0);
+        var G = Engine.TensorMatMul(violatedRows, Engine.TensorTranspose(violatedRows));
+        var a = Engine.ScalarMinusTensor(_margin, Engine.TensorIndexSelect(dots, violatedIndices, 0));
+
+        // Solve the dual QP exactly
         var lambda = SolveQPDual(G, a);
 
-        // Compute projected gradient: g' = g + sum(lambda_k * g_k)
-        var projected = CloneVector(gradient);
-        for (int i = 0; i < numViolations; i++)
-        {
-            if (lambda[i] > 1e-10)
-            {
-                int ki = violations[i];
-                T lambdaT = NumOps.FromDouble(lambda[i]);
-                for (int j = 0; j < projected.Length; j++)
-                {
-                    projected[j] = NumOps.Add(projected[j],
-                        NumOps.Multiply(lambdaT, _taskGradients[ki][j]));
-                }
-            }
-        }
+        // Compute projected gradient: g' = g + sum(lambda_k * g_k) over the multipliers above 1e-10
+        var activeLambda = Engine.TensorWhere(
+            Engine.TensorGreaterThan(lambda, NumOps.FromDouble(1e-10)),
+            lambda,
+            new Tensor<T>(new[] { numViolations }));
+        var correction = Engine.TensorMatMul(
+            Engine.TensorTranspose(violatedRows), activeLambda.Reshape(numViolations, 1));
 
-        return projected;
+        return Engine.TensorAdd(g, correction.Reshape(g.Length)).AsVector();
     }
 
     /// <summary>
@@ -489,14 +471,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
             return gradient;
 
         T factor = NumOps.Divide(dotProduct, refNormSq);
-        var projected = CloneVector(gradient);
-        for (int i = 0; i < projected.Length; i++)
-        {
-            projected[i] = NumOps.Subtract(projected[i],
-                NumOps.Multiply(factor, refGradient[i]));
-        }
-
-        return projected;
+        return Engine.Subtract(gradient, Engine.Multiply(refGradient, factor));
     }
 
     /// <summary>
@@ -509,27 +484,17 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
 
         // For A-GEM, we average all stored task gradients
         // (In full implementation, this would be computed from sampled memory examples)
-        var avgGradient = new Vector<T>(_taskGradients[0].Length);
-        for (int i = 0; i < avgGradient.Length; i++)
-        {
-            avgGradient[i] = NumOps.Zero;
-        }
+        int length = _taskGradients[0].Length;
+        var avgGradient = Engine.Fill(length, NumOps.Zero);
+        var sum = avgGradient.AsTensor();
 
         foreach (var taskGrad in _taskGradients)
         {
-            for (int i = 0; i < avgGradient.Length; i++)
-            {
-                avgGradient[i] = NumOps.Add(avgGradient[i], taskGrad[i]);
-            }
+            Engine.TensorAddInPlace(sum, Head(taskGrad, length));
         }
 
         T invCount = NumOps.FromDouble(1.0 / _taskGradients.Count);
-        for (int i = 0; i < avgGradient.Length; i++)
-        {
-            avgGradient[i] = NumOps.Multiply(avgGradient[i], invCount);
-        }
-
-        return avgGradient;
+        return Engine.Multiply(avgGradient, invCount);
     }
 
     /// <summary>
@@ -551,24 +516,19 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
     /// to the constrained optimum.
     /// </para>
     /// </remarks>
-    private double[] SolveQPDual(double[,] G, double[] a)
+    private Tensor<T> SolveQPDual(Tensor<T> G, Tensor<T> a)
     {
         int n = a.Length;
 
-        var quadratic = new Matrix<double>(n, n);
-        var linear = new Vector<double>(n);
-        for (int i = 0; i < n; i++)
-        {
-            linear[i] = -a[i];
-            for (int j = 0; j < n; j++) quadratic[i, j] = G[i, j];
-        }
+        var quadratic = G.ToMatrix();
+        var linear = Engine.TensorNegate(a).AsVector();
 
-        var program = new AiDotNet.Solvers.QuadraticProgramming.QuadraticProgram<double>(
+        var program = new AiDotNet.Solvers.QuadraticProgramming.QuadraticProgram<T>(
             quadratic,
             linear,
-            lowerBounds: new Vector<double>(n));      // all zeros: lambda >= 0
+            lowerBounds: Engine.Fill(n, NumOps.Zero));      // all zeros: lambda >= 0
 
-        var solver = new AiDotNet.Solvers.QuadraticProgramming.ActiveSetQuadraticProgramSolver<double>(
+        var solver = new AiDotNet.Solvers.QuadraticProgramming.ActiveSetQuadraticProgramSolver<T>(
             new ActiveSetQuadraticProgramSolverOptions
             {
                 MaxIterations = _maxQPIterations,
@@ -582,18 +542,12 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         if (solution.Solution is null ||
             solution.Status != AiDotNet.Solvers.LinearProgramming.LinearProgramStatus.Optimal)
         {
-            return new double[n];
+            return new Tensor<T>(new[] { n });
         }
 
-        var lambda = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            // Clamp away any residue on the wrong side of the bound; a negative multiplier would
-            // flip the sign of that memory's contribution to the projected gradient.
-            lambda[i] = Math.Max(0.0, solution.Solution[i]);
-        }
-
-        return lambda;
+        // Clamp away any residue on the wrong side of the bound; a negative multiplier would
+        // flip the sign of that memory's contribution to the projected gradient.
+        return Engine.TensorMax(solution.Solution.AsTensor(), NumOps.Zero);
     }
 
     #endregion
@@ -628,17 +582,8 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         state["AverageProjectionMagnitude"] = _averageProjectionMagnitude;
 
         // Save task gradients
-        var gradients = new List<double[]>();
-        foreach (var g in _taskGradients)
-        {
-            var arr = new double[g.Length];
-            for (int i = 0; i < g.Length; i++)
-            {
-                arr[i] = Convert.ToDouble(g[i]);
-            }
-            gradients.Add(arr);
-        }
-        state["TaskGradients"] = gradients;
+        // Written as JSON number arrays in the model's own numeric type
+        state["TaskGradients"] = _taskGradients.Select(g => g.ToArray()).ToList();
 
         return state;
     }
