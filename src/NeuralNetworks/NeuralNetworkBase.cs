@@ -14146,7 +14146,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
             if (g is null || g.Length == 0) continue;
             if (hostNorm && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(g, scaleValue)) continue;
-            ScaleGradientInPlaceOffTape(g, scale);
+            ScaleStreamingGradInPlace(g, scale);
         }
     }
 
