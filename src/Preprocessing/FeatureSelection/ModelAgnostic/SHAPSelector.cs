@@ -198,7 +198,8 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 
         // Keep the coalitions that are neither empty nor full
         var joined = engine.TensorGreaterThan(draws, ops.FromDouble(0.5));
-        var sizes = engine.ReduceSum(joined, new[] { 1 }, false);
+        // coalition sizes counted in int (a 0/1 sum in T stops counting at 2048 for Half)
+        var sizes = engine.ReduceSum(joined.Cast<int>(), new[] { 1 }, false).Cast<T>();
         var proper = PreprocessingTensorOps.MaskPositions(engine.TensorMultiply(
             engine.TensorGreaterThan(sizes, ops.Zero), engine.TensorLessThan(sizes, ops.FromDouble(p))));
         if (proper.Length == 0)
@@ -216,11 +217,14 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             engine.TensorBroadcastTo(engine.Reshape(baseline, new[] { 1, p }), shape));
         var f = engine.TensorSubtract(predict(masked), engine.TensorBroadcastTo(emptyPrediction, new[] { m }));
 
-        var weights = engine.TensorDivide(
-            PreprocessingTensorOps.Filled(new[] { m }, ops.FromDouble(p - 1)),
-            engine.TensorMultiply(
-                BinomialCoefficients(p, size),
-                engine.TensorMultiply(size, engine.TensorAddScalar(engine.TensorNegate(size), ops.FromDouble(p)))));
+        // Kernel SHAP weights (p - 1) / (C(p, s) s (p - s)), taken in logs and rescaled so the largest is 1: C(p, s)
+        // overflows float once p passes ~130, which zeroed every weight; the weighted least squares solution does
+        // not depend on the common scale
+        var rest = engine.TensorAddScalar(engine.TensorNegate(size), ops.FromDouble(p));
+        var logWeights = engine.TensorNegate(engine.TensorAdd(
+            LogBinomialCoefficients(p, size), engine.TensorAdd(engine.TensorLog(size), engine.TensorLog(rest))));
+        var weights = engine.TensorExp(engine.TensorSubtract(
+            logWeights, engine.TensorBroadcastTo(engine.ReduceMax(logWeights, new[] { 0 }, true), new[] { m })));
 
         // Eliminate phi_p = gap - sum_{j < p} phi_j: regress f - z_p gap on z_j - z_p (j < p)
         var last = engine.Reshape(engine.TensorSlice(z, new[] { 0, p - 1 }, new[] { m, 1 }), new[] { m });
@@ -238,27 +242,21 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         return engine.TensorConcatenate(new[] { head, tail }, 0);
     }
 
-    /// <summary>C(p, s) for every coalition size s [m], from the product of the ratios (p - i) / (i + 1).</summary>
-    private static Tensor<T> BinomialCoefficients(int p, Tensor<T> sizes)
+    /// <summary>
+    /// ln C(p, s) = lgamma(p + 1) - lgamma(s + 1) - lgamma(p - s + 1) for every coalition size s [m] (no size is
+    /// compared as T, which is not exact past 2048 in Half).
+    /// </summary>
+    private static Tensor<T> LogBinomialCoefficients(int p, Tensor<T> sizes)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-
-        // binom[s] for s = 0..p from the recurrence binom[s + 1] = binom[s] (p - s) / (s + 1), as a cumulative product
-        var steps = engine.TensorArange<T>(0, p, 1);
-        var ratios = engine.TensorDivide(
-            engine.TensorAddScalar(engine.TensorNegate(steps), ops.FromDouble(p)), engine.TensorAddScalar(steps, ops.One));
-        var table = engine.TensorExp(engine.TensorConcatenate(
-            new[] { new Tensor<T>(new[] { 1 }), engine.TensorCumSum(engine.TensorLog(ratios), 0) }, 0));
-
-        // Pick table[s] for every size with a one-hot product
-        var oneHot = engine.TensorEquals(
-            engine.TensorBroadcastTo(engine.Reshape(sizes, new[] { sizes.Length, 1 }), new[] { sizes.Length, p + 1 }),
-            engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, p + 1, 1), new[] { 1, p + 1 }), new[] { sizes.Length, p + 1 }));
-        return engine.ReduceSum(
-            engine.TensorMultiply(oneHot, engine.TensorBroadcastTo(engine.Reshape(table, new[] { 1, p + 1 }), new[] { sizes.Length, p + 1 })),
-            new[] { 1 }, false);
+        T one = ops.One;
+        var rest = engine.TensorAddScalar(engine.TensorNegate(sizes), ops.FromDouble(p + 1));
+        return engine.TensorSubtract(
+            engine.TensorLgamma(PreprocessingTensorOps.Filled(new[] { sizes.Length }, ops.FromDouble(p + 1))),
+            engine.TensorAdd(engine.TensorLgamma(engine.TensorAddScalar(sizes, one)), engine.TensorLgamma(rest)));
     }
+
 
     /// <summary>
     /// Predictions [m] for the rows of <paramref name="rows"/> [m, p]: the user's model, or by default the mean
