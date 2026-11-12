@@ -83,7 +83,6 @@ public class ChamferDistance<T> where T : struct
     {
         int numSource = source.Shape[0];
         int numTarget = target.Shape[0];
-        int dim = source.Shape[1];
 
         // Empty source: no points to match, so distance is 0 (vacuously true)
         if (numSource == 0)
@@ -97,49 +96,12 @@ public class ChamferDistance<T> where T : struct
             throw new ArgumentException("Cannot compute Chamfer Distance: target point cloud is empty but source has points", nameof(target));
         }
 
-        T totalDist = _numOps.Zero;
-
-        for (int i = 0; i < numSource; i++)
-        {
-            T minDist = _numOps.FromDouble(double.MaxValue);
-
-            for (int j = 0; j < numTarget; j++)
-            {
-                T dist = ComputePointDistance(source, target, i, j, dim);
-                if (_numOps.Compare(dist, minDist) < 0)
-                {
-                    minDist = dist;
-                }
-            }
-
-            totalDist = _numOps.Add(totalDist, minDist);
-        }
-
-        return _numOps.Divide(totalDist, _numOps.FromDouble(numSource));
+        // Mean over source points of the distance to the nearest target point.
+        var engine = AiDotNetEngine.Current;
+        var nearest = PointCloudDistances.NearestSquared(source, target);
+        return engine.TensorMean(_squared ? nearest : engine.TensorSqrt(nearest));
     }
 
-    /// <summary>
-    /// Computes distance between two specific points.
-    /// </summary>
-    private T ComputePointDistance(Tensor<T> a, Tensor<T> b, int idxA, int idxB, int dim)
-    {
-        T sum = _numOps.Zero;
-
-        for (int d = 0; d < dim; d++)
-        {
-            T diff = _numOps.Subtract(a[idxA * dim + d], b[idxB * dim + d]);
-            sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
-        }
-
-        if (_squared)
-        {
-            return sum;
-        }
-        else
-        {
-            return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sum)));
-        }
-    }
 
     /// <summary>
     /// Computes Chamfer Distance for batched point clouds.
@@ -170,36 +132,111 @@ public class ChamferDistance<T> where T : struct
         int batchSize = batchA.Shape[0];
         int numA = batchA.Shape[1];
         int numB = batchB.Shape[1];
-        int dim = batchA.Shape[2];
 
-        var results = new T[batchSize];
-
-        for (int batch = 0; batch < batchSize; batch++)
+        if (batchSize == 0 || (numA == 0 && numB == 0))
         {
-            // Extract single point clouds from batch
-            var pointsA = ExtractPointCloud(batchA, batch, numA, dim);
-            var pointsB = ExtractPointCloud(batchB, batch, numB, dim);
-
-            results[batch] = Compute(pointsA, pointsB);
+            return new T[batchSize];
         }
 
+        if (numA == 0 || numB == 0)
+        {
+            // One side empty: the other direction has no target, exactly as Compute reports it.
+            throw new ArgumentException("Cannot compute Chamfer Distance: target point cloud is empty but source has points", "target");
+        }
+
+        // Process batch items independently; each direction reduces bounded point-pair blocks.
+        var results = new T[batchSize];
+        var engine = AiDotNetEngine.Current;
+        int dimensions = batchA.Shape[2];
+        for (int item = 0; item < batchSize; item++)
+        {
+            var a = engine.TensorSlice(batchA, new[] { item, 0, 0 }, new[] { 1, numA, dimensions })
+                .Reshape(new[] { numA, dimensions });
+            var b = engine.TensorSlice(batchB, new[] { item, 0, 0 }, new[] { 1, numB, dimensions })
+                .Reshape(new[] { numB, dimensions });
+            results[item] = Compute(a, b);
+        }
         return results;
     }
+}
+
+/// <summary>
+/// Pairwise squared Euclidean distances between point clouds.
+/// </summary>
+internal static class PointCloudDistances
+{
+    // Bound coordinate intermediates independently of the number of points and batch items.
+    private const int CoordinateBlockElements = 1 << 18;
+
+    /// <summary>Nearest squared distance for each source point, using bounded point-pair blocks.</summary>
+    internal static Tensor<T> NearestSquared<T>(Tensor<T> source, Tensor<T> target) where T : struct
+        => ReduceRows(source, target, (T?)null);
+
+    /// <summary>Whether each source point has a neighbour within the squared threshold, using bounded blocks.</summary>
+    internal static Tensor<T> WithinThreshold<T>(Tensor<T> source, Tensor<T> target, T threshold) where T : struct
+        => ReduceRows(source, target, (T?)threshold);
+
+    private static Tensor<T> ReduceRows<T>(Tensor<T> source, Tensor<T> target, T? threshold) where T : struct
+    {
+        var engine = AiDotNetEngine.Current;
+        int count = source.Shape[0], targets = target.Shape[0], dimensions = source.Shape[1];
+        int coordinateWidth = Math.Max(1, dimensions);
+        int rowBlock = Math.Min(256, Math.Max(1, CoordinateBlockElements / coordinateWidth));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < count; start += rowBlock)
+        {
+            int rows = Math.Min(rowBlock, count - start);
+            var a = engine.TensorSlice(source, new[] { start, 0 }, new[] { rows, dimensions });
+            int targetBlock = Math.Max(1, CoordinateBlockElements / (rows * coordinateWidth));
+            Tensor<T>? reduced = null;
+            for (int offset = 0; offset < targets; offset += targetBlock)
+            {
+                int columns = Math.Min(targetBlock, targets - offset);
+                var b = engine.TensorSlice(target, new[] { offset, 0 }, new[] { columns, dimensions });
+                var squared = dimensions == 0 ? new Tensor<T>(new[] { rows, columns }) : Squared(a, b);
+                Tensor<T> partial;
+                if (threshold.HasValue)
+                {
+                    // NaN distances never match. Complementing a greater-than comparison would match them.
+                    var matches = engine.TensorLessEqual(squared, engine.TensorFullLike(squared, threshold.Value));
+                    partial = engine.ReduceMax(matches, new[] { 1 }, false);
+                    reduced = reduced is null ? partial : engine.TensorMax(reduced, partial);
+                }
+                else
+                {
+                    partial = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(squared), new[] { 1 }, false));
+                    reduced = reduced is null ? partial : engine.TensorMin(reduced, partial);
+                }
+            }
+            blocks.Add(reduced ?? throw new ArgumentException("Target point cloud must not be empty.", nameof(target)));
+        }
+        return blocks.Count == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
 
     /// <summary>
-    /// Extracts a single point cloud from a batch.
+    /// Squared distances between every pair of points: [N, D] x [M, D] -> [N, M], or batched
+    /// [B, N, D] x [B, M, D] -> [B, N, M]. Each entry is sum_d (a_d - b_d)^2 of the coordinate differences.
     /// </summary>
-    private Tensor<T> ExtractPointCloud(Tensor<T> batch, int batchIdx, int numPoints, int dim)
+    internal static Tensor<T> Squared<T>(Tensor<T> a, Tensor<T> b)
     {
-        var data = new T[numPoints * dim];
-        int offset = batchIdx * numPoints * dim;
-
-        for (int i = 0; i < numPoints * dim; i++)
+        var engine = AiDotNetEngine.Current;
+        if (a.Rank == 2)
         {
-            data[i] = batch[offset + i];
+            int n = a.Shape[0], m = b.Shape[0], d = a.Shape[1];
+            var pairShape = new[] { n, m, d };
+            var diff = engine.TensorSubtract(
+                engine.TensorBroadcastTo(a.Reshape(new[] { n, 1, d }), pairShape),
+                engine.TensorBroadcastTo(b.Reshape(new[] { 1, m, d }), pairShape));
+            return engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 2 }, false);
         }
 
-        return new Tensor<T>(new[] { numPoints, dim }, new Vector<T>(data));
+        int batch = a.Shape[0], na = a.Shape[1], nb = b.Shape[1], dim = a.Shape[2];
+        var batchPairShape = new[] { batch, na, nb, dim };
+        var batchDiff = engine.TensorSubtract(
+            engine.TensorBroadcastTo(a.Reshape(new[] { batch, na, 1, dim }), batchPairShape),
+            engine.TensorBroadcastTo(b.Reshape(new[] { batch, 1, nb, dim }), batchPairShape));
+        return engine.ReduceSum(engine.TensorMultiply(batchDiff, batchDiff), new[] { 3 }, false);
     }
 }
 
@@ -257,6 +294,12 @@ public class EarthMoversDistance<T> where T : struct
     /// <param name="pointsA">First point cloud [N, D].</param>
     /// <param name="pointsB">Second point cloud [M, D] (should have same N for exact EMD).</param>
     /// <returns>Approximate EMD. Lower is better.</returns>
+    /// <remarks>
+    /// Entropic optimal transport (Cuturi 2013) with uniform marginals and Euclidean ground cost, iterated in the
+    /// log domain (POT's sinkhorn_log): log u = log a - LSE_j(log K_ij + log v_j), log v = log b -
+    /// LSE_i(log K_ij + log u_i), with log K = -C / epsilon. This is the same fixed point as the scaling form,
+    /// without exp(-C / epsilon) underflowing to zero when distances are large relative to epsilon.
+    /// </remarks>
     public T Compute(Tensor<T> pointsA, Tensor<T> pointsB)
     {
         if (pointsA == null) throw new ArgumentNullException(nameof(pointsA));
@@ -274,7 +317,6 @@ public class EarthMoversDistance<T> where T : struct
 
         int n = pointsA.Shape[0];
         int m = pointsB.Shape[0];
-        int dim = pointsA.Shape[1];
 
         // Handle empty point clouds
         if (n == 0 || m == 0)
@@ -282,84 +324,37 @@ public class EarthMoversDistance<T> where T : struct
             return _numOps.Zero;
         }
 
-        // Compute cost matrix (pairwise distances)
-        var costMatrix = new double[n, m];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < m; j++)
-            {
-                double dist = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    double diff = _numOps.ToDouble(pointsA[i * dim + d]) - _numOps.ToDouble(pointsB[j * dim + d]);
-                    dist += diff * diff;
-                }
-                costMatrix[i, j] = Math.Sqrt(dist);
-            }
-        }
+        var engine = AiDotNetEngine.Current;
 
-        // Sinkhorn algorithm for approximate optimal transport
-        var K = new double[n, m];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < m; j++)
-            {
-                K[i, j] = Math.Exp(-costMatrix[i, j] / _epsilon);
-            }
-        }
+        // Cost matrix (pairwise Euclidean distances) and log of the Gibbs kernel.
+        var cost = engine.TensorSqrt(PointCloudDistances.Squared(pointsA, pointsB));
+        var logKernel = engine.TensorMultiplyScalar(cost, _numOps.FromDouble(-1.0 / _epsilon));
 
-        // Uniform marginals
-        var a = new double[n];
-        var b = new double[m];
-        for (int i = 0; i < n; i++) a[i] = 1.0 / n;
-        for (int j = 0; j < m; j++) b[j] = 1.0 / m;
+        // Uniform marginals; u = v = 1 to start.
+        T logA = _numOps.FromDouble(-Math.Log(n));
+        T logB = _numOps.FromDouble(-Math.Log(m));
+        var logU = new Tensor<T>(new[] { n, 1 });
+        var logV = new Tensor<T>(new[] { 1, m });
+        var planShape = new[] { n, m };
 
-        var u = new double[n];
-        var v = new double[m];
-        for (int i = 0; i < n; i++) u[i] = 1.0;
-        for (int j = 0; j < m; j++) v[j] = 1.0;
-
-        // Sinkhorn iterations
         for (int iter = 0; iter < _iterations; iter++)
         {
-            // Update u
-            for (int i = 0; i < n; i++)
-            {
-                double sum = 0;
-                for (int j = 0; j < m; j++)
-                {
-                    sum += K[i, j] * v[j];
-                }
-                u[i] = a[i] / Math.Max(sum, 1e-10);
-            }
+            var rowLse = engine.TensorLogSumExp(
+                engine.TensorAdd(logKernel, engine.TensorBroadcastTo(logV, planShape)), 1, true);
+            logU = engine.TensorAddScalar(engine.TensorNegate(rowLse), logA);
 
-            // Update v
-            for (int j = 0; j < m; j++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    sum += K[i, j] * u[i];
-                }
-                v[j] = b[j] / Math.Max(sum, 1e-10);
-            }
+            var colLse = engine.TensorLogSumExp(
+                engine.TensorAdd(logKernel, engine.TensorBroadcastTo(logU, planShape)), 0, true);
+            logV = engine.TensorAddScalar(engine.TensorNegate(colLse), logB);
         }
 
-        // Compute transport plan and EMD
-        double emd = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < m; j++)
-            {
-                double transportAmount = u[i] * K[i, j] * v[j];
-                emd += transportAmount * costMatrix[i, j];
-            }
-        }
-
-        return _numOps.FromDouble(emd);
+        // Transport plan P_ij = u_i K_ij v_j and EMD = sum_ij P_ij C_ij.
+        var logPlan = engine.TensorAdd(
+            engine.TensorAdd(logKernel, engine.TensorBroadcastTo(logU, planShape)),
+            engine.TensorBroadcastTo(logV, planShape));
+        return engine.TensorSum(engine.TensorMultiply(engine.TensorExp(logPlan), cost));
     }
 }
-
 /// <summary>
 /// F-Score metric for 3D reconstruction evaluation.
 /// </summary>
@@ -412,16 +407,13 @@ public class FScore<T> where T : struct
 
         var (precision, recall) = ComputePrecisionRecall(predicted, groundTruth);
 
-        double p = _numOps.ToDouble(precision);
-        double r = _numOps.ToDouble(recall);
-
-        if (p + r < 1e-10)
+        T sum = _numOps.Add(precision, recall);
+        if (_numOps.LessThan(sum, _numOps.FromDouble(1e-10)))
         {
             return _numOps.Zero;
         }
 
-        double fScore = 2.0 * p * r / (p + r);
-        return _numOps.FromDouble(fScore);
+        return _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(precision, recall)), sum);
     }
 
     /// <summary>
@@ -434,7 +426,6 @@ public class FScore<T> where T : struct
     {
         int numPred = predicted.Shape[0];
         int numGT = groundTruth.Shape[0];
-        int dim = predicted.Shape[1];
 
         // Handle empty point clouds
         if (numPred == 0 && numGT == 0)
@@ -450,52 +441,14 @@ public class FScore<T> where T : struct
             return (_numOps.Zero, _numOps.Zero);
         }
 
-        double thresholdSquared = _threshold * _threshold;
+        var engine = AiDotNetEngine.Current;
 
-        // Precision: fraction of predicted points close to any GT point
-        int precisionCount = 0;
-        for (int i = 0; i < numPred; i++)
-        {
-            for (int j = 0; j < numGT; j++)
-            {
-                double distSquared = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    double diff = _numOps.ToDouble(predicted[i * dim + d]) - _numOps.ToDouble(groundTruth[j * dim + d]);
-                    distSquared += diff * diff;
-                }
-
-                if (distSquared <= thresholdSquared)
-                {
-                    precisionCount++;
-                    break;
-                }
-            }
-        }
-
-        // Recall: fraction of GT points close to any predicted point
-        int recallCount = 0;
-        for (int j = 0; j < numGT; j++)
-        {
-            for (int i = 0; i < numPred; i++)
-            {
-                double distSquared = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    double diff = _numOps.ToDouble(groundTruth[j * dim + d]) - _numOps.ToDouble(predicted[i * dim + d]);
-                    distSquared += diff * diff;
-                }
-
-                if (distSquared <= thresholdSquared)
-                {
-                    recallCount++;
-                    break;
-                }
-            }
-        }
-
-        T precision = _numOps.FromDouble((double)precisionCount / numPred);
-        T recall = _numOps.FromDouble((double)recallCount / numGT);
+        // Count points with any matching neighbour; integer counts avoid low-precision reduction overflow.
+        T thresholdSquared = _numOps.FromDouble(_threshold * _threshold);
+        var predictedMatches = PointCloudDistances.WithinThreshold(predicted, groundTruth, thresholdSquared);
+        var targetMatches = PointCloudDistances.WithinThreshold(groundTruth, predicted, thresholdSquared);
+        T precision = _numOps.FromDouble((double)engine.TensorCountNonzero(predictedMatches) / numPred);
+        T recall = _numOps.FromDouble((double)engine.TensorCountNonzero(targetMatches) / numGT);
 
         return (precision, recall);
     }
@@ -547,21 +500,19 @@ public class IoU3D<T> where T : struct
             throw new ArgumentException($"Voxel grids must have the same size: {voxelsA.Length} vs {voxelsB.Length}");
         }
 
-        long intersection = 0;
-        long unionCount = 0;
+        // A voxel is occupied when its value exceeds 0.5.
+        var engine = AiDotNetEngine.Current;
+        int count = voxelsA.Length;
+        T half = _numOps.FromDouble(0.5);
+        var a = engine.TensorGreaterThan(voxelsA.Reshape(new[] { count }), half);
+        var b = engine.TensorGreaterThan(voxelsB.Reshape(new[] { count }), half);
 
-        for (int i = 0; i < voxelsA.Length; i++)
-        {
-            bool a = _numOps.ToDouble(voxelsA[i]) > 0.5;
-            bool b = _numOps.ToDouble(voxelsB[i]) > 0.5;
+        T intersection = engine.TensorSum(engine.TensorMultiply(a, b));
+        T unionCount = engine.TensorSum(engine.TensorMax(a, b));
 
-            if (a && b) intersection++;
-            if (a || b) unionCount++;
-        }
+        if (!_numOps.GreaterThan(unionCount, _numOps.Zero)) return _numOps.Zero;
 
-        if (unionCount == 0) return _numOps.Zero;
-
-        return _numOps.FromDouble((double)intersection / unionCount);
+        return _numOps.Divide(intersection, unionCount);
     }
 
     /// <summary>
@@ -581,42 +532,33 @@ public class IoU3D<T> where T : struct
         }
 
         // Validate box coordinates (min should be <= max for each dimension)
-        double aXMin = _numOps.ToDouble(boxA[0]), aYMin = _numOps.ToDouble(boxA[1]), aZMin = _numOps.ToDouble(boxA[2]);
-        double aXMax = _numOps.ToDouble(boxA[3]), aYMax = _numOps.ToDouble(boxA[4]), aZMax = _numOps.ToDouble(boxA[5]);
-        double bXMin = _numOps.ToDouble(boxB[0]), bYMin = _numOps.ToDouble(boxB[1]), bZMin = _numOps.ToDouble(boxB[2]);
-        double bXMax = _numOps.ToDouble(boxB[3]), bYMax = _numOps.ToDouble(boxB[4]), bZMax = _numOps.ToDouble(boxB[5]);
+        var engine = AiDotNetEngine.Current;
+        var minA = new Tensor<T>(new[] { boxA[0], boxA[1], boxA[2] }, new[] { 3 });
+        var maxA = new Tensor<T>(new[] { boxA[3], boxA[4], boxA[5] }, new[] { 3 });
+        var minB = new Tensor<T>(new[] { boxB[0], boxB[1], boxB[2] }, new[] { 3 });
+        var maxB = new Tensor<T>(new[] { boxB[3], boxB[4], boxB[5] }, new[] { 3 });
 
-        if (aXMin > aXMax || aYMin > aYMax || aZMin > aZMax)
+        if (_numOps.GreaterThan(engine.TensorSum(engine.TensorGreaterThan(minA, maxA)), _numOps.Zero))
         {
             throw new ArgumentException("Box A has invalid coordinates: min values must be <= max values", nameof(boxA));
         }
 
-        if (bXMin > bXMax || bYMin > bYMax || bZMin > bZMax)
+        if (_numOps.GreaterThan(engine.TensorSum(engine.TensorGreaterThan(minB, maxB)), _numOps.Zero))
         {
             throw new ArgumentException("Box B has invalid coordinates: min values must be <= max values", nameof(boxB));
         }
 
-        // Compute intersection
-        double xMin = Math.Max(aXMin, bXMin);
-        double yMin = Math.Max(aYMin, bYMin);
-        double zMin = Math.Max(aZMin, bZMin);
-        double xMax = Math.Min(aXMax, bXMax);
-        double yMax = Math.Min(aYMax, bYMax);
-        double zMax = Math.Min(aZMax, bZMax);
+        // Intersection extent per axis, clamped at zero, and the box volumes.
+        var overlap = engine.TensorMax(
+            engine.TensorSubtract(engine.TensorMin(maxA, maxB), engine.TensorMax(minA, minB)), _numOps.Zero);
+        T intersection = engine.Product(overlap.ToVector());
+        T volA = engine.Product(engine.TensorSubtract(maxA, minA).ToVector());
+        T volB = engine.Product(engine.TensorSubtract(maxB, minB).ToVector());
 
-        double interX = Math.Max(0, xMax - xMin);
-        double interY = Math.Max(0, yMax - yMin);
-        double interZ = Math.Max(0, zMax - zMin);
-        double intersection = interX * interY * interZ;
+        T union = _numOps.Subtract(_numOps.Add(volA, volB), intersection);
 
-        // Compute union
-        double volA = (aXMax - aXMin) * (aYMax - aYMin) * (aZMax - aZMin);
-        double volB = (bXMax - bXMin) * (bYMax - bYMin) * (bZMax - bZMin);
+        if (!_numOps.GreaterThan(union, _numOps.Zero)) return _numOps.Zero;
 
-        double union = volA + volB - intersection;
-
-        if (union <= 0) return _numOps.Zero;
-
-        return _numOps.FromDouble(intersection / union);
+        return _numOps.Divide(intersection, union);
     }
 }
