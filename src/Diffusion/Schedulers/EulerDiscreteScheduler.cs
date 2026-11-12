@@ -103,19 +103,7 @@ public sealed class EulerDiscreteScheduler<T> : NoiseSchedulerBase<T>, INoiseSch
     /// </remarks>
     private void ComputeSigmas()
     {
-        var timesteps = Timesteps;
-        _sigmas = new Vector<T>(timesteps.Length + 1);
-
-        for (int i = 0; i < timesteps.Length; i++)
-        {
-            T alphaCumprod = AlphasCumulativeProduct[timesteps[i]];
-            T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaCumprod);
-            // sigma = sqrt((1 - alpha_cumprod) / alpha_cumprod)
-            _sigmas[i] = NumOps.Sqrt(NumOps.Divide(oneMinusAlpha, alphaCumprod));
-        }
-
-        // Append sigma=0 for the final (clean) state
-        _sigmas[timesteps.Length] = NumOps.Zero;
+        _sigmas = ComputeTimestepSigmas();
     }
 
     /// <summary>
