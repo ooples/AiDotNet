@@ -3,6 +3,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 
@@ -29,7 +30,7 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly double _learningRate;
     private readonly int? _randomState;
 
-    private double[]? _reconstructionImportance;
+    private Vector<T>? _reconstructionImportance;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -38,7 +39,7 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     public int HiddenSize => _hiddenSize;
     public int Epochs => _epochs;
     public double LearningRate => _learningRate;
-    public double[]? ReconstructionImportance => _reconstructionImportance;
+    public Vector<T>? ReconstructionImportance => _reconstructionImportance;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,143 +70,57 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
         // Standardize data
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
-
-            for (int i = 0; i < n; i++)
-                stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-
+        var x = NeuralSelectorOps.StandardizePopulation(Tensor<T>.FromMatrix(data));
         int h = Math.Min(_hiddenSize, p);
 
         // Initialize weights (Xavier initialization)
-        var W1 = new double[p, h];
-        var W2 = new double[h, p];
-        var b1 = new double[h];
-        var b2 = new double[p];
+        var w1 = NeuralSelectorOps.SymmetricUniform<T>(rand, Math.Sqrt(2.0 / (p + h)), p, h);
+        var w2 = NeuralSelectorOps.SymmetricUniform<T>(rand, Math.Sqrt(2.0 / (h + p)), h, p);
+        var b1 = new Tensor<T>(new[] { h });
+        var b2 = new Tensor<T>(new[] { p });
+        T rate = NumOps.FromDouble(_learningRate);
+        var rows = NeuralSelectorOps.SplitRows(x);
 
-        double scale1 = Math.Sqrt(2.0 / (p + h));
-        double scale2 = Math.Sqrt(2.0 / (h + p));
-
-        for (int j = 0; j < p; j++)
-            for (int k = 0; k < h; k++)
-                W1[j, k] = (rand.NextDouble() - 0.5) * 2 * scale1;
-
-        for (int k = 0; k < h; k++)
-            for (int j = 0; j < p; j++)
-                W2[k, j] = (rand.NextDouble() - 0.5) * 2 * scale2;
-
-        // Train autoencoder
+        // Train autoencoder: tanh hidden layer, linear output, squared reconstruction error, per-sample steps
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             for (int i = 0; i < n; i++)
             {
                 // Forward pass
-                var hidden = new double[h];
-                for (int k = 0; k < h; k++)
-                {
-                    hidden[k] = b1[k];
-                    for (int j = 0; j < p; j++)
-                        hidden[k] += X[i, j] * W1[j, k];
-                    hidden[k] = Math.Tanh(hidden[k]); // Activation
-                }
+                var hidden = engine.TensorTanh(engine.TensorAdd(NeuralSelectorOps.VecMat(rows[i], w1), b1));
+                var output = engine.TensorAdd(NeuralSelectorOps.VecMat(hidden, w2), b2);
 
-                var output = new double[p];
-                for (int j = 0; j < p; j++)
-                {
-                    output[j] = b2[j];
-                    for (int k = 0; k < h; k++)
-                        output[j] += hidden[k] * W2[k, j];
-                }
-
-                // Backward pass
-                var dOutput = new double[p];
-                for (int j = 0; j < p; j++)
-                    dOutput[j] = output[j] - X[i, j];
-
-                var dHidden = new double[h];
-                for (int k = 0; k < h; k++)
-                {
-                    double sum = 0;
-                    for (int j = 0; j < p; j++)
-                        sum += dOutput[j] * W2[k, j];
-                    dHidden[k] = sum * (1 - hidden[k] * hidden[k]); // tanh derivative
-                }
+                // Backward pass (with the decoder weights before their update)
+                var dOutput = engine.TensorSubtract(output, rows[i]);
+                var dHidden = engine.TensorMultiply(
+                    NeuralSelectorOps.MatVec(w2, dOutput), FeatureSelectionTensorOps.OneMinus(engine.TensorSquare(hidden)));
 
                 // Update weights
-                for (int k = 0; k < h; k++)
-                    for (int j = 0; j < p; j++)
-                        W2[k, j] -= _learningRate * dOutput[j] * hidden[k];
-
-                for (int j = 0; j < p; j++)
-                    b2[j] -= _learningRate * dOutput[j];
-
-                for (int j = 0; j < p; j++)
-                    for (int k = 0; k < h; k++)
-                        W1[j, k] -= _learningRate * dHidden[k] * X[i, j];
-
-                for (int k = 0; k < h; k++)
-                    b1[k] -= _learningRate * dHidden[k];
+                w2 = NeuralSelectorOps.Step(w2, NeuralSelectorOps.Outer(hidden, dOutput), rate);
+                b2 = NeuralSelectorOps.Step(b2, dOutput, rate);
+                w1 = NeuralSelectorOps.Step(w1, NeuralSelectorOps.Outer(rows[i], dHidden), rate);
+                b1 = NeuralSelectorOps.Step(b1, dHidden, rate);
             }
         }
 
-        // Compute reconstruction error per feature
-        _reconstructionImportance = new double[p];
-        for (int i = 0; i < n; i++)
-        {
-            var hidden = new double[h];
-            for (int k = 0; k < h; k++)
-            {
-                hidden[k] = b1[k];
-                for (int j = 0; j < p; j++)
-                    hidden[k] += X[i, j] * W1[j, k];
-                hidden[k] = Math.Tanh(hidden[k]);
-            }
-
-            var output = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                output[j] = b2[j];
-                for (int k = 0; k < h; k++)
-                    output[j] += hidden[k] * W2[k, j];
-            }
-
-            for (int j = 0; j < p; j++)
-                _reconstructionImportance[j] += Math.Abs(X[i, j] - output[j]);
-        }
-
-        for (int j = 0; j < p; j++)
-            _reconstructionImportance[j] /= n;
+        // Compute mean absolute reconstruction error per feature
+        var hiddenAll = engine.TensorTanh(engine.TensorAdd(
+            engine.TensorMatMul(x, w1), engine.TensorBroadcastTo(engine.Reshape(b1, new[] { 1, h }), new[] { n, h })));
+        var outputAll = engine.TensorAdd(
+            engine.TensorMatMul(hiddenAll, w2), engine.TensorBroadcastTo(engine.Reshape(b2, new[] { 1, p }), new[] { n, p }));
+        var importance = engine.ReduceMean(engine.TensorAbs(engine.TensorSubtract(x, outputAll)), new[] { 0 }, false);
+        _reconstructionImportance = importance.ToVector();
 
         // Features with higher reconstruction error are potentially more important
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _reconstructionImportance[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importance, numToSelect);
 
         IsFitted = true;
     }
@@ -222,15 +137,7 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("AutoencoderSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

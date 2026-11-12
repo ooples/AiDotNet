@@ -1495,4 +1495,232 @@ public class FeatureSelectionPopulationReferenceTests
             Assert.True(best > 0.99, $"component {c} correlates at most {best} with a source");
         }
     }
+
+    // ---------------------------------------------------------------- Neural selectors (gradient checks)
+
+    private static void AssertGradient(System.Func<double[], double> loss, double[] at, double[] analytic, string name)
+    {
+        const double h = 1e-6;
+        for (int i = 0; i < at.Length; i++)
+        {
+            var plus = (double[])at.Clone();
+            var minus = (double[])at.Clone();
+            plus[i] += h;
+            minus[i] -= h;
+            double numeric = (loss(plus) - loss(minus)) / (2 * h);
+            Assert.True(System.Math.Abs(numeric - analytic[i]) <= 1e-5 * (1 + System.Math.Abs(numeric)),
+                $"{name}[{i}]: analytic {analytic[i]}, numeric {numeric}");
+        }
+    }
+
+    private static double[] RandomArray(System.Random rng, int length, double scale) =>
+        Enumerable.Range(0, length).Select(_ => (rng.NextDouble() * 2 - 1) * scale).ToArray();
+
+    private static Tensor<double> Shaped(double[] values, params int[] shape) => new Tensor<double>(values, shape);
+
+    [Fact]
+    public void AttentionSelector_GradientsMatchFiniteDifferences()
+    {
+        var rng = new System.Random(71);
+        int p = 4, hidden = 3;
+        var x = RandomArray(rng, p, 1);
+        var w1 = RandomArray(rng, p * hidden, 0.8);
+        var w2 = RandomArray(rng, hidden, 0.8);
+        var v = RandomArray(rng, p, 0.8);
+        double y = 0.7;
+
+        double Loss(double[] a, double[] b, double[] c)
+        {
+            AiDotNet.Preprocessing.FeatureSelection.Neural.AttentionBasedSelector<double>.Forward(
+                Tensor1D(x), Shaped(a, p, hidden), Tensor1D(b), Tensor1D(c), out _, out var prediction);
+            double e = ToArray(prediction)[0] - y;
+            return 0.5 * e * e;
+        }
+
+        var (g1, g2, gv) = AiDotNet.Preprocessing.FeatureSelection.Neural.AttentionBasedSelector<double>.Gradients(
+            Tensor1D(x), Tensor1D(y), Shaped(w1, p, hidden), Tensor1D(w2), Tensor1D(v));
+        AssertGradient(a => Loss(a, w2, v), w1, ToArray(g1), "W1");
+        AssertGradient(b => Loss(w1, b, v), w2, ToArray(g2), "w2");
+        AssertGradient(c => Loss(w1, w2, c), v, ToArray(gv), "v");
+    }
+
+    [Fact]
+    public void SparseAutoencoder_MeanSampleGradientIsTheGradientOfTheSparseObjective()
+    {
+        var rng = new System.Random(72);
+        int n = 5, p = 3, h = 2;
+        double rho = 0.1, beta = 0.7;
+        var data = RandomArray(rng, n * p, 1);
+        var w1 = RandomArray(rng, p * h, 0.8);
+        var w2 = RandomArray(rng, h * p, 0.8);
+
+        double Objective(double[] a, double[] b)
+        {
+            double total = 0;
+            var mean = new double[h];
+            for (int i = 0; i < n; i++)
+            {
+                var act = new double[h];
+                for (int k = 0; k < h; k++)
+                {
+                    double s = 0;
+                    for (int j = 0; j < p; j++) s += data[i * p + j] * a[j * h + k];
+                    act[k] = 1 / (1 + System.Math.Exp(-s));
+                    mean[k] += act[k] / n;
+                }
+
+                for (int j = 0; j < p; j++)
+                {
+                    double o = 0;
+                    for (int k = 0; k < h; k++) o += act[k] * b[k * p + j];
+                    total += 0.5 * (o - data[i * p + j]) * (o - data[i * p + j]) / n;
+                }
+            }
+
+            for (int k = 0; k < h; k++)
+                total += beta * (rho * System.Math.Log(rho / mean[k]) + (1 - rho) * System.Math.Log((1 - rho) / (1 - mean[k])));
+            return total;
+        }
+
+        var xs = Shaped(data, n, p);
+        var sparsity = AiDotNet.Preprocessing.FeatureSelection.Neural.SparseAutoencoderSelector<double>.SparsityDelta(
+            AiDotNet.Preprocessing.FeatureSelection.Neural.SparseAutoencoderSelector<double>.MeanActivation(xs, Shaped(w1, p, h)),
+            rho, beta);
+        var g1 = new double[p * h];
+        var g2 = new double[h * p];
+        for (int i = 0; i < n; i++)
+        {
+            var (a, b) = AiDotNet.Preprocessing.FeatureSelection.Neural.SparseAutoencoderSelector<double>.SampleGradients(
+                Tensor1D(data.Skip(i * p).Take(p).ToArray()), Shaped(w1, p, h), Shaped(w2, h, p), sparsity);
+            var aa = ToArray(a);
+            var bb = ToArray(b);
+            for (int q = 0; q < g1.Length; q++) g1[q] += aa[q] / n;
+            for (int q = 0; q < g2.Length; q++) g2[q] += bb[q] / n;
+        }
+
+        AssertGradient(a => Objective(a, w2), w1, g1, "W1");
+        AssertGradient(b => Objective(w1, b), w2, g2, "W2");
+    }
+
+    [Fact]
+    public void VariationalAutoencoder_GradientsIncludeTheReparameterizationNoise()
+    {
+        var rng = new System.Random(73);
+        int p = 4, z = 2;
+        var x = Enumerable.Range(0, p).Select(_ => rng.NextDouble()).ToArray();
+        var noise = new[] { 0.8, -1.3 };
+        var wMu = RandomArray(rng, p * z, 0.5);
+        var wLv = RandomArray(rng, p * z, 0.5);
+        var wDec = RandomArray(rng, z * p, 0.5);
+        double kl = AiDotNet.Preprocessing.FeatureSelection.Neural.VariationalAutoencoderSelector<double>.KlWeight;
+
+        double Loss(double[] mu, double[] lv, double[] dec)
+        {
+            var m = new double[z];
+            var l = new double[z];
+            var latent = new double[z];
+            for (int k = 0; k < z; k++)
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    m[k] += x[j] * mu[j * z + k];
+                    l[k] += x[j] * lv[j * z + k];
+                }
+
+                latent[k] = m[k] + System.Math.Exp(0.5 * l[k]) * noise[k];
+            }
+
+            double loss = 0;
+            for (int j = 0; j < p; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < z; k++) s += latent[k] * dec[k * p + j];
+                double o = 1 / (1 + System.Math.Exp(-s));
+                loss -= x[j] * System.Math.Log(o) + (1 - x[j]) * System.Math.Log(1 - o);
+            }
+
+            for (int k = 0; k < z; k++)
+                loss += kl * -0.5 * (1 + l[k] - m[k] * m[k] - System.Math.Exp(l[k]));
+            return loss;
+        }
+
+        var (gMu, gLv, gDec) = AiDotNet.Preprocessing.FeatureSelection.Neural.VariationalAutoencoderSelector<double>.Gradients(
+            Tensor1D(x), Tensor1D(noise), Shaped(wMu, p, z), Shaped(wLv, p, z), Shaped(wDec, z, p), kl);
+        AssertGradient(a => Loss(a, wLv, wDec), wMu, ToArray(gMu), "W_mu");
+        AssertGradient(a => Loss(wMu, a, wDec), wLv, ToArray(gLv), "W_logvar");
+        AssertGradient(a => Loss(wMu, wLv, a), wDec, ToArray(gDec), "W_dec");
+    }
+
+    [Fact]
+    public void ConcreteAutoencoder_GradientsMatchFiniteDifferences()
+    {
+        var rng = new System.Random(74);
+        int k = 2, p = 4, h = 3;
+        double temperature = 0.7;
+        var x = Tensor1D(RandomArray(rng, p, 1));
+        var uniforms = Shaped(Enumerable.Range(0, k * p).Select(_ => 0.05 + 0.9 * rng.NextDouble()).ToArray(), k, p);
+        var logits = RandomArray(rng, k * p, 0.5);
+        var wh = RandomArray(rng, k * h, 0.8);
+        var bh = RandomArray(rng, h, 0.3);
+        var wo = RandomArray(rng, h * p, 0.8);
+        var bo = RandomArray(rng, p, 0.3);
+
+        AiDotNet.Preprocessing.FeatureSelection.Neural.ConcreteAutoencoderSelector<double>.ConcreteNetwork Net(
+            double[] l, double[] a, double[] b, double[] c, double[] d) => new()
+        {
+            Logits = Shaped(l, k, p),
+            HiddenWeights = Shaped(a, k, h),
+            HiddenBias = Tensor1D(b),
+            OutputWeights = Shaped(c, h, p),
+            OutputBias = Tensor1D(d),
+        };
+
+        double Loss(AiDotNet.Preprocessing.FeatureSelection.Neural.ConcreteAutoencoderSelector<double>.ConcreteNetwork net) =>
+            ToArray(net.Loss(x, uniforms, temperature))[0];
+
+        var grads = Net(logits, wh, bh, wo, bo).Gradients(x, uniforms, temperature);
+        AssertGradient(a => Loss(Net(a, wh, bh, wo, bo)), logits, ToArray(grads.Logits), "logits");
+        AssertGradient(a => Loss(Net(logits, a, bh, wo, bo)), wh, ToArray(grads.HiddenWeights), "W_h");
+        AssertGradient(a => Loss(Net(logits, wh, a, wo, bo)), bh, ToArray(grads.HiddenBias), "b_h");
+        AssertGradient(a => Loss(Net(logits, wh, bh, a, bo)), wo, ToArray(grads.OutputWeights), "W_o");
+        AssertGradient(a => Loss(Net(logits, wh, bh, wo, a)), bo, ToArray(grads.OutputBias), "b_o");
+    }
+
+    [Fact]
+    public void Perceptron_MatchesWidrowHoffWithSameSeed()
+    {
+        var (x, y) = Problem(75, 20, 3);
+        int seed = 12, epochs = 3;
+        double lr = 0.05;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Neural.PerceptronSelector<double>(2, epochs, lr, seed);
+        selector.Fit(x, y);
+
+        int n = x.Rows, p = x.Columns;
+        var xs = new double[n, p];
+        for (int j = 0; j < p; j++)
+        {
+            double mean = Enumerable.Range(0, n).Average(i => x[i, j]);
+            double std = System.Math.Sqrt(Enumerable.Range(0, n).Average(i => (x[i, j] - mean) * (x[i, j] - mean)));
+            for (int i = 0; i < n; i++) xs[i, j] = (x[i, j] - mean) / std;
+        }
+
+        double yMean = Enumerable.Range(0, n).Average(i => y[i]);
+        double yStd = System.Math.Sqrt(Enumerable.Range(0, n).Average(i => (y[i] - yMean) * (y[i] - yMean)));
+        var rng = new System.Random(seed);
+        var w = Enumerable.Range(0, p).Select(_ => (rng.NextDouble() - 0.5) * 2 * System.Math.Sqrt(1.0 / p)).ToArray();
+        double b = 0;
+        for (int e = 0; e < epochs; e++)
+            for (int i = 0; i < n; i++)
+            {
+                double pred = b;
+                for (int j = 0; j < p; j++) pred += xs[i, j] * w[j];
+                double err = pred - (y[i] - yMean) / yStd;
+                for (int j = 0; j < p; j++) w[j] -= lr * err * xs[i, j];
+                b -= lr * err;
+            }
+
+        var importance = selector.WeightImportance?.ToArray() ?? System.Array.Empty<double>();
+        for (int j = 0; j < p; j++)
+            Assert.Equal(System.Math.Abs(w[j]), importance[j], 10);
+    }
 }
