@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -26,13 +27,13 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _fisherScores;
+    private Vector<T>? _fisherScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FisherScores => _fisherScores;
+    public Vector<T>? FisherScores => _fisherScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -61,72 +62,21 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Group samples by class
-        var classGroups = new Dictionary<double, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            double y = NumOps.ToDouble(target[i]);
-            if (!classGroups.ContainsKey(y))
-                classGroups[y] = new List<int>();
-            classGroups[y].Add(i);
-        }
-
-        int nClasses = classGroups.Count;
+        // Group samples by class (distinct target values)
+        var classOneHot = StatisticalTestHelper.ClassOneHot(target, out int nClasses);
         if (nClasses < 2)
             throw new ArgumentException("FisherScore requires at least 2 classes.");
 
-        _fisherScores = new double[p];
+        // Fisher score = sum_k n_k (mean_k - mean)^2 / sum_k n_k var_k (between / within class scatter); with no
+        // within-class scatter, class means that differ separate the classes exactly (+infinity), equal ones score 0
+        var (betweenClassVar, withinClassVar) = FilterStatisticTensorOps.AnovaSums(
+            FilterStatisticTensorOps.AsTensor(data), classOneHot);
+        var scores = FilterStatisticTensorOps.SeparationAwareRatio(betweenClassVar, withinClassVar, 1e-10);
+        _fisherScores = scores.ToVector();
 
-        // Compute global mean for each feature
-        var globalMeans = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                globalMeans[j] += NumOps.ToDouble(data[i, j]);
-            globalMeans[j] /= n;
-        }
-
-        for (int j = 0; j < p; j++)
-        {
-            double betweenClassVar = 0;
-            double withinClassVar = 0;
-
-            foreach (var kvp in classGroups)
-            {
-                var classIndices = kvp.Value;
-                int nk = classIndices.Count;
-
-                // Compute class mean
-                double classMean = 0;
-                foreach (int i in classIndices)
-                    classMean += NumOps.ToDouble(data[i, j]);
-                classMean /= nk;
-
-                // Between-class variance contribution
-                betweenClassVar += nk * Math.Pow(classMean - globalMeans[j], 2);
-
-                // Within-class variance contribution
-                foreach (int i in classIndices)
-                {
-                    double diff = NumOps.ToDouble(data[i, j]) - classMean;
-                    withinClassVar += diff * diff;
-                }
-            }
-
-            _fisherScores[j] = withinClassVar > 1e-10 ? betweenClassVar / withinClassVar : 0;
-        }
-
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _fisherScores
-            .Select((fs, idx) => (Score: fs, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

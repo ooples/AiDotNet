@@ -29,14 +29,14 @@ public class LaplacianScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
     private readonly int _nNeighbors;
     private readonly double _kernelWidth;
 
-    private double[]? _laplacianScores;
+    private Vector<T>? _laplacianScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
-    public double[]? LaplacianScores => _laplacianScores;
+    public Vector<T>? LaplacianScores => _laplacianScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,97 +65,27 @@ public class LaplacianScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
-        // Step 1: Build k-NN graph with heat kernel weights
-        var weights = new double[n, n];
+        // k-nearest-neighbour graph with heat-kernel weights exp(-||x_i - x_j||^2 / t^2), symmetric
+        var weights = FeatureSelectionTensorOps.KnnGaussianAffinity(x, _nNeighbors, 1.0 / (_kernelWidth * _kernelWidth));
+        var degree = engine.ReduceSum(weights, new[] { 1 }, false);
 
-        for (int i = 0; i < n; i++)
-        {
-            // Compute distances to all other points
-            var distances = new List<(int Index, double Distance)>();
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
+        // f~ = f - (f'D1 / 1'D1) 1, score = f~' L f~ / f~' D f~ with L = D - W (He, Cai and Niyogi 2005)
+        var degreeRow = engine.Reshape(degree, new[] { 1, n });
+        var mean = engine.TensorDivideScalar(
+            engine.Reshape(engine.TensorMatMul(degreeRow, x), new[] { p }), engine.TensorSum(degree));
+        var centered = engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(mean, n));
+        var denominator = engine.Reshape(engine.TensorMatMul(degreeRow, engine.TensorSquare(centered)), new[] { p });
+        var smoothness = engine.ReduceSum(
+            engine.TensorMultiply(centered, engine.TensorMatMul(weights, centered)), new[] { 0 }, false);
+        var numerator = engine.TensorSubtract(denominator, smoothness);
+        var scores = FilterStatisticTensorOps.GuardedDivide(numerator, denominator, 1e-10, NumOps.MaxValue);
+        _laplacianScores = scores.ToVector();
 
-                double dist = 0;
-                for (int f = 0; f < p; f++)
-                {
-                    double diff = NumOps.ToDouble(data[i, f]) - NumOps.ToDouble(data[j, f]);
-                    dist += diff * diff;
-                }
-                distances.Add((j, dist));
-            }
-
-            // Keep k nearest neighbors
-            var neighbors = distances.OrderBy(x => x.Distance).Take(_nNeighbors);
-            foreach (var (j, dist) in neighbors)
-            {
-                // Heat kernel weight
-                double weight = Math.Exp(-dist / (_kernelWidth * _kernelWidth));
-                weights[i, j] = weight;
-                weights[j, i] = weight; // Symmetric
-            }
-        }
-
-        // Step 2: Compute diagonal matrix D
-        var D = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                D[i] += weights[i, j];
-        }
-
-        // Step 3: Compute Laplacian Score for each feature
-        _laplacianScores = new double[p];
-
-        for (int f = 0; f < p; f++)
-        {
-            // Get feature values
-            var featureVals = new double[n];
-            double sumD = 0;
-            double sumFD = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                featureVals[i] = NumOps.ToDouble(data[i, f]);
-                sumD += D[i];
-                sumFD += featureVals[i] * D[i];
-            }
-
-            // Center the feature
-            double mean = sumFD / sumD;
-            var centered = new double[n];
-            for (int i = 0; i < n; i++)
-                centered[i] = featureVals[i] - mean;
-
-            // Numerator: f^T L f where L = D - W
-            double numerator = 0;
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    double laplacian = (i == j) ? D[i] - weights[i, j] : -weights[i, j];
-                    numerator += centered[i] * laplacian * centered[j];
-                }
-            }
-
-            // Denominator: f^T D f
-            double denominator = 0;
-            for (int i = 0; i < n; i++)
-                denominator += centered[i] * D[i] * centered[i];
-
-            _laplacianScores[f] = denominator > 1e-10 ? numerator / denominator : double.MaxValue;
-        }
-
-        // Select features with lowest Laplacian Score (better locality preservation)
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _laplacianScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderBy(x => x.Score) // Lower is better
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        // Lower is better
+        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

@@ -266,6 +266,41 @@ internal static class FeatureSelectionTensorOps
             engine.TensorDivide(hits, FilterStatisticTensorOps.ColumnBroadcast(hitCount, n)));
     }
 
+    /// <summary>Squared Euclidean distances between every pair of rows of an [n, p] tensor ([n, n]).</summary>
+    public static Tensor<T> SquaredDistances<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSquare(engine.TensorCDist(x, x, 2.0));
+    }
+
+    /// <summary>
+    /// A symmetric k-nearest-neighbour graph with Gaussian weights: <c>W[i, j] = exp(-coefficient d_ij^2)</c>
+    /// (squared Euclidean d) when j is among the <paramref name="k"/> nearest neighbours of i or i among those of j
+    /// (ties to the lower index), 0 otherwise and on the diagonal ([n, n]).
+    /// </summary>
+    public static Tensor<T> KnnGaussianAffinity<T>(Tensor<T> x, int k, double coefficient)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        if (n == 0)
+            return new Tensor<T>(new[] { 0, 0 });
+
+        var squared = SquaredDistances(x);
+        var eye = engine.TensorEye<T>(n);
+        var candidates = engine.TensorWhere(eye, FilterStatisticTensorOps.FilledLike(squared, ops.FromDouble(double.PositiveInfinity)), squared);
+        var neighbour = new Tensor<T>(new[] { n, n });
+        foreach (var (index, found) in NearestPerRow(candidates, k))
+        {
+            var oneHot = engine.TensorOneHot<T>(new Tensor<int>(index, new[] { n }), n);
+            neighbour = engine.TensorMax(neighbour, engine.TensorMultiply(oneHot, FilterStatisticTensorOps.ColumnBroadcast(found, n)));
+        }
+
+        var linked = engine.TensorMax(neighbour, engine.TensorTranspose(neighbour));
+        var kernel = engine.TensorExp(engine.TensorMultiplyScalar(squared, ops.FromDouble(-coefficient)));
+        return engine.TensorMultiply(kernel, linked);
+    }
+
     /// <summary>|rows - x[neighbour]| feature by feature ([m, p]).</summary>
     public static Tensor<T> NeighbourDifference<T>(Tensor<T> rows, Tensor<T> x, int[] neighbour)
     {
