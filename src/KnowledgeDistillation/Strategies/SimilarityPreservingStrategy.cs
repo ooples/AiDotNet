@@ -43,42 +43,14 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
-        var studentEmbeddings = new Vector<T>[batchSize];
-        var teacherEmbeddings = new Vector<T>[batchSize];
+        // Per sample: T²·KL(teacher_soft || student_soft), blended with hard CE when labels are given
+        T totalLoss = Engine.Sum(DistillationHelper<T>.StandardSampleLosses(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha));
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            studentEmbeddings[r] = studentSoft;
-            teacherEmbeddings[r] = teacherSoft;
-
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T sampleLoss;
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-                sampleLoss = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            }
-            else
-            {
-                sampleLoss = softLoss;
-            }
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        // The temperature-softened distributions are the embeddings whose similarities are preserved
+        var studentEmbeddings = RowsOf(DistillationHelper<T>.SoftmaxRows(studentBatchOutput, Temperature));
+        var teacherEmbeddings = RowsOf(DistillationHelper<T>.SoftmaxRows(teacherBatchOutput, Temperature));
 
         var standardLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
         var similarityLoss = ComputeSimilarityLoss(studentEmbeddings, teacherEmbeddings);
@@ -95,83 +67,35 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        var studentEmbeddings = new Vector<T>[batchSize];
-        var teacherEmbeddings = new Vector<T>[batchSize];
-
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            var gradient = new Vector<T>(outputDim);
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            studentEmbeddings[r] = studentSoft;
-            teacherEmbeddings[r] = teacherSoft;
-
-            for (int i = 0; i < outputDim; i++)
-            {
-                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
-            }
-
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                    gradient[i] = NumOps.Add(
-                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[i]));
-                }
-            }
-
-            gradientBatch.SetRow(r, gradient);
-        }
+        var gradientBatch = DistillationHelper<T>.StandardSampleGradients(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
 
         if (_similarityWeight > 0)
         {
+            var studentSoft = DistillationHelper<T>.SoftmaxRows(studentBatchOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.SoftmaxRows(teacherBatchOutput, Temperature);
+
             // Similarity gradient is w.r.t. softmax outputs (embeddings).
             // Must apply softmax Jacobian to convert to gradient w.r.t. logits.
-            var simGradEmbedding = ComputeSimilarityGradient(studentEmbeddings, teacherEmbeddings);
+            var simGradEmbedding = Tensor<T>.FromMatrix(ComputeSimilarityGradient(RowsOf(studentSoft), RowsOf(teacherSoft)));
 
-            for (int r = 0; r < batchSize; r++)
-            {
-                // Apply softmax Jacobian: ∂L/∂z_k = Σ_m (∂L/∂p_m) * p_m * (δ_{mk} - p_k) / T
-                var p = studentEmbeddings[r]; // softmax output
-                for (int k = 0; k < outputDim; k++)
-                {
-                    double dLdz_k = 0;
-                    double p_k = Convert.ToDouble(p[k]);
-                    for (int m = 0; m < outputDim; m++)
-                    {
-                        double dLdp_m = NumOps.ToDouble(simGradEmbedding[r, m]);
-                        double p_m = NumOps.ToDouble(p[m]);
-                        double jacobian = p_m * ((m == k ? 1.0 : 0.0) - p_k);
-                        dLdz_k += dLdp_m * jacobian;
-                    }
-                    // Divide by T because softmax input is z/T
-                    dLdz_k /= Temperature;
+            // Apply softmax Jacobian: ∂L/∂z_k = Σ_m (∂L/∂p_m) * p_m * (δ_{mk} - p_k) / T
+            //                                = p_k * (∂L/∂p_k - Σ_m (∂L/∂p_m) p_m) / T
+            var p = Tensor<T>.FromMatrix(studentSoft);
+            var weightedSum = Engine.ReduceSum(Engine.TensorMultiply(simGradEmbedding, p), [1], keepDims: true);
+            var dLdz = Engine.TensorDivideScalar(
+                Engine.TensorMultiply(p, Engine.TensorSubtract(simGradEmbedding, Engine.TensorBroadcastTo(weightedSum, p.Shape.ToArray()))),
+                NumOps.FromDouble(Temperature));
 
-                    var standardGrad = NumOps.Multiply(gradientBatch[r, k], NumOps.FromDouble(1.0 - _similarityWeight));
-                    var simGrad = NumOps.Multiply(NumOps.FromDouble(dLdz_k), NumOps.FromDouble(_similarityWeight));
-                    gradientBatch[r, k] = NumOps.Add(standardGrad, simGrad);
-                }
-            }
+            var standardGrad = Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(gradientBatch), NumOps.FromDouble(1.0 - _similarityWeight));
+            var simGrad = Engine.TensorMultiplyScalar(dLdz, NumOps.FromDouble(_similarityWeight));
+            gradientBatch = Engine.TensorAdd(standardGrad, simGrad).ToMatrix();
         }
 
         // Average gradients over the batch
         T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r2 = 0; r2 < batchSize; r2++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
+        gradientBatch = Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
 
         return gradientBatch;
     }
@@ -203,19 +127,16 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         }
 
         int n = studentEmbeddings.Length;
+        int pairCount = n * (n - 1) / 2;
         T totalLoss = NumOps.Zero;
-        int pairCount = 0;
 
-        for (int i = 0; i < n; i++)
+        if (pairCount > 0)
         {
-            for (int j = i + 1; j < n; j++)
-            {
-                double teacherSim = VectorHelper.CosineSimilarity(teacherEmbeddings[i], teacherEmbeddings[j]);
-                double studentSim = VectorHelper.CosineSimilarity(studentEmbeddings[i], studentEmbeddings[j]);
-                double diff = teacherSim - studentSim;
-                totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(diff * diff));
-                pairCount++;
-            }
+            // Sum over pairs i < j of (cos_teacher(i, j) - cos_student(i, j))²
+            var diff = Engine.TensorSubtract(
+                CosineSimilarityMatrix(StackRows(teacherEmbeddings)),
+                CosineSimilarityMatrix(StackRows(studentEmbeddings)));
+            totalLoss = Engine.TensorSum(Engine.TensorMultiply(Engine.TensorMultiply(diff, diff), PairMask(n, upperOnly: true)));
         }
 
         var loss = pairCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(pairCount)) : NumOps.Zero;
@@ -228,59 +149,75 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         int n = studentEmbeddings.Length;
         int dim = studentEmbeddings[0].Length;
 
-        var gradients = new Matrix<T>(n, dim);
-
-        int pairCount = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                pairCount++;
-            }
-        }
-
+        int pairCount = n * (n - 1) / 2;
         if (pairCount == 0)
-            return gradients;
+            return new Matrix<T>(n, dim);
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
+        // For every ordered pair i != j, with e = student embeddings, d = cos_t(i, j) - cos_s(i, j):
+        //   ∂sim/∂e_i = e_j / (|e_i||e_j| + ε) - (e_i·e_j) / (|e_i|³|e_j| + ε) * e_i
+        //   grad_i   += -2 * d * ∂sim/∂e_i / pairCount
+        var e = StackRows(studentEmbeddings);
+        var t = StackRows(teacherEmbeddings);
+        var simDiff = Engine.TensorMultiply(
+            Engine.TensorSubtract(CosineSimilarityMatrix(t), CosineSimilarityMatrix(e)), PairMask(n, upperOnly: false));
 
-                double teacherSim = VectorHelper.CosineSimilarity(teacherEmbeddings[i], teacherEmbeddings[j]);
-                double studentSim = VectorHelper.CosineSimilarity(studentEmbeddings[i], studentEmbeddings[j]);
+        var dot = Engine.TensorMatMul(e, Engine.TensorTranspose(e));
+        var norms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(e, e), [1], keepDims: true)); // [n, 1]
+        var normsT = Engine.TensorTranspose(norms);
+        T epsilon = NumOps.FromDouble(Epsilon);
+        var normProduct = Engine.TensorAddScalar(Engine.TensorMatMul(norms, normsT), epsilon);
+        var cubedProduct = Engine.TensorAddScalar(
+            Engine.TensorMatMul(Engine.TensorMultiply(Engine.TensorMultiply(norms, norms), norms), normsT), epsilon);
 
-                double simDiff = teacherSim - studentSim;
+        var neighbourWeights = Engine.TensorDivide(simDiff, normProduct);                               // [n, n]
+        var selfWeights = Engine.ReduceSum(
+            Engine.TensorDivide(Engine.TensorMultiply(simDiff, dot), cubedProduct), [1], keepDims: true); // [n, 1]
+        var dSim = Engine.TensorSubtract(
+            Engine.TensorMatMul(neighbourWeights, e),
+            Engine.TensorMultiply(e, Engine.TensorBroadcastTo(selfWeights, [n, dim])));
 
-                double dot = 0, norm_i = 0, norm_j = 0;
-                for (int k = 0; k < dim; k++)
-                {
-                    double ei_k = Convert.ToDouble(studentEmbeddings[i][k]);
-                    double ej_k = Convert.ToDouble(studentEmbeddings[j][k]);
-                    dot += ei_k * ej_k;
-                    norm_i += ei_k * ei_k;
-                    norm_j += ej_k * ej_k;
-                }
+        return Engine.TensorMultiplyScalar(dSim, NumOps.FromDouble(-2.0 / pairCount)).ToMatrix();
+    }
 
-                norm_i = Math.Sqrt(norm_i);
-                norm_j = Math.Sqrt(norm_j);
+    /// <summary>
+    /// Pairwise cosine similarities of the rows of <paramref name="embeddings"/> ([n, d] -> [n, n]),
+    /// clamped to [-1, 1]; pairs whose norm product is at most 1e-10 get 0 (as VectorHelper.CosineSimilarity).
+    /// </summary>
+    private Tensor<T> CosineSimilarityMatrix(Tensor<T> embeddings)
+    {
+        int n = embeddings.Shape[0];
+        var dot = Engine.TensorMatMul(embeddings, Engine.TensorTranspose(embeddings));
+        var squaredNorms = Engine.ReduceSum(Engine.TensorMultiply(embeddings, embeddings), [1], keepDims: true); // [n, 1]
+        var denom = Engine.TensorSqrt(Engine.TensorMatMul(squaredNorms, Engine.TensorTranspose(squaredNorms)));
+        var cosine = Engine.TensorClamp(Engine.TensorDivide(dot, denom), NumOps.FromDouble(-1.0), NumOps.One);
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10)), cosine, new Tensor<T>([n, n]));
+    }
 
-                for (int k = 0; k < dim; k++)
-                {
-                    double ei_k = Convert.ToDouble(studentEmbeddings[i][k]);
-                    double ej_k = Convert.ToDouble(studentEmbeddings[j][k]);
+    /// <summary>
+    /// [n, n] mask (1/0) of the pairs i &lt; j (<paramref name="upperOnly"/>) or of all pairs i != j.
+    /// </summary>
+    private Tensor<T> PairMask(int n, bool upperOnly)
+    {
+        var rows = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, n, 1), [n, 1]), [n, n]);
+        var cols = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, n, 1), [1, n]), [n, n]);
+        return upperOnly ? Engine.TensorLessThan(rows, cols) : Engine.TensorNotEquals(rows, cols);
+    }
 
-                    double dSim_dEi = (ej_k / (norm_i * norm_j + Epsilon)) - (dot / (norm_i * norm_i * norm_i * norm_j + Epsilon)) * ei_k;
+    /// <summary>
+    /// Stacks equally sized vectors as the rows of an [n, d] tensor.
+    /// </summary>
+    private Tensor<T> StackRows(Vector<T>[] rows)
+    {
+        return Engine.TensorStack(rows.Select(row => Tensor<T>.FromVector(row)).ToArray(), 0);
+    }
 
-                    double grad = -2.0 * simDiff * dSim_dEi / pairCount;
-
-                    gradients[i, k] = NumOps.Add(gradients[i, k], NumOps.FromDouble(grad));
-                }
-            }
-        }
-
-        return gradients;
+    /// <summary>
+    /// The rows of <paramref name="matrix"/> as separate vectors.
+    /// </summary>
+    private static Vector<T>[] RowsOf(Matrix<T> matrix)
+    {
+        return Enumerable.Range(0, matrix.Rows).Select(r => matrix.GetRow(r)).ToArray();
     }
 
 }
