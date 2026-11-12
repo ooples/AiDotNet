@@ -102,4 +102,73 @@ public class FeatureSelectionPopulationReferenceTests
         selector.Fit(x, y);
         Assert.Equal(3, selector.SelectedIndices?.Length);
     }
+
+    // ---------------------------------------------------------------- Bat Algorithm (Yang 2010)
+
+    private static BatAlgorithm<double>.BatSwarm TwoBats() =>
+        new BatAlgorithm<double>.BatSwarm(
+            Tensor2D(new[,] { { 0.2, 0.4 }, { 0.6, 0.8 } }),
+            Tensor1D(1.0, 1.0),
+            Tensor1D(0.5, 0.5),
+            rows => AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorNegate(
+                AiDotNet.Tensors.Engines.AiDotNetEngine.Current.ReduceSum(rows, new[] { 1 }, false)));
+
+    [Fact]
+    public void BatAlgorithm_PulseRateFactors_AreNeverZero()
+    {
+        // r_i^t = r_i^0 (1 - exp(-gamma t)) with t = 1, 2, ...: the first accepted move must not zero the pulse rate
+        var factors = ToArray(BatAlgorithm<double>.PulseRateFactors(3, 0.9));
+        for (int t = 1; t <= 3; t++)
+            Assert.Equal(1 - System.Math.Exp(-0.9 * t), factors[t - 1], Tolerance);
+    }
+
+    [Fact]
+    public void BatAlgorithm_AcceptedMove_UpdatesLoudnessAndPulseRate()
+    {
+        var swarm = TwoBats();
+
+        // f = fmin + (fmax - fmin) * 0 = -1, v = 0 + (x_1 - x*) f = -(x_1 - x*), so x_1 + v = x* = (0.2, 0.4)
+        swarm.Fly(1, Tensor1D(0.0), null, Tensor1D(0.1), -1.0, 0.0, Tensor1D(0.6));
+
+        var positions = ToArray(swarm.Positions);
+        Assert.Equal(0.2, positions[2], Tolerance);
+        Assert.Equal(0.4, positions[3], Tolerance);
+        Assert.Equal(BatAlgorithm<double>.Alpha * 1.0, ToArray(swarm.Loudness)[1], Tolerance);
+        Assert.Equal(0.5 * 0.6, ToArray(swarm.PulseRate)[1], Tolerance);
+        Assert.Equal(-0.6, ToArray(swarm.Fitness)[1], Tolerance);
+    }
+
+    [Fact]
+    public void BatAlgorithm_RejectedMove_LeavesBatUnchanged()
+    {
+        var swarm = TwoBats();
+
+        // The candidate is better, but the acceptance draw 1.5 is not below the loudness 1.0
+        swarm.Fly(1, Tensor1D(0.0), null, Tensor1D(1.5), -1.0, 0.0, Tensor1D(0.6));
+
+        var positions = ToArray(swarm.Positions);
+        Assert.Equal(0.6, positions[2], Tolerance);
+        Assert.Equal(0.8, positions[3], Tolerance);
+        Assert.Equal(1.0, ToArray(swarm.Loudness)[1], Tolerance);
+        Assert.Equal(0.5, ToArray(swarm.PulseRate)[1], Tolerance);
+        Assert.Equal(-1.4, ToArray(swarm.Fitness)[1], Tolerance);
+
+        // The velocity is still updated: v_1 = (x_1 - x*) f = (-0.4, -0.4)
+        var velocities = ToArray(swarm.Velocities);
+        Assert.Equal(-0.4, velocities[2], Tolerance);
+        Assert.Equal(-0.4, velocities[3], Tolerance);
+    }
+
+    [Fact]
+    public void BatAlgorithm_LocalWalk_IsAroundBestScaledByMeanLoudness()
+    {
+        var swarm = TwoBats();
+
+        // x_new = x* + epsilon * mean(A) with epsilon = (0.5, -0.25) and mean(A) = 1, clamped to [0, 1]
+        swarm.Fly(1, Tensor1D(0.0), Tensor1D(0.5, -0.25), Tensor1D(0.1), -1.0, 0.0, Tensor1D(0.6));
+
+        var positions = ToArray(swarm.Positions);
+        Assert.Equal(0.7, positions[2], Tolerance);
+        Assert.Equal(0.15, positions[3], Tolerance);
+    }
 }
