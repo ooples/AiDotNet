@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -24,17 +25,17 @@ namespace AiDotNet.Preprocessing.FeatureSelection;
 public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _percentile;
-    private readonly Func<Matrix<T>, Vector<T>, double[]>? _scoreFunc;
-    private readonly string _defaultScoreFunc;
+    private readonly Func<Matrix<T>, Vector<T>, Vector<T>>? _scoreFunc;
+    private readonly UnivariateScoreFunction _defaultScoreFunc;
 
-    private double[]? _scores;
-    private double[]? _pValues;
+    private Vector<T>? _scores;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Percentile => _percentile;
-    public double[]? Scores => _scores;
-    public double[]? PValues => _pValues;
+    public Vector<T>? Scores => _scores;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -42,8 +43,8 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
     public SelectPercentile(
         double percentile = 10.0,
-        Func<Matrix<T>, Vector<T>, double[]>? scoreFunc = null,
-        string defaultScoreFunc = "f_classif",
+        Func<Matrix<T>, Vector<T>, Vector<T>>? scoreFunc = null,
+        UnivariateScoreFunction defaultScoreFunc = UnivariateScoreFunction.FClassif,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -69,257 +70,62 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         // Compute scores
+        Tensor<T> scores;
         if (_scoreFunc != null)
         {
-            _scores = _scoreFunc(data, target);
+            scores = Tensor<T>.FromVector(_scoreFunc(data, target));
         }
         else
         {
-            _scores = _defaultScoreFunc switch
+            var x = Tensor<T>.FromMatrix(data);
+            Tensor<T> pValues;
+            switch (_defaultScoreFunc)
             {
-                "f_classif" => ComputeFClassif(data, target, n, p),
-                "f_regression" => ComputeFRegression(data, target, n, p),
-                "chi2" => ComputeChi2(data, target, n, p),
-                "mutual_info_classif" => ComputeMutualInfo(data, target, n, p),
-                _ => ComputeFClassif(data, target, n, p)
-            };
+                case UnivariateScoreFunction.FRegression:
+                    scores = SelectorTensorOps.FRegression(x, target, out pValues);
+                    _pValues = pValues.ToVector();
+                    break;
+                case UnivariateScoreFunction.Chi2:
+                    scores = SelectorTensorOps.Chi2(x, target, out pValues);
+                    _pValues = pValues.ToVector();
+                    break;
+                case UnivariateScoreFunction.MutualInfoClassif:
+                    scores = SelectorTensorOps.MutualInfoClassif(x, target);
+                    break;
+                default:
+                    scores = SelectorTensorOps.FClassif(x, target, out pValues);
+                    _pValues = pValues.ToVector();
+                    break;
+            }
         }
 
-        // Determine threshold for percentile
-        var sortedScores = _scores.OrderByDescending(s => s).ToArray();
-        int numToSelect = Math.Max(1, (int)Math.Ceiling(p * _percentile / 100.0));
-        double threshold = sortedScores[Math.Min(numToSelect - 1, sortedScores.Length - 1)];
+        _scores = scores.ToVector();
 
-        // Select features at or above threshold
-        _selectedIndices = _scores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .Where(x => x.Score >= threshold)
-            .OrderBy(x => x.Index)
-            .Select(x => x.Index)
-            .ToArray();
-
-        // If we got more than expected due to ties, trim to exact percentile count
-        if (_selectedIndices.Length > numToSelect)
+        if (_percentile >= 100 || p == 0)
         {
-            _selectedIndices = _scores
-                .Select((s, idx) => (Score: s, Index: idx))
-                .OrderByDescending(x => x.Score)
-                .Take(numToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = Enumerable.Range(0, p).ToArray();
+            IsFitted = true;
+            return;
         }
+
+        // scikit-learn SelectPercentile: keep the scores above the (100 - percentile)-th percentile (linear
+        // interpolation), then fill with the lowest-indexed ties at the threshold up to int(p * percentile / 100)
+        var engine = Engine;
+        var threshold = engine.TensorQuantile(scores, (100 - _percentile) / 100, null, false, QuantileInterpolation.Linear);
+        var thresholdRow = engine.TensorBroadcastTo(engine.Reshape(threshold, new[] { 1 }), new[] { p });
+        var above = PreprocessingTensorOps.MaskPositions(engine.TensorGreaterThan(scores, thresholdRow));
+        var ties = PreprocessingTensorOps.MaskPositions(engine.TensorEquals(scores, thresholdRow));
+        int maxFeatures = (int)(p * _percentile / 100);
+        int room = maxFeatures - above.Length;
+
+        // ties[:room] in Python: a negative room drops that many ties from the end
+        int keptTies = room >= 0 ? Math.Min(room, ties.Length) : Math.Max(ties.Length + room, 0);
+        _selectedIndices = above.Concat(ties.Take(keptTies)).OrderBy(index => index).ToArray();
 
         IsFitted = true;
-    }
-
-    private double[] ComputeFClassif(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
-        _pValues = new double[p];
-
-        var classGroups = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classGroups.ContainsKey(label))
-                classGroups[label] = [];
-            classGroups[label].Add(i);
-        }
-
-        int k = classGroups.Count;
-
-        for (int j = 0; j < p; j++)
-        {
-            double overallMean = 0;
-            for (int i = 0; i < n; i++)
-                overallMean += NumOps.ToDouble(data[i, j]);
-            overallMean /= n;
-
-            double ssb = 0, ssw = 0;
-
-            foreach (var kvp in classGroups)
-            {
-                double classMean = 0;
-                foreach (int i in kvp.Value)
-                    classMean += NumOps.ToDouble(data[i, j]);
-                classMean /= kvp.Value.Count;
-
-                ssb += kvp.Value.Count * (classMean - overallMean) * (classMean - overallMean);
-
-                foreach (int i in kvp.Value)
-                {
-                    double diff = NumOps.ToDouble(data[i, j]) - classMean;
-                    ssw += diff * diff;
-                }
-            }
-
-            double msb = ssb / (k - 1);
-            double msw = ssw / (n - k);
-            scores[j] = msw > 1e-10 ? msb / msw : 0;
-            _pValues[j] = 0.05;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeFRegression(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
-        _pValues = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        double ssTotal = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(target[i]) - yMean;
-            ssTotal += diff * diff;
-        }
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-            }
-
-            double beta = sxx > 1e-10 ? sxy / sxx : 0;
-            double ssResidual = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                double pred = yMean + beta * (NumOps.ToDouble(data[i, j]) - xMean);
-                double residual = NumOps.ToDouble(target[i]) - pred;
-                ssResidual += residual * residual;
-            }
-
-            double ssRegression = ssTotal - ssResidual;
-            double msRegression = ssRegression;
-            double msResidual = ssResidual / Math.Max(1, n - 2);
-
-            scores[j] = msResidual > 1e-10 ? msRegression / msResidual : 0;
-            _pValues[j] = 0.05;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeChi2(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var classSums = new Dictionary<int, double>();
-            var classCounts = new Dictionary<int, int>();
-            double totalSum = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-                double val = Math.Max(0, NumOps.ToDouble(data[i, j]));
-
-                if (!classSums.ContainsKey(label))
-                {
-                    classSums[label] = 0;
-                    classCounts[label] = 0;
-                }
-                classSums[label] += val;
-                classCounts[label]++;
-                totalSum += val;
-            }
-
-            double chi2 = 0;
-            foreach (var kvp in classSums)
-            {
-                double expected = totalSum * classCounts[kvp.Key] / n;
-                if (expected > 1e-10)
-                    chi2 += (kvp.Value - expected) * (kvp.Value - expected) / expected;
-            }
-
-            scores[j] = chi2;
-            _pValues[j] = 0.05;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeMutualInfo(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
-        int nBins = 10;
-
-        for (int j = 0; j < p; j++)
-        {
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                minVal = Math.Min(minVal, val);
-                maxVal = Math.Max(maxVal, val);
-            }
-
-            double range = maxVal - minVal;
-            if (range < 1e-10) range = 1;
-
-            var jointCounts = new Dictionary<(int, int), int>();
-            var featureCounts = new int[nBins];
-            var targetCounts = new Dictionary<int, int>();
-
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                int bin = Math.Min((int)(((val - minVal) / range) * nBins), nBins - 1);
-                int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-
-                featureCounts[bin]++;
-                if (!targetCounts.ContainsKey(label))
-                    targetCounts[label] = 0;
-                targetCounts[label]++;
-
-                var key = (bin, label);
-                if (!jointCounts.ContainsKey(key))
-                    jointCounts[key] = 0;
-                jointCounts[key]++;
-            }
-
-            double mi = 0;
-            foreach (var kvp in jointCounts)
-            {
-                int bin = kvp.Key.Item1;
-                int label = kvp.Key.Item2;
-                int joint = kvp.Value;
-
-                double pJoint = (double)joint / n;
-                double pF = (double)featureCounts[bin] / n;
-                double pT = (double)targetCounts[label] / n;
-
-                if (pJoint > 0 && pF > 0 && pT > 0)
-                    mi += pJoint * Math.Log(pJoint / (pF * pT));
-            }
-
-            scores[j] = mi;
-        }
-
-        return scores;
     }
 
     /// <inheritdoc />
@@ -335,15 +141,7 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("SelectPercentile has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
