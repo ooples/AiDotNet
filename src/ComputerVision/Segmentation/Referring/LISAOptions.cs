@@ -8,7 +8,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the LISA model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class LISAOptions : SegmentationModelOptions
+public class LISAOptions : ReferringSegmentationOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public LISAOptions()
@@ -25,6 +25,8 @@ public class LISAOptions : SegmentationModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        CopyReferringSettings(other);
+
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         MaxGradNorm = other.MaxGradNorm;
@@ -39,5 +41,10 @@ public class LISAOptions : SegmentationModelOptions
     /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
     /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
     /// </exception>
-    public void Validate() => ValidateSegmentationCore();
+    public void Validate()
+    {
+        ValidateSegmentationCore();
+        ValidateTextQuerySettings();
+        ValidateMaskThreshold();
+    }
 }

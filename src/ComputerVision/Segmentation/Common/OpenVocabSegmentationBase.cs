@@ -1,7 +1,10 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.Validation;
+using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.ComputerVision.Segmentation.Common;
 
@@ -33,43 +36,139 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
     public int MaxPromptLength => _maxPromptLength;
 
     /// <summary>
+    /// The CLIP-style text encoder that turns class names into the embeddings pixels are scored against.
+    /// </summary>
+    protected readonly ITextEncoder<T> _textEncoder;
+
+    /// <summary>The inverse temperature <c>1 / tau</c> that scales every cosine similarity.</summary>
+    protected readonly T _logitScale;
+
+    /// <summary>Normalized embeddings <c>[NumClasses, D]</c> of the closed-set vocabulary Predict/Train score against.</summary>
+    private readonly Tensor<T> _vocabularyEmbeddings;
+
+    /// <summary>The query vocabulary of an in-flight <see cref="SegmentWithText"/> call, or <c>null</c>.</summary>
+    private Tensor<T>? _queryEmbeddings;
+
+    /// <summary>
+    /// Gets the text encoder whose embeddings the pixel embeddings are compared with.
+    /// </summary>
+    public ITextEncoder<T> TextEncoder => _textEncoder;
+
+    /// <summary>
+    /// Gets the width of the pixel embeddings the decoder must produce: the text encoder's embedding dimension.
+    /// </summary>
+    protected int TextEmbeddingDimension => _textEncoder.TextEmbeddingDimension;
+
+    /// <summary>
     /// Initializes the base in native (trainable) mode.
     /// </summary>
     protected OpenVocabSegmentationBase(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         ILossFunction<T>? lossFunction,
-        int numClasses,
+        ITextEncoder<T> textEncoder,
+        TextQueriedSegmentationOptions options,
         int maxCategories = 256,
         int maxPromptLength = 77)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, RequireOptions(options).NumClasses)
     {
         Guard.Positive(maxCategories);
         Guard.Positive(maxPromptLength);
         _maxCategories = maxCategories;
         _maxPromptLength = maxPromptLength;
+        _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
+        (_logitScale, _vocabularyEmbeddings) = PrepareVocabulary(textEncoder, options);
     }
 
     /// <summary>
-    /// Initializes the base in ONNX (inference-only) mode.
+    /// Initializes the base in ONNX (inference-only) mode. The ONNX graph must output pixel embeddings
+    /// <c>[B, D, H, W]</c> with <c>D</c> equal to the text encoder's embedding dimension.
     /// </summary>
     protected OpenVocabSegmentationBase(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses,
+        ITextEncoder<T> textEncoder,
+        TextQueriedSegmentationOptions options,
         int maxCategories = 256,
         int maxPromptLength = 77)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, RequireOptions(options).NumClasses)
     {
         Guard.Positive(maxCategories);
         Guard.Positive(maxPromptLength);
         _maxCategories = maxCategories;
         _maxPromptLength = maxPromptLength;
+        _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
+        (_logitScale, _vocabularyEmbeddings) = PrepareVocabulary(textEncoder, options);
+    }
+
+    private static TextQueriedSegmentationOptions RequireOptions(TextQueriedSegmentationOptions options)
+        => options ?? throw new ArgumentNullException(nameof(options));
+
+    private static (T LogitScale, Tensor<T> Vocabulary) PrepareVocabulary(
+        ITextEncoder<T> textEncoder, TextQueriedSegmentationOptions options)
+    {
+        if (textEncoder is null) throw new ArgumentNullException(nameof(textEncoder));
+        options.ValidateTextQuerySettings();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return (numOps.FromDouble(1.0 / options.Temperature),
+            TextEmbeddingClassifier.EncodeNormalized(textEncoder, options.ResolveClassNames()));
+    }
+
+    /// <summary>
+    /// Scores pixel embeddings <c>[D, H, W]</c> or <c>[B, D, H, W]</c> against the active vocabulary
+    /// (the closed-set class names, or the names of an in-flight <see cref="SegmentWithText"/> call),
+    /// returning <c>cos / tau</c> logits with one channel per name.
+    /// </summary>
+    protected Tensor<T> ClassifyPixels(Tensor<T> pixelEmbeddings)
+        => TextEmbeddingClassifier.Classify(pixelEmbeddings, _queryEmbeddings ?? _vocabularyEmbeddings, _logitScale);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Scores every pixel against the CLIP text embedding of each name, takes the softmax over the
+    /// names (the per-pixel classification of CAT-Seg, SAN and SED), and labels each pixel with its
+    /// most likely name. A name's mask is the pixels it wins; its score is its mean probability there.
+    /// </remarks>
+    public virtual OpenVocabSegmentationResult<T> SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
+    {
+        if (classNames is null) throw new ArgumentNullException(nameof(classNames));
+        var text = TextEmbeddingClassifier.EncodeNormalized(_textEncoder, classNames);
+        Tensor<T> logits;
+        _queryEmbeddings = text;
+        try
+        {
+            logits = SegmentationTensorOps.EnsureUnbatched(Predict(image));
+        }
+        finally
+        {
+            _queryEmbeddings = null;
+        }
+
+        return BuildResult(Engine, NumOps, logits, classNames);
+    }
+
+    /// <summary>
+    /// Turns per-name logits <c>[K, H, W]</c> into the softmax/argmax segmentation result.
+    /// </summary>
+    internal static OpenVocabSegmentationResult<T> BuildResult(
+        IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, IReadOnlyList<string> classNames)
+    {
+        int numText = classNames.Count;
+        var probs = engine.TensorSoftmax(logits, 0);
+        var labels = engine.TensorArgMax(logits, 0);
+        var masks = engine.TensorPermute(engine.TensorOneHot<T>(labels, numText), new[] { 2, 0, 1 });
+        var area = engine.ReduceSum(masks, new[] { 1, 2 }, false);
+        var confidence = engine.ReduceSum(engine.TensorMultiply(masks, probs), new[] { 1, 2 }, false);
+        var scores = engine.TensorDivide(confidence, engine.TensorClampMin(area, numOps.One));
+        return new OpenVocabSegmentationResult<T>
+        {
+            Masks = masks,
+            ClassNames = classNames.ToArray(),
+            Scores = scores.ToVector(),
+            SemanticMap = labels.Cast<T>()
+        };
     }
 
     /// <inheritdoc/>
-    public abstract OpenVocabSegmentationResult<T> SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames);
-
-    /// <inheritdoc/>
-    public abstract OpenVocabSegmentationResult<T> SegmentWithPrompt(Tensor<T> image, string prompt);
+    public virtual OpenVocabSegmentationResult<T> SegmentWithPrompt(Tensor<T> image, string prompt)
+        => SegmentWithText(image, new[] { prompt });
 }

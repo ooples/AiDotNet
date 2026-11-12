@@ -245,13 +245,11 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         var masks = new Tensor<T>(new[] { classes.Length, height, width });
         var scores = new double[classes.Length];
         var semantic = new Tensor<T>(new[] { height, width });
+        semantic.Fill(NumOps.FromDouble(-1));
         var best = new double[height, width];
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
-            {
-                semantic[y, x] = NumOps.FromDouble(-1);
                 best[y, x] = double.NegativeInfinity;
-            }
         foreach (var s in segments)
         {
             int c = classOf(s);
@@ -269,7 +267,8 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
                     }
                 }
         }
-        return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classes, Scores = scores, SemanticMap = semantic };
+        // Detection scores arrive as double from Grounding DINO's box head; one conversion per class.
+        return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classes, Scores = new Vector<T>(scores.Select(v => NumOps.FromDouble(v))), SemanticMap = semantic };
     }
 
     /// <summary>

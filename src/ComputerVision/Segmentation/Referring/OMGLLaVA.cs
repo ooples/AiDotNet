@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.VisionLanguage.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -39,17 +40,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// <example>
 /// <code>
 /// // Create an OMG-LLaVA model for multi-granularity visual understanding
+/// // Any CLIP-style ITextEncoder supplies the text embeddings, e.g. a CLIP model from VisionLanguage.Encoders.
+/// ITextEncoder&lt;double&gt; textEncoder = clipModel;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new OMGLLaVA&lt;double&gt;(architecture);
+/// var model = new OMGLLaVA&lt;double&gt;(architecture, textEncoder);
 /// // Every tunable is now set through the options object; these are the defaults:
-/// var custom = new OMGLLaVA&lt;double&gt;(architecture,
+/// var custom = new OMGLLaVA&lt;double&gt;(architecture, textEncoder,
 ///     options: new OMGLLaVAOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for visual question answering with segmentation
-/// var onnxModel = new OMGLLaVA&lt;double&gt;(architecture, "omgllava.onnx");
+/// var onnxModel = new OMGLLaVA&lt;double&gt;(architecture, "omgllava.onnx", textEncoder);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -87,6 +90,7 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// Initializes OMGLLaVA in native (trainable) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
     /// <param name="options">Optional model options.</param>
@@ -96,12 +100,13 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// </para>
     /// </remarks>
     public OMGLLaVA(NeuralNetworkArchitecture<T> architecture,
+        ITextEncoder<T> textEncoder,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         OMGLLaVAOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, (options ??= new OMGLLaVAOptions()).NumClasses)
+        : base(architecture, optimizer, lossFunction, textEncoder, options ??= new OMGLLaVAOptions())
     {
         _options = options; Options = _options;
         // OMGLLaVA's own fallback input geometry is 1024x1024, not the base's 512.
@@ -118,6 +123,7 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// Initializes OMGLLaVA in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
@@ -130,10 +136,11 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
     public OMGLLaVA(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
+        ITextEncoder<T> textEncoder,
         OMGLLaVAOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, (options ??= new OMGLLaVAOptions()).NumClasses)
+        : base(architecture, onnxModelPath, textEncoder, options ??= new OMGLLaVAOptions())
     {
         _options = options; Options = _options;
         // OMGLLaVA's own fallback input geometry is 1024x1024, not the base's 512.
@@ -158,7 +165,7 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
     /// </para>
     /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : ClassifyPixels(PredictOnnx(input));
 
     #endregion
 
@@ -170,6 +177,7 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+        features = ClassifyPixels(features);
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
@@ -179,14 +187,14 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
@@ -212,7 +220,7 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
             var encoderLayers = LayerHelper<T>.CreateOMGLLaVAEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
             int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateOMGLLaVADecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
+            var decoderLayers = LayerHelper<T>.CreateOMGLLaVADecoderLayers(_channelDims[^1], _decoderDim, TextEmbeddingDimension, fH, fW);
             Layers.AddRange(decoderLayers);
         }
     }
@@ -244,35 +252,8 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// <inheritdoc/>
     public override bool SupportsConversation => true;
 
-    /// <inheritdoc/>
-    public override ReferringSegmentationResult<T> SegmentFromExpression(Tensor<T> image, string expression)
-    {
-        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
-        int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
-        var weights = Common.SegmentationTensorOps.TextToWeights(expression, numC);
-        var scoreMap = Common.SegmentationTensorOps.WeightedChannelSum(logits, weights);
-        var probs = Common.SegmentationTensorOps.Sigmoid(scoreMap);
-        var binaryMask = Common.SegmentationTensorOps.ThresholdMask(probs, 0.5);
-        int minY = h, maxY = 0, minX = w, maxX = 0;
-        double area = 0, confSum = 0;
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-                if (NumOps.GreaterThan(binaryMask[y, x], NumOps.FromDouble(0.5)))
-                {
-                    area++; confSum += NumOps.ToDouble(probs[y, x]);
-                    if (y < minY) minY = y; if (y > maxY) maxY = y;
-                    if (x < minX) minX = x; if (x > maxX) maxX = x;
-                }
-        double confidence = area > 0 ? confSum / area : 0;
-        var masks = new Tensor<T>([1, h, w]);
-        binaryMask.Data.Span.CopyTo(masks.Data.Span);
-        var boxes = new Tensor<T>([1, 4]);
-        if (area > 0) { boxes[0, 0] = NumOps.FromDouble(minX); boxes[0, 1] = NumOps.FromDouble(minY); boxes[0, 2] = NumOps.FromDouble(maxX); boxes[0, 3] = NumOps.FromDouble(maxY); }
-        string response = area > 0
-            ? $"Segmented region matching '{expression}' with {(int)area} pixels ({confidence:F2} confidence)"
-            : $"No region found matching '{expression}'";
-        return new ReferringSegmentationResult<T> { Masks = masks, TextResponse = response, Confidence = confidence, BoundingBoxes = boxes };
-    }
+    // SegmentFromExpression comes from ReferringSegmentationBase: the expression's CLIP text embedding
+    // is scored against the decoder's pixel embeddings and the sigmoid mask is thresholded.
 
     /// <inheritdoc/>
     public override ReferringSegmentationResult<T> SegmentFromConversation(
@@ -291,17 +272,7 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// </remarks>
     public override List<ReferringSegmentationResult<T>> SegmentVideoFromExpression(Tensor<T> frames, string expression)
     {
-        var results = new List<ReferringSegmentationResult<T>>();
-        if (frames.Rank == 3) { var r = SegmentFromExpression(frames, expression); r.FrameIndex = 0; results.Add(r); return results; }
-        int nf = frames.Shape[0], c = frames.Shape[1], fh = frames.Shape[2], fw = frames.Shape[3];
-        for (int f = 0; f < nf; f++)
-        {
-            var frame = new Tensor<T>([c, fh, fw]);
-            for (int ch = 0; ch < c; ch++) for (int y = 0; y < fh; y++) for (int x = 0; x < fw; x++) frame[ch, y, x] = frames[f, ch, y, x];
-            var r = SegmentFromExpression(frame, expression);
-            r.FrameIndex = f; results.Add(r);
-        }
-        return results;
+        return SegmentEachFrame(frames, expression);
     }
     #endregion
 }

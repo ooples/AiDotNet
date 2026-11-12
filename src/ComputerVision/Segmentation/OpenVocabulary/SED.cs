@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.VisionLanguage.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -39,17 +40,19 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <example>
 /// <code>
 /// // Create a SED model for simple open-vocabulary segmentation
+/// // Any CLIP-style ITextEncoder supplies the text embeddings, e.g. a CLIP model from VisionLanguage.Encoders.
+/// ITextEncoder&lt;double&gt; textEncoder = clipModel;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new SED&lt;double&gt;(architecture);
+/// var model = new SED&lt;double&gt;(architecture, textEncoder);
 /// // Every tunable is now set through the options object; these are the defaults:
-/// var custom = new SED&lt;double&gt;(architecture,
+/// var custom = new SED&lt;double&gt;(architecture, textEncoder,
 ///     options: new SEDOptions { NumClasses = 150, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for category-adaptive segmentation
-/// var onnxModel = new SED&lt;double&gt;(architecture, "sed.onnx");
+/// var onnxModel = new SED&lt;double&gt;(architecture, "sed.onnx", textEncoder);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -84,6 +87,7 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
     /// Initializes SED in native (trainable) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
     /// <param name="options">Optional model options.</param>
@@ -93,12 +97,13 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
     /// </para>
     /// </remarks>
     public SED(NeuralNetworkArchitecture<T> architecture,
+        ITextEncoder<T> textEncoder,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SEDOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, (options ??= new SEDOptions()).NumClasses)
+        : base(architecture, optimizer, lossFunction, textEncoder, options ??= new SEDOptions())
     {
         _options = options; Options = _options;
         // SED's own fallback input geometry is 640x640, not the base's 512.
@@ -115,6 +120,7 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
     /// Initializes SED in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
@@ -127,10 +133,11 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
     public SED(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
+        ITextEncoder<T> textEncoder,
         SEDOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, (options ??= new SEDOptions()).NumClasses)
+        : base(architecture, onnxModelPath, textEncoder, options ??= new SEDOptions())
     {
         _options = options; Options = _options;
         // SED's own fallback input geometry is 640x640, not the base's 512.
@@ -155,7 +162,7 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
     /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
     /// </para>
     /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : ClassifyPixels(PredictOnnx(input));
 
     #endregion
 
@@ -167,6 +174,7 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+        features = ClassifyPixels(features);
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
@@ -176,14 +184,14 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
@@ -209,7 +217,7 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
             var encoderLayers = LayerHelper<T>.CreateSEDEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
             int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateSEDDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
+            var decoderLayers = LayerHelper<T>.CreateSEDDecoderLayers(_channelDims[^1], _decoderDim, TextEmbeddingDimension, fH, fW);
             Layers.AddRange(decoderLayers);
         }
     }
@@ -232,48 +240,6 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
     };
     #endregion
 
-    #region IOpenVocabSegmentation Implementation
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, MaxCategories (256) and
-    // MaxPromptLength (77) all come from the base; only the model-specific overrides remain.
-
-    /// <inheritdoc/>
-    public override OpenVocabSegmentationResult<T> SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
-    {
-        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
-        int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
-        int numText = classNames.Count;
-        var masks = new Tensor<T>([numText, h, w]);
-        var scores = new double[numText];
-        var semanticMap = new Tensor<T>([h, w]);
-        var textProbs = new double[numText][];
-        for (int t = 0; t < numText; t++)
-        {
-            var weights = Common.SegmentationTensorOps.TextToWeights(classNames[t], numC);
-            var scoreMap = Common.SegmentationTensorOps.WeightedChannelSum(logits, weights);
-            var probMap = Common.SegmentationTensorOps.Sigmoid(scoreMap);
-            double area = 0, confSum = 0;
-            textProbs[t] = new double[h * w];
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    double v = NumOps.ToDouble(probMap[y, x]);
-                    textProbs[t][y * w + x] = v;
-                    if (v >= 0.5) { masks[t, y, x] = NumOps.FromDouble(1.0); area++; confSum += v; }
-                }
-            scores[t] = area > 0 ? confSum / area : 0;
-        }
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                int best = 0; double bestV = -1;
-                for (int t = 0; t < numText; t++) { double v = textProbs[t][y * w + x]; if (v > bestV) { bestV = v; best = t; } }
-                semanticMap[y, x] = NumOps.FromDouble(best);
-            }
-        return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classNames.ToArray(), Scores = scores, SemanticMap = semanticMap };
-    }
-
-    /// <inheritdoc/>
-    public override OpenVocabSegmentationResult<T> SegmentWithPrompt(Tensor<T> image, string prompt)
-        => SegmentWithText(image, new[] { prompt });
-    #endregion
+    // SegmentWithText and SegmentWithPrompt come from OpenVocabSegmentationBase: they score the
+    // decoder's pixel embeddings against CLIP text embeddings of the names (cosine / temperature).
 }
