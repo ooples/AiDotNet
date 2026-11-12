@@ -602,18 +602,19 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
     /// </summary>
     private Tensor<T> MedianAcrossSamples(Tensor<T> paths, int samples, int outputLen)
     {
-        var result = new Tensor<T>(new[] { outputLen });
-        var column = new T[samples];
-        for (int i = 0; i < outputLen; i++)
+        // paths holds samples rows of outputLen values; sort each column and take its middle.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var flat = Engine.Reshape(paths, new[] { paths.Length });
+        var grid = Engine.Reshape(Engine.TensorNarrow(flat, 0, 0, samples * outputLen), new[] { samples, outputLen });
+        var sorted = Engine.TensorSort(grid, 0, false).Values;
+        var upper = Engine.Reshape(Engine.TensorNarrow(sorted, 0, samples / 2, 1), new[] { outputLen });
+        if ((samples % 2) == 1)
         {
-            for (int s = 0; s < samples; s++) column[s] = paths[s * outputLen + i];
-            Array.Sort(column, (a, b) => NumOps.LessThan(a, b) ? -1 : NumOps.LessThan(b, a) ? 1 : 0);
-            result[i] = (samples % 2) == 1
-                ? column[samples / 2]
-                : NumOps.Divide(NumOps.Add(column[samples / 2 - 1], column[samples / 2]), NumOps.FromDouble(2.0));
+            return upper;
         }
 
-        return result;
+        var lower = Engine.Reshape(Engine.TensorNarrow(sorted, 0, samples / 2 - 1, 1), new[] { outputLen });
+        return Engine.TensorDivideScalar(Engine.TensorAdd(lower, upper), NumOps.FromDouble(2.0));
     }
 
     /// <inheritdoc />
