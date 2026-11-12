@@ -1219,3 +1219,59 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.GetParameterGradients() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ParameterCount.get -> long
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.SetTrainingMode(bool isTraining) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.SupportsTraining.get -> bool
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.TabPFNBase<T>.TabPFNBase(int numNumericalFeatures, AiDotNet.Models.Options.TabPFNOptions<T>? options = null) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.AggregateNeighbors(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! queryEmbedding, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! neighborEmbeddings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.TabRBase(int numFeatures, AiDotNet.Models.Options.TabROptions<T>? options = null) -> void
+AiDotNet.NeuralNetworks.Tabular.TabTransformerBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Tabular.TabTransformerBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+AiDotNet.NeuralNetworks.Tabular.TabRRegression<T>.BuildIndex(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targets) -> void
+AiDotNet.NeuralNetworks.Tabular.TabRClassifier<T>.BuildIndex(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features, int[]! labels) -> void
+AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.TabRBase(int numFeatures, AiDotNet.Models.Options.TabROptions<T>? options = null, int labelDimension = 0) -> void
+AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.BuildIndexWithLabels(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labelEncodings) -> void
+AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.GetNeighborLabels() -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.Tabular.TabPFNBase<T>.TabPFNBase(int numNumericalFeatures, AiDotNet.Models.Options.TabPFNOptions<T>? options = null, int labelDimension = 0) -> void
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.SupportsTraining.get -> bool
+AiDotNet.NeuralNetworks.Tabular.TabNetBase<T>.SparsityObjective() -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Tabular.TabMBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Tabular.TabMBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ForwardTraced(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Tabular.TabDPTBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Tabular.TabDPTBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+AiDotNet.NeuralNetworks.Tabular.TabPFNBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Tabular.TabPFNBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+AiDotNet.NeuralNetworks.Tabular.MambularBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Tabular.MambularBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.UpdateParameters(T learningRate) -> void
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ClearGradients() -> void
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ResetState() -> void
+AiDotNet.NeuralNetworks.Tabular.TabNetBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Tabular.TabNetBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.HasCompleteConstructionObjectState.get -> bool
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
+AiDotNet.NeuralNetworks.Tabular.NODEBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Tabular.NODEBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.IsShapePreserving.get -> bool
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.AppendDeclaredParameterComponents(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>.DeclaredParameterComponent>! components) -> void
+AiDotNet.NeuralNetworks.Tabular.SAINTBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+AiDotNet.NeuralNetworks.Tabular.SAINTBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.GetRegisteredBuffers() -> System.Collections.Generic.IReadOnlyList<(string! Name, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Tensor)>!
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.CanRestoreBufferField(string! name) -> bool
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.TryRestoreBufferField(string! name, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> bool
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.DeclaredParameterTensors() -> System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Tensor, AiDotNet.Tensors.Engines.PersistentTensorRole Role)>!
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.GetTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.GetTrainableParametersUnmaterialized() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.SetTrainableParameters(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> void
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ZeroGrad() -> void
+override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ReturnPooledParameters() -> void
+virtual AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.GetParameterRoles() -> System.Collections.Generic.Dictionary<string!, string!>!
