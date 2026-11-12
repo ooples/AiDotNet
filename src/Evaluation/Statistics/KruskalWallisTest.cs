@@ -56,12 +56,11 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         // Pool all observations and compute ranks (tied values share their average rank)
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var (pooled, groupIndex) = Pool(groups, N);
+        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolGroups(groups);
         var ranks = EvaluationTensorOps<T>.MidRanks(pooled);
 
         // Compute rank sums for each group
-        var rankSums = engine.TensorIndexAdd(new Tensor<T>(new[] { k }), 0, groupIndex, ranks);
-        var sizes = new Tensor<int>(groupSizes, new[] { k }).Cast<T>();
+        var rankSums = EvaluationTensorOps<T>.GroupSums(ranks, groupIndex, k);
 
         // Compute H statistic
         double sumRankSquaredOverN = NumOps.ToDouble(engine.TensorSum(engine.TensorDivide(engine.TensorSquare(rankSums), sizes)));
@@ -110,13 +109,11 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         // Pool and rank (same as main test)
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var groupSizes = groups.Select(g => g.Length).ToArray();
-        var (pooled, groupIndex) = Pool(groups, N);
+        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolGroups(groups);
         var ranks = EvaluationTensorOps<T>.MidRanks(pooled);
 
         // Compute mean ranks per group: each observation's rank goes to its own group
-        var sizes = new Tensor<int>(groupSizes, new[] { k }).Cast<T>();
-        var meanRanks = engine.TensorDivide(engine.TensorIndexAdd(new Tensor<T>(new[] { k }), 0, groupIndex, ranks), sizes);
+        var meanRanks = engine.TensorDivide(EvaluationTensorOps<T>.GroupSums(ranks, groupIndex, k), sizes);
 
         // Pairwise comparisons: z = |R_i - R_j| / sqrt(N (N + 1) / 12 * (1 / n_i + 1 / n_j)), p = 2 * (1 - Phi(z))
         var shape = new[] { k, k };
@@ -142,21 +139,6 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         }
 
         return results;
-    }
-
-    private static (Tensor<T> Pooled, Tensor<int> GroupIndex) Pool(T[][] groups, int total)
-    {
-        var parts = new Tensor<T>[groups.Length];
-        var groupIndex = new int[total];
-        int position = 0;
-        for (int g = 0; g < groups.Length; g++)
-        {
-            parts[g] = new Tensor<T>(groups[g], new[] { groups[g].Length });
-            for (int i = 0; i < groups[g].Length; i++)
-                groupIndex[position++] = g;
-        }
-
-        return (AiDotNetEngine.Current.TensorConcatenate(parts, 0), new Tensor<int>(groupIndex, new[] { total }));
     }
 
     private static T Median(T[] values)

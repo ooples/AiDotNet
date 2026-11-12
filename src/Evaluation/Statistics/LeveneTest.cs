@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -63,42 +64,28 @@ public class LeveneTest<T> : IStatisticalTest<T>
         int N = groupSizes.Sum();
 
         // Compute center for each group
-        var centers = new double[k];
+        var centers = new T[k];
         for (int g = 0; g < k; g++)
         {
             centers[g] = ComputeCenter(groups[g]);
         }
 
         // Compute absolute deviations from center
-        var Z = new double[k][];
-        for (int g = 0; g < k; g++)
-        {
-            Z[g] = new double[groups[g].Length];
-            for (int i = 0; i < groups[g].Length; i++)
-            {
-                Z[g][i] = Math.Abs(NumOps.ToDouble(groups[g][i]) - centers[g]);
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolGroups(groups);
+        var centerOf = engine.TensorGather(new Tensor<T>(centers, new[] { k }), groupIndex, 0);
+        var Z = engine.TensorAbs(engine.TensorSubtract(pooled, centerOf));
 
         // Compute group means of Z
-        var ZMeans = Z.Select(z => z.Average()).ToArray();
-        double ZGrandMean = Z.SelectMany(z => z).Average();
+        var ZMeans = engine.TensorDivide(EvaluationTensorOps<T>.GroupSums(Z, groupIndex, k), sizes);
+        T ZGrandMean = engine.TensorMean(Z);
 
         // Compute Levene statistic (F-test on Z values)
-        double SSBetween = 0;
-        for (int g = 0; g < k; g++)
-        {
-            SSBetween += groupSizes[g] * (ZMeans[g] - ZGrandMean) * (ZMeans[g] - ZGrandMean);
-        }
-
-        double SSWithin = 0;
-        for (int g = 0; g < k; g++)
-        {
-            for (int i = 0; i < groupSizes[g]; i++)
-            {
-                SSWithin += (Z[g][i] - ZMeans[g]) * (Z[g][i] - ZMeans[g]);
-            }
-        }
+        double SSBetween = NumOps.ToDouble(engine.TensorSum(
+            engine.TensorMultiply(sizes, engine.TensorSquare(engine.TensorSubtractScalar(ZMeans, ZGrandMean)))));
+        double SSWithin = NumOps.ToDouble(engine.TensorSumOfSquares(
+            engine.TensorSubtract(Z, engine.TensorGather(ZMeans, groupIndex, 0))));
 
         int dfBetween = k - 1;
         int dfWithin = N - k;
@@ -119,11 +106,10 @@ public class LeveneTest<T> : IStatisticalTest<T>
         double pValue = 1 - FCDF(F, dfBetween, dfWithin);
 
         // Compute variances for each group
-        var variances = groups.Select(g =>
-        {
-            double mean = g.Select(x => NumOps.ToDouble(x)).Average();
-            return g.Select(x => NumOps.ToDouble(x)).Sum(x => (x - mean) * (x - mean)) / (g.Length - 1);
-        }).ToArray();
+        var means = engine.TensorDivide(EvaluationTensorOps<T>.GroupSums(pooled, groupIndex, k), sizes);
+        var squaredDeviations = engine.TensorSquare(engine.TensorSubtract(pooled, engine.TensorGather(means, groupIndex, 0)));
+        var variances = engine.TensorDivide(
+            EvaluationTensorOps<T>.GroupSums(squaredDeviations, groupIndex, k), engine.TensorSubtractScalar(sizes, NumOps.One)).ToArray();
 
         return new StatisticalTestResult<T>
         {
@@ -139,32 +125,42 @@ public class LeveneTest<T> : IStatisticalTest<T>
         };
     }
 
-    private double ComputeCenter(T[] group)
+    private T ComputeCenter(T[] group)
     {
-        var values = group.Select(x => NumOps.ToDouble(x)).ToArray();
+        using var noGrad = new NoGradScope<T>();
+        var values = new Tensor<T>(group, new[] { group.Length });
         return _center switch
         {
-            CenterType.Mean => values.Average(),
+            CenterType.Mean => Mean(values),
             CenterType.Median => Median(values),
             CenterType.TrimmedMean => TrimmedMean(values, 0.1),
-            _ => values.Average()
+            _ => Mean(values)
         };
     }
 
-    private double Median(double[] values)
+    private static T Mean(Tensor<T> values)
     {
-        var sorted = values.OrderBy(x => x).ToArray();
-        int n = sorted.Length;
-        return n % 2 == 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[n / 2];
+        if (values.Length == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
+        return AiDotNetEngine.Current.TensorMean(values);
     }
 
-    private double TrimmedMean(double[] values, double proportion)
+    private static T Median(Tensor<T> values)
     {
-        var sorted = values.OrderBy(x => x).ToArray();
-        int n = sorted.Length;
+        int n = values.Length;
+        if (n == 0)
+            throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+        var sorted = EvaluationTensorOps<T>.SortNaNFirst(values);
+        return n % 2 == 0 ? NumOps.Divide(NumOps.Add(sorted[n / 2 - 1], sorted[n / 2]), NumOps.FromDouble(2.0)) : sorted[n / 2];
+    }
+
+    private static T TrimmedMean(Tensor<T> values, double proportion)
+    {
+        int n = values.Length;
         int trimCount = (int)(n * proportion);
         if (trimCount * 2 >= n) return Median(values);
-        return sorted.Skip(trimCount).Take(n - 2 * trimCount).Average();
+        var sorted = EvaluationTensorOps<T>.SortNaNFirst(values);
+        return AiDotNetEngine.Current.TensorMean(AiDotNetEngine.Current.TensorNarrow(sorted, 0, trimCount, n - 2 * trimCount));
     }
 
     private double FCDF(double f, int df1, int df2)

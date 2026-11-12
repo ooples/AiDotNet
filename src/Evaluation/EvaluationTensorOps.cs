@@ -365,4 +365,56 @@ internal static class EvaluationTensorOps<T>
     // The engine sort puts NaN last; Array.Sort puts it first, so positions shift by the NaN count.
     private static T SortedAt(Tensor<T> sortedNaNLast, int nanCount, int index)
         => index < nanCount ? sortedNaNLast[sortedNaNLast.Length - 1] : sortedNaNLast[index - nanCount];
+
+    /// <summary>
+    /// Sorts a rank-1 tensor the way <c>Array.Sort</c> / <c>OrderBy</c> order doubles: NaN first, then ascending.
+    /// </summary>
+    internal static Tensor<T> SortNaNFirst(Tensor<T> values)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var sorted = engine.TensorSort(values).Values;
+        int n = values.Length;
+        int nanCount = Count(NanMask(values));
+        if (nanCount == 0 || nanCount == n) return sorted;
+        return engine.TensorConcatenate(
+            new[] { engine.TensorNarrow(sorted, 0, n - nanCount, nanCount), engine.TensorNarrow(sorted, 0, 0, n - nanCount) }, 0);
+    }
+
+    /// <summary>
+    /// Concatenates groups into one rank-1 tensor and returns, for each pooled element, the index of its group.
+    /// </summary>
+    internal static (Tensor<T> Pooled, Tensor<int> GroupIndex, Tensor<T> Sizes) PoolGroups(T[][] groups)
+    {
+        var parts = new Tensor<T>[groups.Length];
+        var sizes = new int[groups.Length];
+        int total = 0;
+        for (int g = 0; g < groups.Length; g++)
+        {
+            parts[g] = new Tensor<T>(groups[g], new[] { groups[g].Length });
+            sizes[g] = groups[g].Length;
+            total += sizes[g];
+        }
+
+        var groupIndex = new int[total];
+        int position = 0;
+        for (int g = 0; g < groups.Length; g++)
+        {
+            for (int i = 0; i < sizes[g]; i++)
+                groupIndex[position++] = g;
+        }
+
+        using var noGrad = new NoGradScope<T>();
+        return (AiDotNetEngine.Current.TensorConcatenate(parts, 0), new Tensor<int>(groupIndex, new[] { total }),
+            new Tensor<int>(sizes, new[] { groups.Length }).Cast<T>());
+    }
+
+    /// <summary>
+    /// Sums pooled values per group (torch <c>index_add</c> into a zero vector of length <paramref name="groupCount"/>).
+    /// </summary>
+    internal static Tensor<T> GroupSums(Tensor<T> pooled, Tensor<int> groupIndex, int groupCount)
+    {
+        using var noGrad = new NoGradScope<T>();
+        return AiDotNetEngine.Current.TensorIndexAdd(new Tensor<T>(new[] { groupCount }), 0, groupIndex, pooled);
+    }
 }
