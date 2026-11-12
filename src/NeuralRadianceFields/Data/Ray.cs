@@ -159,14 +159,9 @@ public class Ray<T>
     /// </remarks>
     public Vector<T> PointAt(T t)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var point = new Vector<T>(3);
-
-        for (int i = 0; i < 3; i++)
-        {
-            point[i] = numOps.Add(Origin[i], numOps.Multiply(t, Direction[i]));
-        }
-
-        return point;
+        var engine = AiDotNetEngine.Current;
+        var origin = Origin.GetSubVector(0, 3);
+        var direction = Direction.GetSubVector(0, 3);
+        return engine.Add(origin, engine.Multiply(direction, t));
     }
 }
