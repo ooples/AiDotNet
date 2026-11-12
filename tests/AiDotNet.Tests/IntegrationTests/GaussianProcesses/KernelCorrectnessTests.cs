@@ -306,7 +306,7 @@ public class KernelCorrectnessTests
         var gridY = Enumerable.Range(0, 5).Select(i => (double)i).ToArray();
 
         var kernel = GridKernel<double>.WithRBF(
-            new[] { gridX, gridY },
+            new[] { new Vector<double>(gridX), new Vector<double>(gridY) },
             lengthscales: new[] { 1.0, 1.0 });
 
         var x = new Vector<double>(new double[] { 2.0, 3.0 });
@@ -323,7 +323,7 @@ public class KernelCorrectnessTests
         var gridY = Enumerable.Range(0, 3).Select(i => (double)i).ToArray();
 
         var kernel = GridKernel<double>.WithRBF(
-            new[] { gridX, gridY },
+            new[] { new Vector<double>(gridX), new Vector<double>(gridY) },
             lengthscales: new[] { 1.0, 1.0 });
 
         kernel.Precompute();
@@ -342,7 +342,7 @@ public class KernelCorrectnessTests
         var gridY = Enumerable.Range(0, 3).Select(i => (double)i).ToArray();
 
         var kernel = GridKernel<double>.WithRBF(
-            new[] { gridX, gridY },
+            new[] { new Vector<double>(gridX), new Vector<double>(gridY) },
             lengthscales: new[] { 1.0, 1.0 });
 
         kernel.Precompute();
@@ -361,7 +361,7 @@ public class KernelCorrectnessTests
         var gridY = new[] { 0.0, 1.0 };
 
         var kernel = GridKernel<double>.WithRBF(
-            new[] { gridX, gridY },
+            new[] { new Vector<double>(gridX), new Vector<double>(gridY) },
             lengthscales: new[] { 1.0, 1.0 });
 
         kernel.Precompute();
