@@ -1234,10 +1234,12 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
         {
             int stepsToAdd = Math.Min(_forecastHorizon, totalSteps - stepsAdded);
 
-            for (int i = 0; i < stepsToAdd && resultIdx < totalSteps; i++)
+            // Copies the leading min(stepsToAdd, pred.Length) values, bounded by the remaining room.
+            int copyCount = Math.Min(Math.Min(stepsToAdd, pred.Length), totalSteps - resultIdx);
+            if (copyCount > 0)
             {
-                if (i < pred.Length)
-                    result.Data.Span[resultIdx++] = pred[i];
+                pred.Data.Span.Slice(0, copyCount).CopyTo(result.Data.Span.Slice(resultIdx, copyCount));
+                resultIdx += copyCount;
             }
 
             stepsAdded += stepsToAdd;

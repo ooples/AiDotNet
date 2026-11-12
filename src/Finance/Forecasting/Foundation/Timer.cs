@@ -1305,9 +1305,9 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         foreach (var pred in predictions)
         {
             int toCopy = Math.Min(pred.Length, totalSteps - position);
-            for (int i = 0; i < toCopy; i++)
+            if (toCopy > 0)
             {
-                result.Data.Span[position + i] = pred.Data.Span[i];
+                pred.Data.Span.Slice(0, toCopy).CopyTo(result.Data.Span.Slice(position, toCopy));
             }
             position += toCopy;
         }
