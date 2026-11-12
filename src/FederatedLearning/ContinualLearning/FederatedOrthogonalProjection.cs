@@ -45,28 +45,28 @@ public class FederatedOrthogonalProjection<T> : Infrastructure.FederatedLearning
     /// <inheritdoc/>
     public Vector<T> ComputeImportance(Vector<T> modelParameters, Matrix<T> taskData)
     {
+        Guard.NotNull(modelParameters);
+        Guard.NotNull(taskData);
         int d = modelParameters.Length;
         int n = taskData.Rows;
-
-        // Compute gradient covariance diagonal as importance estimate
-        var importance = new double[d];
-        for (int i = 0; i < n; i++)
+        int columns = taskData.Columns;
+        if (n == 0 || columns == 0)
         {
-            for (int j = 0; j < d; j++)
-            {
-                int featIdx = j % taskData.Columns;
-                double grad = NumOps.ToDouble(modelParameters[j]) * NumOps.ToDouble(taskData[i, featIdx]);
-                importance[j] += grad * grad;
-            }
+            throw new ArgumentException("Task data must contain at least one row and one column.", nameof(taskData));
         }
 
-        var result = new T[d];
+        // Gradient covariance diagonal as importance estimate: the pseudo-gradient of parameter j on sample i
+        // is theta_j * x_{i, j mod C}, so its mean square is theta_j^2 * mean_i(x_{i, j mod C}^2).
+        var columnMeanSquares = Engine.ReduceMean(Engine.TensorSquare(Tensor<T>.FromMatrix(taskData)), new[] { 0 }, false);
+
+        var featureIndex = new int[d];
         for (int j = 0; j < d; j++)
         {
-            result[j] = NumOps.FromDouble(importance[j] / n);
+            featureIndex[j] = j % columns;
         }
 
-        return new Vector<T>(result);
+        var perParameter = Engine.TensorGather(columnMeanSquares, new Tensor<int>(featureIndex, new[] { d }), 0);
+        return Engine.TensorMultiply(Engine.TensorSquare(modelParameters.AsTensor()), perParameter).ToVector();
     }
 
     /// <inheritdoc/>
@@ -80,81 +80,53 @@ public class FederatedOrthogonalProjection<T> : Infrastructure.FederatedLearning
     /// <inheritdoc/>
     public Vector<T> ProjectGradient(Vector<T> gradient, Vector<T> importanceWeights)
     {
+        Guard.NotNull(gradient);
+        Guard.NotNull(importanceWeights);
         int d = gradient.Length;
-        var projected = new T[d];
+        if (d == 0)
+        {
+            return new Vector<T>(0);
+        }
 
         // Compute the projection: g_projected = g - (g·e)/(e·e) * e
-        // where e is the importance-weighted direction from previous tasks
-        // For diagonal approximation: scale gradient components inversely with importance
+        // where e is the importance vector restricted to entries above the projection threshold; the
+        // remaining entries keep the gradient as-is because e is zero there.
+        var importance = (importanceWeights.Length == d ? importanceWeights : importanceWeights.GetSubVector(0, d)).AsTensor();
+        var mask = Engine.TensorGreaterThan(importance, NumOps.FromDouble(_projectionThreshold));
+        var direction = Engine.TensorMultiply(importance, mask);
 
-        double dotGE = 0;
-        double dotEE = 0;
-
-        for (int i = 0; i < d; i++)
+        // The projection is invariant to the scale of e; dividing by its largest entry keeps e·e finite for
+        // narrow T.
+        T maxDirection = Engine.TensorMaxValue(Engine.TensorAbs(direction));
+        if (!NumOps.GreaterThan(maxDirection, NumOps.Zero))
         {
-            double g = NumOps.ToDouble(gradient[i]);
-            double e = NumOps.ToDouble(importanceWeights[i]);
-
-            if (e > _projectionThreshold)
-            {
-                dotGE += g * e;
-                dotEE += e * e;
-            }
+            return gradient.Clone();
         }
 
-        // Project out the important direction
-        double projScale = dotEE > 1e-10 ? dotGE / dotEE : 0;
-
-        for (int i = 0; i < d; i++)
-        {
-            double g = NumOps.ToDouble(gradient[i]);
-            double e = NumOps.ToDouble(importanceWeights[i]);
-
-            if (e > _projectionThreshold)
-            {
-                // Remove the component along the important direction
-                projected[i] = NumOps.FromDouble(g - projScale * e);
-            }
-            else
-            {
-                // Not important — keep the gradient as-is
-                projected[i] = gradient[i];
-            }
-        }
-
-        return new Vector<T>(projected);
+        var unit = Engine.TensorDivideScalar(direction, maxDirection).ToVector();
+        T projScale = NumOps.Divide(Engine.DotProduct(gradient, unit), Engine.DotProduct(unit, unit));
+        return Engine.Subtract(gradient, Engine.Multiply(unit, projScale));
     }
 
     /// <inheritdoc/>
     public Vector<T> AggregateImportance(Dictionary<int, Vector<T>> clientImportances,
         Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientImportances);
         if (clientImportances.Count == 0)
             throw new ArgumentException("No client importances provided.", nameof(clientImportances));
 
         int d = clientImportances.Values.First().Length;
-        var aggregated = new double[d];
-        double totalWeight = 0;
 
-        // Union of important directions: take max importance across clients
+        // Union of important directions: take max importance across clients (floored at zero).
+        var aggregated = new Tensor<T>(new[] { d });
         foreach (var (clientId, importance) in clientImportances)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            for (int i = 0; i < d; i++)
-            {
-                double val = NumOps.ToDouble(importance[i]) * w;
-                aggregated[i] = Math.Max(aggregated[i], val);
-            }
+            var clientImportance = importance.Length == d ? importance : importance.GetSubVector(0, d);
+            aggregated = Engine.TensorMax(aggregated, Engine.TensorMultiplyScalar(clientImportance.AsTensor(), NumOps.FromDouble(w)));
         }
 
-        var result = new T[d];
-        for (int i = 0; i < d; i++)
-        {
-            result[i] = NumOps.FromDouble(aggregated[i]);
-        }
-
-        return new Vector<T>(result);
+        return aggregated.ToVector();
     }
 }

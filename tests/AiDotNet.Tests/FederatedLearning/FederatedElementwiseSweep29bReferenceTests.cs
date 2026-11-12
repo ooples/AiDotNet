@@ -472,4 +472,31 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(5.6, agc.AggregateImportance(importances, weights)[0], Precision);
         Assert.Equal(5.6, cil.AggregateImportance(importances, weights)[0], Precision);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FederatedOrthogonalProjection_RemovesComponentAlongThresholdedImportance()
+    {
+        await Task.Yield();
+
+        // e = importance above the threshold 0.5 -> [2, 0, 1] from [2, 0.1, 1]; g = [1, 5, 3].
+        // g·e = 5, e·e = 5, scale 1 -> g - e = [-1, 5, 2] (entry 1 keeps its gradient).
+        var projection = new AiDotNet.FederatedLearning.ContinualLearning.FederatedOrthogonalProjection<double>(projectionThreshold: 0.5);
+        var projected = projection.ProjectGradient(new Vector<double>(new[] { 1.0, 5.0, 3.0 }), new Vector<double>(new[] { 2.0, 0.1, 1.0 }));
+        Assert.Equal(-1.0, projected[0], Precision);
+        Assert.Equal(5.0, projected[1], Precision);
+        Assert.Equal(2.0, projected[2], Precision);
+
+        // Importance: theta_j^2 * mean_i x_{i, j mod C}^2 over all rows; rows [1, 2], [3, 4] -> [5, 10].
+        var importance = projection.ComputeImportance(new Vector<double>(new[] { 1.0, 2.0, 3.0 }), new Matrix<double>(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } }));
+        Assert.Equal(new[] { 5.0, 40.0, 45.0 }, importance.ToArray());
+
+        // Zero rows used to divide by zero and return NaN importances.
+        Assert.Throws<ArgumentException>(() => projection.ComputeImportance(new Vector<double>(new[] { 1.0 }), new Matrix<double>(0, 2)));
+
+        // Aggregation keeps the elementwise max of weighted importances: max(1*[1, 4], 2*[3, 1]) = [6, 4].
+        var aggregated = projection.AggregateImportance(
+            new Dictionary<int, Vector<double>> { [0] = new Vector<double>(new[] { 1.0, 4.0 }), [1] = new Vector<double>(new[] { 3.0, 1.0 }) },
+            new Dictionary<int, double> { [0] = 1.0, [1] = 2.0 });
+        Assert.Equal(new[] { 6.0, 4.0 }, aggregated.ToArray());
+    }
 }
