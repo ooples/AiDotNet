@@ -725,25 +725,6 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
         Engine.TensorSlice(values.Reshape([values.Length]), [index], [1]);
 
     /// <summary>
-    /// Shifts a flat sequence: result[t] = values[t + offset] when 0 &lt;= t + offset &lt; n, otherwise 0.
-    /// </summary>
-    /// <param name="values">Values to shift (read flattened).</param>
-    /// <param name="offset">Position offset to read from.</param>
-    /// <returns>The shifted sequence of shape [n].</returns>
-    private protected Tensor<T> ShiftFlat(Tensor<T> values, int offset)
-    {
-        int n = values.Length;
-        var flat = values.Reshape([n]);
-        if (offset == 0)
-            return flat;
-        if (Math.Abs(offset) >= n)
-            return new Tensor<T>([n]);
-        return offset > 0
-            ? Engine.TensorConcatenate([Engine.TensorSlice(flat, [offset], [n - offset]), new Tensor<T>([offset])], 0)
-            : Engine.TensorConcatenate([new Tensor<T>([-offset]), Engine.TensorSlice(flat, [0], [n + offset])], 0);
-    }
-
-    /// <summary>
     /// Selects the <paramref name="k"/> highest-scoring eligible positions as a 1/0 mask: the same set a
     /// repeated "first strictly greater than -infinity" scan picks one at a time (higher scores first, ties
     /// broken by the lower position). NaN and -infinity scores are never selected.
