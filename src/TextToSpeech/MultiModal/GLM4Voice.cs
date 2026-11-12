@@ -539,10 +539,9 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
 
     private int[] TokenIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(tensor.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"Token ids lie in [0, {_options.VocabSize}).");
         }
