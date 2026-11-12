@@ -352,4 +352,55 @@ public class FeatureSelectionPopulationReferenceTests
         Assert.Equal(moved1[0], result[2], Tolerance);
         Assert.Equal(moved1[1], result[3], Tolerance);
     }
+
+    // ---------------------------------------------------------------- Dragonfly Algorithm (Mirjalili 2016)
+
+    [Fact]
+    public void DragonflyAlgorithm_StepCombinesSwarmBehaviours()
+    {
+        // t = 1 of T = 4: r = 0.25 + 2/4, w = 0.9 - 0.5/4, c' = 0.1 - 0.2/4; draws for s, a, c, f
+        double[] u = { 0.5, 0.25, 0.8, 0.0 };
+        var weights = DragonflyAlgorithm<double>.SwarmWeights.ForIteration(1, 4, Tensor1D(u));
+        double radius = 0.75, w = 0.775, cPrime = 0.05;
+        Assert.Equal(radius, weights.Radius, Tolerance);
+        Assert.Equal(w, weights.Inertia, Tolerance);
+
+        var positions = Tensor2D(new[,] { { 0.2 }, { 0.5 }, { 0.9 } });
+        var steps = Tensor2D(new[,] { { 0.05 }, { -0.02 }, { 0.01 } });
+        DragonflyAlgorithm<double>.MoveDragonfly(
+            ref positions, ref steps, 0, Tensor1D(0.9), Tensor1D(0.2), weights, new System.Random(1));
+
+        // Neighbours of dragonfly 0 (distance <= r and nonzero): 1 and 2
+        double x = 0.2;
+        double separation = -((0.5 - x) + (0.9 - x));
+        double alignment = (-0.02 + 0.01) / 2;
+        double cohesion = (0.5 + 0.9) / 2 - x;
+        double food = 0.9 - x, enemy = 0.2 + x;
+        double s = 2 * u[0] * cPrime, a = 2 * u[1] * cPrime, c = 2 * u[2] * cPrime, f = 2 * u[3], e = cPrime;
+        double step = s * separation + a * alignment + c * cohesion + f * food + e * enemy + w * 0.05;
+        step = System.Math.Max(-0.1, System.Math.Min(0.1, step));
+
+        Assert.Equal(step, ToArray(steps)[0], Tolerance);
+        Assert.Equal(x + step, ToArray(positions)[0], Tolerance);
+    }
+
+    [Fact]
+    public void DragonflyAlgorithm_IsolatedDragonflyFliesLevy()
+    {
+        var weights = DragonflyAlgorithm<double>.SwarmWeights.ForIteration(0, 10, Tensor1D(0.5, 0.5, 0.5, 0.5));
+        var positions = Tensor2D(new[,] { { 0.1 }, { 0.9 } });
+        var steps = Tensor2D(new[,] { { 0.05 }, { 0.05 } });
+        DragonflyAlgorithm<double>.MoveDragonfly(
+            ref positions, ref steps, 0, Tensor1D(0.9), Tensor1D(0.9), weights, new System.Random(3));
+
+        // Food out of reach and no neighbour: X = X + Levy .* X with uniform r1, r2 and the step reset to 0
+        var rng = new System.Random(3);
+        double r1 = rng.NextDouble(), r2 = rng.NextDouble();
+        double sigma = System.Math.Pow(
+            1.329340388179137 * System.Math.Sin(System.Math.PI * 0.75) / (0.906402477055477 * 1.5 * System.Math.Pow(2, 0.25)),
+            1 / 1.5);
+        double levy = 0.01 * r1 * sigma / System.Math.Pow(System.Math.Abs(r2), 1 / 1.5);
+        Assert.Equal(0.1 + levy * 0.1, ToArray(positions)[0], 1e-10);
+        Assert.Equal(0.0, ToArray(steps)[0], Tolerance);
+    }
 }
