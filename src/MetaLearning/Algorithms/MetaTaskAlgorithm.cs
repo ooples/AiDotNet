@@ -82,7 +82,7 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
             // Eq. 4-5: Z virtual examples mixed from random pairs, one λ ~ Beta(α̌, α̌) per episode.
             var (first, second) = DrawPairs(task);
-            T lambda = NumOps.FromDouble(SampleBeta(_algoOptions.InterpolationAlpha, _algoOptions.InterpolationAlpha));
+            double lambda = SampleBeta(_algoOptions.InterpolationAlpha, _algoOptions.InterpolationAlpha);
             var (mixedX, mixedY) = BuildMixedSet(task, first, second, lambda);
 
             // Eq. 6-7: the mixed set replaces the query set in the outer objective.
@@ -150,14 +150,15 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// Eq. 4-5: x̂ = λ x_first + (1-λ) x_second and ŷ = λ y_first + (1-λ) y_second for each pair.
     /// </summary>
     internal (TInput X, TOutput Y) BuildMixedSet(
-        IMetaLearningTask<T, TInput, TOutput> task, int[] first, int[] second, T lambda)
+        IMetaLearningTask<T, TInput, TOutput> task, int[] first, int[] second, double lambda)
     {
+        T weight = NumOps.FromDouble(lambda);
         bool fromSupport = _algoOptions.MixSource == MetaMixSource.SupportAndQuery;
         var firstX = InputHelper<T, TInput>.GetBatch(fromSupport ? task.SupportInput : task.QueryInput, first);
         var firstY = InputHelper<T, TOutput>.GetBatch(fromSupport ? task.SupportOutput : task.QueryOutput, first);
         var secondX = InputHelper<T, TInput>.GetBatch(task.QueryInput, second);
         var secondY = InputHelper<T, TOutput>.GetBatch(task.QueryOutput, second);
-        return (Mix(firstX, secondX, lambda), Mix(firstY, secondY, lambda));
+        return (Mix(firstX, secondX, weight), Mix(firstY, secondY, weight));
     }
 
     /// <summary>λ a + (1-λ) b on whole containers, i.e. a lerp from b towards a by λ.</summary>

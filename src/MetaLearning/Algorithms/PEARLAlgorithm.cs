@@ -135,8 +135,7 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 sampleGrads.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
             }
 
-            losses.Add(NumOps.Add(ComputeMean(sampleLosses),
-                NumOps.Multiply(NumOps.FromDouble(_algoOptions.KLWeight), KLToStandardNormal(mu, logVar))));
+            losses.Add(WithKL(ComputeMean(sampleLosses), mu, logVar));
             metaGradients.Add(AverageVectors(sampleGrads));
         }
         // Outer loop
@@ -243,6 +242,10 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         return (mu.ToVector(), logVar.ToVector());
     }
 
+    /// <summary>loss + β KL(q(z|c) || N(0, I)).</summary>
+    private T WithKL(T loss, Vector<T> mu, Vector<T> logVar)
+        => NumOps.Add(loss, NumOps.Multiply(NumOps.FromDouble(_algoOptions.KLWeight), KLToStandardNormal(mu, logVar)));
+
     /// <summary>KL(N(μ, σ²) || N(0, I)) = ½ Σ (σ² + μ² − 1 − log σ²).</summary>
     private T KLToStandardNormal(Vector<T> mu, Vector<T> logVar)
     {
@@ -275,8 +278,7 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             var (mu, logVar) = Encode(ComputeContext(task.SupportInput, task.SupportOutput, initParams));
             ParamModel.SetParameters(Infer(initParams, task, mu));
             var loss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            losses.Add(NumOps.Add(loss,
-                NumOps.Multiply(NumOps.FromDouble(_algoOptions.KLWeight), KLToStandardNormal(mu, logVar))));
+            losses.Add(WithKL(loss, mu, logVar));
         }
 
         ParamModel.SetParameters(initParams);

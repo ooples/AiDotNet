@@ -112,7 +112,7 @@ public partial class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearne
 
             ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            losses.Add(NumOps.Add(queryLoss, CellRegularization(hidden)));
+            losses.Add(WithCellRegularization(queryLoss, hidden));
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -160,11 +160,11 @@ public partial class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearne
         return (adaptedParams, hidden);
     }
 
-    /// <summary>CellRegWeight * ||h||^2 / H.</summary>
-    private T CellRegularization(Vector<T> hidden)
-        => NumOps.Multiply(
+    /// <summary>queryLoss + CellRegWeight * ||h||^2 / H.</summary>
+    private T WithCellRegularization(T queryLoss, Vector<T> hidden)
+        => NumOps.Add(queryLoss, NumOps.Multiply(
             NumOps.FromDouble(_algoOptions.CellRegWeight / _algoOptions.HiddenStateDim),
-            Engine.DotProduct(hidden, hidden));
+            Engine.DotProduct(hidden, hidden)));
 
     /// <summary>
     /// One GRU step: z = sigmoid(W_z [h, x] + ForgetBias), r = sigmoid(W_r [h, x]),
@@ -209,7 +209,7 @@ public partial class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearne
             var (ap, hid) = AdaptRecurrent(initParams, task);
             ParamModel.SetParameters(ap);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            losses.Add(NumOps.Add(queryLoss, CellRegularization(hid)));
+            losses.Add(WithCellRegularization(queryLoss, hid));
         }
         ParamModel.SetParameters(initParams);
         return NumOps.ToDouble(ComputeMean(losses));

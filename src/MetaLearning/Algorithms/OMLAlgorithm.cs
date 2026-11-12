@@ -80,37 +80,11 @@ public partial class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
-        T penalty = NumOps.FromDouble(_algoOptions.SparsityPenalty);
 
         foreach (var task in taskBatch.Tasks)
         {
             var adaptedParams = AdaptPredictionNetwork(task, initParams);
-            ParamModel.SetParameters(adaptedParams);
-
-            // Meta-loss on S_traj U X_rand: the per-example mean over both sets.
-            int nSupport = InputHelper<T, TInput>.GetBatchSize(task.SupportInput);
-            int nQuery = InputHelper<T, TInput>.GetBatchSize(task.QueryInput);
-            T wSupport = NumOps.FromDouble((double)nSupport / (nSupport + nQuery));
-            T wQuery = NumOps.FromDouble((double)nQuery / (nSupport + nQuery));
-            T trajectoryLoss = ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput);
-            T randomLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            var gradient = Engine.Add(
-                Engine.Multiply(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput), wSupport),
-                Engine.Multiply(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput), wQuery));
-            T loss = NumOps.Add(NumOps.Multiply(trajectoryLoss, wSupport), NumOps.Multiply(randomLoss, wQuery));
-
-            // Optional L1 on the RLN parameters: penalty * ||theta||_1, gradient penalty * sign(theta).
-            if (_plnStart > 0 && _algoOptions.SparsityPenalty > 0)
-            {
-                var rln = adaptedParams.GetSubVector(0, _plnStart);
-                loss = NumOps.Add(loss, NumOps.Multiply(penalty, Engine.Sum(Engine.Abs(rln))));
-                gradient = Engine.Add(gradient, Vector<T>.Concatenate(new[]
-                {
-                    Engine.Multiply(Engine.Sign(rln), penalty),
-                    new Vector<T>(_paramDim - _plnStart),
-                }));
-            }
-
+            var (loss, gradient) = MetaObjective(task, adaptedParams);
             losses.Add(loss);
             metaGradients.Add(ClipGradients(gradient));
         }
@@ -119,6 +93,40 @@ public partial class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// The meta-loss at the adapted parameters: the per-example mean over S_traj U X_rand, plus the optional
+    /// L1 term on the RLN parameters, and its first-order gradient.
+    /// </summary>
+    private (T Loss, Vector<T> Gradient) MetaObjective(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> adaptedParams)
+    {
+        ParamModel.SetParameters(adaptedParams);
+        int nSupport = InputHelper<T, TInput>.GetBatchSize(task.SupportInput);
+        int nQuery = InputHelper<T, TInput>.GetBatchSize(task.QueryInput);
+        T wSupport = NumOps.FromDouble((double)nSupport / (nSupport + nQuery));
+        T wQuery = NumOps.FromDouble((double)nQuery / (nSupport + nQuery));
+        T trajectoryLoss = ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput);
+        T randomLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+        var gradient = Engine.Add(
+            Engine.Multiply(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput), wSupport),
+            Engine.Multiply(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput), wQuery));
+        T loss = NumOps.Add(NumOps.Multiply(trajectoryLoss, wSupport), NumOps.Multiply(randomLoss, wQuery));
+
+        // Optional L1 on the RLN parameters: penalty * ||theta||_1, gradient penalty * sign(theta).
+        if (_plnStart > 0 && _algoOptions.SparsityPenalty > 0)
+        {
+            T penalty = NumOps.FromDouble(_algoOptions.SparsityPenalty);
+            var rln = adaptedParams.GetSubVector(0, _plnStart);
+            loss = NumOps.Add(loss, NumOps.Multiply(penalty, Engine.Sum(Engine.Abs(rln))));
+            gradient = Engine.Add(gradient, Vector<T>.Concatenate(new[]
+            {
+                Engine.Multiply(Engine.Sign(rln), penalty),
+                new Vector<T>(_paramDim - _plnStart),
+            }));
+        }
+
+        return (loss, gradient);
     }
 
     /// <inheritdoc/>
