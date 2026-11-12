@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.PowerTransforms;
 using AiDotNet.Preprocessing.ImbalancedLearning;
 using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.AnomalyDetection.Statistical;
@@ -508,5 +509,29 @@ public class PreprocessingReferenceTests
 
         var (mode, _) = new EditedNearestNeighbors<double>(kNeighbors: 3, kind: ENNKind.Mode).Resample(x, y);
         Assert.Equal(new[] { 0.0, 1, 2, 3, 4 }, mode.GetColumn(0).ToArray());
+    }
+
+    // sklearn QuantileTransformer(n_quantiles=10) on 0, 1, ..., 20: quantiles_ = np.nanpercentile(X, linspace(0, 1, 10)
+    // * 100) (linear interpolation) = 20 i / 9, so quantiles_[1] = 2.2222... (not the floor-indexed sample 2), and
+    // transform maps x to x / 20 (2 -> 0.1).
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_InterpolatesQuantilesLinearly()
+    {
+        await Task.CompletedTask;
+        var data = new double[21, 1];
+        for (int i = 0; i <= 20; i++)
+        {
+            data[i, 0] = i;
+        }
+
+        var transformer = new QuantileTransformer<double>(nQuantiles: 10);
+        transformer.Fit(M(data));
+
+        var quantiles = transformer.Quantiles;
+        Assert.NotNull(quantiles);
+        Assert.Equal(10, quantiles[0].Length);
+        Assert.Equal(20.0 / 9.0, quantiles[0][1], Tolerance);
+        Assert.Equal(0.1, transformer.Transform(M(new double[,] { { 2.0 } }))[0, 0], Tolerance);
+        Assert.Equal(2.0, transformer.InverseTransform(M(new double[,] { { 0.1 } }))[0, 0], Tolerance);
     }
 }
