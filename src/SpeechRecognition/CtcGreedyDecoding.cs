@@ -125,30 +125,54 @@ internal static class CtcGreedyDecoding
 
     private static (List<int> tokens, double confidence) DecodeFrames<T>(Tensor<T> scores, int maxTokens)
     {
-        var engine = AiDotNetEngine.Current;
-        int numFrames = scores.Shape[0];
-
         // Decoding only reads values; nothing here belongs on a gradient tape.
         using (new NoGradScope<T>())
         {
             var (bestIndex, frameConfidence) = ScoreFrames(scores);
-
-            // Emit where the index differs from the previous frame's and is not the blank. The first frame is
-            // compared against 0, which there is the same as "not blank".
-            var startPad = new Tensor<int>(new[] { 1 });
-            var previous = numFrames == 1
-                ? startPad
-                : engine.TensorConcatenate(new[] { startPad, engine.TensorNarrow(bestIndex, 0, 0, numFrames - 1) }, 0);
-            var emitted = engine.TensorMultiply(
-                engine.TensorNotEquals(bestIndex, previous), engine.TensorGreaterThan(bestIndex, 0));
-
-            // Only the first maxTokens emissions count; decoding stops there.
-            var overLimit = engine.TensorGreaterThan(engine.TensorCumSum(emitted, 0), maxTokens);
-            var kept = engine.TensorMultiply(emitted, engine.ScalarMinusTensor(1, overLimit));
-
-            var positions = engine.TensorNonzero(kept);
-            return Collect(bestIndex, frameConfidence, positions.Reshape(positions.Shape[0]).ToArray());
+            return Collect(bestIndex, frameConfidence, EmittedFrames(bestIndex, maxTokens));
         }
+    }
+
+    /// <summary>
+    /// Index of the first maximum in each row of <c>[rows, cols]</c> scores under a left-to-right
+    /// <c>value &gt; best</c> scan started at negative infinity: NaN and negative infinity never win, and a
+    /// row with nothing else picks column 0.
+    /// </summary>
+    internal static Tensor<int> FirstMaxIndexPerRow<T>(Tensor<T> scores)
+    {
+        using (new NoGradScope<T>())
+        {
+            return FirstMax(scores).BestIndex;
+        }
+    }
+
+    /// <summary>
+    /// Greedy CTC emission over per-frame indices: the frames whose index is not the blank (0) and differs
+    /// from the previous frame's, limited to the first <paramref name="maxTokens"/> such frames, in order.
+    /// </summary>
+    internal static int[] EmittedFrames(Tensor<int> bestIndex, int maxTokens)
+    {
+        var engine = AiDotNetEngine.Current;
+        int numFrames = bestIndex.Length;
+        if (numFrames == 0)
+        {
+            return new int[0];
+        }
+
+        // The first frame is compared against 0, which there is the same as "not blank".
+        var startPad = new Tensor<int>(new[] { 1 });
+        var previous = numFrames == 1
+            ? startPad
+            : engine.TensorConcatenate(new[] { startPad, engine.TensorNarrow(bestIndex, 0, 0, numFrames - 1) }, 0);
+        var emitted = engine.TensorMultiply(
+            engine.TensorNotEquals(bestIndex, previous), engine.TensorGreaterThan(bestIndex, 0));
+
+        // Only the first maxTokens emissions count; decoding stops there.
+        var overLimit = engine.TensorGreaterThan(engine.TensorCumSum(emitted, 0), maxTokens);
+        var kept = engine.TensorMultiply(emitted, engine.ScalarMinusTensor(1, overLimit));
+
+        var positions = engine.TensorNonzero(kept);
+        return positions.Reshape(positions.Shape[0]).ToArray();
     }
 
     /// <summary>
@@ -157,10 +181,22 @@ internal static class CtcGreedyDecoding
     private static (Tensor<int> bestIndex, Tensor<T> frameConfidence) ScoreFrames<T>(Tensor<T> scores)
     {
         var engine = AiDotNetEngine.Current;
+        var (bestIndex, rowMaxWide) = FirstMax(scores);
+
+        // Softmax probability of the winning entry: 1 / sum(exp(logit - max)).
+        var sumExp = engine.ReduceSum(
+            engine.TensorExp(engine.TensorSubtract(scores, rowMaxWide)), new[] { 1 }, false);
+        return (bestIndex, engine.TensorReciprocal(sumExp));
+    }
+
+    /// <summary>First-maximum index per row, plus the row maximum broadcast back to the scores' shape.</summary>
+    private static (Tensor<int> BestIndex, Tensor<T> RowMaxWide) FirstMax<T>(Tensor<T> scores)
+    {
+        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        int numFrames = scores.Shape[0];
-        int vocabSize = scores.Shape[1];
-        var shape = new[] { numFrames, vocabSize };
+        int rows = scores.Shape[0];
+        int cols = scores.Shape[1];
+        var shape = new[] { rows, cols };
 
         var zeros = engine.TensorZerosLike(scores);
         var ones = engine.TensorOnesLike(scores);
@@ -176,17 +212,13 @@ internal static class CtcGreedyDecoding
         var rowMaxWide = engine.TensorBroadcastTo(rowMax, shape);
         var isMax = engine.TensorMultiply(engine.TensorEquals(clean, rowMaxWide), eligible).Cast<int>();
 
-        // key = vocab - column on a frame's maxima, so the largest key is the lowest maximal column; 0 = none.
+        // key = cols - column on a row's maxima, so the largest key is the lowest maximal column; 0 = none.
         var reversedColumn = engine.TensorBroadcastTo(
-            engine.TensorArange<int>(vocabSize, 0, -1).Reshape(1, vocabSize), shape);
+            engine.TensorArange<int>(cols, 0, -1).Reshape(1, cols), shape);
         var key = engine.ReduceMax(engine.TensorMultiply(isMax, reversedColumn), new[] { 1 }, false);
         var bestIndex = engine.TensorMultiply(
-            engine.ScalarMinusTensor(vocabSize, key), engine.TensorGreaterThan(key, 0));
-
-        // Softmax probability of the winning entry: 1 / sum(exp(logit - max)).
-        var sumExp = engine.ReduceSum(
-            engine.TensorExp(engine.TensorSubtract(scores, rowMaxWide)), new[] { 1 }, false);
-        return (bestIndex, engine.TensorReciprocal(sumExp));
+            engine.ScalarMinusTensor(cols, key), engine.TensorGreaterThan(key, 0));
+        return (bestIndex, rowMaxWide);
     }
 
     /// <summary>The tokens at <paramref name="frames"/>, in order, and the mean of their frame confidences.</summary>
