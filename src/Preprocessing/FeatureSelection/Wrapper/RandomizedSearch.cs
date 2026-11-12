@@ -30,7 +30,8 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Tensor<T>? _featureScoreTensor;
+    private Vector<T>? _featureScores;
     private double _bestScore;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
@@ -38,7 +39,7 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NIterations => _nIterations;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     public double BestScore => _bestScore;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
@@ -83,7 +84,9 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        _featureScores = ComputeFeatureScores(data, target, n, p);
+        var featureScores = ComputeFeatureScores(data, target, n, p);
+        _featureScoreTensor = featureScores;
+        _featureScores = featureScores.ToVector();
 
         _bestScore = double.MinValue;
         _selectedIndices = null;
@@ -115,11 +118,7 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         // Fallback if no good solution found
         if (_selectedIndices is null)
         {
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _featureScores[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(featureScores, Math.Min(_nFeaturesToSelect, p));
         }
 
         IsFitted = true;
@@ -142,44 +141,15 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
     private double EvaluateSubset(int[] subset)
     {
-        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
-        double score = 0;
-        foreach (int j in subset)
-            score += featureScores[j];
-
-        return score / subset.Length;
+        var featureScores = _featureScoreTensor ?? throw new InvalidOperationException("Feature scores have not been computed.");
+        var scores = Engine.TensorIndexSelect(featureScores, new Tensor<int>(subset, new[] { subset.Length }), 0);
+        return WrapperScoringOps.ToDouble(Engine.TensorMean(scores));
     }
 
-    private double[] ComputeFeatureScores(Matrix<T> data, Vector<T> target, int n, int p)
+    private Tensor<T> ComputeFeatureScores(Matrix<T> data, Vector<T> target, int n, int p)
     {
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
+        // |Pearson r| of every feature with the target
+        return WrapperScoringOps.AbsTargetCorrelations(data, target, Enumerable.Range(0, p).ToArray());
     }
 
     /// <inheritdoc />
