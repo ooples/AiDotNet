@@ -271,4 +271,24 @@ internal static class GeometryEngineOps<T>
         var flags = Engine.TensorWhere(Engine.TensorIsNan(values), Engine.TensorOnesLike(values), Engine.TensorZerosLike(values));
         return Engine.TensorCountNonzero(flags) > 0;
     }
+
+    /// <summary>
+    /// Returns the per-column minimum and maximum the way Math.Min/Math.Max folds seeded with
+    /// <c>MaxValue</c>/<c>MinValue</c> find them: a column containing NaN reports NaN for both bounds.
+    /// </summary>
+    internal static (Tensor<T> min, Tensor<T> max) PropagatingColumnBounds(Tensor<T> rows)
+    {
+        var (min, max) = ColumnBounds(rows);
+        var hasNan = ColumnHasNan(rows);
+        var nan = Engine.TensorFullLike(min, NumOps.FromDouble(double.NaN));
+        return (Engine.TensorWhere(hasNan, nan, min), Engine.TensorWhere(hasNan, nan, max));
+    }
+
+    /// <summary>
+    /// Returns the largest entry the way a Math.Max fold does: NaN when any entry is NaN.
+    /// </summary>
+    internal static T PropagatingMax(Tensor<T> values)
+    {
+        return AnyNan(values) ? NumOps.FromDouble(double.NaN) : Engine.TensorMaxValue(values);
+    }
 }

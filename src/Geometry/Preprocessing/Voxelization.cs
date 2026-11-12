@@ -12,15 +12,6 @@ namespace AiDotNet.Geometry.Preprocessing;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public static class Voxelization<T>
 {
-    /// <summary>
-    /// Clamps a value between a minimum and maximum. .NET 4.7.1 compatible.
-    /// </summary>
-    private static int ClampValue(int value, int min, int max)
-    {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
-    }
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -44,65 +35,59 @@ public static class Voxelization<T>
                 nameof(pointCloud));
         }
 
-        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
-        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+        var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
+        var (origin, voxelSize) = GridLayout(positions, resolution, padding);
+        var voxels = MarkCells(
+            new Tensor<T>(new[] { resolution, resolution, resolution }), positions, origin, voxelSize, resolution);
+        return CreateGrid(voxels, origin, voxelSize);
+    }
 
-        for (int i = 0; i < numPoints; i++)
+    /// <summary>
+    /// Computes the padded cubic grid around the positions: the origin (bounding-box minimum minus the padding)
+    /// and the edge length of one voxel. Bounds follow Math.Min/Math.Max, so NaN coordinates propagate.
+    /// </summary>
+    private static (Tensor<T> origin, T voxelSize) GridLayout(Tensor<T> positions, int resolution, double padding)
+    {
+        var engine = AiDotNetEngine.Current;
+        var (min, max) = GeometryEngineOps<T>.PropagatingColumnBounds(positions);
+        T maxRange = GeometryEngineOps<T>.PropagatingMax(engine.TensorSubtract(max, min));
+
+        if (NumOps.LessThan(maxRange, NumOps.FromDouble(1e-10)))
         {
-            double x = NumOps.ToDouble(pointCloud.Points[i, 0]);
-            double y = NumOps.ToDouble(pointCloud.Points[i, 1]);
-            double z = NumOps.ToDouble(pointCloud.Points[i, 2]);
-
-            minX = Math.Min(minX, x);
-            minY = Math.Min(minY, y);
-            minZ = Math.Min(minZ, z);
-            maxX = Math.Max(maxX, x);
-            maxY = Math.Max(maxY, y);
-            maxZ = Math.Max(maxZ, z);
+            maxRange = NumOps.One;
         }
 
-        double rangeX = maxX - minX;
-        double rangeY = maxY - minY;
-        double rangeZ = maxZ - minZ;
-        double maxRange = Math.Max(Math.Max(rangeX, rangeY), rangeZ);
+        T padAmount = NumOps.Multiply(maxRange, NumOps.FromDouble(padding));
+        var origin = engine.TensorSubtractScalar(min, padAmount);
+        T extent = NumOps.Add(maxRange, NumOps.Multiply(NumOps.FromDouble(2), padAmount));
+        return (origin, NumOps.Divide(extent, NumOps.FromDouble(resolution)));
+    }
 
-        if (maxRange < 1e-10)
-        {
-            maxRange = 1.0;
-        }
+    /// <summary>
+    /// Marks the voxel containing each [count, 3] position as occupied. Cell coordinates are floored and clamped
+    /// to the grid (NaN coordinates land in cell 0, as the saturating integer conversion places them).
+    /// </summary>
+    private static Tensor<T> MarkCells(Tensor<T> voxels, Tensor<T> positions, Tensor<T> origin, T voxelSize, int resolution)
+    {
+        var engine = AiDotNetEngine.Current;
+        var relative = engine.TensorSubtract(positions, engine.TensorBroadcastTo(origin.Reshape(1, 3), positions.Shape));
+        var cells = engine.TensorFloor(engine.TensorDivideScalar(relative, voxelSize));
+        cells = engine.TensorWhere(engine.TensorIsNan(cells), engine.TensorZerosLike(cells), cells);
+        cells = engine.TensorClamp(cells, NumOps.Zero, NumOps.FromDouble(resolution - 1));
 
-        double padAmount = maxRange * padding;
-        minX -= padAmount;
-        minY -= padAmount;
-        minZ -= padAmount;
+        // The clamped cells are whole numbers in [0, resolution), so their position in 0..resolution-1 is the index.
+        var axis = engine.TensorArange<T>(0, resolution, 1);
+        var x = GeometryEngineOps<T>.Column(cells, 0);
+        var ix = engine.TensorSearchSorted(axis, x, false);
+        var iy = engine.TensorSearchSorted(axis, GeometryEngineOps<T>.Column(cells, 1), false);
+        var iz = engine.TensorSearchSorted(axis, GeometryEngineOps<T>.Column(cells, 2), false);
+        return engine.TensorIndexPut(voxels, new[] { iz, iy, ix }, engine.TensorOnesLike(x), false);
+    }
 
-        double voxelSize = (maxRange + 2 * padAmount) / resolution;
-
-        var voxels = new T[resolution * resolution * resolution];
-
-        for (int i = 0; i < numPoints; i++)
-        {
-            double x = NumOps.ToDouble(pointCloud.Points[i, 0]);
-            double y = NumOps.ToDouble(pointCloud.Points[i, 1]);
-            double z = NumOps.ToDouble(pointCloud.Points[i, 2]);
-
-            int vx = (int)Math.Floor((x - minX) / voxelSize);
-            int vy = (int)Math.Floor((y - minY) / voxelSize);
-            int vz = (int)Math.Floor((z - minZ) / voxelSize);
-
-            vx = ClampValue(vx, 0, resolution - 1);
-            vy = ClampValue(vy, 0, resolution - 1);
-            vz = ClampValue(vz, 0, resolution - 1);
-
-            int idx = vz * resolution * resolution + vy * resolution + vx;
-            voxels[idx] = NumOps.One;
-        }
-
-        var voxelTensor = new Tensor<T>(voxels, [resolution, resolution, resolution]);
-        var origin = new Vector<T>([NumOps.FromDouble(minX), NumOps.FromDouble(minY), NumOps.FromDouble(minZ)]);
-        var voxelSizeVec = new Vector<T>([NumOps.FromDouble(voxelSize), NumOps.FromDouble(voxelSize), NumOps.FromDouble(voxelSize)]);
-
-        return new VoxelGridData<T>(voxelTensor, origin, voxelSizeVec);
+    private static VoxelGridData<T> CreateGrid(Tensor<T> voxels, Tensor<T> origin, T voxelSize)
+    {
+        var voxelSizeVec = new Vector<T>([voxelSize, voxelSize, voxelSize]);
+        return new VoxelGridData<T>(voxels, origin.ToVector(), voxelSizeVec);
     }
 
     /// <summary>
@@ -135,101 +120,75 @@ public static class Voxelization<T>
                 nameof(mesh));
         }
 
-        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
-        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+        var engine = AiDotNetEngine.Current;
+        var vertices = GeometryEngineOps<T>.Positions(mesh.Vertices);
+        var (origin, voxelSize) = GridLayout(vertices, resolution, padding);
+        var voxels = new Tensor<T>(new[] { resolution, resolution, resolution });
 
-        for (int v = 0; v < numVertices; v++)
-        {
-            double x = NumOps.ToDouble(mesh.Vertices[v, 0]);
-            double y = NumOps.ToDouble(mesh.Vertices[v, 1]);
-            double z = NumOps.ToDouble(mesh.Vertices[v, 2]);
-
-            minX = Math.Min(minX, x);
-            minY = Math.Min(minY, y);
-            minZ = Math.Min(minZ, z);
-            maxX = Math.Max(maxX, x);
-            maxY = Math.Max(maxY, y);
-            maxZ = Math.Max(maxZ, z);
-        }
-
-        double rangeX = maxX - minX;
-        double rangeY = maxY - minY;
-        double rangeZ = maxZ - minZ;
-        double maxRange = Math.Max(Math.Max(rangeX, rangeY), rangeZ);
-
-        if (maxRange < 1e-10)
-        {
-            maxRange = 1.0;
-        }
-
-        double padAmount = maxRange * padding;
-        minX -= padAmount;
-        minY -= padAmount;
-        minZ -= padAmount;
-
-        double voxelSize = (maxRange + 2 * padAmount) / resolution;
-        var voxels = new T[resolution * resolution * resolution];
-
-        int samplesPerEdge = Math.Max(1, resolution / 4);
-
+        // Skip faces that reference a vertex outside the mesh.
+        var faceData = mesh.Faces.ToArray();
+        int faceStride = mesh.Faces.Shape[1];
+        var validFaces = new List<int>();
         for (int f = 0; f < numFaces; f++)
         {
-            int v0 = mesh.Faces[f, 0];
-            int v1 = mesh.Faces[f, 1];
-            int v2 = mesh.Faces[f, 2];
-
-            // Validate vertex indices are within bounds
-            if (v0 < 0 || v0 >= numVertices ||
-                v1 < 0 || v1 >= numVertices ||
-                v2 < 0 || v2 >= numVertices)
+            int v0 = faceData[f * faceStride];
+            int v1 = faceData[f * faceStride + 1];
+            int v2 = faceData[f * faceStride + 2];
+            if (v0 >= 0 && v0 < numVertices && v1 >= 0 && v1 < numVertices && v2 >= 0 && v2 < numVertices)
             {
-                // Skip invalid faces
-                continue;
-            }
-
-            double x0 = NumOps.ToDouble(mesh.Vertices[v0, 0]);
-            double y0 = NumOps.ToDouble(mesh.Vertices[v0, 1]);
-            double z0 = NumOps.ToDouble(mesh.Vertices[v0, 2]);
-
-            double x1 = NumOps.ToDouble(mesh.Vertices[v1, 0]);
-            double y1 = NumOps.ToDouble(mesh.Vertices[v1, 1]);
-            double z1 = NumOps.ToDouble(mesh.Vertices[v1, 2]);
-
-            double x2 = NumOps.ToDouble(mesh.Vertices[v2, 0]);
-            double y2 = NumOps.ToDouble(mesh.Vertices[v2, 1]);
-            double z2 = NumOps.ToDouble(mesh.Vertices[v2, 2]);
-
-            for (int i = 0; i <= samplesPerEdge; i++)
-            {
-                for (int j = 0; j <= samplesPerEdge - i; j++)
-                {
-                    double u = (double)i / samplesPerEdge;
-                    double v = (double)j / samplesPerEdge;
-                    double w = 1 - u - v;
-
-                    double px = w * x0 + u * x1 + v * x2;
-                    double py = w * y0 + u * y1 + v * y2;
-                    double pz = w * z0 + u * z1 + v * z2;
-
-                    int vx = (int)Math.Floor((px - minX) / voxelSize);
-                    int vy = (int)Math.Floor((py - minY) / voxelSize);
-                    int vz = (int)Math.Floor((pz - minZ) / voxelSize);
-
-                    vx = ClampValue(vx, 0, resolution - 1);
-                    vy = ClampValue(vy, 0, resolution - 1);
-                    vz = ClampValue(vz, 0, resolution - 1);
-
-                    int idx = vz * resolution * resolution + vy * resolution + vx;
-                    voxels[idx] = NumOps.One;
-                }
+                validFaces.Add(f);
             }
         }
 
-        var voxelTensor = new Tensor<T>(voxels, [resolution, resolution, resolution]);
-        var origin = new Vector<T>([NumOps.FromDouble(minX), NumOps.FromDouble(minY), NumOps.FromDouble(minZ)]);
-        var voxelSizeVec = new Vector<T>([NumOps.FromDouble(voxelSize), NumOps.FromDouble(voxelSize), NumOps.FromDouble(voxelSize)]);
+        if (validFaces.Count > 0)
+        {
+            // Barycentric sample weights u = i / s, v = j / s for i + j <= s, in the (i, j) scan order.
+            int samplesPerEdge = Math.Max(1, resolution / 4);
+            var steps = engine.TensorArange<T>(0, samplesPerEdge + 1, 1);
+            int side = samplesPerEdge + 1;
+            var rowSteps = engine.TensorBroadcastTo(steps.Reshape(side, 1), new[] { side, side });
+            var columnSteps = engine.TensorBroadcastTo(steps.Reshape(1, side), new[] { side, side });
+            var inside = engine.TensorLessEqual(
+                engine.TensorAdd(rowSteps, columnSteps), engine.TensorFullLike(rowSteps, NumOps.FromDouble(samplesPerEdge)));
+            var stepPairs = engine.TensorNonzero(inside);
+            var stepRows = GeometryEngineOps<T>.Column(stepPairs, 0);
+            var stepColumns = GeometryEngineOps<T>.Column(stepPairs, 1);
+            var divisor = NumOps.FromDouble(samplesPerEdge);
+            var u = engine.TensorDivideScalar(engine.TensorIndexSelect(steps, stepRows, 0), divisor);
+            var v = engine.TensorDivideScalar(engine.TensorIndexSelect(steps, stepColumns, 0), divisor);
+            var w = engine.ScalarMinusTensor(NumOps.One, engine.TensorAdd(u, v));
+            int samples = u.Shape[0];
 
-        return new VoxelGridData<T>(voxelTensor, origin, voxelSizeVec);
+            var faces = engine.TensorIndexSelect(
+                mesh.Faces, new Tensor<int>(validFaces.ToArray(), new[] { validFaces.Count }), 0);
+            int chunk = Math.Max(1, (1 << 20) / samples);
+            for (int start = 0; start < validFaces.Count; start += chunk)
+            {
+                int count = Math.Min(chunk, validFaces.Count - start);
+                var chunkFaces = engine.TensorSlice(faces, new[] { start, 0 }, new[] { count, faces.Shape[1] });
+                var points = BarycentricPoints(vertices, chunkFaces, w, u, v);
+                voxels = MarkCells(voxels, points.Reshape(count * samples, 3), origin, voxelSize, resolution);
+            }
+        }
+
+        return CreateGrid(voxels, origin, voxelSize);
+    }
+
+    private static Tensor<T> BarycentricPoints(Tensor<T> vertices, Tensor<int> faces, Tensor<T> w, Tensor<T> u, Tensor<T> v)
+    {
+        var engine = AiDotNetEngine.Current;
+        int count = faces.Shape[0];
+        int samples = w.Shape[0];
+        var shape = new[] { count, samples, 3 };
+        Tensor<T> Weighted(int corner, Tensor<T> weight)
+        {
+            var position = GeometryEngineOps<T>.FaceCorner(vertices, faces, corner).Reshape(count, 1, 3);
+            return engine.TensorMultiply(
+                engine.TensorBroadcastTo(weight.Reshape(1, samples, 1), shape),
+                engine.TensorBroadcastTo(position, shape));
+        }
+
+        return engine.TensorAdd(engine.TensorAdd(Weighted(0, w), Weighted(1, u)), Weighted(2, v));
     }
 
     /// <summary>
@@ -247,31 +206,13 @@ public static class Voxelization<T>
             throw new ArgumentException("Voxel grids must have the same dimensions");
         }
 
+        var engine = AiDotNetEngine.Current;
         T thresholdT = NumOps.FromDouble(threshold);
+        var predOccupied = engine.TensorGreaterThan(prediction.Voxels, thresholdT);
+        var gtOccupied = engine.TensorGreaterThan(groundTruth.Voxels, thresholdT);
 
-        int intersection = 0;
-        int union = 0;
-
-        for (int z = 0; z < prediction.Depth; z++)
-        {
-            for (int y = 0; y < prediction.Height; y++)
-            {
-                for (int x = 0; x < prediction.Width; x++)
-                {
-                    bool predOccupied = NumOps.GreaterThan(prediction.Voxels[z, y, x], thresholdT);
-                    bool gtOccupied = NumOps.GreaterThan(groundTruth.Voxels[z, y, x], thresholdT);
-
-                    if (predOccupied && gtOccupied)
-                    {
-                        intersection++;
-                    }
-                    if (predOccupied || gtOccupied)
-                    {
-                        union++;
-                    }
-                }
-            }
-        }
+        int intersection = engine.TensorCountNonzero(engine.TensorMultiply(predOccupied, gtOccupied));
+        int union = engine.TensorCountNonzero(engine.TensorMax(predOccupied, gtOccupied));
 
         return union > 0 ? (double)intersection / union : 0;
     }
@@ -281,50 +222,15 @@ public static class Voxelization<T>
     /// </summary>
     public static VoxelGridData<T> Dilate(VoxelGridData<T> voxelGrid, int radius = 1)
     {
-        int depth = voxelGrid.Depth;
-        int height = voxelGrid.Height;
-        int width = voxelGrid.Width;
-        var result = new T[depth * height * width];
+        var engine = AiDotNetEngine.Current;
+        var occupied = engine.TensorGreaterThan(voxelGrid.Voxels, NumOps.Zero);
 
-        for (int z = 0; z < depth; z++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    bool occupied = false;
-
-                    for (int dz = -radius; dz <= radius && !occupied; dz++)
-                    {
-                        for (int dy = -radius; dy <= radius && !occupied; dy++)
-                        {
-                            for (int dx = -radius; dx <= radius && !occupied; dx++)
-                            {
-                                int nz = z + dz;
-                                int ny = y + dy;
-                                int nx = x + dx;
-
-                                if (nz >= 0 && nz < depth &&
-                                    ny >= 0 && ny < height &&
-                                    nx >= 0 && nx < width)
-                                {
-                                    if (NumOps.GreaterThan(voxelGrid.Voxels[nz, ny, nx], NumOps.Zero))
-                                    {
-                                        occupied = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    int idx = z * height * width + y * width + x;
-                    result[idx] = occupied ? NumOps.One : NumOps.Zero;
-                }
-            }
-        }
-
-        var voxelTensor = new Tensor<T>(result, [depth, height, width]);
-        return new VoxelGridData<T>(voxelTensor, voxelGrid.Origin, voxelGrid.VoxelSize);
+        // A voxel is set when any in-bounds voxel of the (2r + 1)^3 cube around it is occupied: a max-pool over
+        // the occupancy padded with empty voxels.
+        var result = radius < 0
+            ? engine.TensorZerosLike(occupied)
+            : CubeMax(occupied, radius, NumOps.Zero);
+        return new VoxelGridData<T>(result, voxelGrid.Origin, voxelGrid.VoxelSize);
     }
 
     /// <summary>
@@ -332,54 +238,41 @@ public static class Voxelization<T>
     /// </summary>
     public static VoxelGridData<T> Erode(VoxelGridData<T> voxelGrid, int radius = 1)
     {
-        int depth = voxelGrid.Depth;
-        int height = voxelGrid.Height;
-        int width = voxelGrid.Width;
-        var result = new T[depth * height * width];
+        var engine = AiDotNetEngine.Current;
+        var occupied = engine.TensorGreaterThan(voxelGrid.Voxels, NumOps.Zero);
 
-        for (int z = 0; z < depth; z++)
+        // A voxel survives when every voxel of the (2r + 1)^3 cube around it is in bounds and occupied: the
+        // complement of a max-pool over the empty mask padded with "empty" (out-of-bounds) voxels.
+        Tensor<T> result;
+        if (radius < 0)
         {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    bool allOccupied = true;
-
-                    for (int dz = -radius; dz <= radius && allOccupied; dz++)
-                    {
-                        for (int dy = -radius; dy <= radius && allOccupied; dy++)
-                        {
-                            for (int dx = -radius; dx <= radius && allOccupied; dx++)
-                            {
-                                int nz = z + dz;
-                                int ny = y + dy;
-                                int nx = x + dx;
-
-                                if (nz >= 0 && nz < depth &&
-                                    ny >= 0 && ny < height &&
-                                    nx >= 0 && nx < width)
-                                {
-                                    if (!NumOps.GreaterThan(voxelGrid.Voxels[nz, ny, nx], NumOps.Zero))
-                                    {
-                                        allOccupied = false;
-                                    }
-                                }
-                                else
-                                {
-                                    allOccupied = false;
-                                }
-                            }
-                        }
-                    }
-
-                    int idx = z * height * width + y * width + x;
-                    result[idx] = allOccupied ? NumOps.One : NumOps.Zero;
-                }
-            }
+            result = engine.TensorOnesLike(occupied);
+        }
+        else
+        {
+            var empty = engine.ScalarMinusTensor(NumOps.One, occupied);
+            result = engine.ScalarMinusTensor(NumOps.One, CubeMax(empty, radius, NumOps.One));
         }
 
-        var voxelTensor = new Tensor<T>(result, [depth, height, width]);
-        return new VoxelGridData<T>(voxelTensor, voxelGrid.Origin, voxelGrid.VoxelSize);
+        return new VoxelGridData<T>(result, voxelGrid.Origin, voxelGrid.VoxelSize);
+    }
+
+    private static Tensor<T> CubeMax(Tensor<T> mask, int radius, T outside)
+    {
+        var engine = AiDotNetEngine.Current;
+        int depth = mask.Shape[0];
+        int height = mask.Shape[1];
+        int width = mask.Shape[2];
+        if (radius == 0)
+        {
+            return mask;
+        }
+
+        int size = 2 * radius + 1;
+        var padded = engine.TensorConstantPad(mask, new[] { radius, radius, radius, radius, radius, radius }, outside)
+            .Reshape(1, 1, depth + 2 * radius, height + 2 * radius, width + 2 * radius);
+        var pooled = engine.MaxPool3D(padded, new[] { size, size, size }, new[] { 1, 1, 1 }, new[] { 0, 0, 0 });
+        return pooled.Reshape(depth, height, width);
     }
 
     private static VoxelGridData<T> CreateEmptyGrid(int resolution)

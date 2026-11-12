@@ -164,11 +164,7 @@ public static class MeshOperations<T>
         if (numVertices > 0)
         {
             // Math.Min/Math.Max propagate NaN, so a column holding NaN reports NaN for both bounds.
-            var (min, max) = GeometryEngineOps<T>.ColumnBounds(mesh.Vertices);
-            var hasNan = GeometryEngineOps<T>.ColumnHasNan(mesh.Vertices);
-            var nan = engine.TensorFullLike(min, NumOps.FromDouble(double.NaN));
-            min = engine.TensorWhere(hasNan, nan, min);
-            max = engine.TensorWhere(hasNan, nan, max);
+            var (min, max) = GeometryEngineOps<T>.PropagatingColumnBounds(mesh.Vertices);
             boundsMin = (min[0], min[1], min[2]);
             boundsMax = (max[0], max[1], max[2]);
         }
