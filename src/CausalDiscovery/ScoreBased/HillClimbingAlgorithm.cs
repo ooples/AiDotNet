@@ -32,6 +32,11 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
     [ResearchPaper("Learning Bayesian Networks: The Combination of Knowledge and Statistical Data", "https://doi.org/10.1023/A:1022623210503")]
 public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
 {
+    /// <summary>
+    /// Smallest weight given to a selected edge, so an edge whose correlation is near zero stays in the graph.
+    /// </summary>
+    private const double MinimumEdgeWeight = 1e-10;
+
     /// <inheritdoc/>
     public override string Name => "Hill Climbing";
 
@@ -153,11 +158,6 @@ public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
         }
 
         // Build adjacency using Matrix<T>
-        var W = new Matrix<T>(d, d);
-        for (int to = 0; to < d; to++)
-            foreach (int from in parentSets[to])
-                W[from, to] = NumOps.FromDouble(Math.Max(1e-10, ComputeAbsCorrelation(data, from, to)));
-
-        return W;
+        return CorrelationWeightedAdjacency(data, parentSets, MinimumEdgeWeight);
     }
 }

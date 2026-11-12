@@ -79,19 +79,27 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         T detA = Determinant(A);
-        if (NumOps.Equals(detA, NumOps.Zero))
+        if (IsNumericallySingular(detA))
         {
             throw new InvalidOperationException("The matrix is singular and cannot be solved using Cramer's rule.");
         }
 
-        Vector<T> x = new(A.Columns);
-        for (int i = 0; i < A.Columns; i++)
+        int n = A.Columns;
+        if (n == 0)
         {
-            Matrix<T> Ai = ReplaceColumn(A, b, i);
-            x[i] = NumOps.Divide(Determinant(Ai), detA);
+            return new Vector<T>(0);
         }
 
-        return x;
+        // Batch i is A with column i replaced by b: select b where the column index equals the
+        // batch index, then take all n determinants in one batched engine call.
+        var shape = new[] { n, n, n };
+        var stackedA = Engine.TensorBroadcastTo(Tensor<T>.FromMatrix(A).Reshape(new[] { 1, n, n }), shape);
+        var stackedB = Engine.TensorBroadcastTo(Tensor<T>.FromVector(b, new[] { 1, n, 1 }), shape);
+        var columnMask = Engine.TensorBroadcastTo(Engine.TensorEye<T>(n).Reshape(new[] { n, 1, n }), shape);
+        var replaced = Engine.TensorWhere(columnMask, stackedB, stackedA);
+
+        var determinants = LinalgDispatch<T>.Det(replaced);
+        return Engine.TensorDivideScalar(determinants, detA).Reshape(new[] { n }).ToVector();
     }
 
     /// <summary>
@@ -108,30 +116,18 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
     public override Matrix<T> Invert()
     {
         T detA = Determinant(A);
-        if (NumOps.Equals(detA, NumOps.Zero))
+        if (IsNumericallySingular(detA))
         {
             throw new InvalidOperationException("The matrix is singular and cannot be inverted.");
         }
 
-        Matrix<T> inverse = new(A.Rows, A.Columns);
-
-        // VECTORIZED: Compute cofactors and construct inverse using row operations
-        for (int i = 0; i < A.Rows; i++)
+        if (A.Rows == 0)
         {
-            Vector<T> inverseRow = new Vector<T>(A.Columns);
-            for (int j = 0; j < A.Columns; j++)
-            {
-                T cofactor = Cofactor(A, i, j);
-                inverseRow[j] = NumOps.Divide(cofactor, detA);
-            }
-            // Transpose during construction: row i of cofactor matrix → column i of inverse
-            for (int j = 0; j < A.Columns; j++)
-            {
-                inverse[j, i] = inverseRow[j];
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return inverse;
+        // adj(A) / det(A) is the inverse; the engine computes it in one whole-matrix call.
+        return LinalgDispatch<T>.Inv(Tensor<T>.FromMatrix(A)).ToMatrix();
     }
 
     /// <summary>
@@ -147,76 +143,37 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
     private T Determinant(Matrix<T> matrix)
     {
         // Base case: 0x0 matrix (empty matrix) has determinant 1 by convention
-        // This is needed for cofactor expansion of 1x1 matrices to work correctly
         if (matrix.Rows == 0)
         {
             return NumOps.One;
         }
 
-        if (matrix.Rows == 1)
-        {
-            return matrix[0, 0];
-        }
-
-        T det = NumOps.Zero;
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            det = NumOps.Add(det, NumOps.Multiply(matrix[0, j], Cofactor(matrix, 0, j)));
-        }
-
-        return det;
+        // Det of a single 2-D matrix holds one element; TensorSum reads it whatever rank the result has.
+        return Engine.TensorSum(LinalgDispatch<T>.Det(Tensor<T>.FromMatrix(matrix)));
     }
 
     /// <summary>
-    /// Calculates the cofactor of a matrix element at the specified position.
+    /// True when <paramref name="det"/> is zero to working precision, relative to the scale of A.
     /// </summary>
     /// <remarks>
-    /// A cofactor is the signed minor of an element. The minor is the determinant of the
-    /// submatrix formed by removing the row and column of the specified element.
-    /// The sign is determined by the position: positive if row+column is even, negative if odd.
+    /// The engine determinant is LU-based, so an exactly singular matrix gives a rounding residue
+    /// (about 6.7e-16 for [[1,2,3],[4,5,6],[7,8,9]]) rather than an exact zero. Hadamard's inequality
+    /// bounds |det A| by the product of the column norms; a determinant at or below
+    /// n * eps * that bound cannot be told apart from zero. eps = 2^(1 - p) for a p-bit significand,
+    /// which is 0 for integer types, so they keep the exact-zero test.
     /// </remarks>
-    /// <param name="matrix">The matrix to calculate the cofactor from.</param>
-    /// <param name="row">The row index of the element.</param>
-    /// <param name="col">The column index of the element.</param>
-    /// <returns>The cofactor value.</returns>
-    private T Cofactor(Matrix<T> matrix, int row, int col)
+    private bool IsNumericallySingular(T det)
     {
-        Matrix<T> minor = new(matrix.Rows - 1, matrix.Columns - 1);
-        int m = 0;
-
-        // VECTORIZED: Use row-based operations to construct minor matrix
-        for (int i = 0; i < matrix.Rows; i++)
+        int n = A.Rows;
+        if (n == 0)
         {
-            if (i == row) continue;
-
-            Vector<T> sourceRow = matrix.GetRow(i);
-            Vector<T> minorRow = new Vector<T>(sourceRow.Where((val, idx) => idx != col));
-            minor.SetRow(m, minorRow);
-            m++;
+            return false;
         }
 
-        T sign = (row + col) % 2 == 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-        return NumOps.Multiply(sign, Determinant(minor));
-    }
-
-    /// <summary>
-    /// Creates a copy of a matrix with one column replaced by a vector.
-    /// </summary>
-    /// <remarks>
-    /// This helper method is used in Cramer's rule to create the modified matrices
-    /// needed for calculating each variable in the solution.
-    /// </remarks>
-    /// <param name="original">The original matrix to copy.</param>
-    /// <param name="column">The vector to insert as a column.</param>
-    /// <param name="colIndex">The index of the column to replace.</param>
-    /// <returns>A new matrix with the specified column replaced.</returns>
-    private static Matrix<T> ReplaceColumn(Matrix<T> original, Vector<T> column, int colIndex)
-    {
-        Matrix<T> result = original.Clone();
-
-        // VECTORIZED: Use SetColumn to replace entire column at once
-        result.SetColumn(colIndex, column);
-
-        return result;
+        var columnNorms = Engine.TensorNorm(Tensor<T>.FromMatrix(A), 0, false);
+        T hadamardBound = Engine.Product(columnNorms.ToVector());
+        T epsilon = NumOps.Power(NumOps.FromDouble(2), NumOps.FromDouble(1 - NumOps.PrecisionBits));
+        T threshold = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(n), epsilon), hadamardBound);
+        return NumOps.LessThanOrEquals(NumOps.Abs(det), threshold);
     }
 }

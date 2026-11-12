@@ -199,6 +199,7 @@ public class KernelInceptionDistance<T>
 
         try
         {
+            var engine = AiDotNetEngine.Current;
             var imageSize = images.Length / numImages;
             var singleImageShape = new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] };
 
@@ -213,11 +214,17 @@ public class KernelInceptionDistance<T>
 
                 var output = FeatureNetwork.Predict(singleImage);
 
+                // First min(output length, FeatureDimension) outputs; any remaining columns stay zero.
                 var featureCount = Math.Min(output.Length, FeatureDimension);
-                for (int j = 0; j < featureCount; j++)
+                var row = featureCount > 0
+                    ? engine.Reshape(output, new[] { output.Length }).ToVector().GetSubVector(0, featureCount)
+                    : new Vector<T>(0);
+                if (featureCount < FeatureDimension)
                 {
-                    features[i, j] = output.GetFlat(j);
+                    row = Vector<T>.Concatenate(row, new Vector<T>(FeatureDimension - featureCount));
                 }
+
+                engine.SetRow(features, i, row);
             }
 
             return features;
@@ -301,7 +308,6 @@ public class KernelInceptionDistance<T>
     private Matrix<T> SampleSubset(Matrix<T> features, int subsetSize, Random random)
     {
         int n = features.Rows;
-        int d = features.Columns;
 
         // Generate random indices
         var indices = new int[subsetSize];
@@ -318,16 +324,7 @@ public class KernelInceptionDistance<T>
         }
 
         // Create subset matrix
-        var subset = new Matrix<T>(subsetSize, d);
-        for (int i = 0; i < subsetSize; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                subset[i, j] = features[indices[i], j];
-            }
-        }
-
-        return subset;
+        return features.GetRows(indices);
     }
 
     /// <summary>

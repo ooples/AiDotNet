@@ -829,6 +829,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             && _regularization is AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>;
         float l1Strength = gpuL1 ? (float)_regularization.GetOptions().Strength : 0f;
 
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
         foreach (var param in context.Parameters)
         {
             // True sparse scatter Proximal-L1: SGD step + L1 soft-threshold at touched
@@ -841,7 +842,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             {
                 if (SparseEmbeddingOptimizerHelpers.TryApplyProximalL1Sparse(
                         param,
-                        NumOps.ToDouble(CurrentLearningRate),
+                        learningRateValue,
                         _regularization.GetOptions().Strength))
                 {
                     continue;
@@ -853,7 +854,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
 
             if (gpuL1 && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryProximalL1Step((Tensor<float>)(object)param, (Tensor<float>)(object)grad,
-                    (float)NumOps.ToDouble(CurrentLearningRate), l1Strength))
+                    (float)learningRateValue, l1Strength))
                 continue;
 
             // Gradient descent step: param -= lr * grad
@@ -863,8 +864,15 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             // Apply proximal operator (regularization) via Vector<T> interface
             var paramVec = param.ToVector();
             var regularized = _regularization.Regularize(paramVec);
-            for (int i = 0; i < param.Length && i < regularized.Length; i++)
-                param[i] = regularized[i];
+            if (regularized.Length == param.Length)
+            {
+                Engine.TensorCopy(Engine.Reshape(regularized.AsTensor(), param._shape), param);
+            }
+            else
+            {
+                int copyLength = Math.Min(param.Length, regularized.Length);
+                regularized.AsSpan().Slice(0, copyLength).CopyTo(param.AsWritableSpan().Slice(0, copyLength));
+            }
         }
     }
 

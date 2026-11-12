@@ -655,17 +655,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -846,10 +836,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
@@ -865,10 +852,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
@@ -944,6 +928,17 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
         int startIdx = seqLen - actualWindow;
 
         // For highway layer, we want to flatten the recent values
+        if (batchSize > 0 && features > 0 && actualWindow > 0 && batchSize * seqLen * features <= input.Length)
+        {
+            // Per-feature mean of the last actualWindow steps (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var grid = Engine.Reshape(
+                Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { input.Length }), 0, 0, batchSize * seqLen * features).Contiguous(),
+                new[] { batchSize, seqLen, features });
+            var recentWindow = Engine.TensorNarrow(grid, 1, startIdx, actualWindow).Contiguous();
+            return Engine.TensorDivideScalar(Engine.ReduceSum(recentWindow, new[] { 1 }, false), NumOps.FromDouble(actualWindow));
+        }
+
         var recent = new Tensor<T>(new[] { batchSize, features });
 
         for (int b = 0; b < batchSize; b++)
@@ -1088,6 +1083,29 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 1, totalSteps });
 
         int batchSize = predictions[0].Shape[0];
+        if (batchSize > 0 && totalSteps > 0 && predictions.TrueForAll(p => p.Length / batchSize * batchSize <= p.Length))
+        {
+            // Row b takes the leading steps of each prediction's row b (rows are p.Length / batchSize long), then zeros (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
+            foreach (var p in predictions)
+            {
+                int rowLength = p.Length / batchSize;
+                int take = Math.Min(rowLength, totalSteps - filled);
+                if (take <= 0)
+                    continue;
+                var rows = Engine.Reshape(
+                    Engine.TensorNarrow(Engine.Reshape(p.Contiguous(), new[] { p.Length }), 0, 0, batchSize * rowLength).Contiguous(),
+                    new[] { batchSize, rowLength });
+                parts.Add(Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { batchSize, take }));
+                filled += take;
+            }
+            if (filled < totalSteps)
+                parts.Add(new Tensor<T>(new[] { batchSize, totalSteps - filled }));
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         var result = new Tensor<T>(new[] { batchSize, totalSteps });
 
         int currentStep = 0;
