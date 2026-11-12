@@ -111,18 +111,23 @@ public class GIFTEvalBenchmark<T>
     /// </summary>
     /// <param name="quantileForecasts">Dictionary mapping quantile level to forecast tensor, each of shape [horizon].</param>
     /// <param name="actuals">Actual values of shape [horizon].</param>
-    /// <returns>Average CRPS score across the forecast horizon. Lower is better.</returns>
+    /// <returns>
+    /// The GIFT-Eval CRPS of one series: the mean weighted quantile loss
+    /// <c>mean_q [2 * sum_t pinball_q(y_t, yhat_q,t) / sum_t |y_t|]</c>. Lower is better.
+    /// </returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> CRPS measures how well the predicted probability distribution
     /// matches the actual outcome. It generalizes MAE to probabilistic forecasts:
     /// <list type="bullet">
-    /// <item>If you only provide a point forecast, CRPS equals MAE</item>
+    /// <item>If you only provide a median forecast, CRPS equals MAE divided by the mean absolute target</item>
     /// <item>If you provide well-calibrated quantile forecasts, CRPS will be lower than MAE</item>
     /// <item>Poorly calibrated probabilistic forecasts may have CRPS higher than MAE</item>
     /// </list>
     /// We approximate CRPS using the quantile score (pinball loss) approach, which is the
-    /// standard method used in the GIFT-Eval benchmark.
+    /// standard method used in the GIFT-Eval benchmark: GIFT-Eval reports the gluonts
+    /// <c>MeanWeightedSumQuantileLoss</c>, where each quantile's summed loss is doubled and scaled by
+    /// the summed absolute target, then the quantiles are averaged.
     /// </para>
     /// </remarks>
     public T ComputeCRPS(IReadOnlyDictionary<double, Tensor<T>> quantileForecasts, Tensor<T> actuals)
@@ -152,22 +157,25 @@ public class GIFTEvalBenchmark<T>
             }
         }
 
-        // CRPS = mean over steps of the mean pinball loss over quantiles = (1 / (H * Q)) * sum_q sum_t pinball.
-        T totalCrps = NumOps.Zero;
+        // GIFT-Eval CRPS (gluonts MeanWeightedSumQuantileLoss):
+        // (1 / Q) * sum_q [2 * sum_t pinball_q / sum_t |y_t|] = 2 * sum_q sum_t pinball_q / (Q * sum_t |y_t|).
+        T totalLoss = NumOps.Zero;
+        T absoluteTarget = NumOps.Zero;
         if (horizon > 0)
         {
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var actual = FlatRange(actuals, 0, horizon);
+            absoluteTarget = Engine.TensorSum(Engine.TensorAbs(actual));
             foreach (var kvp in quantileForecasts)
             {
                 var error = Engine.TensorSubtract(actual, FlatRange(kvp.Value, 0, horizon));
-                totalCrps = NumOps.Add(totalCrps, PinballSum(error, kvp.Key));
+                totalLoss = NumOps.Add(totalLoss, PinballSum(error, kvp.Key));
             }
-
-            totalCrps = NumOps.Divide(totalCrps, NumOps.FromDouble(quantileForecasts.Count));
         }
 
-        return NumOps.Divide(totalCrps, NumOps.FromDouble(horizon));
+        return NumOps.Divide(
+            NumOps.Multiply(NumOps.FromDouble(2.0), totalLoss),
+            NumOps.Multiply(NumOps.FromDouble(quantileForecasts.Count), absoluteTarget));
     }
 
     /// <summary>
@@ -228,7 +236,14 @@ public class GIFTEvalBenchmark<T>
             throw new ArgumentException($"seasonalPeriods.Count ({seasonalPeriods.Count}) must equal testSeries.Count ({testSeries.Count}).", nameof(seasonalPeriods));
 
         var maseScores = new List<T>();
-        var crpsScores = new List<T>();
+
+        // GIFT-Eval aggregates the weighted quantile loss over the whole dataset: each level's pinball
+        // losses and the absolute targets are summed across every scored series before dividing.
+        var levelLosses = new List<Tensor<T>>();
+        var absoluteTargets = new List<T>();
+        int numQ = quantileLevels.Length;
+        var levelRow = new Tensor<T>(
+            new[] { 1, numQ }, new Vector<T>(quantileLevels.Select(q => NumOps.FromDouble(q)).ToArray()));
 
         for (int s = 0; s < testSeries.Count; s++)
         {
@@ -262,43 +277,55 @@ public class GIFTEvalBenchmark<T>
 
             // Compute CRPS from quantile forecasts (single call with all quantile levels)
             var allQuantileForecast = model.Forecast(context, quantileLevels);
-            var quantileDict = new Dictionary<double, Tensor<T>>();
-            int numQ = quantileLevels.Length;
 
-            // Output layout: [horizon * numQuantiles] with quantile as inner dimension; positions past the end of
-            // the forecast read as zero. Quantile qi is column qi of the zero-padded [evalLen, numQ] grid.
-            Tensor<T>? grid = null;
-            if (evalLen > 0 && numQ > 0)
+            // Output layout: [horizon * numQuantiles] with quantile as inner dimension. A forecast that does
+            // not cover the whole [evalLen, numQ] grid is not scored: GIFT-Eval needs every level at every
+            // step, and filling the gap with zeros would score a forecast that was never made.
+            int needed = evalLen * numQ;
+            if (evalLen <= 0 || numQ <= 0 || allQuantileForecast.Length < needed)
+                continue;
+
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                int needed = evalLen * numQ;
-                int available = Math.Min(needed, allQuantileForecast.Length);
-                var head = FlatRange(allQuantileForecast, 0, available);
-                var padded = available == needed
-                    ? head
-                    : Engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { needed - available }) }, 0);
-                grid = Engine.Reshape(padded, new[] { evalLen, numQ });
-            }
+                var gridShape = new[] { evalLen, numQ };
+                var grid = Engine.Reshape(FlatRange(allQuantileForecast, 0, needed), gridShape);
+                var actualColumn = Engine.TensorBroadcastTo(Engine.Reshape(actualSlice, new[] { evalLen, 1 }), gridShape);
+                var error = Engine.TensorSubtract(actualColumn, grid);
 
-            for (int qi = 0; qi < numQ; qi++)
-            {
-                var qSlice = grid is null
-                    ? new Tensor<T>(new[] { evalLen })
-                    : Engine.Reshape(Engine.TensorNarrow(grid, 1, qi, 1), new[] { evalLen });
-                quantileDict[quantileLevels[qi]] = qSlice;
+                // pinball_q(e) = q * e + max(-e, 0), summed down the steps for each level.
+                var pinball = Engine.TensorAdd(
+                    Engine.TensorMultiply(Engine.TensorBroadcastTo(levelRow, gridShape), error),
+                    Engine.TensorReLU(Engine.TensorNegate(error)));
+                levelLosses.Add(Engine.ReduceSum(pinball, new[] { 0 }, false));
+                absoluteTargets.Add(Engine.TensorSum(Engine.TensorAbs(actualSlice)));
             }
-
-            T crps = ComputeCRPS(quantileDict, actualSlice);
-            crpsScores.Add(crps);
         }
 
         var results = new Dictionary<string, T>();
         var (maseMean, maseFinite) = FiniteMeanOrNaN(maseScores);
         results["MASE"] = maseMean;
-        results["CRPS"] = FiniteMeanOrNaN(crpsScores).Mean;
+        results["CRPS"] = DatasetWeightedQuantileLoss(levelLosses, absoluteTargets, numQ);
+        results["NumCRPSEvaluated"] = NumOps.FromDouble(levelLosses.Count);
         results["NumSeries"] = NumOps.FromDouble(testSeries.Count);
         results["NumEvaluated"] = NumOps.FromDouble(maseFinite);
 
         return results;
+    }
+
+    /// <summary>
+    /// GIFT-Eval's dataset CRPS: (1 / Q) * sum_q [2 * (sum over series and steps of pinball_q) / (sum of |y|)];
+    /// NaN when no series was scored.
+    /// </summary>
+    private static T DatasetWeightedQuantileLoss(List<Tensor<T>> levelLosses, List<T> absoluteTargets, int numQ)
+    {
+        if (levelLosses.Count == 0 || numQ == 0)
+            return NumOps.FromDouble(double.NaN);
+        var perLevel = Engine.ReduceSum(Engine.TensorStack(levelLosses.ToArray(), 0), new[] { 0 }, false);
+        T absoluteTotal = Engine.TensorSum(
+            new Tensor<T>(new[] { absoluteTargets.Count }, new Vector<T>(absoluteTargets.ToArray())));
+        return NumOps.Divide(
+            NumOps.Multiply(NumOps.FromDouble(2.0), Engine.TensorSum(perLevel)),
+            NumOps.Multiply(NumOps.FromDouble(numQ), absoluteTotal));
     }
 
     /// <summary>
