@@ -100,13 +100,8 @@ public class D3PO<T>
 
     private T ComputeLogLikelihoodRatio(Vector<T> modelPred, Vector<T> refPred)
     {
-        var sum = NumOps.Zero;
         int len = Math.Min(modelPred.Length, refPred.Length);
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(modelPred[i], refPred[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
+        var sum = DiffusionVectorOps.SquaredDistance(modelPred, refPred);
         return NumOps.Negate(NumOps.Divide(sum, NumOps.FromDouble(2.0 * len)));
     }
 }
