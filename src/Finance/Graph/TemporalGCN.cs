@@ -1032,31 +1032,22 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
-        var inputVec = input.ToVector();
-        var predVec = prediction.ToVector();
-
-        // Use actual input size, not calculated expected size
-        int inputSize = inputVec.Length;
+        // [input after the first shiftSize values | leading predictions | zeros], detached.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int inputSize = input.Length;
         int shiftSize = Math.Min(_numNodes * _numFeatures, inputSize);
-        var shifted = new T[inputSize];
-
-        // Copy shifted values from input (avoiding index out of range)
         int copyLen = Math.Max(0, inputSize - shiftSize);
-        for (int i = 0; i < copyLen; i++)
-        {
-            int srcIdx = i + shiftSize;
-            if (srcIdx < inputVec.Length)
-                shifted[i] = inputVec[srcIdx];
-        }
-        // Fill end with prediction values
-        for (int i = 0; i < Math.Min(shiftSize, predVec.Length); i++)
-        {
-            int dstIdx = inputSize - shiftSize + i;
-            if (dstIdx >= 0 && dstIdx < inputSize)
-                shifted[dstIdx] = predVec[i];
-        }
-
-        return new Tensor<T>(new[] { inputSize }, new Vector<T>(shifted));
+        int fill = Math.Max(0, Math.Min(shiftSize, prediction.Length));
+        var parts = new List<Tensor<T>>(3);
+        if (copyLen > 0)
+            parts.Add(Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { inputSize }), 0, inputSize - copyLen, copyLen));
+        if (fill > 0)
+            parts.Add(Engine.TensorNarrow(Engine.Reshape(prediction.Contiguous(), new[] { prediction.Length }), 0, 0, fill));
+        if (inputSize - copyLen - fill > 0)
+            parts.Add(new Tensor<T>(new[] { inputSize - copyLen - fill }));
+        if (parts.Count == 0)
+            return new Tensor<T>(new[] { inputSize });
+        return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.Select(p => p.Contiguous()).ToArray(), 0);
     }
 
     /// <summary>
