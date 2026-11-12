@@ -77,18 +77,8 @@ public class VariationalScoreDistillation<T>
     /// <returns>VSD gradient: w(t) * (pretrained_score - particle_score).</returns>
     public Vector<T> ComputeGradient(Vector<T> pretrainedScore, Vector<T> particleScore, double timestepWeight)
     {
-        var gradient = new Vector<T>(pretrainedScore.Length);
-        var weight = NumOps.FromDouble(timestepWeight);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var diff = NumOps.Subtract(
-                pretrainedScore[i],
-                i < particleScore.Length ? particleScore[i] : NumOps.Zero);
-            gradient[i] = NumOps.Multiply(weight, diff);
-        }
-
-        return gradient;
+        // w(t) * (eps_pretrained - eps_particle), the particle score zero-padded to the pretrained length
+        return DiffusionVectorOps.ScaledDifference(pretrainedScore, particleScore, pretrainedScore.Length, NumOps.FromDouble(timestepWeight));
     }
 
     /// <summary>
@@ -99,13 +89,8 @@ public class VariationalScoreDistillation<T>
     /// <returns>MSE loss for LoRA training.</returns>
     public T ComputeParticleLoss(Vector<T> particlePrediction, Vector<T> targetNoise)
     {
-        var loss = NumOps.Zero;
         int len = Math.Min(particlePrediction.Length, targetNoise.Length);
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(particlePrediction[i], targetNoise[i]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-        }
+        var loss = DiffusionVectorOps.SquaredDistance(particlePrediction, targetNoise);
         return NumOps.Divide(loss, NumOps.FromDouble(len));
     }
 }

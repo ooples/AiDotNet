@@ -43,6 +43,28 @@ internal static class DiffusionVectorOps
     }
 
     /// <summary>
+    /// weight * (a - b) over the first <paramref name="length"/> elements, each operand zero-padded or truncated.
+    /// </summary>
+    internal static Vector<T> ScaledDifference<T>(Vector<T> a, Vector<T> b, int length, T weight)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.Multiply(engine.Subtract(Fit(a, length), Fit(b, length)), weight);
+    }
+
+    /// <summary>
+    /// Sum of the pseudo-Huber terms sqrt((a - b)^2 + c^2) - c over the common prefix of the two vectors.
+    /// </summary>
+    internal static T PseudoHuberSum<T>(Vector<T> a, Vector<T> b, T c)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int length = Math.Min(a.Length, b.Length);
+        var diff = engine.Subtract(Fit(a, length), Fit(b, length));
+        var root = engine.Sqrt(engine.Add(engine.Multiply(diff, diff), Vector<T>.Default(length, ops.Multiply(c, c))));
+        return ops.Subtract(engine.Sum(root), ops.Multiply(c, ops.FromDouble(length)));
+    }
+
+    /// <summary>
     /// Sum of squared differences over the common prefix of the two vectors.
     /// </summary>
     internal static T SquaredDistance<T>(Vector<T> a, Vector<T> b)

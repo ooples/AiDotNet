@@ -76,17 +76,7 @@ public class IntervalScoreMatching<T>
         Vector<T> denoisedAtT1, Vector<T> invertedAtT2,
         Vector<T> originalRender, double timestepWeight)
     {
-        var gradient = new Vector<T>(originalRender.Length);
-        var weight = NumOps.FromDouble(timestepWeight);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var target = i < denoisedAtT1.Length ? denoisedAtT1[i] : NumOps.Zero;
-            var current = originalRender[i];
-            var diff = NumOps.Subtract(target, current);
-            gradient[i] = NumOps.Multiply(weight, diff);
-        }
-
-        return gradient;
+        // weight * (denoised_t1 - render), the denoised target zero-padded to the render length
+        return DiffusionVectorOps.ScaledDifference(denoisedAtT1, originalRender, originalRender.Length, NumOps.FromDouble(timestepWeight));
     }
 }
