@@ -1219,3 +1219,75 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.BoundingBoxMax.get -> (T X, T Y, T Z)
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.BoundingBoxMax.init -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.BoundingBoxMin.get -> (T X, T Y, T Z)
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.BoundingBoxMin.init -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.Deconstruct(out int NumVertices, out int NumFaces, out int NumEdges, out T SurfaceArea, out T Volume, out (T X, T Y, T Z) BoundingBoxMin, out (T X, T Y, T Z) BoundingBoxMax) -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.MeshStatistics(AiDotNet.Geometry.Preprocessing.MeshStatistics<T>! original) -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.MeshStatistics(int NumVertices, int NumFaces, int NumEdges, T SurfaceArea, T Volume, (T X, T Y, T Z) BoundingBoxMin, (T X, T Y, T Z) BoundingBoxMax) -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.NumEdges.get -> int
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.NumEdges.init -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.NumFaces.get -> int
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.NumFaces.init -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.NumVertices.get -> int
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.NumVertices.init -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.SurfaceArea.get -> T
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.SurfaceArea.init -> void
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.Volume.get -> T
+AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.Volume.init -> void
+override AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.Equals(object? obj) -> bool
+override AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.GetHashCode() -> int
+override AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.ToString() -> string!
+static AiDotNet.Geometry.Preprocessing.GeometryMetrics<T>.ChamferDistance(AiDotNet.PointCloud.Data.PointCloudData<T>! source, AiDotNet.PointCloud.Data.PointCloudData<T>! target, bool squared = false) -> T
+static AiDotNet.Geometry.Preprocessing.GeometryMetrics<T>.FScore(AiDotNet.PointCloud.Data.PointCloudData<T>! prediction, AiDotNet.PointCloud.Data.PointCloudData<T>! groundTruth, T threshold) -> (T FScore, T Precision, T Recall)
+static AiDotNet.Geometry.Preprocessing.GeometryMetrics<T>.HausdorffDistance(AiDotNet.PointCloud.Data.PointCloudData<T>! source, AiDotNet.PointCloud.Data.PointCloudData<T>! target) -> T
+static AiDotNet.Geometry.Preprocessing.MeshOperations<T>.ComputeStatistics(AiDotNet.Geometry.Data.TriangleMeshData<T>! mesh) -> AiDotNet.Geometry.Preprocessing.MeshStatistics<T>!
+static AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.operator !=(AiDotNet.Geometry.Preprocessing.MeshStatistics<T>? left, AiDotNet.Geometry.Preprocessing.MeshStatistics<T>? right) -> bool
+static AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.operator ==(AiDotNet.Geometry.Preprocessing.MeshStatistics<T>? left, AiDotNet.Geometry.Preprocessing.MeshStatistics<T>? right) -> bool
+static AiDotNet.Geometry.Preprocessing.NeighborSearch<T>.BallQuery(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud, AiDotNet.PointCloud.Data.PointCloudData<T>! centroids, T radius, int maxSamples) -> int[,]!
+static AiDotNet.Geometry.Preprocessing.NeighborSearch<T>.ComputeDistanceMatrix(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.Geometry.Preprocessing.NeighborSearch<T>.RadiusSearch(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud, AiDotNet.PointCloud.Data.PointCloudData<T>! queryPoints, T radius) -> System.Collections.Generic.List<int>![]!
+static AiDotNet.Geometry.Preprocessing.PointCloudSampling<T>.PoissonDiskSample(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud, T minDistance, int maxSamples = 0, int? seed = null) -> AiDotNet.PointCloud.Data.PointCloudData<T>!
+static AiDotNet.Geometry.Preprocessing.PointCloudSampling<T>.VoxelGridSample(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud, T voxelSize) -> AiDotNet.PointCloud.Data.PointCloudData<T>!
+virtual AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.<Clone>$() -> AiDotNet.Geometry.Preprocessing.MeshStatistics<T>!
+virtual AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.EqualityContract.get -> System.Type!
+virtual AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.Equals(AiDotNet.Geometry.Preprocessing.MeshStatistics<T>? other) -> bool
+virtual AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.PrintMembers(System.Text.StringBuilder! builder) -> bool
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.BoundingBoxMax.get -> (double X, double Y, double Z)
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.BoundingBoxMax.init -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.BoundingBoxMin.get -> (double X, double Y, double Z)
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.BoundingBoxMin.init -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.Deconstruct(out int NumVertices, out int NumFaces, out int NumEdges, out double SurfaceArea, out double Volume, out (double X, double Y, double Z) BoundingBoxMin, out (double X, double Y, double Z) BoundingBoxMax) -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.MeshStatistics(AiDotNet.Geometry.Preprocessing.MeshStatistics! original) -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.MeshStatistics(int NumVertices, int NumFaces, int NumEdges, double SurfaceArea, double Volume, (double X, double Y, double Z) BoundingBoxMin, (double X, double Y, double Z) BoundingBoxMax) -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.NumEdges.get -> int
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.NumEdges.init -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.NumFaces.get -> int
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.NumFaces.init -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.NumVertices.get -> int
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.NumVertices.init -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.SurfaceArea.get -> double
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.SurfaceArea.init -> void
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.Volume.get -> double
+*REMOVED*AiDotNet.Geometry.Preprocessing.MeshStatistics.Volume.init -> void
+*REMOVED*override AiDotNet.Geometry.Preprocessing.MeshStatistics.Equals(object? obj) -> bool
+*REMOVED*override AiDotNet.Geometry.Preprocessing.MeshStatistics.GetHashCode() -> int
+*REMOVED*override AiDotNet.Geometry.Preprocessing.MeshStatistics.ToString() -> string!
+*REMOVED*static AiDotNet.Geometry.Preprocessing.GeometryMetrics<T>.ChamferDistance(AiDotNet.PointCloud.Data.PointCloudData<T>! source, AiDotNet.PointCloud.Data.PointCloudData<T>! target, bool squared = false) -> double
+*REMOVED*static AiDotNet.Geometry.Preprocessing.GeometryMetrics<T>.FScore(AiDotNet.PointCloud.Data.PointCloudData<T>! prediction, AiDotNet.PointCloud.Data.PointCloudData<T>! groundTruth, double threshold) -> (double FScore, double Precision, double Recall)
+*REMOVED*static AiDotNet.Geometry.Preprocessing.GeometryMetrics<T>.HausdorffDistance(AiDotNet.PointCloud.Data.PointCloudData<T>! source, AiDotNet.PointCloud.Data.PointCloudData<T>! target) -> double
+*REMOVED*static AiDotNet.Geometry.Preprocessing.MeshOperations<T>.ComputeStatistics(AiDotNet.Geometry.Data.TriangleMeshData<T>! mesh) -> AiDotNet.Geometry.Preprocessing.MeshStatistics!
+*REMOVED*static AiDotNet.Geometry.Preprocessing.MeshStatistics.operator !=(AiDotNet.Geometry.Preprocessing.MeshStatistics? left, AiDotNet.Geometry.Preprocessing.MeshStatistics? right) -> bool
+*REMOVED*static AiDotNet.Geometry.Preprocessing.MeshStatistics.operator ==(AiDotNet.Geometry.Preprocessing.MeshStatistics? left, AiDotNet.Geometry.Preprocessing.MeshStatistics? right) -> bool
+*REMOVED*static AiDotNet.Geometry.Preprocessing.NeighborSearch<T>.BallQuery(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud, AiDotNet.PointCloud.Data.PointCloudData<T>! centroids, double radius, int maxSamples) -> int[,]!
+*REMOVED*static AiDotNet.Geometry.Preprocessing.NeighborSearch<T>.ComputeDistanceMatrix(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud) -> double[,]!
+*REMOVED*static AiDotNet.Geometry.Preprocessing.NeighborSearch<T>.RadiusSearch(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud, AiDotNet.PointCloud.Data.PointCloudData<T>! queryPoints, double radius) -> System.Collections.Generic.List<int>![]!
+*REMOVED*static AiDotNet.Geometry.Preprocessing.PointCloudSampling<T>.PoissonDiskSample(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud, double minDistance, int maxSamples = 0, int? seed = null) -> AiDotNet.PointCloud.Data.PointCloudData<T>!
+*REMOVED*static AiDotNet.Geometry.Preprocessing.PointCloudSampling<T>.VoxelGridSample(AiDotNet.PointCloud.Data.PointCloudData<T>! pointCloud, double voxelSize) -> AiDotNet.PointCloud.Data.PointCloudData<T>!
+*REMOVED*virtual AiDotNet.Geometry.Preprocessing.MeshStatistics.<Clone>$() -> AiDotNet.Geometry.Preprocessing.MeshStatistics!
+*REMOVED*virtual AiDotNet.Geometry.Preprocessing.MeshStatistics.EqualityContract.get -> System.Type!
+*REMOVED*virtual AiDotNet.Geometry.Preprocessing.MeshStatistics.Equals(AiDotNet.Geometry.Preprocessing.MeshStatistics? other) -> bool
+*REMOVED*virtual AiDotNet.Geometry.Preprocessing.MeshStatistics.PrintMembers(System.Text.StringBuilder! builder) -> bool
