@@ -117,14 +117,7 @@ public partial class FairCutForest<T> : AnomalyDetectorBase<T>
         {
             // Sample data
             var sampleIndices = SampleIndices(n, _effectiveMaxSamples);
-            var sample = new Matrix<T>(sampleIndices.Length, _inputDim);
-            for (int si = 0; si < sampleIndices.Length; si++)
-            {
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    sample[si, j] = X[sampleIndices[si], j];
-                }
-            }
+            var sample = AnomalyTensorOps.SelectRows(AnomalyTensorOps.ToTensor(X), sampleIndices).ToMatrix();
 
             // Build tree with fair cuts
             var tree = BuildFairCutTree(sample, featureImportances, maxDepth);
@@ -141,37 +134,21 @@ public partial class FairCutForest<T> : AnomalyDetectorBase<T>
     private Vector<T> ComputeFeatureImportances(Matrix<T> data)
     {
         int d = data.Columns;
-        var importances = new Vector<T>(d);
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
 
-        for (int j = 0; j < d; j++)
-        {
-            T min = NumOps.MaxValue;
-            T max = NumOps.MinValue;
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                if (NumOps.LessThan(data[i, j], min)) min = data[i, j];
-                if (NumOps.GreaterThan(data[i, j], max)) max = data[i, j];
-            }
-
-            importances[j] = NumOps.Subtract(max, min);
-        }
+        // Spread (max - min) of each feature
+        var importances = engine.TensorSubtract(
+            engine.ReduceMax(values, new[] { 0 }, false), engine.TensorAmin(values, new[] { 0 }, false));
 
         // Normalize importances
-        T sum = NumOps.Zero;
-        for (int j = 0; j < d; j++) sum = NumOps.Add(sum, importances[j]);
-
+        T sum = engine.TensorSum(importances);
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int j = 0; j < d; j++) importances[j] = NumOps.Divide(importances[j], sum);
-        }
-        else
-        {
-            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(d));
-            for (int j = 0; j < d; j++) importances[j] = uniform;
+            return engine.TensorDivideScalar(importances, sum).ToVector();
         }
 
-        return importances;
+        return engine.Fill(d, NumOps.Divide(NumOps.One, NumOps.FromDouble(d)));
     }
 
     private int[] SampleIndices(int n, int sampleSize)
@@ -209,14 +186,11 @@ public partial class FairCutForest<T> : AnomalyDetectorBase<T>
         int selectedFeature = SelectFeatureByImportance(featureImportances);
 
         // Find min and max for selected feature
-        T min = NumOps.MaxValue;
-        T max = NumOps.MinValue;
-
-        for (int i = 0; i < data.Rows; i++)
-        {
-            if (NumOps.LessThan(data[i, selectedFeature], min)) min = data[i, selectedFeature];
-            if (NumOps.GreaterThan(data[i, selectedFeature], max)) max = data[i, selectedFeature];
-        }
+        var engine = Engine;
+        var dataTensor = AnomalyTensorOps.ToTensor(data);
+        var column = engine.TensorSliceAxis(dataTensor, 1, selectedFeature);
+        T min = engine.TensorMinValue(column);
+        T max = engine.TensorMaxValue(column);
 
         T range = NumOps.Subtract(max, min);
         T eps = NumOps.FromDouble(1e-10);
@@ -228,11 +202,8 @@ public partial class FairCutForest<T> : AnomalyDetectorBase<T>
         }
 
         // Fair cut: use median instead of random split for more balanced trees
-        var values = Enumerable.Range(0, data.Rows)
-            .Select(i => data[i, selectedFeature])
-            .OrderBy(v => NumOps.ToDouble(v))
-            .ToArray();
-        T splitValue = values[values.Length / 2]; // Median
+        var (sortedColumn, _) = engine.TensorSort(column, 0, false);
+        T splitValue = sortedColumn[data.Rows / 2]; // Median
 
         // Add small random perturbation to avoid identical splits
         T perturbation = NumOps.Multiply(NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.1), range);
@@ -243,26 +214,20 @@ public partial class FairCutForest<T> : AnomalyDetectorBase<T>
         node.SplitFeature = selectedFeature;
         node.SplitValue = splitValue;
 
-        // Split data
-        var leftIndices = new List<int>();
-        var rightIndices = new List<int>();
-        for (int i = 0; i < data.Rows; i++)
-        {
-            if (NumOps.LessThan(data[i, selectedFeature], splitValue))
-                leftIndices.Add(i);
-            else
-                rightIndices.Add(i);
-        }
+        // Split data: values below the split go left (order preserved)
+        var goesLeft = engine.TensorLessThan(column, splitValue);
+        var leftIndices = AnomalyTensorOps.NonzeroIndices(goesLeft);
+        var rightIndices = AnomalyTensorOps.NonzeroIndices(engine.ScalarMinusTensor(NumOps.One, goesLeft));
 
-        if (leftIndices.Count == 0 || rightIndices.Count == 0)
+        if (leftIndices.Length == 0 || rightIndices.Length == 0)
         {
             node.IsLeaf = true;
             node.Size = data.Rows;
             return node;
         }
 
-        var leftData = ExtractRows(data, leftIndices);
-        var rightData = ExtractRows(data, rightIndices);
+        var leftData = AnomalyTensorOps.SelectRows(dataTensor, leftIndices).ToMatrix();
+        var rightData = AnomalyTensorOps.SelectRows(dataTensor, rightIndices).ToMatrix();
 
         node.Left = BuildFairCutTreeRecursive(leftData, featureImportances, currentDepth + 1, maxDepth);
         node.Right = BuildFairCutTreeRecursive(rightData, featureImportances, currentDepth + 1, maxDepth);
@@ -270,35 +235,17 @@ public partial class FairCutForest<T> : AnomalyDetectorBase<T>
         return node;
     }
 
-    private static Matrix<T> ExtractRows(Matrix<T> data, List<int> indices)
-    {
-        var result = new Matrix<T>(indices.Count, data.Columns);
-        for (int i = 0; i < indices.Count; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                result[i, j] = data[indices[i], j];
-            }
-        }
-        return result;
-    }
-
     private int SelectFeatureByImportance(Vector<T> importances)
     {
         // Feature selection uses Random.NextDouble() - this is a double boundary
         double r = _random.NextDouble();
-        double cumulative = 0;
 
-        for (int i = 0; i < importances.Length; i++)
-        {
-            cumulative += NumOps.ToDouble(importances[i]);
-            if (r <= cumulative)
-            {
-                return i;
-            }
-        }
-
-        return importances.Length - 1;
+        // The first feature whose running importance total reaches r (the last one if none does)
+        var engine = Engine;
+        var cumulative = engine.TensorCumSum(importances.AsTensor(), 0);
+        var target = Vector<T>.FromArray(new[] { NumOps.FromDouble(r) }).AsTensor();
+        int position = engine.TensorSearchSorted(cumulative, target, false).ToArray()[0];
+        return Math.Min(position, importances.Length - 1);
     }
 
     /// <inheritdoc/>
@@ -325,52 +272,66 @@ public partial class FairCutForest<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
         T cn = NumOps.FromDouble(ComputeCn(_effectiveMaxSamples));
-        T two = NumOps.FromDouble(2);
         T nTreesT = NumOps.FromDouble(trees.Count);
 
-        for (int i = 0; i < X.Rows; i++)
+        if (!NumOps.GreaterThan(cn, NumOps.Zero))
         {
-            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            // Average path length across all trees
-            T avgPathLength = NumOps.Zero;
-            foreach (var tree in trees)
-            {
-                avgPathLength = NumOps.Add(avgPathLength, ComputePathLength(point, tree, 0));
-            }
-            avgPathLength = NumOps.Divide(avgPathLength, nTreesT);
-
-            // Anomaly score: 2^(-avgPathLength / c(n))
-            T score = NumOps.GreaterThan(cn, NumOps.Zero)
-                ? NumOps.Power(two, NumOps.Negate(NumOps.Divide(avgPathLength, cn)))
-                : NumOps.FromDouble(0.5);
-
-            scores[i] = score;
+            return Engine.Fill(X.Rows, NumOps.FromDouble(0.5));
         }
 
-        return scores;
+        // Average path length across all trees (summed in tree order for every point)
+        var engine = Engine;
+        var columns = AnomalyTensorOps.Columns(X);
+        var allRows = AnomalyTensorOps.Range(X.Rows);
+        var totalPathLength = Tensor<T>.CreateZeros(new[] { X.Rows });
+        foreach (var tree in trees)
+        {
+            var leafRows = new List<Tensor<int>>();
+            var leafValues = new List<Tensor<T>>();
+            RoutePathLengths(columns, allRows, tree, 0, leafRows, leafValues);
+            totalPathLength = engine.TensorAdd(totalPathLength, AnomalyTensorOps.AssembleByRow(leafRows, leafValues));
+        }
+
+        var avgPathLength = engine.TensorDivideScalar(totalPathLength, nTreesT);
+
+        // Anomaly score: 2^(-avgPathLength / c(n))
+        return engine.TensorExp2(engine.TensorNegate(engine.TensorDivideScalar(avgPathLength, cn))).ToVector();
     }
 
-    private T ComputePathLength(Vector<T> point, FCFTree node, int currentDepth)
+    // Routes the given rows down a tree as index sets; each leaf contributes depth + c(size) for the
+    // rows that reach it.
+    private void RoutePathLengths(Tensor<T>[] columns, Tensor<int> rows, FCFTree node, int currentDepth,
+        List<Tensor<int>> leafRows, List<Tensor<T>> leafValues)
     {
-        if (node.IsLeaf)
+        if (rows.Length == 0)
         {
-            return NumOps.FromDouble(currentDepth + ComputeCn(node.Size));
+            return;
         }
 
-        if (NumOps.LessThan(point[node.SplitFeature], node.SplitValue))
+        if (node.IsLeaf)
         {
-            if (node.Left is null)
-                throw new InvalidOperationException("Corrupt tree: non-leaf node missing left child.");
-            return ComputePathLength(point, node.Left, currentDepth + 1);
+            leafRows.Add(rows);
+            leafValues.Add(Engine.Fill(rows.Length, NumOps.FromDouble(currentDepth + ComputeCn(node.Size))).AsTensor());
+            return;
         }
-        else
+
+        var engine = Engine;
+        var goesLeft = engine.TensorLessThan(engine.TensorGather(columns[node.SplitFeature], rows, 0), node.SplitValue);
+        var leftRows = AnomalyTensorOps.SelectWhere(rows, goesLeft, NumOps.One);
+        var rightRows = AnomalyTensorOps.SelectWhere(rows, goesLeft, NumOps.Zero);
+        if (leftRows.Length > 0)
         {
-            if (node.Right is null)
-                throw new InvalidOperationException("Corrupt tree: non-leaf node missing right child.");
-            return ComputePathLength(point, node.Right, currentDepth + 1);
+            RoutePathLengths(columns, leftRows,
+                node.Left ?? throw new InvalidOperationException("Corrupt tree: non-leaf node missing left child."),
+                currentDepth + 1, leafRows, leafValues);
+        }
+
+        if (rightRows.Length > 0)
+        {
+            RoutePathLengths(columns, rightRows,
+                node.Right ?? throw new InvalidOperationException("Corrupt tree: non-leaf node missing right child."),
+                currentDepth + 1, leafRows, leafValues);
         }
     }
 
