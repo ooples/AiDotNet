@@ -73,16 +73,16 @@ public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
         // Outliers: |x - median| / (1.4826 * MAD) above the threshold (only when that MAD is above 1e-10)
-        var deviation = engine.TensorAbs(engine.TensorSubtract(x, FeatureSelectionTensorOps.ColumnMedian(x, keepDims: true)));
-        var mad = engine.TensorMultiplyScalar(FeatureSelectionTensorOps.ColumnMedian(deviation, keepDims: true), NumOps.FromDouble(1.4826));
+        var deviation = engine.TensorAbs(engine.TensorSubtract(x, SelectorTensorOps.ColumnMedian(x, keepDims: true)));
+        var mad = engine.TensorMultiplyScalar(SelectorTensorOps.ColumnMedian(deviation, keepDims: true), NumOps.FromDouble(1.4826));
         var spread = engine.TensorBroadcastTo(engine.TensorGreaterThan(mad, NumOps.FromDouble(1e-10)), new[] { n, p });
         var isOutlier = engine.TensorMultiply(spread,
             engine.TensorGreaterThan(engine.TensorDivide(deviation, mad), NumOps.FromDouble(_outlierThreshold)));
 
         // Correlation with all data and without each column's outliers (needs more than 2 rows)
         var all = PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.One);
-        var corrAll = FeatureSelectionTensorOps.MaskedPearson(x, y, all, 2);
-        var corrFiltered = FeatureSelectionTensorOps.MaskedPearson(x, y, PreprocessingTensorOps.Not(isOutlier), 3);
+        var corrAll = SelectorTensorOps.MaskedPearson(x, y, all, 2);
+        var corrFiltered = SelectorTensorOps.MaskedPearson(x, y, PreprocessingTensorOps.Not(isOutlier), 3);
 
         // Robustness score: high correlation that is stable with and without outliers
         var stability = PreprocessingTensorOps.OneMinus(engine.TensorAbs(engine.TensorSubtract(corrAll, corrFiltered)));

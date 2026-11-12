@@ -59,7 +59,7 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
 
         var scores = n == 0
             ? PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero)
-            : FeatureSelectionTensorOps.ColumnMedianAbsoluteDeviation(Tensor<T>.FromMatrix(data));
+            : SelectorTensorOps.ColumnMedianAbsoluteDeviation(Tensor<T>.FromMatrix(data));
         _madScores = scores.ToVector();
 
         // Select features

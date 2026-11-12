@@ -57,12 +57,12 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
         var engine = Engine;
 
         // Correlation matrix (sample covariance over sample std + 1e-10, unit diagonal)
-        var correlation = FeatureSelectionTensorOps.SampleCorrelationMatrix(Tensor<T>.FromMatrix(data), 1e-10);
+        var correlation = SelectorTensorOps.SampleCorrelationMatrix(Tensor<T>.FromMatrix(data), 1e-10);
         _correlationMatrix = correlation.ToMatrix();
 
         // Walking the features in order, each kept feature removes every later one correlated above the threshold
         var redundant = engine.TensorGreaterThan(engine.TensorAbs(correlation), NumOps.FromDouble(_threshold));
-        _selectedIndices = FeatureSelectionTensorOps.KeepFirstOfRedundantPairs(redundant);
+        _selectedIndices = SelectorTensorOps.KeepFirstOfRedundantPairs(redundant);
 
         IsFitted = true;
     }

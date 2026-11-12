@@ -68,19 +68,19 @@ public class WaveletEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var energies = new List<Tensor<T>>();
             for (int level = 0; level < _decompositionLevel && current.Shape[0] >= 2; level++)
             {
-                var (approximation, detail) = FeatureSelectionTensorOps.HaarStep(current);
-                energies.Add(engine.Reshape(FeatureSelectionTensorOps.ColumnSumOfSquares(detail), new[] { 1, p }));
+                var (approximation, detail) = SelectorTensorOps.HaarStep(current);
+                energies.Add(engine.Reshape(SelectorTensorOps.ColumnSumOfSquares(detail), new[] { 1, p }));
                 current = approximation;
             }
 
-            energies.Add(engine.Reshape(FeatureSelectionTensorOps.ColumnSumOfSquares(current), new[] { 1, p }));
+            energies.Add(engine.Reshape(SelectorTensorOps.ColumnSumOfSquares(current), new[] { 1, p }));
 
             // Entropy (bits) of the energy distribution; near-zero total energy scores 0
             var energy = engine.Concat(energies, 0);
             var totalEnergy = engine.ReduceSum(energy, new[] { 0 }, false);
-            scores = FeatureSelectionTensorOps.ZeroUnless(
+            scores = SelectorTensorOps.ZeroUnless(
                 PreprocessingTensorOps.AtLeast(totalEnergy, NumOps.FromDouble(1e-10)),
-                FeatureSelectionTensorOps.ColumnEntropyBits(energy, double.NegativeInfinity, 1e-10));
+                SelectorTensorOps.ColumnEntropyBits(energy, double.NegativeInfinity, 1e-10));
         }
 
         _waveletEntropyScores = scores.ToVector();

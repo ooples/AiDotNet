@@ -68,9 +68,9 @@ public class LARSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var engine = Engine;
 
         // Standardize X (population std; near-constant columns keep scale 1) and centre y
-        var x = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var x = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var stds = engine.TensorSqrt(engine.TensorDivideScalar(
-            FeatureSelectionTensorOps.ColumnSumOfSquares(x), NumOps.FromDouble(n)));
+            SelectorTensorOps.ColumnSumOfSquares(x), NumOps.FromDouble(n)));
         stds = engine.TensorWhere(engine.TensorLessThan(stds, NumOps.FromDouble(1e-10)),
             PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), stds);
         x = engine.TensorDivide(x, engine.Reshape(stds, new[] { 1, p }));

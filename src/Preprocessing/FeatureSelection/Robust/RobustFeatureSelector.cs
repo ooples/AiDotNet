@@ -73,8 +73,8 @@ public class RobustFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var yColumn = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
         // Non-outlier rows by the target: |y - median| / (MAD + 1e-10) <= threshold
-        var deviation = engine.TensorAbs(engine.TensorSubtract(yColumn, FeatureSelectionTensorOps.ColumnMedian(yColumn, keepDims: true)));
-        var mad = engine.TensorAddScalar(FeatureSelectionTensorOps.ColumnMedian(deviation, keepDims: true), NumOps.FromDouble(1e-10));
+        var deviation = engine.TensorAbs(engine.TensorSubtract(yColumn, SelectorTensorOps.ColumnMedian(yColumn, keepDims: true)));
+        var mad = engine.TensorAddScalar(SelectorTensorOps.ColumnMedian(deviation, keepDims: true), NumOps.FromDouble(1e-10));
         var scaled = engine.Reshape(engine.TensorDivide(deviation, mad), new[] { n });
         var nonOutlierIndices = PreprocessingTensorOps.MaskPositions(
             engine.TensorLessEqual(scaled, PreprocessingTensorOps.Filled(new[] { n }, NumOps.FromDouble(_outlierThreshold))));
@@ -84,9 +84,9 @@ public class RobustFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (nonOutlierIndices.Length >= 3)
         {
             var rows = new Tensor<int>(nonOutlierIndices, new[] { nonOutlierIndices.Length });
-            var xRanks = FeatureSelectionTensorOps.AverageRanks(engine.TensorIndexSelect(Tensor<T>.FromMatrix(data), rows, 0));
-            var yRanks = FeatureSelectionTensorOps.AverageRanks(engine.TensorIndexSelect(yColumn, rows, 0));
-            scores = FeatureSelectionTensorOps.PearsonWithColumn(xRanks, yRanks);
+            var xRanks = SelectorTensorOps.AverageRanks(engine.TensorIndexSelect(Tensor<T>.FromMatrix(data), rows, 0));
+            var yRanks = SelectorTensorOps.AverageRanks(engine.TensorIndexSelect(yColumn, rows, 0));
+            scores = SelectorTensorOps.PearsonWithColumn(xRanks, yRanks);
         }
 
         _robustScores = scores.ToVector();

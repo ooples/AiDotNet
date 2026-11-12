@@ -64,8 +64,8 @@ public class SeasonalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         var engine = Engine;
         int effectiveMaxPeriod = Math.Min(_maxPeriod, n / 2);
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
-        var totalVariance = FeatureSelectionTensorOps.ColumnSumOfSquares(centered);
+        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var totalVariance = SelectorTensorOps.ColumnSumOfSquares(centered);
 
         // Largest DFT power (|X(1/period)|^2 / n) over the candidate periods
         var maxPower = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
@@ -75,12 +75,12 @@ public class SeasonalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             var frequencies = engine.TensorDivide(
                 PreprocessingTensorOps.Filled(periods.Shape.ToArray(), NumOps.One), periods);
             var power = engine.TensorDivideScalar(
-                FeatureSelectionTensorOps.FrequencyPower(centered, frequencies), NumOps.FromDouble(n));
+                SelectorTensorOps.FrequencyPower(centered, frequencies), NumOps.FromDouble(n));
             maxPower = engine.TensorMax(maxPower, engine.ReduceMax(power, new[] { 0 }, false));
         }
 
         // Seasonality strength as ratio of max periodic power to total variance (near-constant columns score 0)
-        var strengths = FeatureSelectionTensorOps.ZeroUnless(
+        var strengths = SelectorTensorOps.ZeroUnless(
             PreprocessingTensorOps.AtLeast(totalVariance, NumOps.FromDouble(1e-10)),
             engine.TensorDivide(maxPower, totalVariance));
         _seasonalityStrengths = strengths.ToVector();

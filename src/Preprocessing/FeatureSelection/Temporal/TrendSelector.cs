@@ -63,19 +63,19 @@ public class TrendSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
         T tVar = engine.TensorSum(engine.TensorMultiply(tCentered, tCentered));
         if (n > 0 && !NumOps.LessThan(tVar, NumOps.FromDouble(1e-10)))
         {
-            var yCentered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
-            var yVar = FeatureSelectionTensorOps.ColumnSumOfSquares(yCentered);
+            var yCentered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+            var yVar = SelectorTensorOps.ColumnSumOfSquares(yCentered);
 
             // Linear regression slope and the R-squared of the fitted trend line
             var slope = engine.TensorDivideScalar(
                 engine.ReduceSum(engine.TensorMultiply(yCentered, tCentered), new[] { 0 }, false), tVar);
             var residual = engine.TensorSubtract(yCentered,
                 engine.TensorMultiply(tCentered, engine.Reshape(slope, new[] { 1, p })));
-            var ssRes = FeatureSelectionTensorOps.ColumnSumOfSquares(residual);
+            var ssRes = SelectorTensorOps.ColumnSumOfSquares(residual);
             var r2 = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, NumOps.One),
                 engine.TensorDivide(ssRes, yVar));
 
-            strengths = FeatureSelectionTensorOps.ZeroUnless(
+            strengths = SelectorTensorOps.ZeroUnless(
                 PreprocessingTensorOps.AtLeast(yVar, NumOps.FromDouble(1e-10)), engine.TensorMax(r2, NumOps.Zero));
         }
 

@@ -60,19 +60,19 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         var engine = Engine;
         int effectiveMaxLag = Math.Min(_maxLag, n / 3);
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
-        var variance = FeatureSelectionTensorOps.ColumnSumOfSquares(centered);
+        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var variance = SelectorTensorOps.ColumnSumOfSquares(centered);
 
         // Largest absolute autocorrelation over lags 1 .. effectiveMaxLag
         var maxAC = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
         for (int lag = 1; lag <= effectiveMaxLag; lag++)
         {
-            var acf = engine.TensorDivide(FeatureSelectionTensorOps.LagProducts(centered, lag), variance);
+            var acf = engine.TensorDivide(SelectorTensorOps.LagProducts(centered, lag), variance);
             maxAC = engine.TensorMax(maxAC, engine.TensorAbs(acf));
         }
 
         // Near-constant columns score 0
-        var scores = FeatureSelectionTensorOps.ZeroUnless(
+        var scores = SelectorTensorOps.ZeroUnless(
             PreprocessingTensorOps.AtLeast(variance, NumOps.FromDouble(1e-10)), maxAC);
         _autocorrelationScores = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));

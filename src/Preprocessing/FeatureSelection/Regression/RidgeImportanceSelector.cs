@@ -70,11 +70,11 @@ public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int p = data.Columns;
 
         // Standardize X (population std; near-constant columns keep scale 1) and centre y
-        var x = FeatureSelectionTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
-        var y = FeatureSelectionTensorOps.CenteredColumn(target);
+        var x = SelectorTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
+        var y = SelectorTensorOps.CenteredColumn(target);
 
         // Solve (X^T X + alpha I) beta = X^T y
-        var coefficients = FeatureSelectionTensorOps.RidgeCoefficients(x, y, NumOps.FromDouble(_alpha));
+        var coefficients = SelectorTensorOps.RidgeCoefficients(x, y, NumOps.FromDouble(_alpha));
         _coefficients = coefficients.ToVector();
 
         // Select features with largest coefficients

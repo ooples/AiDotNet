@@ -73,18 +73,18 @@ public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         T delta = NumOps.FromDouble(_huberDelta);
 
         // Standardize x and y with median / (1.4826 * MAD) + 1e-10
-        var xStd = FeatureSelectionTensorOps.RobustZScores(Tensor<T>.FromMatrix(data));
-        var yStd = FeatureSelectionTensorOps.RobustZScores(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
+        var xStd = SelectorTensorOps.RobustZScores(Tensor<T>.FromMatrix(data));
+        var yStd = SelectorTensorOps.RobustZScores(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
 
         // Huber-weighted correlation
         var w = engine.TensorMultiply(
-            FeatureSelectionTensorOps.HuberWeights(xStd, delta), FeatureSelectionTensorOps.HuberWeights(yStd, delta));
+            SelectorTensorOps.HuberWeights(xStd, delta), SelectorTensorOps.HuberWeights(yStd, delta));
         var wx = engine.TensorMultiply(w, xStd);
         var sumWxy = engine.ReduceSum(engine.TensorMultiply(wx, yStd), new[] { 0 }, false);
         var sumWx2 = engine.ReduceSum(engine.TensorMultiply(wx, xStd), new[] { 0 }, false);
         var sumWy2 = engine.ReduceSum(engine.TensorMultiply(w, engine.TensorMultiply(yStd, yStd)), new[] { 0 }, false);
         var denom = engine.TensorSqrt(engine.TensorMultiply(sumWx2, sumWy2));
-        var correlations = FeatureSelectionTensorOps.ZeroUnless(
+        var correlations = SelectorTensorOps.ZeroUnless(
             engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10)), engine.TensorAbs(engine.TensorDivide(sumWxy, denom)));
 
         _robustCorrelations = correlations.ToVector();

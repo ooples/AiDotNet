@@ -8,7 +8,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection;
 /// Whole-array engine helpers shared by the feature selectors (column statistics, rank transforms and
 /// class-wise moments), generic in <typeparamref name="T"/> and free of per-element loops.
 /// </summary>
-internal static class FeatureSelectionTensorOps
+internal static class SelectorTensorOps
 {
     /// <summary>Column medians of an [n, p] tensor (mean of the two middle values for even n), as [p].</summary>
     public static Tensor<T> ColumnMedian<T>(Tensor<T> x, bool keepDims = false) =>
@@ -343,4 +343,223 @@ internal static class FeatureSelectionTensorOps
     /// <summary>0/1 mask of the entries that are at least <paramref name="minimum"/>.</summary>
     public static Tensor<T> AtLeastCount<T>(Tensor<T> counts, int minimum) =>
         PreprocessingTensorOps.AtLeast(counts, MathHelper.GetNumericOperations<T>().FromDouble(minimum));
+
+    /// <summary>
+    /// Chi-squared survival function <c>P(X &gt;= statistic)</c> for X ~ chi2(df), i.e. the regularized upper incomplete
+    /// gamma <c>Q(df / 2, statistic / 2)</c> (scipy.stats.chi2.sf); 1 where <c>df &lt;= 0</c> or the statistic is not
+    /// positive.
+    /// </summary>
+    public static Tensor<T> ChiSquaredSurvival<T>(Tensor<T> statistic, Tensor<T> df)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shape = statistic.Shape.ToArray();
+        var one = PreprocessingTensorOps.Filled(shape, ops.One);
+        var defined = engine.TensorMultiply(engine.TensorGreaterThan(df, ops.Zero), engine.TensorGreaterThan(statistic, ops.Zero));
+        T half = ops.FromDouble(0.5);
+        var q = engine.TensorIgammac(engine.TensorMultiplyScalar(engine.TensorWhere(defined, df, one), half),
+            engine.TensorMultiplyScalar(engine.TensorWhere(defined, statistic, one), half));
+        return engine.TensorWhere(defined, q, one);
+    }
+
+    /// <summary>
+    /// Element-wise regularized incomplete beta function <c>I_x(a, b)</c> (scipy.special.betainc) by the continued
+    /// fraction of Numerical Recipes (modified Lentz, up to 300 terms), using the symmetry
+    /// <c>I_x(a, b) = 1 - I_{1-x}(b, a)</c> where the fraction converges faster. <c>x</c> is clamped to [0, 1].
+    /// </summary>
+    public static Tensor<T> RegularizedIncompleteBeta<T>(Tensor<T> a, Tensor<T> b, Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shape = x.Shape.ToArray();
+        var zero = new Tensor<T>(shape);
+        var one = PreprocessingTensorOps.Filled(shape, ops.One);
+        var clamped = engine.TensorClamp(x, ops.Zero, ops.One);
+        var interior = engine.TensorMultiply(engine.TensorGreaterThan(clamped, ops.Zero), engine.TensorLessThan(clamped, ops.One));
+        var safeX = engine.TensorWhere(interior, clamped, PreprocessingTensorOps.Filled(shape, ops.FromDouble(0.5)));
+        var complement = PreprocessingTensorOps.OneMinus(safeX);
+
+        // Front factor x^a (1 - x)^b / (a B(a, b))
+        var logFront = engine.TensorAdd(engine.TensorSubtract(engine.TensorSubtract(
+            engine.TensorLgamma(engine.TensorAdd(a, b)), engine.TensorLgamma(a)), engine.TensorLgamma(b)),
+            engine.TensorAdd(engine.TensorMultiply(a, engine.TensorLog(safeX)), engine.TensorMultiply(b, engine.TensorLog(complement))));
+        var front = engine.TensorExp(logFront);
+
+        // Direct fraction where x < (a + 1) / (a + b + 2), else the symmetric one
+        var direct = engine.TensorLessThan(safeX, engine.TensorDivide(engine.TensorAddScalar(a, ops.One),
+            engine.TensorAddScalar(engine.TensorAdd(a, b), ops.FromDouble(2))));
+        var fa = engine.TensorWhere(direct, a, b);
+        var fb = engine.TensorWhere(direct, b, a);
+        var fx = engine.TensorWhere(direct, safeX, complement);
+        var fraction = engine.TensorDivide(engine.TensorMultiply(front, BetaContinuedFraction(fa, fb, fx)), fa);
+        var value = engine.TensorWhere(direct, fraction, PreprocessingTensorOps.OneMinus(fraction));
+
+        // x = 0 gives 0 and x = 1 gives 1
+        return engine.TensorWhere(interior, value, engine.TensorWhere(engine.TensorGreaterThan(clamped, ops.Zero), one, zero));
+    }
+
+    private static Tensor<T> BetaContinuedFraction<T>(Tensor<T> a, Tensor<T> b, Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shape = x.Shape.ToArray();
+        T tiny = ops.FromDouble(1e-30);
+        T epsilon = ops.FromDouble(3e-16);
+        T one = ops.One;
+        var tinyTensor = PreprocessingTensorOps.Filled(shape, tiny);
+
+        Tensor<T> AwayFromZero(Tensor<T> t) =>
+            engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(t), tiny), tinyTensor, t);
+
+        var qab = engine.TensorAdd(a, b);
+        var qap = engine.TensorAddScalar(a, one);
+        var qam = engine.TensorSubtractScalar(a, one);
+        var c = PreprocessingTensorOps.Filled(shape, one);
+        var d = engine.TensorReciprocal(AwayFromZero(PreprocessingTensorOps.OneMinus(
+            engine.TensorDivide(engine.TensorMultiply(qab, x), qap))));
+        var h = d;
+
+        for (int m = 1; m <= 300; m++)
+        {
+            T mT = PreprocessingTensorOps.CountAsScalar<T>(m);
+            T m2 = PreprocessingTensorOps.CountAsScalar<T>(2 * m);
+
+            // Even step: m (b - m) x / ((a - 1 + 2m)(a + 2m))
+            var even = engine.TensorDivide(engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSubtractScalar(b, mT), x), mT),
+                engine.TensorMultiply(engine.TensorAddScalar(qam, m2), engine.TensorAddScalar(a, m2)));
+            d = engine.TensorReciprocal(AwayFromZero(engine.TensorAddScalar(engine.TensorMultiply(even, d), one)));
+            c = AwayFromZero(engine.TensorAddScalar(engine.TensorDivide(even, c), one));
+            h = engine.TensorMultiply(h, engine.TensorMultiply(d, c));
+
+            // Odd step: -(a + m)(a + b + m) x / ((a + 2m)(a + 1 + 2m))
+            var odd = engine.TensorNegate(engine.TensorDivide(
+                engine.TensorMultiply(engine.TensorMultiply(engine.TensorAddScalar(a, mT), engine.TensorAddScalar(qab, mT)), x),
+                engine.TensorMultiply(engine.TensorAddScalar(a, m2), engine.TensorAddScalar(qap, m2))));
+            d = engine.TensorReciprocal(AwayFromZero(engine.TensorAddScalar(engine.TensorMultiply(odd, d), one)));
+            c = AwayFromZero(engine.TensorAddScalar(engine.TensorDivide(odd, c), one));
+            var delta = engine.TensorMultiply(d, c);
+            h = engine.TensorMultiply(h, delta);
+
+            if (PreprocessingTensorOps.IsBelow(engine.TensorMaxValue(engine.TensorAbs(engine.TensorSubtractScalar(delta, one))), epsilon))
+                break;
+        }
+
+        return h;
+    }
+
+    /// <summary>
+    /// F-distribution survival function <c>P(F &gt;= f)</c> for F ~ F(df1, df2) (scipy.stats.f.sf):
+    /// <c>I_{df2 / (df2 + df1 f)}(df2 / 2, df1 / 2)</c>; 1 where <c>f &lt;= 0</c> or a degree of freedom is not positive.
+    /// </summary>
+    public static Tensor<T> FSurvival<T>(Tensor<T> f, double df1, double df2)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shape = f.Shape.ToArray();
+        var one = PreprocessingTensorOps.Filled(shape, ops.One);
+        if (df1 <= 0 || df2 <= 0)
+            return one;
+
+        var positive = engine.TensorGreaterThan(f, ops.Zero);
+        var safeF = engine.TensorWhere(positive, f, one);
+        var x = engine.TensorDivide(PreprocessingTensorOps.Filled(shape, ops.FromDouble(df2)),
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(safeF, ops.FromDouble(df1)), ops.FromDouble(df2)));
+        var tail = RegularizedIncompleteBeta(PreprocessingTensorOps.Filled(shape, ops.FromDouble(df2 / 2)),
+            PreprocessingTensorOps.Filled(shape, ops.FromDouble(df1 / 2)), x);
+        return engine.TensorWhere(positive, tail, one);
+    }
+
+    /// <summary>
+    /// Per-group column means: <paramref name="membership"/> is a 0/1 [n, k] one-hot of each row's group and
+    /// <paramref name="x"/> is [n, p]. Returns [k, p]; an empty group's mean is 0. <paramref name="counts"/> gets
+    /// the [k] group sizes.
+    /// </summary>
+    public static Tensor<T> GroupMeans<T>(Tensor<T> membership, Tensor<T> x, out Tensor<T> counts)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int k = membership.Shape[1];
+        counts = engine.ReduceSum(membership, new[] { 0 }, false);
+        var sums = engine.TensorMatMul(engine.TensorTranspose(membership), x);
+        var divisor = engine.Reshape(engine.TensorMax(counts, ops.One), new[] { k, 1 });
+        return engine.TensorDivide(sums, engine.TensorBroadcastTo(divisor, sums.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// Kendall rank correlation of every column of <paramref name="x"/> ([n, p]) with <paramref name="y"/> ([n]).
+    /// A pair counts as tied in a variable when its difference is below 1e-10 in magnitude. Tau-b is
+    /// <c>(C - D) / sqrt((n0 - n1)(n0 - n2))</c> with n1 / n2 the pairs tied in x / y (joint ties included in both,
+    /// as in scipy.stats.kendalltau), 0 when the denominator is 0; tau-a is <c>(C - D) / n0</c>. Returns [p].
+    /// </summary>
+    public static Tensor<T> KendallTau<T>(Tensor<T> x, Tensor<T> y, bool tauB)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var zeros = new Tensor<T>(new[] { p });
+        if (p == 0)
+            return zeros;
+
+        T tolerance = ops.FromDouble(1e-10);
+        var ySigns = PairSigns(y, tolerance);
+        var signSums = new Tensor<T>[p];
+        var untied = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+        {
+            var xSigns = PairSigns(PreprocessingTensorOps.ColumnVector(x, j), tolerance);
+            signSums[j] = engine.ReduceSum(engine.TensorMultiply(xSigns, ySigns), new[] { 0 }, true);
+            untied[j] = engine.ReduceSum(engine.TensorAbs(xSigns), new[] { 0 }, true);
+        }
+
+        // Over ordered pairs: sum(sx * sy) = 2 (C - D) and sum|sx| = 2 (n0 - n1)
+        var differences = engine.TensorConcatenate(signSums, 0);
+        if (tauB)
+        {
+            var denominators = engine.TensorSqrt(engine.TensorMultiplyScalar(
+                engine.TensorConcatenate(untied, 0), engine.TensorSum(engine.TensorAbs(ySigns))));
+            var usable = engine.TensorGreaterThan(denominators, ops.Zero);
+            return engine.TensorWhere(usable, engine.TensorDivide(differences,
+                engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, ops.One))), zeros);
+        }
+
+        long pairs = (long)n * (n - 1) / 2;
+        return pairs > 0 ? engine.TensorDivideScalar(differences, ops.FromDouble(2.0 * pairs)) : zeros;
+    }
+
+    /// <summary>
+    /// Signs of all ordered pairwise differences <c>v_i - v_k</c> of a 1-D tensor, flattened to [s * s];
+    /// differences below <paramref name="tolerance"/> in magnitude count as ties (0).
+    /// </summary>
+    public static Tensor<T> PairSigns<T>(Tensor<T> values, T tolerance)
+    {
+        var engine = AiDotNetEngine.Current;
+        int s = values.Length;
+        var shape = new[] { s, s };
+        var differences = engine.Reshape(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(values, new[] { s, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(values, new[] { 1, s }), shape)), new[] { s * s });
+        return engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(differences), tolerance),
+            new Tensor<T>(new[] { s * s }), engine.TensorSign(differences));
+    }
+
+    /// <summary>
+    /// Class scatter of every column of <paramref name="x"/> ([n, p]) for rows grouped by
+    /// <paramref name="classIndex"/> (positions in 0..<paramref name="classCount"/>-1): returns the between-class sum
+    /// of squares <c>sum_c n_c (mean_c - mean)^2</c> and, in <paramref name="within"/>, the within-class sum of
+    /// squares <c>sum_i (x_i - mean_class(i))^2</c>. Both [p].
+    /// </summary>
+    public static Tensor<T> ClassScatter<T>(Tensor<T> x, Tensor<int> classIndex, int classCount, out Tensor<T> within)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = x.Shape[1];
+        var shape = new[] { classCount, p };
+        var membership = engine.TensorOneHot<T>(classIndex, classCount);
+        var classMeans = GroupMeans(membership, x, out var counts);
+        var overallMean = engine.TensorBroadcastTo(engine.ReduceMean(x, new[] { 0 }, true), shape);
+        within = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(x,
+            engine.TensorIndexSelect(classMeans, classIndex, 0))), new[] { 0 }, false);
+        return engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean)),
+            engine.TensorBroadcastTo(engine.Reshape(counts, new[] { classCount, 1 }), shape)), new[] { 0 }, false);
+    }
 }
