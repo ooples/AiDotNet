@@ -206,4 +206,24 @@ public class WaveletReferenceValueTests
             Assert.Equal(expected, reconstructed[m], 1e-12);
         }
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task FejerKorovkin_ReconstructIsAdjointOfDecompose()
+    {
+        // A unit approximation impulse reconstructs to the scaling filter, a unit detail impulse to the wavelet
+        // filter (the previous index arithmetic never matched and returned zeros).
+        var wavelet = new FejÃ©rKorovkinWavelet<double>(order: 4);
+        var h = wavelet.GetScalingCoefficients();
+        var g = wavelet.GetWaveletCoefficients();
+        var impulse = new Vector<double>(4);
+        impulse[0] = 1.0;
+
+        var fromApproximation = wavelet.Reconstruct(impulse, new Vector<double>(4));
+        var fromDetail = wavelet.Reconstruct(new Vector<double>(4), impulse);
+        for (int m = 0; m < 8; m++)
+        {
+            Assert.Equal(m < h.Length ? h[m] : 0.0, fromApproximation[m], 1e-12);
+            Assert.Equal(m < g.Length ? g[m] : 0.0, fromDetail[m], 1e-12);
+        }
+    }
 }
