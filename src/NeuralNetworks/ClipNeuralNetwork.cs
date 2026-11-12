@@ -374,11 +374,11 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
     private Vector<T> ScaledSoftmax(Vector<T> scores)
     {
         // CLIP's logit scale of 100: exp((s - max) * 100) / sum.
-        var scoreTensor = AiDotNet.Tensors.LinearAlgebra.Tensor<T>.FromVector(scores);
-        T max = Engine.TensorMaxValue(scoreTensor);
+        var scoreTensor = AiDotNet.Tensors.LinearAlgebra.Tensor<T>.FromVector(scores).Cast<double>();
+        double max = Engine.TensorMaxValue(scoreTensor);
         var expScores = Engine.TensorExp(
-            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(scoreTensor, max), NumOps.FromDouble(100.0)));
-        return Engine.TensorDivideScalar(expScores, Engine.TensorSum(expScores)).ToVector();
+            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(scoreTensor, max), 100.0));
+        return Engine.TensorDivideScalar(expScores, Engine.TensorSum(expScores)).Cast<T>().ToVector();
     }
 
     /// <inheritdoc />
