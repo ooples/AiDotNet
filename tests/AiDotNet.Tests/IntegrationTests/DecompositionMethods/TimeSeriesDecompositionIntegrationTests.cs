@@ -327,6 +327,49 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #endregion
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(7)]
+    [InlineData(9)]
+    [InlineData(20)]
+    public void Wavelet_CircularFilterPair_MatchesDefinitionForAnyDilation(int dilation)
+    {
+        // first[t] = sum_l a[l] v[(t - l * dilation) mod N]; large dilations (span beyond N, or a
+        // multiple of N) are filtered in bounded tap groups and must still match the definition.
+        var decomp = new WaveletDecomposition<double>(CreateSeasonalTimeSeries(), levels: 3);
+        var method = typeof(WaveletDecomposition<double>).GetMethod(
+            "CircularFilterPair", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        var v = new[] { 1.0, -2.0, 3.5, 0.25, 4.0, -1.5, 2.0 };
+        var a = new[] { 1.0, 2.0, 3.0, 4.0 };
+        var b = new[] { 0.5, -1.0, 2.0, 0.25 };
+        int n = v.Length;
+
+        var result = method.Invoke(decomp, new object[]
+        {
+            new Vector<double>(v), new Vector<double>(a), new Vector<double>(b), dilation
+        });
+        var (first, second) = Assert.IsType<(Vector<double>, Vector<double>)>(result);
+
+        for (int t = 0; t < n; t++)
+        {
+            double expectedFirst = 0;
+            double expectedSecond = 0;
+            for (int l = 0; l < a.Length; l++)
+            {
+                int index = (int)(((t - (long)l * dilation) % n + n) % n);
+                expectedFirst += a[l] * v[index];
+                expectedSecond += b[l] * v[index];
+            }
+
+            Assert.Equal(expectedFirst, first[t], 1e-10);
+            Assert.Equal(expectedSecond, second[t], 1e-10);
+        }
+    }
+
     #region HodrickPrescottDecomposition Tests
 
     [Fact(Timeout = 120000)]
