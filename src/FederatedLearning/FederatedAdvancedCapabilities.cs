@@ -251,45 +251,29 @@ public sealed class FederatedAdvancedCapabilities<T>
 
     // --- helpers ---
 
-    private static Tensor<T> ToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>(new[] { v.Length });
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
+    private static AiDotNet.Tensors.Engines.IEngine Engine => AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
 
-    private static Vector<T> ToVector(Tensor<T> t)
-    {
-        var v = new Vector<T>(t.Length);
-        for (int i = 0; i < t.Length; i++) v[i] = t[i];
-        return v;
-    }
+    // Copies, so later mutation of the source does not leak into the result.
+    private static Tensor<T> ToTensor(Vector<T> v) => Vector<T>.Wrap(v.ToArray()).AsTensor();
 
-    private Tensor<T> Add(Tensor<T> a, Tensor<T> b)
-    {
-        var r = new Tensor<T>(new[] { a.Length });
-        for (int i = 0; i < a.Length; i++) r[i] = _numOps.Add(a[i], b[i]);
-        return r;
-    }
+    private static Vector<T> ToVector(Tensor<T> t) => t.ToVector();
+
+    private static Tensor<T> Add(Tensor<T> a, Tensor<T> b) => Engine.TensorAdd(a, b);
 
     private bool TensorsClose(Tensor<T> a, Tensor<T> b)
     {
         if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++)
-        {
-            double diff = Math.Abs(_numOps.ToDouble(a[i]) - _numOps.ToDouble(b[i]));
-            if (diff > 1e-6 * (1.0 + Math.Abs(_numOps.ToDouble(b[i])))) return false;
-        }
+        if (a.Length == 0) return true;
 
-        return true;
+        // Close iff every |a - b| - 1e-6 * |b| <= 1e-6, i.e. |a - b| <= 1e-6 * (1 + |b|).
+        var excess = Engine.TensorSubtract(
+            Engine.TensorAbs(Engine.TensorSubtract(a, b)),
+            Engine.TensorMultiplyScalar(Engine.TensorAbs(b), _numOps.FromDouble(1e-6)));
+        double maxExcess = -_numOps.ToDouble(Engine.TensorMinValue(Engine.TensorNegate(excess)));
+        return !(maxExcess > 1e-6);
     }
 
-    private double L2Norm(Vector<T> v)
-    {
-        double sum = 0;
-        for (int i = 0; i < v.Length; i++) { double d = _numOps.ToDouble(v[i]); sum += d * d; }
-        return Math.Sqrt(sum);
-    }
+    private double L2Norm(Vector<T> v) => _numOps.ToDouble(Engine.Norm(v));
 
     private byte[] Digest(Vector<T> v)
     {
