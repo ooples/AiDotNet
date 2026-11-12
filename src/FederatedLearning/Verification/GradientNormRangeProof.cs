@@ -162,14 +162,8 @@ public class GradientNormRangeProof<T> : FederatedLearningComponentBase<T>, IVer
     private double ComputeNormSquared(Tensor<T> tensor)
     {
         int totalElements = ComputeTotalElements(tensor);
-        double normSq = 0.0;
-        for (int i = 0; i < totalElements; i++)
-        {
-            double val = NumOps.ToDouble(tensor[i]);
-            normSq += val * val;
-        }
-
-        return normSq;
+        var flat = tensor.Reshape(new[] { totalElements });
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(flat)));
     }
 
     private static double ComputeNormSquaredFromBytes(byte[] value)

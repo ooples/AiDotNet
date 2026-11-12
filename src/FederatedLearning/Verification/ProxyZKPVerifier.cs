@@ -140,29 +140,59 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
                 "Commitment hash mismatch: update was modified after commitment.");
         }
 
-        // Check 2: Per-element magnitude bounds and NaN/Infinity.
-        double totalNorm2 = 0;
+        // Check 2: Per-element magnitude bounds and NaN/Infinity, reported for the first failing
+        // element in layer order.
+        var layerNames = new List<string>(update.Count);
+        var layerTensors = new List<Tensor<T>>(update.Count);
         foreach (var kvp in update)
         {
-            for (int i = 0; i < kvp.Value.Length; i++)
+            if (kvp.Value.Length > 0)
             {
-                double v = NumOps.ToDouble(kvp.Value[i]);
-
-                if (double.IsNaN(v) || double.IsInfinity(v))
-                {
-                    return ProxyVerificationResult.Fail(
-                        $"NaN/Infinity detected in layer '{kvp.Key}' at index {i}.");
-                }
-
-                if (Math.Abs(v) > _maxElementMagnitude)
-                {
-                    return ProxyVerificationResult.Fail(
-                        $"Element magnitude {Math.Abs(v):F4} exceeds limit {_maxElementMagnitude} in layer '{kvp.Key}'.");
-                }
-
-                totalNorm2 += v * v;
+                layerNames.Add(kvp.Key);
+                layerTensors.Add(new Tensor<T>(kvp.Value, new[] { kvp.Value.Length }));
             }
         }
+
+        Tensor<T>? flat = layerTensors.Count > 0 ? Engine.Concat(layerTensors, 0) : null;
+        if (flat is not null)
+        {
+            // v - v is 0 for finite v and NaN for NaN or +/-Infinity.
+            int[] finite = Engine.TensorEquals(Engine.TensorSubtract(flat, flat), NumOps.Zero).Cast<int>().ToArray();
+            int[] overLimit = Engine.TensorGreaterThan(Engine.TensorAbs(flat), NumOps.FromDouble(_maxElementMagnitude)).Cast<int>().ToArray();
+
+            int firstBad = -1;
+            for (int i = 0; i < finite.Length; i++)
+            {
+                if (finite[i] == 0 || overLimit[i] == 1)
+                {
+                    firstBad = i;
+                    break;
+                }
+            }
+
+            if (firstBad >= 0)
+            {
+                int layer = 0;
+                int index = firstBad;
+                while (index >= layerTensors[layer].Length)
+                {
+                    index -= layerTensors[layer].Length;
+                    layer++;
+                }
+
+                if (finite[firstBad] == 0)
+                {
+                    return ProxyVerificationResult.Fail(
+                        $"NaN/Infinity detected in layer '{layerNames[layer]}' at index {index}.");
+                }
+
+                double magnitude = Math.Abs(NumOps.ToDouble(flat.GetFlat(firstBad)));
+                return ProxyVerificationResult.Fail(
+                    $"Element magnitude {magnitude:F4} exceeds limit {_maxElementMagnitude} in layer '{layerNames[layer]}'.");
+            }
+        }
+
+        double totalNorm2 = flat is null ? 0.0 : NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(flat)));
 
         // Check 3: L2 norm bound.
         double norm = Math.Sqrt(totalNorm2);
