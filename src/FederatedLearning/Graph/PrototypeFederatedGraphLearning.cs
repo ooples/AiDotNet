@@ -87,46 +87,49 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
 
         int numNodes = labels.Shape[0];
         var prototypes = new Dictionary<int, Tensor<T>>();
-        var classCounts = new Dictionary<int, int>();
-        var classSums = new Dictionary<int, double[]>();
-
-        // Accumulate embeddings per class
-        for (int n = 0; n < numNodes; n++)
+        if (numNodes == 0 || embeddingDim <= 0)
         {
-            int classId = (int)NumOps.ToDouble(labels[n]);
-
-            if (!classSums.ContainsKey(classId))
-            {
-                classSums[classId] = new double[embeddingDim];
-                classCounts[classId] = 0;
-            }
-
-            classCounts[classId]++;
-
-            for (int d = 0; d < embeddingDim; d++)
-            {
-                int idx = n * embeddingDim + d;
-                if (idx < nodeEmbeddings.Shape[0])
-                {
-                    classSums[classId][d] += NumOps.ToDouble(nodeEmbeddings[idx]);
-                }
-            }
+            return prototypes;
         }
 
-        // Compute mean prototype per class
-        foreach (var kvp in classSums)
+        // Class of every node; classes are numbered in order of first appearance.
+        var labelValues = labels.Reshape(new[] { labels.Length }).Cast<double>().ToArray();
+        var classSlot = new Dictionary<int, int>();
+        var classOrder = new List<int>();
+        var classCounts = new List<int>();
+        var nodeSlots = new int[numNodes];
+        for (int n = 0; n < numNodes; n++)
         {
-            int classId = kvp.Key;
-            double[] sum = kvp.Value;
-            int count = classCounts[classId];
-
-            var proto = new Tensor<T>(new[] { embeddingDim });
-            for (int d = 0; d < embeddingDim; d++)
+            int classId = (int)labelValues[n];
+            if (!classSlot.TryGetValue(classId, out int slot))
             {
-                proto[d] = NumOps.FromDouble(count > 0 ? sum[d] / count : 0);
+                slot = classOrder.Count;
+                classSlot[classId] = slot;
+                classOrder.Add(classId);
+                classCounts.Add(0);
             }
 
-            prototypes[classId] = proto;
+            classCounts[slot]++;
+            nodeSlots[n] = slot;
+        }
+
+        // Accumulate embeddings per class (entries past the end of the embedding tensor count as zero).
+        var embeddings = FitToLength(nodeEmbeddings, numNodes * embeddingDim).Reshape(new[] { numNodes, embeddingDim });
+        var classSums = Engine.TensorIndexAdd(
+            new Tensor<T>(new[] { classOrder.Count, embeddingDim }), 0, new Tensor<int>(nodeSlots, new[] { numNodes }), embeddings);
+
+        // Compute mean prototype per class
+        var counts = new double[classOrder.Count];
+        for (int s = 0; s < counts.Length; s++)
+        {
+            counts[s] = classCounts[s];
+        }
+
+        var means = Engine.TensorDivide(classSums, Engine.TensorBroadcastTo(
+            new Tensor<double>(counts, new[] { counts.Length, 1 }).Cast<T>(), new[] { counts.Length, embeddingDim }));
+        for (int s = 0; s < classOrder.Count; s++)
+        {
+            prototypes[classOrder[s]] = Engine.TensorSlice(means, new[] { s, 0 }, new[] { 1, embeddingDim }).Reshape(new[] { embeddingDim });
         }
 
         return prototypes;
@@ -147,30 +150,21 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
 
         for (int c = 0; c < _numClasses; c++)
         {
-            var sum = new double[_prototypeDim];
+            var sum = new Tensor<T>(new[] { _prototypeDim });
             int clientsWithClass = 0;
 
             foreach (var clientProtos in _clientPrototypes.Values)
             {
-                if (clientProtos.ContainsKey(c))
+                if (clientProtos.TryGetValue(c, out var proto))
                 {
-                    var proto = clientProtos[c];
                     clientsWithClass++;
-
-                    for (int d = 0; d < _prototypeDim && d < proto.Shape[0]; d++)
-                    {
-                        sum[d] += NumOps.ToDouble(proto[d]);
-                    }
+                    sum = Engine.TensorAdd(sum, FitToLength(proto, _prototypeDim));
                 }
             }
 
-            var globalProto = new Tensor<T>(new[] { _prototypeDim });
-            for (int d = 0; d < _prototypeDim; d++)
-            {
-                globalProto[d] = NumOps.FromDouble(clientsWithClass > 0 ? sum[d] / clientsWithClass : 0);
-            }
-
-            newGlobal[c] = globalProto;
+            newGlobal[c] = clientsWithClass > 0
+                ? Engine.TensorDivideScalar(sum, NumOps.FromDouble(clientsWithClass))
+                : sum;
         }
 
         _globalPrototypes = newGlobal;
@@ -194,41 +188,61 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
             int classId = kvp.Key;
             var localProto = kvp.Value;
 
-            if (_globalPrototypes.ContainsKey(classId))
+            if (_globalPrototypes.TryGetValue(classId, out var globalProto))
             {
-                var globalProto = _globalPrototypes[classId];
                 int dim = Math.Min(localProto.Shape[0], globalProto.Shape[0]);
-
-                // L2 distance between local and global prototype
-                double distSquared = 0;
-                for (int d = 0; d < dim; d++)
+                if (dim == 0)
                 {
-                    double diff = NumOps.ToDouble(localProto[d]) - NumOps.ToDouble(globalProto[d]);
-                    distSquared += diff * diff;
+                    continue;
                 }
 
-                loss += lambda * distSquared;
+                // L2 distance between local and global prototype, as max|diff|^2 * Σ (diff / max|diff|)^2 so the
+                // sum of squares cannot overflow narrow T.
+                var diff = Engine.TensorSubtract(FitToLength(localProto, dim), FitToLength(globalProto, dim));
+                T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(diff));
+                if (!NumOps.GreaterThan(maxAbs, NumOps.Zero))
+                {
+                    continue;
+                }
+
+                double scaledSumSq = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(Engine.TensorDivideScalar(diff, maxAbs))));
+                double maxValue = NumOps.ToDouble(maxAbs);
+                loss += lambda * maxValue * maxValue * scaledSumSq;
             }
         }
 
         return loss;
     }
 
+    /// <summary>
+    /// Copies the first <paramref name="length"/> entries of a flattened tensor, zero-padding short ones.
+    /// </summary>
+    private Tensor<T> FitToLength(Tensor<T> source, int length)
+    {
+        var flat = source.Reshape(new[] { source.Length });
+        int covered = Math.Min(length, source.Length);
+        if (covered == length)
+        {
+            return covered == source.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { length });
+        }
+
+        return Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { length - covered }) }, 0);
+    }
+
     private void InitializeGlobalPrototypes()
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        double scale = Math.Sqrt(2.0 / _prototypeDim);
 
         for (int c = 0; c < _numClasses; c++)
         {
-            var proto = new Tensor<T>(new[] { _prototypeDim });
-            double scale = Math.Sqrt(2.0 / _prototypeDim);
-
+            var values = new double[_prototypeDim];
             for (int d = 0; d < _prototypeDim; d++)
             {
-                proto[d] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
+                values[d] = (rng.NextDouble() * 2 - 1) * scale;
             }
 
-            _globalPrototypes[c] = proto;
+            _globalPrototypes[c] = new Tensor<double>(values, new[] { _prototypeDim }).Cast<T>();
         }
     }
 }
