@@ -127,6 +127,19 @@ internal sealed class LinearProgramStandardForm<T>
         bool treatMissingLowerBoundsAsUnbounded = false)
     {
         int originalVariableCount = program.VariableCount;
+        var engine = SolverTensorOps<T>.Engine;
+
+        // Classify every bound at once; the mapping loop below only reads plain arrays.
+        bool[] lowerFinite = FiniteFlags(program.LowerBounds, originalVariableCount, !treatMissingLowerBoundsAsUnbounded);
+        bool[] upperFinite = FiniteFlags(program.UpperBounds, originalVariableCount, whenMissing: false);
+        // A missing bound reads as zero, as it did per element before.
+        var zeros = Tensor<T>.CreateDefault(new[] { originalVariableCount }, NumOps.Zero);
+        var lowerTensor = program.LowerBounds is null ? zeros : SolverTensorOps<T>.AsTensor(program.LowerBounds);
+        var upperTensor = program.UpperBounds is null ? zeros : SolverTensorOps<T>.AsTensor(program.UpperBounds);
+        T[] lowers = lowerTensor.ToArray();
+        T[] uppers = upperTensor.ToArray();
+        T[] widths = engine.TensorSubtract(upperTensor, lowerTensor).ToArray();
+        T negativeOne = NumOps.Negate(NumOps.One);
 
         var mappings = new List<VariableMapping>(originalVariableCount);
         var upperBoundRows = new List<(int MappingIndex, T Limit)>();
@@ -134,25 +147,17 @@ internal sealed class LinearProgramStandardForm<T>
 
         for (int i = 0; i < originalVariableCount; i++)
         {
-            bool lowerIsFinite = program.LowerBounds is null
-                ? !treatMissingLowerBoundsAsUnbounded
-                : IsFinite(program.LowerBounds[i]);
-            bool upperIsFinite = program.UpperBounds is not null && IsFinite(program.UpperBounds[i]);
-            T lower = program.LowerBounds is null ? NumOps.Zero : program.LowerBounds[i];
-            T upper = program.UpperBounds is null ? NumOps.Zero : program.UpperBounds[i];
-
-            if (lowerIsFinite)
+            if (lowerFinite[i])
             {
-                mappings.Add(new VariableMapping(nextColumn++, -1, lower, NumOps.One));
-                if (upperIsFinite)
+                mappings.Add(new VariableMapping(nextColumn++, -1, lowers[i], NumOps.One));
+                if (upperFinite[i])
                 {
-                    upperBoundRows.Add((mappings.Count - 1, NumOps.Subtract(upper, lower)));
+                    upperBoundRows.Add((mappings.Count - 1, widths[i]));
                 }
             }
-            else if (upperIsFinite)
+            else if (upperFinite[i])
             {
-                mappings.Add(new VariableMapping(
-                    nextColumn++, -1, upper, NumOps.Negate(NumOps.One)));
+                mappings.Add(new VariableMapping(nextColumn++, -1, uppers[i], negativeOne));
             }
             else
             {
@@ -164,69 +169,74 @@ internal sealed class LinearProgramStandardForm<T>
         }
 
         int variableCount = nextColumn;
+        var layout = new MappingLayout(mappings, variableCount);
 
         int inequalityRowCount = program.InequalityMatrix?.Rows ?? 0;
         int equalityRowCount = program.EqualityMatrix?.Rows ?? 0;
         int constraintCount = inequalityRowCount + equalityRowCount + upperBoundRows.Count;
 
+        var rowBlocks = new List<Tensor<T>>(3);
+        var rightHandSideBlocks = new List<Tensor<T>>(3);
+        if (inequalityRowCount > 0)
+        {
+            var matrix = SolverTensorOps<T>.AsTensor(program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required."));
+            var bounds = SolverTensorOps<T>.AsTensor(program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."));
+            rowBlocks.Add(layout.ToStandardColumns(matrix));
+            rightHandSideBlocks.Add(engine.TensorSubtract(bounds, SolverTensorOps<T>.MatVec(matrix, layout.Offsets)));
+        }
+
+        if (equalityRowCount > 0)
+        {
+            var matrix = SolverTensorOps<T>.AsTensor(program.EqualityMatrix ?? throw new InvalidOperationException("program.EqualityMatrix is null where it is required."));
+            var bounds = SolverTensorOps<T>.AsTensor(program.EqualityBounds ?? throw new InvalidOperationException("program.EqualityBounds is null where it is required."));
+            rowBlocks.Add(layout.ToStandardColumns(matrix));
+            rightHandSideBlocks.Add(engine.TensorSubtract(bounds, SolverTensorOps<T>.MatVec(matrix, layout.Offsets)));
+        }
+
+        if (upperBoundRows.Count > 0)
+        {
+            var columns = new int[upperBoundRows.Count];
+            var limits = new T[upperBoundRows.Count];
+            for (int k = 0; k < columns.Length; k++)
+            {
+                columns[k] = mappings[upperBoundRows[k].MappingIndex].PrimaryColumn;
+                limits[k] = upperBoundRows[k].Limit;
+            }
+
+            rowBlocks.Add(engine.TensorIndexSelect(
+                engine.TensorEye<T>(variableCount), new Tensor<int>(new[] { columns.Length }, new Vector<int>(columns)), 0));
+            rightHandSideBlocks.Add(new Tensor<T>(new[] { limits.Length }, new Vector<T>(limits)));
+        }
+
         var rows = new List<Vector<T>>(constraintCount);
         var rightHandSides = new List<T>(constraintCount);
         var isEquality = new List<bool>(constraintCount);
-
-        for (int r = 0; r < inequalityRowCount; r++)
-        {
-            var (row, shift) = ProjectRow((program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required.")), r, mappings, variableCount);
-            rows.Add(row);
-            rightHandSides.Add(NumOps.Subtract((program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."))[r], shift));
-            isEquality.Add(false);
-        }
-
-        for (int r = 0; r < equalityRowCount; r++)
-        {
-            var (row, shift) = ProjectRow((program.EqualityMatrix ?? throw new InvalidOperationException("program.EqualityMatrix is null where it is required.")), r, mappings, variableCount);
-            rows.Add(row);
-            rightHandSides.Add(NumOps.Subtract((program.EqualityBounds ?? throw new InvalidOperationException("program.EqualityBounds is null where it is required."))[r], shift));
-            isEquality.Add(true);
-        }
-
-        foreach (var (mappingIndex, limit) in upperBoundRows)
-        {
-            var row = new Vector<T>(variableCount);
-            row[mappings[mappingIndex].PrimaryColumn] = NumOps.One;
-            rows.Add(row);
-            rightHandSides.Add(limit);
-            isEquality.Add(false);
-        }
-
         var rowWasNegated = new bool[constraintCount];
-        for (int r = 0; r < constraintCount; r++)
+        for (int r = 0; r < inequalityRowCount; r++) isEquality.Add(false);
+        for (int r = 0; r < equalityRowCount; r++) isEquality.Add(true);
+        for (int r = 0; r < upperBoundRows.Count; r++) isEquality.Add(false);
+
+        if (constraintCount > 0)
         {
-            if (NumOps.LessThan(rightHandSides[r], NumOps.Zero))
-            {
-                rows[r] = Negate(rows[r]);
-                rightHandSides[r] = NumOps.Negate(rightHandSides[r]);
-                rowWasNegated[r] = true;
-            }
+            var allRows = rowBlocks.Count == 1 ? rowBlocks[0] : engine.TensorConcatenate(rowBlocks.ToArray(), 0);
+            var allRightHandSides = rightHandSideBlocks.Count == 1
+                ? rightHandSideBlocks[0]
+                : engine.TensorConcatenate(rightHandSideBlocks.ToArray(), 0);
+
+            // A negative right-hand side flips its whole row so every b stays non-negative.
+            var negative = engine.TensorLessThan(allRightHandSides, NumOps.Zero);
+            var rowMask = engine.TensorBroadcastTo(engine.Reshape(negative, new[] { constraintCount, 1 }), new[] { constraintCount, variableCount });
+            allRows = engine.TensorWhere(rowMask, engine.TensorNegate(allRows), allRows);
+            allRightHandSides = engine.TensorWhere(negative, engine.TensorNegate(allRightHandSides), allRightHandSides);
+            foreach (int r in engine.TensorNonzero(negative).ToArray()) rowWasNegated[r] = true;
+
+            for (int r = 0; r < constraintCount; r++) rows.Add(engine.TensorSliceAxis(allRows, 0, r).ToVector());
+            rightHandSides.AddRange(allRightHandSides.ToArray());
         }
 
-        var objective = new Vector<T>(variableCount);
-        T objectiveOffset = NumOps.Zero;
-        for (int i = 0; i < originalVariableCount; i++)
-        {
-            T coefficient = program.Objective[i];
-            var mapping = mappings[i];
-
-            objectiveOffset = NumOps.Add(objectiveOffset, NumOps.Multiply(coefficient, mapping.Offset));
-            objective[mapping.PrimaryColumn] = NumOps.Add(
-                objective[mapping.PrimaryColumn], NumOps.Multiply(coefficient, mapping.Scale));
-
-            if (mapping.NegativePartColumn >= 0)
-            {
-                objective[mapping.NegativePartColumn] = NumOps.Subtract(
-                    objective[mapping.NegativePartColumn],
-                    NumOps.Multiply(coefficient, mapping.Scale));
-            }
-        }
+        var coefficients = engine.Reshape(SolverTensorOps<T>.AsTensor(program.Objective), new[] { 1, originalVariableCount });
+        var objective = engine.Reshape(layout.ToStandardColumns(coefficients), new[] { variableCount }).ToVector();
+        T objectiveOffset = engine.TensorSum(engine.TensorMultiply(SolverTensorOps<T>.AsTensor(program.Objective), layout.Offsets));
 
         return new LinearProgramStandardForm<T>(
             rows, rightHandSides, isEquality, rowWasNegated, objective, objectiveOffset,
@@ -238,21 +248,10 @@ internal sealed class LinearProgramStandardForm<T>
     /// </summary>
     public Vector<T> RecoverOriginalVariables(Vector<T> standardValues)
     {
-        var solution = new Vector<T>(OriginalVariableCount);
-        for (int i = 0; i < OriginalVariableCount; i++)
-        {
-            var mapping = _mappings[i];
-            T value = standardValues[mapping.PrimaryColumn];
-
-            if (mapping.NegativePartColumn >= 0)
-            {
-                value = NumOps.Subtract(value, standardValues[mapping.NegativePartColumn]);
-            }
-
-            solution[i] = NumOps.Add(mapping.Offset, NumOps.Multiply(mapping.Scale, value));
-        }
-
-        return solution;
+        var engine = SolverTensorOps<T>.Engine;
+        var layout = new MappingLayout(_mappings, VariableCount);
+        var value = layout.FromStandard(SolverTensorOps<T>.AsTensor(standardValues));
+        return engine.TensorAdd(layout.Offsets, engine.TensorMultiply(layout.Scales, value)).ToVector();
     }
 
     /// <summary>
@@ -275,129 +274,131 @@ internal sealed class LinearProgramStandardForm<T>
     public (Matrix<T> Projected, Vector<T> LinearCorrection, T Constant) ProjectQuadratic(
         Matrix<T> quadratic)
     {
+        var engine = SolverTensorOps<T>.Engine;
+        var layout = new MappingLayout(_mappings, VariableCount);
+        var q = SolverTensorOps<T>.AsTensor(quadratic);
+
         // qu[i] = (Q u)_i, over the caller's variables.
-        var quadraticTimesOffset = new Vector<T>(OriginalVariableCount);
-        for (int i = 0; i < OriginalVariableCount; i++)
-        {
-            T accumulator = NumOps.Zero;
-            for (int j = 0; j < OriginalVariableCount; j++)
-            {
-                accumulator = NumOps.Add(
-                    accumulator, NumOps.Multiply(quadratic[i, j], _mappings[j].Offset));
-            }
+        var quadraticTimesOffset = SolverTensorOps<T>.MatVec(q, layout.Offsets);
 
-            quadraticTimesOffset[i] = accumulator;
-        }
-
-        T constant = NumOps.Zero;
-        for (int i = 0; i < OriginalVariableCount; i++)
-        {
-            constant = NumOps.Add(
-                constant, NumOps.Multiply(_mappings[i].Offset, quadraticTimesOffset[i]));
-        }
-
+        T constant = engine.TensorSum(engine.TensorMultiply(layout.Offsets, quadraticTimesOffset));
         constant = NumOps.Divide(constant, NumOps.FromDouble(2.0));
 
-        var linearCorrection = new Vector<T>(VariableCount);
-        var projected = new Matrix<T>(VariableCount, VariableCount);
+        var linearCorrection = engine.Reshape(
+            layout.ToStandardColumns(engine.Reshape(quadraticTimesOffset, new[] { 1, OriginalVariableCount })),
+            new[] { VariableCount }).ToVector();
 
-        for (int i = 0; i < OriginalVariableCount; i++)
-        {
-            var rowMapping = _mappings[i];
-            ScatterScaled(linearCorrection, rowMapping, quadraticTimesOffset[i]);
+        // Every (i, j) pair lands on its own standard-form cells, so mapping the columns and then the rows
+        // places entry * scaleRow * scaleColumn exactly where the per-entry scatter did (scales are +-1).
+        var columnsMapped = layout.ToStandardColumns(q);
+        var projected = engine.TensorTranspose(layout.ToStandardColumns(engine.TensorTranspose(columnsMapped)).Contiguous());
 
-            for (int j = 0; j < OriginalVariableCount; j++)
-            {
-                T entry = quadratic[i, j];
-                var columnMapping = _mappings[j];
-                AccumulateOuter(projected, rowMapping, columnMapping, entry);
-            }
-        }
-
-        return (projected, linearCorrection, constant);
+        return (projected.Contiguous().ToMatrix(), linearCorrection, constant);
     }
 
     /// <summary>
-    /// Adds <paramref name="value"/> scaled by one variable's mapping into <paramref name="target"/>.
+    /// The variable map <c>x = u + Mz</c> as index tensors: each original variable's primary column, and for a
+    /// free variable the column of its negative part.
     /// </summary>
-    private static void ScatterScaled(Vector<T> target, VariableMapping mapping, T value)
+    private sealed class MappingLayout
     {
-        T scaled = NumOps.Multiply(mapping.Scale, value);
-        target[mapping.PrimaryColumn] = NumOps.Add(target[mapping.PrimaryColumn], scaled);
+        private readonly Tensor<int> _primary;
+        private readonly Tensor<int>? _negativeSource;
+        private readonly Tensor<int>? _negativeColumn;
+        private readonly int _variableCount;
 
-        if (mapping.NegativePartColumn >= 0)
+        public MappingLayout(List<VariableMapping> mappings, int variableCount)
         {
-            target[mapping.NegativePartColumn] =
-                NumOps.Subtract(target[mapping.NegativePartColumn], scaled);
-        }
-    }
-
-    /// <summary>
-    /// Adds <c>entry · scaleRow · scaleColumn</c> into every standard-form cell the pair of original
-    /// variables maps onto, negating the entries that belong to a free variable's negative part.
-    /// </summary>
-    private static void AccumulateOuter(
-        Matrix<T> target, VariableMapping row, VariableMapping column, T entry)
-    {
-        T scaled = NumOps.Multiply(entry, NumOps.Multiply(row.Scale, column.Scale));
-
-        target[row.PrimaryColumn, column.PrimaryColumn] =
-            NumOps.Add(target[row.PrimaryColumn, column.PrimaryColumn], scaled);
-
-        if (column.NegativePartColumn >= 0)
-        {
-            target[row.PrimaryColumn, column.NegativePartColumn] =
-                NumOps.Subtract(target[row.PrimaryColumn, column.NegativePartColumn], scaled);
-        }
-
-        if (row.NegativePartColumn >= 0)
-        {
-            target[row.NegativePartColumn, column.PrimaryColumn] =
-                NumOps.Subtract(target[row.NegativePartColumn, column.PrimaryColumn], scaled);
-
-            if (column.NegativePartColumn >= 0)
+            _variableCount = variableCount;
+            var primary = new int[mappings.Count];
+            var offsets = new T[mappings.Count];
+            var scales = new T[mappings.Count];
+            var negativeSource = new List<int>();
+            var negativeColumn = new List<int>();
+            for (int i = 0; i < mappings.Count; i++)
             {
-                target[row.NegativePartColumn, column.NegativePartColumn] =
-                    NumOps.Add(target[row.NegativePartColumn, column.NegativePartColumn], scaled);
+                var mapping = mappings[i];
+                primary[i] = mapping.PrimaryColumn;
+                offsets[i] = mapping.Offset;
+                scales[i] = mapping.Scale;
+                if (mapping.NegativePartColumn >= 0)
+                {
+                    negativeSource.Add(i);
+                    negativeColumn.Add(mapping.NegativePartColumn);
+                }
             }
-        }
-    }
 
-    private static (Vector<T> Row, T Shift) ProjectRow(
-        Matrix<T> matrix, int rowIndex, List<VariableMapping> mappings, int variableCount)
-    {
-        var row = new Vector<T>(variableCount);
-        T shift = NumOps.Zero;
-
-        for (int i = 0; i < mappings.Count; i++)
-        {
-            T coefficient = matrix[rowIndex, i];
-            var mapping = mappings[i];
-
-            shift = NumOps.Add(shift, NumOps.Multiply(coefficient, mapping.Offset));
-            row[mapping.PrimaryColumn] = NumOps.Add(
-                row[mapping.PrimaryColumn], NumOps.Multiply(coefficient, mapping.Scale));
-
-            if (mapping.NegativePartColumn >= 0)
+            _primary = new Tensor<int>(new[] { primary.Length }, new Vector<int>(primary));
+            Offsets = new Tensor<T>(new[] { offsets.Length }, new Vector<T>(offsets));
+            Scales = new Tensor<T>(new[] { scales.Length }, new Vector<T>(scales));
+            if (negativeSource.Count > 0)
             {
-                row[mapping.NegativePartColumn] = NumOps.Subtract(
-                    row[mapping.NegativePartColumn], NumOps.Multiply(coefficient, mapping.Scale));
+                _negativeSource = new Tensor<int>(new[] { negativeSource.Count }, new Vector<int>(negativeSource.ToArray()));
+                _negativeColumn = new Tensor<int>(new[] { negativeColumn.Count }, new Vector<int>(negativeColumn.ToArray()));
             }
         }
 
-        return (row, shift);
+        /// <summary>The offsets <c>u</c>, one per original variable.</summary>
+        public Tensor<T> Offsets { get; }
+
+        /// <summary>The scales (+1 or -1), one per original variable.</summary>
+        public Tensor<T> Scales { get; }
+
+        /// <summary>
+        /// Rewrites the columns of <paramref name="x"/> ([rows, original]) over the standard-form variables:
+        /// <c>x[:, i] * scale_i</c> into the primary column and its negation into the negative-part column.
+        /// </summary>
+        public Tensor<T> ToStandardColumns(Tensor<T> x)
+        {
+            var engine = SolverTensorOps<T>.Engine;
+            int rows = x.Shape[0];
+            var scaled = engine.TensorMultiply(x, engine.Reshape(Scales, new[] { 1, Scales.Length }));
+            var result = engine.TensorIndexAdd(
+                Tensor<T>.CreateDefault(new[] { rows, _variableCount }, NumOps.Zero), 1, _primary, scaled);
+            if (_negativeSource is not null && _negativeColumn is not null)
+            {
+                result = engine.TensorIndexAdd(
+                    result, 1, _negativeColumn, engine.TensorNegate(engine.TensorIndexSelect(scaled, _negativeSource, 1)));
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// The mapped value of each original variable from a standard-form point: its primary column, minus its
+        /// negative-part column for a free variable.
+        /// </summary>
+        public Tensor<T> FromStandard(Tensor<T> standardValues)
+        {
+            var engine = SolverTensorOps<T>.Engine;
+            var value = engine.TensorTake(standardValues, _primary);
+            if (_negativeSource is not null && _negativeColumn is not null)
+            {
+                value = engine.TensorIndexAdd(
+                    value, 0, _negativeSource, engine.TensorNegate(engine.TensorTake(standardValues, _negativeColumn)));
+            }
+
+            return value;
+        }
     }
 
-    private static Vector<T> Negate(Vector<T> vector)
+    private static bool[] FiniteFlags(Vector<T>? bounds, int count, bool whenMissing)
     {
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++) result[i] = NumOps.Negate(vector[i]);
-        return result;
-    }
+        var flags = new bool[count];
+        if (bounds is null)
+        {
+            if (whenMissing)
+            {
+                for (int i = 0; i < count; i++) flags[i] = true;
+            }
 
-    private static bool IsFinite(T value)
-    {
-        double asDouble = NumOps.ToDouble(value);
-        return !double.IsInfinity(asDouble) && !double.IsNaN(asDouble);
+            return flags;
+        }
+
+        for (int i = 0; i < count; i++) flags[i] = true;
+        if (count == 0) return flags;
+        var nonFinite = SolverTensorOps<T>.NonFinite(SolverTensorOps<T>.AsTensor(bounds));
+        foreach (int i in SolverTensorOps<T>.Engine.TensorNonzero(nonFinite).ToArray()) flags[i] = false;
+        return flags;
     }
 }
