@@ -282,7 +282,7 @@ public partial class MARS5TTS<T> : TtsModelBase<T>
     protected override Tensor<T> PreprocessText(string text)
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
-        return Wave(TextTokens(text.Trim()).Select(t => (double)t).ToArray());
+        return IdTensor(TextTokens(text.Trim()));
     }
 
     /// <inheritdoc />
@@ -310,10 +310,10 @@ public partial class MARS5TTS<T> : TtsModelBase<T>
         if (!HasPaperLayers) return base.PredictCore(input);
         int vocabulary = TextTokenizer.VocabSize;
         var tokens = new List<int>();
-        for (int i = 0; i < input.Length; i++)
+        foreach (int id in RoundedIds(input))
         {
-            int id = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
-            if (id < 0 || id >= vocabulary) throw new ArgumentOutOfRangeException(nameof(input), $"Text tokens lie in [0, {vocabulary}).");
+            if (id < 0
+ || id >= vocabulary) throw new ArgumentOutOfRangeException(nameof(input), $"Text tokens lie in [0, {vocabulary}).");
             tokens.Add(id);
         }
         if (tokens.Count == 0) throw new ArgumentException("There are no text tokens.", nameof(input));
