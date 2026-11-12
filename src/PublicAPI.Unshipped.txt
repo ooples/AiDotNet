@@ -22565,3 +22565,11 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*virtual AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ComputeAccuracy(TOutput predictions, TOutput labels) -> double
+virtual AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ComputeAccuracy(TOutput predictions, TOutput labels) -> T
+AiDotNet.MetaLearning.Options.ReptileOptions<T, TInput, TOutput>.FinalOuterLearningRate.get -> double?
+AiDotNet.MetaLearning.Options.ReptileOptions<T, TInput, TOutput>.FinalOuterLearningRate.set -> void
+*REMOVED*static AiDotNet.MetaLearning.Data.TaskDifficultyEstimator<T>.EstimateDifficulty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportX, AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportY, int numWays, int numShots) -> double
+*REMOVED*static AiDotNet.MetaLearning.Data.TaskDifficultyEstimator<T>.EstimateFisherDifficulty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportX, AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportY, int numWays) -> double
+static AiDotNet.MetaLearning.Data.TaskDifficultyEstimator<T>.EstimateDifficulty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportX, AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportY, int numWays, int numShots) -> T
+static AiDotNet.MetaLearning.Data.TaskDifficultyEstimator<T>.EstimateFisherDifficulty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportX, AiDotNet.Tensors.LinearAlgebra.Vector<T>! supportY, int numWays) -> T
