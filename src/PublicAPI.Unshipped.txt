@@ -22958,3 +22958,15 @@ AiDotNet.FederatedLearning.Compression.GradientSketchCompressor<T>.DecompressTop
 AiDotNet.FederatedLearning.Personalization.FedCPPersonalization<T>.CombineExpertOutputs(T[]![]! expertOutputs, T[]! routingWeights) -> T[]!
 *REMOVED*AiDotNet.FederatedLearning.Personalization.FedCPPersonalization<T>.ComputeRoutingWeights(T[]! policyLogits) -> double[]!
 AiDotNet.FederatedLearning.Personalization.FedCPPersonalization<T>.ComputeRoutingWeights(T[]! policyLogits) -> T[]!
+*REMOVED*AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.KNNPersonalization(int k = 5, double lambda = 0.5) -> void
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.KNNPersonalization(int k = 5, double lambda = 0.5, double temperature = 1, AiDotNet.Enums.DistanceMetricType distanceMetric = AiDotNet.Enums.DistanceMetricType.Euclidean) -> void
+*REMOVED*AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.KNNPredict(T[]! queryFeatures, int numClasses) -> double[]!
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.KNNPredict(T[]! queryFeatures, int numClasses) -> T[]!
+*REMOVED*AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.CombinedPredict(T[]! queryFeatures, double[]! globalPrediction, int numClasses) -> double[]!
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.CombinedPredict(T[]! queryFeatures, T[]! globalPrediction, int numClasses) -> T[]!
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.Temperature.get -> double
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.DistanceMetric.get -> AiDotNet.Enums.DistanceMetricType
+*REMOVED*AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeGradientSimilarity(T[]! gradA, T[]! gradB) -> double
+AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeGradientSimilarity(T[]! gradA, T[]! gradB) -> T
+*REMOVED*AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeAdaptiveWeights(T[]! targetGradient, System.Collections.Generic.Dictionary<int, T[]!>! clientGradients, System.Collections.Generic.Dictionary<int, double>? previousWeights = null) -> System.Collections.Generic.Dictionary<int, double>!
+AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeAdaptiveWeights(T[]! targetGradient, System.Collections.Generic.Dictionary<int, T[]!>! clientGradients, System.Collections.Generic.Dictionary<int, T>? previousWeights = null) -> System.Collections.Generic.Dictionary<int, T>!
