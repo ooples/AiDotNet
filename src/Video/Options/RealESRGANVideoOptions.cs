@@ -1,30 +1,24 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for Real-ESRGAN extended to video with temporal consistency.
+/// Configuration options for Real-ESRGAN applied to video, frame by frame.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Real-ESRGAN Video (Wang et al., 2022) extends the image-based Real-ESRGAN to video:
-/// - RRDB backbone: Residual-in-Residual Dense Blocks (RRDBs) from ESRGAN provide the
-///   per-frame feature extraction with strong representational capacity
-/// - Second-order degradation model: simulates realistic degradations by applying
-///   blur-resize-noise-JPEG twice in sequence, covering a wider range of real-world artifacts
-/// - Temporal consistency module: flow-guided feature alignment between adjacent frames
-///   with a temporal aggregation layer that fuses aligned features
-/// - U-Net discriminator: a U-Net-based discriminator provides both global and local
-///   adversarial feedback for high-quality perceptual results
+/// Defaults follow Wang et al. 2021 and the authors' release (xinntao/Real-ESRGAN, RealESRGAN_x4plus,
+/// options/train_realesrgan_x4plus.yml, and inference_realesrgan_video.py, which upscales each frame independently):
+/// an RRDBNet generator with 64 features, 23 residual-in-residual dense blocks and growth 32 at x4, a spectrally
+/// normalized U-Net discriminator with 64 channels, an L1 loss, a VGG19 perceptual loss and a vanilla GAN loss weighted
+/// 0.1, the L1 and perceptual losses against the unsharp-masked target, both networks trained with Adam (0.9, 0.99) at
+/// 1e-4, and a 0.999 moving average of the generator for inference.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Real-ESRGAN is one of the most popular practical upscaling tools.
-/// The video version adds temporal awareness so that when you upscale a video, each frame
-/// looks consistent with its neighbors (no flickering). It uses a realistic degradation
-/// model during training, so it handles real-world issues like compression artifacts,
-/// noise, and blur that lab models struggle with.
+/// <b>For Beginners:</b> Real-ESRGAN is one of the most popular practical upscaling tools. It is trained on
+/// images degraded the way real photos and videos are (blur, noise, resizing, compression), so it cleans those
+/// artifacts while it upscales. For video it simply upscales every frame.
 /// </para>
 /// </remarks>
 public class RealESRGANVideoOptions : NeuralNetworkOptions
@@ -41,52 +35,43 @@ public class RealESRGANVideoOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public RealESRGANVideoOptions(RealESRGANVideoOptions other)
+    public RealESRGANVideoOptions(RealESRGANVideoOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
+        Seed = other.Seed;
         NumFeatures = other.NumFeatures;
         NumRRDBBlocks = other.NumRRDBBlocks;
-        ScaleFactor = other.ScaleFactor;
-        DenseLayersPerBlock = other.DenseLayersPerBlock;
-        ResidualScale = other.ResidualScale;
-        PerceptualWeight = other.PerceptualWeight;
-        GANWeight = other.GANWeight;
+        GrowthChannels = other.GrowthChannels;
+        DiscriminatorChannels = other.DiscriminatorChannels;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
+        DiscriminatorLearningRate = other.DiscriminatorLearningRate;
+        PixelLossWeight = other.PixelLossWeight;
+        PerceptualWeight = other.PerceptualWeight;
+        GANWeight = other.GANWeight;
+        SharpenTarget = other.SharpenTarget;
+        UnsharpWeight = other.UnsharpWeight;
+        UnsharpKernelSize = other.UnsharpKernelSize;
+        UnsharpThreshold = other.UnsharpThreshold;
+        EmaMomentum = other.EmaMomentum;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
-
-    /// <summary>Gets or sets the number of feature channels.</summary>
+    /// <summary>Gets or sets the generator's feature channels (64).</summary>
     public int NumFeatures { get; set; } = 64;
 
-    /// <summary>Gets or sets the number of RRDB (Residual-in-Residual Dense Block) blocks.</summary>
-    /// <remarks>The RealESRGAN-x4plus model uses 23 RRDBs.</remarks>
+    /// <summary>Gets or sets the residual-in-residual dense blocks (23).</summary>
     public int NumRRDBBlocks { get; set; } = 23;
 
-    /// <summary>Gets or sets the spatial upscaling factor.</summary>
-    public int ScaleFactor { get; set; } = 4;
+    /// <summary>Gets or sets the dense blocks' growth channels (32).</summary>
+    public int GrowthChannels { get; set; } = 32;
 
-    /// <summary>Gets or sets the number of dense layers per RRDB.</summary>
-    public int DenseLayersPerBlock { get; set; } = 5;
-
-    /// <summary>Gets or sets the residual scaling factor for RRDB stability.</summary>
-    /// <remarks>Scales the residual connection in each RRDB to prevent training instability.</remarks>
-    public double ResidualScale { get; set; } = 0.2;
-
-    /// <summary>Gets or sets the weight for perceptual (LPIPS) loss.</summary>
-    public double PerceptualWeight { get; set; } = 1.0;
-
-    /// <summary>Gets or sets the weight for GAN adversarial loss.</summary>
-    public double GANWeight { get; set; } = 0.1;
+    /// <summary>Gets or sets the U-Net discriminator's base channels (64).</summary>
+    public int DiscriminatorChannels { get; set; } = 64;
 
     #endregion
 
@@ -102,11 +87,41 @@ public class RealESRGANVideoOptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
+    /// <summary>Gets or sets the generator's Adam learning rate (1e-4).</summary>
     public double LearningRate { get; set; } = 1e-4;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
+    /// <summary>Gets or sets the discriminator's Adam learning rate (1e-4).</summary>
+    public double DiscriminatorLearningRate { get; set; } = 1e-4;
+
+    /// <summary>Gets or sets the weight of the L1 loss (1.0).</summary>
+    public double PixelLossWeight { get; set; } = 1.0;
+
+    /// <summary>Gets or sets the weight of the VGG19 perceptual loss (1.0); zero omits the VGG19 from the model.</summary>
+    public double PerceptualWeight { get; set; } = 1.0;
+
+    /// <summary>Gets or sets the weight of the generator's adversarial loss (0.1).</summary>
+    public double GANWeight { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets whether the L1 and perceptual losses score the unsharp-masked target (true, l1_gt_usm and
+    /// percep_gt_usm); the discriminator always sees the unsharpened target.
+    /// </summary>
+    public bool SharpenTarget { get; set; } = true;
+
+    /// <summary>Gets or sets the unsharp-masking weight (0.5).</summary>
+    public double UnsharpWeight { get; set; } = 0.5;
+
+    /// <summary>Gets or sets the unsharp-masking Gaussian size (51).</summary>
+    public int UnsharpKernelSize { get; set; } = 51;
+
+    /// <summary>Gets or sets the unsharp-masking residue threshold in pixel levels (10).</summary>
+    public double UnsharpThreshold { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the momentum of the generator's moving average used for inference (0.001, ema_decay 0.999); null
+    /// disables it and inference uses the trained weights.
+    /// </summary>
+    public double? EmaMomentum { get; set; } = 0.001;
 
     #endregion
 }

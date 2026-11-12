@@ -24,6 +24,8 @@ public class HideAndSeek<T> : ImageAugmenterBase<T>
         int patchH = Math.Max(1, data.Height / GridSize);
         int patchW = Math.Max(1, data.Width / GridSize);
 
+        var image = data.ToPlanarTensor();
+        T fill = NumOps.FromDouble(FillValue);
         for (int gy = 0; gy < GridSize; gy++)
         {
             for (int gx = 0; gx < GridSize; gx++)
@@ -35,13 +37,14 @@ public class HideAndSeek<T> : ImageAugmenterBase<T>
                 int endY = Math.Min(startY + patchH, data.Height);
                 int endX = Math.Min(startX + patchW, data.Width);
 
-                for (int y = startY; y < endY; y++)
-                    for (int x = startX; x < endX; x++)
-                        for (int c = 0; c < data.Channels; c++)
-                            result.SetPixel(y, x, c, NumOps.FromDouble(FillValue));
+                if (endY > startY && endX > startX)
+                {
+                    image = ImageTensor<T>.FillRect(image, startY, startX, endY - startY, endX - startX, fill);
+                }
             }
         }
 
+        result.SetFromPlanarTensor(image);
         return result;
     }
 

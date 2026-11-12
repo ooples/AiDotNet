@@ -16,29 +16,30 @@ namespace AiDotNet.Tests.UnitTests.SpeechRecognition;
 /// That paper is a COMPARISON — "we explored both CTC and LAS systems" — whose conclusion is that
 /// "the LAS was more resilient to noisy data and CTC required more data clean up". A CTC-only class
 /// cannot express that finding, because the finding IS the difference between the two arms. These
-/// tests pin both arms and the pyramidal reduction that makes the LAS arm what it is.
+/// tests pin both arms and the input both read: 80 filterbanks stacked three frames at a time with a
+/// stride of three (section 4). The earlier revision's "pyramidal" averaging of encoder outputs is not
+/// in the paper, whose only time reduction is that stacking.
 /// </remarks>
 public class MedicalASRMechanismTests
 {
     private static NeuralNetworkArchitecture<double> Arch() =>
         new(inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.MultiClassClassification,
-            inputSize: 64, outputSize: 32);
+            taskType: NeuralNetworkTaskType.SequenceToSequence,
+            inputSize: 3200, outputSize: 24);
 
     private static MedicalASROptions Small(Action<MedicalASROptions>? tweak = null)
     {
         var o = new MedicalASROptions
         {
-            EncoderDim = 16,
+            EncoderDim = 8,
             NumEncoderLayers = 1,
             NumAttentionHeads = 2,
             NumMels = 8,
             VocabSize = 24,
-            DecoderDim = 16,
+            DecoderDim = 8,
             NumDecoderLayers = 1,
-            PyramidalReductions = 2,
-            MaxTextLength = 16,
-            DropoutRate = 0.0,
+            MaxTextLength = 6,
+            Seed = 3,
         };
         tweak?.Invoke(o);
         return o;
@@ -47,12 +48,11 @@ public class MedicalASRMechanismTests
     private static MedicalASR<double> Model(Action<MedicalASROptions>? tweak = null)
         => new(Arch(), Small(tweak));
 
-    // 32 frames by default: the listener's convolution subsampling reduces them to 7 before the pyramid.
-    private static Tensor<double> Features(int frames = 32, int width = 8, int seed = 4)
+    private static Tensor<double> Audio(int samples = 3200, int seed = 4)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
-        var t = new Tensor<double>([frames, width]);
-        for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() - 0.5;
+        var t = new Tensor<double>([samples]);
+        for (int i = 0; i < t.Length; i++) t[i] = 0.3 * Math.Sin(2 * Math.PI * 220 * i / 16000.0) + 0.05 * (rng.NextDouble() - 0.5);
         return t;
     }
 
@@ -71,46 +71,40 @@ public class MedicalASRMechanismTests
     }
 
     [Fact]
-    public void LasListensPyramidally_HalvingTheSequencePerReduction()
+    public void InputStacksThreeFramesWithAStrideOfThree()
     {
-        // Without the reduction the speller would attend over every acoustic frame of a
-        // consultation. This is the part that distinguishes a "listener" from an ordinary encoder.
-        var model = Model(o => o.PyramidalReductions = 2);
-        Assert.Equal(4, model.TimeReductionFactor);
+        // "As input to the model we stack 3 such frames and take a stride of 3, i.e., input is 240
+        // filterbanks every 30 ms."
+        var model = Model();
+        var network = model.Network ?? throw new InvalidOperationException("native model");
+        Assert.Equal(3, model.TimeReductionFactor);
+        var features = network.Features(Audio());
+        // 0.2 s is 21 frames of 10 ms: ceil(21 / 3) = 7 steps of 3 x 8 values.
+        Assert.Equal(new[] { 7, 24 }, features.Shape.ToArray());
 
-        var encoded = Features(frames: 8, width: 16);
-        var reduced = model.PyramidalReduce(encoded);
-
-        Assert.Equal(2, reduced.Shape[0]);    // 8 -> 4 -> 2
-        Assert.Equal(16, reduced.Shape[1]);   // width unchanged, so it can reduce repeatedly
+        var unstacked = new MedicalASR<double>(Arch(), Small(o => o.StackedFrames = 1)).Network
+            ?? throw new InvalidOperationException("native model");
+        var frames = unstacked.Features(Audio());
+        Assert.Equal(new[] { 21, 8 }, frames.Shape.ToArray());
+        // Step 2 holds frames 6, 7 and 8 side by side.
+        for (int k = 0; k < 3; k++)
+            for (int b = 0; b < 8; b++)
+                Assert.Equal(frames[6 + k, b], features[2, k * 8 + b], 9);
     }
 
     [Fact]
-    public void ReductionAveragesAdjacentFrames()
+    public void TheEncoderIsBidirectional()
     {
-        var model = Model(o => o.PyramidalReductions = 1);
-        var input = new Tensor<double>([4, 2]);
-        double[] values = [0, 10, 2, 12, 4, 14, 6, 16];
-        for (int i = 0; i < values.Length; i++) input[i] = values[i];
-
-        var reduced = model.PyramidalReduce(input);
-
-        Assert.Equal(2, reduced.Shape[0]);
-        Assert.Equal(1.0, reduced[0, 0], 12);    // mean(0, 2)
-        Assert.Equal(11.0, reduced[0, 1], 12);   // mean(10, 12)
-        Assert.Equal(5.0, reduced[1, 0], 12);    // mean(4, 6)
-        Assert.Equal(15.0, reduced[1, 1], 12);   // mean(14, 16)
-    }
-
-    [Fact]
-    public void CtcArmKeepsFullTimeResolution()
-    {
-        // CTC is frame-synchronous: reducing the time axis would destroy the alignment it depends on.
-        var model = Model(o => { o.DecoderType = MedicalAsrDecoderType.Ctc; o.PyramidalReductions = 3; });
-
-        Assert.Equal(1, model.TimeReductionFactor);
-        var encoded = Features(frames: 8, width: 16);
-        Assert.Equal(8, model.PyramidalReduce(encoded).Shape[0]);
+        var model = Model();
+        var network = model.Network ?? throw new InvalidOperationException("native model");
+        var features = network.Features(Audio());
+        var encoded = network.Encode(features);
+        Assert.Equal(new[] { 7, 16 }, encoded.Shape.ToArray());
+        // The first step's encoding depends on the last step's input.
+        var changed = features.Clone();
+        for (int b = 0; b < features.Shape[1]; b++) changed[6, b] += 2.0;
+        var other = network.Encode(changed);
+        Assert.Contains(Enumerable.Range(0, 16), k => Math.Abs(other[0, k] - encoded[0, k]) > 1e-9);
     }
 
     [Fact]
@@ -119,46 +113,17 @@ public class MedicalASRMechanismTests
         // If both arms produced the same parameterization, only one of them would really exist.
         var las = Model();
         var ctc = Model(o => o.DecoderType = MedicalAsrDecoderType.Ctc);
+        var lasNetwork = las.Network ?? throw new InvalidOperationException("native model");
+        var ctcNetwork = ctc.Network ?? throw new InvalidOperationException("native model");
 
-        las.Predict(Features());
-        ctc.Predict(Features());
-
+        Assert.Null(lasNetwork.CtcHead);
+        Assert.NotNull(lasNetwork.Embedding);
+        Assert.NotNull(ctcNetwork.CtcHead);
+        Assert.Null(ctcNetwork.Embedding);
         Assert.NotEqual(las.GetParameters().Length, ctc.GetParameters().Length);
-    }
-
-    [Fact]
-    public void MoreReductionsGiveAShorterSummary()
-    {
-        var one = Model(o => o.PyramidalReductions = 1);
-        var three = Model(o => o.PyramidalReductions = 3);
-        var encoded = Features(frames: 16, width: 16);
-
-        Assert.Equal(8, one.PyramidalReduce(encoded).Shape[0]);
-        Assert.Equal(2, three.PyramidalReduce(encoded).Shape[0]);
-        Assert.True(three.TimeReductionFactor > one.TimeReductionFactor);
-    }
-
-    [Fact]
-    public void ReductionStopsRatherThanCollapsingToNothing()
-    {
-        // A short utterance must not be reduced away entirely.
-        var model = Model(o => o.PyramidalReductions = 8);
-        var reduced = model.PyramidalReduce(Features(frames: 2, width: 4));
-        Assert.True(reduced.Shape[0] >= 1);
-    }
-
-    [Fact]
-    public void NamedActivationsExposeTheThreeLasStages()
-    {
-        var model = Model();
-        var activations = model.GetNamedLayerActivations(Features());
-
-        Assert.Contains("Listener", activations.Keys);
-        Assert.Contains("PyramidalSummary", activations.Keys);
-        Assert.Contains("Speller", activations.Keys);
-
-        // The summary must genuinely be shorter than what the listener produced.
-        Assert.True(activations["PyramidalSummary"].Shape[0] < activations["Listener"].Shape[0]);
+        // CTC is frame-synchronous: one distribution per input step. LAS emits one per grapheme.
+        Assert.Equal(new[] { 7, 24 }, ctc.Predict(Audio()).Shape.ToArray());
+        Assert.Equal(new[] { 6, 24 }, las.Predict(Audio()).Shape.ToArray());
     }
 
     [Fact]
@@ -167,7 +132,7 @@ public class MedicalASRMechanismTests
         foreach (var arm in (MedicalAsrDecoderType[])Enum.GetValues(typeof(MedicalAsrDecoderType)))
         {
             var model = Model(o => o.DecoderType = arm);
-            var input = Features();
+            var input = Audio();
 
             var output = model.Predict(input);
             for (int i = 0; i < output.Length; i++)
@@ -177,14 +142,12 @@ public class MedicalASRMechanismTests
             }
 
             var before = model.GetParameters();
-            var target = new Tensor<double>(output.Shape.ToArray());
-            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
-            for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
+            var target = new Tensor<double>([3], new Vector<double>(new[] { 5.0, 9.0, 2.0 }));
 
             model.Train(input, target);
             var after = model.GetParameters();
-            Assert.True(Enumerable.Range(0, Math.Min(before.Length, after.Length))
-                    .Any(i => Math.Abs(before[i] - after[i]) > 1e-12),
+            Assert.Equal(before.Length, after.Length);
+            Assert.True(Enumerable.Range(0, before.Length).Any(i => Math.Abs(before[i] - after[i]) > 1e-12),
                 $"{arm} did not update any parameter.");
         }
     }
@@ -193,12 +156,7 @@ public class MedicalASRMechanismTests
     public void TranscriptionReportsFiniteConfidence()
     {
         var model = Model();
-        // One second: the listener's convolution subsampling needs at least seven feature frames.
-        var audio = new Tensor<double>([16000]);
-        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
-        for (int i = 0; i < audio.Length; i++) audio[i] = rng.NextDouble() - 0.5;
-
-        var result = model.Transcribe(audio);
+        var result = model.Transcribe(Audio(64));
         Assert.NotNull(result);
         Assert.False(double.IsNaN(result.Confidence) || double.IsInfinity(result.Confidence));
     }

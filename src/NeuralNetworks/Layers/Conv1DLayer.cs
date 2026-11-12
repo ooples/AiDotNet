@@ -25,8 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// reshaped away on return.
 /// </para>
 /// <para>
-/// Used by <see cref="AiDotNet.Diffusion.Audio.DiffWaveModel{T}"/> for the
-/// dilated convolution stack from Kong et al. 2020 "DiffWave" §3 — kernel
+/// Suits the dilated convolution stack from Kong et al. 2020 "DiffWave" §3 — kernel
 /// size 3, dilation <c>2^(i % dilation_cycle)</c>. Also valid as a 1×1
 /// channel mixer (<c>kernelSize=1</c>) — the same shape used by DiffWave
 /// for the input/skip/output projections.
@@ -305,6 +304,12 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
+        // OnFirstForward rejects a wrong rank only on the first call; once the layer is built a rank-2 input would
+        // otherwise fail below with an IndexOutOfRangeException that names no layer and no shape.
+        if (input.Shape.Length != 3)
+            throw new ArgumentException(
+                $"Conv1DLayer requires rank-3 [B, C, T] input; got [{string.Join(", ", input.Shape)}].",
+                nameof(input));
         _originalInputShape = input._shape;
 
         // Reshape [B, C, T] -> [B, C, 1, T] for the Engine.Conv2D call.
@@ -381,6 +386,27 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         parameters.AsSpan().Slice(0, _kernels.Length).CopyTo(_kernels.Data.Span);
         parameters.AsSpan().Slice(_kernels.Length, _biases.Length).CopyTo(_biases.Data.Span);
 
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <summary>
+    /// Loads a torch <c>nn.Conv1d</c>'s weight of torch shape <paramref name="weightShape"/> (<c>[out, in / groups, k]</c>)
+    /// and bias straight from <paramref name="source"/> into the sized layer; a layer not yet sized, or a streamed weight,
+    /// takes the <see cref="SetParameters"/> route.
+    /// </summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, int[] weightShape, string biasName)
+    {
+        long count = weightShape.Aggregate(1L, (a, b) => a * b);
+        var biasShape = new[] { _outputChannels };
+        if (_kernels.Length != count || _biases.Length != _outputChannels
+            || _kernels.Lifetime == WeightLifetime.Streaming || _biases.Lifetime == WeightLifetime.Streaming)
+        {
+            SetParameters(new Vector<T>(source.Read(weightName, weightShape).Concat(source.Read(biasName, biasShape)).Select(NumOps.FromDouble)));
+            return;
+        }
+        source.CopyTo(weightName, weightShape, _kernels);
+        source.CopyTo(biasName, biasShape, _biases);
         Engine.InvalidatePersistentTensor(_kernels);
         Engine.InvalidatePersistentTensor(_biases);
     }
