@@ -183,4 +183,57 @@ public class MetaLearningOptionWiringTests
 
         Assert.Equal(0.1 / 2 * Math.Log(0.5 / 0.05), tightLoss - looseLoss, 1e-9);
     }
+
+    private static MetaSGDAlgorithm<double, Matrix<double>, Vector<double>> MetaSgd(
+        bool schedule, MetaSGDLearningRateScheduleType type = MetaSGDLearningRateScheduleType.CosineAnnealing)
+        => new MetaSGDAlgorithm<double, Matrix<double>, Vector<double>>(
+            new MetaSGDOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3))
+            {
+                LossFunction = new MeanSquaredErrorLoss<double>(),
+                OuterLearningRate = 0.1,
+                UseLearningRateSchedule = schedule,
+                LearningRateSchedule = type,
+                ScheduleWarmupEpisodes = 4,
+                NumMetaIterations = 12,
+            });
+
+    [Theory]
+    [InlineData(MetaSGDLearningRateScheduleType.Constant, 0.1)]
+    [InlineData(MetaSGDLearningRateScheduleType.StepDecay, 0.025)]
+    [InlineData(MetaSGDLearningRateScheduleType.Exponential, 0.01)]
+    [InlineData(MetaSGDLearningRateScheduleType.CosineAnnealing, 0.05)]
+    [InlineData(MetaSGDLearningRateScheduleType.Cyclical, 0.1)]
+    public void MetaSGD_LearningRateSchedule_ShapesTheMetaStepAfterWarmup(
+        MetaSGDLearningRateScheduleType type, double expected)
+    {
+        // Warmup ramps linearly over 4 iterations (Goyal et al. 2017); the schedule then runs over the remaining 8.
+        var learner = MetaSgd(schedule: true, type);
+        Assert.Equal(0.1 * 1 / 4, learner.ScheduledMetaLearningRate(0), Tolerance);
+        Assert.Equal(0.1 * 4 / 4, learner.ScheduledMetaLearningRate(3), Tolerance);
+
+        // Halfway (progress 1/2): step decay has halved twice, the exponential is at 0.01^(1/2) = 0.1 of the rate,
+        // cosine at (1 + cos(pi / 2)) / 2. The cyclical policy (four cycles) peaks at progress 1/8.
+        int iteration = type == MetaSGDLearningRateScheduleType.Cyclical ? 4 + 1 : 4 + 4;
+        Assert.Equal(expected, learner.ScheduledMetaLearningRate(iteration), Tolerance);
+    }
+
+    [Fact]
+    public void MetaSGD_LearningRateSchedule_ScalesTheThetaStep()
+    {
+        // Li et al. (2017) keep the meta step fixed (the default). With the schedule on, the first iteration of a
+        // four-iteration warmup steps theta by a quarter of the fixed step along the same meta-gradient.
+        var fixedRate = MetaSgd(schedule: false);
+        var warmup = MetaSgd(schedule: true);
+        var start = fixedRate.GetMetaModel().GetParameters();
+
+        fixedRate.MetaTrain(Batch());
+        warmup.MetaTrain(Batch());
+
+        var fixedStep = fixedRate.GetMetaModel().GetParameters();
+        var warmupStep = warmup.GetMetaModel().GetParameters();
+        for (int i = 0; i < start.Length; i++)
+        {
+            Assert.Equal(0.25 * (fixedStep[i] - start[i]), warmupStep[i] - start[i], 1e-12);
+        }
+    }
 }
