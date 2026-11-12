@@ -235,19 +235,18 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         T betaStartT = NumOps.FromDouble(_betaStart);
         T betaRangeT = NumOps.FromDouble(_betaEnd - _betaStart);
         T maxDenom = NumOps.FromDouble(Math.Max(1, _numDiffusionSteps - 1));
-        for (int t = 0; t < _numDiffusionSteps; t++)
-        {
-            _betas[t] = NumOps.Add(betaStartT, NumOps.Divide(NumOps.Multiply(betaRangeT, NumOps.FromDouble(t)), maxDenom));
-            _alphas[t] = NumOps.Subtract(one, _betas[t]);
-        }
-        _alphasCumprod[0] = _alphas[0];
-        for (int t = 1; t < _numDiffusionSteps; t++)
-            _alphasCumprod[t] = NumOps.Multiply(_alphasCumprod[t - 1], _alphas[t]);
-        for (int t = 0; t < _numDiffusionSteps; t++)
-        {
-            _sqrtAlphasCumprod[t] = NumOps.Sqrt(_alphasCumprod[t]);
-            _sqrtOneMinusAlphasCumprod[t] = NumOps.Sqrt(NumOps.Subtract(one, _alphasCumprod[t]));
-        }
+
+        // Linear betas start + range * t / max(1, n - 1), then alpha-bar as the running product of alphas.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var steps = Engine.TensorArange<T>(0, _numDiffusionSteps, 1);
+        var betas = Engine.TensorAddScalar(Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(steps, betaRangeT), maxDenom), betaStartT);
+        var alphas = Engine.TensorSubtract(Engine.TensorFullLike(betas, one), betas);
+        var alphasCumprod = Engine.TensorCumProd(alphas, 0);
+        _betas = betas.ToVector();
+        _alphas = alphas.ToVector();
+        _alphasCumprod = alphasCumprod.ToVector();
+        _sqrtAlphasCumprod = Engine.TensorSqrt(alphasCumprod).ToVector();
+        _sqrtOneMinusAlphasCumprod = Engine.TensorSqrt(Engine.TensorSubtract(Engine.TensorFullLike(alphasCumprod, one), alphasCumprod)).ToVector();
     }
 
     private T SampleStandardNormal(Random rand)
