@@ -374,4 +374,50 @@ public class SyntheticDataEngineOpsReferenceTests
         Assert.Equal(stds, info.Stds.ToArray());
         Assert.Equal(weights, info.Weights.ToArray());
     }
+
+    [Fact]
+    public void Vgm_ConstantColumn_KeepsFloorsInDataUnits()
+    {
+        // A constant 7 column collapses onto one mode at 7. With every row in that mode
+        // (N_k = n), zero spread and x̄ = m0, the Gamma rate stays at its prior b0, which is the
+        // 1e-6 variance floor in DATA units, and a_k = 1 + n/2; so std = sqrt(1e-6 / (1 + n/2)),
+        // exactly as master's unscaled fit gives. A floor applied in scaled units (x / 7) would
+        // instead give 7 times that.
+        const int n = 50;
+        var data = new Matrix<double>(n, 1);
+        for (int i = 0; i < n; i++) data[i, 0] = 7.0;
+        var columns = new List<ColumnMetadata> { new("X", ColumnDataType.Continuous, columnIndex: 0) };
+
+        var transformer = new TabularDataTransformer<double>(vgmModes: 10, random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed));
+        transformer.Fit(data, columns);
+
+        var info = transformer.GetContinuousColumnInfo(0);
+        Assert.Equal(1, info.NumActiveModes);
+        Assert.Equal(7.0, info.Means.ToArray()[0], 12);
+        double expectedStd = Math.Sqrt(1e-6 / (1.0 + n / 2.0));
+        Assert.Equal(expectedStd, info.Stds.ToArray()[0], 9);
+    }
+
+    [Fact]
+    public void Vgm_NormalRangeColumn_MatchesTheUnscaledFit()
+    {
+        // Values in [-2.3, 2.3]. Reference means and stds come from the unscaled VB fit (the
+        // algorithm before the max|x| rescale, mirrored in double precision).
+        const int n = 200;
+        var data = new Matrix<double>(n, 1);
+        for (int i = 0; i < n; i++) data[i, 0] = (i % 2 == 0 ? -2.0 : 2.0) + 0.3 * Math.Sin(0.7 * i);
+        var columns = new List<ColumnMetadata> { new("X", ColumnDataType.Continuous, columnIndex: 0) };
+
+        var transformer = new TabularDataTransformer<double>(vgmModes: 10, random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed));
+        transformer.Fit(data, columns);
+
+        var info = transformer.GetContinuousColumnInfo(0);
+        var means = info.Means.ToArray();
+        var stds = info.Stds.ToArray();
+        Assert.Equal(2, means.Length);
+        Assert.Equal(-1.9795247119079302, means[0], 5);
+        Assert.Equal(1.982976489694219, means[1], 5);
+        Assert.Equal(0.4024556911096269, stds[0], 5);
+        Assert.Equal(0.4030624712189378, stds[1], 5);
+    }
 }
