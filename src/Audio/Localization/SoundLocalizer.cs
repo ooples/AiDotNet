@@ -347,7 +347,7 @@ public class SoundLocalizer<T> : IDisposable
         for (int mic = 0; mic < _numMicrophones; mic++)
         {
             if (audioChannels[mic].Length < length)
-                throw new IndexOutOfRangeException("Every channel must have at least as many samples as the first.");
+                throw new ArgumentOutOfRangeException("flatIndex", "Every channel must have at least as many samples as the first.");
             channels[mic] = AudioEngineOps.FitLength(engine, audioChannels[mic], length);
         }
         var input = _numMicrophones == 0
@@ -404,7 +404,7 @@ public class SoundLocalizer<T> : IDisposable
         int n = channel1.Length;
         int fftSize = NextPowerOf2(n * 2);
         if (channel2.Length < n)
-            throw new IndexOutOfRangeException("The second channel is shorter than the first.");
+            throw new ArgumentOutOfRangeException("flatIndex", "The second channel is shorter than the first.");
 
         var engine = AiDotNetEngine.Current;
 

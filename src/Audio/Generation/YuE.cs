@@ -342,7 +342,7 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             int ti = i * tokens.Length / numSamples;
             if (ti < 0)
-                throw new IndexOutOfRangeException("Token index overflowed for this output length.");
+                throw new ArgumentOutOfRangeException("flatIndex", "Token index overflowed for this output length.");
             tokenIndex[i] = ti;
         }
 
