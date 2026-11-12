@@ -174,19 +174,16 @@ namespace AiDotNet.AutoML.NAS
             var teacherSoftTargets = NasSamplingHelper.SoftmaxWithTemperature(teacherLogits, temperature, _ops);
             var studentSoftTargets = NasSamplingHelper.SoftmaxWithTemperature(studentLogits, temperature, _ops);
 
-            // KL divergence loss
-            T loss = _ops.Zero;
-            for (int i = 0; i < teacherLogits.Length; i++)
-            {
-                if (_ops.GreaterThan(teacherSoftTargets[i], _ops.Zero))
-                {
-                    T logRatio = _ops.Log(_ops.Divide(
-                        _ops.Add(teacherSoftTargets[i], _ops.FromDouble(1e-10)),
-                        _ops.Add(studentSoftTargets[i], _ops.FromDouble(1e-10))
-                    ));
-                    loss = _ops.Add(loss, _ops.Multiply(teacherSoftTargets[i], logRatio));
-                }
-            }
+            // KL divergence loss: sum over p_t > 0 of p_t * log((p_t + eps) / (p_s + eps))
+            var engine = AiDotNetEngine.Current;
+            var teacher = teacherSoftTargets.AsTensor();
+            var student = studentSoftTargets.AsTensor();
+            T eps = _ops.FromDouble(1e-10);
+            var logRatio = engine.TensorLog(engine.TensorDivide(
+                engine.TensorAddScalar(teacher, eps), engine.TensorAddScalar(student, eps)));
+            var terms = engine.TensorWhere(engine.TensorGreaterThan(teacher, _ops.Zero),
+                engine.TensorMultiply(teacher, logRatio), new Tensor<T>(new[] { teacher.Length }));
+            T loss = teacher.Length == 0 ? _ops.Zero : engine.TensorSum(terms);
 
             // Scale by temperature squared (following Hinton et al.)
             T tempSquared = _ops.Multiply(temperature, temperature);

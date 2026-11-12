@@ -163,17 +163,10 @@ namespace AiDotNet.AutoML.NAS
             for (int nodeIdx = 0; nodeIdx < alphas.Count; nodeIdx++)
             {
                 var alpha = alphas[nodeIdx];
+                var defaultRow = OneHotLogitRow(alpha.Columns, defaultOpIdx, high, low);
                 for (int row = 0; row < alpha.Rows; row++)
                 {
-                    for (int col = 0; col < alpha.Columns; col++)
-                    {
-                        alpha[row, col] = low;
-                    }
-
-                    if (defaultOpIdx >= 0 && defaultOpIdx < alpha.Columns)
-                    {
-                        alpha[row, defaultOpIdx] = high;
-                    }
+                    alpha.SetRow(row, defaultRow);
                 }
             }
 
@@ -196,13 +189,30 @@ namespace AiDotNet.AutoML.NAS
                     continue;
                 }
 
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    alpha[fromNode, col] = low;
-                }
-
-                alpha[fromNode, opIdx] = high;
+                alpha.SetRow(fromNode, OneHotLogitRow(alpha.Columns, opIdx, high, low));
             }
+        }
+
+        /// <summary>
+        /// A logit row that is <paramref name="high"/> at <paramref name="hotIndex"/> and <paramref name="low"/>
+        /// elsewhere (all <paramref name="low"/> when the index is outside the row).
+        /// </summary>
+        private static Vector<T> OneHotLogitRow(int columns, int hotIndex, T high, T low)
+        {
+            var lowRow = new Tensor<T>(new[] { columns });
+            lowRow.Fill(low);
+            if (hotIndex < 0 || hotIndex >= columns)
+            {
+                return lowRow.ToVector();
+            }
+
+            var engine = AiDotNetEngine.Current;
+            var highRow = new Tensor<T>(new[] { columns });
+            highRow.Fill(high);
+            var hot = new Tensor<int>(new[] { 1 });
+            hot.Fill(hotIndex);
+            var mask = engine.TensorOneHot<T>(hot, columns).Reshape(new[] { columns });
+            return engine.TensorWhere(mask, highRow, lowRow).ToVector();
         }
     }
 }
