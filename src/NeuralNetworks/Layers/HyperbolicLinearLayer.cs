@@ -584,13 +584,13 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         if (_biasesGradient.Length < OutputFeatures)
             throw new InvalidOperationException($"Bias gradient shape mismatch: expected {OutputFeatures}, got {_biasesGradient.Length}.");
 
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-                _weights[o, i] = NumOps.Subtract(_weights[o, i], NumOps.Multiply(learningRate, _weightsGradient[o, i]));
-
-            _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, _biasesGradient[o]));
-        }
+        // Plain SGD in place: W -= lr * dW over [out, in], b -= lr * db over the first OutputFeatures entries.
+        var weightStep = Engine.TensorMultiplyScalar(
+            Engine.TensorSlice(_weightsGradient, [0, 0], [OutputFeatures, InputFeatures]), learningRate);
+        Engine.TensorCopy(Engine.TensorSubtract(_weights, weightStep), _weights);
+        var biasStep = Engine.TensorMultiplyScalar(
+            Engine.TensorSlice(Engine.Reshape(_biasesGradient, [_biasesGradient.Length]), [0], [OutputFeatures]), learningRate);
+        Engine.TensorCopy(Engine.TensorSubtract(_biases, biasStep), _biases);
 
         _weightsTCache = null;
     }

@@ -278,16 +278,16 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         // Initialize gammas per the paper's formula:
         // gamma_h = 1 - 2^(-5 - h * range / numHeads)
         // This spaces decay rates logarithmically so heads cover different time scales.
-        for (int h = 0; h < _numHeads; h++)
-        {
-            double exponent = -5.0 - (h * 8.0 / _numHeads);
-            double gamma = 1.0 - Math.Pow(2.0, exponent);
-            _gammas[h] = NumOps.FromDouble(gamma);
-        }
+        // gamma_h = 1 - 2^(-5 - 8h/H)
+        var exponent = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, _numHeads, 1), NumOps.FromDouble(-8.0 / _numHeads)),
+            NumOps.FromDouble(-5.0));
+        Engine.TensorCopy(
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorExp(Engine.TensorMultiplyScalar(exponent, NumOps.FromDouble(Math.Log(2.0))))),
+            _gammas);
 
         // Group normalization: scale = 1, bias = 0
-        for (int i = 0; i < _groupNormScale.Length; i++)
-            _groupNormScale[i] = NumOps.One;
+        _groupNormScale.Fill(NumOps.One);
         _groupNormBias.Fill(NumOps.Zero);
 
         RegisterTrainableParameter(_gammas, PersistentTensorRole.Weights);
@@ -439,12 +439,16 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorAddInPlace(_groupNormBias, Engine.TensorMultiplyScalar((_groupNormBiasGradient ?? throw new InvalidOperationException("_groupNormBiasGradient is null where it is required.")), negLR));
 
         // Clamp gammas to (0, 1) after update to maintain valid decay rates
-        for (int h = 0; h < _numHeads; h++)
-        {
-            double gVal = NumOps.ToDouble(_gammas[h]);
-            if (gVal <= 0.0) _gammas[h] = NumOps.FromDouble(1e-6);
-            else if (gVal >= 1.0) _gammas[h] = NumOps.FromDouble(1.0 - 1e-6);
-        }
+        // Keep each decay in (0, 1): values <= 0 become 1e-6 and values >= 1 become 1 - 1e-6 (NaN is left as is).
+        int[] gammaShape = _gammas._shape;
+        var floor = new Tensor<T>(gammaShape);
+        floor.Fill(NumOps.FromDouble(1e-6));
+        var ceiling = new Tensor<T>(gammaShape);
+        ceiling.Fill(NumOps.FromDouble(1.0 - 1e-6));
+        var clampedLow = Engine.TensorWhere(Engine.TensorLessEqual(_gammas, new Tensor<T>(gammaShape)), floor, _gammas);
+        var oneTensor = new Tensor<T>(gammaShape);
+        oneTensor.Fill(NumOps.One);
+        Engine.TensorCopy(Engine.TensorWhere(Engine.TensorGreaterEqual(clampedLow, oneTensor), ceiling, clampedLow), _gammas);
 
     }
 
@@ -499,9 +503,8 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         metadata["HeadDimension"] = _headDimension.ToString();
 
         // Include the decay rates for inspection
-        var gammaValues = new string[_numHeads];
-        for (int h = 0; h < _numHeads; h++)
-            gammaValues[h] = NumOps.ToDouble(_gammas[h]).ToString("F6");
+        // Display only: each decay rate formatted with six decimals.
+        var gammaValues = _gammas.ToArray().Select(g => string.Format(System.Globalization.CultureInfo.CurrentCulture, "{0:F6}", g));
         metadata["DecayRates"] = string.Join(", ", gammaValues);
 
         return metadata;

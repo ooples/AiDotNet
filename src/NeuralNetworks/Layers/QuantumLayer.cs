@@ -508,6 +508,44 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// Updates the gradients of the rotation angles based on the output gradient.
+    /// </summary>
+    /// <param name="gradientState">The gradient of the loss with respect to the layer's output in complex form.</param>
+    /// <param name="batchIndex">The index of the current batch item.</param>
+    /// <remarks>
+    /// This private method calculates the gradients of the rotation angles based on the output gradient.
+    /// These gradients are accumulated across all items in a batch and used to update the parameters
+    /// during the UpdateParameters method.
+    /// </remarks>
+    private void UpdateAngleGradients(Tensor<Complex<T>> gradientState, int batchIndex)
+    {
+        int dimension = 1 << _numQubits;
+
+        for (int qubit = 0; qubit < _numQubits; qubit++)
+        {
+            T qubitGradient = NumOps.Zero;
+
+            for (int i = 0; i < dimension; i++)
+            {
+                if ((i & (1 << qubit)) == 0)
+                {
+                    int j = i | (1 << qubit);
+
+                    // Calculate gradient contribution for this qubit
+                    var gradDiff = gradientState[j] * _quantumCircuit[j, i].Conjugate() -
+                                   gradientState[i] * _quantumCircuit[i, j].Conjugate();
+
+                    // Extract the real part of the complex number
+                    qubitGradient = NumOps.Add(qubitGradient, gradDiff.Real);
+                }
+            }
+
+            // Accumulate gradients across batches
+            _angleGradients[qubit] = NumOps.Add(_angleGradients[qubit], qubitGradient);
+        }
+    }
+
+    /// <summary>
     /// Resets the quantum circuit to an identity matrix.
     /// </summary>
     /// <remarks>

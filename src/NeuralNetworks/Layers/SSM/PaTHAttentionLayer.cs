@@ -247,53 +247,22 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
         {
             for (int hi = 0; hi < _numHeads; hi++)
             {
-                // Generate random direction and normalize
-                T normSq = NumOps.Zero;
+                // Generate random direction (seeded draws in row-major order)
                 for (int di = 0; di < _headDimension; di++)
                 {
                     T val = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
                     _householderVectors[new[] { pos, hi, di }] = val;
-                    normSq = NumOps.Add(normSq, NumOps.Multiply(val, val));
-                }
-
-                // Normalize to unit length for stable initialization
-                T norm = NumOps.Sqrt(NumOps.Add(normSq, NumOps.FromDouble(1e-8)));
-                for (int di = 0; di < _headDimension; di++)
-                {
-                    T val = _householderVectors[new[] { pos, hi, di }];
-                    _householderVectors[new[] { pos, hi, di }] = NumOps.Divide(val, norm);
                 }
             }
         }
-    }
 
-    /// <summary>
-    /// Applies Householder reflection H = I - 2*p*p^T/||p||^2 to a vector x.
-    /// Result: x - 2 * p * (p^T * x) / ||p||^2.
-    /// </summary>
-    private void ApplyHouseholderReflection(
-        T[] x, int pos, int headIndex, T[] result)
-    {
-        // Compute p^T * x and ||p||^2
-        T dotPX = NumOps.Zero;
-        T normPSq = NumOps.Zero;
-
-        for (int di = 0; di < _headDimension; di++)
-        {
-            T pVal = _householderVectors[new[] { pos, headIndex, di }];
-            dotPX = NumOps.Add(dotPX, NumOps.Multiply(pVal, x[di]));
-            normPSq = NumOps.Add(normPSq, NumOps.Multiply(pVal, pVal));
-        }
-
-        // H*x = x - 2 * (p^T * x) / ||p||^2 * p
-        T normPSqSafe = NumOps.Add(normPSq, NumOps.FromDouble(1e-10));
-        T coeff = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Divide(dotPX, normPSqSafe));
-
-        for (int di = 0; di < _headDimension; di++)
-        {
-            T pVal = _householderVectors[new[] { pos, headIndex, di }];
-            result[di] = NumOps.Subtract(x[di], NumOps.Multiply(coeff, pVal));
-        }
+        // Normalize each (position, head) direction to unit length: p / sqrt(|p|^2 + 1e-8).
+        var norms = Engine.TensorSqrt(Engine.TensorAddScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(_householderVectors, _householderVectors), new[] { 2 }, keepDims: true),
+            NumOps.FromDouble(1e-8)));
+        Engine.TensorCopy(
+            Engine.TensorDivide(_householderVectors, Engine.TensorBroadcastTo(norms, _householderVectors._shape)),
+            _householderVectors);
     }
 
     /// <inheritdoc />

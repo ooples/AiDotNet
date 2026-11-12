@@ -477,27 +477,26 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     /// Gaussian exp(-(M/d_max²)·||x - c||²) is exp(-||x - c||²/(2σ²)) with σ = d_max/sqrt(2M). With fewer than two
     /// distinct centres there is no spread to measure, and the width falls back to 1, the unit Gaussian.
     /// </summary>
-    private double CenterSpreadWidth() => CenterSpreadWidth(_centers.AsSpan().ToArray(), _numCenters);
+    private T CenterSpreadWidth() => CenterSpreadWidth(_centers, _numCenters);
 
-    private double CenterSpreadWidth(T[] centers, int count)
+    /// <summary>
+    /// The spread width d_max / sqrt(2 M) over the M centres (rows of <paramref name="centers"/>), or 1 when every
+    /// centre coincides.
+    /// </summary>
+    private T CenterSpreadWidth(Tensor<T> centers, int count)
     {
-        int dims = count == 0 ? 0 : centers.Length / count;
-        double maxSquared = 0;
-        for (int a = 0; a < count; a++)
-        {
-            for (int b = a + 1; b < count; b++)
-            {
-                double squared = 0;
-                for (int d = 0; d < dims; d++)
-                {
-                    double diff = NumOps.ToDouble(centers[a * dims + d]) - NumOps.ToDouble(centers[b * dims + d]);
-                    squared += diff * diff;
-                }
-                if (squared > maxSquared) maxSquared = squared;
-            }
-        }
+        if (count == 0) return NumOps.One;
+        int dims = centers.Length / count;
+        int[] pairShape = [count, count, dims];
+        var rows = Engine.Reshape(centers, [count, dims]);
+        var diff = Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(Engine.Reshape(rows, [count, 1, dims]), pairShape),
+            Engine.TensorBroadcastTo(Engine.Reshape(rows, [1, count, dims]), pairShape));
+        T maxSquared = Engine.TensorMaxValue(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), [2], keepDims: false));
 
-        return maxSquared > 0 ? Math.Sqrt(maxSquared) / Math.Sqrt(2.0 * count) : 1.0;
+        return NumOps.GreaterThan(maxSquared, NumOps.Zero)
+            ? NumOps.Divide(NumOps.Sqrt(maxSquared), NumOps.Sqrt(NumOps.FromDouble(2.0 * count)))
+            : NumOps.One;
     }
 
     /// <summary>
@@ -515,41 +514,45 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         int rows = input2D.Shape[0], dims = _inputSize, count = _numCenters;
         if (rows <= 0 || dims <= 0 || count <= 0 || input2D.Length != rows * dims) return;
 
-        var data = input2D.ToArray();
+        var data = Engine.Reshape(input2D, [rows * dims]);
         // A non-finite value would become a trainable centre permanently: placement happens once, and the centre would
         // then answer every later input with NaN. Refuse the batch before touching any parameter, so placement still
         // happens on the first finite batch.
-        for (int i = 0; i < data.Length; i++)
+        var ones = new Tensor<T>([rows * dims]);
+        ones.Fill(NumOps.One);
+        var nonFinite = Engine.TensorNonzero(Engine.TensorWhere(Engine.TensorIsFinite(data), new Tensor<T>([rows * dims]), ones));
+        if (nonFinite.Shape[0] > 0)
         {
-            double value = NumOps.ToDouble(data[i]);
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                throw new ArgumentException(
-                    $"RBFLayer places its centres on the first batch it sees, and this batch holds a non-finite value at " +
-                    $"flat index {i}. No centre was placed; pass finite input.", nameof(input2D));
-            }
+            int firstIndex = nonFinite.ToArray()[0];
+            throw new ArgumentException(
+                $"RBFLayer places its centres on the first batch it sees, and this batch holds a non-finite value at " +
+                $"flat index {firstIndex}. No centre was placed; pass finite input.", nameof(input2D));
         }
 
-        var parameters = GetParameters();
-        var centers = new T[count * dims];
-        for (int i = 0; i < centers.Length; i++) centers[i] = parameters[i];
+        var parameters = GetParameters().AsTensor();
+        int centerLength = count * dims;
+        var centers = Engine.Reshape(Engine.TensorSlice(parameters, [0], [centerLength]), [count, dims]);
         // One centre per row while rows last. A batch smaller than the layer cannot supply every centre, and stacking
         // several on one row would only duplicate a unit; the rest keep their random initialization, so the set still
         // spans the space and the widths below measure a real spread.
-        for (int i = 0; i < Math.Min(count, rows); i++)
+        int placed = Math.Min(count, rows);
+        var sourceRows = new int[placed];
+        for (int i = 0; i < placed; i++)
         {
-            int row = rows >= count ? (int)((long)i * rows / count) : i;
-            Array.Copy(data, row * dims, centers, i * dims, dims);
+            sourceRows[i] = rows >= count ? (int)((long)i * rows / count) : i;
         }
 
-        for (int i = 0; i < centers.Length; i++) parameters[i] = centers[i];
+        var picked = Engine.TensorGather(Engine.Reshape(input2D, [rows, dims]), new Tensor<int>(sourceRows, [placed]), 0);
+        centers = Engine.TensorSetSlice(centers, picked, [0, 0]);
+        parameters = Engine.TensorSetSlice(parameters, Engine.Reshape(centers, [centerLength]), [0]);
         if (_widthInitialization == RbfWidthInitialization.CenterSpread)
         {
-            T width = NumOps.FromDouble(CenterSpreadWidth(centers, count));
-            for (int i = 0; i < count; i++) parameters[centers.Length + i] = width;
+            var widths = new Tensor<T>([count]);
+            widths.Fill(CenterSpreadWidth(centers, count));
+            parameters = Engine.TensorSetSlice(parameters, widths, [centerLength]);
         }
 
-        SetParameters(parameters);
+        SetParameters(parameters.ToVector());
         _centerInitialization = RbfCenterInitialization.AsInitialized;
     }
 
@@ -568,9 +571,7 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         }
         else
         {
-            double width = CenterSpreadWidth();
-            for (int i = 0; i < widthSpan.Length; i++)
-                widthSpan[i] = NumOps.FromDouble(width);
+            _widths.Fill(CenterSpreadWidth());
         }
 
         // Register after initialization so tensor references are final

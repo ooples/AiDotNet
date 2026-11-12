@@ -250,22 +250,20 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_valueWeights);
 
         // RMSNorm scales initialized to 1.0
-        for (int i = 0; i < _queryNormScale.Length; i++)
-            _queryNormScale[i] = NumOps.One;
-        for (int i = 0; i < _keyNormScale.Length; i++)
-            _keyNormScale[i] = NumOps.One;
-        for (int i = 0; i < _outputNormScale.Length; i++)
-            _outputNormScale[i] = NumOps.One;
+        _queryNormScale.Fill(NumOps.One);
+        _keyNormScale.Fill(NumOps.One);
+        _outputNormScale.Fill(NumOps.One);
 
         // Initialize gammas with multi-scale decay rates centered around the specified decay rate
         // Heads get slightly different rates for multi-scale context capture
-        for (int h = 0; h < _numHeads; h++)
-        {
-            double spread = 0.02;
-            double offset = (h - (_numHeads - 1.0) / 2.0) / Math.Max(1, _numHeads - 1) * spread;
-            double gamma = Math.Max(0.9, Math.Min(0.9999, _decayRate + offset));
-            _gammas[h] = NumOps.FromDouble(gamma);
-        }
+        // gamma_h = clamp(decayRate + (h - (H - 1) / 2) / max(1, H - 1) * 0.02, 0.9, 0.9999)
+        const double spread = 0.02;
+        var offsets = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorArange<T>(0, _numHeads, 1), NumOps.FromDouble(-(_numHeads - 1.0) / 2.0)),
+            NumOps.FromDouble(spread / Math.Max(1, _numHeads - 1)));
+        Engine.TensorCopy(
+            Engine.TensorClamp(Engine.TensorAddScalar(offsets, NumOps.FromDouble(_decayRate)), NumOps.FromDouble(0.9), NumOps.FromDouble(0.9999)),
+            _gammas);
 
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
@@ -415,12 +413,16 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar((_outputProjectionBiasGradient ?? throw new InvalidOperationException("_outputProjectionBiasGradient is null where it is required.")), negLR));
 
         // Clamp gammas to valid range
-        for (int h = 0; h < _numHeads; h++)
-        {
-            double gVal = NumOps.ToDouble(_gammas[h]);
-            if (gVal <= 0.0) _gammas[h] = NumOps.FromDouble(1e-6);
-            else if (gVal >= 1.0) _gammas[h] = NumOps.FromDouble(1.0 - 1e-6);
-        }
+        // Keep each decay in (0, 1): values <= 0 become 1e-6 and values >= 1 become 1 - 1e-6 (NaN is left as is).
+        int[] gammaShape = _gammas._shape;
+        var floor = new Tensor<T>(gammaShape);
+        floor.Fill(NumOps.FromDouble(1e-6));
+        var ceiling = new Tensor<T>(gammaShape);
+        ceiling.Fill(NumOps.FromDouble(1.0 - 1e-6));
+        var clampedLow = Engine.TensorWhere(Engine.TensorLessEqual(_gammas, new Tensor<T>(gammaShape)), floor, _gammas);
+        var oneTensor = new Tensor<T>(gammaShape);
+        oneTensor.Fill(NumOps.One);
+        Engine.TensorCopy(Engine.TensorWhere(Engine.TensorGreaterEqual(clampedLow, oneTensor), ceiling, clampedLow), _gammas);
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
@@ -478,9 +480,8 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         metadata["HeadDimension"] = _headDimension.ToString();
         metadata["DecayRate"] = _decayRate.ToString("F4");
 
-        var gammaValues = new string[_numHeads];
-        for (int h = 0; h < _numHeads; h++)
-            gammaValues[h] = NumOps.ToDouble(_gammas[h]).ToString("F6");
+        // Display only: each decay rate formatted with six decimals.
+        var gammaValues = _gammas.ToArray().Select(g => string.Format(System.Globalization.CultureInfo.CurrentCulture, "{0:F6}", g));
         metadata["PerHeadDecayRates"] = string.Join(", ", gammaValues);
 
         return metadata;

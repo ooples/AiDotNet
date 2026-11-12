@@ -439,68 +439,6 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorAdd(a, b);
     }
 
-    private Tensor<T> UpsampleGradient(Tensor<T> gradient, int targetH, int targetW, bool hasBatch)
-    {
-        int batch = hasBatch ? gradient.Shape[0] : 1;
-        int channels = hasBatch ? gradient.Shape[1] : gradient.Shape[0];
-        int srcH = hasBatch ? gradient.Shape[2] : gradient.Shape[1];
-        int srcW = hasBatch ? gradient.Shape[3] : gradient.Shape[2];
-
-        if (srcH == targetH && srcW == targetW)
-            return gradient;
-
-        var outShape = hasBatch ? new[] { batch, channels, targetH, targetW } : new[] { channels, targetH, targetW };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        double scaleH = (double)srcH / targetH;
-        double scaleW = (double)srcW / targetW;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcHf = h * scaleH;
-                        double srcWf = w * scaleW;
-
-                        int h0 = (int)Math.Floor(srcHf);
-                        int w0 = (int)Math.Floor(srcWf);
-                        int h1 = Math.Min(h0 + 1, srcH - 1);
-                        int w1 = Math.Min(w0 + 1, srcW - 1);
-
-                        double hWeight = srcHf - h0;
-                        double wWeight = srcWf - w0;
-
-                        T v00 = GetGradValue(gradient, b, c, h0, w0, hasBatch, srcH, srcW, channels);
-                        T v01 = GetGradValue(gradient, b, c, h0, w1, hasBatch, srcH, srcW, channels);
-                        T v10 = GetGradValue(gradient, b, c, h1, w0, hasBatch, srcH, srcW, channels);
-                        T v11 = GetGradValue(gradient, b, c, h1, w1, hasBatch, srcH, srcW, channels);
-
-                        T top = NumOps.Add(
-                            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-                        T bottom = NumOps.Add(
-                            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-                        T value = NumOps.Add(
-                            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-                            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
-
-                        int outIdx = hasBatch
-                            ? b * channels * targetH * targetW + c * targetH * targetW + h * targetW + w
-                            : c * targetH * targetW + h * targetW + w;
-                        output.Data.Span[outIdx] = value;
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
     private T GetGradValue(Tensor<T> grad, int b, int c, int h, int w, bool hasBatch, int height, int width, int channels)
     {
         int idx = hasBatch

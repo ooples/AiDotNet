@@ -1660,6 +1660,35 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 #endregion
 #region GPU Execution
 
+    /// <summary>
+    /// Divides tensor A by broadcast of tensor B along axis 1.
+    /// A: [batchSize, features], B: [batchSize, 1] -> Result: A[i,j] / B[i,0]
+    /// </summary>
+    private Tensor<T> DivideByBroadcastGpuHelper(DirectGpuTensorEngine gpuEngine, Tensor<T> a, Tensor<T> b)
+    {
+        // For normalization: a / b where b is [batchSize, 1]
+        // We can compute 1/b then multiply
+        // But we need an inverse operation. For now, download, compute, upload
+        // TODO: Add InverseGpu or DivideGpu to DirectGpuTensorEngine
+        var aData = a;
+        var bData = b;
+
+        int batchSize = aData.Shape[0];
+        int features = aData.Shape[1];
+
+        var result = TensorAllocator.Rent<T>(aData._shape);
+        for (int i = 0; i < batchSize; i++)
+        {
+            T divisor = bData[i, 0];
+            T safeDivisor = NumOps.GreaterThan(divisor, NumOps.Zero) ? divisor : NumOps.One;
+            for (int j = 0; j < features; j++)
+            {
+                result[i, j] = NumOps.Divide(aData[i, j], safeDivisor);
+            }
+        }
+
+        return gpuEngine.UploadToGpu(result, GpuTensorRole.Activation);
+    }
     #endregion
 
 }
