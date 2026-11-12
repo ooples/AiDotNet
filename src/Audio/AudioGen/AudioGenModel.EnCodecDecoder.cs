@@ -10,8 +10,12 @@ public partial class AudioGenModel<T>
     /// <summary>EnCodec latent dimension D (Défossez et al. 2022, §4.1).</summary>
     private const int CodecLatentDim = 128;
 
-    /// <summary>SEANet base channel count C (Défossez et al. 2022, §3.1).</summary>
-    private const int CodecBaseChannels = 32;
+    /// <summary>
+    /// SEANet base channel count C. AudioGen's own 16 kHz compression model
+    /// (facebook/audiogen-medium, <c>seanet.n_filters: 64</c>) uses 64, so its first decoder
+    /// convolution is 128 -> 1024 channels; the EnCodec paper's general models use 32.
+    /// </summary>
+    private const int CodecBaseChannels = 64;
 
     /// <summary>LSTM layers in the SEANet decoder (Défossez et al. 2022, §3.1).</summary>
     private const int CodecLstmLayers = 2;
@@ -145,10 +149,18 @@ public partial class AudioGenModel<T>
     }
 
     /// <summary>
-    /// Replaces the decoder weights with a pretrained EnCodec checkpoint in safetensors format, using
-    /// audiocraft's state-dict names. A weight-normalized convolution (<c>weight_g</c> /
-    /// <c>weight_v</c>) is folded into its plain weight.
+    /// Replaces the decoder weights with a pretrained EnCodec checkpoint in safetensors format.
     /// </summary>
+    /// <remarks>
+    /// Names follow audiocraft's compression-model state dict, verified against the
+    /// <c>best_state</c> of facebook/audiogen-medium <c>compression_state_dict.bin</c> (convert it to
+    /// safetensors without the <c>best_state.</c> prefix): <c>quantizer.vq.layers.{q}._codebook.embed</c>
+    /// [2048, 128], <c>decoder.model.0.conv.conv</c>, <c>decoder.model.1.lstm.{weight,bias}_{ih,hh}_l{0,1}</c>,
+    /// <c>decoder.model.{3,6,9,12}.convtr.convtr</c>, <c>decoder.model.{4,7,10,13}.block.{1,3}.conv.conv</c>
+    /// and <c>decoder.model.15.conv.conv</c>. That checkpoint stores convolutions weight-normalized
+    /// (<c>weight_g</c> [d0, 1, 1] and <c>weight_v</c>); they are folded into the plain weight.
+    /// Hugging Face transformers' EnCodec naming (<c>decoder.layers.*</c>) is not supported.
+    /// </remarks>
     private void LoadCodecWeights(string path)
     {
         var checkpoint = new SafeTensorsLoader<T>().Load(path);
@@ -250,8 +262,8 @@ public partial class AudioGenModel<T>
     /// <item>ELU and a final Conv1d(C -> channels, kernel 7).</item>
     /// </list>
     /// <para>
-    /// The paper's 16 kHz model uses D = 128, C = 32 and ratios (8, 5, 4, 2), a hop of 320 samples and
-    /// 50 tokens per second. The hop here is the sample rate divided by the 50 Hz token rate, split
+    /// AudioGen's 16 kHz compression model uses D = 128, C = 64, ratios (8, 5, 4, 2), a hop of 320
+    /// samples, 50 tokens per second and 4 codebooks of 2048 entries. The hop here is the sample rate divided by the 50 Hz token rate, split
     /// into those ratios where they divide it. Pretrained weights load from
     /// <see cref="AudioGenOptions.EncodecWeightsPath"/>; in ONNX mode the supplied audio decoder is
     /// used instead.
