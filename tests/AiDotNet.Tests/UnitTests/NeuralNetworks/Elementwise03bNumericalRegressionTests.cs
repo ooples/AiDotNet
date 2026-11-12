@@ -51,6 +51,32 @@ public class Elementwise03bNumericalRegressionTests
     }
 
     [Fact]
+    public void HalfMape_MoreThan2048KeptTargetsDividesByTheExactCount()
+    {
+        const int rows = 5000;
+        var options = new FTTransformerOptions<Half>
+        {
+            EmbeddingDimension = 8, NumHeads = 2, NumLayers = 1, DropoutRate = 0
+        };
+        var model = new FTTransformerRegression<Half>(1, 1, options);
+        var headField = model.GetType().GetField("_regressionHead", PrivateInstance);
+        Assert.NotNull(headField);
+        var head = Assert.IsType<FullyConnectedLayer<Half>>(headField?.GetValue(model));
+
+        // Zero weights and a unit bias: every prediction is exactly 1.
+        var headParameters = new Vector<Half>(checked((int)head.ParameterCount));
+        headParameters[headParameters.Length - 1] = (Half)1;
+        head.SetParameters(headParameters);
+
+        // 4900 targets of 1 (APE 0) and 100 of 2 (APE 0.5): total 50 over 5000 kept targets.
+        var targets = new Tensor<Half>(new[] { rows, 1 });
+        for (int i = 0; i < rows; i++) targets.SetFlat(i, (Half)(i < 4900 ? 1 : 2));
+        var mape = model.ComputeMAPE(new Tensor<Half>(new[] { rows, 1 }), targets);
+
+        Assert.Equal((Half)(50.0 / rows), mape);
+    }
+
+    [Fact]
     public void HalfGandalfTraining_WrongExtremeLogitsHaveFiniteLossAndGradients()
     {
         var options = new GANDALFOptions<Half>
@@ -171,6 +197,18 @@ public class Elementwise03bNumericalRegressionTests
         method.Invoke(model, new object[] { 0,
             new Tensor<double>(new[] { 1.0, 2.0 }, new[] { 1, 2 }), 0.0, 1.0, 2 });
         Assert.Equal(new[] { 1.0, 2.0, 7.0 }, memory.GetRow(0).ToArray());
+    }
+
+    [Fact]
+    public void MemoryMeanSquaredError_UnsupportedRankThrows()
+    {
+        var model = MemoryModel<double>();
+        var method = model.GetType().GetMethod("CalculateMeanSquaredError", PrivateInstance);
+        Assert.NotNull(method);
+        var vector = new Tensor<double>(new[] { 1.0, 2.0 }, new[] { 2 });
+        var thrown = Assert.Throws<TargetInvocationException>(
+            () => method?.Invoke(model, new object[] { vector, vector }));
+        Assert.IsType<ArgumentException>(thrown.InnerException);
     }
 
     [Fact]
