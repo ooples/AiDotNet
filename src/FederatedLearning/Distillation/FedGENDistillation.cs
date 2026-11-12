@@ -62,32 +62,32 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
     /// <inheritdoc/>
     public Matrix<T> ExtractKnowledge(Vector<T> localModelParameters, Matrix<T>? publicData)
     {
+        Guard.NotNull(localModelParameters);
+
         // FedGEN extracts class-conditional statistics (mean, variance) per class
         // Encoded as a matrix: rows = classes, cols = 2*featureDim (mean + variance)
         int d = localModelParameters.Length;
-        int statDim = Math.Min(_featureDim, d / _numClasses);
+        int statDim = StatDimension(d);
 
-        var stats = new Matrix<T>(_numClasses, statDim * 2);
-        for (int c = 0; c < _numClasses; c++)
+        // Mean of class c, feature f: parameter (c * statDim + f) mod d.
+        var index = new int[_numClasses * statDim];
+        for (int k = 0; k < index.Length; k++)
         {
-            int offset = (c * statDim) % d;
-            for (int f = 0; f < statDim; f++)
-            {
-                int idx = (offset + f) % d;
-                // Mean: parameter value
-                stats[c, f] = localModelParameters[idx];
-                // Variance: absolute value of parameter (heuristic for spread)
-                double absVal = Math.Abs(NumOps.ToDouble(localModelParameters[idx]));
-                stats[c, statDim + f] = NumOps.FromDouble(Math.Max(0.01, absVal));
-            }
+            index[k] = k % d;
         }
 
-        return stats;
+        var means = Engine.TensorGather(localModelParameters.AsTensor(), new Tensor<int>(index, new[] { index.Length }), 0)
+            .Reshape(new[] { _numClasses, statDim });
+
+        // Variance: absolute value of parameter (heuristic for spread), floored at 0.01.
+        var variances = Engine.TensorMax(Engine.TensorAbs(means), NumOps.FromDouble(0.01));
+        return Engine.TensorConcatenate(new[] { means, variances }, 1).ToMatrix();
     }
 
     /// <inheritdoc/>
     public Matrix<T> AggregateKnowledge(Dictionary<int, Matrix<T>> clientKnowledge, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientKnowledge);
         if (clientKnowledge.Count == 0)
             throw new ArgumentException("No client knowledge provided.", nameof(clientKnowledge));
 
@@ -95,119 +95,142 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
         int rows = first.Rows;
         int cols = first.Columns;
 
-        // Average class-conditional statistics across clients
-        double totalWeight = 0;
-        var aggregated = new Matrix<T>(rows, cols);
+        double totalWeight = clientKnowledge.Keys.Sum(id => clientWeights?.GetValueOrDefault(id, 1.0) ?? 1.0);
+        if (totalWeight <= 0)
+            throw new ArgumentException("Client weights must sum to a positive value.", nameof(clientWeights));
 
+        // Average class-conditional statistics across clients (weights normalized by their total).
+        var aggregated = new Tensor<T>(new[] { rows, cols });
         foreach (var (clientId, stats) in clientKnowledge)
         {
+            if (stats.Rows != rows || stats.Columns != cols)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} statistics are {stats.Rows}x{stats.Columns}; expected {rows}x{cols}.",
+                    nameof(clientKnowledge));
+            }
+
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            T weight = NumOps.FromDouble(w);
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    aggregated[i, j] = NumOps.Add(aggregated[i, j], NumOps.Multiply(stats[i, j], weight));
-                }
-            }
+            aggregated = Engine.TensorAdd(aggregated,
+                Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(stats), NumOps.FromDouble(w / totalWeight)));
         }
 
-        T invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                aggregated[i, j] = NumOps.Multiply(aggregated[i, j], invTotal);
-            }
-        }
-
-        // Update generator weights from aggregated class statistics
+        // Update generator weights from aggregated class statistics (mean as centroid).
         int statDim = cols / 2;
+        var centroids = Engine.TensorSlice(aggregated, new[] { 0, 0 }, new[] { rows, statDim }).ToArray();
         _generatorWeights = new T[rows][];
         for (int c = 0; c < rows; c++)
         {
             _generatorWeights[c] = new T[statDim];
-            for (int f = 0; f < statDim; f++)
-            {
-                _generatorWeights[c][f] = aggregated[c, f]; // Use mean as centroid
-            }
+            Array.Copy(centroids, c * statDim, _generatorWeights[c], 0, statDim);
         }
 
-        return aggregated;
+        return aggregated.ToMatrix();
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Draws class-conditional Gaussian samples from the global statistics, then runs full-batch gradient
+    /// descent on the squared error between the class scores s = X Wᵀ and the one-hot labels, where
+    /// W[c, f] = θ[c·statDim + f]: ∇W = (S − Y)ᵀ X / N.
+    /// </remarks>
     public Vector<T> ApplyKnowledge(Vector<T> localModelParameters, Matrix<T> globalKnowledge,
         Matrix<T>? publicData, double temperature)
     {
+        Guard.NotNull(localModelParameters);
+        Guard.NotNull(globalKnowledge);
+
         // Generate synthetic samples from aggregated statistics and distill
         int d = localModelParameters.Length;
         int statDim = globalKnowledge.Columns / 2;
+        if (statDim == 0 || globalKnowledge.Rows < _numClasses)
+        {
+            throw new ArgumentException(
+                $"Global knowledge must have at least {_numClasses} rows and two columns.", nameof(globalKnowledge));
+        }
+
+        if (d < statDim)
+        {
+            throw new ArgumentException(
+                $"Model has {d} parameters, fewer than the {statDim} features of one class.", nameof(localModelParameters));
+        }
+
         int samplesPerClass = 10;
         int totalSamples = _numClasses * samplesPerClass;
 
-        // Generate synthetic data from class-conditional Gaussians
-        var syntheticData = new Matrix<T>(totalSamples, statDim);
-        var syntheticLabels = new int[totalSamples];
-
+        // Box-Muller draws in the original (class, sample, feature) order of the seeded generator.
         _rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter);
         _roundCounter++;
-        for (int c = 0; c < _numClasses; c++)
+        var z = new double[totalSamples * statDim];
+        for (int k = 0; k < z.Length; k++)
         {
-            for (int s = 0; s < samplesPerClass; s++)
+            double u1 = 1.0 - _rng.NextDouble();
+            double u2 = _rng.NextDouble();
+            z[k] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
+
+        // x = mean + sqrt(variance) * z, class statistics broadcast over the samples of the class.
+        var knowledge = Tensor<T>.FromMatrix(globalKnowledge);
+        var sampleShape = new[] { _numClasses, samplesPerClass, statDim };
+        var means = Engine.TensorSlice(knowledge, new[] { 0, 0 }, new[] { _numClasses, statDim }).Reshape(new[] { _numClasses, 1, statDim });
+        var stddevs = Engine.TensorSqrt(Engine.TensorSlice(knowledge, new[] { 0, statDim }, new[] { _numClasses, statDim }))
+            .Reshape(new[] { _numClasses, 1, statDim });
+        var noise = new Tensor<double>(z, sampleShape).Cast<T>();
+        var syntheticData = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(means, sampleShape),
+            Engine.TensorMultiply(Engine.TensorBroadcastTo(stddevs, sampleShape), noise))
+            .Reshape(new[] { totalSamples, statDim });
+
+        // One-hot targets of the scored classes (sample i belongs to class i / samplesPerClass).
+        int scoredClasses = Math.Min(_numClasses, d / statDim);
+        var oneHot = new int[totalSamples * scoredClasses];
+        for (int i = 0; i < totalSamples; i++)
+        {
+            int label = i / samplesPerClass;
+            if (label < scoredClasses)
             {
-                int idx = c * samplesPerClass + s;
-                syntheticLabels[idx] = c;
-                for (int f = 0; f < statDim; f++)
-                {
-                    double mean = NumOps.ToDouble(globalKnowledge[c, f]);
-                    double variance = NumOps.ToDouble(globalKnowledge[c, statDim + f]);
-                    double stddev = Math.Sqrt(variance);
-                    // Box-Muller for Gaussian sampling
-                    double u1 = 1.0 - _rng.NextDouble();
-                    double u2 = _rng.NextDouble();
-                    double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                    syntheticData[idx, f] = NumOps.FromDouble(mean + stddev * z);
-                }
+                oneHot[i * scoredClasses + label] = 1;
             }
         }
+
+        var targets = new Tensor<int>(oneHot, new[] { totalSamples, scoredClasses }).Cast<T>();
+        var weightIndex = new int[scoredClasses * statDim];
+        for (int k = 0; k < weightIndex.Length; k++)
+        {
+            weightIndex[k] = k;
+        }
+
+        var weightIndexTensor = new Tensor<int>(weightIndex, new[] { weightIndex.Length });
+        var step = NumOps.FromDouble(_generatorLearningRate / totalSamples);
 
         // Distill: update local model to classify synthetic data correctly
-        var updatedParams = new T[d];
-        Array.Copy(localModelParameters.ToArray(), updatedParams, d);
-
+        var parameters = localModelParameters.Clone();
         for (int epoch = 0; epoch < _generatorEpochs; epoch++)
         {
-            for (int i = 0; i < totalSamples; i++)
-            {
-                int label = syntheticLabels[i];
-                // Compute prediction scores for this sample
-                for (int c = 0; c < Math.Min(_numClasses, d / statDim); c++)
-                {
-                    T score = NumOps.Zero;
-                    for (int f = 0; f < statDim; f++)
-                    {
-                        int paramIdx = (c * statDim + f) % d;
-                        score = NumOps.Add(score, NumOps.Multiply(syntheticData[i, f], updatedParams[paramIdx]));
-                    }
+            var weights = Engine.TensorSlice(parameters.AsTensor(), new[] { 0 }, new[] { weightIndex.Length })
+                .Reshape(new[] { scoredClasses, statDim });
+            var scores = Engine.TensorMatMul(syntheticData, Engine.TensorTranspose(weights));
 
-                    // Gradient: if c == label, push score up; else push down
-                    double target = (c == label) ? 1.0 : 0.0;
-                    double grad = NumOps.ToDouble(score) - target;
-                    T scaledGrad = NumOps.FromDouble(grad * _generatorLearningRate / totalSamples);
-
-                    for (int f = 0; f < statDim; f++)
-                    {
-                        int paramIdx = (c * statDim + f) % d;
-                        T update = NumOps.Multiply(syntheticData[i, f], scaledGrad);
-                        updatedParams[paramIdx] = NumOps.Subtract(updatedParams[paramIdx], update);
-                    }
-                }
-            }
+            // Gradient: if c == label, push score up; else push down
+            var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(scores, targets), step);
+            var gradWeights = Engine.TensorMatMul(Engine.TensorTranspose(residual), syntheticData);
+            var gradParams = Engine.TensorIndexAdd(new Tensor<T>(new[] { d }), 0, weightIndexTensor,
+                gradWeights.Reshape(new[] { weightIndex.Length }));
+            parameters = Engine.Subtract(parameters, gradParams.ToVector());
         }
 
-        return new Vector<T>(updatedParams);
+        return parameters;
+    }
+
+    private int StatDimension(int parameterCount)
+    {
+        int statDim = Math.Min(_featureDim, parameterCount / _numClasses);
+        if (statDim <= 0)
+        {
+            throw new ArgumentException(
+                $"Model has {parameterCount} parameters; at least {_numClasses} are needed for {_numClasses} classes.");
+        }
+
+        return statDim;
     }
 }

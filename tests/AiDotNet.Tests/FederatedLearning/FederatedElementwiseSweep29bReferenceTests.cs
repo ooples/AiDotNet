@@ -533,4 +533,30 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(a / 2.0, updated[2], Precision);
         Assert.Equal(1.0, updated[3], Precision);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedGEN_StatisticsAndFullBatchDistillationStepMatchHandComputation()
+    {
+        await Task.Yield();
+
+        // Two classes, two features: means are theta[c * 2 + f], variances max(0.01, |mean|).
+        var fedGen = new AiDotNet.FederatedLearning.Distillation.FedGENDistillation<double>(
+            numClasses: 2, featureDim: 2, generatorEpochs: 1, generatorLearningRate: 1.0);
+        var stats = fedGen.ExtractKnowledge(new Vector<double>(new[] { 1.0, -2.0, 0.001, 3.0 }), null);
+        Assert.Equal(new[] { 1.0, -2.0, 1.0, 2.0 }, stats.GetRow(0).ToArray());
+        Assert.Equal(new[] { 0.001, 3.0, 0.01, 3.0 }, stats.GetRow(1).ToArray());
+
+        // Zero variance makes every synthetic sample its class mean: class 0 -> [1, 0], class 1 -> [0, 1],
+        // ten samples each. From theta = 0 the scores are 0 and grad W = (0 - Y)^T X / 20:
+        // row 0 = -10/20 [1, 0], row 1 = -10/20 [0, 1], so theta = [0.5, 0, 0, 0.5].
+        var global = new Matrix<double>(new[,] { { 1.0, 0.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0, 0.0 } });
+        var updated = fedGen.ApplyKnowledge(new Vector<double>(4), global, null, 1.0);
+        Assert.Equal(0.5, updated[0], Precision);
+        Assert.Equal(0.0, updated[1], Precision);
+        Assert.Equal(0.0, updated[2], Precision);
+        Assert.Equal(0.5, updated[3], Precision);
+
+        // Fewer parameters than classes used to return empty statistics (and divide by zero when applied).
+        Assert.Throws<ArgumentException>(() => fedGen.ExtractKnowledge(new Vector<double>(new[] { 1.0 }), null));
+    }
 }
