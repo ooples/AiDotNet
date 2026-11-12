@@ -224,6 +224,10 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
         int n = data.Rows;
         int batchSize = Math.Min(32, n);
         var values = AnomalyTensorOps.ToTensor(data);
+        // Step learningRate / batch size: every batch is full except possibly the last one
+        int lastBatchSize = batchSize > 0 && n % batchSize != 0 ? n % batchSize : batchSize;
+        T fullBatchStep = batchSize > 0 ? NumOps.FromDouble(_learningRate / batchSize) : NumOps.Zero;
+        T lastBatchStep = lastBatchSize > 0 ? NumOps.FromDouble(_learningRate / lastBatchSize) : NumOps.Zero;
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -249,7 +253,7 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
 
                 // Forward pass, then gradients summed over the batch and a step of learningRate / batch size
                 var forward = Forward(x, epsilon);
-                Backward(x, forward, NumOps.FromDouble(_learningRate / actualBatchSize));
+                Backward(x, forward, actualBatchSize == batchSize ? fullBatchStep : lastBatchStep);
             }
         }
     }

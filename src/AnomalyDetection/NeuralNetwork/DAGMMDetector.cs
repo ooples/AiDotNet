@@ -268,7 +268,7 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
         var uniform = Tensor<double>.FromVector(Vector<double>.Wrap(draws), new[] { _numMixtures, _zDim }).Cast<T>();
         _phi = engine.Fill(_numMixtures, NumOps.FromDouble(1.0 / _numMixtures)).AsTensor();
         _mu = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(uniform, NumOps.FromDouble(0.5)), NumOps.FromDouble(0.1));
-        _sigma = engine.TensorTile(engine.Reshape(engine.TensorEye(_zDim), new[] { 1, _zDim, _zDim }),
+        _sigma = engine.TensorTile(engine.Reshape(engine.TensorEye<T>(_zDim), new[] { 1, _zDim, _zDim }),
             new[] { _numMixtures, 1, 1 });
     }
 
@@ -541,7 +541,7 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
         var scatter = engine.TensorBatchMatMul(engine.TensorSwapAxes(engine.TensorMultiply(diffs, gammaWeights), 1, 2), diffs);
         var covariance = engine.TensorDivide(scatter,
             engine.TensorBroadcastTo(engine.Reshape(safeSum, new[] { k, 1, 1 }), new[] { k, d, d }));
-        var identity = engine.TensorBroadcastTo(engine.Reshape(engine.TensorEye(d), new[] { 1, d, d }), new[] { k, d, d });
+        var identity = engine.TensorBroadcastTo(engine.Reshape(engine.TensorEye<T>(d), new[] { 1, d, d }), new[] { k, d, d });
         covariance = engine.TensorWhere(
             engine.TensorBroadcastTo(engine.Reshape(positive, new[] { k, 1, 1 }), new[] { k, d, d }), covariance, identity);
 
@@ -571,6 +571,7 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
         var componentRows = new int[1];
         var logDets = new Tensor<T>[_numMixtures];
         var mahalanobis = new Tensor<T>[_numMixtures];
+        T varianceFloor = NumOps.FromDouble(1e-10);
 
         for (int c = 0; c < _numMixtures; c++)
         {
@@ -594,7 +595,7 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
             else
             {
                 // Diagonal fallback
-                var variances = engine.TensorAddScalar(LinalgDispatch<T>.Diagonal(sigmaK), NumOps.FromDouble(1e-10));
+                var variances = engine.TensorAddScalar(LinalgDispatch<T>.Diagonal(sigmaK), varianceFloor);
                 logDets[c] = engine.ReduceSum(engine.TensorLog(variances), axis0, true);
                 mahal = engine.ReduceSum(AnomalyTensorOps.DivideRow(engine.TensorSquare(diff), variances), axis1, false);
             }

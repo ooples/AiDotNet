@@ -280,6 +280,10 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
         T two = NumOps.FromDouble(2.0);
         T clipValue = NumOps.FromDouble(5.0);
         T negClipValue = NumOps.Negate(clipValue);
+        // Step learningRate / batch size: every batch is full except possibly the last one
+        int lastBatchSize = batchSize > 0 && n % batchSize != 0 ? n % batchSize : batchSize;
+        T fullBatchStep = batchSize > 0 ? NumOps.FromDouble(_learningRate / batchSize) : NumOps.Zero;
+        T lastBatchStep = lastBatchSize > 0 ? NumOps.FromDouble(_learningRate / lastBatchSize) : NumOps.Zero;
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -360,7 +364,7 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
                 }
 
                 // Apply clipped gradients (clip to [-5, 5], step learningRate / batch size) to all blocks
-                T lr = NumOps.FromDouble(_learningRate / actualBatchSize);
+                T lr = actualBatchSize == batchSize ? fullBatchStep : lastBatchStep;
                 for (int blockIdx = 0; blockIdx < blocks.Count; blockIdx++)
                 {
                     var block = blocks[blockIdx];

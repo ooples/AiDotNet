@@ -177,9 +177,11 @@ public partial class RobustPCADetector<T> : AnomalyDetectorBase<T>
             // Update Y: Y = Y + mu(M - L - S)
             var residual = engine.TensorSubtract(engine.TensorSubtract(M, lowRank), sparse);
             Y = engine.TensorAdd(Y, engine.TensorMultiplyScalar(residual, mu));
-            T primalResidual = engine.TensorSum(engine.TensorSquare(residual));
-
-            if (NumOps.LessThan(NumOps.Divide(NumOps.Sqrt(primalResidual), nm), toleranceT))
+            // Converged when sqrt(||M - L - S||_F^2) / (n m) < tolerance
+            var primalResidual = engine.ReduceSum(engine.Reshape(engine.TensorSquare(residual), new[] { n * m }),
+                new[] { 0 }, true);
+            var converged = engine.TensorLessThan(engine.TensorDivideScalar(engine.TensorSqrt(primalResidual), nm), toleranceT);
+            if (converged.Cast<int>().ToArray()[0] != 0)
                 break;
         }
 
