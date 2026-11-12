@@ -86,7 +86,7 @@ public class AprioriBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         // bin and avoids 0 / 0 in T types such as Half, where 1e-10 rounds to 0.
         var spread = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(X), new[] { 1, p }), min);
         var range = engine.TensorWhere(engine.TensorGreaterThan(spread, NumOps.Zero),
-            engine.TensorAddScalar(spread, NumOps.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
+            engine.TensorAddScalar(spread, PreprocessingTensorOps.Tolerance<T>(1e-10)), PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
         var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(X, min), range), NumOps.FromDouble(_nBins));
         var bins = engine.TensorMin(engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
         var oneHot = PreprocessingTensorOps.OneHotBins(bins, _nBins);

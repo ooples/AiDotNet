@@ -108,7 +108,7 @@ public class WOEEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Count total events (1s) and non-events (0s)
         var y = Tensor<T>.FromVector(target);
         var events = IsOne(y);
-        var nonEvents = Engine.TensorLessThan(Engine.TensorAbs(y), NumOps.FromDouble(1e-10));
+        var nonEvents = Engine.TensorLessThan(Engine.TensorAbs(y), PreprocessingTensorOps.Tolerance<T>(1e-10));
         var invalid = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(Engine.TensorAdd(events, nonEvents)));
         if (invalid.Length > 0)
             throw new ArgumentException($"Target must be binary (0 or 1). Found value: {y.GetFlat(invalid[0])}");
@@ -135,7 +135,7 @@ public class WOEEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     /// <summary>A 0/1 mask of the targets within 1e-10 of 1 (the events).</summary>
     private Tensor<T> IsOne(Tensor<T> y) =>
-        Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtractScalar(y, NumOps.One)), NumOps.FromDouble(1e-10));
+        Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtractScalar(y, NumOps.One)), PreprocessingTensorOps.Tolerance<T>(1e-10));
 
     /// <summary>
     /// Regularized event and non-event distributions per category and their clamped weight of evidence

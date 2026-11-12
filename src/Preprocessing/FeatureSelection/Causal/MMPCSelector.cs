@@ -150,7 +150,7 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         T varZ = engine.TensorSumOfSquares(z);
         var residX = xc;
         var residY = yc;
-        if (NumOps.GreaterThan(varZ, NumOps.FromDouble(1e-10)))
+        if (NumOps.GreaterThan(varZ, PreprocessingTensorOps.Tolerance<T>(1e-10)))
         {
             var zColumn = engine.Reshape(z, new[] { n, 1 });
             var slopeX = engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(zColumn), xc), varZ);

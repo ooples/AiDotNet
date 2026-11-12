@@ -98,7 +98,7 @@ public class BayesianModelAveraging<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             engine.TensorWhere(included, ones, new Tensor<T>(new[] { _nModels * p })), new[] { _nModels, p });
 
         // Model likelihood (R-squared proxy from per-feature squared correlations) with a BIC-like penalty.
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         Tensor<T> modelWeights;
         T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y)));
         if (PreprocessingTensorOps.IsBelow(ssTot, eps))

@@ -89,7 +89,7 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             throw new ArgumentException("Both classes must have at least one sample.");
 
         // Class means, floored at a small value to avoid division by zero
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var mean0 = engine.TensorMax(engine.TensorDivideScalar(
             engine.Reshape(engine.TensorMatMul(engine.Reshape(class0Mask, new[] { 1, n }), X), new[] { p }),
             NumOps.FromDouble(class0Count)), eps);

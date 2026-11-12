@@ -129,7 +129,7 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var (sortedStds, _) = engine.TensorSort(pooledStds, 0, false);
         T s0 = sortedStds.GetFlat(p / 2);
         if (NumOps.IsNaN(s0) || !NumOps.GreaterThan(s0, NumOps.Zero))
-            s0 = NumOps.FromDouble(1e-12);
+            s0 = PreprocessingTensorOps.Tolerance<T>(1e-12);
         var denominator = engine.TensorAddScalar(pooledStds, s0);
 
         // d_i (SAM statistic)

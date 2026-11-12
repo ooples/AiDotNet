@@ -71,7 +71,7 @@ public class MarginSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k)); // [k, n]
 
         // Standardize each feature (population std); near-constant features stay as they are
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var mean = engine.ReduceMean(X, new[] { 0 }, true);
         var centered = engine.TensorSubtract(X, mean);
         var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));

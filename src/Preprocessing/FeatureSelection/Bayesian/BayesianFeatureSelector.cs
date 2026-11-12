@@ -102,7 +102,7 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             var sumSqPos = engine.Reshape(engine.TensorMatMul(positiveRow, squares), new[] { p });
             var sumSqNeg = engine.Reshape(engine.TensorMatMul(negativeRow, squares), new[] { p });
 
-            T eps = NumOps.FromDouble(1e-10);
+            T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
             var meanPos = engine.TensorDivideScalar(sumPos, NumOps.FromDouble(countPos));
             var meanNeg = engine.TensorDivideScalar(sumNeg, NumOps.FromDouble(countNeg));
             var varPos = engine.TensorAddScalar(

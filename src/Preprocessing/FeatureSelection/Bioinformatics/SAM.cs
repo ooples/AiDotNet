@@ -128,7 +128,7 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         var (sortedSE, _) = engine.TensorSort(standardErrors, 0, false);
         T s0 = sortedSE.GetFlat((int)(_s0Percentile * (p - 1)));
         if (!NumOps.GreaterThan(s0, NumOps.Zero))
-            s0 = NumOps.FromDouble(1e-12);
+            s0 = PreprocessingTensorOps.Tolerance<T>(1e-12);
         var denominator = engine.TensorAddScalar(standardErrors, s0);
 
         // d-statistics

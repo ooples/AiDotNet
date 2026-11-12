@@ -98,7 +98,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var isSelected = new bool[p];
         var redundancySum = new Tensor<T>(new[] { p });
         var excluded = PreprocessingTensorOps.Filled(new[] { p }, NumOps.MinValue);
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var selectedScores = new Tensor<T>[p];
 
         while (selected.Count < Math.Min(_nFeaturesToSelect, p))

@@ -96,8 +96,8 @@ public class JamesSteinEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         T globalMean = _globalMean;
         T globalVariance = NumOps.Divide(
             engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, globalMean)), NumOps.FromDouble(n - 1));
-        bool degenerateVariance = NumOps.LessThan(globalVariance, NumOps.FromDouble(1e-10));
-        T eps = NumOps.FromDouble(1e-10);
+        bool degenerateVariance = NumOps.LessThan(globalVariance, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T two = NumOps.FromDouble(2);
 
         _encodingMap = new Dictionary<int, CategoryValueMap<T>>();

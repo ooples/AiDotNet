@@ -309,7 +309,7 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         basis = engine.TensorAdd(basis, engine.TensorMultiply(setLast, PreprocessingTensorOps.OneMinus(basis)));
 
         // Recursively build higher degree basis functions
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T one = NumOps.One;
         var hasNext = engine.TensorBroadcastTo(engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { 1, n }, one), lastColumn), shape);
         for (int d = 1; d <= _degree; d++)

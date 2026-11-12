@@ -97,7 +97,7 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var X = Tensor<T>.FromMatrix(data);
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T tolerance = NumOps.FromDouble(_tolerance);
         var thresholdFill = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(_alphaThreshold));
         var largeFill = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(1e10));
@@ -165,7 +165,7 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
 
     private T UpdateNoisePrecision(int n, T gammaSum, T residualSum)
     {
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T value = NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(n), gammaSum), NumOps.Add(residualSum, eps));
         return PreprocessingTensorOps.ScalarMax(value, eps);
     }

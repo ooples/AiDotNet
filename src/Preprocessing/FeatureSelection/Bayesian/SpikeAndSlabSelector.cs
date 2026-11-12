@@ -90,7 +90,7 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var prior = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(_priorInclusionProbability));
 
         // Residual variance estimate
