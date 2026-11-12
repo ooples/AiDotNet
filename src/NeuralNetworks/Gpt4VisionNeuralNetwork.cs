@@ -1383,32 +1383,15 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         if (values.Count == 0)
             throw new InvalidOperationException("Sequence contains no elements");
 
-        // Enumerable.Max over doubles: NaN loses to every number, and is the max only when all are NaN
-        var logits = new Tensor<T>(values.ToArray(), new[] { values.Count });
+        // Keep the maximum, exponentials and reduction wide, including for Half and decimal.
+        var logits = new Tensor<T>(values.ToArray(), [values.Count]).Cast<double>();
         var isNaN = Engine.TensorIsNan(logits);
-        var floor = new Tensor<T>(new[] { values.Count });
-        floor.Fill(NumOps.FromDouble(double.NegativeInfinity));
+        var floor = new Tensor<double>([values.Count]);
+        floor.Fill(double.NegativeInfinity);
         var numbers = Engine.TensorWhere(isNaN, floor, logits);
-        int maxIndex = Engine.TensorArgMax(numbers, 0)[0];
-        T maxVal = FirstNumberIndex(values) < 0
-            ? NumOps.FromDouble(double.NaN)
-            : numbers.GetFlat(maxIndex);
-
-        var expValues = Engine.TensorExp(Engine.TensorSubtractScalar(logits, maxVal));
-        T sum = Engine.TensorSum(expValues);
-
-        return Engine.TensorDivideScalar(expValues, sum).ToArray().ToList();
-    }
-
-    /// <summary>The index of the first non-NaN value, or -1 when every value is NaN.</summary>
-    private int FirstNumberIndex(List<T> values)
-    {
-        var ones = new Tensor<T>(new[] { values.Count });
-        ones.Fill(NumOps.One);
-        var isNumber = Engine.TensorWhere(Engine.TensorIsNan(new Tensor<T>(values.ToArray(), new[] { values.Count })),
-            new Tensor<T>(new[] { values.Count }), ones);
-        int first = Engine.TensorArgMax(isNumber, 0)[0];
-        return NumOps.IsNaN(values[first]) ? -1 : first;
+        double max = numbers.GetFlat(Engine.TensorArgMax(numbers, 0)[0]);
+        var exps = Engine.TensorExp(Engine.TensorSubtractScalar(logits, max));
+        return Engine.TensorDivideScalar(exps, Engine.TensorSum(exps)).Cast<T>().ToArray().ToList();
     }
 
     // SoftmaxVector + SampleFromDistribution were removed (#1632): GenerateTokens now uses the
@@ -1482,32 +1465,24 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Tensor<T> NormalizeTensor(Tensor<T> tensor)
     {
-        T first = tensor[0, 0];
-        T min = first;
-        T max = first;
+        var wide = tensor.Cast<double>();
+        double first = wide[0, 0];
+        double min = first, max = first;
 
-        // The scan starts at [0, 0] and only moves to a strictly smaller (larger) value, so a NaN start
-        // is kept and a NaN later on is never taken: the extremes are those of the non-NaN values.
+        // Preserve the original scan: a NaN first value is retained; later NaNs do not set extremes.
         int count = tensor.Shape[0] * tensor.Shape[1];
-        if (!NumOps.IsNaN(first))
+        if (!double.IsNaN(first))
         {
-            var grid = new Tensor<T>(tensor.ToArray().AsSpan(0, count).ToArray(), new[] { count });
+            var grid = new Tensor<double>(wide.ToArray().AsSpan(0, count).ToArray(), [count]);
             var isNaN = Engine.TensorIsNan(grid);
-            var floor = new Tensor<T>(new[] { count });
-            floor.Fill(NumOps.FromDouble(double.NegativeInfinity));
-            var forMax = Engine.TensorWhere(isNaN, floor, grid);
-            var forMin = Engine.TensorWhere(isNaN, floor, Engine.TensorNegate(grid));
-            max = grid.GetFlat(Engine.TensorArgMax(forMax, 0)[0]);
-            min = grid.GetFlat(Engine.TensorArgMax(forMin, 0)[0]);
+            var floor = new Tensor<double>([count]);
+            floor.Fill(double.NegativeInfinity);
+            max = grid.GetFlat(Engine.TensorArgMax(Engine.TensorWhere(isNaN, floor, grid), 0)[0]);
+            min = grid.GetFlat(Engine.TensorArgMax(Engine.TensorWhere(isNaN, floor, Engine.TensorNegate(grid)), 0)[0]);
         }
-
-        T range = NumOps.Subtract(max, min);
-        if (NumOps.LessThan(range, NumOps.FromDouble(1e-8)))
-        {
-            return tensor;
-        }
-
-        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(tensor, min), range);
+        double range = max - min;
+        if (range < 1e-8) return tensor;
+        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(wide, min), range).Cast<T>();
     }
 
     #endregion

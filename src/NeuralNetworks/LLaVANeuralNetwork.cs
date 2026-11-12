@@ -1106,21 +1106,15 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         if (values.Count == 0)
             throw new InvalidOperationException("Sequence contains no elements");
 
-        // Enumerable.Max over doubles: NaN loses to every number, and is the max only when all are NaN
-        var logits = new Tensor<T>(values.ToArray(), [values.Count]);
+        // Keep the maximum, exponentials and reduction wide, including for Half and decimal.
+        var logits = new Tensor<T>(values.ToArray(), [values.Count]).Cast<double>();
         var isNaN = Engine.TensorIsNan(logits);
-        var ones = new Tensor<T>([values.Count]);
-        ones.Fill(NumOps.One);
-        int firstNumber = Engine.TensorArgMax(Engine.TensorWhere(isNaN, new Tensor<T>([values.Count]), ones), 0)[0];
-        var floor = new Tensor<T>([values.Count]);
-        floor.Fill(NumOps.FromDouble(double.NegativeInfinity));
+        var floor = new Tensor<double>([values.Count]);
+        floor.Fill(double.NegativeInfinity);
         var numbers = Engine.TensorWhere(isNaN, floor, logits);
-        T maxVal = NumOps.IsNaN(values[firstNumber])
-            ? NumOps.FromDouble(double.NaN)
-            : numbers.GetFlat(Engine.TensorArgMax(numbers, 0)[0]);
-
-        var expValues = Engine.TensorExp(Engine.TensorSubtractScalar(logits, maxVal));
-        return Engine.TensorDivideScalar(expValues, Engine.TensorSum(expValues)).ToArray().ToList();
+        double max = numbers.GetFlat(Engine.TensorArgMax(numbers, 0)[0]);
+        var exps = Engine.TensorExp(Engine.TensorSubtractScalar(logits, max));
+        return Engine.TensorDivideScalar(exps, Engine.TensorSum(exps)).Cast<T>().ToArray().ToList();
     }
 
     #endregion
