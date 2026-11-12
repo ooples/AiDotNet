@@ -198,15 +198,16 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     /// The two objectives of every row of a 0/1 mask [m, p]: the mean absolute target correlation of the selected
     /// features (to maximize) and the number of selected features (to minimize); an empty row scores (0, p).
     /// </summary>
-    private (Tensor<T> Accuracy, Tensor<T> FeatureCount) EvaluateObjectives(Tensor<T> masks, Tensor<T> scores)
+    internal static (Tensor<T> Accuracy, Tensor<T> FeatureCount) EvaluateObjectives(Tensor<T> masks, Tensor<T> scores)
     {
-        var engine = Engine;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         int m = masks.Shape[0];
         // counted in int: a 0/1 sum in T stops counting at 2048 for Half
         var count = engine.ReduceSum(masks.Cast<int>(), new[] { 1 }, false).Cast<T>();
-        var emptyCount = PreprocessingTensorOps.Filled(new[] { m }, NumOps.FromDouble(masks.Shape[1]));
-        return (PopulationSearchOps.SubsetFitness(masks, scores, 0, NumOps.Zero, NumOps.Zero),
-                engine.TensorWhere(engine.TensorGreaterThan(count, NumOps.Zero), count, emptyCount));
+        var emptyCount = PreprocessingTensorOps.Filled(new[] { m }, ops.FromDouble(masks.Shape[1]));
+        return (PopulationSearchOps.SubsetFitness(masks, scores, 0, ops.Zero, ops.Zero),
+                engine.TensorWhere(engine.TensorGreaterThan(count, ops.Zero), count, emptyCount));
     }
 
     /// <summary>

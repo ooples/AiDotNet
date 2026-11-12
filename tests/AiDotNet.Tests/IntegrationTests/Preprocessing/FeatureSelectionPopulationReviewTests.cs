@@ -124,4 +124,41 @@ public class FeatureSelectionPopulationReviewTests
         for (int j = 0; j < p; j++)
             Assert.Equal(w[j], phi[j], 1);
     }
+
+    // The feature-count objective of a subset selecting all 3000 features is 3000. Summed in Half the count
+    // stopped at 2048, so wide subsets looked cheaper than they are on the Pareto front.
+    private static Tensor<Half> AllSelected(int p)
+    {
+        var ones = new Half[p];
+        for (int j = 0; j < p; j++)
+            ones[j] = (Half)1;
+        return new Tensor<Half>(ones, new[] { 1, p });
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task NSGAII_Half_CountsSelectedFeaturesPast2048()
+    {
+        await Task.CompletedTask;
+        var (_, count) = AiDotNet.Preprocessing.FeatureSelection.MultiObjective.NSGAIISelector<Half>.EvaluateObjectives(
+            AllSelected(3000), new Tensor<Half>(new[] { 3000 }));
+        Assert.Equal(3000.0, (double)count[0]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task SPEAII_Half_CountsSelectedFeaturesPast2048()
+    {
+        await Task.CompletedTask;
+        var (_, count) = AiDotNet.Preprocessing.FeatureSelection.MultiObjective.SPEAIISelector<Half>.EvaluateObjectives(
+            AllSelected(3000), new Tensor<Half>(new[] { 3000 }));
+        Assert.Equal(3000.0, (double)count[0]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task MOEAD_Half_CountsSelectedFeaturesPast2048()
+    {
+        await Task.CompletedTask;
+        var (_, count) = AiDotNet.Preprocessing.FeatureSelection.MultiObjective.MOEADSelector<Half>.EvaluateObjectives(
+            AllSelected(3000), new Tensor<Half>(new[] { 3000 }));
+        Assert.Equal(3000.0, (double)count[0]);
+    }
 }

@@ -143,9 +143,13 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     /// The two objectives of every row of a 0/1 mask [m, p]: the mean absolute target correlation of the selected
     /// features (to maximize; 0 for an empty row) and the number of selected features (to minimize).
     /// </summary>
-    private (Tensor<T> Accuracy, Tensor<T> FeatureCount) EvaluateObjectives(Tensor<T> masks, Tensor<T> scores) =>
-        (PopulationSearchOps.SubsetFitness(masks, scores, 0, NumOps.Zero, NumOps.Zero),
-         Engine.ReduceSum(masks.Cast<int>(), new[] { 1 }, false).Cast<T>());
+    internal static (Tensor<T> Accuracy, Tensor<T> FeatureCount) EvaluateObjectives(Tensor<T> masks, Tensor<T> scores)
+    {
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        T zero = MathHelper.GetNumericOperations<T>().Zero;
+        return (PopulationSearchOps.SubsetFitness(masks, scores, 0, zero, zero),
+            AiDotNetEngine.Current.ReduceSum(masks.Cast<int>(), new[] { 1 }, false).Cast<T>());
+    }
 
     /// <summary>
     /// Crowded binary tournament: of two uniformly drawn solutions the one in the better front wins, and within a
