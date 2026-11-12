@@ -32,10 +32,10 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     private readonly double _w; // Inertia weight
     private readonly double _c1; // Cognitive coefficient
     private readonly double _c2; // Social coefficient
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _scorer;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -44,7 +44,7 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     public double InertiaWeight => _w;
     public double CognitiveCoefficient => _c1;
     public double SocialCoefficient => _c2;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -57,7 +57,7 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         double inertiaWeight = 0.7,
         double cognitiveCoefficient = 1.5,
         double socialCoefficient = 1.5,
-        Func<Matrix<T>, Vector<T>, int[], double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? scorer = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -97,31 +97,34 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         var scorer = _scorer ?? DefaultScorer;
 
-        // Initialize particles (positions and velocities)
-        var positions = new double[_nParticles, p];
-        var velocities = new double[_nParticles, p];
-        var pBest = new double[_nParticles, p]; // Personal best positions
-        var pBestFitness = new double[_nParticles];
-        var gBest = new double[p]; // Global best position
-        double gBestFitness = double.NegativeInfinity;
+        // Initialize particles: positions uniform on [0, 1), velocities uniform on [-0.05, 0.05), each drawn in bulk
+        // by the engine from one seed of the selector's generator
+        var positions = new Tensor<T>[_nParticles];
+        var velocities = new Tensor<T>[_nParticles];
+        var pBest = new Tensor<T>[_nParticles]; // Personal best positions
+        var pBestFitness = new T[_nParticles];
+        var gBest = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero); // Global best position
+        T gBestFitness = NumOps.FromDouble(double.NegativeInfinity);
+        T inertia = NumOps.FromDouble(_w);
+        T cognitive = NumOps.FromDouble(_c1);
+        T social = NumOps.FromDouble(_c2);
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+        T minusOne = NumOps.FromDouble(-1);
 
         // Initialize
         for (int i = 0; i < _nParticles; i++)
         {
-            for (int j = 0; j < p; j++)
-            {
-                positions[i, j] = random.NextDouble();
-                velocities[i, j] = (random.NextDouble() - 0.5) * 0.1;
-                pBest[i, j] = positions[i, j];
-            }
+            positions[i] = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+            velocities[i] = Engine.TensorUniform<T>(new[] { p }, -0.05, 0.05, random.Next());
+            pBest[i] = positions[i];
 
-            pBestFitness[i] = EvaluatePosition(data, target, positions, i, p, scorer);
+            pBestFitness[i] = EvaluatePosition(data, target, positions[i], scorer);
 
-            if (pBestFitness[i] > gBestFitness)
+            if (WrapperScoringOps.IsAbove(pBestFitness[i], gBestFitness))
             {
                 gBestFitness = pBestFitness[i];
-                for (int j = 0; j < p; j++)
-                    gBest[j] = positions[i, j];
+                gBest = positions[i];
             }
         }
 
@@ -130,89 +133,61 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         {
             for (int i = 0; i < _nParticles; i++)
             {
-                // Update velocity
-                for (int j = 0; j < p; j++)
-                {
-                    double r1 = random.NextDouble();
-                    double r2 = random.NextDouble();
+                // Update velocity: w v + c1 r1 (pBest - x) + c2 r2 (gBest - x), clamped to [-1, 1]
+                var r1 = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+                var r2 = Engine.TensorUniform<T>(new[] { p }, 0, 1, random.Next());
+                var velocity = Engine.TensorAdd(Engine.TensorMultiplyScalar(velocities[i], inertia), Engine.TensorAdd(
+                    Engine.TensorMultiplyScalar(Engine.TensorMultiply(r1, Engine.TensorSubtract(pBest[i], positions[i])), cognitive),
+                    Engine.TensorMultiplyScalar(Engine.TensorMultiply(r2, Engine.TensorSubtract(gBest, positions[i])), social)));
+                velocities[i] = Engine.TensorClamp(velocity, minusOne, one);
 
-                    velocities[i, j] = _w * velocities[i, j]
-                        + _c1 * r1 * (pBest[i, j] - positions[i, j])
-                        + _c2 * r2 * (gBest[j] - positions[i, j]);
-
-                    // Clamp velocity
-                    velocities[i, j] = Math.Max(-1, Math.Min(1, velocities[i, j]));
-                }
-
-                // Update position
-                for (int j = 0; j < p; j++)
-                {
-                    positions[i, j] += velocities[i, j];
-                    positions[i, j] = Math.Max(0, Math.Min(1, positions[i, j]));
-                }
+                // Update position, clamped to [0, 1]
+                positions[i] = Engine.TensorClamp(Engine.TensorAdd(positions[i], velocities[i]), zero, one);
 
                 // Evaluate new position
-                double fitness = EvaluatePosition(data, target, positions, i, p, scorer);
+                T fitness = EvaluatePosition(data, target, positions[i], scorer);
 
                 // Update personal best
-                if (fitness > pBestFitness[i])
+                if (WrapperScoringOps.IsAbove(fitness, pBestFitness[i]))
                 {
                     pBestFitness[i] = fitness;
-                    for (int j = 0; j < p; j++)
-                        pBest[i, j] = positions[i, j];
+                    pBest[i] = positions[i];
 
                     // Update global best
-                    if (fitness > gBestFitness)
+                    if (WrapperScoringOps.IsAbove(fitness, gBestFitness))
                     {
                         gBestFitness = fitness;
-                        for (int j = 0; j < p; j++)
-                            gBest[j] = positions[i, j];
+                        gBest = positions[i];
                     }
                 }
             }
         }
 
         // Extract selected features from global best
-        _featureScores = gBest;
+        _featureScores = gBest.ToVector();
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = gBest
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(gBest, numToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluatePosition(Matrix<T> data, Vector<T> target, double[,] positions,
-        int particleIdx, int p, Func<Matrix<T>, Vector<T>, int[], double> scorer)
+    private T EvaluatePosition(Matrix<T> data, Vector<T> target, Tensor<T> position,
+        Func<Matrix<T>, Vector<T>, int[], T> scorer)
     {
         // Convert continuous position to binary selection (threshold = 0.5)
-        var selected = new List<int>();
-        for (int j = 0; j < p; j++)
-        {
-            if (positions[particleIdx, j] > 0.5)
-                selected.Add(j);
-        }
+        var selected = PreprocessingTensorOps.MaskPositions(Engine.TensorGreaterThan(position, NumOps.FromDouble(0.5)));
 
         // If no features selected, take top by position value
-        if (selected.Count == 0)
-        {
-            var topIdx = Enumerable.Range(0, p)
-                .OrderByDescending(j => positions[particleIdx, j])
-                .First();
-            selected.Add(topIdx);
-        }
+        if (selected.Length == 0)
+            selected = new[] { PreprocessingTensorOps.FirstArgMax(position) };
 
-        return scorer(data, target, [.. selected]);
+        return scorer(data, target, selected);
     }
 
-    private double DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
+    private T DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
     {
         if (featureIndices.Length == 0)
-            return double.NegativeInfinity;
+            return NumOps.FromDouble(double.NegativeInfinity);
 
         // Correlation-based score: mean |Pearson r| with the target
         return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, featureIndices);

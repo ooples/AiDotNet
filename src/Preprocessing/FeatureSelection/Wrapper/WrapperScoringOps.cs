@@ -252,4 +252,41 @@ internal static class WrapperScoringOps
         T total = engine.TensorSum(engine.TensorMultiply(counted, engine.TensorAbs(correlation)));
         return ops.Divide(total, ops.FromDouble(k * (k - 1) / 2));
     }
+
+    /// <summary>A [length] 0/1 tensor with ones at <paramref name="features"/> (counted once per occurrence).</summary>
+    public static Tensor<T> Membership<T>(int[] features, int length)
+    {
+        if (features.Length == 0)
+            return PreprocessingTensorOps.Filled(new[] { length }, MathHelper.GetNumericOperations<T>().Zero);
+
+        var engine = AiDotNetEngine.Current;
+        var oneHot = engine.TensorOneHot<T>(new Tensor<int>((int[])features.Clone(), new[] { features.Length }), length);
+        return engine.ReduceSum(oneHot, new[] { 0 }, false);
+    }
+
+    /// <summary>A [rows, length] 0/1 tensor whose row r marks <paramref name="subsets"/>[r].</summary>
+    public static Tensor<T> MembershipRows<T>(IReadOnlyList<int[]> subsets, int length) =>
+        AiDotNetEngine.Current.TensorStack(subsets.Select(subset => Membership<T>(subset, length)).ToArray(), 0);
+
+    /// <summary>The positions of the true entries of a mask, ascending.</summary>
+    public static int[] Positions(bool[] mask) => Enumerable.Range(0, mask.Length).Where(j => mask[j]).ToArray();
+
+    /// <summary>
+    /// Per feature, the sum of the scores of the subsets ([rows] <paramref name="scores"/>) that contain it, as
+    /// [length]; a subset adds nothing to the features it leaves out.
+    /// </summary>
+    public static Tensor<T> ScoreSums<T>(IReadOnlyList<int[]> subsets, Tensor<T> scores, int length)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (subsets.Count == 0)
+            return PreprocessingTensorOps.Filled(new[] { length }, ops.Zero);
+
+        var membership = MembershipRows<T>(subsets, length);
+        var shape = new[] { subsets.Count, length };
+        var contributions = engine.TensorWhere(engine.TensorGreaterThan(membership, ops.Zero),
+            engine.TensorMultiply(membership, engine.TensorBroadcastTo(engine.Reshape(scores, new[] { subsets.Count, 1 }), shape)),
+            PreprocessingTensorOps.Filled(shape, ops.Zero));
+        return engine.ReduceSum(contributions, new[] { 0 }, false);
+    }
 }

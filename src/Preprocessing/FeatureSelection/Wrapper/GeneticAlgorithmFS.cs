@@ -32,10 +32,10 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly double _crossoverRate;
     private readonly double _mutationRate;
     private readonly int _eliteSize;
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _scorer;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -43,7 +43,7 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double CrossoverRate => _crossoverRate;
     public double MutationRate => _mutationRate;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -56,7 +56,7 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         double crossoverRate = 0.8,
         double mutationRate = 0.1,
         int eliteSize = 2,
-        Func<Matrix<T>, Vector<T>, int[], double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? scorer = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -99,7 +99,7 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         // Initialize population with random binary chromosomes
         var population = new bool[_populationSize][];
-        var fitness = new double[_populationSize];
+        var fitness = new T[_populationSize];
 
         for (int i = 0; i < _populationSize; i++)
         {
@@ -119,12 +119,11 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         for (int gen = 0; gen < _nGenerations; gen++)
         {
             // Sort by fitness (descending)
-            var sortedIndices = Enumerable.Range(0, _populationSize)
-                .OrderByDescending(i => fitness[i])
-                .ToArray();
+            var sortedIndices = PreprocessingTensorOps.StableOrder(
+                new Tensor<T>(fitness, new[] { _populationSize }), descending: true);
 
             var newPopulation = new bool[_populationSize][];
-            var newFitness = new double[_populationSize];
+            var newFitness = new T[_populationSize];
 
             // Elitism: copy best individuals
             for (int i = 0; i < _eliteSize && i < _populationSize; i++)
@@ -161,28 +160,14 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             fitness = newFitness;
         }
 
-        // Find best solution
-        int bestIdx = 0;
-        double bestFitness = fitness[0];
-        for (int i = 1; i < _populationSize; i++)
-        {
-            if (fitness[i] > bestFitness)
-            {
-                bestFitness = fitness[i];
-                bestIdx = i;
-            }
-        }
+        // Find best solution (the first best)
+        var fitnessTensor = new Tensor<T>(fitness, new[] { _populationSize });
+        int bestIdx = PreprocessingTensorOps.FirstArgMax(fitnessTensor);
 
-        // Compute feature frequency scores
-        _featureScores = new double[p];
-        for (int i = 0; i < _populationSize; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                if (population[i][j])
-                    _featureScores[j] += fitness[i];
-            }
-        }
+        // Compute feature frequency scores: the summed fitness of the chromosomes that select each feature
+        var featureScores = WrapperScoringOps.ScoreSums(
+            population.Select(WrapperScoringOps.Positions).ToList(), fitnessTensor, p);
+        _featureScores = featureScores.ToVector();
 
         // Select from best chromosome, respecting _nFeaturesToSelect
         var bestChrom = population[bestIdx];
@@ -196,9 +181,10 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         // If too many, take top by feature score
         if (selectedFromBest.Count > numToSelect)
         {
-            _selectedIndices = selectedFromBest
-                .OrderByDescending(j => _featureScores[j])
-                .Take(numToSelect)
+            var candidates = selectedFromBest.ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+                WrapperScoringOps.Gather(featureScores, candidates), numToSelect)
+                .Select(position => candidates[position])
                 .OrderBy(x => x)
                 .ToArray();
         }
@@ -210,13 +196,13 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         IsFitted = true;
     }
 
-    private int TournamentSelection(double[] fitness, Random random, int tournamentSize = 3)
+    private int TournamentSelection(T[] fitness, Random random, int tournamentSize = 3)
     {
         int best = random.Next(_populationSize);
         for (int i = 1; i < tournamentSize; i++)
         {
             int competitor = random.Next(_populationSize);
-            if (fitness[competitor] > fitness[best])
+            if (WrapperScoringOps.IsAbove(fitness[competitor], fitness[best]))
                 best = competitor;
         }
         return best;
@@ -253,8 +239,8 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         }
     }
 
-    private double EvaluateChromosome(Matrix<T> data, Vector<T> target, bool[] chromosome,
-        Func<Matrix<T>, Vector<T>, int[], double> scorer)
+    private T EvaluateChromosome(Matrix<T> data, Vector<T> target, bool[] chromosome,
+        Func<Matrix<T>, Vector<T>, int[], T> scorer)
     {
         var selected = new List<int>();
         for (int j = 0; j < chromosome.Length; j++)
@@ -264,15 +250,15 @@ public class GeneticAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         }
 
         if (selected.Count == 0)
-            return double.NegativeInfinity;
+            return NumOps.FromDouble(double.NegativeInfinity);
 
         return scorer(data, target, [.. selected]);
     }
 
-    private double DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
+    private T DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
     {
         if (featureIndices.Length == 0)
-            return double.NegativeInfinity;
+            return NumOps.FromDouble(double.NegativeInfinity);
 
         // Correlation-based score: mean |Pearson r| with the target
         return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, featureIndices);
