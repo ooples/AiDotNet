@@ -283,6 +283,9 @@ public abstract class TabNetBase<T>
         // Processed features from previous step (for first step, use zeros)
         var processedFeatures = CreateZeros(batchSize, Options.FeatureDimension);
 
+        // First-step attention weight: every feature gets 1 / InputDim
+        var uniformAttention = NumOps.Divide(NumOps.One, NumOps.FromDouble(InputDim));
+
         // Step 3: Process each decision step
         for (int step = 0; step < Options.NumDecisionSteps; step++)
         {
@@ -291,8 +294,7 @@ public abstract class TabNetBase<T>
             if (step == 0)
             {
                 // First step: uniform attention (use all features equally)
-                attentionMask = Tensor<T>.CreateDefault(
-                    [batchSize, InputDim], NumOps.Divide(NumOps.One, NumOps.FromDouble(InputDim)));
+                attentionMask = Tensor<T>.CreateDefault([batchSize, InputDim], uniformAttention);
             }
             else
             {
