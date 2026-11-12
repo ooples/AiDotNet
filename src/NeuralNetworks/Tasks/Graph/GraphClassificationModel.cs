@@ -416,6 +416,7 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         };
 
         var lr = NumOps.FromDouble(learningRate);
+        var probabilityFloor = NumOps.FromDouble(1e-10);
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
@@ -425,7 +426,8 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 layer.SetTrainingMode(true);
             }
 
-            double epochLoss = 0.0;
+            // Sum of label * log(prob) per graph; the cross-entropy is its negation
+            var graphLogLikelihoods = new T[task.TrainGraphs.Count];
             int correctTrain = 0;
 
             // Training loop - process each graph
@@ -446,9 +448,9 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 // Compute cross-entropy loss: -sum(label * log(max(prob, 1e-10)))
                 var probRow = Engine.TensorNarrow(probs, 1, 0, NumClasses);
                 var floored = Engine.TensorWhere(
-                    Engine.TensorIsNan(probRow), probRow, Engine.TensorMax(probRow, NumOps.FromDouble(1e-10)));
+                    Engine.TensorIsNan(probRow), probRow, Engine.TensorMax(probRow, probabilityFloor));
                 var weightedLog = Engine.TensorMultiply(LabelRow(task.TrainLabels, i), Engine.TensorLog(floored));
-                epochLoss -= NumOps.ToDouble(Engine.TensorSum(weightedLog));
+                graphLogLikelihoods[i] = Engine.TensorSum(weightedLog);
 
                 // Accuracy
                 int predictedClass = GetPredictedClass(logits);
@@ -465,6 +467,9 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 }
             }
 
+            double epochLoss = task.TrainGraphs.Count > 0
+                ? -NumOps.ToDouble(Engine.Sum(new Vector<T>(graphLogLikelihoods)))
+                : 0.0;
             double avgLoss = task.TrainGraphs.Count > 0 ? epochLoss / task.TrainGraphs.Count : 0.0;
             double trainAcc = task.TrainGraphs.Count > 0 ? (double)correctTrain / task.TrainGraphs.Count : 0.0;
 
