@@ -79,6 +79,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     private Tensor<T> ColumnSums(Tensor<T> batch)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = batch.Shape[0];
         var columns = batch.Shape[1] == _dimension
             ? batch
@@ -91,6 +92,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     private void BlendIntoCenter(Tensor<T> batchMean)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var momentum = NumOps.FromDouble(_momentum);
         var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
         var blended = Engine.TensorAdd(
@@ -130,6 +132,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <returns>Centered tensor.</returns>
     public Tensor<T> ApplyCenter(Tensor<T> input)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (input is null) throw new ArgumentNullException(nameof(input));
 
         var batchSize = input.Shape[0];
@@ -149,6 +152,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <param name="batchOutput">Batch of outputs from teacher network [batch_size, dim].</param>
     public void Update(Tensor<T> batchOutput)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (batchOutput is null) throw new ArgumentNullException(nameof(batchOutput));
 
         var batchSize = batchOutput.Shape[0];
@@ -170,6 +174,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <param name="outputs">List of output tensors.</param>
     public void UpdateFromMultiple(IList<Tensor<T>> outputs)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (outputs is null || outputs.Count == 0)
             throw new ArgumentException("Must provide at least one output tensor", nameof(outputs));
 
@@ -233,6 +238,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     public T CenterNorm()
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         T sumSquared = Engine.TensorSumOfSquares(CenterTensor);
         return NumOps.Sqrt(sumSquared);
     }
@@ -242,6 +248,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     public (T mean, T std, T min, T max) CenterStatistics()
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (_dimension == 0)
             return (NumOps.Zero, NumOps.Zero, NumOps.Zero, NumOps.Zero);
 

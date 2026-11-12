@@ -201,6 +201,7 @@ public class MemoryBank<T> : IMemoryBank<T>
     /// <inheritdoc />
     public void UpdateWithMomentum(int[] indices, Tensor<T> newEmbeddings, double momentum)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (indices is null) throw new ArgumentNullException(nameof(indices));
         if (newEmbeddings is null) throw new ArgumentNullException(nameof(newEmbeddings));
         if (momentum < 0 || momentum > 1) throw new ArgumentOutOfRangeException(nameof(momentum));

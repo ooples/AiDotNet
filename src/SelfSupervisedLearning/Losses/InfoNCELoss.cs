@@ -68,6 +68,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     /// <returns>The computed loss value.</returns>
     public T ComputeLoss(Tensor<T> queries, Tensor<T> positiveKeys, Tensor<T> negativeKeys)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (queries is null) throw new ArgumentNullException(nameof(queries));
         if (positiveKeys is null) throw new ArgumentNullException(nameof(positiveKeys));
         if (negativeKeys is null) throw new ArgumentNullException(nameof(negativeKeys));
@@ -96,6 +97,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private Tensor<T> PositiveFirstSimilarities(Tensor<T> q, Tensor<T> kPos, Tensor<T> kNeg)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var posSims = Engine.ReduceSum(Engine.TensorMultiply(q, kPos), new[] { 1 }, keepDims: true);
         var negSims = Engine.TensorMatMul(q, Engine.TensorTranspose(kNeg));
         return Engine.TensorConcatenate(new[] { posSims, negSims }, 1);
@@ -106,6 +108,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private (Tensor<T> LogSumExp, Tensor<T> Probabilities) RowLogSumExpAndSoftmax(Tensor<T> logits)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var maxLogit = Engine.ReduceMax(logits, new[] { 1 }, keepDims: true);
         var exps = Engine.TensorExp(Engine.TensorSubtract(logits, maxLogit));
         var sumExp = Engine.ReduceSum(exps, new[] { 1 }, keepDims: true);
@@ -121,6 +124,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     /// <returns>The computed loss value.</returns>
     public T ComputeLossInBatch(Tensor<T> queries, Tensor<T> keys)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (queries is null) throw new ArgumentNullException(nameof(queries));
         if (keys is null) throw new ArgumentNullException(nameof(keys));
 
@@ -150,6 +154,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     public (T loss, Tensor<T> gradQueries, Tensor<T> gradKeys) ComputeLossInBatchWithGradients(
         Tensor<T> queries, Tensor<T> keys)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (queries is null) throw new ArgumentNullException(nameof(queries));
         if (keys is null) throw new ArgumentNullException(nameof(keys));
 
@@ -188,6 +193,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     public (T loss, Tensor<T> gradQueries, Tensor<T> gradPositiveKeys) ComputeLossWithGradients(
         Tensor<T> queries, Tensor<T> positiveKeys, Tensor<T> negativeKeys)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = queries.Shape[0];
         var numNegatives = negativeKeys.Shape[0];
 
@@ -229,6 +235,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     /// </summary>
     public double ComputeAccuracy(Tensor<T> queries, Tensor<T> positiveKeys, Tensor<T> negativeKeys)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = queries.Shape[0];
 
         var q = _normalize ? L2Normalize(queries) : queries;
@@ -247,6 +254,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));

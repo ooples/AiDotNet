@@ -89,6 +89,7 @@ internal static class SelfSupervisedLearningPretrainer
         }
 
         // Mean over features of the unbiased per-feature standard deviation across the batch
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         var matrix = repr.Contiguous().Reshape(rows, k);
         var centered = engine.TensorSubtract(matrix, engine.ReduceMean(matrix, new[] { 0 }, keepDims: true));
@@ -109,6 +110,7 @@ internal static class SelfSupervisedLearningPretrainer
             return 0.0;
         }
 
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
 
         // Design matrix with a bias column: F[n, k+1].

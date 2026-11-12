@@ -124,6 +124,8 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
         var m = NumOps.FromDouble(_momentum);
         var oneMinusM = NumOps.FromDouble(1.0 - _momentum);
 
+        // Detached, as master's fresh parameter array was
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var newParams = AiDotNetEngine.Current.TensorAdd(
             AiDotNetEngine.Current.TensorMultiplyScalar(momentumParams.AsTensor(), m),
             AiDotNetEngine.Current.TensorMultiplyScalar(mainEncoderParams.AsTensor(), oneMinusM));

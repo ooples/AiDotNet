@@ -85,6 +85,7 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
 
     private T ComputeLossScalarLegacy(Tensor<T> onlinePrediction, Tensor<T> targetProjection)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (onlinePrediction is null) throw new ArgumentNullException(nameof(onlinePrediction));
         if (targetProjection is null) throw new ArgumentNullException(nameof(targetProjection));
 
@@ -130,6 +131,7 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
     public (T loss, Tensor<T> gradPrediction) ComputeLossWithGradients(
         Tensor<T> onlinePrediction, Tensor<T> targetProjection)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = onlinePrediction.Shape[0];
 
         var p = _normalize ? L2Normalize(onlinePrediction) : onlinePrediction;
@@ -166,6 +168,7 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
     /// </remarks>
     public T ComputeMSELoss(Tensor<T> prediction, Tensor<T> target)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = prediction.Shape[0];
         var dim = prediction.Shape[1];
 
@@ -179,6 +182,7 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));

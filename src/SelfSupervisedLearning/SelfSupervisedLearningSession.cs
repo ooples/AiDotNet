@@ -408,6 +408,8 @@ public class SelfSupervisedLearningSession<T>
 
             if (batchSize > 0)
             {
+                // A detached copy of the rows, as master's fresh feature arrays were
+                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
                 allFeatures.Add(Engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { batchSize, dim }));
             }
         }
@@ -418,6 +420,7 @@ public class SelfSupervisedLearningSession<T>
         }
 
         // Stack the rows into one [numSamples, featureDim] tensor
+        using var stackNoGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         _cachedTrainingFeatures = Engine.TensorConcatenate(allFeatures.ToArray(), 0);
         _cachedTrainingLabels = trainingLabels;
     }

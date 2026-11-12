@@ -134,6 +134,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
 
     private T ComputeLossScalarLegacy(Tensor<T> z1, Tensor<T> z2)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (z1 is null) throw new ArgumentNullException(nameof(z1));
         if (z2 is null) throw new ArgumentNullException(nameof(z2));
 
@@ -167,6 +168,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     public (T loss, Tensor<T> gradZ1, Tensor<T> gradZ2) ComputeLossWithGradients(
         Tensor<T> z1, Tensor<T> z2)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = z1.Shape[0];
         var dim = z1.Shape[1];
 
@@ -209,6 +211,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     public Tensor<T> ComputeCrossCorrelation(Tensor<T> z1, Tensor<T> z2, int batchSize)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
 
         // C[i,j] = (sum_b z1[b,i] * z2[b,j]) / batchSize
@@ -220,6 +223,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private Tensor<T> BatchNormalize(Tensor<T> tensor)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = tensor.Shape[0];
         var batchSizeT = NumOps.FromDouble(batchSize);
 
@@ -240,6 +244,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     public T OffDiagonalSum(Tensor<T> matrix)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         return Engine.TensorSumOfSquares(OffDiagonal(matrix));
     }
 
@@ -249,6 +254,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private Tensor<T> OffDiagonal(Tensor<T> matrix)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var dim = matrix.Shape[0];
         return Engine.TensorWhere(Engine.TensorEye<T>(dim), new Tensor<T>(new[] { dim, dim }), matrix);
     }
