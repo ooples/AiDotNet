@@ -1129,6 +1129,22 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
+        // Posterior coefficients per step: beta / sqrt(max(1e-20, 1 - bar)), 1 / sqrt(alpha) and
+        // sqrt(max(0, (1 - barPrev) beta / max(1e-20, 1 - bar))).
+        T[] coefficientTable, invSqrtAlphaTable, sigmaTable;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var betas = Tensor<T>.FromVector(_betas);
+            var bar = Tensor<T>.FromVector(_alphasCumprod);
+            var ones = Engine.TensorFullLike(bar, NumOps.One);
+            var oneMinusBar = Engine.TensorMax(Engine.TensorSubtract(ones, bar), NumOps.FromDouble(1e-20));
+            coefficientTable = Engine.TensorDivide(betas, Engine.TensorSqrt(oneMinusBar)).ToArray();
+            invSqrtAlphaTable = Engine.TensorDivide(ones, Engine.TensorSqrt(Tensor<T>.FromVector(_alphas))).ToArray();
+            var variance = Engine.TensorDivide(
+                Engine.TensorMultiply(Engine.TensorSubtract(ones, Tensor<T>.FromVector(_alphasCumprodPrev)), betas), oneMinusBar);
+            sigmaTable = Engine.TensorSqrt(Engine.TensorMax(variance, NumOps.Zero)).ToArray();
+        }
+
         var results = new List<Tensor<T>>(windows.Count);
         foreach (var window in windows)
         {
@@ -1138,25 +1154,21 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
             for (int k = _diffusionSteps - 1; k >= 0; k--)
             {
-                var epsilon = Denoise(window.Tokens, yk, new[] { k }, samples).ToArray();
-                double beta = NumOps.ToDouble(_betas[k]);
-                double alpha = NumOps.ToDouble(_alphas[k]);
-                double bar = NumOps.ToDouble(_alphasCumprod[k]);
-                double barPrev = NumOps.ToDouble(_alphasCumprodPrev[k]);
-                double coefficient = beta / Math.Sqrt(Math.Max(1e-20, 1.0 - bar));
-                double invSqrtAlpha = 1.0 / Math.Sqrt(alpha);
-                double sigma = Math.Sqrt(Math.Max(0.0, (1.0 - barPrev) * beta / Math.Max(1e-20, 1.0 - bar)));
-
-                var next = new Tensor<T>(new[] { samples, _forecastHorizon, _numFeatures });
-                var nextSpan = next.Data.Span;
-                var current = yk.Data.Span;
-                for (int i = 0; i < nextSpan.Length; i++)
+                var epsilon = Denoise(window.Tokens, yk, new[] { k }, samples);
+                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
                 {
-                    double mean = (NumOps.ToDouble(current[i]) - coefficient * NumOps.ToDouble(epsilon[i])) * invSqrtAlpha;
-                    double z = NumOps.ToDouble(SampleStandardNormal(rand));
-                    nextSpan[i] = NumOps.FromDouble(mean + sigma * z);
+                    var shape = yk._shape;
+                    var epsilonGrid = Engine.Reshape(
+                        Engine.TensorNarrow(Engine.Reshape(epsilon.Contiguous(), new[] { epsilon.Length }), 0, 0, yk.Length), shape);
+                    var mean = Engine.TensorMultiplyScalar(
+                        Engine.TensorSubtract(yk, Engine.TensorMultiplyScalar(epsilonGrid, coefficientTable[k])), invSqrtAlphaTable[k]);
+
+                    // One noise draw per element at every step, in the same order (sigma is zero at k = 0).
+                    var z = new Tensor<T>(shape);
+                    var zSpan = z.Data.Span;
+                    for (int i = 0; i < zSpan.Length; i++) zSpan[i] = SampleStandardNormal(rand);
+                    yk = Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(z, sigmaTable[k]));
                 }
-                yk = next;
             }
 
             results.Add(Summarize(yk, window, samples, perRow, quantiles));

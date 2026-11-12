@@ -561,23 +561,30 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         T one = NumOps.One;
         T guard = NumOps.FromDouble(1e-10);
         var step = new int[1];
+
+        // Equation 18's per-step coefficients, computed once for the whole schedule.
+        T[] coefficientXkTable, coefficientX0Table, sigmaTable;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var betas = Tensor<T>.FromVector(_betas);
+            var abar = Tensor<T>.FromVector(_alphasCumprod);
+            var abarPrev = Tensor<T>.FromVector(_alphasCumprodPrev);
+            var ones = Engine.TensorFullLike(abar, one);
+            var oneMinusBar = Engine.TensorAddScalar(Engine.TensorSubtract(ones, abar), guard);
+            var oneMinusPrev = Engine.TensorSubtract(ones, abarPrev);
+            coefficientXkTable = Engine.TensorDivide(
+                Engine.TensorMultiply(Engine.TensorSqrt(Tensor<T>.FromVector(_alphas)), oneMinusPrev), oneMinusBar).ToArray();
+            coefficientX0Table = Engine.TensorDivide(Engine.TensorMultiply(Engine.TensorSqrt(abarPrev), betas), oneMinusBar).ToArray();
+            sigmaTable = Engine.TensorSqrt(Engine.TensorDivide(Engine.TensorMultiply(oneMinusPrev, betas), oneMinusBar)).ToArray();
+        }
         for (int k = _diffusionSteps - 1; k >= 0; k--)
         {
             step[0] = k;
             var predicted = DenoiserForward(xk, mixed, autoregressiveInit, step, 1, outputLen);
 
-            T alphaBarPrev = _alphasCumprodPrev[k];
-            T oneMinusBar = NumOps.Add(NumOps.Subtract(one, _alphasCumprod[k]), guard);
-            T coefficientXk = NumOps.Divide(
-                NumOps.Multiply(NumOps.Sqrt(_alphas[k]), NumOps.Subtract(one, alphaBarPrev)),
-                oneMinusBar);
-            T coefficientX0 = NumOps.Divide(
-                NumOps.Multiply(NumOps.Sqrt(alphaBarPrev), _betas[k]),
-                oneMinusBar);
-            T sigma = k > 0
-                ? NumOps.Sqrt(NumOps.Divide(
-                    NumOps.Multiply(NumOps.Subtract(one, alphaBarPrev), _betas[k]), oneMinusBar))
-                : NumOps.Zero;
+            T coefficientXk = coefficientXkTable[k];
+            T coefficientX0 = coefficientX0Table[k];
+            T sigma = k > 0 ? sigmaTable[k] : NumOps.Zero;
 
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
