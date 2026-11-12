@@ -412,6 +412,45 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.True(result.ChiSquareStatistic >= 0);
     }
 
+    [Theory(Timeout = 120000)]
+    [InlineData(3.841458820694124, 1)]
+    [InlineData(5.991464547107979, 2)]
+    [InlineData(9.487729036781154, 4)]
+    public async Task ChiSquarePValue_AtTheFivePercentCriticalValue_IsFivePercent(double chiSquare, int degreesOfFreedom)
+    {
+        // The arguments are scipy.stats.chi2.ppf(0.95, df); the survival function there is 0.05 by
+        // definition. Closed forms: df=1 erfc(sqrt(x/2)), df=2 exp(-x/2), df=4 exp(-x/2)(1 + x/2).
+        double p = StatisticsHelper<double>.ChiSquarePValue(chiSquare, degreesOfFreedom);
+        Assert.Equal(0.05, p, 1e-9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ChiSquare_CriticalValue_IsTheChiSquareQuantile()
+    {
+        // Two categories => df = 1; at alpha = 0.05 the critical value is scipy.stats.chi2.ppf(0.95, 1).
+        var g1 = new Vector<double>(new double[] { 1, 1, 2, 2 });
+        var g2 = new Vector<double>(new double[] { 1, 2, 2, 2 });
+        var result = StatisticsHelper<double>.ChiSquareTest(g1, g2);
+        Assert.Equal(1, result.DegreesOfFreedom);
+        Assert.Equal(3.841458820694124, result.CriticalValue, 1e-6);
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(1.0, -0.57721566490153286)]   // psi(1) = -gamma (Euler-Mascheroni)
+    [InlineData(0.5, -1.9635100260214235)]    // psi(1/2) = -gamma - 2 ln 2
+    [InlineData(2.0, 0.42278433509846714)]    // psi(2) = 1 - gamma
+    public async Task Digamma_MatchesClosedForms(double x, double expected)
+    {
+        Assert.Equal(expected, StatisticsHelper<double>.Digamma(x), 1e-9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task IncompleteGamma_ShapeOne_IsExponentialCdf()
+    {
+        // P(1, x) = 1 - exp(-x)
+        Assert.Equal(1.0 - Math.Exp(-2.0), StatisticsHelper<double>.IncompleteGamma(1.0, 2.0), 1e-9);
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // F-TEST
     // ═══════════════════════════════════════════════════════════════

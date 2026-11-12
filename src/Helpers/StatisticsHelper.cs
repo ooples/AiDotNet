@@ -22,6 +22,41 @@ public static class StatisticsHelper<T>
     /// </summary>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>The active engine every whole-vector statistic below runs on.</summary>
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>Zero-copy rank-1 tensor view of <paramref name="values"/>.</summary>
+    private static Tensor<T> AsTensor(Vector<T> values) => values.AsTensor();
+
+    /// <summary>The values as a rank-1 tensor (a zero-copy view when they already are a vector).</summary>
+    private static Tensor<T> AsTensor(IEnumerable<T> values)
+        => values is Vector<T> vector ? vector.AsTensor() : new Vector<T>(values).AsTensor();
+
+    /// <summary>Sum of (x - center)^2 over every element.</summary>
+    private static T SumOfSquaredDeviations(Tensor<T> values, T center)
+    {
+        var deviations = Engine.TensorSubtractScalar(values, center);
+        return Engine.TensorSum(Engine.TensorMultiply(deviations, deviations));
+    }
+
+    /// <summary>Sum of (a - b)^2 over paired elements.</summary>
+    private static T SumOfSquaredDifferences(Tensor<T> a, Tensor<T> b)
+    {
+        var differences = Engine.TensorSubtract(a, b);
+        return Engine.TensorSum(Engine.TensorMultiply(differences, differences));
+    }
+
+    /// <summary>Sum of |a - b| over paired elements.</summary>
+    private static T SumOfAbsoluteDifferences(Tensor<T> a, Tensor<T> b)
+        => Engine.TensorSum(Engine.TensorAbs(Engine.TensorSubtract(a, b)));
+
+    /// <summary>A tensor of the given shape with every element equal to <paramref name="value"/>.</summary>
+    private static Tensor<T> Filled(int[] shape, T value) => Engine.TensorAddScalar(new Tensor<T>(shape), value);
+
+    /// <summary>Gathers <paramref name="values"/> at <paramref name="indices"/> into a rank-1 tensor.</summary>
+    private static Tensor<T> Gather(Tensor<T> values, List<int> indices)
+        => Engine.TensorIndexSelect(values, new Tensor<int>(indices.ToArray(), new[] { indices.Count }), 0);
+
     private static T GetOrDefaultOptionalParameter(T? value, T defaultValue, bool treatDefaultAsMissing = true)
     {
         if (value is null)
@@ -87,7 +122,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateMeanAbsoluteDeviation(Vector<T> values, T median)
     {
-        return _numOps.Divide(values.Select(x => _numOps.Abs(_numOps.Subtract(x, median))).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(values.Length));
+        T sumOfAbsoluteDeviations = Engine.TensorSum(Engine.TensorAbs(Engine.TensorSubtractScalar(AsTensor(values), median)));
+        return _numOps.Divide(sumOfAbsoluteDeviations, _numOps.FromDouble(values.Length));
     }
 
     /// <summary>
@@ -115,7 +151,7 @@ public static class StatisticsHelper<T>
             return _numOps.Zero;
         }
 
-        T sumOfSquares = values.Select(x => _numOps.Square(_numOps.Subtract(x, mean))).Aggregate(_numOps.Zero, _numOps.Add);
+        T sumOfSquares = SumOfSquaredDeviations(AsTensor(values), mean);
         return _numOps.Divide(sumOfSquares, _numOps.FromDouble(values.Length - 1));
     }
 
@@ -135,20 +171,18 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateVariance(IEnumerable<T> values)
     {
-        var enumerable = values.ToList();
-        int count = enumerable.Count;
+        var tensor = AsTensor(values);
+        int count = tensor.Length;
 
         if (count < 2)
         {
             return _numOps.Zero;
         }
 
-        T sum = enumerable.Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
+        T sum = Engine.TensorSum(tensor);
         T mean = _numOps.Divide(sum, _numOps.FromDouble(count));
 
-        T sumOfSquaredDifferences = enumerable
-            .Select(x => _numOps.Square(_numOps.Subtract(x, mean)))
-            .Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
+        T sumOfSquaredDifferences = SumOfSquaredDeviations(tensor, mean);
 
         return _numOps.Divide(sumOfSquaredDifferences, _numOps.FromDouble(count - 1));
     }
@@ -196,9 +230,14 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateMeanSquaredError(IEnumerable<T> actualValues, IEnumerable<T> predictedValues)
     {
-        T sumOfSquaredErrors = actualValues.Zip(predictedValues, (a, p) => _numOps.Square(_numOps.Subtract(a, p)))
-                                           .Aggregate(_numOps.Zero, _numOps.Add);
-        return _numOps.Divide(sumOfSquaredErrors, _numOps.FromDouble(actualValues.Count()));
+        // Zip semantics: pairs up to the shorter sequence, averaged over the actual count.
+        var actual = AsTensor(actualValues);
+        var predicted = AsTensor(predictedValues);
+        int paired = Math.Min(actual.Length, predicted.Length);
+        T sumOfSquaredErrors = paired == 0
+            ? _numOps.Zero
+            : SumOfSquaredDifferences(Engine.TensorNarrow(actual, 0, 0, paired), Engine.TensorNarrow(predicted, 0, 0, paired));
+        return _numOps.Divide(sumOfSquaredErrors, _numOps.FromDouble(actual.Length));
     }
 
     /// <summary>
@@ -232,11 +271,11 @@ public static class StatisticsHelper<T>
         //
         // Vector<T>.AsTensor().Data.Span gives us the backing memory in one
         // materialise call, then we index a plain Span<T> for the rest.
-        var ySpan = y.AsTensor().Data.Span;
+        var yTensor = y.AsTensor();
 
-        T totalVariance = CalculatePopulationVarianceSpan(ySpan);
-        T leftVariance = CalculatePopulationVarianceFromIndicesSpan(ySpan, leftIndices);
-        T rightVariance = CalculatePopulationVarianceFromIndicesSpan(ySpan, rightIndices);
+        T totalVariance = CalculatePopulationVariance(yTensor);
+        T leftVariance = CalculatePopulationVarianceFromIndices(yTensor, leftIndices);
+        T rightVariance = CalculatePopulationVarianceFromIndices(yTensor, rightIndices);
 
         T leftWeight = _numOps.Divide(_numOps.FromDouble(leftIndices.Count), _numOps.FromDouble(y.Length));
         T rightWeight = _numOps.Divide(_numOps.FromDouble(rightIndices.Count), _numOps.FromDouble(y.Length));
@@ -246,56 +285,27 @@ public static class StatisticsHelper<T>
 
     private static T CalculatePopulationVariance(IEnumerable<T> values)
     {
-        var list = values.ToList();
-        int count = list.Count;
-        if (count < 1) return _numOps.Zero;
-
-        T sum = list.Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
-        T mean = _numOps.Divide(sum, _numOps.FromDouble(count));
-
-        T sumOfSquaredDifferences = list
-            .Select(x => _numOps.Square(_numOps.Subtract(x, mean)))
-            .Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
-
-        return _numOps.Divide(sumOfSquaredDifferences, _numOps.FromDouble(count));
+        return CalculatePopulationVariance(AsTensor(values));
     }
 
-    private static T CalculatePopulationVarianceSpan(System.ReadOnlySpan<T> values)
+    private static T CalculatePopulationVariance(Tensor<T> values)
     {
         int count = values.Length;
         if (count < 1) return _numOps.Zero;
 
-        T sum = _numOps.Zero;
-        for (int i = 0; i < count; i++) sum = _numOps.Add(sum, values[i]);
+        T sum = Engine.TensorSum(values);
         T mean = _numOps.Divide(sum, _numOps.FromDouble(count));
 
-        T sumOfSquaredDifferences = _numOps.Zero;
-        for (int i = 0; i < count; i++)
-        {
-            T diff = _numOps.Subtract(values[i], mean);
-            sumOfSquaredDifferences = _numOps.Add(sumOfSquaredDifferences, _numOps.Multiply(diff, diff));
-        }
+        T sumOfSquaredDifferences = SumOfSquaredDeviations(values, mean);
 
         return _numOps.Divide(sumOfSquaredDifferences, _numOps.FromDouble(count));
     }
 
-    private static T CalculatePopulationVarianceFromIndicesSpan(System.ReadOnlySpan<T> values, List<int> indices)
+    private static T CalculatePopulationVarianceFromIndices(Tensor<T> values, List<int> indices)
     {
-        int count = indices.Count;
-        if (count < 1) return _numOps.Zero;
+        if (indices.Count < 1) return _numOps.Zero;
 
-        T sum = _numOps.Zero;
-        for (int i = 0; i < count; i++) sum = _numOps.Add(sum, values[indices[i]]);
-        T mean = _numOps.Divide(sum, _numOps.FromDouble(count));
-
-        T sumOfSquaredDifferences = _numOps.Zero;
-        for (int i = 0; i < count; i++)
-        {
-            T diff = _numOps.Subtract(values[indices[i]], mean);
-            sumOfSquaredDifferences = _numOps.Add(sumOfSquaredDifferences, _numOps.Multiply(diff, diff));
-        }
-
-        return _numOps.Divide(sumOfSquaredDifferences, _numOps.FromDouble(count));
+        return CalculatePopulationVariance(Gather(values, indices));
     }
 
     /// <summary>
@@ -441,11 +451,9 @@ public static class StatisticsHelper<T>
         var allValues = leftY.Concat(rightY).ToList();
         var ranks = CalculateRanks(allValues);
 
-        T leftRankSum = _numOps.Zero;
-        for (int i = 0; i < leftY.Length; i++)
-        {
-            leftRankSum = _numOps.Add(leftRankSum, ranks[i]);
-        }
+        T leftRankSum = leftY.Length == 0
+            ? _numOps.Zero
+            : Engine.TensorSum(Engine.TensorNarrow(AsTensor(ranks), 0, 0, leftY.Length));
 
         T u1 = _numOps.Subtract(
             _numOps.Multiply(_numOps.FromDouble(leftY.Length), _numOps.FromDouble(rightY.Length)),
@@ -549,47 +557,26 @@ public static class StatisticsHelper<T>
         int _categoryCount = _categories.Count;
 
         // Calculate observed frequencies
-        var _leftObserved = new Vector<T>(_categoryCount);
-        var _rightObserved = new Vector<T>(_categoryCount);
-
-        for (int i = 0; i < _categoryCount; i++)
-        {
-            _leftObserved[i] = _numOps.FromDouble(leftY.Count(y => _numOps.Equals(y, _categories[i])));
-            _rightObserved[i] = _numOps.FromDouble(rightY.Count(y => _numOps.Equals(y, _categories[i])));
-        }
+        // Observed counts per category, as one-hot equality matches summed over the samples.
+        var _categoryTensor = AsTensor(new Vector<T>(_categories));
+        var _leftObserved = CountPerCategory(AsTensor(leftY), _categoryTensor).ToVector();
+        var _rightObserved = CountPerCategory(AsTensor(rightY), _categoryTensor).ToVector();
 
         // Calculate expected frequencies
         T _leftTotal = _numOps.FromDouble(leftY.Length);
         T _rightTotal = _numOps.FromDouble(rightY.Length);
         T _totalObservations = _numOps.Add(_leftTotal, _rightTotal);
 
-        var _leftExpected = new Vector<T>(_categoryCount);
-        var _rightExpected = new Vector<T>(_categoryCount);
+        var _categoryTotals = Engine.TensorAdd(AsTensor(_leftObserved), AsTensor(_rightObserved));
+        var _leftExpected = Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(_categoryTotals, _leftTotal), _totalObservations).ToVector();
+        var _rightExpected = Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(_categoryTotals, _rightTotal), _totalObservations).ToVector();
 
-        for (int i = 0; i < _categoryCount; i++)
-        {
-            T _categoryTotal = _numOps.Add(_leftObserved[i], _rightObserved[i]);
-            _leftExpected[i] = _numOps.Divide(_numOps.Multiply(_categoryTotal, _leftTotal), _totalObservations);
-            _rightExpected[i] = _numOps.Divide(_numOps.Multiply(_categoryTotal, _rightTotal), _totalObservations);
-        }
+        // Calculate chi-square statistic over the categories with a positive expected count
+        T _chiSquare = _categoryCount == 0
+            ? _numOps.Zero
+            : _numOps.Add(ChiSquareTerms(AsTensor(_leftObserved), AsTensor(_leftExpected)),
+                ChiSquareTerms(AsTensor(_rightObserved), AsTensor(_rightExpected)));
 
-        // Calculate chi-square statistic
-        T _chiSquare = _numOps.Zero;
-        for (int i = 0; i < _categoryCount; i++)
-        {
-            if (_numOps.GreaterThan(_leftExpected[i], _numOps.Zero))
-            {
-                _chiSquare = _numOps.Add(_chiSquare,
-                    _numOps.Divide(_numOps.Square(_numOps.Subtract(_leftObserved[i], _leftExpected[i])), _leftExpected[i]));
-            }
-            if (_numOps.GreaterThan(_rightExpected[i], _numOps.Zero))
-            {
-                _chiSquare = _numOps.Add(_chiSquare,
-                    _numOps.Divide(_numOps.Square(_numOps.Subtract(_rightObserved[i], _rightExpected[i])), _rightExpected[i]));
-            }
-        }
-
-        // Calculate degrees of freedom
         int _degreesOfFreedom = _categoryCount - 1;
 
         // Use the clamped upper-tail helper rather than inlining 1 - CDF.
@@ -619,6 +606,39 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
+    /// For each category, how many of <paramref name="values"/> equal it: the [samples, categories] equality
+    /// grid summed over the samples.
+    /// </summary>
+    private static Tensor<T> CountPerCategory(Tensor<T> values, Tensor<T> categories)
+    {
+        int samples = values.Length;
+        int categoryCount = categories.Length;
+        if (samples == 0 || categoryCount == 0)
+        {
+            return new Tensor<T>(new[] { categoryCount });
+        }
+
+        var grid = new[] { samples, categoryCount };
+        var matches = Engine.TensorEquals(
+            Engine.TensorBroadcastTo(values.Reshape(new[] { samples, 1 }), grid),
+            Engine.TensorBroadcastTo(categories.Reshape(new[] { 1, categoryCount }), grid));
+        return Engine.ReduceSum(matches, new[] { 0 }, false);
+    }
+
+    /// <summary>Sum of (observed - expected)^2 / expected over the entries whose expected count is positive.</summary>
+    private static T ChiSquareTerms(Tensor<T> observed, Tensor<T> expected)
+    {
+        var deviation = Engine.TensorSubtract(observed, expected);
+        var terms = Engine.TensorDivide(Engine.TensorMultiply(deviation, deviation), expected);
+        var positive = Engine.TensorGreaterThan(expected, _numOps.Zero);
+        return Engine.TensorSum(Engine.TensorWhere(positive, terms, new Tensor<T>(expected._shape)));
+    }
+
+    /// <summary>Applies a binary element-wise engine special function to two scalars.</summary>
+    private static T ScalarSpecial(Func<Tensor<T>, Tensor<T>, Tensor<T>> op, T a, T x)
+        => op(Tensor<T>.FromScalar(a), Tensor<T>.FromScalar(x)).GetFlat(0);
+
+    /// <summary>
     /// Calculates the inverse of the Chi-Square cumulative distribution function.
     /// </summary>
     /// <param name="probability">The probability value (between 0 and 1).</param>
@@ -637,242 +657,9 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T InverseChiSquareCDF(T probability, int degreesOfFreedom)
     {
-        if (_numOps.LessThanOrEquals(probability, _numOps.Zero) || _numOps.GreaterThanOrEquals(probability, _numOps.FromDouble(1)))
-        {
-            throw new ArgumentOutOfRangeException(nameof(probability), "Probability must be between 0 and 1.");
-        }
-
-        if (degreesOfFreedom <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(degreesOfFreedom), "Degrees of freedom must be positive.");
-        }
-
-        // Initial guess
-        T _x = _numOps.Multiply(_numOps.FromDouble(2), _numOps.FromDouble(degreesOfFreedom));
-        T _delta = _numOps.FromDouble(1);
-        int _maxIterations = 100;
-        T _epsilon = _numOps.FromDouble(1e-8);
-
-        for (int i = 0; i < _maxIterations && _numOps.GreaterThan(_numOps.Abs(_delta), _epsilon); i++)
-        {
-            T _fx = ChiSquareCDF(_x, degreesOfFreedom);
-            T _dfx = ChiSquarePDF(_x, degreesOfFreedom);
-
-            if (_numOps.Equals(_dfx, _numOps.Zero))
-            {
-                break;
-            }
-
-            _delta = _numOps.Divide(_numOps.Subtract(_fx, probability), _dfx);
-            _x = _numOps.Subtract(_x, _delta);
-
-            if (_numOps.LessThanOrEquals(_x, _numOps.Zero))
-            {
-                _x = _numOps.Divide(_x, _numOps.FromDouble(2));
-            }
-        }
-
-        return _x;
-    }
-
-    /// <summary>
-    /// Calculates the probability density function (PDF) of the chi-square distribution.
-    /// </summary>
-    /// <param name="x">The value at which to evaluate the PDF.</param>
-    /// <param name="degreesOfFreedom">The degrees of freedom parameter.</param>
-    /// <returns>The PDF value at x.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The chi-square PDF measures the likelihood of observing a specific value 
-    /// in a chi-square distribution. Think of it as the height of the curve at a particular point.
-    /// The degrees of freedom parameter determines the shape of the distribution.
-    /// </para>
-    /// </remarks>
-    private static T ChiSquarePDF(T x, int degreesOfFreedom)
-    {
-        T _halfDf = _numOps.Divide(_numOps.FromDouble(degreesOfFreedom), _numOps.FromDouble(2));
-        T _halfX = _numOps.Divide(x, _numOps.FromDouble(2));
-        T _numerator = _numOps.Multiply(
-            _numOps.Exp(_numOps.Subtract(_numOps.Multiply(_halfDf, _numOps.Log(_halfX)), _halfX)),
-            _numOps.Power(_halfX, _numOps.Subtract(_halfDf, _numOps.FromDouble(1)))
-        );
-        T _denominator = _numOps.Multiply(_numOps.Sqrt(_numOps.FromDouble(2)), GammaFunction(_halfDf));
-        return _numOps.Divide(_numerator, _denominator);
-    }
-
-    /// <summary>
-    /// Calculates the Gamma function for a given value.
-    /// </summary>
-    /// <param name="x">The input value.</param>
-    /// <returns>The Gamma function value.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The Gamma function is a mathematical function that extends the factorial 
-    /// operation to non-integer values. For positive integers n, Gamma(n) = (n-1)!
-    /// This implementation uses the Lanczos approximation, which is a numerical method to 
-    /// calculate the Gamma function with high precision.
-    /// </para>
-    /// </remarks>
-    private static T GammaFunction(T x)
-    {
-        // Lanczos approximation for the Gamma function
-        T[] _p = { _numOps.FromDouble(676.5203681218851),
-              _numOps.FromDouble(-1259.1392167224028),
-              _numOps.FromDouble(771.32342877765313),
-              _numOps.FromDouble(-176.61502916214059),
-              _numOps.FromDouble(12.507343278686905),
-              _numOps.FromDouble(-0.13857109526572012),
-              _numOps.FromDouble(9.9843695780195716e-6),
-              _numOps.FromDouble(1.5056327351493116e-7) };
-
-        if (_numOps.LessThan(x, _numOps.FromDouble(0.5)))
-        {
-            return _numOps.Divide(
-                MathHelper.Pi<T>(),
-                _numOps.Multiply(
-                    MathHelper.Sin(_numOps.Multiply(MathHelper.Pi<T>(), x)),
-                    GammaFunction(_numOps.Subtract(_numOps.FromDouble(1), x))
-                )
-            );
-        }
-
-        x = _numOps.Subtract(x, _numOps.FromDouble(1));
-        T _y = _numOps.Add(x, _numOps.FromDouble(7.5));
-        T _sum = _numOps.FromDouble(0.99999999999980993);
-
-        for (int i = 0; i < _p.Length; i++)
-        {
-            _sum = _numOps.Add(_sum, _numOps.Divide(_p[i], _numOps.Add(x, _numOps.FromDouble(i + 1))));
-        }
-
-        T _t = _numOps.Multiply(
-            _numOps.Sqrt(_numOps.FromDouble(2 * Math.PI)),
-            _numOps.Multiply(
-                _numOps.Power(_y, _numOps.Add(x, _numOps.FromDouble(0.5))),
-                _numOps.Multiply(
-                    _numOps.Exp(_numOps.Negate(_y)),
-                    _sum
-                )
-            )
-        );
-
-        return _t;
-    }
-
-    /// <summary>
-    /// Calculates the cumulative distribution function (CDF) of the chi-square distribution.
-    /// </summary>
-    /// <param name="x">The value at which to evaluate the CDF.</param>
-    /// <param name="df">The degrees of freedom parameter.</param>
-    /// <returns>The probability that a chi-square random variable is less than or equal to x.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The chi-square CDF gives the probability that a random value from 
-    /// the chi-square distribution will be less than or equal to x. It's like asking "what's the 
-    /// chance of getting a value of x or lower?" This is useful in hypothesis testing to determine 
-    /// if observed data fits an expected distribution.
-    /// </para>
-    /// </remarks>
-    private static T ChiSquareCDF(T x, int df)
-    {
-        // Chi-Square CDF = P(X <= x) = regularized lower incomplete gamma P(k/2, x/2)
-        return GammaRegularized(_numOps.Divide(_numOps.FromDouble(df), _numOps.FromDouble(2)), _numOps.Divide(x, _numOps.FromDouble(2)));
-    }
-
-    /// <summary>
-    /// Calculates the regularized gamma function P(a,x).
-    /// </summary>
-    /// <param name="a">The shape parameter.</param>
-    /// <param name="x">The value at which to evaluate the function.</param>
-    /// <returns>The regularized gamma function value.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The regularized gamma function is a mathematical function used in 
-    /// probability theory and statistics. It's particularly important for calculating probabilities 
-    /// in distributions like chi-square, gamma, and exponential. Think of it as a specialized 
-    /// calculator that helps determine probabilities for these distributions.
-    /// </para>
-    /// </remarks>
-    private static T GammaRegularized(T a, T x)
-    {
-        if (_numOps.LessThanOrEquals(x, _numOps.Zero) || _numOps.LessThanOrEquals(a, _numOps.Zero))
-        {
-            return _numOps.Zero;
-        }
-
-        if (_numOps.GreaterThan(x, _numOps.Add(a, _numOps.FromDouble(1))))
-        {
-            return _numOps.Subtract(_numOps.FromDouble(1), GammaRegularizedContinuedFraction(a, x));
-        }
-
-        return GammaRegularizedSeries(a, x);
-    }
-
-    /// <summary>
-    /// Calculates the regularized gamma function using a series expansion.
-    /// </summary>
-    /// <param name="a">The shape parameter.</param>
-    /// <param name="x">The value at which to evaluate the function.</param>
-    /// <returns>The regularized gamma function value calculated using series expansion.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method uses a mathematical technique called "series expansion" 
-    /// to calculate the regularized gamma function. It's like adding up many small terms to get 
-    /// a precise answer. The method keeps adding terms until the result is accurate enough.
-    /// </para>
-    /// </remarks>
-    private static T GammaRegularizedSeries(T a, T x)
-    {
-        T _sum = _numOps.FromDouble(1.0 / Convert.ToDouble(a));
-        T _term = _sum;
-        for (int n = 1; n < 100; n++)
-        {
-            _term = _numOps.Multiply(_term, _numOps.Divide(x, _numOps.Add(a, _numOps.FromDouble(n))));
-            _sum = _numOps.Add(_sum, _term);
-            if (_numOps.LessThan(_numOps.Abs(_term), _numOps.Multiply(_numOps.Abs(_sum), _numOps.FromDouble(1e-15))))
-            {
-                break;
-            }
-        }
-
-        return _numOps.Multiply(_numOps.Exp(_numOps.Add(_numOps.Multiply(a, _numOps.Log(x)), _numOps.Negate(x))), _sum);
-    }
-
-    /// <summary>
-    /// Calculates the regularized gamma function using a continued fraction expansion.
-    /// </summary>
-    /// <param name="a">The shape parameter.</param>
-    /// <param name="x">The value at which to evaluate the function.</param>
-    /// <returns>The regularized gamma function value calculated using continued fraction.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method uses a mathematical technique called "continued fraction" 
-    /// to calculate the regularized gamma function. It's an alternative approach to series expansion 
-    /// that works better for certain ranges of input values. The method iteratively refines the 
-    /// calculation until it reaches the desired precision.
-    /// </para>
-    /// </remarks>
-    private static T GammaRegularizedContinuedFraction(T a, T x)
-    {
-        T _b = _numOps.Add(x, _numOps.Subtract(_numOps.FromDouble(1), a));
-        T _c = _numOps.Divide(_numOps.FromDouble(1), _numOps.FromDouble(1e-30));
-        T _d = _numOps.Divide(_numOps.FromDouble(1), _b);
-        T _h = _d;
-        for (int i = 1; i <= 100; i++)
-        {
-            T _an = _numOps.Negate(_numOps.Multiply(_numOps.FromDouble(i), _numOps.Add(_numOps.FromDouble(i), _numOps.Negate(a))));
-            _b = _numOps.Add(_b, _numOps.FromDouble(2));
-            _d = _numOps.Divide(_numOps.FromDouble(1), _numOps.Add(_numOps.Multiply(_an, _d), _b));
-            _c = _numOps.Add(_b, _numOps.Divide(_an, _c));
-            T _del = _numOps.Multiply(_c, _d);
-            _h = _numOps.Multiply(_h, _del);
-            if (_numOps.LessThan(_numOps.Abs(_numOps.Subtract(_del, _numOps.FromDouble(1))), _numOps.FromDouble(1e-15)))
-            {
-                break;
-            }
-        }
-
-        return _numOps.Multiply(_numOps.Exp(_numOps.Add(_numOps.Multiply(a, _numOps.Log(x)), _numOps.Negate(x))), _h);
+        // Same argument checks and Newton refinement as the public quantile, which starts from the
+        // Wilson-Hilferty approximation and iterates on the regularized CDF and its density.
+        return CalculateInverseChiSquareCDF(degreesOfFreedom, probability);
     }
 
     /// <summary>
@@ -1040,20 +827,12 @@ public static class StatisticsHelper<T>
         if (_numOps.LessThanOrEquals(chiSquare, _numOps.Zero) || degreesOfFreedom <= 0)
             return _numOps.One;
 
-        // Compute the survival function directly via the regularised upper
-        // incomplete gamma function: chi2.sf(x, df) == Q(df/2, x/2) ==
-        // 1 - P(df/2, x/2). Doing the 1 - CDF subtraction outside the helper
-        // catastrophically cancelled tiny right-tail p-values to 0 when
-        // GammaRegularized's continued-fraction branch had already computed
-        // 1 - Q internally. Calling GammaRegularizedContinuedFraction
-        // directly when we're in the upper-tail regime preserves precision
-        // down to ~1e-15. The series branch and small-x path still need the
-        // 1 - P form, but those are not the precision-sensitive regions.
+        // The survival function is the regularized upper incomplete gamma function:
+        // chi2.sf(x, df) == Q(df/2, x/2) (torch.special.gammaincc), computed directly rather than as
+        // 1 - P so tiny right-tail p-values keep their precision.
         T a = _numOps.Divide(_numOps.FromDouble(degreesOfFreedom), _numOps.FromDouble(2));
         T x = _numOps.Divide(chiSquare, _numOps.FromDouble(2));
-        T p = _numOps.GreaterThan(x, _numOps.Add(a, _numOps.FromDouble(1)))
-            ? GammaRegularizedContinuedFraction(a, x)
-            : _numOps.Subtract(_numOps.One, GammaRegularizedSeries(a, x));
+        T p = ScalarSpecial(Engine.TensorIgammac, a, x);
         if (_numOps.LessThan(p, _numOps.Zero)) return _numOps.Zero;
         if (_numOps.GreaterThan(p, _numOps.One)) return _numOps.One;
         return p;
@@ -2161,40 +1940,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T Digamma(T x)
     {
-        // Approximation of the digamma function
-        T result = _numOps.Zero;
-        T eight = _numOps.FromDouble(8);
-
-        for (int i = 0; i < 100 && _numOps.LessThan(x, eight) || _numOps.Equals(x, eight); i++)
-        {
-            result = _numOps.Subtract(result, _numOps.Divide(_numOps.One, x));
-            x = _numOps.Add(x, _numOps.One);
-        }
-
-        if (_numOps.LessThan(x, eight) || _numOps.Equals(x, eight)) return result;
-
-        T invX = _numOps.Divide(_numOps.One, x);
-        T invX2 = _numOps.Square(invX);
-
-        return _numOps.Subtract(
-            _numOps.Subtract(
-                _numOps.Log(x),
-                _numOps.Multiply(_numOps.FromDouble(0.5), invX)
-            ),
-            _numOps.Multiply(
-                invX2,
-                _numOps.Subtract(
-                    _numOps.FromDouble(1.0 / 12),
-                    _numOps.Multiply(
-                        invX2,
-                        _numOps.Subtract(
-                            _numOps.FromDouble(1.0 / 120),
-                            _numOps.Multiply(invX2, _numOps.FromDouble(1.0 / 252))
-                        )
-                    )
-                )
-            )
-        );
+        // psi(x) = d/dx ln Gamma(x) (torch.special.digamma)
+        return Engine.TensorDigamma(Tensor<T>.FromScalar(x)).GetFlat(0);
     }
 
     /// <summary>
@@ -2460,26 +2207,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T IncompleteGamma(T a, T x)
     {
-        const int maxIterations = 100;
-        T epsilon = _numOps.FromDouble(1e-8);
-
-        T sum = _numOps.Zero;
-        T term = _numOps.Divide(_numOps.One, a);
-        for (int i = 0; i < maxIterations; i++)
-        {
-            sum = _numOps.Add(sum, term);
-            term = _numOps.Multiply(term, _numOps.Divide(x, _numOps.Add(a, _numOps.FromDouble(i + 1))));
-            if (_numOps.LessThan(term, epsilon))
-                break;
-        }
-
-        return _numOps.Multiply(
-            sum,
-            _numOps.Exp(_numOps.Subtract(
-                _numOps.Subtract(_numOps.Multiply(a, _numOps.Log(x)), x),
-                LogGamma(a)
-            ))
-        );
+        // Regularized lower incomplete gamma P(a, x) = gamma(a, x) / Gamma(a) (torch.special.gammainc)
+        return ScalarSpecial(Engine.TensorIgamma, a, x);
     }
 
     /// <summary>
