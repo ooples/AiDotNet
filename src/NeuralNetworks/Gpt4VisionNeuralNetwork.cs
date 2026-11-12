@@ -1392,7 +1392,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         int maxIndex = Engine.TensorArgMax(numbers, 0)[0];
         T maxVal = FirstNumberIndex(values) < 0
             ? NumOps.FromDouble(double.NaN)
-            : NumOps.FromDouble(NumOps.ToDouble(numbers.GetFlat(maxIndex)));
+            : numbers.GetFlat(maxIndex);
 
         var expValues = Engine.TensorExp(Engine.TensorSubtractScalar(logits, maxVal));
         T sum = Engine.TensorSum(expValues);
