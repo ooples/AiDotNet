@@ -22656,3 +22656,27 @@ AiDotNet.AutoML.NAS.ENASOptions.Seed.get -> int
 AiDotNet.AutoML.NAS.ENASOptions.Seed.set -> void
 AiDotNet.AutoML.NAS.ENAS<T>.ENAS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.ENASOptions! options) -> void
 AiDotNet.AutoML.NAS.ENAS<T>.Options.get -> AiDotNet.AutoML.NAS.ENASOptions!
+AiDotNet.AutoML.DartsOptimizerOptions
+AiDotNet.AutoML.DartsOptimizerOptions.DartsOptimizerOptions() -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureLearningRate.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureLearningRate.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureBeta1.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureBeta1.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureBeta2.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureBeta2.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureEpsilon.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureEpsilon.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureWeightDecay.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.ArchitectureWeightDecay.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMaxLearningRate.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMaxLearningRate.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMinLearningRate.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMinLearningRate.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMomentum.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.WeightMomentum.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.WeightDecay.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.WeightDecay.set -> void
+AiDotNet.AutoML.DartsOptimizerOptions.GradientClipNorm.get -> double
+AiDotNet.AutoML.DartsOptimizerOptions.GradientClipNorm.set -> void
+AiDotNet.AutoML.NeuralArchitectureSearch<T>.NeuralArchitectureSearch(AiDotNet.Enums.NeuralArchitectureSearchStrategy strategy, int maxEpochs, AiDotNet.AutoML.DartsOptimizerOptions! optimizerOptions) -> void
+AiDotNet.AutoML.NeuralArchitectureSearch<T>.OptimizerOptions.get -> AiDotNet.AutoML.DartsOptimizerOptions!
