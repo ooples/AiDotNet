@@ -151,24 +151,8 @@ public abstract class ComplexWaveletFunctionBase<T> : IWaveletFunction<Complex<T
     /// </remarks>
     protected Vector<Complex<T>> Convolve(Vector<Complex<T>> input, Vector<Complex<T>> kernel)
     {
-        int resultLength = input.Length + kernel.Length - 1;
-        var result = new Complex<T>[resultLength];
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-
-        for (int i = 0; i < resultLength; i++)
-        {
-            Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
-            for (int j = 0; j < kernel.Length; j++)
-            {
-                if (i - j >= 0 && i - j < input.Length)
-                {
-                    sum = complexOps.Add(sum, complexOps.Multiply(input[i - j], kernel[j]));
-                }
-            }
-            result[i] = sum;
-        }
-
-        return new Vector<Complex<T>>(result);
+        // Full linear convolution: result[i] = sum_j input[i - j] * kernel[j], length n + k - 1
+        return ComplexWaveletEngineOps<T>.FullConvolve(input, kernel);
     }
 
     /// <summary>
@@ -193,14 +177,6 @@ public abstract class ComplexWaveletFunctionBase<T> : IWaveletFunction<Complex<T
     /// </remarks>
     protected static Vector<Complex<T>> Downsample(Vector<Complex<T>> input, int factor)
     {
-        int newLength = input.Length / factor;
-        var result = new Complex<T>[newLength];
-
-        for (int i = 0; i < newLength; i++)
-        {
-            result[i] = input[i * factor];
-        }
-
-        return new Vector<Complex<T>>(result);
+        return ComplexWaveletEngineOps<T>.Decimate(input, factor, input.Length / factor);
     }
 }
