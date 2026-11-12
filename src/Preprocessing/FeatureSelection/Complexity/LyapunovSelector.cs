@@ -27,7 +27,7 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     private readonly int _embeddingDimension;
     private readonly int _delay;
 
-    private double[]? _lyapunovValues;
+    private Vector<T>? _lyapunovValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +35,7 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int EmbeddingDimension => _embeddingDimension;
     public int Delay => _delay;
-    public double[]? LyapunovValues => _lyapunovValues;
+    public Vector<T>? LyapunovValues => _lyapunovValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,106 +71,93 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (n < minLength)
             throw new ArgumentException($"Need at least {minLength} samples.");
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+    }
+@@NEW
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        _lyapunovValues = new double[p];
-
+        var perFeature = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+            perFeature[j] = EstimateLyapunov(PreprocessingTensorOps.ColumnVector(X, j));
 
-            _lyapunovValues[j] = EstimateLyapunov(col);
-        }
+        var lyapunov = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(perFeature, 0);
+        _lyapunovValues = lyapunov.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _lyapunovValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(lyapunov, numToSelect);
 
         IsFitted = true;
     }
-
-    private double EstimateLyapunov(double[] data)
-    {
-        int n = data.Length;
-        int numVectors = n - (_embeddingDimension - 1) * _delay;
-        if (numVectors < 10) return 0;
-
-        // Create embedded vectors
-        var vectors = new double[numVectors][];
-        for (int i = 0; i < numVectors; i++)
-        {
-            vectors[i] = new double[_embeddingDimension];
-            for (int d = 0; d < _embeddingDimension; d++)
-                vectors[i][d] = data[i + d * _delay];
-        }
-
-        // Rosenstein's algorithm (simplified)
-        var divergences = new List<double>();
-
-        // For each point, find nearest neighbor (not too close in time)
-        int minTimeSep = _embeddingDimension * _delay;
-
-        for (int i = 0; i < numVectors - 10; i++)
-        {
-            double minDist = double.MaxValue;
-            int nearestIdx = -1;
-
-            for (int k = 0; k < numVectors; k++)
-            {
-                if (Math.Abs(k - i) < minTimeSep) continue;
-
-                double dist = 0;
-                for (int d = 0; d < _embeddingDimension; d++)
-                {
-                    double diff = vectors[i][d] - vectors[k][d];
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-
-                if (dist > 0 && dist < minDist)
-                {
-                    minDist = dist;
-                    nearestIdx = k;
-                }
-            }
-
-            if (nearestIdx < 0 || nearestIdx >= numVectors - 5) continue;
-
-            // Track divergence over time steps
-            for (int step = 1; step <= 5; step++)
-            {
-                if (i + step >= numVectors || nearestIdx + step >= numVectors)
-                    break;
-
-                double dist = 0;
-                for (int d = 0; d < _embeddingDimension; d++)
-                {
-                    double diff = vectors[i + step][d] - vectors[nearestIdx + step][d];
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-
-                if (dist > 0 && minDist > 0)
-                {
-                    divergences.Add(Math.Log(dist / minDist) / step);
-                }
-            }
-        }
-
-        if (divergences.Count == 0)
-            return 0;
-
-        return divergences.Average();
     }
 
+    private Tensor<T> EstimateLyapunov(Tensor<T> data)
+    {
+        var engine = Engine;
+        int n = data.Length;
+        int numVectors = n - (_embeddingDimension - 1) * _delay;
+        var none = new Tensor<T>(new[] { 1 });
+        if (numVectors < 10) return none;
+
+        // Create embedded vectors: row i is (x[i], x[i + delay], ..., x[i + (m - 1) * delay])
+        var lagged = new Tensor<T>[_embeddingDimension];
+        for (int d = 0; d < _embeddingDimension; d++)
+            lagged[d] = engine.TensorSlice(data, new[] { d * _delay }, new[] { numVectors });
+        var vectors = engine.TensorStack(lagged, 1);
+
+        // Rosenstein's algorithm (simplified)
+        // For each point, find nearest neighbor (not too close in time, at a positive distance)
+        int minTimeSep = _embeddingDimension * _delay;
+        int reference = numVectors - 10;
+        if (reference <= 0) return none;
+
+        var shape = new[] { reference, numVectors };
+        var timeGap = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.Range<T>(numVectors), new[] { 1, numVectors }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.Range<T>(reference), new[] { reference, 1 }), shape)));
+        var separated = PreprocessingTensorOps.AtLeast(timeGap, NumOps.FromDouble(minTimeSep));
+        var referenceVectors = engine.TensorSlice(vectors, new[] { 0, 0 }, new[] { reference, _embeddingDimension });
+        var distances = engine.TensorSqrt(FeatureSelectionTensorOps.SquaredDistances(referenceVectors, vectors));
+        T maxValue = NumOps.MaxValue;
+        T zero = NumOps.Zero;
+        var allowed = engine.TensorMultiply(separated, engine.TensorGreaterThan(distances, zero));
+        var candidates = engine.TensorWhere(allowed, distances, PreprocessingTensorOps.Filled(shape, maxValue));
+        var minDist = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidates), new[] { 1 }, false));
+        var nearest = FeatureSelectionTensorOps.FirstArgMinPerRow(candidates);
+
+        // Points whose neighbour exists and has 5 successors are tracked
+        int lastNeighbour = numVectors - 5;
+        var tracked = engine.TensorMultiply(
+            engine.TensorLessThan(minDist, maxValue),
+            new Tensor<int>(Array.ConvertAll(nearest, k => k < lastNeighbour ? 1 : 0), new[] { reference }).Cast<T>());
+        var neighbour = Array.ConvertAll(nearest, k => k < lastNeighbour ? k : 0);
+
+        // Track divergence over time steps: log(dist / minDist) / step
+        var zeros = new Tensor<T>(new[] { reference });
+        Tensor<T>? total = null;
+        Tensor<T>? count = null;
+        for (int step = 1; step <= 5; step++)
+        {
+            int offset = step;
+            var ahead = engine.TensorSlice(vectors, new[] { step, 0 }, new[] { reference, _embeddingDimension });
+            var neighbourAhead = engine.TensorIndexSelect(vectors,
+                new Tensor<int>(Array.ConvertAll(neighbour, k => k + offset), new[] { reference }), 0);
+            var dist = engine.TensorSqrt(engine.ReduceSum(
+                engine.TensorSquare(engine.TensorSubtract(ahead, neighbourAhead)), new[] { 1 }, false));
+            var used = engine.TensorMultiply(tracked, engine.TensorGreaterThan(dist, zero));
+            var terms = engine.TensorWhere(used, engine.TensorDivideScalar(
+                engine.TensorLog(engine.TensorDivide(dist, minDist)), PreprocessingTensorOps.CountAsScalar<T>(step)), zeros);
+            total = total is null ? terms : engine.TensorAdd(total, terms);
+            count = count is null ? used : engine.TensorAdd(count, used);
+        }
+
+        if (total is null || count is null)
+            return none;
+
+        var divergenceSum = engine.ReduceSum(total, new[] { 0 }, true);
+        var divergenceCount = engine.ReduceSum(count, new[] { 0 }, true);
+        return engine.TensorWhere(engine.TensorGreaterThan(divergenceCount, zero),
+            engine.TensorDivide(divergenceSum, divergenceCount), none);
+    }
     public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);
@@ -183,15 +170,7 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("LyapunovSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
