@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -277,18 +278,23 @@ public sealed class RT2ActionTokenizer<T>
                 nameof(logits)
             );
 
-        int bestToken = TokenIdOffset;
-        double bestLogit = _numOps.ToDouble(logits[TokenIdOffset]);
-        for (int t = TokenIdOffset + 1; t < TokenIdEndExclusive; t++)
-        {
-            double v = _numOps.ToDouble(logits[t]);
-            if (v > bestLogit)
-            {
-                bestLogit = v;
-                bestToken = t;
-            }
-        }
-        return bestToken;
+        var engine = AiDotNetEngine.Current;
+        var flat = logits.Reshape([logits.Length]);
+        // A NaN first logit is never beaten (every comparison with NaN is false).
+        if (_numOps.IsNaN(flat[TokenIdOffset]))
+            return TokenIdOffset;
+
+        // Greedy argmax over the action window. NaN logits never win; on ties the lowest
+        // token wins, so the first position holding the maximum is selected explicitly.
+        var window = engine.TensorSlice(flat, [TokenIdOffset], [NumBins]);
+        var negInf = Tensor<T>.CreateDefault([NumBins], _numOps.FromDouble(double.NegativeInfinity));
+        var comparable = engine.TensorWhere(engine.TensorIsNan(window), negInf, window);
+        T bestLogit = engine.TensorMaxValue(comparable);
+        var isBest = engine.TensorEquals(comparable, bestLogit);
+        var positions = engine.TensorArange<T>(0, NumBins, 1);
+        var sentinel = Tensor<T>.CreateDefault([NumBins], _numOps.FromDouble(NumBins));
+        T firstBest = engine.TensorMinValue(engine.TensorWhere(isBest, positions, sentinel));
+        return TokenIdOffset + _numOps.ToInt(firstBest);
     }
 
     private int ValueToBin(double value, int dim)
